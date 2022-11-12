@@ -384,7 +384,7 @@ public:
     void ensureWaitSem();
     void tryCloseStdinPipe();
     enum WaitCond { WaitReadyRead, WaitBytesWritten, WaitFinished };
-    bool waitFor(WaitCond cond, int msecs);
+    bool waitFor(WaitCond cond, const QDeadlineTimer &deadline);
     static qint64 bytesAvailableFromPipe(HPIPE hpipe, bool *closed = 0);
 #endif
 

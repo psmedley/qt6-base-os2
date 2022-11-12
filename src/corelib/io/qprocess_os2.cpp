@@ -151,7 +151,7 @@ private:
 
     void installSigHandler();
     void uninstallSigHandler();
-    void run();
+    void run() override;
 
     int refcnt;
     bool finish;
@@ -270,11 +270,8 @@ USHORT QProcessManager::addProcess(QProcess *process)
         instance->start();
     }
 
-#if 0
     QProcessPrivate *d = process->d_func();
-#else
-    QProcessPrivate *d = d_func();
-#endif
+
     USHORT procKey = instance->lastProcKey + 1;
     if (procKey > MaxProcKey) {
         // limit reached, find an unused number
@@ -340,11 +337,7 @@ void QProcessManager::removeProcess(USHORT procKey)
     // to guarantee that the given procKey may be reused, we must close all
     // pipes in order to ensure that we won't get late NPSS_CLOSE for the
     // removed process with the key that may be already associated with a new one
-#if 0
     QProcessPrivate *d = process->d_func();
-#else
-    QProcessPrivate *d = d_func();
-#endif
     d->closeChannel(&d->stdinChannel);
     d->closeChannel(&d->stdoutChannel);
     d->closeChannel(&d->stderrChannel);
@@ -1289,7 +1282,7 @@ static int qt_timeout_value(int msecs, int elapsed)
     return timeout < 0 ? 0 : timeout;
 }
 
-bool QProcessPrivate::waitForStarted(int /*msecs*/)
+bool QProcessPrivate::waitForStarted(const QDeadlineTimer &deadline)
 {
     if (processState == QProcess::Running)
         return true;
@@ -1301,7 +1294,7 @@ bool QProcessPrivate::waitForStarted(int /*msecs*/)
     return false;
 }
 
-bool QProcessPrivate::waitFor(WaitCond cond, int msecs)
+bool QProcessPrivate::waitFor(WaitCond cond, const QDeadlineTimer &deadline)
 {
     Q_Q(QProcess);
 
@@ -1309,7 +1302,7 @@ bool QProcessPrivate::waitFor(WaitCond cond, int msecs)
     const char *condStr = cond == WaitReadyRead ? "ReadyRead" :
                           cond == WaitBytesWritten ? "BytesWritten" :
                           cond == WaitFinished ? "Finished" : "???";
-    DEBUG(("pid %d, %s, %d", pid, condStr, msecs));
+    DEBUG(("pid %d, %s, %lld", pid, condStr, deadline.remainingTime()));
 #endif
 
     QElapsedTimer stopWatch;
@@ -1371,7 +1364,7 @@ bool QProcessPrivate::waitFor(WaitCond cond, int msecs)
             break;
 
         // wait for the new signals
-        int timeout = qt_timeout_value(msecs, stopWatch.elapsed());
+        int timeout = qt_timeout_value(deadline.remainingTime(), stopWatch.elapsed());
         DEBUG(() << "timeout" << timeout);
         qDosNI(arc = DosWaitEventSem(waitSem, (ULONG)timeout));
 
@@ -1398,23 +1391,23 @@ bool QProcessPrivate::waitFor(WaitCond cond, int msecs)
                                   Q_ARG(int, QProcessPrivate::CanAll));
     }
 
-    DEBUG(("%s, %d returns %d", condStr, msecs, ret));
+    DEBUG(("%s, %lld returns %d", condStr, deadline.remainingTime(), ret));
     return ret;
 }
 
-bool QProcessPrivate::waitForReadyRead(int msecs)
+bool QProcessPrivate::waitForReadyRead(const QDeadlineTimer &deadline)
 {
-    return waitFor(WaitReadyRead, msecs);
+    return waitFor(WaitReadyRead, deadline);
 }
 
-bool QProcessPrivate::waitForBytesWritten(int msecs)
+bool QProcessPrivate::waitForBytesWritten(const QDeadlineTimer &deadline)
 {
-    return waitFor(WaitBytesWritten, msecs);
+    return waitFor(WaitBytesWritten, deadline);
 }
 
-bool QProcessPrivate::waitForFinished(int msecs)
+bool QProcessPrivate::waitForFinished(const QDeadlineTimer &deadline)
 {
-    return waitFor(WaitFinished, msecs);
+    return waitFor(WaitFinished, deadline);
 }
 
 void QProcessPrivate::findExitCode()
@@ -1532,8 +1525,8 @@ int QProcessPrivate::_q_notified(int flags)
         if (/*dying ||*/ processState == QProcess::NotRunning) {
             ret |= CanDie;
         } else {
-            if (_q_processDied())
-                ret |= CanDie;
+            processFinished();
+            return false;
         }
     }
 

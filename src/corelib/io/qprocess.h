@@ -291,6 +291,7 @@ private:
     Q_PRIVATE_SLOT(d_func(), void _q_processDied())
 #if defined(Q_OS_OS2)
     Q_PRIVATE_SLOT(d_func(), void _q_notified(int))
+    friend class QProcessManager; //from qt 5.15.2 qprocess.h
 #endif
 };
 
