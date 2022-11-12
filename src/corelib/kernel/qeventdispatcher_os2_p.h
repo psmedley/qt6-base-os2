@@ -71,25 +71,25 @@ public:
     explicit QEventDispatcherOS2(QObject *parent = 0);
     ~QEventDispatcherOS2();
 
-    bool processEvents(QEventLoop::ProcessEventsFlags flags);
+    bool processEvents(QEventLoop::ProcessEventsFlags flags) override;
     bool hasPendingEvents();
 
-    void registerSocketNotifier(QSocketNotifier *notifier);
-    void unregisterSocketNotifier(QSocketNotifier *notifier);
+    void registerSocketNotifier(QSocketNotifier *notifier) override;
+    void unregisterSocketNotifier(QSocketNotifier *notifier) override;
 
-    void registerTimer(int timerId, int interval, Qt::TimerType timerType, QObject *object);
-    bool unregisterTimer(int timerId);
-    bool unregisterTimers(QObject *object);
-    QList<TimerInfo> registeredTimers(QObject *object) const;
+    void registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object) override;
+    bool unregisterTimer(int timerId) override;
+    bool unregisterTimers(QObject *object) override;
+    QList<TimerInfo> registeredTimers(QObject *object) const override;
 
-    int remainingTime(int timerId);
+    int remainingTime(int timerId) override;
 
-    void wakeUp();
-    void interrupt();
+    void wakeUp() override;
+    void interrupt() override;
     void flush();
 
-    void startingUp();
-    void closingDown();
+    void startingUp() override;
+    void closingDown() override;
 };
 
 class Q_CORE_EXPORT QPMObjectWindow

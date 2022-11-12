@@ -291,7 +291,7 @@ void QThreadPrivate::finish(void *arg, bool lockAnyway) noexcept
  ** QThread
  *************************************************************************/
 
-Qt::HANDLE QThread::currentThreadId() Q_DECL_NOTHROW
+Qt::HANDLE QThread::currentThreadIdImpl() noexcept
 {
     return reinterpret_cast<Qt::HANDLE>(_gettid());
 }
