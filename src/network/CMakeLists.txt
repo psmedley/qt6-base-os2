@@ -197,6 +197,14 @@ qt_internal_extend_target(Network CONDITION WIN32
         winhttp
 )
 
+qt_internal_extend_target(Network CONDITION OS2
+    SOURCES
+        kernel/qdnslookup_unix.cpp
+        kernel/qhostinfo_unix.cpp
+        kernel/qnetworkinterface_unix.cpp
+        socket/qnativesocketengine_unix.cpp
+)
+
 qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND WIN32
     SOURCES
         kernel/qdnslookup_win.cpp
@@ -294,7 +302,7 @@ qt_internal_extend_target(Network CONDITION INTEGRITY AND QT_FEATURE_localserver
         QT_LOCALSOCKET_TCP
 )
 
-qt_internal_extend_target(Network CONDITION QT_FEATURE_localserver AND UNIX AND NOT INTEGRITY
+qt_internal_extend_target(Network CONDITION QT_FEATURE_localserver AND (UNIX OR OS2) AND NOT INTEGRITY
     SOURCES
         socket/qlocalserver_unix.cpp
         socket/qlocalsocket_unix.cpp

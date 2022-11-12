@@ -2483,6 +2483,30 @@ Oreo
 }
 #endif
 
+#if defined(Q_OS_OS2)
+static const char *osVer_helper(QOperatingSystemVersion version = QOperatingSystemVersion::current())
+{
+    if (version.majorVersion() == 20) {
+        switch (version.minorVersion()) {
+        case 00:
+            return "2.0";
+        case 10:
+            return "2.1";
+        case 11:
+            return "2.11";
+        case 30:
+            return "Warp 3";
+        case 40:
+            return "Warp 4";
+        case 45:
+            return "Warp 4.5";
+        }
+    }
+
+    return 0;
+}
+#endif
+
 /*!
     \since 5.4
 
@@ -2690,8 +2714,8 @@ static QString unknownText()
     that new OS kernel types may be added over time.
 
     On Windows, this function returns the type of Windows kernel, like "winnt".
-    On Unix systems, it returns the same as the output of \c{uname
-    -s} (lowercased).
+    On OS/2, it returns "os2". On Unix systems, it returns the same as the
+    output of \c{uname -s} (lowercased).
 
     \note This function may return surprising values: it returns "linux"
     for all operating systems running Linux (including Android), "qnx" for all
@@ -2705,6 +2729,8 @@ QString QSysInfo::kernelType()
 {
 #if defined(Q_OS_WIN)
     return QStringLiteral("winnt");
+#elif defined(Q_OS_OS2)
+    return QStringLiteral("os2");
 #elif defined(Q_OS_UNIX)
     struct utsname u;
     if (uname(&u) == 0)
@@ -2717,9 +2743,9 @@ QString QSysInfo::kernelType()
     \since 5.4
 
     Returns the release version of the operating system kernel. On Windows, it
-    returns the version of the NT kernel. On Unix systems, including
-    Android and \macos, it returns the same as the \c{uname -r}
-    command would return.
+    returns the version of the NT kernel. On OS/2, it returns the version of
+    the OS/2 kernel. On Unix systems, including Android and \macos, it returns
+    the same as the \c{uname -r} command would return.
 
     If the version could not be determined, this function may return an empty
     string.
@@ -2728,10 +2754,12 @@ QString QSysInfo::kernelType()
 */
 QString QSysInfo::kernelVersion()
 {
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_OS2)
     const auto osver = QOperatingSystemVersion::current();
-    return QString::number(osver.majorVersion()) + QLatin1Char('.') + QString::number(osver.minorVersion())
-            + QLatin1Char('.') + QString::number(osver.microVersion());
+    QString ret = QString::number(osver.majorVersion()) + QLatin1Char('.') + QString::number(osver.minorVersion());
+    if (osver.segmentCount() >= 3)
+        ret += QLatin1Char('.') + QString::number(osver.microVersion());
+    return ret;
 #else
     struct utsname u;
     if (uname(&u) == 0)
@@ -2772,6 +2800,8 @@ QString QSysInfo::kernelVersion()
 
     \b{Windows note}: this function return "windows"
 
+    \b{OS/2 note}: this function returns "os2" on all OS/2 versions.
+
     For other Unix-type systems, this function usually returns "unknown".
 
     \sa QFileSelector, kernelType(), kernelVersion(), productVersion(), prettyProductName()
@@ -2781,6 +2811,9 @@ QString QSysInfo::productType()
     // similar, but not identical to QFileSelectorPrivate::platformSelectors
 #if defined(Q_OS_WIN)
     return QStringLiteral("windows");
+
+#elif defined(Q_OS_OS2)
+    return QStringLiteral("os2");
 
 #elif defined(Q_OS_QNX)
     return QStringLiteral("qnx");
@@ -2856,6 +2889,12 @@ QString QSysInfo::productVersion()
         return QString::fromLatin1(version).remove(spaceChar).toLower() + winSp_helper().remove(spaceChar).toLower();
     }
     // fall through
+
+#elif defined(Q_OS_OS2)
+  const char *version = osVer_helper();
+  if (version)
+      return QString::fromLatin1(version);
+  // fall through
 
 #elif defined(USE_ETC_OS_RELEASE) // Q_OS_UNIX
     QUnixOSVersion unixOsVersion;

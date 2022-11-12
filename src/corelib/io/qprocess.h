@@ -207,6 +207,11 @@ public:
     void setChildProcessModifier(const std::function<void(void)> &modifier);
 #endif
 
+#if defined(Q_OS_OS2) || defined(Q_CLANG_QDOC)
+    bool threadSafe() const;
+    void setThreadSafe(bool threadSafe);
+#endif // Q_OS_OS2 || Q_CLANG_QDOC
+
     QString workingDirectory() const;
     void setWorkingDirectory(const QString &dir);
 
@@ -284,6 +289,9 @@ private:
     Q_PRIVATE_SLOT(d_func(), bool _q_canWrite())
     Q_PRIVATE_SLOT(d_func(), bool _q_startupNotification())
     Q_PRIVATE_SLOT(d_func(), void _q_processDied())
+#if defined(Q_OS_OS2)
+    Q_PRIVATE_SLOT(d_func(), void _q_notified(int))
+#endif
 };
 
 #endif // QT_CONFIG(process)

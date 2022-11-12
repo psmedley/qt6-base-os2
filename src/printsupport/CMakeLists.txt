@@ -78,7 +78,7 @@ qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_printpreviewwidget
         widgets/qprintpreviewwidget.cpp widgets/qprintpreviewwidget.h
 )
 
-qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cups AND UNIX AND NOT APPLE
+qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cups AND (UNIX OR OS2) AND NOT APPLE
     SOURCES
         kernel/qcups.cpp kernel/qcups_p.h
 )

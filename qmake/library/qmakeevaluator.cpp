@@ -50,7 +50,7 @@
 # include <qthreadpool.h>
 #endif
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <unistd.h>
 #include <sys/utsname.h>
 #  ifdef Q_OS_BSD4
@@ -62,6 +62,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef Q_OS_OS2
+#define INCL_BASE
+#include <os2.h>
+#endif
+
 using namespace QMakeInternal;
 
 QT_BEGIN_NAMESPACE
@@ -69,7 +74,7 @@ QT_BEGIN_NAMESPACE
 #define fL1S(s) QString::fromLatin1(s)
 
 // we can't use QThread in qmake
-// this function is a merger of QThread::idealThreadCount from qthread_win.cpp and qthread_unix.cpp
+// this function is a merger of QThread::idealThreadCount from qthread_win.cpp, qthread_os2.cpp and qthread_unix.cpp
 static int idealThreadCount()
 {
 #ifdef PROEVALUATOR_THREAD_SAFE
@@ -78,6 +83,13 @@ static int idealThreadCount()
     SYSTEM_INFO sysinfo;
     GetSystemInfo(&sysinfo);
     return sysinfo.dwNumberOfProcessors;
+#elif defined(Q_OS_OS2)
+    ULONG cpuCnt = 1;
+    APIRET rc = DosQuerySysInfo(QSV_NUMPROCESSORS, QSV_NUMPROCESSORS,
+                                &cpuCnt, sizeof(cpuCnt));
+    if (rc != NO_ERROR || cpuCnt == 0)
+        cpuCnt = 1;
+    return cpuCnt;
 #else
     // there are a couple more definitions in the Unix QThread::idealThreadCount, but
     // we don't need them all here
@@ -1093,6 +1105,18 @@ void QMakeEvaluator::loadDefaults()
                 vcInstallDir,
                 m_option->getEnv(QLatin1String("PATH")));
 # endif
+#elif defined(Q_OS_OS2)
+    // Follow the Windows logic
+    vars[ProKey("QMAKE_HOST.os")] << ProString("OS/2");
+    vars[ProKey("QMAKE_HOST.version")] << ProString(QSysInfo::kernelVersion());
+    vars[ProKey("QMAKE_HOST.version_string")] << ProString(QSysInfo::productVersion());
+    /// Use x86 for arch as on Windows too (note: uname always returns i386)
+    vars[ProKey("QMAKE_HOST.arch")] << ProString("x86");
+    // Take the host name from uname
+    struct utsname name;
+    if (uname(&name) != -1) {
+        vars[ProKey("QMAKE_HOST.name")] << ProString(QString::fromLocal8Bit(name.nodename));
+    }
 #elif defined(Q_OS_UNIX)
     struct utsname name;
     if (uname(&name) != -1) {

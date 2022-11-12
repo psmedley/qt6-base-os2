@@ -87,7 +87,7 @@ typedef void (*res_nclose_proto)(res_state_ptr);
 static res_nclose_proto local_res_nclose = nullptr;
 static res_state_ptr local_res = nullptr;
 
-#if QT_CONFIG(library) && !defined(Q_OS_QNX)
+#if QT_CONFIG(library) && !defined(Q_OS_QNX) && !defined(Q_OS_OS2)
 namespace {
 struct LibResolv
 {
@@ -181,11 +181,11 @@ static void resolveLibrary(LibResolvFeature f)
     if (LibResolv::ReinitNecessary || f == NeedResNInit)
         libResolv();
 }
-#else // QT_CONFIG(library) || Q_OS_QNX
+#else // QT_CONFIG(library) || Q_OS_QNX || Q_OS_OS2
 static void resolveLibrary(LibResolvFeature)
 {
 }
-#endif // QT_CONFIG(library) || Q_OS_QNX
+#endif // QT_CONFIG(library) || Q_OS_QNX || Q_OS_OS2
 
 QHostInfo QHostInfoAgent::fromName(const QString &hostName)
 {

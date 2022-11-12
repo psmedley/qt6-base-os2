@@ -180,8 +180,13 @@ void tst_qstandardpaths::testDefaultLocations()
     QCOMPARE(genericDataDirs.count(), 3);
     const QString expectedDataHome = QDir::homePath() + QString::fromLatin1("/.local/share");
     QCOMPARE(genericDataDirs.at(0), expectedDataHome);
+#ifdef Q_OS_OS2
+    QCOMPARE(genericDataDirs.at(1), QString::fromLatin1("/@unixroot/usr/local/share"));
+    QCOMPARE(genericDataDirs.at(2), QString::fromLatin1("/@unixroot/usr/share"));
+#else
     QCOMPARE(genericDataDirs.at(1), QString::fromLatin1("/usr/local/share"));
     QCOMPARE(genericDataDirs.at(2), QString::fromLatin1("/usr/share"));
+#endif
 #endif
 }
 
@@ -328,8 +333,13 @@ void tst_qstandardpaths::testDataLocation()
     const QStringList appDataDirs = QStandardPaths::standardLocations(QStandardPaths::AppLocalDataLocation);
     QCOMPARE(appDataDirs.count(), 3);
     QCOMPARE(appDataDirs.at(0), expectedAppDataDir);
+#ifdef Q_OS_OS2
+    QCOMPARE(appDataDirs.at(1), QString::fromLatin1("/@unixroot/usr/local/share/Qt/QtTest"));
+    QCOMPARE(appDataDirs.at(2), QString::fromLatin1("/@unixroot/usr/share/Qt/QtTest"));
+#else
     QCOMPARE(appDataDirs.at(1), QString::fromLatin1("/usr/local/share/Qt/QtTest"));
     QCOMPARE(appDataDirs.at(2), QString::fromLatin1("/usr/share/Qt/QtTest"));
+#endif
 #endif
 
     // reset for other tests
@@ -359,9 +369,13 @@ void tst_qstandardpaths::testAppConfigLocation()
 // It may exist twice, in /bin/sh and /usr/bin/sh, in that case use the PATH order.
 static inline QFileInfo findSh()
 {
+#ifdef Q_OS_OS2
+    QLatin1String sh("/sh.exe");
+#else
     QLatin1String sh("/sh");
+#endif
     QByteArray pEnv = qgetenv("PATH");
-    const QLatin1Char pathSep(':');
+    const QChar pathSep = QDir::listSeparator();
     const QStringList rawPaths = QString::fromLocal8Bit(pEnv.constData()).split(pathSep, Qt::SkipEmptyParts);
     foreach (const QString &path, rawPaths) {
         if (QFile::exists(path + sh))
@@ -437,7 +451,7 @@ void tst_qstandardpaths::testFindExecutable()
     if (changeDirectory)
         QVERIFY(QDir::setCurrent(currentDirectory));
 
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     const Qt::CaseSensitivity sensitivity = Qt::CaseInsensitive;
 #else
     const Qt::CaseSensitivity sensitivity = Qt::CaseSensitive;
@@ -648,7 +662,7 @@ void tst_qstandardpaths::testCustomRuntimeDirectory_data()
 
 void tst_qstandardpaths::testCustomRuntimeDirectory()
 {
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
     if (::getuid() == 0)
         QSKIP("Running this test as root doesn't make sense");
 #endif

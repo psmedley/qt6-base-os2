@@ -139,7 +139,11 @@ void tst_QFontDatabase::fixedPitch_data()
     QTest::newRow( "Times New Roman" ) << QString( "Times New Roman" ) << false;
     QTest::newRow( "Arial" ) << QString( "Arial" ) << false;
     QTest::newRow( "Andale Mono" ) << QString( "Andale Mono" ) << true;
+#ifndef Q_OS_OS2
+    // Standard Courier Type 1 font is broken on OS/2 (its bold variants don't
+    // report they are fixed and it screws QFontDatabse)
     QTest::newRow( "Courier" ) << QString( "Courier" ) << true;
+#endif
     QTest::newRow( "Courier New" ) << QString( "Courier New" ) << true;
 #ifndef Q_OS_MAC
     QTest::newRow( "Script" ) << QString( "Script" ) << false;

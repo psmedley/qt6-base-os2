@@ -146,11 +146,17 @@ void Q_CORE_EXPORT qRegisterStaticPluginFunction(QStaticPlugin staticPlugin);
 
 #else
 
+#  if defined (Q_OS_OS2)
+#     define Q_STANDARD_CALL _System
+#  else
+#     define Q_STANDARD_CALL
+#  endif
+
 #  define QT_MOC_EXPORT_PLUGIN(PLUGINCLASS, PLUGINCLASSNAME)      \
             extern "C" Q_DECL_EXPORT \
-            QPluginMetaData qt_plugin_query_metadata() \
+            QPluginMetaData Q_STANDARD_CALL qt_plugin_query_metadata() \
             { return { qt_pluginMetaData_##PLUGINCLASSNAME, sizeof qt_pluginMetaData_##PLUGINCLASSNAME }; } \
-            extern "C" Q_DECL_EXPORT QT_PREPEND_NAMESPACE(QObject) *qt_plugin_instance() \
+            extern "C" Q_DECL_EXPORT QT_PREPEND_NAMESPACE(QObject) * Q_STANDARD_CALL qt_plugin_instance() \
             Q_PLUGIN_INSTANCE(PLUGINCLASS)
 
 #endif

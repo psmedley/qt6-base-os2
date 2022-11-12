@@ -34,9 +34,9 @@
 
 # the directory of this script is the "source tree"
 relpath=`dirname $0`
-relpath=`(cd "$relpath"; /bin/pwd)`
+relpath=`(cd "$relpath"; pwd)`
 # the current directory is the "build tree" or "object tree"
-outpath=`/bin/pwd`
+outpath=`pwd`
 
 # do this early so we don't store it in config.status
 CFG_TOPLEVEL=

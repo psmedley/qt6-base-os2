@@ -270,8 +270,11 @@ USHORT QProcessManager::addProcess(QProcess *process)
         instance->start();
     }
 
+#if 0
     QProcessPrivate *d = process->d_func();
-
+#else
+    QProcessPrivate *d = d_func();
+#endif
     USHORT procKey = instance->lastProcKey + 1;
     if (procKey > MaxProcKey) {
         // limit reached, find an unused number
@@ -337,7 +340,11 @@ void QProcessManager::removeProcess(USHORT procKey)
     // to guarantee that the given procKey may be reused, we must close all
     // pipes in order to ensure that we won't get late NPSS_CLOSE for the
     // removed process with the key that may be already associated with a new one
+#if 0
     QProcessPrivate *d = process->d_func();
+#else
+    QProcessPrivate *d = d_func();
+#endif
     d->closeChannel(&d->stdinChannel);
     d->closeChannel(&d->stdoutChannel);
     d->closeChannel(&d->stderrChannel);
@@ -1060,7 +1067,7 @@ void QProcessPrivate::startProcess()
         return;
     }
 
-    this->pid = Q_PID(pid);
+    this->pid = qint64(pid);
 
     DEBUG(() << "pid" << pid);
 
@@ -1134,14 +1141,14 @@ qint64 QProcessPrivate::bytesAvailableInChannel(const Channel *channel) const
 {
     Q_ASSERT(channel->pipe.server != INVALID_HFILE);
     qint64 bytes = 0;
-    if (!dying) {
+//    if (!dying) {
         Q_ASSERT(channel->pipe.signaled);
         // reuse the number we got in _q_notified()
         bytes = channel->pipe.bytes;
-    } else {
-        if (stdoutChannel.type == QProcessPrivate::Channel::Normal)
-            bytes = bytesAvailableFromPipe(channel->pipe.server);
-    }
+//    } else {
+//        if (stdoutChannel.type == QProcessPrivate::Channel::Normal)
+//            bytes = bytesAvailableFromPipe(channel->pipe.server);
+//    }
 
     DEBUG(("%s = %lld", channel == &stdoutChannel ? "stdout" : "stderr", bytes));
     return bytes;
@@ -1424,7 +1431,7 @@ void QProcessPrivate::findExitCode()
     }
 }
 
-bool QProcessPrivate::waitForDeadChild()
+void QProcessPrivate::waitForDeadChild()
 {
     DEBUG(() << "pid" << pid);
     Q_ASSERT(pid != 0);
@@ -1436,11 +1443,8 @@ bool QProcessPrivate::waitForDeadChild()
         crashed = !WIFEXITED(exitStatus);
         exitCode = WEXITSTATUS(exitStatus);
         DEBUG(() << "dead with exitCode" << exitCode << ", crashed?" << crashed);
-        return true;
+//        return true;
     }
-
-    DEBUG(() << "not dead!" << waitResult << "errno" << errno << strerror(errno));
-    return false;
 }
 
 int QProcessPrivate::_q_notified(int flags)
@@ -1525,7 +1529,7 @@ int QProcessPrivate::_q_notified(int flags)
 
     if (flags & CanDie) {
         // Note: don't deliver _q_processDied if the process is already dead.
-        if (dying || processState == QProcess::NotRunning) {
+        if (/*dying ||*/ processState == QProcess::NotRunning) {
             ret |= CanDie;
         } else {
             if (_q_processDied())

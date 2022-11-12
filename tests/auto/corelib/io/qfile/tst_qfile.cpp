@@ -69,6 +69,9 @@ QT_END_NAMESPACE
 # include <unistd.h>
 # include <private/qcore_unix_p.h>
 #endif
+#ifdef Q_OS_OS2
+# include <qt_os2.h>
+#endif
 #ifdef Q_OS_MAC
 # include <sys/mount.h>
 #elif defined(Q_OS_LINUX)
@@ -99,7 +102,7 @@ QT_END_NAMESPACE
 #  undef fileno
 #endif
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
 #include "../../../network-settings.h"
 #endif
 
@@ -467,7 +470,7 @@ void tst_QFile::initTestCase()
 #if QT_CONFIG(process)
 #if defined(Q_OS_ANDROID)
     m_stdinProcess = QCoreApplication::applicationDirPath() + QLatin1String("/libstdinprocess_helper.so");
-#elif defined(Q_OS_WIN)
+#elif defined(Q_OS_DOSLIKE)
     m_stdinProcess = QFINDTESTDATA("stdinprocess_helper.exe");
 #else
     m_stdinProcess = QFINDTESTDATA("stdinprocess_helper");
@@ -1202,6 +1205,7 @@ QString driveLetters()
     } while (FindNextVolumeW(h, volumeName, MAX_PATH));
     FindVolumeClose(h);
     return result;
+#endif
 }
 
 static inline QChar invalidDriveLetter()
@@ -1214,12 +1218,12 @@ static inline QChar invalidDriveLetter()
     return QChar();
 }
 
-#endif // Q_OS_WIN
+#endif // Q_OS_DOSLIKE
 
 void tst_QFile::invalidFile_data()
 {
     QTest::addColumn<QString>("fileName");
-#if !defined(Q_OS_WIN)
+#if !defined(Q_OS_DOSLIKE)
     QTest::newRow( "x11" ) << QString( "qwe//" );
 #else
     QTest::newRow( "colon2" ) << invalidDriveLetter() + QString::fromLatin1(":ail:invalid");
@@ -1330,11 +1334,14 @@ void tst_QFile::permissions_data()
     QTest::newRow("data0") << QCoreApplication::instance()->applicationFilePath() << uint(QFile::ExeUser) << true << false;
     QTest::newRow("data1") << m_testSourceFile << uint(QFile::ReadUser) << true << false;
     QTest::newRow("readonly") << QString::fromLatin1("readonlyfile") << uint(QFile::WriteUser) << false << false;
+#ifndef Q_OS_OS2
+    // OS/2 file names are limited to 260 chars in total and 256 per component, this is obviously too long.
     QTest::newRow("longfile") << QString::fromLatin1("longFileNamelongFileNamelongFileNamelongFileName"
                                                     "longFileNamelongFileNamelongFileNamelongFileName"
                                                     "longFileNamelongFileNamelongFileNamelongFileName"
                                                     "longFileNamelongFileNamelongFileNamelongFileName"
                                                     "longFileNamelongFileNamelongFileNamelongFileName.txt") << uint(QFile::ReadUser) << true << true;
+#endif
     QTest::newRow("resource1") << ":/tst_qfileinfo/resources/file1.ext1" << uint(QFile::ReadUser) << true << false;
     QTest::newRow("resource2") << ":/tst_qfileinfo/resources/file1.ext1" << uint(QFile::WriteUser) << false << false;
     QTest::newRow("resource3") << ":/tst_qfileinfo/resources/file1.ext1" << uint(QFile::ExeUser) << false << false;
@@ -1694,7 +1701,7 @@ void tst_QFile::writeTextFile()
     QVERIFY2(file.open(QFile::WriteOnly | QFile::Truncate | QFile::Text),
              msgOpenFailed(file).constData());
     QByteArray out = in;
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     out.replace('\n', "\r\n");
 #endif
     QCOMPARE(file.write(in), qlonglong(in.size()));
@@ -2143,6 +2150,8 @@ void tst_QFile::longFileName_data()
     QTest::newRow( "148 chars" ) << QString::fromLatin1("longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName.txt");
+#ifndef Q_OS_OS2
+    // OS/2 file names are limited to 260 chars in total and 256 per component, this is obviously too long.
     QTest::newRow( "244 chars" ) << QString::fromLatin1("longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
@@ -2153,6 +2162,7 @@ void tst_QFile::longFileName_data()
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName.txt")).absoluteFilePath();
+#endif
   /* needs to be put on a windows 2000 > test machine
   QTest::newRow( "244 chars on UNC" ) <<  QString::fromLatin1("//arsia/D/troll/tmp/longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
@@ -2657,7 +2667,8 @@ void tst_QFile::socketPair()
 
 void tst_QFile::textFile()
 {
-    const char *openMode = QOperatingSystemVersion::current().type() != QOperatingSystemVersion::Windows
+    const char *openMode = QOperatingSystemVersion::current().type() != QOperatingSystemVersion::Windows &&
+                           QOperatingSystemVersion::current().type() != QOperatingSystemVersion::OS2
         ? "w" : "wt";
     StdioFileGuard fs(fopen("writeabletextfile", openMode));
     QVERIFY(fs);
@@ -2677,7 +2688,7 @@ void tst_QFile::textFile()
     QByteArray data = file.readAll();
 
     QByteArray expected = part1 + part2;
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     expected.replace("\n", "\015\012");
 #endif
     QCOMPARE(data, expected);
@@ -3220,7 +3231,7 @@ void tst_QFile::map()
     file.close();
 
 #if !defined(Q_OS_VXWORKS)
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
     if (::getuid() != 0)
         // root always has permissions
 #endif
@@ -3567,7 +3578,7 @@ void tst_QFile::objectConstructors()
 
 void tst_QFile::caseSensitivity()
 {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     const bool caseSensitive = false;
 #elif defined(Q_OS_MAC)
      const bool caseSensitive = pathconf(QDir::currentPath().toLatin1().constData(), _PC_CASE_SENSITIVE);

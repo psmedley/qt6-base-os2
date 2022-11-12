@@ -41,11 +41,16 @@
 #include <qcommandlineoption.h>
 #include <qcommandlineparser.h>
 
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
 #  include <fcntl.h>
 #  include <io.h>
 #  include <stdio.h>
-#endif // Q_OS_WIN
+#ifdef Q_OS_OS2
+#  define _O_BINARY O_BINARY
+#  define _fileno fileno
+#  define _setmode setmode
+#endif
+#endif // Q_OS_DOSLIKE
 
 QT_BEGIN_NAMESPACE
 
@@ -351,7 +356,7 @@ int runRcc(int argc, char *argv[])
 
 
     if (outFilename.isEmpty() || outFilename == QLatin1String("-")) {
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
         // Make sure fwrite to stdout doesn't do LF->CRLF
         if (library.format() == RCCResourceLibrary::Binary)
             _setmode(_fileno(stdout), _O_BINARY);
@@ -359,7 +364,7 @@ int runRcc(int argc, char *argv[])
         // otherwise we'll end up in CRCRLF instead of
         // CRLF.
         mode &= ~QIODevice::Text;
-#endif // Q_OS_WIN
+#endif // Q_OS_DOSLIKE
         // using this overload close() only flushes.
         out.open(stdout, mode);
     } else {

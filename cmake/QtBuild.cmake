@@ -109,7 +109,7 @@ function(qt_get_install_target_default_args)
     set(${arg_OUT_VAR} "${args}" PARENT_SCOPE)
 endfunction()
 
-if (WIN32)
+if (WIN32 OR OS2)
     set(_default_libexec "${INSTALL_ARCHDATADIR}/bin")
 else()
     set(_default_libexec "${INSTALL_ARCHDATADIR}/libexec")
@@ -350,6 +350,8 @@ elseif(NETBSD)
     set(QT_DEFAULT_MKSPEC netbsd-g++)
 elseif(OPENBSD)
     set(QT_DEFAULT_MKSPEC openbsd-g++)
+elseif(OS2)
+    set(QT_DEFAULT_MKSPEC os2-g++)
 elseif(SOLARIS)
     if(GCC)
         if(QT_64BIT)
@@ -423,7 +425,7 @@ set(QT_KNOWN_MODULES_WITH_TOOLS "" CACHE INTERNAL "Known Qt modules with tools" 
 # For adjusting variables when running tests, we need to know what
 # the correct variable is for separating entries in PATH-alike
 # variables.
-if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+if((CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows") OR (CMAKE_HOST_SYSTEM_NAME STREQUAL "OS2"))
     set(QT_PATH_SEPARATOR "\\;")
 else()
     set(QT_PATH_SEPARATOR ":")

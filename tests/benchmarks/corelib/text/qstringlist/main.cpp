@@ -54,8 +54,10 @@ private slots:
     void split_stdvector_stdstring() const;
     void split_stdvector_stdstring_data() const { return split_data(); }
 
+#if defined(__GLIBC__) && defined(_GLIBCXX_USE_WCHAR_T)
     void split_stdvector_stdwstring() const;
     void split_stdvector_stdwstring_data() const { return split_data(); }
+#endif
 
     void split_stdlist_stdstring() const;
     void split_stdlist_stdstring_data() const { return split_data(); }
@@ -203,6 +205,7 @@ void tst_QStringList::split_stdvector_stdstring() const
     }
 }
 
+#if defined(__GLIBC__) && defined(_GLIBCXX_USE_WCHAR_T)
 void tst_QStringList::split_stdvector_stdwstring() const
 {
     QFETCH(QString, input);
@@ -218,6 +221,7 @@ void tst_QStringList::split_stdvector_stdwstring() const
             ;
     }
 }
+#endif
 
 void tst_QStringList::split_stdlist_stdstring() const
 {

@@ -39,7 +39,7 @@
 #include <qdir.h>
 #include <qfileinfo.h>
 #include <qstorageinfo.h>
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -48,15 +48,21 @@
 #ifndef Q_OS_VXWORKS
 #include <pwd.h>
 #endif
+#ifdef Q_OS_OS2
+#include <grp.h>
+#endif
 #endif
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #include <private/qwinregistry_p.h>
 #include <lm.h>
 #endif
+#ifdef Q_OS_OS2
+#include <qt_os2.h>
+#endif
 #include <qplatformdefs.h>
 #include <qdebug.h>
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
 #include "../../../network-settings.h"
 #endif
 #include <private/qfileinfo_p.h>
@@ -81,7 +87,7 @@ inline bool qIsLikelyToBeFat(const QString &path)
 
 inline bool qIsLikelyToBeNfs(const QString &path)
 {
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     Q_UNUSED(path);
     return false;
 #else
@@ -334,7 +340,7 @@ void tst_QFileInfo::copy()
     file.flush();
 
     QTest::qWait(250);
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     file.close();
 #endif
     info3.refresh();
@@ -570,7 +576,7 @@ void tst_QFileInfo::absFilePath_data()
     QTest::newRow("relativeFile") << "tmp.txt" << QDir::currentPath() + "/tmp.txt";
     QTest::newRow("relativeFileInSubDir") << "temp/tmp.txt" << QDir::currentPath() + "/" + "temp/tmp.txt";
     QString drivePrefix;
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QString curr = QDir::currentPath();
 
     curr.remove(0, 2);   // Make it a absolute path with no drive specifier: \depot\qt-4.2\tests\auto\qfileinfo
@@ -599,7 +605,7 @@ void tst_QFileInfo::absFilePath()
     QFETCH(QString, expected);
 
     QFileInfo fi(file);
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QVERIFY(QString::compare(fi.absoluteFilePath(), expected, Qt::CaseInsensitive) == 0);
 #else
     QCOMPARE(fi.absoluteFilePath(), expected);
@@ -751,7 +757,7 @@ void tst_QFileInfo::fileName_data()
 
     QTest::newRow("relativeFile") << "tmp.txt" << "tmp.txt";
     QTest::newRow("relativeFileInSubDir") << "temp/tmp.txt" << "tmp.txt";
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("absFilePath") << "c:\\home\\andy\\tmp.txt" << "tmp.txt";
     QTest::newRow("driveWithNoSlash") << "c:tmp.txt" << "tmp.txt";
 #else
@@ -855,7 +861,7 @@ void tst_QFileInfo::suffix_data()
     QTest::newRow("hidden2") << ".ex.ext2" << "ext2";
     QTest::newRow("hidden2") << ".e.ext2" << "ext2";
     QTest::newRow("hidden2") << "..ext2" << "ext2";
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     QTest::newRow("driveWithSlash") << "c:/file1.ext1.ext2" << "ext2";
     QTest::newRow("driveWithoutSlash") << "c:file1.ext1.ext2" << "ext2";
 #endif
@@ -884,7 +890,7 @@ void tst_QFileInfo::completeSuffix_data()
     QTest::newRow("data3") << "/path/file.tar" << "tar";
     QTest::newRow("resource1") << ":/tst_qfileinfo/resources/file1.ext1" << "ext1";
     QTest::newRow("resource2") << ":/tst_qfileinfo/resources/file1.ext1.ext2" << "ext1.ext2";
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     QTest::newRow("driveWithSlash") << "c:/file1.ext1.ext2" << "ext1.ext2";
     QTest::newRow("driveWithoutSlash") << "c:file1.ext1.ext2" << "ext1.ext2";
 #endif
@@ -911,7 +917,7 @@ void tst_QFileInfo::baseName_data()
     QTest::newRow("data4") << "/path/file" << "file";
     QTest::newRow("resource1") << ":/tst_qfileinfo/resources/file1.ext1" << "file1";
     QTest::newRow("resource2") << ":/tst_qfileinfo/resources/file1.ext1.ext2" << "file1";
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     QTest::newRow("driveWithSlash") << "c:/file1.ext1.ext2" << "file1";
     QTest::newRow("driveWithoutSlash") << "c:file1.ext1.ext2" << "file1";
 #endif
@@ -938,7 +944,7 @@ void tst_QFileInfo::completeBaseName_data()
     QTest::newRow("data4") << "/path/file" << "file";
     QTest::newRow("resource1") << ":/tst_qfileinfo/resources/file1.ext1" << "file1";
     QTest::newRow("resource2") << ":/tst_qfileinfo/resources/file1.ext1.ext2" << "file1.ext1";
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     QTest::newRow("driveWithSlash") << "c:/file1.ext1.ext2" << "file1.ext1";
     QTest::newRow("driveWithoutSlash") << "c:file1.ext1.ext2" << "file1.ext1";
 #endif
@@ -1038,7 +1044,7 @@ void tst_QFileInfo::compare_data()
     QTest::newRow("casesense1")
         << caseChangedSource
         << m_sourceFile
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
         << true;
 #elif defined(Q_OS_MAC)
         << !pathconf(QDir::currentPath().toLatin1().constData(), _PC_CASE_SENSITIVE);
@@ -1066,7 +1072,7 @@ void tst_QFileInfo::consistent_data()
     QTest::addColumn<QString>("file");
     QTest::addColumn<QString>("expected");
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("slashes") << QString::fromLatin1("\\a\\a\\a\\a") << QString::fromLatin1("/a/a/a/a");
 #endif
     QTest::newRow("ending slash") << QString::fromLatin1("/a/somedir/") << QString::fromLatin1("/a/somedir/");
@@ -1088,6 +1094,8 @@ void tst_QFileInfo::fileTimes_data()
 {
     QTest::addColumn<QString>("fileName");
     QTest::newRow("simple") << QString::fromLatin1("simplefile.txt");
+#ifndef Q_OS_OS2
+    // OS/2 file names are limited to 260 chars in total and 256 per component, this is obviously too long.
     QTest::newRow( "longfile" ) << QString::fromLatin1("longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
@@ -1098,6 +1106,7 @@ void tst_QFileInfo::fileTimes_data()
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName"
                                                      "longFileNamelongFileNamelongFileNamelongFileName.txt")).absoluteFilePath();
+#endif
 }
 
 void tst_QFileInfo::fileTimes()
@@ -1114,10 +1123,15 @@ void tst_QFileInfo::fileTimes()
     // sync with the system clock (maybe they're using CLOCK_REALTIME_COARSE),
     // so add a margin of error to our comparisons
     int fsClockSkew = 10;
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     fsClockSkew = 500;
 #endif
 
+#ifdef Q_OS_OS2
+    // OS/2 provides access times but timestamp granularity is always 2 seconds
+    bool noAccessTime = false;
+    fsClockSkew = sleepTime = 2000;
+#else
     // NFS clocks may be WAY out of sync
     if (qIsLikelyToBeNfs(fileName))
         QSKIP("This test doesn't work on NFS");
@@ -1138,6 +1152,7 @@ void tst_QFileInfo::fileTimes()
             }
         }
     }
+#endif
 
     if (QFile::exists(fileName)) {
         QVERIFY(QFile::remove(fileName));
@@ -1178,9 +1193,15 @@ void tst_QFileInfo::fileTimes()
     {
         QFileInfo fileInfo(fileName);
         metadataChangeTime = fileInfo.metadataChangeTime();
+#ifdef Q_OS_OS2
+        // OS/2 doesn't change any timestamp at all when file attributes change
+        QVERIFY2(metadataChangeTime == writeTime,
+                 datePairString(metadataChangeTime, writeTime));
+#else
         QVERIFY2(metadataChangeTime > beforeMetadataChange,
                  datePairString(metadataChangeTime, beforeMetadataChange));
         QVERIFY(metadataChangeTime >= writeTime); // not all filesystems can store both times
+#endif
         QCOMPARE(fileInfo.birthTime(), birthTime); // mustn't have changed
     }
 
@@ -1473,17 +1494,27 @@ void tst_QFileInfo::isHidden_data()
 {
     QTest::addColumn<QString>("path");
     QTest::addColumn<bool>("isHidden");
+#if !defined(Q_OS_OS2)
+    // On OS/2 some drives (e.g. bootable volumes) are reported as hidden...
     foreach (const QFileInfo& info, QDir::drives()) {
         QTest::newRow(qPrintable("drive." + info.path())) << info.path() << false;
     }
+#endif
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QVERIFY(QDir("./hidden-directory").exists() || QDir().mkdir("./hidden-directory"));
+#if defined(Q_OS_OS2)
+    FILESTATUS3 info;
+    QVERIFY(DosQueryPathInfo("./hidden-directory", FIL_STANDARD, &info, sizeof(info)) == NO_ERROR);
+    info.attrFile |= FILE_HIDDEN;
+    QVERIFY(DosSetPathInfo("./hidden-directory", FIL_STANDARD, &info, sizeof(info), DSPI_WRTTHRU) == NO_ERROR);
+#else
     QVERIFY(SetFileAttributesW(reinterpret_cast<LPCWSTR>(QString("./hidden-directory").utf16()),FILE_ATTRIBUTE_HIDDEN));
+#endif
     QTest::newRow("C:/path/to/hidden-directory") << QDir::currentPath() + QString::fromLatin1("/hidden-directory") << true;
     QTest::newRow("C:/path/to/hidden-directory/.") << QDir::currentPath() + QString::fromLatin1("/hidden-directory/.") << true;
 #endif
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
     QVERIFY(QDir("./.hidden-directory").exists() || QDir().mkdir("./.hidden-directory"));
     QTest::newRow("/path/to/.hidden-directory") << QDir::currentPath() + QString("/.hidden-directory") << true;
     QTest::newRow("/path/to/.hidden-directory/.") << QDir::currentPath() + QString("/.hidden-directory/.") << true;
@@ -1493,7 +1524,7 @@ void tst_QFileInfo::isHidden_data()
 #if defined(Q_OS_MAC)
     // /bin has the hidden attribute on OS X
     QTest::newRow("/bin/") << QString::fromLatin1("/bin/") << true;
-#elif !defined(Q_OS_WIN)
+#elif !defined(Q_OS_DOSLIKE)
     QTest::newRow("/bin/") << QString::fromLatin1("/bin/") << false;
 #endif
 
@@ -1501,6 +1532,11 @@ void tst_QFileInfo::isHidden_data()
     QTest::newRow("mac_etc") << QString::fromLatin1("/etc") << true;
     QTest::newRow("mac_private_etc") << QString::fromLatin1("/private/etc") << false;
     QTest::newRow("mac_Applications") << QString::fromLatin1("/Applications") << false;
+#endif
+
+#ifdef Q_OS_OS2
+    QTest::newRow("os2_boot") << QDir::rootPath() + QString::fromLatin1("/OS2BOOT") << true;
+    QTest::newRow("os2_config") << QDir::rootPath() + QString::fromLatin1("/config.sys") << false;
 #endif
 }
 
@@ -1510,6 +1546,7 @@ void tst_QFileInfo::isHidden()
     QFETCH(bool, isHidden);
     QFileInfo fi(path);
 
+    QVERIFY2(fi.exists(), msgDoesNotExist(fi.filePath()).constData());
     QCOMPARE(fi.isHidden(), isHidden);
 }
 
@@ -1603,7 +1640,7 @@ void tst_QFileInfo::refresh()
     QCOMPARE(info.lastModified(), lastModified);
 
     QCOMPARE(info.size(), qint64(7));
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     file.close();
 #endif
     info.refresh();
@@ -1881,7 +1918,7 @@ void tst_QFileInfo::isExecutable()
     appPath += "/libtst_qfileinfo.so";
 #else
     appPath += "/tst_qfileinfo";
-# if defined(Q_OS_WIN)
+# if defined(Q_OS_DOSLIKE)
     appPath += ".exe";
 # endif
 #endif

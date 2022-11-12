@@ -187,7 +187,7 @@ void QFactoryLoader::update()
             continue;
 
         QStringList plugins = QDir(path).entryList(
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
                     QStringList(QStringLiteral("*.dll")),
 #elif defined(Q_OS_ANDROID)
                     QStringList(QLatin1String("libplugins_%1_*.so").arg(d->suffix)),

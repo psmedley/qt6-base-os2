@@ -101,7 +101,7 @@ function(qt_internal_apply_gc_binaries target visibility)
         target_link_options("${target}" ${visibility} "${gc_sections_flag}")
     endif()
 
-    if((GCC OR CLANG OR ICC) AND NOT WASM AND NOT UIKIT AND NOT MSVC)
+    if((GCC OR CLANG OR ICC) AND NOT WASM AND NOT UIKIT AND NOT MSVC AND NOT OS2)
         set(split_sections_flags "-ffunction-sections" "-fdata-sections")
     endif()
     if(split_sections_flags)

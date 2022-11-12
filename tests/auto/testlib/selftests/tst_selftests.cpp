@@ -155,7 +155,7 @@ static QByteArray runDiff(const QByteArrayList &expected, const QByteArrayList &
 {
     QByteArray result;
 #ifdef USE_DIFF
-#  ifndef Q_OS_WIN
+#  ifndef Q_OS_DOSLIKE
     const QString diff = QStandardPaths::findExecutable("diff");
 #  else
     const QString diff = QStandardPaths::findExecutable("diff.exe");

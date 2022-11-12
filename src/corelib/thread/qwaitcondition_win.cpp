@@ -107,6 +107,11 @@ QWaitConditionEvent *QWaitConditionPrivate::pre()
 bool QWaitConditionPrivate::wait(QWaitConditionEvent *wce, unsigned long time)
 {
     // wait for the event
+#ifdef Q_OS_OS2
+    APIRET arc;
+    qDosNI(arc = DosWaitEventSem(wce->event, time));
+    bool ret = !arc;
+#else
     bool ret = false;
     switch (WaitForSingleObjectEx(wce->event, time, FALSE)) {
     default:
@@ -116,6 +121,7 @@ bool QWaitConditionPrivate::wait(QWaitConditionEvent *wce, unsigned long time)
         ret = true;
         break;
     }
+#endif
     return ret;
 }
 
@@ -125,13 +131,22 @@ void QWaitConditionPrivate::post(QWaitConditionEvent *wce, bool ret)
 
     // remove 'wce' from the queue
     queue.removeAll(wce);
+#ifdef Q_OS_OS2
+    ULONG cnt;
+    DosResetEventSem(wce->event, &cnt);
+#else
     ResetEvent(wce->event);
+#endif
     freeQueue.append(wce);
 
     // wakeups delivered after the timeout should be forwarded to the next waiter
     if (!ret && wce->wokenUp && !queue.isEmpty()) {
         QWaitConditionEvent *other = queue.constFirst();
+#ifdef Q_OS_OS2
+        DosPostEventSem(other->event);
+#else
         SetEvent(other->event);
+#endif
         other->wokenUp = true;
     }
 
@@ -217,7 +232,11 @@ void QWaitCondition::wakeOne()
     for (QWaitConditionEvent *current : qAsConst(d->queue)) {
         if (current->wokenUp)
             continue;
+#ifdef Q_OS_OS2
+        DosPostEventSem(current->event);
+#else
         SetEvent(current->event);
+#endif
         current->wokenUp = true;
         break;
     }
@@ -228,7 +247,11 @@ void QWaitCondition::wakeAll()
     // wake up the all threads in the queue
     QMutexLocker locker(&d->mtx);
     for (QWaitConditionEvent *current : qAsConst(d->queue)) {
+#ifdef Q_OS_OS2
+        DosPostEventSem(current->event);
+#else
         SetEvent(current->event);
+#endif
         current->wokenUp = true;
     }
 }

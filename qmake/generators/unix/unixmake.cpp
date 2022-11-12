@@ -56,6 +56,9 @@ UnixMakefileGenerator::init()
     if(project->isEmpty("QMAKE_EXTENSION_PLUGIN"))
         project->values("QMAKE_EXTENSION_PLUGIN").append(project->first("QMAKE_EXTENSION_SHLIB"));
 
+    if(!project->isSet("QMAKE_PREFIX_SHLIB"))
+       project->values("QMAKE_PREFIX_SHLIB").append("lib");
+
     project->values("QMAKE_ORIG_TARGET") = project->values("TARGET");
 
     //version handling
@@ -88,6 +91,10 @@ UnixMakefileGenerator::init()
             project->values("MAKEFILE").append("Makefile");
         return; /* subdirs is done */
     }
+
+    /* Always force unversioned_libname on OS/2 (to disable unneeded code in other places) */
+    if(project->isActiveConfig("os2") && configs.indexOf("unversioned_libname") == -1)
+        configs.append("unversioned_libname");
 
     project->values("QMAKE_ORIG_DESTDIR") = project->values("DESTDIR");
     if((!project->isEmpty("QMAKE_LIB_FLAG") && !project->isActiveConfig("staticlib")) ||
@@ -301,11 +308,13 @@ UnixMakefileGenerator::init()
     }
 
     init2();
-    ProString target = project->first("TARGET");
-    int slsh = target.lastIndexOf(Option::dir_sep);
-    if (slsh != -1)
-        target.chopFront(slsh + 1);
-    project->values("LIB_TARGET").prepend(target);
+    if (project->isEmpty("LIB_TARGET")) {
+        ProString target = project->first("TARGET");
+        int slsh = target.lastIndexOf(Option::dir_sep);
+        if (slsh != -1)
+            target.chopFront(slsh + 1);
+        project->values("LIB_TARGET").prepend(target);
+    }
 }
 
 QStringList
@@ -588,6 +597,8 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
         bundle = project->isActiveConfig("sliced_bundle") ? SlicedBundle : SolidBundle;
     } else if(project->first("TEMPLATE") == "app") {
         target = "$(QMAKE_TARGET)";
+        if (!project->isEmpty("QMAKE_EXTENSION_APP"))
+            target += "." + project->first("QMAKE_EXTENSION_APP");
     } else if(project->first("TEMPLATE") == "lib") {
             if (!project->isActiveConfig("staticlib")
                     && !project->isActiveConfig("plugin")
@@ -608,6 +619,14 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
         if(!uninst.isEmpty())
             uninst.append("\n\t");
         uninst.append("-$(DEL_FILE) " + dst);
+    }
+
+    if (!project->isEmpty("TARGET_SHORT") && project->isActiveConfig("target_short_symlink")) {
+        QString symlink_src = "$(QMAKE_TARGET)." + project->first("QMAKE_EXTENSION_SHLIB");
+        QString symlink_dst = escapeFilePath(filePrefixRoot(root, targetdir)) + symlink_src;
+        if (!destdir.isEmpty())
+            symlink_src = Option::fixPathToTargetOS(destdir, false) + Option::dir_sep + symlink_src;
+        ret += "-$(QINSTALL) " + symlink_src + ' ' + symlink_dst;
     }
 
     {
@@ -723,6 +742,15 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
                     uninst.append("-$(DEL_FILE) " + dst_link);
                 }
             }
+        }
+        if(project->first("TEMPLATE") == "lib" && !project->isActiveConfig("staticlib")
+            && !project->isActiveConfig("plugin") && !project->isEmpty("QMAKE_LINK_IMPLIB_CMD")) {
+            QString dst_lib = escapeFilePath(
+                        filePrefixRoot(root, fileFixify(targetdir, FileFixifyAbsolute))) + "/$(LIB_TARGET)";
+            ret += "\n\t-$(INSTALL_FILE) " + destdir + "$(LIB_TARGET) " + dst_lib;
+            if(!uninst.isEmpty())
+                uninst.append("\n\t");
+            uninst.append("-$(DEL_FILE) " + dst_lib);
         }
     }
     if (isAux || project->first("TEMPLATE") == "lib") {

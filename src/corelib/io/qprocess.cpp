@@ -138,7 +138,7 @@ void QProcessEnvironmentPrivate::insert(const QProcessEnvironmentPrivate &other)
     for ( ; it != end; ++it)
         vars.insert(it.key(), it.value());
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
     const OrderedNameMapMutexLocker locker(this, &other);
     auto nit = other.nameMap.constBegin();
     const auto nend = other.nameMap.constEnd();
@@ -783,6 +783,9 @@ QProcessPrivate::QProcessPrivate()
 {
     readBufferChunkSize = QRINGBUFFER_CHUNKSIZE;
     writeBufferChunkSize = QRINGBUFFER_CHUNKSIZE;
+#ifdef Q_OS_OS2
+    init();
+#endif
 }
 
 /*!
@@ -790,6 +793,9 @@ QProcessPrivate::QProcessPrivate()
 */
 QProcessPrivate::~QProcessPrivate()
 {
+#ifdef Q_OS_OS2
+    uninit();
+#endif
     if (stdinChannel.process)
         stdinChannel.process->stdoutChannel.clear();
     if (stdoutChannel.process)
@@ -934,8 +940,14 @@ bool QProcessPrivate::openChannelsForDetached()
 bool QProcessPrivate::tryReadFromChannel(Channel *channel)
 {
     Q_Q(QProcess);
+#ifdef Q_OS_OS2
+    // Note: server handle may be valid in Pipe/Sink mode (see openChannel).
+    if (channel->pipe.server == INVALID_HFILE || channel->type != Channel::Normal)
+        return false;
+#else
     if (channel->pipe[0] == INVALID_Q_PIPE)
         return false;
+#endif
 
     qint64 available = bytesAvailableInChannel(channel);
     if (available == 0)
@@ -968,6 +980,10 @@ bool QProcessPrivate::tryReadFromChannel(Channel *channel)
 #if defined QPROCESS_DEBUG
         qDebug("QProcessPrivate::tryReadFromChannel(%d), 0 bytes available",
                int(channel - &stdinChannel));
+#endif
+#if defined Q_OS_OS2
+        if (stdinChannel.pipe.closePending)
+            tryCloseStdinPipe();
 #endif
         return false;
     }
@@ -1510,6 +1526,72 @@ void QProcess::setChildProcessModifier(const std::function<void(void)> &modifier
 }
 #endif
 
+
+#if defined(Q_OS_OS2) || defined(Q_CLANG_QDOC)
+
+/*!
+    \since 5.11
+
+    Returns true if this process instance is set up for thread-safe behavior
+    when starting the program.
+
+    \note This function is available only on the OS/2 platform.
+
+    \sa setThreadSafe()
+*/
+bool QProcess::threadSafe() const
+{
+    Q_D(const QProcess);
+    return d->threadSafe;
+}
+
+/*!
+    \since 5.11
+
+    Enables or disables thread-safe mode of operation when launching a
+    subprocess.
+
+    On OS/2, the native system API for starting new processes is not
+    thread-safe. This API does not allow to specify a working directory or
+    standard I/O handles for the new process — these properties are always
+    inherited from the parent (starting) process. They are process-wide
+    properties, so there is no way to change them in a thread-safe manner. In
+    order to overcome this limitation, Qt uses a special extension function
+    spawn2 to start a new subprocess. This extension is capable of launching
+    processes in a completely thread-safe way using a special intermediate
+    wrapper process. This process exists as long as the target subprocess runs.
+
+    Setting \a threadSafe to \c true enables this thread-safe mode for all
+    subsequent start() and startDetached() operations. Note that enabling this
+    mode doubles the number of subprocesses because a wrapper is needed for
+    each started process. Since processes are rather expensive system
+    resources, this thread-safe mode is disabled by default. You should only
+    enable it when you really need thread safety. If you always start new
+    processes from one thread and do not change the current directory or
+    perform any standard I/O on any other thread, you don't need to enable this
+    mode.
+
+    \note Enabling thread-safe mode is also necessary if you want to receive a
+    process identifier of the detached subprocess in startDetached() calls that
+    support it. If thread-safe mode is disabled, these calls will always return
+    0 as a process identifier.
+
+    \note This function is available only on the OS/2 platform.
+
+    \sa threadSafe()
+    \sa startDetached(qint64 *pid)
+    \sa startDetached(const QString &program, const QStringList &arguments,
+                      const QString &workingDirectory, qint64 *pid)
+*/
+void QProcess::setThreadSafe(bool threadSafe)
+{
+    Q_D(QProcess);
+    d->threadSafe = threadSafe;
+}
+
+#endif
+
+
 /*!
     If QProcess has been assigned a working directory, this function returns
     the working directory that the QProcess will enter before the program has
@@ -2017,6 +2099,10 @@ void QProcess::startCommand(const QString &command, OpenMode mode)
     process. To suppress console output, redirect standard/error output to
     QProcess::nullDevice().
 
+    \note Due to system limitations, under OS/2, zero is always returned in
+    *\a pid on success. If you need an actual process identifier, you should
+    enable thread-safe mode with setThreadSafe().
+
     \sa start()
     \sa startDetached(const QString &program, const QStringList &arguments,
                       const QString &workingDirectory, qint64 *pid)
@@ -2318,6 +2404,10 @@ int QProcess::execute(const QString &program, const QStringList &arguments)
     If the function is successful then *\a pid is set to the process
     identifier of the started process.
 
+    \note Due to system limitations, under OS/2, zero is always returned in
+    *\a pid on success. If you need an actual process identifier, you should
+    enable thread-safe mode with setThreadSafe().
+
     \sa start()
 */
 bool QProcess::startDetached(const QString &program,
@@ -2406,6 +2496,8 @@ QString QProcess::nullDevice()
 {
 #ifdef Q_OS_WIN
     return QStringLiteral("\\\\.\\NUL");
+#elif defined(Q_OS_OS2)
+    return QStringLiteral("NUL");
 #elif defined(_PATH_DEVNULL)
     return QStringLiteral(_PATH_DEVNULL);
 #else

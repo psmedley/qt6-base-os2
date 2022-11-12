@@ -95,7 +95,7 @@ public:
 
 QOffscreenIntegration::QOffscreenIntegration()
 {
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
 #if defined(Q_OS_MAC)
     m_fontDatabase.reset(new QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>);
 #else
@@ -238,8 +238,12 @@ QPlatformBackingStore *QOffscreenIntegration::createPlatformBackingStore(QWindow
 
 QAbstractEventDispatcher *QOffscreenIntegration::createEventDispatcher() const
 {
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
+#if defined(Q_OS_OS2)
+    return new QOffscreenEventDispatcher<QEventDispatcherOS2>();
+#else
     return createUnixEventDispatcher();
+#endif
 #elif defined(Q_OS_WIN)
     return new QOffscreenEventDispatcher<QEventDispatcherWin32>();
 #else

@@ -267,7 +267,7 @@ load(qt_installs)
 load(qt_targets)
 
 # this builds on top of qt_common
-!internal_module:if(unix|mingw):!if(darwin:debug_and_release:CONFIG(debug, debug|release)) {
+!internal_module:if(unix|mingw|os2):!if(darwin:debug_and_release:CONFIG(debug, debug|release)) {
     CONFIG += create_pc
     QMAKE_PKGCONFIG_DESTDIR = pkgconfig
     host_build: \
@@ -351,3 +351,4 @@ win32 {
 }
 
 TARGET = $$qt5LibraryTarget($$TARGET$$QT_LIBINFIX)  # Do this towards the end
+!isEmpty(TARGET_SHORT):TARGET_SHORT = $$qt5LibraryTarget($$TARGET_SHORT$$QT_LIBINFIX)

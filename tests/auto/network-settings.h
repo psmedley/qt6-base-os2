@@ -133,7 +133,11 @@ public:
         }
         ::close(s);
 #endif
+#ifdef Q_OS_OS2
+        return false;
+#else
         return true;
+#endif
     }
 
     static bool canBindToLowPorts()

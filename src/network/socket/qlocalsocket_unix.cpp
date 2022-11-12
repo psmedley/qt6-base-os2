@@ -187,6 +187,9 @@ QString QLocalSocketPrivate::generateErrorString(QLocalSocket::LocalSocketError 
     case QLocalSocket::UnknownSocketError:
     default:
         errorString = QLocalSocket::tr("%1: Unknown error %2").arg(function).arg(errno);
+        const char *err = strerror(errno);
+        if (err)
+            errorString += QString(QLatin1String(" (%1)")).arg(QLatin1String(err));
     }
     return errorString;
 }

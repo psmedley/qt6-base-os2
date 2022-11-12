@@ -129,6 +129,16 @@ static SLJIT_INLINE int open_dev_zero(void)
 #if (defined SLJIT_UTIL_STACK && SLJIT_UTIL_STACK) \
 	|| (defined SLJIT_EXECUTABLE_ALLOCATOR && SLJIT_EXECUTABLE_ALLOCATOR)
 
+#ifdef __OS2__
+/* Preserve BOOL definition in pcre2_internal.h */
+#define BOOL __OS2_BOOL
+
+#define INCL_BASE
+#include <os2.h>
+
+#undef BOOL
+#endif /* __OS2__ */
+
 #ifdef _WIN32
 
 static SLJIT_INLINE sljit_sw get_page_alignment(void) {
@@ -137,6 +147,19 @@ static SLJIT_INLINE sljit_sw get_page_alignment(void) {
 	if (!sljit_page_align) {
 		GetSystemInfo(&si);
 		sljit_page_align = si.dwPageSize - 1;
+	}
+	return sljit_page_align;
+}
+
+#elif defined(__OS2__)
+
+SLJIT_INLINE static sljit_sw get_page_alignment(void) {
+	static sljit_sw sljit_page_align;
+	if (!sljit_page_align) {
+		ULONG pgsize = 0;
+		if (DosQuerySysInfo(QSV_PAGE_SIZE, QSV_PAGE_SIZE, &pgsize, sizeof(pgsize)))
+			pgsize = 4096; /* Should never happen. */
+		sljit_page_align = pgsize - 1;
 	}
 	return sljit_page_align;
 }
@@ -161,7 +184,7 @@ static SLJIT_INLINE sljit_sw get_page_alignment(void) {
 	return sljit_page_align;
 }
 
-#endif /* _WIN32 */
+#endif /* _WIN32 || __OS2__ */
 
 #endif /* get_page_alignment() */
 
@@ -196,12 +219,21 @@ SLJIT_API_FUNC_ATTRIBUTE struct sljit_stack* SLJIT_FUNC sljit_allocate_stack(slj
 	return stack;
 }
 
+#ifndef __OS2__
 SLJIT_API_FUNC_ATTRIBUTE void SLJIT_FUNC sljit_free_stack(struct sljit_stack *stack, void *allocator_data)
 {
 	SLJIT_UNUSED_ARG(allocator_data);
 	SLJIT_FREE((void*)stack->min_start, allocator_data);
 	SLJIT_FREE(stack, allocator_data);
 }
+#else
+SLJIT_API_FUNC_ATTRIBUTE void SLJIT_FUNC sljit_free_stack(struct sljit_stack *stack, void *allocator_data)
+{
+	SLJIT_UNUSED_ARG(allocator_data);
+	DosFreeMem((PVOID)stack->min_start);
+	SLJIT_FREE(stack, allocator_data);
+}
+#endif
 
 SLJIT_API_FUNC_ATTRIBUTE sljit_u8 *SLJIT_FUNC sljit_stack_resize(struct sljit_stack *stack, sljit_u8 *new_start)
 {
@@ -222,6 +254,13 @@ SLJIT_API_FUNC_ATTRIBUTE void SLJIT_FUNC sljit_free_stack(struct sljit_stack *st
 	SLJIT_FREE(stack, allocator_data);
 }
 
+#elif __OS2__
+SLJIT_API_FUNC_ATTRIBUTE void SLJIT_FUNC sljit_free_stack(struct sljit_stack *stack, void *allocator_data)
+{
+	SLJIT_UNUSED_ARG(allocator_data);
+	DosFreeMem((PVOID)stack->min_start);
+	SLJIT_FREE(stack, allocator_data);
+}
 #else /* !_WIN32 */
 
 SLJIT_API_FUNC_ATTRIBUTE void SLJIT_FUNC sljit_free_stack(struct sljit_stack *stack, void *allocator_data)
@@ -267,7 +306,22 @@ SLJIT_API_FUNC_ATTRIBUTE struct sljit_stack* SLJIT_FUNC sljit_allocate_stack(slj
 		sljit_free_stack(stack, allocator_data);
 		return NULL;
 	}
-#else /* !_WIN32 */
+#elif defined(__OS2__)
+	APIRET arc = DosAllocMem(&ptr, max_size, PAG_COMMIT | PAG_READ | PAG_WRITE | OBJ_ANY);
+	if (arc)
+		arc = DosAllocMem(&ptr, max_size, PAG_COMMIT | PAG_READ | PAG_WRITE);
+	if (arc) {
+		SLJIT_FREE(stack, allocator_data);
+		return NULL;
+	}
+	stack->min_start = (sljit_u8 *)ptr;
+	stack->end = stack->min_start + max_size;
+	stack->start = stack->end;
+	if (sljit_stack_resize(stack, stack->end - start_size)) {
+		sljit_free_stack(stack, allocator_data);
+		return NULL;
+	}
+#else /* !_WIN32 && !__OS2__ */
 #ifdef MAP_ANON
 	ptr = mmap(NULL, max_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 #else /* !MAP_ANON */
@@ -330,7 +384,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_u8 *SLJIT_FUNC sljit_stack_resize(struct sljit_st
 #endif /* MADV_FREE */
 		}
 	}
-#endif /* _WIN32 */
+#endif /* _WIN32 || __OS2__ */
 
 	stack->start = new_start;
 	return new_start;

@@ -27,6 +27,7 @@ darwin:!no_app_extension_api_only: CONFIG += app_extension_api_only
 !no_cxx_module:isEmpty(CXX_MODULE) {
     CXX_MODULE = $$TARGET
     TARGET = declarative_$${TARGET}
+    !isEmpty(TARGET_SHORT):TARGET_SHORT = d$${TARGET_SHORT}
 }
 isEmpty(TARGETPATH): TARGETPATH = $$eval(QT.$${CXX_MODULE}.name)
 
@@ -49,6 +50,7 @@ exists($$QMLTYPEFILE): AUX_QML_FILES += $$QMLTYPEFILE
 load(qt_build_paths)
 
 DESTDIR = $$MODULE_BASE_OUTDIR/qml/$$TARGETPATH
+os2:CONFIG += target_short_symlink
 
 target.path = $$[QT_INSTALL_QML]/$$TARGETPATH
 INSTALLS += target
@@ -56,6 +58,7 @@ INSTALLS += target
 # Some final setup
 
 TARGET = $$qt5LibraryTarget($$TARGET, "qml/$$TARGETPATH/")
+!isEmpty(TARGET_SHORT):TARGET_SHORT = $$qt5LibraryTarget($$TARGET_SHORT, "qml/$$TARGETPATH/")
 
 load(qt_targets)
 load(qt_common)

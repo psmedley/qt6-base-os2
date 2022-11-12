@@ -71,7 +71,7 @@ struct QTimerInfo {
     QTimerInfo **activateRef; // - ref from activateTimers
 
 #ifdef QTIMERINFO_DEBUG
-    timeval expected; // when timer is expected to fire
+    timespec expected; // when timer is expected to fire
     float cumulativeError;
     uint count;
 #endif
@@ -92,11 +92,19 @@ class Q_CORE_EXPORT QTimerInfoList : public QList<QTimerInfo*>
     // state variables used by activateTimers()
     QTimerInfo *firstTimerInfo;
 
+#ifdef Q_OS_OS2
+    int zeroTimers;
+#endif
+
 public:
     QTimerInfoList();
 
     timespec currentTime;
     timespec updateCurrentTime();
+
+#ifdef Q_OS_OS2
+    int zeroTimerCount() const { return zeroTimers; };
+#endif
 
     // must call updateCurrentTime() first!
     void repairTimersIfNeeded();

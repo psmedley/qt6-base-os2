@@ -39,7 +39,7 @@
 #include <qfileinfo.h>
 #include <qstringlist.h>
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
 #include <QtCore/private/qfsfileengine_p.h>
 #include "../../../network-settings.h"
 #endif
@@ -63,7 +63,7 @@
 #define Q_NO_SYMLINKS
 #endif
 
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
 #define DRIVE "Q:"
 #else
 #define DRIVE
@@ -332,7 +332,7 @@ void tst_QDir::setPath_data()
     QTest::addColumn<QString>("dir2");
 
     QTest::newRow("data0") << QString(".") << QString("..");
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("data1") << QString("c:/") << QDir::currentPath();
 #endif
 }
@@ -656,7 +656,7 @@ void tst_QDir::isRelativePath_data()
     QTest::addColumn<bool>("relative");
 
     QTest::newRow("data0") << "../somedir" << true;
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("data1") << "C:/sOmedir" << false;
 #endif
     QTest::newRow("data2") << "somedir" << true;
@@ -951,7 +951,11 @@ void tst_QDir::entryListWithTestFiles()
 void tst_QDir::entryListTimedSort()
 {
 #if QT_CONFIG(process)
+#ifdef Q_OS_OS2
+    const QString touchBinary = "/@unixroot/usr/bin/touch.exe";
+#else
     const QString touchBinary = "/bin/touch";
+#endif
     if (!QFile::exists(touchBinary))
         QSKIP("/bin/touch not found");
 
@@ -1079,7 +1083,7 @@ void tst_QDir::canonicalPath_data()
 
     QTest::newRow("relative") << "." << m_dataPath;
     QTest::newRow("relativeSubDir") << "./testData/../testData" << m_dataPath + "/testData";
-#ifndef Q_OS_WIN
+#ifndef Q_OS_DOSLIKE
     QTest::newRow("absPath") << m_dataPath + "/testData/../testData" << m_dataPath + "/testData";
 #else
     QTest::newRow("absPath") << m_dataPath + "\\testData\\..\\testData" << m_dataPath + "/testData";
@@ -1089,7 +1093,7 @@ void tst_QDir::canonicalPath_data()
     QTest::newRow("rootPath") << QDir::rootPath() << QDir::rootPath();
     QTest::newRow("rootPath + ./") << QDir::rootPath().append("./") << QDir::rootPath();
     QTest::newRow("rootPath + ../.. ") << QDir::rootPath().append("../..") << QDir::rootPath();
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("drive:\\") << QDir::toNativeSeparators(QDir::rootPath()) << QDir::rootPath();
     QTest::newRow("drive:\\.\\") << QDir::toNativeSeparators(QDir::rootPath().append("./")) << QDir::rootPath();
     QTest::newRow("drive:\\..\\..") << QDir::toNativeSeparators(QDir::rootPath().append("../..")) << QDir::rootPath();
@@ -1112,7 +1116,7 @@ void tst_QDir::canonicalPath()
     QFETCH(QString, canonicalPath);
 
     QDir dir(path);
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QCOMPARE(dir.canonicalPath().toLower(), canonicalPath.toLower());
 #else
     QCOMPARE(dir.canonicalPath(), canonicalPath);
@@ -1128,7 +1132,7 @@ void tst_QDir::current_data()
 
     QTest::newRow("startup") << QString() << m_dataPath;
     QTest::newRow("relPath") << "testData" << m_dataPath + "/testData";
-#ifndef Q_OS_WIN
+#ifndef Q_OS_DOSLIKE
     QTest::newRow("absPath") << m_dataPath + "/testData" << m_dataPath + "/testData";
 #else
     QTest::newRow("absPath") << m_dataPath + "\\testData" << m_dataPath + "/testData";
@@ -1177,7 +1181,7 @@ void tst_QDir::cd_data()
     QTest::newRow("cdUp non existent (absolute dir)") << m_dataPath + "/anonexistingDir" << ".."
                                                       << true << m_dataPath;
     QTest::newRow("noChange") << m_dataPath << "." << true << m_dataPath;
-#if defined(Q_OS_WIN)  // on windows QDir::root() is usually c:/ but cd "/" will not force it to be root
+#if defined(Q_OS_DOSLIKE)  // on windows QDir::root() is usually c:/ but cd "/" will not force it to be root
     QTest::newRow("absolute") << m_dataPath << "/" << true << "/";
 #else
     QTest::newRow("absolute") << m_dataPath << "/" << true << QDir::root().absolutePath();
@@ -1252,7 +1256,7 @@ tst_QDir::cleanPath_data()
     QTest::newRow("data2-above-root") << "/.." << "/..";
     QTest::newRow("data3") << QDir::cleanPath("../.") << "..";
     QTest::newRow("data4") << QDir::cleanPath("../..") << "../..";
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("data5") << "d:\\a\\bc\\def\\.." << "d:/a/bc";
     QTest::newRow("data6") << "d:\\a\\bc\\def\\../../.." << "d:/";
 #else
@@ -1368,7 +1372,7 @@ void tst_QDir::normalizePathSegments_data()
     QTest::newRow("data34") << "c://foo" << HandleUnc << "c:/foo";
     QTest::newRow("data35") << "c:" << HandleUnc << "c:";
     QTest::newRow("data36") << "c:foo/bar" << IgnoreUnc << "c:foo/bar";
-#if defined Q_OS_WIN
+#if defined Q_OS_DOSLIKE
     QTest::newRow("data37") << "c:/." << HandleUnc << "c:/";
     QTest::newRow("data38") << "c:/.." << HandleUnc << "c:/..";
     QTest::newRow("data39") << "c:/../" << HandleUnc << "c:/../";
@@ -1502,7 +1506,7 @@ void tst_QDir::relativeFilePath_data()
     QTest::newRow("same path 1") << "/tmp" << "/tmp" << ".";
     QTest::newRow("same path 2") << "//tmp" << "/tmp/" << ".";
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("12") << "C:/foo/bar" << "ding" << "ding";
     QTest::newRow("13") << "C:/foo/bar" << "C:/ding/dong" << "../../ding/dong";
     QTest::newRow("14") << "C:/foo/bar" << "/ding/dong" << "../../ding/dong";
@@ -1557,7 +1561,7 @@ void tst_QDir::filePath_data()
     QTest::newRow("assets-abs") << "assets-library:/" << "/foo/bar.baz" << "/foo/bar.baz";
     QTest::newRow("abs-assets") << "/some/path" << "assets-library:/foo/bar.baz" << "assets-library:/foo/bar.baz";
 #endif
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     QTest::newRow("abs-LTUNC") << "Q:/path" << "\\/leaning\\tooth/pick" << "\\/leaning\\tooth/pick";
     QTest::newRow("LTUNC-slash") << "\\/leaning\\tooth/pick" << "/path" << "//leaning/tooth/path";
     QTest::newRow("LTUNC-abs") << "\\/leaning\\tooth/pick" << "Q:/path" << "Q:/path";
@@ -1598,7 +1602,7 @@ void tst_QDir::rename()
     QVERIFY(dir.rename("rename-test-renamed", "rename-test"));
 #if defined(Q_OS_MAC)
     QVERIFY(!dir.rename("rename-test", "/etc/rename-test-renamed"));
-#elif !defined(Q_OS_WIN)
+#elif !defined(Q_OS_DOSLIKE)
     // on windows this is possible - maybe make the test a bit better
 #ifdef Q_OS_UNIX
     // not valid if run as root so skip if needed
@@ -1627,7 +1631,7 @@ void tst_QDir::exists2_data()
     QTest::newRow("2") << "" << false;
     QTest::newRow("3") << "testData" << true;
     QTest::newRow("4") << "/testData" << false;
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     QTest::newRow("abs") << "Q:/testData" << false;
 #endif
     QTest::newRow("5") << "tst_qdir.cpp" << true;
@@ -1664,7 +1668,7 @@ void tst_QDir::dirName_data()
     QTest::newRow("slash0") << "c:/winnt/system32" << "system32";
     QTest::newRow("slash1") << "/winnt/system32" << "system32";
     QTest::newRow("slash2") << "c:/winnt/system32/kernel32.dll" << "kernel32.dll";
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("bslash0") << "c:\\winnt\\system32" << "system32";
     QTest::newRow("bslash1") << "\\winnt\\system32" << "system32";
     QTest::newRow("bslash2") << "c:\\winnt\\system32\\kernel32.dll" << "kernel32.dll";
@@ -1744,7 +1748,7 @@ void tst_QDir::tempPath()
 #ifdef Q_OS_UNIX
     if (path.length() > 1)      // root dir = "/"
         QVERIFY(!path.endsWith('/'));
-#elif defined(Q_OS_WIN)
+#elif defined(Q_OS_DOSLIKE)
     if (path.length() > 3)      // root dir = "c:/"; "//" is not really valid...
         QVERIFY(!path.endsWith('/'));
     QVERIFY2(!path.contains(QLatin1Char('~')),
@@ -1768,7 +1772,7 @@ void tst_QDir::rootPath()
 
 void tst_QDir::nativeSeparators()
 {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QCOMPARE(QDir::toNativeSeparators(QLatin1String("/")), QString("\\"));
     QCOMPARE(QDir::toNativeSeparators(QLatin1String("\\")), QString("\\"));
     QCOMPARE(QDir::fromNativeSeparators(QLatin1String("/")), QString("/"));
@@ -2128,7 +2132,7 @@ void tst_QDir::isRoot_data()
     test = QDir(QDir::rootPath().append("./")).canonicalPath();
     QTest::newRow(QString("canonicalPath " + test).toLatin1()) << test << true;
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     test = QDir::rootPath().left(2);
     QTest::newRow(QString("drive relative " + test).toLatin1()) << test << false;
 #endif
@@ -2236,6 +2240,8 @@ void tst_QDir::equalityOperator_data()
     //need a path in the root directory that is unlikely to be a symbolic link.
 #if defined (Q_OS_WIN)
     QString pathinroot("c:/windows/..");
+#elif defined (Q_OS_OS2)
+    QString pathinroot("c:/os2/..");
 #elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     QString pathinroot("/system/..");
 #elif defined(Q_OS_HAIKU)

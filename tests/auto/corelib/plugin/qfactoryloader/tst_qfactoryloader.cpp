@@ -54,7 +54,8 @@ private slots:
     void usingTwoFactoriesFromSameDir();
 };
 
-static const char binFolderC[] = "bin";
+#define BIN_FOLDER "bin"
+static const char *binFolderC = BIN_FOLDER;
 
 void tst_QFactoryLoader::initTestCase()
 {
@@ -64,8 +65,11 @@ void tst_QFactoryLoader::initTestCase()
     QVERIFY(directory->isValid());
     QVERIFY2(QDir::setCurrent(directory->path()), qPrintable("Could not chdir to " + directory->path()));
 #endif
-    const QString binFolder = QFINDTESTDATA(binFolderC);
-    QVERIFY2(!binFolder.isEmpty(), "Unable to locate 'bin' folder");
+    QString binFolder = QFINDTESTDATA(binFolderC);
+    // Support running the test case from the build dir w/o installing.
+    if (binFolder.isEmpty())
+        binFolder = QFINDTESTDATA("../" BIN_FOLDER);
+    QVERIFY2(!binFolder.isEmpty(), "Unable to locate '" BIN_FOLDER "' folder");
 #if QT_CONFIG(library)
     QCoreApplication::setLibraryPaths(QStringList(QFileInfo(binFolder).absolutePath()));
 #endif

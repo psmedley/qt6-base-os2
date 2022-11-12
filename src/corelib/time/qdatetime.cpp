@@ -4748,7 +4748,7 @@ qint64 QDateTime::currentSecsSinceEpoch() noexcept
            daysAfterEpoch * SECS_PER_DAY;
 }
 
-#elif defined(Q_OS_UNIX)
+#elif defined(Q_OS_UNIXLIKE)
 QDate QDate::currentDate()
 {
     return QDateTime::currentDateTime().date();

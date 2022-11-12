@@ -81,6 +81,7 @@ void QLocalServerPrivate::init()
 
 bool QLocalServerPrivate::removeServer(const QString &name)
 {
+#ifndef Q_OS_OS2
     QString fileName;
     if (name.startsWith(QLatin1Char('/'))) {
         fileName = name;
@@ -92,6 +93,10 @@ bool QLocalServerPrivate::removeServer(const QString &name)
         return QFile::remove(fileName);
     else
         return true;
+#else
+    Q_UNUSED(name);
+    return true;
+#endif
 }
 
 bool QLocalServerPrivate::listen(const QString &requestedServerName)
@@ -356,6 +361,9 @@ void QLocalServerPrivate::setError(const QString &function)
     default:
         errorString = QLocalServer::tr("%1: Unknown error %2")
                       .arg(function).arg(errno);
+        const char *err = strerror(errno);
+        if (err)
+            errorString += QString(QLatin1String(" (%1)")).arg(QLatin1String(err));
         error = QAbstractSocket::UnknownSocketError;
 #if defined QLOCALSERVER_DEBUG
         qWarning() << errorString << "fullServerName:" << fullServerName;

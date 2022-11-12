@@ -514,7 +514,7 @@ QRegion& QRegion::operator|=(const QRegion &r)
 
     \sa intersected()
 */
-#if !defined (Q_OS_UNIX) && !defined (Q_OS_WIN)
+#if !defined (Q_OS_UNIXLIKE) && !defined (Q_OS_WINLIKE)
 QRegion& QRegion::operator+=(const QRect &r)
 {
     return operator+=(QRegion(r));
@@ -537,7 +537,7 @@ QRegion& QRegion::operator&=(const QRegion &r)
    \overload
    \since 4.4
  */
-#if defined (Q_OS_UNIX) || defined (Q_OS_WIN)
+#if defined (Q_OS_UNIXLIKE) || defined (Q_OS_WINLIKE)
 QRegion& QRegion::operator&=(const QRect &r)
 {
     return *this = *this & r;
@@ -671,7 +671,7 @@ bool QRegion::intersects(const QRegion &region) const
 */
 
 
-#if !defined (Q_OS_UNIX) && !defined (Q_OS_WIN) || defined(Q_CLANG_QDOC)
+#if !defined (Q_OS_UNIXLIKE) && !defined (Q_OS_WINLIKE) || defined(Q_CLANG_QDOC)
 /*
     \overload
     \since 4.4
@@ -1095,7 +1095,7 @@ Q_GUI_EXPORT QPainterPath qt_regionToPath(const QRegion &region)
     return result;
 }
 
-#if defined(Q_OS_UNIX) || defined(Q_OS_WIN)
+#if defined(Q_OS_UNIXLIKE) || defined(Q_OS_WINLIKE)
 
 //#define QT_REGION_DEBUG
 /*

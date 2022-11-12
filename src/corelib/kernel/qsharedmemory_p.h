@@ -78,8 +78,12 @@ QT_END_NAMESPACE
 # include "private/qobject_p.h"
 #endif
 
-#if !defined(Q_OS_WIN) && !defined(Q_OS_ANDROID) && !defined(Q_OS_INTEGRITY) && !defined(Q_OS_RTEMS)
+#if !defined(Q_OS_WIN) && !defined(Q_OS_ANDROID) && !defined(Q_OS_OS2) && !defined(Q_OS_INTEGRITY) && !defined(Q_OS_RTEMS)
 #  include <sys/sem.h>
+#endif
+
+#ifdef Q_OS_OS2
+#include "qt_os2.h"
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -146,6 +150,8 @@ public:
     Qt::HANDLE handle();
 #elif defined(QT_POSIX_IPC)
     int handle();
+#elif defined(Q_OS_OS2)
+    // nothing
 #else
     key_t handle();
 #endif
@@ -155,7 +161,11 @@ public:
     bool attach(QSharedMemory::AccessMode mode);
     bool detach();
 
+#if defined(Q_OS_OS2)
+    void setErrorString(APIRET arc, QLatin1String function);
+#else
     void setErrorString(QLatin1String function);
+#endif
 
 #ifndef QT_NO_SYSTEMSEMAPHORE
     bool tryLocker(QSharedMemoryLocker *locker, const QString &function) {
@@ -173,6 +183,8 @@ private:
     Qt::HANDLE hand;
 #elif defined(QT_POSIX_IPC)
     int hand;
+#elif defined(Q_OS_OS2)
+    // nothing
 #else
     key_t unix_key;
 #endif

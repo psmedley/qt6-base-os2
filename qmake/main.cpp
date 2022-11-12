@@ -45,7 +45,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
 #include <errno.h>
 #include <unistd.h>
 #endif
@@ -284,7 +284,7 @@ static int installFile(const QString &source, const QString &target, bool exe = 
     QFile sourceFile(source);
     QFile targetFile(target);
     if (targetFile.exists()) {
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
         targetFile.setPermissions(targetFile.permissions() | QFile::WriteUser);
 #endif
         QFile::remove(target);
@@ -323,7 +323,7 @@ static int installFileOrDirectory(const QString &source, const QString &target,
 {
     QFileInfo fi(source);
     if (false) {
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
     } else if (fi.isSymLink()) {
         QString linkTarget;
         if (!IoUtils::readLinkTarget(fi.absoluteFilePath(), &linkTarget)) {

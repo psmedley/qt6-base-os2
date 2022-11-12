@@ -54,10 +54,16 @@ private slots:
     void defaultCtor();
 };
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
+#if defined(Q_OS_OS2)
+typedef QByteArray NativePath;
+#else
+typedef QString NativePath;
+#endif
+
 void tst_QFileSystemEntry::getSetCheck_data()
 {
-    QTest::addColumn<QString>("nativeFilePath");
+    QTest::addColumn<NativePath>("nativeFilePath");
     QTest::addColumn<QString>("internalnativeFilePath");
     QTest::addColumn<QString>("filepath");
     QTest::addColumn<QString>("filename");
@@ -132,7 +138,11 @@ void tst_QFileSystemEntry::getSetCheck()
 
     QFileSystemEntry entry1(filepath);
     QCOMPARE(entry1.filePath(), filepath);
+#if defined(Q_OS_OS2)
+    QCOMPARE(entry1.nativeFilePath().toLower(), nativeFilePath.toLower());
+#else
     QCOMPARE(entry1.nativeFilePath().toLower(), internalnativeFilePath.toLower());
+#endif
     QCOMPARE(entry1.fileName(), filename);
     QCOMPARE(entry1.suffix(), suffix);
     QCOMPARE(entry1.completeSuffix(), completeSuffix);

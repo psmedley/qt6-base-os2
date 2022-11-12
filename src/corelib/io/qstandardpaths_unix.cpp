@@ -258,7 +258,8 @@ QString QStandardPaths::writableLocation(StandardLocation type)
             xdgRuntimeDir = QDir::tempPath() + QLatin1String("/runtime-") + userName;
 
             if (!fromEnv) {
-#ifndef Q_OS_WASM
+#if !defined(Q_OS_OS2) && !defined(Q_OS_WASM)
+                // Makes no sense to warn on OS/2 as it is almost always not set and it's normal
                 qWarning("QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '%ls'", qUtf16Printable(xdgRuntimeDir));
 #endif
             }
@@ -351,10 +352,15 @@ static QStringList xdgDataDirs()
     // http://standards.freedesktop.org/basedir-spec/latest/
     QString xdgDataDirsEnv = QFile::decodeName(qgetenv("XDG_DATA_DIRS"));
     if (xdgDataDirsEnv.isEmpty()) {
+#ifdef Q_OS_OS2
+        dirs.append(QString::fromLatin1("/@unixroot/usr/local/share"));
+        dirs.append(QString::fromLatin1("/@unixroot/usr/share"));
+#else
         dirs.append(QString::fromLatin1("/usr/local/share"));
         dirs.append(QString::fromLatin1("/usr/share"));
+#endif
     } else {
-        const auto parts = QStringView{xdgDataDirsEnv}.split(QLatin1Char(':'), Qt::SkipEmptyParts);
+        const auto parts = QStringView{xdgDataDirsEnv}.split(QDir::listSeparator(), Qt::SkipEmptyParts);
 
         // Normalize paths, skip relative paths
         for (const auto &dir : parts) {
@@ -379,9 +385,13 @@ static QStringList xdgConfigDirs()
     // http://standards.freedesktop.org/basedir-spec/latest/
     const QString xdgConfigDirs = QFile::decodeName(qgetenv("XDG_CONFIG_DIRS"));
     if (xdgConfigDirs.isEmpty())
+#ifdef Q_OS_OS2
+        dirs.append(QString::fromLatin1("/@unixroot/etc/xdg"));
+#else
         dirs.append(QString::fromLatin1("/etc/xdg"));
+#endif
     else
-        dirs = xdgConfigDirs.split(QLatin1Char(':'));
+        dirs = xdgConfigDirs.split(QDir::listSeparator());
     return dirs;
 }
 

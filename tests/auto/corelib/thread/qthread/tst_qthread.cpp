@@ -51,6 +51,9 @@
 #include <process.h>
 #endif
 #endif
+#ifdef Q_OS_OS2
+#include <qt_os2.h>
+#endif
 
 #ifndef QT_NO_EXCEPTIONS
 #include <exception>
@@ -613,7 +616,7 @@ void tst_QThread::msleep()
     thread.interval = 120;
     thread.start();
     QVERIFY(thread.wait(five_minutes));
-#if defined (Q_OS_WIN) // May no longer be needed
+#if defined (Q_OS_WIN) || defined(Q_OS_OS2) // May no longer be needed
     QVERIFY2(thread.elapsed >= 100, qPrintable(msgElapsed(thread.elapsed)));
 #else
     QVERIFY2(thread.elapsed >= 120, qPrintable(msgElapsed(thread.elapsed)));
@@ -627,7 +630,7 @@ void tst_QThread::usleep()
     thread.interval = 120000;
     thread.start();
     QVERIFY(thread.wait(five_minutes));
-#if defined (Q_OS_WIN) // May no longer be needed
+#if defined (Q_OS_WIN) || defined(Q_OS_OS2) // May no longer be needed
     QVERIFY2(thread.elapsed >= 100, qPrintable(msgElapsed(thread.elapsed)));
 #else
     QVERIFY2(thread.elapsed >= 120, qPrintable(msgElapsed(thread.elapsed)));
@@ -641,6 +644,8 @@ void noop(void*) { }
     typedef pthread_t ThreadHandle;
 #elif defined Q_OS_WIN
     typedef HANDLE ThreadHandle;
+#elif defined Q_OS_OS2
+    typedef int ThreadHandle;
 #endif
 
 #ifdef Q_OS_WIN
@@ -668,6 +673,7 @@ public:
 protected:
     static void *runUnix(void *data);
     static unsigned WIN_FIX_STDCALL runWin(void *data);
+    static void runOS2(void *data);
 
     FunctionPointer functionPointer;
     void *data;
@@ -683,6 +689,8 @@ void NativeThreadWrapper::start(FunctionPointer functionPointer, void *data)
 #elif defined Q_OS_WIN
     unsigned thrdid = 0;
     nativeThreadHandle = (Qt::HANDLE) _beginthreadex(NULL, 0, NativeThreadWrapper::runWin, this, 0, &thrdid);
+#elif defined Q_OS_OS2
+    nativeThreadHandle = _beginthread(NativeThreadWrapper::runOS2, NULL, 0, this);
 #endif
 }
 
@@ -700,6 +708,9 @@ void NativeThreadWrapper::join()
 #elif defined Q_OS_WIN
     WaitForSingleObjectEx(nativeThreadHandle, INFINITE, FALSE);
     CloseHandle(nativeThreadHandle);
+#elif defined Q_OS_OS2
+    TID tid = nativeThreadHandle;
+    DosWaitThread(&tid, DCWW_WAIT);
 #endif
 }
 
@@ -733,6 +744,11 @@ unsigned WIN_FIX_STDCALL NativeThreadWrapper::runWin(void *data)
 {
     runUnix(data);
     return 0;
+}
+
+void NativeThreadWrapper::runOS2(void *data)
+{
+    runUnix(data);
 }
 
 void NativeThreadWrapper::stop()
@@ -884,7 +900,7 @@ void tst_QThread::adoptedThreadExecFinished()
 
 void tst_QThread::adoptMultipleThreads()
 {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_WIN) || defined(Q_OS_OS2)
     // need to test lots of threads, so that we exceed MAXIMUM_WAIT_OBJECTS in qt_adopted_thread_watcher()
     const int numThreads = 200;
 #else
@@ -916,7 +932,7 @@ void tst_QThread::adoptMultipleThreads()
 
 void tst_QThread::adoptMultipleThreadsOverlap()
 {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_WIN) || defined(Q_OS_OS2)
     // need to test lots of threads, so that we exceed MAXIMUM_WAIT_OBJECTS in qt_adopted_thread_watcher()
     const int numThreads = 200;
 #else

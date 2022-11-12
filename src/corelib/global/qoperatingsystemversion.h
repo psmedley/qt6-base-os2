@@ -57,7 +57,8 @@ public:
         IOS,
         TvOS,
         WatchOS,
-        Android
+        Android,
+        OS2
     };
 
     static const QOperatingSystemVersion Windows7;
@@ -89,6 +90,10 @@ public:
     static const QOperatingSystemVersion Android10;
     static const QOperatingSystemVersion Android11;
 
+    static const QOperatingSystemVersion OS2Warp3;
+    static const QOperatingSystemVersion OS2Warp4;
+    static const QOperatingSystemVersion OS2Warp4_5;
+
     constexpr QOperatingSystemVersion(OSType osType,
                                              int vmajor, int vminor = -1, int vmicro = -1)
         : m_os(osType),
@@ -113,6 +118,8 @@ public:
         return WatchOS;
 #elif defined(Q_OS_ANDROID)
         return Android;
+#elif defined(Q_OS_OS2)
+        return OS2;
 #else
         return Unknown;
 #endif

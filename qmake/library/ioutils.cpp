@@ -26,6 +26,11 @@
 **
 ****************************************************************************/
 
+#ifdef __OS2__
+#  define _EMX_SOURCE // _abspath
+#  include <stdlib.h>
+#endif
+
 #include "ioutils.h"
 
 #include <qdir.h>
@@ -105,7 +110,7 @@ bool IoUtils::isRelativePath(const QString &path)
     if (path.startsWith(QLatin1String(":/")))
         return false;
 #endif
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     // Unlike QFileInfo, this considers only paths with both a drive prefix and
     // a subsequent (back-)slash absolute:
     if (path.length() >= 3 && path.at(1) == QLatin1Char(':') && path.at(0).isLetter()
@@ -118,10 +123,23 @@ bool IoUtils::isRelativePath(const QString &path)
         && path.at(1) == path.at(0)) {
         return false;
     }
+#ifdef Q_OS_OS2
+    // More over, on OS/2 under kLIBC paths like /@unixroot are also absolute and should not be
+    // fiddled with. Luckily, _abspath knows that and returns them as is. We use this feature here.
+    if (path.length() > 0 && (path.at(0) == QLatin1Char('/') || path.at(0) == QLatin1Char('\\'))) {
+        QByteArray bpath = QFile::encodeName(path);
+        if (!_abspath(bpath.data(), bpath.constData(), bpath.size() + 1)) {
+            // _abspath succeeded. If it still starts with a slash, then it was already absoltue
+            // (a /@unixroot-like path rewrite or a special device name).
+            if (bpath.at(0) == '/' || bpath.at(0) == '\\')
+                return false;
+        }
+    }
+#endif
 #else
     if (path.startsWith(QLatin1Char('/')))
         return false;
-#endif // Q_OS_WIN
+#endif // Q_OS_DOSLIKE
     return true;
 }
 
@@ -141,12 +159,12 @@ QString IoUtils::resolvePath(const QString &baseDir, const QString &fileName)
         return QString();
     if (isAbsolutePath(fileName))
         return QDir::cleanPath(fileName);
-#ifdef Q_OS_WIN // Add drive to otherwise-absolute path:
+#ifdef Q_OS_DOSLIKE // Add drive to otherwise-absolute path:
     if (fileName.at(0).unicode() == '/' || fileName.at(0).unicode() == '\\') {
         Q_ASSERT_X(isAbsolutePath(baseDir), "IoUtils::resolvePath", qUtf8Printable(baseDir));
         return QDir::cleanPath(baseDir.left(2) + fileName);
     }
-#endif // Q_OS_WIN
+#endif // Q_OS_DOSLIKE
     return QDir::cleanPath(baseDir + QLatin1Char('/') + fileName);
 }
 
@@ -256,7 +274,7 @@ static QString windowsErrorCode()
 
 bool IoUtils::touchFile(const QString &targetFileName, const QString &referenceFileName, QString *errorString)
 {
-#  ifdef Q_OS_UNIX
+#  ifdef Q_OS_UNIXLIKE
     struct stat st;
     if (stat(referenceFileName.toLocal8Bit().constData(), &st)) {
         *errorString = fL1S("Cannot stat() reference file %1: %2.").arg(referenceFileName, fL1S(strerror(errno)));
@@ -299,7 +317,7 @@ bool IoUtils::touchFile(const QString &targetFileName, const QString &referenceF
     return true;
 }
 
-#if defined(QT_BUILD_QMAKE) && defined(Q_OS_UNIX)
+#if defined(QT_BUILD_QMAKE) && defined(Q_OS_UNIXLIKE)
 bool IoUtils::readLinkTarget(const QString &symlinkPath, QString *target)
 {
     const QByteArray localSymlinkPath = QFile::encodeName(symlinkPath);

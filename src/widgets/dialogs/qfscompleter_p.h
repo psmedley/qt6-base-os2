@@ -67,7 +67,7 @@ public:
     explicit QFSCompleter(QFileSystemModel *model, QObject *parent = nullptr)
         : QCompleter(model, parent), proxyModel(nullptr), sourceModel(model)
     {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
         setCaseSensitivity(Qt::CaseInsensitive);
 #endif
     }

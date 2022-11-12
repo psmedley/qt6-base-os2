@@ -67,9 +67,9 @@ EchoWindow::EchoWindow()
     setWindowTitle("Echo Plugin Example");
 
     if (!loadPlugin()) {
-        QMessageBox::information(this, "Error", "Could not load the plugin");
         lineEdit->setEnabled(false);
         button->setEnabled(false);
+        QMessageBox::information(this, "Error", "Could not load the plugin");
     }
 }
 //! [0]
@@ -109,7 +109,7 @@ void EchoWindow::createGUI()
 bool EchoWindow::loadPlugin()
 {
     QDir pluginsDir(QCoreApplication::applicationDirPath());
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     if (pluginsDir.dirName().toLower() == "debug" || pluginsDir.dirName().toLower() == "release")
         pluginsDir.cdUp();
 #elif defined(Q_OS_MAC)

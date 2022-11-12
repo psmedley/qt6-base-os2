@@ -47,6 +47,9 @@
 #  include <process.h>
 #  include <qt_windows.h>
 #endif
+#ifdef Q_OS_OS2
+#include <qt_os2.h>
+#endif
 
 class tst_QThreadStorage : public QObject
 {
@@ -206,6 +209,11 @@ void tst_QThreadStorage::adoptedThreads()
         thread = (HANDLE)_beginthread(testAdoptedThreadStorageWin, 0, &pointers);
         QVERIFY(thread);
         WaitForSingleObject(thread, INFINITE);
+#elif defined Q_OS_OS2
+        TID thread;
+        thread = _beginthread(testAdoptedThreadStorageWin, NULL, 0, &pointers);
+        QVERIFY(thread != (TID)-1);
+        DosWaitThread(&thread, DCWW_WAIT);
 #endif
     }
     QVERIFY(threadStorageOk);

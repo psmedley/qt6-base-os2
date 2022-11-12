@@ -640,8 +640,8 @@ int main(int argc, char *argv[]) \
 #define QTEST_MAIN_IMPL(TestObject) \
     TESTLIB_SELFCOVERAGE_START(#TestObject) \
     QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
+    QApplication::setAttribute(Qt::AA_Use96Dpi, true); \
     QApplication app(argc, argv); \
-    app.setAttribute(Qt::AA_Use96Dpi, true); \
     QTEST_DISABLE_KEYPAD_NAVIGATION \
     TestObject tc; \
     QTEST_SET_MAIN_SOURCE_PATH \
@@ -654,8 +654,8 @@ int main(int argc, char *argv[]) \
 #define QTEST_MAIN_IMPL(TestObject) \
     TESTLIB_SELFCOVERAGE_START(#TestObject) \
     QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
+    QGuiApplication::setAttribute(Qt::AA_Use96Dpi, true); \
     QGuiApplication app(argc, argv); \
-    app.setAttribute(Qt::AA_Use96Dpi, true); \
     TestObject tc; \
     QTEST_SET_MAIN_SOURCE_PATH \
     return QTest::qExec(&tc, argc, argv);
@@ -665,8 +665,8 @@ int main(int argc, char *argv[]) \
 #define QTEST_MAIN_IMPL(TestObject) \
     TESTLIB_SELFCOVERAGE_START(#TestObject) \
     QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
+    QCoreApplication::setAttribute(Qt::AA_Use96Dpi, true); \
     QCoreApplication app(argc, argv); \
-    app.setAttribute(Qt::AA_Use96Dpi, true); \
     TestObject tc; \
     QTEST_SET_MAIN_SOURCE_PATH \
     return QTest::qExec(&tc, argc, argv);
@@ -684,8 +684,8 @@ int main(int argc, char *argv[]) \
 { \
     TESTLIB_SELFCOVERAGE_START(#TestObject) \
     QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
+    QCoreApplication::setAttribute(Qt::AA_Use96Dpi, true); \
     QCoreApplication app(argc, argv); \
-    app.setAttribute(Qt::AA_Use96Dpi, true); \
     TestObject tc; \
     QTEST_SET_MAIN_SOURCE_PATH \
     return QTest::qExec(&tc, argc, argv); \

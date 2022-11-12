@@ -226,7 +226,7 @@ public:
     uint groupId() const;
     uint ownerId(QAbstractFileEngine::FileOwner owner) const;
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
     void fillFromStatxBuf(const struct statx &statBuffer);
     void fillFromStatBuf(const QT_STATBUF &statBuffer);
     void fillFromDirEnt(const QT_DIRENT &statBuffer);
@@ -277,28 +277,7 @@ inline bool QFileSystemMetaData::isBundle() const                   { return fal
 inline bool QFileSystemMetaData::isAlias() const                    { return false; }
 #endif
 
-#if defined(Q_OS_UNIX) || defined (Q_OS_WIN)
-inline QDateTime QFileSystemMetaData::fileTime(QAbstractFileEngine::FileTime time) const
-{
-    switch (time) {
-    case QAbstractFileEngine::ModificationTime:
-        return modificationTime();
-
-    case QAbstractFileEngine::AccessTime:
-        return accessTime();
-
-    case QAbstractFileEngine::BirthTime:
-        return birthTime();
-
-    case QAbstractFileEngine::MetadataChangeTime:
-        return metadataChangeTime();
-    }
-
-    return QDateTime();
-}
-#endif
-
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
 inline QDateTime QFileSystemMetaData::birthTime() const
 { return birthTime_ ? QDateTime::fromMSecsSinceEpoch(birthTime_, Qt::UTC) :  QDateTime(); }
 inline QDateTime QFileSystemMetaData::metadataChangeTime() const
@@ -317,6 +296,27 @@ inline uint QFileSystemMetaData::ownerId(QAbstractFileEngine::FileOwner owner) c
         return userId();
     else
         return groupId();
+}
+#endif
+
+#if defined(Q_OS_UNIX) || defined (Q_OS_DOSLIKE)
+inline QDateTime QFileSystemMetaData::fileTime(QAbstractFileEngine::FileTime time) const
+{
+    switch (time) {
+    case QAbstractFileEngine::ModificationTime:
+        return modificationTime();
+
+    case QAbstractFileEngine::AccessTime:
+        return accessTime();
+
+    case QAbstractFileEngine::BirthTime:
+        return birthTime();
+
+    case QAbstractFileEngine::MetadataChangeTime:
+        return metadataChangeTime();
+    }
+
+    return QDateTime();
 }
 #endif
 

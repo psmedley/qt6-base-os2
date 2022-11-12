@@ -2136,6 +2136,10 @@ void tst_QProcess::detachedProcessParameters()
     process.setCreateProcessArgumentsModifier(
         [&modifierCalls] (QProcess::CreateProcessArguments *) { modifierCalls++; });
 #endif
+#ifdef Q_OS_OS2
+    // We need this in order to receive the actual PID from startDetached.
+    process.setThreadSafe(true);
+#endif
     QStringList args(infoFile.fileName());
     if (!outChannel.isEmpty()) {
         args << QStringLiteral("--out-channel=") + outChannel;

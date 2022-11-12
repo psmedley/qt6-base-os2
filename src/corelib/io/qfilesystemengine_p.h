@@ -93,7 +93,7 @@ class Q_AUTOTEST_EXPORT QFileSystemEngine
 public:
     static bool isCaseSensitive()
     {
-#ifndef Q_OS_WIN
+#ifndef Q_OS_DOSLIKE
         return true;
 #else
         return false;
@@ -108,7 +108,7 @@ public:
     static QString resolveUserName(const QFileSystemEntry &entry, QFileSystemMetaData &data);
     static QString resolveGroupName(const QFileSystemEntry &entry, QFileSystemMetaData &data);
 
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
     static QString resolveUserName(uint userId);
     static QString resolveGroupName(uint groupId);
 #endif
@@ -121,7 +121,7 @@ public:
 
     static bool fillMetaData(const QFileSystemEntry &entry, QFileSystemMetaData &data,
                              QFileSystemMetaData::MetaDataFlags what);
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
     static bool cloneFile(int srcfd, int dstfd, const QFileSystemMetaData &knownData);
     static bool fillMetaData(int fd, QFileSystemMetaData &data); // what = PosixStatFlags
     static QByteArray id(int fd);

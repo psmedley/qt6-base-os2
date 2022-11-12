@@ -57,7 +57,7 @@
 #include "qatomic.h"
 #include "qbytearray.h"
 
-#ifndef Q_OS_UNIX
+#ifndef Q_OS_UNIXLIKE
 # error "qcore_unix_p.h included on a non-Unix system"
 #endif
 
@@ -345,7 +345,7 @@ static inline pid_t qt_safe_waitpid(pid_t pid, int *status, int options)
 #  define _POSIX_MONOTONIC_CLOCK -1
 #endif
 
-// in qelapsedtimer_mac.cpp or qtimestamp_unix.cpp
+// in qelapsedtimer_mac.cpp or qelapsedtimer_unix.cpp or qcore_unix.cpp
 timespec qt_gettime() noexcept;
 void qt_nanosleep(timespec amount);
 QByteArray qt_readlink(const char *path);

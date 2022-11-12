@@ -52,6 +52,7 @@
 #endif // QT_BOOTSTRAPPED
 
 #include <pwd.h>
+#include <grp.h>
 #include <stdlib.h> // for realpath()
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -106,6 +107,10 @@ extern "C" NSString *NSTemporaryDirectory();
 #  undef STATX_BASIC_STATS
 #endif
 
+#if defined(Q_OS_OS2)
+#include "qt_os2.h"
+#endif
+
 #ifndef STATX_ALL
 struct statx { mode_t stx_mode; };      // dummy
 #endif
@@ -113,7 +118,7 @@ struct statx { mode_t stx_mode; };      // dummy
 QT_BEGIN_NAMESPACE
 
 enum {
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) || defined(Q_OS_OS2)
     // On Android, the link(2) system call has been observed to always fail
     // with EACCES, regardless of whether there are permission problems or not.
     SupportsHardlinking = false
@@ -203,6 +208,8 @@ static inline typename std::enable_if_t<(&T::st_atim, &T::st_mtim, true)> get(co
     modification->tv_usec = p->st_mtim.tv_nsec / 1000;
 }
 
+#  ifndef st_atimespec
+// if "st_atimespec" is defined, this would create a duplicate definition
 template <typename T>
 static inline typename std::enable_if_t<(&T::st_atimespec, &T::st_mtimespec, true)> get(const T *p, struct timeval *access, struct timeval *modification)
 {
@@ -212,6 +219,7 @@ static inline typename std::enable_if_t<(&T::st_atimespec, &T::st_mtimespec, tru
     modification->tv_sec = p->st_mtimespec.tv_sec;
     modification->tv_usec = p->st_mtimespec.tv_nsec / 1000;
 }
+#  endif
 
 #  ifndef st_atimensec
 // if "st_atimensec" is defined, this would expand to invalid C++
@@ -484,7 +492,12 @@ void QFileSystemMetaData::fillFromStatBuf(const QT_STATBUF &statBuffer)
     if (statBuffer.st_nlink == 0)
         entryFlags |= QFileSystemMetaData::WasDeletedAttribute;
     size_ = statBuffer.st_size;
-#ifdef UF_HIDDEN
+#if defined(Q_OS_OS2)
+    if (statBuffer.st_attr & A_HIDDEN) {
+        entryFlags |= QFileSystemMetaData::HiddenAttribute;
+        knownFlagsMask |= QFileSystemMetaData::HiddenAttribute;
+    }
+#elif defined(UF_HIDDEN)
     if (statBuffer.st_flags & UF_HIDDEN) {
         entryFlags |= QFileSystemMetaData::HiddenAttribute;
         knownFlagsMask |= QFileSystemMetaData::HiddenAttribute;
@@ -544,7 +557,7 @@ void QFileSystemMetaData::fillFromDirEnt(const QT_DIRENT &entry)
             }
         }
     }
-#elif defined(_DIRENT_HAVE_D_TYPE) || defined(Q_OS_BSD4)
+#elif defined(_DIRENT_HAVE_D_TYPE) || defined(Q_OS_BSD4) || defined(Q_OS_OS2)
     // BSD4 includes OS X and iOS
 
     // ### This will clear all entry flags and knownFlagsMask
@@ -626,6 +639,21 @@ QFileSystemEntry QFileSystemEngine::getLinkTarget(const QFileSystemEntry &link, 
 
     QByteArray s = qt_readlink(link.nativeFilePath().constData());
     if (s.length() > 0) {
+#if defined(Q_OS_OS2)
+        // No idea why Unix code below is so complex, let's do it simpler and
+        // with isRelative specifics but leave the Unix part intact just in case
+        if (s.length() > 1 && s.endsWith('/'))
+            s.chop(1);
+
+        Q_UNUSED(data);
+        QFileSystemEntry ret(s, QFileSystemEntry::FromNativePath());
+        if (ret.isRelative())
+            ret = QFileSystemEntry(QDir::cleanPath(absoluteName(link).path() + QLatin1Char('/') + ret.filePath()));
+        else
+            ret = QFileSystemEntry(QDir::cleanPath(ret.filePath()));
+
+        return ret;
+#else
         QString ret;
         if (!data.hasFlags(QFileSystemMetaData::DirectoryType))
             fillMetaData(link, data, QFileSystemMetaData::DirectoryType);
@@ -644,6 +672,7 @@ QFileSystemEntry QFileSystemEngine::getLinkTarget(const QFileSystemEntry &link, 
         if (ret.size() > 1 && ret.endsWith(QLatin1Char('/')))
             ret.chop(1);
         return QFileSystemEntry(ret);
+#endif
     }
 #if defined(Q_OS_DARWIN)
     {
@@ -683,7 +712,7 @@ QFileSystemEntry QFileSystemEngine::canonicalName(const QFileSystemEntry &entry,
 {
     Q_CHECK_FILE_NAME(entry, entry);
 
-#if !defined(Q_OS_MAC) && !defined(Q_OS_QNX) && !defined(Q_OS_ANDROID) && !defined(Q_OS_HAIKU) && _POSIX_VERSION < 200809L
+#if !defined(Q_OS_MAC) && !defined(Q_OS_QNX) && !defined(Q_OS_ANDROID) && !defined(Q_OS_HAIKU) && !defined(Q_OS_OS2) && _POSIX_VERSION < 200809L
     // realpath(X,0) is not supported
     Q_UNUSED(data);
     return QFileSystemEntry(slowCanonicalized(absoluteName(entry).filePath()));
@@ -704,7 +733,7 @@ QFileSystemEntry QFileSystemEngine::canonicalName(const QFileSystemEntry &entry,
     if (resolved_name && realpath(entry.nativeFilePath().constData(), resolved_name) == nullptr)
         resolved_name = nullptr;
 # else
-#  if _POSIX_VERSION >= 200801L // ask realpath to allocate memory
+#  if _POSIX_VERSION >= 200801L || defined(Q_OS_OS2) // ask realpath to allocate memory
     resolved_name = realpath(entry.nativeFilePath().constData(), nullptr);
 #  else
     resolved_name = stack_result;
@@ -733,6 +762,53 @@ QFileSystemEntry QFileSystemEngine::absoluteName(const QFileSystemEntry &entry)
 {
     Q_CHECK_FILE_NAME(entry, entry);
 
+#ifdef Q_OS_OS2
+    // We mostly follow the Windows logic here. Note that at QFileSystemEntry
+    // level isAbsolute() is not necessarily a negation of isRelative() like it
+    // is at QFileInfo level.
+    QString ret = entry.filePath();
+
+    if (entry.isAbsolute() && entry.isClean() && ret.at(0).isUpper())
+        return entry;
+
+    if (!entry.isRelative()) {
+        if (!entry.isAbsolute()) {
+            // Ask LIBC to resolve cases like "D:foo.txt" and "\foo.txt"
+            QVarLengthArray<char, PATH_MAX * 2 + 1> buf(PATH_MAX * 2 + 1);
+            if (::_abspath(buf.data(), entry.nativeFilePath().constData(), buf.size()) == 0) {
+                ret = QFile::decodeName(buf.constData());
+            } else {
+                qErrnoWarning("_abspath() failed for '%s'", entry.nativeFilePath().constData());
+                return QFileSystemEntry();
+            }
+        }
+    } else {
+        ret = QDir::currentPath() + QLatin1Char('/') + ret;
+    }
+
+    // The path should be absolute at this point.
+    // From the docs :
+    // Absolute paths begin with the directory separator "/"
+    // (optionally preceded by a drive specification under Windows).
+    if (ret.at(0) != QLatin1Char('/')) {
+        Q_ASSERT(ret.length() >= 2);
+        Q_ASSERT(ret.at(0).isLetter());
+        Q_ASSERT(ret.at(1) == QLatin1Char(':'));
+
+        // Force uppercase drive letters.
+        ret[0] = ret.at(0).toUpper();
+    }
+
+    // Although not documented, it is implied that the returned path contains no "." or ".."
+    // components (and this is important for backward compatibility), so clean it up.
+    // See https://bugreports.qt.io/browse/QTBUG-19995 for details.
+    const bool isDir = ret.endsWith(QLatin1Char('/'));
+    ret = QDir::cleanPath(ret);
+    if (isDir)
+        ret += QLatin1Char('/');
+
+    return QFileSystemEntry(ret, QFileSystemEntry::FromInternalPath());
+#else
     if (entry.isAbsolute() && entry.isClean())
         return entry;
 
@@ -761,6 +837,7 @@ QFileSystemEntry QFileSystemEngine::absoluteName(const QFileSystemEntry &entry)
     if (isDir)
         stringVersion.append(QLatin1Char('/'));
     return QFileSystemEntry(stringVersion);
+#endif
 }
 
 //static
@@ -887,7 +964,12 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
             what |= QFileSystemMetaData::DirectoryType;
     }
 #endif
-#ifdef UF_HIDDEN
+#if defined(Q_OS_OS2)
+    if (what & QFileSystemMetaData::HiddenAttribute) {
+        // kLIBC: st_attr & A_HIDDEN
+        what |= QFileSystemMetaData::PosixStatFlags;
+    }
+#elif defined(UF_HIDDEN)
     if (what & QFileSystemMetaData::HiddenAttribute) {
         // OS X >= 10.5: st_flags & UF_HIDDEN
         what |= QFileSystemMetaData::PosixStatFlags;
@@ -902,6 +984,11 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
 
     const QByteArray nativeFilePath = entry.nativeFilePath();
     int entryErrno = 0; // innocent until proven otherwise
+
+#if defined(Q_OS_OS2)
+    // Drive roots require special handling: don't check for links and account for removable media.
+    bool isDriveRoot = entry.isDriveRoot();
+#endif
 
     // first, we may try lstat(2). Possible outcomes:
     //  - success and is a symlink: filesystem entry exists, but we need stat(2)
@@ -921,7 +1008,11 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
         struct statx statxBuffer;
     };
     int statResult = -1;
+#if defined(Q_OS_OS2)
+    if (!isDriveRoot && (what & QFileSystemMetaData::LinkType)) {
+#else
     if (what & QFileSystemMetaData::LinkType) {
+#endif
         mode_t mode = 0;
         statResult = qt_lstatx(nativeFilePath, &statxBuffer);
         if (statResult == -ENOSYS) {
@@ -959,12 +1050,33 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
     }
 
     // second, we try a regular stat(2)
+#if defined(Q_OS_OS2)
+    if (isDriveRoot || (statResult == -1 && (what & QFileSystemMetaData::PosixStatFlags))) {
+#else
     if (statResult == -1 && (what & QFileSystemMetaData::PosixStatFlags)) {
+#endif
         if (entryErrno == 0 && statResult == -1) {
             data.entryFlags &= ~QFileSystemMetaData::PosixStatFlags;
             statResult = qt_statx(nativeFilePath, &statxBuffer);
             if (statResult == -ENOSYS) {
                 // use stat(2)
+#if defined(Q_OS_OS2)
+                // Calling stat on a drive with no media inserted will cause unnecessary noise and
+                // significant delays. Detect this and avoid stat. It seems that the simplest (and
+                // fastest) way to do so is just to query FSINFO on such a drive.
+                if (isDriveRoot) {
+                    FSINFO fsinfo;
+                    int drive = nativeFilePath.at(0);
+                    if (drive >= 'a' && drive <= 'z')
+                        drive -= 'a';
+                    else
+                        drive -= 'A';
+                    APIRET arc = DosQueryFSInfo (drive + 1, FSIL_VOLSER, &fsinfo, sizeof (fsinfo));
+                    if (arc != NO_ERROR)
+                        statResult = -EIO;
+                }
+                if (statResult != -EIO)
+#endif
                 statResult = QT_STAT(nativeFilePath, &statBuffer);
                 if (statResult == 0)
                     data.fillFromStatBuf(statBuffer);
@@ -987,6 +1099,22 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
         // reset the mask
         data.knownFlagsMask |= QFileSystemMetaData::PosixStatFlags
             | QFileSystemMetaData::ExistsAttribute;
+
+#if defined(Q_OS_OS2)
+        if (isDriveRoot) {
+            // Drive root is never a link.
+            if (what & QFileSystemMetaData::LinkType) {
+                data.entryFlags &= ~QFileSystemMetaData::LinkType;
+                data.knownFlagsMask |= QFileSystemMetaData::LinkType;
+            }
+            if (statResult == -EIO) {
+                // Treat the drive with no media as a directory but don't mark it as existing to
+                // prevents some users (e.g. QFileDialog) from "entering" such a drive.
+                data.entryFlags |= QFileSystemMetaData::DirectoryType;
+            }
+            return true;
+        }
+#endif
     }
 
     // third, we try access(2)
@@ -1184,7 +1312,7 @@ bool QFileSystemEngine::removeDirectory(const QFileSystemEntry &entry, bool remo
             } else {
                 return false;
             }
-            slash = dirName.lastIndexOf(QDir::separator(), oldslash-1);
+            slash = dirName.lastIndexOf(QLatin1Char('/'), oldslash-1);
         }
         return true;
     }
@@ -1660,7 +1788,16 @@ QString QFileSystemEngine::homePath()
 
 QString QFileSystemEngine::rootPath()
 {
+#ifdef Q_OS_OS2
+    char root[] = "C:/"; // fallback to C: on any error
+    ULONG drive;
+    APIRET arc = DosQuerySysInfo(QSV_BOOT_DRIVE, QSV_BOOT_DRIVE, &drive, sizeof(drive));
+    if (arc == NO_ERROR && drive >= 1 && drive <= 26)
+        root[0] = 'A' + --drive;
+    return QLatin1String(root);
+#else
     return QLatin1String("/");
+#endif
 }
 
 QString QFileSystemEngine::tempPath()
@@ -1669,6 +1806,10 @@ QString QFileSystemEngine::tempPath()
     return QLatin1String(QT_UNIX_TEMP_PATH_OVERRIDE);
 #else
     QString temp = QFile::decodeName(qgetenv("TMPDIR"));
+#if defined(Q_OS_OS2)
+    if (temp.isEmpty())
+        temp = QFile::decodeName(qgetenv("TEMP"));
+#endif
     if (temp.isEmpty()) {
         if (false) {
 #if defined(Q_OS_DARWIN) && !defined(QT_BOOTSTRAPPED)
@@ -1701,7 +1842,7 @@ QFileSystemEntry QFileSystemEngine::currentPath()
     }
 #else
     char currentName[PATH_MAX+1];
-    if (::getcwd(currentName, PATH_MAX)) {
+    if (QT_GETCWD(currentName, PATH_MAX)) {
 #if defined(Q_OS_VXWORKS) && defined(VXWORKS_VXSIM)
         QByteArray dir(currentName);
         if (dir.indexOf(':') < dir.indexOf('/'))

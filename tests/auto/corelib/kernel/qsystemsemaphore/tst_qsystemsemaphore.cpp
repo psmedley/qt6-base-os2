@@ -62,7 +62,7 @@ private slots:
     void processes_data();
     void processes();
 
-#if !defined(Q_OS_WIN) && !defined(QT_POSIX_IPC)
+#if !defined(Q_OS_DOSLIKE) && !defined(QT_POSIX_IPC)
     void undo();
 #endif
     void initialValue();
@@ -231,7 +231,7 @@ void tst_QSystemSemaphore::processes()
 }
 
 // This test only checks a system v unix behavior.
-#if !defined(Q_OS_WIN) && !defined(QT_POSIX_IPC)
+#if !defined(Q_OS_DOSLIKE) && !defined(QT_POSIX_IPC)
 void tst_QSystemSemaphore::undo()
 {
 #if !QT_CONFIG(process)

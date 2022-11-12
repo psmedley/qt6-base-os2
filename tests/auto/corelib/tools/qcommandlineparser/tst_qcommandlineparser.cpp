@@ -568,7 +568,7 @@ void tst_QCommandLineParser::testVersionOption()
     QVERIFY(process.waitForFinished(5000));
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
     QString output = process.readAll();
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     output.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
 #endif
     QCOMPARE(output, QString("qcommandlineparser_test_helper 1.0\n"));
@@ -638,7 +638,7 @@ void tst_QCommandLineParser::testHelpOption()
     QVERIFY(process.waitForFinished(5000));
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
     QString output = process.readAll();
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     output.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
 #endif
     QCOMPARE(output.split('\n'), expectedHelpOutput.split('\n')); // easier to debug than the next line, on failure
@@ -648,7 +648,7 @@ void tst_QCommandLineParser::testHelpOption()
     QVERIFY(process.waitForFinished(5000));
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
     output = process.readAll();
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     output.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
 #endif
     QByteArray expectedResizeHelp = QByteArrayLiteral(

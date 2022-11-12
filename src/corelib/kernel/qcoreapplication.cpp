@@ -38,6 +38,7 @@
 **
 ****************************************************************************/
 
+#include "qplatformdefs.h"
 #include "qcoreapplication.h"
 #include "qcoreapplication_p.h"
 
@@ -104,7 +105,7 @@
 
 #include <stdlib.h>
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #  include <locale.h>
 #  ifndef Q_OS_INTEGRITY
 #    include <langinfo.h>
@@ -166,6 +167,10 @@ QString QCoreApplicationPrivate::appName() const
     QString applicationName;
 #ifdef Q_OS_DARWIN
     applicationName = infoDictionaryStringProperty(QStringLiteral("CFBundleName"));
+#elif defined(Q_OS_OS2)
+    applicationName = QCoreApplication::applicationFilePath();
+    if (!applicationName.isEmpty())
+        applicationName = QFileInfo(applicationName).completeBaseName();
 #endif
     if (applicationName.isEmpty() && argv[0]) {
         char *p = strrchr(argv[0], '/');
@@ -180,6 +185,8 @@ QString QCoreApplicationPrivate::appVersion() const
 #ifndef QT_BOOTSTRAPPED
 #  ifdef Q_OS_DARWIN
     applicationVersion = infoDictionaryStringProperty(QStringLiteral("CFBundleVersion"));
+#  elif defined(Q_OS_OS2)
+    // ### TODO use module DESCRIPTION string etc.
 #  elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     QJniObject context(QNativeInterface::QAndroidApplication::context());
     if (context.isValid()) {
@@ -2276,6 +2283,23 @@ void QCoreApplicationPrivate::setApplicationFilePath(const QString &path)
         QCoreApplicationPrivate::cachedApplicationFilePath = new QString(path);
 }
 
+#ifdef Q_OS_OS2
+Q_CORE_EXPORT QString qAppFileName()
+{
+    char appPath[PATH_MAX + 1];
+    if (_execname(appPath, sizeof(appPath)) == 0) {
+        // _execname returns the uppercased path, try to get the real case
+        char *path = appPath;
+        char realAppPath[PATH_MAX + 1];
+        if (_realrealpath(appPath, realAppPath, sizeof(realAppPath)))
+            path = realAppPath;
+        return QFile::decodeName(path);
+    }
+
+    return QString();
+}
+#endif
+
 /*!
     Returns the directory that contains the application executable.
 
@@ -2308,7 +2332,7 @@ QString QCoreApplication::applicationDirPath()
     return d->cachedApplicationDirPath;
 }
 
-#if !defined(Q_OS_WIN) && !defined(Q_OS_DARWIN)     // qcoreapplication_win.cpp or qcoreapplication_mac.cpp
+#if !defined(Q_OS_WIN) && !defined(Q_OS_DARWIN) && !defined(Q_OS_OS2)     // qcoreapplication_win.cpp or qcoreapplication_mac.cpp
 static QString qAppFileName()
 {
 #  if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)

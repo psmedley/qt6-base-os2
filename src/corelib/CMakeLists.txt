@@ -494,6 +494,27 @@ qt_internal_extend_target(Core CONDITION WIN32
         userenv
 )
 
+qt_internal_extend_target(Core CONDITION OS2
+    SOURCES
+        global/qoperatingsystemversion_os2.cpp
+        io/qprocess_os2.cpp
+        io/qfsfileengine_unix.cpp
+        io/qfilesystemengine_unix.cpp
+        io/qlockfile_os2.cpp
+        io/qfilesystemiterator_unix.cpp
+        io/qstandardpaths_unix.cpp
+        kernel/qcore_unix.cpp kernel/qcore_unix_p.h
+        kernel/qeventdispatcher_os2.cpp kernel/qeventdispatcher_os2_p.h
+        kernel/qtimerinfo_unix.cpp kernel/qtimerinfo_unix_p.h
+        kernel/qsharedmemory_os2.cpp
+        kernel/qsystemsemaphore_os2.cpp
+        kernel/qelapsedtimer_generic.cpp
+        text/qlocale_unix.cpp
+        thread/qthread_os2.cpp
+        thread/qmutex_os2.cpp
+        thread/qwaitcondition_win.cpp
+)
+
 qt_internal_extend_target(Core CONDITION APPLE
     SOURCES
         global/qoperatingsystemversion_darwin.mm
@@ -1036,7 +1057,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_library
         plugin/qmachparser.cpp plugin/qmachparser_p.h
 )
 
-qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND UNIX
+qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND (UNIX OR OS2)
     SOURCES
         plugin/qlibrary_unix.cpp
 )
