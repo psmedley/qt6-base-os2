@@ -181,7 +181,7 @@ public:
     {
     public:
         AuxWnd(QEventDispatcherOS2Private &that) : QPMObjectWindow(true /*deferred*/), d(that) {}
-        MRESULT message(ULONG msg, MPARAM mp1, MPARAM mp2);
+        MRESULT message(ULONG msg, MPARAM mp1, MPARAM mp2) override;
     private:
         QEventDispatcherOS2Private &d;
     } auxWnd;
@@ -901,7 +901,7 @@ void QEventDispatcherOS2::unregisterSocketNotifier(QSocketNotifier *notifier)
     d->maybeStopOrStartThread();
 }
 
-void QEventDispatcherOS2::registerTimer(int timerId, int interval, Qt::TimerType timerType, QObject *object)
+void QEventDispatcherOS2::registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object)
 {
 #ifndef QT_NO_DEBUG
     if (timerId < 1 || interval < 0 || !object) {
