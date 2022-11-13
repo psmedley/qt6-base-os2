@@ -301,7 +301,7 @@ public:
      */
     void setPortAndAddress(quint16 port, const QHostAddress &address, qt_sockaddr *aa, QT_SOCKLEN_T *sockAddrSize)
     {
-#ifndef QT_NO_IPV6
+#ifndef Q_OS_OS2
         if (address.protocol() == QAbstractSocket::IPv6Protocol
             || address.protocol() == QAbstractSocket::AnyIPProtocol
             || socketProtocol == QAbstractSocket::IPv6Protocol
