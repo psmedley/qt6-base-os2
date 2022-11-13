@@ -21,6 +21,8 @@ if (QT_FEATURE_gui)
         set(_default_platform "ios")
     elseif(WATCHOS)
         set(_default_platform "minimal")
+    elseif(OS2)
+        set(_default_platform "os2")
     elseif(QNX)
         set(_default_platform "qnx")
     elseif(INTEGRITY)
@@ -956,6 +958,11 @@ qt_internal_extend_target(Gui CONDITION UNIX
         platform/unix/qunixeventdispatcher.cpp
         platform/unix/qunixeventdispatcher_qpa_p.h
         platform/unix/qunixnativeinterface.cpp
+)
+
+qt_internal_extend_target(Gui CONDITION UNIX
+    SOURCES
+        platform/unix/qgenericunixeventdispatcher.cpp platform/unix/qgenericunixeventdispatcher_p.h
 )
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_glib AND UNIX
