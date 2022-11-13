@@ -960,7 +960,7 @@ qt_internal_extend_target(Gui CONDITION UNIX
         platform/unix/qunixnativeinterface.cpp
 )
 
-qt_internal_extend_target(Gui CONDITION UNIX
+qt_internal_extend_target(Gui CONDITION OS2
     SOURCES
         platform/unix/qgenericunixeventdispatcher.cpp platform/unix/qgenericunixeventdispatcher_p.h
 )
