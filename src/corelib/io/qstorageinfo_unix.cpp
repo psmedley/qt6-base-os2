@@ -100,7 +100,7 @@
 #  define QT_STATFSBUF struct statvfs
 #  define QT_STATFS    ::statvfs
 #else
-#  if defined(QT_LARGEFILE_SUPPORT)
+#  if defined(QT_LARGEFILE_SUPPORT) && !defined(Q_OS_OS2)
 #    define QT_STATFSBUF struct statvfs64
 #    define QT_STATFS    ::statvfs64
 #  else

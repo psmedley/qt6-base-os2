@@ -78,7 +78,7 @@ protected:
     void retrievePosixInfo();
     void retrieveUrlProperties(bool initRootPath = false);
     void retrieveLabel();
-#elif defined(Q_OS_UNIX)
+#elif defined(Q_OS_UNIX) || defined(Q_OS_OS2)
     void retrieveVolumeInfo();
 #endif
 

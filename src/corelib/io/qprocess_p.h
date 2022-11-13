@@ -73,6 +73,8 @@ typedef HANDLE Q_PIPE;
 #elif defined(Q_OS_OS2)
 #include "QtCore/qt_os2.h"
 #define INVALID_HFILE HFILE(~0)
+typedef int Q_PIPE;
+#define INVALID_Q_PIPE -1
 #else
 typedef int Q_PIPE;
 #define INVALID_Q_PIPE -1
@@ -267,7 +269,7 @@ public:
 
         QString file;
         QProcessPrivate *process = nullptr;
-#ifdef Q_OS_UNIX
+#if defined(Q_OS_UNIX) || defined(Q_OS_OS2)
         QSocketNotifier *notifier = nullptr;
 #else
         union {
@@ -348,7 +350,7 @@ public:
 #endif
     QProcessEnvironment environment;
 
-#ifdef Q_OS_UNIX
+#if defined(Q_OS_UNIX) || defined(Q_OS_OS2)
     Q_PIPE childStartedPipe[2] = {INVALID_Q_PIPE, INVALID_Q_PIPE};
     QSocketNotifier *stateNotifier = nullptr;
     int forkfd = -1;

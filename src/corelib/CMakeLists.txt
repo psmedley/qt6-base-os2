@@ -513,6 +513,7 @@ qt_internal_extend_target(Core CONDITION OS2
         thread/qthread_os2.cpp
         thread/qmutex_os2.cpp
         thread/qwaitcondition_win.cpp
+        io/qstorageinfo_unix.cpp
 )
 
 qt_internal_extend_target(Core CONDITION APPLE
@@ -881,7 +882,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_timezone AND UNIX AND (ANDRO
         time/qtimezoneprivate_tz.cpp
 )
 
-qt_internal_extend_target(Core CONDITION QT_FEATURE_icu AND QT_FEATURE_timezone AND UNIX AND (ANDROID_EMBEDDED OR NOT ANDROID) AND (NACL OR NOT APPLE)
+qt_internal_extend_target(Core CONDITION QT_FEATURE_icu AND QT_FEATURE_timezone AND (UNIX OR OS2) AND (ANDROID_EMBEDDED OR NOT ANDROID) AND (NACL OR NOT APPLE)
     SOURCES
         time/qtimezoneprivate_icu.cpp
 )

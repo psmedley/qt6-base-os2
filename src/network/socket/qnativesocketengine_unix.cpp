@@ -1069,13 +1069,14 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxS
 #  endif
 #endif
 
+#if !defined(QT_NO_IPV6)
             if (cmsgptr->cmsg_len == CMSG_LEN(sizeof(int))
                     && ((cmsgptr->cmsg_level == IPPROTO_IPV6 && cmsgptr->cmsg_type == IPV6_HOPLIMIT)
                         || (cmsgptr->cmsg_level == IPPROTO_IP && cmsgptr->cmsg_type == IP_TTL))) {
                 static_assert(sizeof(header->hopLimit) == sizeof(int));
                 memcpy(&header->hopLimit, CMSG_DATA(cmsgptr), sizeof(header->hopLimit));
             }
-
+#endif
 #ifndef QT_NO_SCTP
             if (cmsgptr->cmsg_level == IPPROTO_SCTP && cmsgptr->cmsg_type == SCTP_SNDRCV
                 && cmsgptr->cmsg_len >= CMSG_LEN(sizeof(sctp_sndrcvinfo))) {

@@ -1038,7 +1038,7 @@ QUrl QFileDialog::directoryUrl() const
 static inline bool isCaseSensitiveFileSystem(const QString &path)
 {
     Q_UNUSED(path);
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     // Return case insensitive unconditionally, even if someone has a case sensitive
     // file system mounted, wrongly capitalized drive letters will cause mismatches.
     return false;
@@ -4206,7 +4206,7 @@ QStringList QFSCompleter::splitPath(const QString &path) const
 
     QString pathCopy = QDir::toNativeSeparators(path);
     QChar sep = QDir::separator();
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     if (pathCopy == QLatin1String("\\") || pathCopy == QLatin1String("\\\\"))
         return QStringList(pathCopy);
     QString doubleSlash(QLatin1String("\\\\"));
@@ -4229,7 +4229,7 @@ QStringList QFSCompleter::splitPath(const QString &path) const
     }
 #endif
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QStringList parts = pathCopy.split(sep, Qt::SkipEmptyParts);
     if (!doubleSlash.isEmpty() && !parts.isEmpty())
         parts[0].prepend(doubleSlash);

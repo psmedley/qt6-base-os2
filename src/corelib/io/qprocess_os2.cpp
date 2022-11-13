@@ -82,6 +82,7 @@ QT_END_NAMESPACE
 #include <qglobal.h>
 
 #include <private/qcoreapplication_p.h>
+#include "private/qcore_unix_p.h"
 #include <private/qthread_p.h>
 #include <private/qsystemerror_p.h>
 #include <qdatetime.h>
@@ -89,6 +90,7 @@ QT_END_NAMESPACE
 #include <qfileinfo.h>
 #include <qhash.h>
 #include <qmutex.h>
+#include <qsocketnotifier.h>
 #include <qdir.h>
 
 #define HF_STDIN        HFILE(0)
@@ -1588,6 +1590,80 @@ bool QProcessPrivate::startDetached(qint64 *pid)
     if (pid)
         *pid = startedPid;
     return true;
+}
+
+void QProcessPrivate::cleanup()
+{
+    q_func()->setProcessState(QProcess::NotRunning);
+
+    closeChannels();
+    delete stateNotifier;
+    stateNotifier = nullptr;
+#ifndef Q_OS_OS2
+    destroyPipe(childStartedPipe);
+#endif
+    pid = 0;
+    if (forkfd != -1) {
+        qt_safe_close(forkfd);
+        forkfd = -1;
+    }
+}
+
+/*! \reimp
+*/
+qint64 QProcess::writeData(const char *data, qint64 len)
+{
+    Q_D(QProcess);
+
+    if (d->stdinChannel.closed) {
+#if defined QPROCESS_DEBUG
+        qDebug("QProcess::writeData(%p \"%s\", %lld) == 0 (write channel closing)",
+               data, QtDebugUtils::toPrintable(data, len, 16).constData(), len);
+#endif
+        return 0;
+    }
+
+    d->write(data, len);
+    if (d->stdinChannel.notifier)
+        d->stdinChannel.notifier->setEnabled(true);
+
+#if defined QPROCESS_DEBUG
+    qDebug("QProcess::writeData(%p \"%s\", %lld) == %lld (written to buffer)",
+           data, QtDebugUtils::toPrintable(data, len, 16).constData(), len, len);
+#endif
+#if defined(Q_OS_OS2)
+    // Try to write some bytes (there may be space in the pipe). Asyncronously,
+    // so that a subsequent waitForBytesWritten call could succeed. This is
+    // also required by tst_QProcess::waitForBytesWrittenInABytesWrittenSlot.
+    QMetaObject::invokeMethod(this, "_q_notified", Qt::QueuedConnection,
+                              Q_ARG(int, QProcessPrivate::CanWrite));
+#endif
+    return len;
+}
+
+bool QProcessPrivate::_q_canWrite()
+{
+    if (writeBuffer.isEmpty()) {
+        if (stdinChannel.notifier)
+            stdinChannel.notifier->setEnabled(false);
+#if defined QPROCESS_DEBUG
+        qDebug("QProcessPrivate::canWrite(), not writing anything (empty write buffer).");
+#endif
+#if defined Q_OS_OS2
+        if (stdinChannel.pipe.closePending)
+            tryCloseStdinPipe();
+#endif
+        return false;
+    }
+
+    const bool writeSucceeded = writeToStdin();
+
+    if (writeBuffer.isEmpty() && stdinChannel.closed)
+        closeWriteChannel();
+    else if (stdinChannel.notifier)
+        stdinChannel.notifier->setEnabled(!writeBuffer.isEmpty());
+
+    return writeSucceeded;
 }
 
 #endif // QT_CONFIG(process)

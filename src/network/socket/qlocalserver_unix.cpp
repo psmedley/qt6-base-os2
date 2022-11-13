@@ -107,6 +107,13 @@ bool QLocalServerPrivate::listen(const QString &requestedServerName)
     auto options = optionsForPlatform(socketOptions.value());
 
     // determine the full server path
+#ifdef Q_OS_OS2
+    // Local OS/2 sockets must always start with "\socket\"
+    const QLatin1String socketPath("\\socket\\");
+    fullServerName = QDir::toNativeSeparators(requestedServerName);
+    if (!fullServerName.startsWith(socketPath))
+        fullServerName = socketPath + requestedServerName;
+#else
     if (options.testFlag(QLocalServer::AbstractNamespaceOption)
         ||  requestedServerName.startsWith(QLatin1Char('/'))) {
         fullServerName = requestedServerName;
@@ -114,6 +121,7 @@ bool QLocalServerPrivate::listen(const QString &requestedServerName)
         fullServerName = QDir::cleanPath(QDir::tempPath());
         fullServerName += QLatin1Char('/') + requestedServerName;
     }
+#endif
     serverName = requestedServerName;
 
     QByteArray encodedTempPath;

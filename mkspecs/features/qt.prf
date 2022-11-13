@@ -220,7 +220,7 @@ for(ever) {
             } else {
                 lib_bases = $$MODULE_MODULE$$qtPlatformTargetSuffix()
                 darwin: lib_bases *= $$MODULE_MODULE
-                win32|contains(MODULE_CONFIG, staticlib) {
+                win32|os2|contains(MODULE_CONFIG, staticlib) {
                     lib_prefix = $$MODULE_LIBS/$$QMAKE_PREFIX_STATICLIB
                     lib_suffixes = $$QMAKE_EXTENSION_STATICLIB
                     lib_suffixes *= $$QMAKE_LIB_EXTENSIONS

@@ -93,6 +93,9 @@ static SLJIT_INLINE void free_chunk(void *chunk, sljit_uw size)
 }
 #elif defined(__OS2__)
 
+#ifndef SLJIT_UPDATE_WX_FLAGS
+#define SLJIT_UPDATE_WX_FLAGS(from, to, enable_exec)
+#endif /* !SLJIT_UPDATE_WX_FLAGS */
 static SLJIT_INLINE void* alloc_chunk(sljit_uw size)
 {
 	PVOID ptr;

@@ -83,10 +83,12 @@ android: isEmpty($(TESTRUNNER)) {
 } else {
     $${type}.commands += $(TESTRUNNER)
 
-    unix {
+    unix|os2 {
         isEmpty(TEST_TARGET_DIR): TEST_TARGET_DIR = .
 
-        app_bundle: \
+    os2: \
+        $${type}.commands += $${TEST_TARGET_DIR}/$(QMAKE_TARGET).exe
+    else:app_bundle: \
             $${type}.commands += $${TEST_TARGET_DIR}/$(QMAKE_TARGET).app/Contents/MacOS/$(QMAKE_TARGET)
         else: !android: \
             $${type}.commands += $${TEST_TARGET_DIR}/$(QMAKE_TARGET)
