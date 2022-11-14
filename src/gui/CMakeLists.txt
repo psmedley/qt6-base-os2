@@ -952,7 +952,7 @@ qt_internal_extend_target(Gui CONDITION WASM
         platform/wasm/qwasmlocalfileaccess.cpp platform/wasm/qwasmlocalfileaccess_p.h
 )
 
-qt_internal_extend_target(Gui CONDITION (UNIX OR OS2)
+qt_internal_extend_target(Gui CONDITION UNIX
     SOURCES
         platform/unix/qgenericunixeventdispatcher.cpp platform/unix/qgenericunixeventdispatcher_p.h
         platform/unix/qunixeventdispatcher.cpp
@@ -960,7 +960,7 @@ qt_internal_extend_target(Gui CONDITION (UNIX OR OS2)
         platform/unix/qunixnativeinterface.cpp
 )
 
-qt_internal_extend_target(Gui CONDITION QT_FEATURE_glib AND (UNIX OR OS2)
+qt_internal_extend_target(Gui CONDITION QT_FEATURE_glib AND UNIX
     SOURCES
         platform/unix/qeventdispatcher_glib.cpp platform/unix/qeventdispatcher_glib_p.h
     LIBRARIES
@@ -980,6 +980,11 @@ qt_internal_extend_target(Gui CONDITION UNIX AND (QT_FEATURE_xcb)
 qt_internal_extend_target(Gui CONDITION TARGET Qt::DBus AND UNIX AND (QT_FEATURE_xcb OR NOT UIKIT)
     LIBRARIES
         Qt::DBus
+)
+
+qt_internal_extend_target(Gui CONDITION OS2
+    SOURCES
+        platform/os2/qos2guieventdispatcher.cpp platform/os2/qos2guieventdispatcher_p.h
 )
 
 qt_internal_extend_target(Gui CONDITION UNIX AND (QT_FEATURE_xcb OR NOT MACOS) AND (QT_FEATURE_xcb OR NOT UIKIT)
