@@ -66,9 +66,9 @@ public:
     static const char *messageName(unsigned long msg);
 
     bool processEvents(QEventLoop::ProcessEventsFlags flags) override;
-    bool hasPendingEvents() override;
+    bool hasPendingEvents();
 
-    void flush() override;
+    void flush();
 };
 
 QT_END_NAMESPACE
