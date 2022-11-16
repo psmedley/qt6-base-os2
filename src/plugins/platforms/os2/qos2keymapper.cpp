@@ -724,10 +724,9 @@ QList<int> QOS2KeyMapper::possibleKeys(const QKeyEvent *e) const
 
     Qt::KeyboardModifiers keyMods = e->modifiers();
 
-    // The base key is _always_ valid, of course.
-    result << int(baseKey0 + keyMods);
+    result << int(baseKey0) + int(keyMods); // The base key is _always_ valid, of course
     if (baseKey1 != baseKey0)
-        result << int(baseKey1 + keyMods);
+        result << int(baseKey1) + int(keyMods);
 
     // Go through both keyboard layouts
     for (int j = 0; j < 2; ++j) {
@@ -740,7 +739,7 @@ QList<int> QOS2KeyMapper::possibleKeys(const QKeyEvent *e) const
             int key = kbItem.qtKey[i][j];
             if (key && key != baseKey0 && key != baseKey1 &&
                 ((keyMods & neededMods) == neededMods)) {
-                int k = int(key + (keyMods & ~neededMods));
+                int k = int(key) + int(keyMods & ~neededMods);
                 if (!result.contains(k))
                     result << k;
             }
