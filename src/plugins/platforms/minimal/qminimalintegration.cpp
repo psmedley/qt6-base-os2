@@ -64,8 +64,10 @@
 #include <QtGui/private/qfontengine_ft_p.h>
 #endif
 
-#if !defined(Q_OS_WIN)
+#if !defined(Q_OS_DOSLIKE)
 #include <QtGui/private/qgenericunixeventdispatcher_p.h>
+#elif defined(Q_OS_OS2)
+#include <QtCore/private/qeventdispatcher_os2_p.h>
 #else
 #include <QtCore/private/qeventdispatcher_win_p.h>
 #endif
@@ -186,6 +188,8 @@ QAbstractEventDispatcher *QMinimalIntegration::createEventDispatcher() const
 {
 #ifdef Q_OS_WIN
     return new QEventDispatcherWin32;
+#elif defined(Q_OS_OS2)
+    return new QEventDispatcherOS2;
 #else
     return createUnixEventDispatcher();
 #endif
