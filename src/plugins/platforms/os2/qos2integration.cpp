@@ -51,11 +51,11 @@
 
 #include <qpa/qwindowsysteminterface.h>
 
-#include <QtEventDispatcherSupport/private/qos2guieventdispatcher_p.h>
+#include <QtGui/private/qos2guieventdispatcher_p.h>
 
-#include <QtFontDatabaseSupport/private/qfreetypefontdatabase_p.h>
+#include <QtGui/private/qfreetypefontdatabase_p.h>
 #if QT_CONFIG(fontconfig)
-#  include <QtFontDatabaseSupport/private/qgenericunixfontdatabase_p.h>
+#  include <QtGui/private/qgenericunixfontdatabase_p.h>
 #else
 #  include <qpa/qplatformfontdatabase.h>
 #endif

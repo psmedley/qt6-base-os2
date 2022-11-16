@@ -45,7 +45,7 @@
 #include <qpa/qwindowsysteminterface.h>
 
 #include <QtGui/QGuiApplication>
-#include <QtEventDispatcherSupport/private/qos2guieventdispatcher_p.h>
+#include <QtGui/private/qos2guieventdispatcher_p.h>
 
 #include <private/qwindow_p.h>
 

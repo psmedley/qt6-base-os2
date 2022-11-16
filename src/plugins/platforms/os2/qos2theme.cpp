@@ -275,6 +275,7 @@ void QOS2Theme::refreshFonts()
     qCInfo(lcQpaWindows) << DV(QGuiApplication::desktopSettingsAware());
 
     clearFonts();
+
     if (!QGuiApplication::desktopSettingsAware())
         return;
 
@@ -287,7 +288,7 @@ void QOS2Theme::refreshFonts()
     // FixedFont is a usual app requirement (checked by tst_QFontDatabase).
     // There is a standard "Courier" Type 1 font coming with every OS/2 install
     // but prefer fontcofig matching as this can be configured by the user.
-    mFonts[FixedFont] = new QFont("monospace");
+//    mFonts[FixedFont] = new QFont("monospace"); //FIXME
 }
 
 QT_END_NAMESPACE

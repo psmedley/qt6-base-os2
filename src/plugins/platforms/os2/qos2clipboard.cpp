@@ -56,7 +56,7 @@ class QOS2ClipboardRetrievalMimeData : public QInternalMimeData
 public:
     bool hasFormat_sys(const QString &mimetype) const override;
     QStringList formats_sys() const override;
-    QVariant retrieveData_sys(const QString &mimetype, QVariant::Type preferredType) const override;
+    QVariant retrieveData_sys(const QString &mimetype, QMetaType::Type preferredType) const;
 
 private:
     bool peekData(bool leaveOpen = false) const;
@@ -125,7 +125,7 @@ QStringList QOS2ClipboardRetrievalMimeData::formats_sys() const
 }
 
 QVariant QOS2ClipboardRetrievalMimeData::retrieveData_sys(const QString &mime,
-                                                          QVariant::Type type) const
+                                                          QMetaType::Type type) const
 {
     QVariant result;
 
