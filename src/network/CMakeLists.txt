@@ -203,7 +203,10 @@ qt_internal_extend_target(Network CONDITION OS2
         kernel/qhostinfo_unix.cpp
         kernel/qnetworkinterface_unix.cpp
         socket/qnativesocketengine_unix.cpp
-        kernel/qnetworkproxy_generic.cpp)
+        kernel/qnetworkproxy_generic.cpp
+    DEFINES
+        QT_NO_IPV6
+)
 
 qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup AND WIN32
     SOURCES
