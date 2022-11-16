@@ -49,7 +49,7 @@ class QOS2IntegrationPlugin : public QPlatformIntegrationPlugin
     Q_PLUGIN_METADATA(IID QPlatformIntegrationFactoryInterface_iid FILE "os2.json")
 
 public:
-    QPlatformIntegration *create(const QString&, const QStringList&) override;
+    QPlatformIntegration *create(const QString &, const QStringList &) override;
 };
 
 QPlatformIntegration *QOS2IntegrationPlugin::create(const QString& system, const QStringList& paramList)
