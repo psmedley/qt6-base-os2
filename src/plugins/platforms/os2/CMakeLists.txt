@@ -23,7 +23,6 @@ qt_internal_add_plugin(QOS2IntegrationPlugin
 
     DEFINES
         QT_NO_CAST_FROM_ASCII
-        QT_NO_FOREACH
     INCLUDE_DIRECTORIES
         ${CMAKE_CURRENT_SOURCE_DIR}
     LIBRARIES
