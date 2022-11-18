@@ -57,7 +57,7 @@ QT_BEGIN_NAMESPACE
     \internal
 */
 
-QOS2GuiEventDispatcher::QOS2GuiEventDispatcher(QObject *parent) :
+extern "C" __declspec(dllexport)  QOS2GuiEventDispatcher::QOS2GuiEventDispatcher(QObject *parent) :
     QEventDispatcherOS2(parent)
 {
     setObjectName(QStringLiteral("QOS2GuiEventDispatcher"));
@@ -132,7 +132,7 @@ static inline const MessageDebugEntry *messageDebugEntry(ULONG msg)
     return 0;
 }
 
-const char *QOS2GuiEventDispatcher::messageName(unsigned long msg)
+extern "C" __declspec(dllexport)  const char *QOS2GuiEventDispatcher::messageName(unsigned long msg)
 {
     if (const MessageDebugEntry *e = messageDebugEntry(msg))
         return e->description;
