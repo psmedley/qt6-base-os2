@@ -721,7 +721,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_freetype AND UNIX AND NOT APP
         text/unix/qgenericunixfontdatabase_p.h
 )
 
-qt_internal_extend_target(Gui CONDITION QT_FEATURE_fontconfig AND QT_FEATURE_freetype AND UNIX AND NOT APPLE
+qt_internal_extend_target(Gui CONDITION QT_FEATURE_fontconfig AND QT_FEATURE_freetype AND (UNIX OR OS2) AND NOT APPLE
     SOURCES
         text/unix/qfontconfigdatabase.cpp text/unix/qfontconfigdatabase_p.h
         text/unix/qfontenginemultifontconfig.cpp text/unix/qfontenginemultifontconfig_p.h

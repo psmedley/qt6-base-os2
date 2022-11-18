@@ -167,7 +167,7 @@ public:
 private:
     bool setClipboard(QOS2Mime *converter, ULONG format, bool isDelayed);
 
-    MRESULT message(ULONG msg, MPARAM mp1, MPARAM mp2);
+    MRESULT message(ULONG msg, MPARAM mp1, MPARAM mp2) override;
 
     QOS2Clipboard *q;
 
@@ -175,7 +175,7 @@ private:
     QList<QOS2Mime::Match> matches;
     HWND prevClipboardViewer;
 
-    QOS2ClipboardRetrievalMimeData retrievalData;
+    QOS2ClipboardRetrievalMimeData *retrievalData;
 
     bool ignore_WM_DESTROYCLIPBOARD;
 };
@@ -320,7 +320,7 @@ QMimeData *QOS2ClipboardData::mimeData()
     // short cut for local copy / paste
     if (ownsClipboard())
         return src;
-    return &retrievalData;
+    return retrievalData;
 }
 
 MRESULT QOS2ClipboardData::message(ULONG msg, MPARAM mp1, MPARAM mp2)
