@@ -41,8 +41,12 @@
 #include "qoffscreenwindow.h"
 #include "qoffscreencommon.h"
 
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
+#if defined(Q_OS_OS2)
+#include <QtEventDispatcherSupport/private/qos2guieventdispatcher_p.h>
+#else
 #include <QtGui/private/qgenericunixeventdispatcher_p.h>
+#endif
 #if defined(Q_OS_MAC)
 #include <qpa/qplatformfontdatabase.h>
 #include <QtGui/private/qcoretextfontdatabase_p.h>
