@@ -43,7 +43,7 @@
 
 #if defined(Q_OS_UNIXLIKE)
 #if defined(Q_OS_OS2)
-#include <QtEventDispatcherSupport/private/qos2guieventdispatcher_p.h>
+#include <QtGui/private/qos2guieventdispatcher_p.h>
 #else
 #include <QtGui/private/qgenericunixeventdispatcher_p.h>
 #endif
