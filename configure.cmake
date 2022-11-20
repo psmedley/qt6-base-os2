@@ -988,7 +988,7 @@ qt_feature_config("static_runtime" QMAKE_PUBLIC_CONFIG)
 qt_feature_config("static_runtime" QMAKE_PUBLIC_QT_CONFIG)
 qt_feature("dlopen" PRIVATE
     LABEL "dlopen()"
-    CONDITION UNIX AND NOT INTEGRITY
+    CONDITION (UNIX OR OS2) AND NOT INTEGRITY
 )
 qt_feature("relocatable" PRIVATE
     LABEL "Relocatable"
