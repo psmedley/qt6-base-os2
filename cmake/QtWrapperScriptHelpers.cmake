@@ -5,7 +5,7 @@
 # qt-cmake-private-install
 function(qt_internal_create_wrapper_scripts)
     # Provide a convenience cmake wrapper.
-    if(CMAKE_HOST_UNIX)
+    if(CMAKE_HOST_UNIX OR OS2)
         configure_file("${CMAKE_CURRENT_SOURCE_DIR}/bin/qt-cmake.in"
                        "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-cmake" @ONLY)
         qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-cmake"
@@ -26,7 +26,7 @@ function(qt_internal_create_wrapper_scripts)
     # The private wrapper is more conveient for building Qt itself, because a developer doesn't need
     # to specify the same options for each qt module built.
     set(__qt_cmake_extra "-G\"${CMAKE_GENERATOR}\"")
-    if(CMAKE_HOST_UNIX)
+    if(CMAKE_HOST_UNIX OR OS2)
         configure_file("${CMAKE_CURRENT_SOURCE_DIR}/bin/qt-cmake.in"
             "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-cmake-private" @ONLY)
     qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-cmake-private"
@@ -49,7 +49,7 @@ function(qt_internal_create_wrapper_scripts)
     endif()
     file(TO_NATIVE_PATH "${__relative_path_to_cmake_scripts_dir}"
         __relative_path_to_cmake_scripts_dir)
-    if(CMAKE_HOST_UNIX)
+    if(CMAKE_HOST_UNIX OR OS2)
         configure_file("${CMAKE_CURRENT_SOURCE_DIR}/bin/qt-configure-module.in"
             "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-configure-module" @ONLY)
         qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-configure-module"
@@ -91,7 +91,7 @@ function(qt_internal_create_wrapper_scripts)
     file(RELATIVE_PATH __qt_cmake_standalone_test_relpath "${rel_base_path}"
         "${__qt_cmake_standalone_test_path}")
 
-    if(CMAKE_HOST_UNIX)
+    if(CMAKE_HOST_UNIX OR OS2)
         set(__qt_cmake_standalone_test_os_prelude "#!/bin/sh")
         set(__qt_cmake_standalone_test_script_relpath "SCRIPT_DIR=`dirname $0`")
         string(PREPEND __qt_cmake_private_relpath "exec $SCRIPT_DIR/")
@@ -147,7 +147,7 @@ function(qt_internal_create_qt_configure_tests_wrapper_script)
     file(TO_NATIVE_PATH "${relative_path_from_libexec_dir_to_bin_dir}"
                         relative_path_from_libexec_dir_to_bin_dir)
 
-    if(CMAKE_HOST_UNIX)
+    if(CMAKE_HOST_UNIX OR OS2)
         configure_file("${CMAKE_CURRENT_SOURCE_DIR}/libexec/${script_name}.in"
             "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/${script_name}" @ONLY)
 
