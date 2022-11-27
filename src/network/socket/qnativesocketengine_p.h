@@ -103,8 +103,10 @@ typedef INT (WSAAPI *LPFN_WSASENDMSG)(SOCKET s, LPWSAMSG lpMsg, DWORD dwFlags,
 union qt_sockaddr {
     sockaddr a;
     sockaddr_in a4;
+#ifndef Q_OS_OS2
 #ifndef QT_NO_IPV6
     sockaddr_in6 a6;
+#endif
 #endif
 };
 
