@@ -579,7 +579,7 @@ bool QProcessPrivate::createPipe(PipeType type, Channel::Pipe &pipe,
     switch (type) {
     case InPipe:
         // create our end of the pipe
-        sprintf(pathBuf, "\\pipe\\Qt5\\%08lX\\QProcess\\%p\\%s",
+        sprintf(pathBuf, "\\pipe\\Qt6\\%08lX\\QProcess\\%p\\%s",
                 ppib->pib_ulpid, this->q_func(), name ? name : "Stdin");
         arc = DosCreateNPipe(pathBuf, &pipe.server,
                              NP_ACCESS_OUTBOUND | NP_NOINHERIT,
@@ -603,7 +603,7 @@ bool QProcessPrivate::createPipe(PipeType type, Channel::Pipe &pipe,
     case OutPipe:
     case ErrPipe:
         // create our end of the pipe
-        sprintf(pathBuf, "\\pipe\\Qt5\\%08lX\\QProcess\\%p\\%s",
+        sprintf(pathBuf, "\\pipe\\Qt6\\%08lX\\QProcess\\%p\\%s",
                 ppib->pib_ulpid, this->q_func(),
                 name ? name : type == OutPipe ? "Stdout" : "Stderr");
         arc = DosCreateNPipe(pathBuf, &pipe.server,

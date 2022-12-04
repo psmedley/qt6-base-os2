@@ -1097,7 +1097,7 @@ bool QPMObjectWindow::create()
     if (w != NULLHANDLE)
         return false;
 
-    static const char *ClassName = "Qt5.ObjectWindow";
+    static const char *ClassName = "Qt6.ObjectWindow";
     static bool classRegistered = FALSE;
 
     if (!classRegistered) {
