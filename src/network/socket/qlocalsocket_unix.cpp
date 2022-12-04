@@ -72,10 +72,11 @@ static QString pathNameForConnection(const QString &connectingName,
 
     const QLatin1String socketPath("\\socket\\");
     connectingPathName = QDir::toNativeSeparators(connectingName);
-    if (!connectingName.startsWith(socketPath))
-        connectingPathName = socketPath + connectingName;
+    if (connectingName.startsWith(socketPath)) {
+        return connectingName;
+    }
 
-    return connectingPathName;
+    return socketPath + connectingName;
 #else
     if (options.testFlag(QLocalSocket::AbstractNamespaceOption)
         || connectingName.startsWith(QLatin1Char('/'))) {
