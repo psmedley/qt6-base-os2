@@ -66,12 +66,24 @@ namespace {
 static QString pathNameForConnection(const QString &connectingName,
                                      QLocalSocket::SocketOptions options)
 {
+#ifdef Q_OS_OS2
+    // Local OS/2 sockets must always start with "\socket\"
+    QString connectingPathName;
+
+    const QLatin1String socketPath("\\socket\\");
+    connectingPathName = QDir::toNativeSeparators(connectingName);
+    if (!connectingName.startsWith(socketPath))
+        connectingPathName = socketPath + connectingName;
+
+    return connectingPathName;
+#else
     if (options.testFlag(QLocalSocket::AbstractNamespaceOption)
         || connectingName.startsWith(QLatin1Char('/'))) {
         return connectingName;
     }
 
     return QDir::tempPath() + QLatin1Char('/') + connectingName;
+#endif
 }
 
 static QLocalSocket::SocketOptions optionsForPlatform(QLocalSocket::SocketOptions srcOptions)
