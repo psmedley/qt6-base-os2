@@ -75,7 +75,7 @@ public:
     virtual QList<MimeCFPair> mimesForFormats(const QList<ULONG> &formats) const = 0;
     virtual QVariant convertFromFormat(ULONG format, ULONG flags, ULONG data,
                                        const QString &mimeType,
-                                       QMetaType::Type preferredType) const = 0;
+                                       QMetaType preferredType) const = 0;
 
 protected:
 

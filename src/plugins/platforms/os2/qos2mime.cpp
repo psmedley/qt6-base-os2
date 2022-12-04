@@ -256,7 +256,7 @@ void QOS2Mime::freeMemory(ULONG addr)
 /*!
     \fn QVariant QOS2Mime::convertFromFormat(ULONG format, ULONG flags, ULONG data,
                                              const QString &mimeType,
-                                             QMetaType::Type preferredType) const
+                                             QMetaType preferredType) const
 
     Returns a QVariant containing the converted from the \a data in the
     specified \a format with the given \a flags to the requested \a mimeType. If
@@ -375,7 +375,7 @@ public:
     QList<MimeCFPair> mimesForFormats(const QList<ULONG> &formats) const override;
     QVariant convertFromFormat(ULONG format, ULONG flags, ULONG data,
                                const QString &mimeType,
-                               QMetaType::Type preferredType) const override;
+                               QMetaType preferredType) const override;
 
     const ULONG CF_TextUnicode;
     const ULONG CF_TextHtml;
@@ -514,7 +514,7 @@ QList<QOS2Mime::MimeCFPair> QOS2MimeText::mimesForFormats(const QList<ULONG> &fo
 
 QVariant QOS2MimeText::convertFromFormat(ULONG format, ULONG flags, ULONG data,
                                          const QString &mimeType,
-                                         QMetaType::Type preferredType) const
+                                         QMetaType preferredType) const
 {
     QVariant ret;
 
@@ -547,7 +547,7 @@ QVariant QOS2MimeText::convertFromFormat(ULONG format, ULONG flags, ULONG data,
         str.replace(QLatin1String("\r\n"), QLatin1String("\n"));
     }
 
-    if (preferredType == QVariant::String)
+    if (preferredType.id() == QMetaType::QString)
         ret = str;
     else
         ret = str.toUtf8();
@@ -569,7 +569,7 @@ public:
     QList<MimeCFPair> mimesForFormats(const QList<ULONG> &formats) const override;
     QVariant convertFromFormat(ULONG format, ULONG flags, ULONG data,
                                const QString &mimeType,
-                               QMetaType::Type preferredType) const override;
+                               QMetaType preferredType) const override;
 
 private:
     ULONG registerMimeType(const QString &mime) const;
@@ -671,7 +671,7 @@ QList<QOS2Mime::MimeCFPair> QOS2MimeAnyMime::mimesForFormats(const QList<ULONG> 
 
 QVariant QOS2MimeAnyMime::convertFromFormat(ULONG format, ULONG flags, ULONG data,
                                             const QString &mimeType,
-                                            QMetaType::Type preferredType) const
+                                            QMetaType preferredType) const
 {
     Q_UNUSED(preferredType);
 

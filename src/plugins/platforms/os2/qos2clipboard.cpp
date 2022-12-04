@@ -44,6 +44,7 @@
 
 #include <QtCore/qthread.h>
 #include <QtCore/private/qeventdispatcher_os2_p.h>
+#include <private/qguiapplication_p.h>
 
 #if QT_CONFIG(clipboard)
 
@@ -56,7 +57,7 @@ class QOS2ClipboardRetrievalMimeData : public QInternalMimeData
 public:
     bool hasFormat_sys(const QString &mimetype) const override;
     QStringList formats_sys() const override;
-    QVariant retrieveData_sys(const QString &mimetype, QMetaType::Type preferredType) const;
+    QVariant retrieveData_sys(const QString &mimetype, QMetaType preferredType) const override;
 
 private:
     bool peekData(bool leaveOpen = false) const;
@@ -125,7 +126,7 @@ QStringList QOS2ClipboardRetrievalMimeData::formats_sys() const
 }
 
 QVariant QOS2ClipboardRetrievalMimeData::retrieveData_sys(const QString &mime,
-                                                          QMetaType::Type type) const
+                                                          QMetaType type) const
 {
     QVariant result;
 
@@ -175,7 +176,7 @@ private:
     QList<QOS2Mime::Match> matches;
     HWND prevClipboardViewer;
 
-    QOS2ClipboardRetrievalMimeData *retrievalData;
+    QOS2ClipboardRetrievalMimeData retrievalData;
 
     bool ignore_WM_DESTROYCLIPBOARD;
 };
@@ -320,7 +321,7 @@ QMimeData *QOS2ClipboardData::mimeData()
     // short cut for local copy / paste
     if (ownsClipboard())
         return src;
-    return retrievalData;
+    return &retrievalData;
 }
 
 MRESULT QOS2ClipboardData::message(ULONG msg, MPARAM mp1, MPARAM mp2)
