@@ -232,7 +232,7 @@ public:
 
     static QChar separator()
     {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
         return QLatin1Char('\\');
 #else
         return QLatin1Char('/');
