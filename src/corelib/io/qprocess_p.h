@@ -62,19 +62,17 @@
 
 QT_REQUIRE_CONFIG(processenvironment);
 
-#ifdef Q_OS_UNIXLIKE
+#ifdef Q_OS_UNIX
 #include <QtCore/private/qorderedmutexlocker_p.h>
 #endif
 
-#if defined(Q_OS_WIN)
+#ifdef Q_OS_WIN
 #include "QtCore/qt_windows.h"
 typedef HANDLE Q_PIPE;
 #define INVALID_Q_PIPE INVALID_HANDLE_VALUE
 #elif defined(Q_OS_OS2)
 #include "QtCore/qt_os2.h"
 #define INVALID_HFILE HFILE(~0)
-typedef int Q_PIPE;
-#define INVALID_Q_PIPE -1
 #else
 typedef int Q_PIPE;
 #define INVALID_Q_PIPE -1
@@ -269,7 +267,7 @@ public:
 
         QString file;
         QProcessPrivate *process = nullptr;
-#if defined(Q_OS_UNIX) || defined(Q_OS_OS2)
+#ifdef Q_OS_UNIX
         QSocketNotifier *notifier = nullptr;
 #else
         union {
@@ -350,7 +348,13 @@ public:
 #endif
     QProcessEnvironment environment;
 
-#if defined(Q_OS_UNIX) || defined(Q_OS_OS2)
+#ifdef Q_OS_OS2
+    enum PipeType { InPipe = 0, OutPipe = 1, ErrPipe = 2 };
+    bool createPipe(PipeType type, Channel::Pipe &pipe, const char *name = 0);
+    void destroyPipe(Channel::Pipe &pipe);
+    void closeHandle(HFILE &handle);
+#endif
+#ifdef Q_OS_UNIX
     Q_PIPE childStartedPipe[2] = {INVALID_Q_PIPE, INVALID_Q_PIPE};
     QSocketNotifier *stateNotifier = nullptr;
     int forkfd = -1;
@@ -368,7 +372,7 @@ public:
     void processFinished();
     void terminateProcess();
     void killProcess();
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIX) || defined(Q_OS_OS2)
     void waitForDeadChild();
 #else
     void findExitCode();
@@ -380,13 +384,12 @@ public:
     qint64 pipeWriterBytesToWrite() const;
 #endif
 #ifdef Q_OS_OS2
-    void waitForDeadChild();
     void init();
     void uninit();
     void ensureWaitSem();
     void tryCloseStdinPipe();
     enum WaitCond { WaitReadyRead, WaitBytesWritten, WaitFinished };
-    bool waitFor(WaitCond cond, const QDeadlineTimer &deadline);
+    bool waitFor(WaitCond cond, int msecs);
     static qint64 bytesAvailableFromPipe(HPIPE hpipe, bool *closed = 0);
 #endif
 
@@ -415,12 +418,7 @@ public:
     qint64 readFromChannel(const Channel *channel, char *data, qint64 maxlen);
     bool writeToStdin();
 
-#ifdef Q_OS_OS2
-    enum PipeType { InPipe = 0, OutPipe = 1, ErrPipe = 2 };
-    bool createPipe(PipeType type, Channel::Pipe &pipe, const char *name = 0);
-    void destroyPipe(Channel::Pipe &pipe);
-    void closeHandle(HFILE &handle);
-#else
+#ifndef Q_OS_OS2
     void destroyPipe(Q_PIPE pipe[2]);
 #endif
     void cleanup();
