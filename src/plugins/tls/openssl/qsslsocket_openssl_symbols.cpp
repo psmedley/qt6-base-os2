@@ -66,7 +66,7 @@
 #endif
 #include <QtCore/qmutex.h>
 #include <QtCore/qdatetime.h>
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_UNIXLIKE)
 #include <QtCore/qdir.h>
 #endif
 #include <QtCore/private/qduplicatetracker_p.h>
@@ -539,10 +539,17 @@ DEFINEFUNC(void, EC_KEY_free, EC_KEY *ecdh, ecdh, return, DUMMYARG)
 
 #endif
 
+#ifdef Q_OS_OS2
+#define RESOLVEFUNC(func) \
+    if (!(_q_##func = _q_PTR_##func(libs.first->resolve("_"#func)))     \
+        && !(_q_##func = _q_PTR_##func(libs.second->resolve("_"#func)))) \
+        qsslSocketCannotResolveSymbolWarning(#func);
+#else
 #define RESOLVEFUNC(func) \
     if (!(_q_##func = _q_PTR_##func(libs.ssl->resolve(#func)))     \
         && !(_q_##func = _q_PTR_##func(libs.crypto->resolve(#func)))) \
         qsslSocketCannotResolveSymbolWarning(#func);
+#endif
 
 #if !defined QT_LINKED_OPENSSL
 
@@ -557,7 +564,7 @@ bool q_resolveOpenSslSymbols()
 }
 #else
 
-# ifdef Q_OS_UNIX
+# ifdef Q_OS_UNIXLIKE
 struct NumericallyLess
 {
     typedef bool result_type;
@@ -630,9 +637,16 @@ static QStringList libraryPathList()
     paths = QString::fromLatin1(qgetenv("LD_LIBRARY_PATH"))
             .split(QLatin1Char(':'), Qt::SkipEmptyParts);
 #  endif
+#  ifdef Q_OS_OS2
+    // local/lib should be checked before lib/. We might also support LIBPATH similarly to LD_LIBRARY_PATH
+    // later - but since it not exposed via getenv, parsing CONFIG.SYS is needed. Once it's done,
+    // the below line is not needed as LIBPATH contains both.
+    paths << QLatin1String("/@unixroot/usr/local/lib") << QLatin1String("/@unixroot/usr/lib");
+#  else
     paths << QLatin1String("/lib") << QLatin1String("/usr/lib") << QLatin1String("/usr/local/lib");
     paths << QLatin1String("/lib64") << QLatin1String("/usr/lib64") << QLatin1String("/usr/local/lib64");
     paths << QLatin1String("/lib32") << QLatin1String("/usr/lib32") << QLatin1String("/usr/local/lib32");
+#  endif
 
 #if defined(Q_OS_ANDROID)
     paths << QLatin1String("/system/lib");
@@ -667,12 +681,20 @@ static QStringList findAllLibs(QLatin1String filter)
 
 static QStringList findAllLibSsl()
 {
+#ifdef Q_OS_OS2
+    return findAllLibs(QLatin1String("ssl*.dll"));
+#else
     return findAllLibs(QLatin1String("libssl.*"));
+#endif
 }
 
 static QStringList findAllLibCrypto()
 {
+#ifdef Q_OS_OS2
+    return findAllLibs(QLatin1String("crypto*.dll"));
+#else
     return findAllLibs(QLatin1String("libcrypto.*"));
+#endif
 }
 # endif
 
@@ -739,7 +761,7 @@ static LoadedOpenSsl loadOpenSsl()
 {
     LoadedOpenSsl result = { std::make_unique<QLibrary>(), std::make_unique<QLibrary>() };
 
-# if defined(Q_OS_UNIX)
+# if defined(Q_OS_UNIXLIKE)
     QLibrary * const libssl = result.ssl.get();
     QLibrary * const libcrypto = result.crypto.get();
 
