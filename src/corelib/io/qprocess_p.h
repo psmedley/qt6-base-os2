@@ -62,7 +62,7 @@
 
 QT_REQUIRE_CONFIG(processenvironment);
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <QtCore/private/qorderedmutexlocker_p.h>
 #endif
 
@@ -267,7 +267,7 @@ public:
 
         QString file;
         QProcessPrivate *process = nullptr;
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
         QSocketNotifier *notifier = nullptr;
 #else
         union {
@@ -372,10 +372,14 @@ public:
     void processFinished();
     void terminateProcess();
     void killProcess();
-#if defined(Q_OS_UNIX) || defined(Q_OS_OS2)
+#ifdef Q_OS_UNIX
     void waitForDeadChild();
 #else
     void findExitCode();
+#endif
+#ifdef Q_OS_OS2
+    void waitForDeadChild();
+
 #endif
 #ifdef Q_OS_WIN
     STARTUPINFOW createStartupInfo();
@@ -389,7 +393,7 @@ public:
     void ensureWaitSem();
     void tryCloseStdinPipe();
     enum WaitCond { WaitReadyRead, WaitBytesWritten, WaitFinished };
-    bool waitFor(WaitCond cond, int msecs);
+    bool waitFor(WaitCond cond, const QDeadlineTimer &deadline);
     static qint64 bytesAvailableFromPipe(HPIPE hpipe, bool *closed = 0);
 #endif
 
