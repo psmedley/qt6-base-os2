@@ -272,13 +272,13 @@ QOS2Window::QOS2Window(QWindow *window)
     const char *className;
 
     if (isPopup) {
-        className = "Qt5.QPopup";
+        className = "Qt6.QPopup";
         static bool IsClassNameRegistered = false;
         if (Q_UNLIKELY(!IsClassNameRegistered))
             WinRegisterClass(NULLHANDLE, className, QtWindowProc, CS_SAVEBITS, WinDataSize);
 
     } else {
-        className = "Qt5.QWindow";
+        className = "Qt6.QWindow";
         static bool IsClassNameRegistered = false;
         if (Q_UNLIKELY(!IsClassNameRegistered))
             WinRegisterClass(NULLHANDLE, className, QtWindowProc, 0, WinDataSize);
