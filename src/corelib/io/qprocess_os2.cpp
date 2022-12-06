@@ -1597,16 +1597,16 @@ void QProcessPrivate::cleanup()
     q_func()->setProcessState(QProcess::NotRunning);
 
     closeChannels();
-    delete stateNotifier;
-    stateNotifier = nullptr;
+//    delete stateNotifier;
+//    stateNotifier = nullptr;
 #ifndef Q_OS_OS2
     destroyPipe(childStartedPipe);
 #endif
     pid = 0;
-    if (forkfd != -1) {
-        qt_safe_close(forkfd);
-        forkfd = -1;
-    }
+//    if (forkfd != -1) {
+//        qt_safe_close(forkfd);
+//        forkfd = -1;
+//    }
 }
 
 /*! \reimp
