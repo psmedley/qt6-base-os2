@@ -10,7 +10,7 @@ qt_internal_add_executable(qlogging_helper
     LIBRARIES Qt::Core)
 
 # Fixes required for the backtrace stack to be correct
-if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" AND NOT MINGW)
+if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" AND NOT MINGW AND NOT OS2)
     target_link_options(qlogging_helper PRIVATE -rdynamic)
 endif()
 set_target_properties(qlogging_helper PROPERTIES CXX_VISIBILITY_PRESET default)
