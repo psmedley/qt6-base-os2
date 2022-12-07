@@ -399,20 +399,21 @@ void tst_QFileInfo::isDir_data()
 
     QTest::newRow("broken link") << "brokenlink.lnk" << false;
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("drive 1") << "c:" << true;
     QTest::newRow("drive 2") << "c:/" << true;
     //QTest::newRow("drive 2") << "t:s" << false;
 #endif
-#if defined(Q_OS_WIN)
-    const QString uncRoot = QStringLiteral("//") + QtNetworkSettings::winServerName();
-    QTest::newRow("unc 1") << uncRoot << true;
-    QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
-    QTest::newRow("unc 3") << uncRoot + "/testshare" << true;
-    QTest::newRow("unc 4") << uncRoot + "/testshare/" << true;
-    QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << true;
-    QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << true;
-    QTest::newRow("unc 7") << uncRoot + "/testshare/adirthatshouldnotexist" << false;
+#if defined(Q_OS_DOSLIKE)
+    // Disable some UNC tests if the server is not accessible
+    if (QFile::exists(uncRoot)) {
+        QTest::newRow("unc 1") << uncRoot << true;
+        QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
+        QTest::newRow("unc 3") << uncRoot + "/testshare" << true;
+        QTest::newRow("unc 4") << uncRoot + "/testshare/" << true;
+        QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << true;
+        QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << true;
+    }
 #endif
 }
 
@@ -441,19 +442,22 @@ void tst_QFileInfo::isRoot_data()
 
     QTest::newRow("simple dir") << m_resourcesDir << false;
     QTest::newRow("simple dir with slash") << (m_resourcesDir + QLatin1Char('/')) << false;
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("drive 1") << "c:" << false;
     QTest::newRow("drive 2") << "c:/" << true;
     QTest::newRow("drive 3") << "p:/" << false;
 #endif
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     const QString uncRoot = QStringLiteral("//") + QtNetworkSettings::winServerName();
-    QTest::newRow("unc 1") << uncRoot << true;
-    QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
-    QTest::newRow("unc 3") << uncRoot + "/testshare" << false;
-    QTest::newRow("unc 4") << uncRoot + "/testshare/" << false;
-    QTest::newRow("unc 7") << "//ahostthatshouldnotexist" << false;
+    // Disable some UNC tests if the server is not accessible
+    if (QFile::exists(uncRoot)) {
+        QTest::newRow("unc 1") << uncRoot << true;
+        QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
+        QTest::newRow("unc 3") << uncRoot + "/testshare" << false;
+        QTest::newRow("unc 4") << uncRoot + "/testshare/" << false;
+        QTest::newRow("unc 7") << "//ahostthatshouldnotexist" << false;
+    }
 #endif
 }
 
@@ -491,17 +495,20 @@ void tst_QFileInfo::exists_data()
     QTest::newRow("simple dir") << m_resourcesDir << true;
     QTest::newRow("simple dir with slash") << (m_resourcesDir + QLatin1Char('/')) << true;
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     const QString uncRoot = QStringLiteral("//") + QtNetworkSettings::winServerName();
-    QTest::newRow("unc 1") << uncRoot << true;
-    QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
-    QTest::newRow("unc 3") << uncRoot + "/testshare" << true;
-    QTest::newRow("unc 4") << uncRoot + "/testshare/" << true;
-    QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << true;
-    QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << true;
-    QTest::newRow("unc 7") << uncRoot + "/testshare/adirthatshouldnotexist" << false;
-    QTest::newRow("unc 8") << uncRoot + "/asharethatshouldnotexist" << false;
-    QTest::newRow("unc 9") << "//ahostthatshouldnotexist" << false;
+    // Disable some UNC tests if the server is not accessible
+    if (QFile::exists(uncRoot)) {
+        QTest::newRow("unc 1") << uncRoot << true;
+        QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
+        QTest::newRow("unc 3") << uncRoot + "/testshare" << true;
+        QTest::newRow("unc 4") << uncRoot + "/testshare/" << true;
+        QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << true;
+        QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << true;
+        QTest::newRow("unc 7") << uncRoot + "/testshare/adirthatshouldnotexist" << false;
+        QTest::newRow("unc 8") << uncRoot + "/asharethatshouldnotexist" << false;
+        QTest::newRow("unc 9") << "//ahostthatshouldnotexist" << false;
+    }
 #endif
 }
 
@@ -526,7 +533,7 @@ void tst_QFileInfo::absolutePath_data()
     QTest::addColumn<QString>("filename");
 
     QString drivePrefix;
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     drivePrefix = QDir::currentPath().left(2);
     QString nonCurrentDrivePrefix =
         drivePrefix.left(1).compare("X", Qt::CaseInsensitive) == 0 ? QString("Y:") : QString("X:");
@@ -543,7 +550,7 @@ void tst_QFileInfo::absolutePath_data()
     QTest::newRow("3") << "/usr/local/bin/" << drivePrefix + "/usr/local/bin" << "";
     QTest::newRow("/test") << "/test" << drivePrefix + "/" << "test";
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("c:\\autoexec.bat") << "c:\\autoexec.bat" << "C:/"
                                       << "autoexec.bat";
     QTest::newRow("c:autoexec.bat") << QDir::currentPath().left(2) + "autoexec.bat" << QDir::currentPath()
@@ -816,7 +823,7 @@ void tst_QFileInfo::dir_data()
     QTest::newRow("absFilePath") << QDir::currentPath() + "/tmp.txt" << false << QDir::currentPath();
     QTest::newRow("absFilePathAbsPath") << QDir::currentPath() + "/tmp.txt" << true << QDir::currentPath();
     QTest::newRow("resource1") << ":/tst_qfileinfo/resources/file1.ext1" << true << ":/tst_qfileinfo/resources";
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     QTest::newRow("driveWithSlash") << "C:/file1.ext1.ext2" << true << "C:/";
     QTest::newRow("driveWithoutSlash") << QDir::currentPath().left(2) + "file1.ext1.ext2" << false << QDir::currentPath().left(2);
 #endif
@@ -1007,10 +1014,14 @@ void tst_QFileInfo::size()
 
 void tst_QFileInfo::systemFiles()
 {
-#if !defined(Q_OS_WIN)
-    QSKIP("This is a Windows only test");
+#if !defined(Q_OS_DOSLIKE)
+    QSKIP("This is a Windows and OS/2 only test");
 #endif
+#if defined(Q_OS_OS2)
+    QFileInfo fi("c:\\config.sys");
+#else
     QFileInfo fi("c:\\pagefile.sys");
+#endif
     QVERIFY2(fi.exists(), msgDoesNotExist(fi.absoluteFilePath()).constData());
     QVERIFY(fi.size() > 0);
     QVERIFY(fi.lastModified().isValid());
@@ -1886,8 +1897,12 @@ void tst_QFileInfo::isWritable()
     QVERIFY(QFileInfo("tempfile.txt").isWritable());
     tempfile.remove();
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_OS2)
+    QFileInfo fi(QDir::rootPath() + "\\OS2BOOT");
+#else
     QFileInfo fi("c:\\pagefile.sys");
+#endif
     QVERIFY2(fi.exists(), msgDoesNotExist(fi.absoluteFilePath()).constData());
     QVERIFY(!fi.isWritable());
 #endif
@@ -2100,7 +2115,7 @@ bool IsUserAdmin()
 void tst_QFileInfo::owner()
 {
     QString userName;
-#if defined(Q_OS_UNIX) && !defined(Q_OS_VXWORKS) && !defined(Q_OS_INTEGRITY)
+#if defined(Q_OS_UNIXLIKE) && !defined(Q_OS_VXWORKS) && !defined(Q_OS_INTEGRITY)
     {
         passwd *user = getpwuid(geteuid());
         QVERIFY(user);
@@ -2162,7 +2177,7 @@ void tst_QFileInfo::owner()
 void tst_QFileInfo::group()
 {
     QString expected;
-#if defined(Q_OS_UNIX) && !defined(Q_OS_VXWORKS) && !defined(Q_OS_INTEGRITY)
+#if defined(Q_OS_UNIXLIKE) && !defined(Q_OS_VXWORKS) && !defined(Q_OS_INTEGRITY)
     struct group *gr;
     gid_t gid = getegid();
 
