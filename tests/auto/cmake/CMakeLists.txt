@@ -128,7 +128,10 @@ _qt_internal_test_expect_pass(test_umbrella_config)
 _qt_internal_test_expect_pass(test_wrap_cpp_and_resources)
 if (NOT NO_WIDGETS)
     _qt_internal_test_expect_pass(test_dependent_modules)
-    _qt_internal_test_expect_pass("test(needsquoting)dirname")
+    if (NOT OS2)
+        # Until https://github.com/bitwiseworks/cmake-os2/issues/3 is fixed.
+        expect_pass("test(needsquoting)dirname")
+    endif()
 endif()
 _qt_internal_test_expect_build_fail(test_add_resource_options)
 _qt_internal_test_expect_build_fail(test_wrap_cpp_options)
@@ -204,6 +207,12 @@ if (NOT NO_WIDGETS)
   )
 endif()
 
+if (NOT NO_OPENGL)
+  list(APPEND qt_module_includes
+     OpenGL QOpenGLBuffer
+  )
+endif()
+
 if (NOT NO_DBUS)
   list(APPEND qt_module_includes
     DBus QDBusMessage
@@ -215,8 +224,10 @@ _qt_internal_test_module_includes(
 )
 _qt_internal_test_expect_pass(test_concurrent_module)
 
+if (NOT NO_OPENGL)
 if(NOT NO_GUI)
     _qt_internal_test_expect_pass(test_opengl_lib)
+endif()
 endif()
 
 if (NOT NO_WIDGETS)
