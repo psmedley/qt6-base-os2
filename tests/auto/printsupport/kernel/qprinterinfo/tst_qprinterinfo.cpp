@@ -33,7 +33,7 @@
 
 #include <algorithm>
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_INTEGRITY)
+#if defined(Q_OS_UNIXLIKE) && !defined(Q_OS_INTEGRITY)
 #  include <unistd.h>
 #  include <sys/types.h>
 #  include <sys/wait.h>

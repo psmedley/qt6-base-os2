@@ -1207,6 +1207,12 @@ protected:
         exitCode = 90210;
 
         QProcess process;
+#ifdef Q_OS_OS2
+        // On OS/2, the native process start API is not thread-safe. Making it so
+        // is expensive (requires an intermediate wrapper process) and hence is
+        // off by default. Turn it on.
+        process.setThreadSafe(true);
+#endif
         connect(&process, &QProcess::finished, this, &TestThread::catchExitCode, Qt::DirectConnection);
 
         process.start("testProcessEcho/testProcessEcho");

@@ -792,9 +792,14 @@ void checkErrorOutput(const QString &test, const QByteArray &errorOutput)
         return; // Complains about uncaught exception
 #endif
 
-#ifdef Q_OS_LINUX
+#if defined(Q_OS_LINUX) || defined(Q_OS_OS2)
+        // QEMU and OS/2 kLIBC output to stderr about uncaught signals
     // QEMU outputs to stderr about uncaught signals
+#ifdef Q_OS_OS2
+    if (
+#else
     if (QTestPrivate::isRunningArmOnX86() &&
+#endif
         (test == "assert"
          || test == "blacklisted"
          || test == "crashes"
@@ -1249,7 +1254,7 @@ int main(int argc, char **argv)
 
     // Detect the location of the sub programs
     QString subProgram = "pass/pass";
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
     subProgram += ".exe";
 #endif
     QString testdataDir = QFINDTESTDATA(subProgram);

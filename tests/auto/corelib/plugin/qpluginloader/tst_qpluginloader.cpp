@@ -223,7 +223,7 @@ void tst_QPluginLoader::errorString()
 #endif
 
     {
-    QPluginLoader loader( sys_qualifiedLibraryName(THEPLUGIN));       //a plugin
+    loader.setFileName( sys_qualifiedLibraryName(THEPLUGIN));       //a plugin
 
     // Check metadata
     const QJsonObject metaData = loader.metaData();
@@ -262,10 +262,10 @@ void tst_QPluginLoader::loadHints()
 
     QPluginLoader loader2;
     QCOMPARE(loader2.loadHints(), QLibrary::PreventUnloadHint);
-    loader2.setFileName(sys_qualifiedLibraryName("theplugin"));
+    loader2.setFileName(sys_qualifiedLibraryName(THEPLUGIN));
     QCOMPARE(loader2.loadHints(), QLibrary::PreventUnloadHint);
 
-    QPluginLoader loader3(sys_qualifiedLibraryName("theplugin"));
+    QPluginLoader loader3(sys_qualifiedLibraryName(THEPLUGIN));
     QCOMPARE(loader3.loadHints(), QLibrary::PreventUnloadHint);
 }
 
@@ -445,7 +445,7 @@ void tst_QPluginLoader::relativePath()
     const QString binDir = QFINDTESTDATA("bin");
     QVERIFY(!binDir.isEmpty());
     QCoreApplication::addLibraryPath(binDir);
-    QPluginLoader loader("theplugin" SUFFIX);
+    QPluginLoader loader(THEPLUGIN SUFFIX);
     loader.load(); // not recommended, instance() should do the job.
     PluginInterface *instance = qobject_cast<PluginInterface*>(loader.instance());
     QVERIFY(instance);
@@ -462,7 +462,7 @@ void tst_QPluginLoader::absolutePath()
     const QString binDir = QFINDTESTDATA("bin");
     QVERIFY(!binDir.isEmpty());
     QVERIFY(QDir::isAbsolutePath(binDir));
-    QPluginLoader loader(binDir + "/" PREFIX "theplugin" SUFFIX);
+    QPluginLoader loader(binDir + "/" PREFIX THEPLUGIN SUFFIX);
     loader.load(); // not recommended, instance() should do the job.
     PluginInterface *instance = qobject_cast<PluginInterface*>(loader.instance());
     QVERIFY(instance);

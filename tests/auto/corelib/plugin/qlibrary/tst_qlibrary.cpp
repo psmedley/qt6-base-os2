@@ -438,10 +438,14 @@ void tst_QLibrary::loadHints_data()
     QString appDir = directory;
 
     lh |= QLibrary::ResolveAllSymbolsHint;
-# if defined(Q_OS_WIN32)
+# if defined(Q_OS_DOSLIKE)
     QTest::newRow( "ok01 (with suffix)" ) << appDir + "/mylib.dll" << int(lh) << true;
     QTest::newRow( "ok02 (with non-standard suffix)" ) << appDir + "/mylib.dl2" << int(lh) << true;
+#  if defined(Q_OS_OS2)
+    QTest::newRow( "ok03 (with many dots)" ) << appDir + "/qt.mylib.dll" << int(lh) << true;
+#  else
     QTest::newRow( "ok03 (with many dots)" ) << appDir + "/system.qt.test.mylib.dll" << int(lh) << true;
+#endif
 # elif defined Q_OS_UNIX
     QTest::newRow( "ok01 (with suffix)" ) << appDir + "/libmylib" SUFFIX << int(lh) << true;
     QTest::newRow( "ok02 (with non-standard suffix)" ) << appDir + "/libmylib.so2" << int(lh) << true;
