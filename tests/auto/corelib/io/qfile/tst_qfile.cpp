@@ -565,10 +565,14 @@ void tst_QFile::exists()
     file.remove();
     QVERIFY(!file.exists());
 
-#if defined(Q_OS_WIN)
-    const QString uncPath = "//" + QtNetworkSettings::winServerName() + "/testshare/readme.txt";
-    QFile unc(uncPath);
-    QVERIFY2(unc.exists(), msgFileDoesNotExist(uncPath).constData());
+#if defined(Q_OS_DOSLIKE)
+    const QString uncRoot = "//" + QtNetworkSettings::winServerName();
+    // Disable some UNC tests if the server is not accessible
+    if (QFile::exists(uncRoot)) {
+        const QString uncPath = uncRoot + "/testshare/readme.txt";
+        QFile unc(uncPath);
+        QVERIFY2(unc.exists(), msgFileDoesNotExist(uncPath).constData());
+    }
 #endif
 
     QTest::ignoreMessage(QtWarningMsg, "Broken filename passed to function");
@@ -652,8 +656,8 @@ void tst_QFile::open()
         QSKIP("Running this test as root doesn't make sense");
 #endif
 
-#if defined(Q_OS_WIN32)
-    QEXPECT_FAIL("noreadfile", "Windows does not currently support non-readable files.", Abort);
+#if defined(Q_OS_DOSLIKE)
+    QEXPECT_FAIL("noreadfile", "Windows and OS/2 do not currently support non-readable files.", Abort);
 #endif
     if (filename.isEmpty())
         QTest::ignoreMessage(QtWarningMsg, "QFSFileEngine::open: No file name specified");
@@ -704,9 +708,13 @@ void tst_QFile::size_data()
     QTest::addColumn<qint64>("size");
 
     QTest::newRow( "exist01" ) << m_testFile << (qint64)245;
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE) && !defined(Q_OS_WINRT)
     // Only test UNC on Windows./
-    QTest::newRow("unc") << "//" + QString(QtNetworkSettings::winServerName() + "/testshare/test.pri") << (qint64)34;
+    const QString uncRoot = "//" + QtNetworkSettings::winServerName();
+    // Disable some UNC tests if the server is not accessible
+    if (QFile::exists(uncRoot)) {
+        QTest::newRow("unc") << "//" + QString(uncRoot + "/testshare/test.pri") << (qint64)34;
+    }
 #endif
 }
 
@@ -1188,9 +1196,21 @@ void tst_QFile::ungetChar()
     QCOMPARE(buf[2], '4');
 }
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
 QString driveLetters()
 {
+#if defined(Q_OS_OS2)
+    ULONG dummy;
+    ULONG map;
+    QString result;
+    if (DosQueryCurrentDisk(&dummy, &map) == NO_ERROR) {
+        for (int i = 0; i < 26; ++i, map >>= 1) {
+            if (map & 0x1)
+                result.append(QLatin1Char('A' + i));
+        }
+    }
+    return result;
+#else
     wchar_t volumeName[MAX_PATH];
     wchar_t path[MAX_PATH];
     const HANDLE h = FindFirstVolumeW(volumeName, MAX_PATH);
@@ -2453,12 +2473,16 @@ void tst_QFile::writeLargeDataBlock_data()
     QTest::newRow("localfile-Fd")     << "./largeblockfile.txt" << (int)OpenFd;
     QTest::newRow("localfile-Stream") << "./largeblockfile.txt" << (int)OpenStream;
 
-#if defined(Q_OS_WIN) && !defined(QT_NO_NETWORK)
+#if defined(Q_OS_DOSLIKE) && !defined(QT_NO_NETWORK)
     // Some semi-randomness to avoid collisions.
-    QTest::newRow("unc file")
-        << QString("//" + QtNetworkSettings::winServerName() + "/TESTSHAREWRITABLE/largefile-%1-%2.txt")
-        .arg(QHostInfo::localHostName())
-        .arg(QTime::currentTime().msec()) << (int)OpenQFile;
+    const QString uncRoot = "//" + QtNetworkSettings::winServerName();
+    // Disable some UNC tests if the server is not accessible
+    if (QFile::exists(uncRoot)) {
+        QTest::newRow("unc file")
+            << QString(uncRoot + "/TESTSHAREWRITABLE/largefile-%1-%2.txt")
+            .arg(QHostInfo::localHostName())
+            .arg(QTime::currentTime().msec()) << (int)OpenQFile;
+    }
 #endif
 }
 
@@ -2880,16 +2904,19 @@ void tst_QFile::appendAndRead()
 
 void tst_QFile::miscWithUncPathAsCurrentDir()
 {
-#if defined(Q_OS_WIN)
-    QString current = QDir::currentPath();
-    const QString path = QLatin1String("//") + QtNetworkSettings::winServerName()
-        + QLatin1String("/testshare");
-    QVERIFY2(QDir::setCurrent(path), qPrintable(QDir::toNativeSeparators(path)));
-    QFile file("test.pri");
-    QVERIFY2(file.exists(), msgFileDoesNotExist(file.fileName()).constData());
-    QCOMPARE(int(file.size()), 34);
-    QVERIFY2(file.open(QIODevice::ReadOnly), msgOpenFailed(file).constData());
-    QVERIFY(QDir::setCurrent(current));
+#if defined(Q_OS_DOSLIKE)
+    const QString uncRoot = "//" + QtNetworkSettings::winServerName();
+    // Disable some UNC tests if the server is not accessible
+    if (QFile::exists(uncRoot)) {
+        QString current = QDir::currentPath();
+        const QString path = uncRoot + QLatin1String("/testshare");
+        QVERIFY2(QDir::setCurrent(path), qPrintable(QDir::toNativeSeparators(path)));
+        QFile file("test.pri");
+        QVERIFY2(file.exists(), msgFileDoesNotExist(file.fileName()).constData());
+        QCOMPARE(int(file.size()), 34);
+        QVERIFY2(file.open(QIODevice::ReadOnly), msgOpenFailed(file).constData());
+        QVERIFY(QDir::setCurrent(current));
+    }
 #endif
 }
 

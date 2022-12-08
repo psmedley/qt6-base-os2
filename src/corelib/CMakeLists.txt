@@ -503,6 +503,7 @@ qt_internal_extend_target(Core CONDITION OS2
         io/qlockfile_os2.cpp
         io/qfilesystemiterator_unix.cpp
         io/qstandardpaths_unix.cpp
+        io/qsettings.cpp io/qsettings.h io/qsettings_p.h
         kernel/qcore_unix.cpp kernel/qcore_unix_p.h
         kernel/qeventdispatcher_os2.cpp kernel/qeventdispatcher_os2_p.h
         kernel/qtimerinfo_unix.cpp kernel/qtimerinfo_unix_p.h

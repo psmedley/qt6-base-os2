@@ -202,7 +202,7 @@ static_assert(!CanConvert<std::list<char32_t>>);
 //
 
 constexpr bool CanConvertFromWCharT =
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
         true
 #else
         false

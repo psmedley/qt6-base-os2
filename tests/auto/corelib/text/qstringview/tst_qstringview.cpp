@@ -120,7 +120,7 @@ static_assert(!CanConvert<std::list<char16_t>>::value);
 //
 
 constexpr bool CanConvertFromWCharT =
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
         true
 #else
         false
