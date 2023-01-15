@@ -18,6 +18,7 @@ qt_internal_add_plugin(QOS2IntegrationPlugin
         qos2keymapper.cpp
         qos2mime.cpp
         qos2screen.cpp
+        qos2services.cpp
         qos2theme.cpp
         qos2window.cpp
 

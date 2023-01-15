@@ -46,6 +46,7 @@ QT_BEGIN_NAMESPACE
 
 class QOS2Clipboard;
 class QOS2KeyMapper;
+class QOS2Services;
 
 class QOS2Integration : public QPlatformIntegration
 {
@@ -73,11 +74,15 @@ public:
     Qt::KeyboardModifiers queryKeyboardModifiers() const override;
     QList<int> possibleKeys(const QKeyEvent *e) const override;
 
+    QPlatformServices *services() const override;
+
     void beep() const override;
 
     // OS/2 specifics
 
     QOS2KeyMapper *keyMapper() const { return mKeyMapper; }
+
+    //QOS2Services  *mplatformServices() const { return mplatformServices; }
 
     static QOS2Integration *instance() { return sInstance; }
 
@@ -89,6 +94,8 @@ private:
 #endif
 
     QOS2KeyMapper *mKeyMapper = nullptr;
+
+    QOS2Services  *mplatformServices = nullptr;
 
     static QOS2Integration * sInstance;
 };
