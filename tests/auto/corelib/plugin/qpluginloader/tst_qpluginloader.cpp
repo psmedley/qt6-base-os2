@@ -223,7 +223,7 @@ void tst_QPluginLoader::errorString()
 #endif
 
     {
-    loader.setFileName( sys_qualifiedLibraryName(THEPLUGIN));       //a plugin
+    QPluginLoader loader( sys_qualifiedLibraryName(THEPLUGIN));       //a plugin
 
     // Check metadata
     const QJsonObject metaData = loader.metaData();
@@ -257,7 +257,7 @@ void tst_QPluginLoader::loadHints()
     QCOMPARE(loader.loadHints(), QLibrary::PreventUnloadHint);   //Do not crash
     loader.setLoadHints(QLibrary::ResolveAllSymbolsHint);
     QCOMPARE(loader.loadHints(), QLibrary::ResolveAllSymbolsHint);
-    loader.setFileName( sys_qualifiedLibraryName("theplugin"));     //a plugin
+    loader.setFileName( sys_qualifiedLibraryName(THEPLUGIN));       //a plugin
     QCOMPARE(loader.loadHints(), QLibrary::ResolveAllSymbolsHint);
 
     QPluginLoader loader2;
