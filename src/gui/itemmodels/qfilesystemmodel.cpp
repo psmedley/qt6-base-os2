@@ -57,6 +57,10 @@
 #  include <shlobj.h>
 #endif
 
+#ifdef Q_OS_OS2
+extern "C" char *_getvol (char);
+#endif
+
 QT_BEGIN_NAMESPACE
 
 /*!
