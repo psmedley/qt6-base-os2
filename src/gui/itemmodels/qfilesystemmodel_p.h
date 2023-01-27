@@ -74,7 +74,7 @@ class ExtendedInformation;
 class QFileSystemModelPrivate;
 class QFileIconProvider;
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
 class QFileSystemModelNodePathKey : public QString
 {
 public:
@@ -87,7 +87,7 @@ public:
 Q_DECLARE_TYPEINFO(QFileSystemModelNodePathKey, Q_RELOCATABLE_TYPE);
 
 inline size_t qHash(const QFileSystemModelNodePathKey &key) { return qHash(key.toCaseFolded()); }
-#else // Q_OS_WIN
+#else // Q_OS_DOSLIKE
 typedef QString QFileSystemModelNodePathKey;
 #endif
 
@@ -111,7 +111,7 @@ public:
         }
 
         QString fileName;
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_DOSLIKE)
         QString volumeName;
 #endif
 
