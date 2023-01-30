@@ -62,6 +62,7 @@ public:
 
     QSizeF physicalSize() const override;
     QDpi logicalDpi() const override;
+    QDpi logicalBaseDpi() const override;
 
     QPlatformCursor *cursor() const override;
 
