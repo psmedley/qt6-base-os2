@@ -269,7 +269,8 @@ public:
         QProcessPrivate *process = nullptr;
 #ifdef Q_OS_UNIXLIKE
         QSocketNotifier *notifier = nullptr;
-#else
+#endif
+#ifdef Q_OS_WIN
         union {
             QWindowsPipeReader *reader = nullptr;
             QWindowsPipeWriter *writer;
