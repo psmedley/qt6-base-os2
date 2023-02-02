@@ -67,11 +67,8 @@ QOS2Screen::QOS2Screen()
     HDC hdc = GpiQueryDevice(hps);
 
     DevQueryCaps(hdc, CAPS_HORIZONTAL_FONT_RES, 2, buf);
-    //mDpi = QDpi(buf[0], buf[1]);
-    // The above seems wrong. mDpi should be the screen DPI, nothing to do with font resolution. With Qt6
-    // the above results in DPI set to 120, 120 and scaling issues cause menus to be out of alignment.
-    // See https://github.com/psmedley/qt6-base-os2/issues/6
-    mDpi = QDpi(96, 96);
+    mDpi = QDpi(buf[0], buf[1]);
+
     DevQueryCaps(hdc, CAPS_HORIZONTAL_RESOLUTION, 2, buf);
     mPhysicalSize = QSizeF(mWidth * 1000 / buf[0], mHeight * 1000 / buf[1]);
     
@@ -124,6 +121,11 @@ QSizeF QOS2Screen::physicalSize() const
 }
 
 QDpi QOS2Screen::logicalDpi() const
+{
+    return mDpi;
+}
+
+QDpi QOS2Screen::logicalBaseDpi() const
 {
     return mDpi;
 }
