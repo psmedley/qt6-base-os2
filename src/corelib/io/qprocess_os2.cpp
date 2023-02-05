@@ -805,6 +805,11 @@ static int qt_startProcess(const QString &program, const QStringList &arguments,
                fullProgramName.data(), fullProgramName.size()) == -1)
         return -1;
 
+    // In Qt6, having the QByteArray full of null zeros causes "Broken filename 
+    // passed to function" errors from fullProgramInfo.absolutePath() - strip 
+    // them out and truncate the size of fullProgramName
+    quint16 index = fullProgramName.indexOf('\0');
+    if (index >1) fullProgramName.truncate(index);
     DEBUG(("found \"%s\" for \"%s\"",
            qPrintable(QFile::decodeName(fullProgramName)),
            qPrintable(QFile::decodeName(programName))));
@@ -872,7 +877,7 @@ static int qt_startProcess(const QString &program, const QStringList &arguments,
     DEBUG(() << "curdir" << QDir::currentPath() << "workingDirectory" << workingDirectory);
 
     // Add the program's dir to BEGINLIBPATH to make sure the DLLs are
-    // serached there first (no, the OS/2 loader does't do it itself).
+    // searched there first (no, the OS/2 loader does't do it itself).
     QFileInfo fullProgramInfo(QFile::decodeName(fullProgramName));
     QString fullPath = QDir::toNativeSeparators(fullProgramInfo.absolutePath());
 
