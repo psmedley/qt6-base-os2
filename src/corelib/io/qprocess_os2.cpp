@@ -1141,7 +1141,7 @@ qint64 QProcessPrivate::bytesAvailableInChannel(const Channel *channel) const
 {
     Q_ASSERT(channel->pipe.server != INVALID_HFILE);
     qint64 bytes = 0;
-//    if (!dying) {
+//    if (!dying) { //doesn't exist in Qt6
         Q_ASSERT(channel->pipe.signaled);
         // reuse the number we got in _q_notified()
         bytes = channel->pipe.bytes;
@@ -1276,19 +1276,6 @@ void QProcessPrivate::killProcess()
         DosKillProcess(DKP_PROCESS, pid);
 }
 
-/*
-   Returns the difference between msecs and elapsed. If msecs is -1,
-   however, -1 is returned.
-*/
-static int qt_timeout_value(int msecs, int elapsed)
-{
-    if (msecs == -1)
-        return -1;
-
-    int timeout = msecs - elapsed;
-    return timeout < 0 ? 0 : timeout;
-}
-
 bool QProcessPrivate::waitForStarted(const QDeadlineTimer &deadline)
 {
     if (processState == QProcess::Running)
@@ -1311,9 +1298,6 @@ bool QProcessPrivate::waitFor(WaitCond cond, const QDeadlineTimer &deadline)
                           cond == WaitFinished ? "Finished" : "???";
     DEBUG(("pid %d, %s, %lld", pid, condStr, deadline.remainingTime()));
 #endif
-
-    QElapsedTimer stopWatch;
-    stopWatch.start();
 
     APIRET arc;
     bool ret = false;
@@ -1371,7 +1355,7 @@ bool QProcessPrivate::waitFor(WaitCond cond, const QDeadlineTimer &deadline)
             break;
 
         // wait for the new signals
-        int timeout = qt_timeout_value(deadline.remainingTime(), stopWatch.elapsed());
+        int timeout = deadline.remainingTime();
         DEBUG(() << "timeout" << timeout);
         qDosNI(arc = DosWaitEventSem(waitSem, (ULONG)timeout));
 
