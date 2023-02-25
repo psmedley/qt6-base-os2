@@ -122,7 +122,7 @@ public:
     }
 };
 
-class Q_CORE_EXPORT ResultStoreBase
+class Q_CORE_EXPORT ResultStoreBase final
 {
 public:
     ResultStoreBase();
@@ -136,6 +136,7 @@ public:
     ResultIteratorBase resultAt(int index) const;
     bool contains(int index) const;
     int count() const;
+    // ### Qt 7: 'virtual' isn't required, can be removed
     virtual ~ResultStoreBase();
 
 protected:

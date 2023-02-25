@@ -281,8 +281,19 @@ public:
     NSURL *toNSURL() const Q_DECL_NS_RETURNS_AUTORELEASED;
 #endif
 
+    enum AceProcessingOption : unsigned int {
+        IgnoreIDNWhitelist = 0x1,
+        AceTransitionalProcessing = 0x2,
+    };
+    Q_DECLARE_FLAGS(AceProcessingOptions, AceProcessingOption)
+
+#if QT_CORE_REMOVED_SINCE(6, 3)
     static QString fromAce(const QByteArray &);
     static QByteArray toAce(const QString &);
+#endif
+    static QString fromAce(const QByteArray &domain, AceProcessingOptions options = {});
+    static QByteArray toAce(const QString &domain, AceProcessingOptions options = {});
+
     static QStringList idnWhitelist();
     static QStringList toStringList(const QList<QUrl> &uris, FormattingOptions options = FormattingOptions(PrettyDecoded));
     static QList<QUrl> fromStringList(const QStringList &uris, ParsingMode mode = TolerantMode);
@@ -302,6 +313,7 @@ public:
 Q_DECLARE_SHARED(QUrl)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QUrl::ComponentFormattingOptions)
 //Q_DECLARE_OPERATORS_FOR_FLAGS(QUrl::FormattingOptions)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QUrl::AceProcessingOptions)
 
 #ifndef Q_QDOC
 constexpr inline QUrl::FormattingOptions operator|(QUrl::UrlFormattingOption f1, QUrl::UrlFormattingOption f2)

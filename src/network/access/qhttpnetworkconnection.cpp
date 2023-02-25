@@ -48,6 +48,7 @@
 #include <qnetworkproxy.h>
 #include <qauthenticator.h>
 #include <qcoreapplication.h>
+#include <private/qdecompresshelper_p.h>
 
 #include <qbuffer.h>
 #include <qpair.h>
@@ -257,9 +258,9 @@ void QHttpNetworkConnectionPrivate::prepareRequest(HttpMessagePair &messagePair)
 
     // add missing fields for the request
     QByteArray value;
+#ifndef Q_OS_WASM
     // check if Content-Length is provided
     QNonContiguousByteDevice* uploadByteDevice = request.uploadByteDevice();
-#ifndef Q_OS_WASM
     if (uploadByteDevice) {
         const qint64 contentLength = request.contentLength();
         const qint64 uploadDeviceSize = uploadByteDevice->size();
@@ -760,6 +761,15 @@ QHttpNetworkRequest QHttpNetworkConnectionPrivate::predictNextRequest() const
     return QHttpNetworkRequest();
 }
 
+QHttpNetworkReply* QHttpNetworkConnectionPrivate::predictNextRequestsReply() const
+{
+    if (!highPriorityQueue.isEmpty())
+        return highPriorityQueue.last().second;
+    if (!lowPriorityQueue.isEmpty())
+        return lowPriorityQueue.last().second;
+    return nullptr;
+}
+
 // this is called from _q_startNextRequest and when a request has been sent down a socket from the channel
 void QHttpNetworkConnectionPrivate::fillPipeline(QAbstractSocket *socket)
 {
@@ -916,6 +926,8 @@ QString QHttpNetworkConnectionPrivate::errorDetail(QNetworkReply::NetworkError e
         break;
     case QNetworkReply::SslHandshakeFailedError:
         errorString = QCoreApplication::translate("QHttp", "SSL handshake failed");
+        if (socket)
+            errorString += QStringLiteral(": ") + socket->errorString();
         break;
     case QNetworkReply::TooManyRedirectsError:
         errorString = QCoreApplication::translate("QHttp", "Too many redirects");
@@ -1277,11 +1289,10 @@ void QHttpNetworkConnectionPrivate::_q_hostLookupFinished(const QHostInfo &info)
                 emitReplyError(channels[0].socket, currentReply, QNetworkReply::HostNotFoundError);
             }
         } else {
-            // Should not happen: we start a host lookup before sending a request,
-            // so it's natural to have requests either in HTTP/2 queue, or in low/high
-            // priority queues.
-            qWarning("QHttpNetworkConnectionPrivate::_q_hostLookupFinished"
-                     " could not de-queue request, failed to report HostNotFoundError");
+            // We can end up here if a request has been aborted or otherwise failed (e.g. timeout)
+            // before the host lookup was finished.
+            qDebug("QHttpNetworkConnectionPrivate::_q_hostLookupFinished"
+                   " could not de-queue request, failed to report HostNotFoundError");
             networkLayerState = QHttpNetworkConnectionPrivate::Unknown;
         }
     }
@@ -1470,13 +1481,13 @@ void QHttpNetworkConnection::setSslConfiguration(const QSslConfiguration &config
         d->channels[i].setSslConfiguration(config);
 }
 
-QSharedPointer<QSslContext> QHttpNetworkConnection::sslContext()
+std::shared_ptr<QSslContext> QHttpNetworkConnection::sslContext()
 {
     Q_D(QHttpNetworkConnection);
     return d->sslContext;
 }
 
-void QHttpNetworkConnection::setSslContext(QSharedPointer<QSslContext> context)
+void QHttpNetworkConnection::setSslContext(std::shared_ptr<QSslContext> context)
 {
     Q_D(QHttpNetworkConnection);
     d->sslContext = std::move(context);

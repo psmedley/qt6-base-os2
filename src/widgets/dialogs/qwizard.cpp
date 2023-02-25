@@ -54,7 +54,7 @@
 #include "qlineedit.h"
 #endif
 #include <qpointer.h>
-#include "qpainter.h"
+#include "qstylepainter.h"
 #include "qwindow.h"
 #include "qpushbutton.h"
 #include "qset.h"
@@ -420,7 +420,7 @@ void QWizardHeader::setup(const QWizardLayoutInfo &info, const QString &title,
 
 void QWizardHeader::paintEvent(QPaintEvent * /* event */)
 {
-    QPainter painter(this);
+    QStylePainter painter(this);
     painter.drawPixmap(0, 0, bannerPixmap);
 
     int x = width() - 2;
@@ -452,7 +452,7 @@ public:
 
     QSize minimumSizeHint() const override {
         if (!pixmap(Qt::ReturnByValue).isNull())
-            return pixmap(Qt::ReturnByValue).size() / pixmap(Qt::ReturnByValue).devicePixelRatio();
+            return pixmap(Qt::ReturnByValue).deviceIndependentSize().toSize();
         return QFrame::minimumSizeHint();
     }
 
@@ -3229,7 +3229,7 @@ void QWizard::paintEvent(QPaintEvent * event)
         if (backgroundPixmap.isNull())
             return;
 
-        QPainter painter(this);
+        QStylePainter painter(this);
         painter.drawPixmap(0, (height() - backgroundPixmap.height()) / 2, backgroundPixmap);
     }
 #if QT_CONFIG(style_windowsvista)

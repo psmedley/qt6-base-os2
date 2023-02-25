@@ -78,12 +78,13 @@ struct QNullRenderBuffer : public QRhiRenderBuffer
     QRhiTexture::Format backingFormat() const override;
 
     bool valid = false;
+    uint generation = 0;
 };
 
 struct QNullTexture : public QRhiTexture
 {
     QNullTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, int depth,
-                  int sampleCount, Flags flags);
+                 int arraySize, int sampleCount, Flags flags);
     ~QNullTexture();
     void destroy() override;
     bool create() override;
@@ -91,6 +92,7 @@ struct QNullTexture : public QRhiTexture
 
     bool valid = false;
     QVarLengthArray<std::array<QImage, QRhi::MAX_MIP_LEVELS>, 6> image;
+    uint generation = 0;
 };
 
 struct QNullSampler : public QRhiSampler
@@ -119,6 +121,7 @@ struct QNullRenderTargetData
     QNullRenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
     float dpr = 1;
+    QRhiRenderTargetAttachmentTracker::ResIdList currentResIdList;
 };
 
 struct QNullReferenceRenderTarget : public QRhiRenderTarget
@@ -224,6 +227,7 @@ public:
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
                                int depth,
+                               int arraySize,
                                int sampleCount,
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter,

@@ -82,6 +82,8 @@ private slots:
     void registerOpenTypePreferredNamesSystem();
     void registerOpenTypePreferredNamesApplication();
 
+    void stretchRespected();
+
 #ifdef Q_OS_WIN
     void findCourier();
 #endif
@@ -359,6 +361,28 @@ static QString testString()
     return QStringLiteral("foo bar");
 }
 
+void tst_QFontDatabase::stretchRespected()
+{
+    int italicId = QFontDatabase::addApplicationFont(m_testFontItalic);
+    QVERIFY(italicId != -1);
+
+    QVERIFY(!QFontDatabase::applicationFontFamilies(italicId).isEmpty());
+
+    QString italicFontName = QFontDatabase::applicationFontFamilies(italicId).first();
+
+    QFont italicFont = QFontDatabase::font(italicFontName,
+                                           QString::fromLatin1("Italic"), 14);
+    QVERIFY(italicFont.italic());
+
+    QFont italicStretchedFont = italicFont;
+    italicStretchedFont.setStretch( 400 );
+
+    QVERIFY(QFontMetricsF(italicFont).horizontalAdvance(QStringLiteral("foobar")) <
+            QFontMetricsF(italicStretchedFont).horizontalAdvance(QStringLiteral("foobar")));
+
+    QFontDatabase::removeApplicationFont(italicId);
+}
+
 void tst_QFontDatabase::condensedFontWidthNoFontMerging()
 {
     int regularFontId = QFontDatabase::addApplicationFont(m_testFont);
@@ -422,9 +446,6 @@ void tst_QFontDatabase::condensedFontMatching()
         QEXPECT_FAIL("","No matching of sub-family by stretch on Windows", Continue);
 #endif
 
-#ifdef Q_OS_ANDROID
-    QEXPECT_FAIL("", "QTBUG-69216", Continue);
-#endif
     QCOMPARE(QFontMetrics(tfcByStretch).horizontalAdvance(testString()),
              QFontMetrics(tfcByStyleName).horizontalAdvance(testString()));
 

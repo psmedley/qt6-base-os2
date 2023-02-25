@@ -988,17 +988,6 @@ void QFusionStyle::drawPrimitive(PrimitiveElement elem,
 
     case PE_FrameStatusBarItem:
         break;
-    case PE_IndicatorTabClose:
-    {
-        Q_D(const QFusionStyle);
-        if (d->tabBarcloseButtonIcon.isNull())
-            d->tabBarcloseButtonIcon = proxy()->standardIcon(SP_DialogCloseButton, option, widget);
-        if ((option->state & State_Enabled) && (option->state & State_MouseOver))
-            proxy()->drawPrimitive(PE_PanelButtonCommand, option, painter, widget);
-        QPixmap pixmap = d->tabBarcloseButtonIcon.pixmap(QSize(16, 16), painter->device()->devicePixelRatio(), QIcon::Normal, QIcon::On);
-        proxy()->drawItemPixmap(painter, option->rect, Qt::AlignCenter, pixmap);
-    }
-        break;
     case PE_PanelMenu: {
         painter->save();
         const QBrush menuBackground = option->palette.base().color().lighter(108);
@@ -1565,8 +1554,9 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                 }
                 painter->setPen(shadow.lighter(106));
                 const bool reverse = menuItem->direction == Qt::RightToLeft;
-                painter->drawLine(menuItem->rect.left() + margin + (reverse ? 0 : w), menuItem->rect.center().y(),
-                                  menuItem->rect.right() - margin - (reverse ? w : 0), menuItem->rect.center().y());
+                qreal y = menuItem->rect.center().y() + 0.5f;
+                painter->drawLine(QPointF(menuItem->rect.left() + margin + (reverse ? 0 : w), y),
+                                  QPointF(menuItem->rect.right() - margin - (reverse ? w : 0), y));
                 painter->restore();
                 break;
             }
@@ -1666,10 +1656,7 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                 else
                     pixmap = menuItem->icon.pixmap(iconSize, painter->device()->devicePixelRatio(), mode);
 
-                const int pixw = pixmap.width() / pixmap.devicePixelRatio();
-                const int pixh = pixmap.height() / pixmap.devicePixelRatio();
-
-                QRect pmr(0, 0, pixw, pixh);
+                QRect pmr(QPoint(0, 0), pixmap.deviceIndependentSize().toSize());
                 pmr.moveCenter(vCheckRect.center());
                 painter->setPen(menuItem->palette.text().color());
                 if (!ignoreCheckMark && checkable && checked) {
@@ -1739,7 +1726,8 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                 p->setFont(font);
                 const QFontMetrics fontMetrics(font);
                 const QString textToDraw = fontMetrics.elidedText(s.left(tabIndex).toString(),
-                                                                  Qt::ElideMiddle, vTextRect.width());
+                                                                  Qt::ElideMiddle, vTextRect.width(),
+                                                                  text_flags);
                 if (dis && !act && proxy()->styleHint(SH_EtchDisabledText, option, widget)) {
                     p->setPen(menuitem->palette.light().color());
                     p->drawText(vTextRect.adjusted(1, 1, 1, 1), text_flags, textToDraw);

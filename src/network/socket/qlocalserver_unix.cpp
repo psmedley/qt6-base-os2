@@ -52,6 +52,8 @@
 #include <qdir.h>
 #include <qdatetime.h>
 
+#include <optional>
+
 #ifdef Q_OS_VXWORKS
 #  include <selectLib.h>
 #endif
@@ -126,11 +128,11 @@ bool QLocalServerPrivate::listen(const QString &requestedServerName)
 
     QByteArray encodedTempPath;
     const QByteArray encodedFullServerName = QFile::encodeName(fullServerName);
-    QScopedPointer<QTemporaryDir> tempDir;
+    std::optional<QTemporaryDir> tempDir;
 
     if (options & QLocalServer::WorldAccessOption) {
         QFileInfo serverNameFileInfo(fullServerName);
-        tempDir.reset(new QTemporaryDir(serverNameFileInfo.absolutePath() + QLatin1Char('/')));
+        tempDir.emplace(serverNameFileInfo.absolutePath() + u'/');
         if (!tempDir->isValid()) {
             setError(QLatin1String("QLocalServer::listen"));
             return false;
@@ -195,7 +197,7 @@ bool QLocalServerPrivate::listen(const QString &requestedServerName)
     }
 
     // listen for connections
-    if (-1 == qt_safe_listen(listenSocket, 50)) {
+    if (-1 == qt_safe_listen(listenSocket, listenBacklog)) {
         setError(QLatin1String("QLocalServer::listen"));
         closeServer();
         return false;
@@ -250,6 +252,10 @@ bool QLocalServerPrivate::listen(qintptr socketDescriptor)
     QT_SOCKLEN_T len = sizeof(addr);
     memset(&addr, 0, sizeof(addr));
     if (::getsockname(socketDescriptor, (sockaddr *)&addr, &len) == 0) {
+#if defined(Q_OS_QNX)
+        if (addr.sun_path[0] == 0 && addr.sun_path[1] == 0)
+            len = SUN_LEN(&addr);
+#endif
         if (QLocalSocketPrivate::parseSockaddr(addr, len, fullServerName, serverName,
                                                abstractAddress)) {
             QLocalServer::SocketOptions options = socketOptions.value();

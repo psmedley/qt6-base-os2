@@ -45,27 +45,10 @@
 #include "qdom_p.h"
 #include "qxmlstream.h"
 
+#include <memory>
 #include <stack>
 
 QT_BEGIN_NAMESPACE
-
-/**************************************************************
- *
- * QXmlDocumentLocators
- *
- **************************************************************/
-
-int QDomDocumentLocator::column() const
-{
-    Q_ASSERT(reader);
-    return static_cast<int>(reader->columnNumber());
-}
-
-int QDomDocumentLocator::line() const
-{
-    Q_ASSERT(reader);
-    return static_cast<int>(reader->lineNumber());
-}
 
 /**************************************************************
  *
@@ -73,14 +56,16 @@ int QDomDocumentLocator::line() const
  *
  **************************************************************/
 
-QDomBuilder::QDomBuilder(QDomDocumentPrivate *d, QXmlDocumentLocator *l, bool namespaceProcessing)
+QDomBuilder::QDomBuilder(QDomDocumentPrivate *d, QXmlStreamReader *r, bool namespaceProcessing)
     : errorLine(0),
       errorColumn(0),
       doc(d),
       node(d),
-      locator(l),
+      reader(r),
       nsProcessing(namespaceProcessing)
 {
+    Q_ASSERT(doc);
+    Q_ASSERT(reader);
 }
 
 QDomBuilder::~QDomBuilder() {}
@@ -101,6 +86,35 @@ bool QDomBuilder::startDTD(const QString &name, const QString &publicId, const Q
     return true;
 }
 
+QString QDomBuilder::dtdInternalSubset(const QString &dtd)
+{
+    // https://www.w3.org/TR/xml/#NT-intSubset
+    // doctypedecl: '<!DOCTYPE' S Name (S ExternalID)? S? ('[' intSubset ']' S?)? '>'
+    const QString &name = doc->doctype()->name;
+    QStringView tmp = QStringView(dtd).sliced(dtd.indexOf(name) + name.size());
+
+    const QString &publicId = doc->doctype()->publicId;
+    if (!publicId.isEmpty())
+        tmp = tmp.sliced(tmp.indexOf(publicId) + publicId.size());
+
+    const QString &systemId = doc->doctype()->systemId;
+    if (!systemId.isEmpty())
+        tmp = tmp.sliced(tmp.indexOf(systemId) + systemId.size());
+
+    const qsizetype obra = tmp.indexOf(u'[');
+    const qsizetype cbra = tmp.lastIndexOf(u']');
+    if (obra >= 0 && cbra >= 0)
+        return tmp.left(cbra).sliced(obra + 1).toString();
+
+    return QString();
+}
+
+bool QDomBuilder::parseDTD(const QString &dtd)
+{
+    doc->doctype()->internalSubset = dtdInternalSubset(dtd);
+    return true;
+}
+
 bool QDomBuilder::startElement(const QString &nsURI, const QString &qName,
                                const QXmlStreamAttributes &atts)
 {
@@ -109,7 +123,7 @@ bool QDomBuilder::startElement(const QString &nsURI, const QString &qName,
     if (!n)
         return false;
 
-    n->setLocation(locator->line(), locator->column());
+    n->setLocation(int(reader->lineNumber()), int(reader->columnNumber()));
 
     node->appendChild(n);
     node = n;
@@ -145,23 +159,23 @@ bool QDomBuilder::characters(const QString &characters, bool cdata)
     if (node == doc)
         return false;
 
-    QScopedPointer<QDomNodePrivate> n;
+    std::unique_ptr<QDomNodePrivate> n;
     if (cdata) {
         n.reset(doc->createCDATASection(characters));
     } else if (!entityName.isEmpty()) {
-        QScopedPointer<QDomEntityPrivate> e(
-                new QDomEntityPrivate(doc, nullptr, entityName, QString(), QString(), QString()));
+        auto e = std::make_unique<QDomEntityPrivate>(
+                    doc, nullptr, entityName, QString(), QString(), QString());
         e->value = characters;
         e->ref.deref();
-        doc->doctype()->appendChild(e.data());
-        e.take();
+        doc->doctype()->appendChild(e.get());
+        Q_UNUSED(e.release());
         n.reset(doc->createEntityReference(entityName));
     } else {
         n.reset(doc->createTextNode(characters));
     }
-    n->setLocation(locator->line(), locator->column());
-    node->appendChild(n.data());
-    n.take();
+    n->setLocation(int(reader->lineNumber()), int(reader->columnNumber()));
+    node->appendChild(n.get());
+    Q_UNUSED(n.release());
 
     return true;
 }
@@ -171,7 +185,7 @@ bool QDomBuilder::processingInstruction(const QString &target, const QString &da
     QDomNodePrivate *n;
     n = doc->createProcessingInstruction(target, data);
     if (n) {
-        n->setLocation(locator->line(), locator->column());
+        n->setLocation(int(reader->lineNumber()), int(reader->columnNumber()));
         node->appendChild(n);
         return true;
     } else
@@ -181,7 +195,7 @@ bool QDomBuilder::processingInstruction(const QString &target, const QString &da
 bool QDomBuilder::skippedEntity(const QString &name)
 {
     QDomNodePrivate *n = doc->createEntityReference(name);
-    n->setLocation(locator->line(), locator->column());
+    n->setLocation(int(reader->lineNumber()), int(reader->columnNumber()));
     node->appendChild(n);
     return true;
 }
@@ -189,8 +203,8 @@ bool QDomBuilder::skippedEntity(const QString &name)
 void QDomBuilder::fatalError(const QString &message)
 {
     errorMsg = message;
-    errorLine = static_cast<int>(locator->line());
-    errorColumn = static_cast<int>(locator->column());
+    errorLine = static_cast<int>(reader->lineNumber());
+    errorColumn = static_cast<int>(reader->columnNumber());
 }
 
 QDomBuilder::ErrorInfo QDomBuilder::error() const
@@ -214,7 +228,7 @@ bool QDomBuilder::comment(const QString &characters)
 {
     QDomNodePrivate *n;
     n = doc->createComment(characters);
-    n->setLocation(locator->line(), locator->column());
+    n->setLocation(int(reader->lineNumber()), int(reader->columnNumber()));
     node->appendChild(n);
     return true;
 }
@@ -253,7 +267,7 @@ bool QDomBuilder::notationDecl(const QString &name, const QString &publicId,
  **************************************************************/
 
 QDomParser::QDomParser(QDomDocumentPrivate *d, QXmlStreamReader *r, bool namespaceProcessing)
-    : reader(r), locator(r), domBuilder(d, &locator, namespaceProcessing)
+    : reader(r), domBuilder(d, r, namespaceProcessing)
 {
 }
 
@@ -321,6 +335,8 @@ bool QDomParser::parseProlog()
                         QDomParser::tr("Error occurred while processing document type declaration"));
                 return false;
             }
+            if (!domBuilder.parseDTD(reader->text().toString()))
+                return false;
             if (!parseMarkupDecl())
                 return false;
             break;
@@ -379,7 +395,7 @@ bool QDomParser::parseBody()
             break;
         case QXmlStreamReader::Characters:
             if (!reader->isWhitespace()) { // Skip the content consisting of only whitespaces
-                if (!reader->text().toString().trimmed().isEmpty()) {
+                if (reader->isCDATA() || !reader->text().trimmed().isEmpty()) {
                     if (!domBuilder.characters(reader->text().toString(), reader->isCDATA())) {
                         domBuilder.fatalError(QDomParser::tr(
                                 "Error occurred while processing the element content"));

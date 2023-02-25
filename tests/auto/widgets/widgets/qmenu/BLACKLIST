@@ -3,8 +3,6 @@ macos
 [layoutDirection]
 macos
 # Fails when enabling synchronous expose events QTBUG-62092
-[pushButtonPopulateOnAboutToShow]
-macos
 [tearOff]
 macos
 [submenuTearOffDontClose]
@@ -29,3 +27,6 @@ android
 [QTBUG_89082_actionTipsHide]
 macos ci # Can't move cursor (QTBUG-76312)
 windows-10 ci
+# QTBUG-87424
+[transientParent]
+android

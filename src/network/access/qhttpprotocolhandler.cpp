@@ -107,7 +107,7 @@ void QHttpProtocolHandler::_q_receiveReply()
                 return;
             }
             bytes += statusBytes;
-            m_channel->lastStatus = m_reply->d_func()->statusCode;
+            m_channel->lastStatus = m_reply->statusCode();
             break;
         }
         case QHttpNetworkReplyPrivate::ReadingHeaderState: {
@@ -127,7 +127,7 @@ void QHttpProtocolHandler::_q_receiveReply()
                 } else {
                     replyPrivate->autoDecompress = false;
                 }
-                if (replyPrivate->statusCode == 100) {
+                if (m_reply->statusCode() == 100) {
                     replyPrivate->clearHttpLayerInformation();
                     replyPrivate->state = QHttpNetworkReplyPrivate::ReadingStatusState;
                     break; // ignore
@@ -177,8 +177,7 @@ void QHttpProtocolHandler::_q_receiveReply()
                    m_connection->d_func()->emitReplyError(m_socket, m_reply, QNetworkReply::RemoteHostClosedError);
                    break;
                }
-           } else if (!replyPrivate->isChunked() && !replyPrivate->autoDecompress
-                 && replyPrivate->bodyLength > 0) {
+           } else if (!replyPrivate->isChunked() && replyPrivate->bodyLength > 0) {
                  // bulk files like images should fulfill these properties and
                  // we can therefore save on memory copying
                 qint64 haveRead = replyPrivate->readBodyFast(m_socket, &replyPrivate->responseData);
@@ -320,6 +319,7 @@ bool QHttpProtocolHandler::sendRequest()
 #else
         m_header = QHttpNetworkRequestPrivate::header(m_channel->request, false);
 #endif
+
         // flushing is dangerous (QSslSocket calls transmit which might read or error)
 //        m_socket->flush();
         QNonContiguousByteDevice* uploadByteDevice = m_channel->request.uploadByteDevice();
@@ -334,6 +334,7 @@ bool QHttpProtocolHandler::sendRequest()
         } else {
             // no data to send: just send the HTTP headers
             m_socket->write(qExchange(m_header, {}));
+            QMetaObject::invokeMethod(m_reply, "requestSent", Qt::QueuedConnection);
             m_channel->state = QHttpNetworkConnectionChannel::WaitingState; // now wait for response
             sendRequest(); //recurse
         }
@@ -408,6 +409,7 @@ bool QHttpProtocolHandler::sendRequest()
                     currentWriteSize = m_socket->write(qExchange(m_header, {}));
                     if (currentWriteSize != -1)
                         currentWriteSize -= headerSize;
+                    QMetaObject::invokeMethod(m_reply, "requestSent", Qt::QueuedConnection);
                 }
                 if (currentWriteSize == -1 || currentWriteSize != currentReadSize) {
                     // socket broke down

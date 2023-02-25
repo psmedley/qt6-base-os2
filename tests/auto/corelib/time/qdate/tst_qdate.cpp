@@ -475,23 +475,32 @@ void tst_QDate::startOfDay_endOfDay_data()
 
     const QTime initial(0, 0), final(23, 59, 59, 999), invalid(QDateTime().time());
 
+    // UTC is always a valid zone.
     QTest::newRow("epoch")
         << QDate(1970, 1, 1) << QByteArray("UTC")
         << initial << final;
-    QTest::newRow("Brazil")
-        << QDate(2008, 10, 19) << QByteArray("America/Sao_Paulo")
-        << QTime(1, 0) << final;
+    if (QTimeZone("America/Sao_Paulo").isValid()) {
+        QTest::newRow("Brazil")
+            << QDate(2008, 10, 19) << QByteArray("America/Sao_Paulo")
+            << QTime(1, 0) << final;
+    }
 #if QT_CONFIG(icu) || !defined(Q_OS_WIN) // MS's TZ APIs lack data
-    QTest::newRow("Sofia")
-        << QDate(1994, 3, 27) << QByteArray("Europe/Sofia")
-        << QTime(1, 0) << final;
+    if (QTimeZone("Europe/Sofia").isValid()) {
+        QTest::newRow("Sofia")
+            << QDate(1994, 3, 27) << QByteArray("Europe/Sofia")
+            << QTime(1, 0) << final;
+    }
 #endif
-    QTest::newRow("Kiritimati")
-        << QDate(1994, 12, 31) << QByteArray("Pacific/Kiritimati")
-        << invalid << invalid;
-    QTest::newRow("Samoa")
-        << QDate(2011, 12, 30) << QByteArray("Pacific/Apia")
-        << invalid << invalid;
+    if (QTimeZone("Pacific/Kiritimati").isValid()) {
+        QTest::newRow("Kiritimati")
+            << QDate(1994, 12, 31) << QByteArray("Pacific/Kiritimati")
+            << invalid << invalid;
+    }
+    if (QTimeZone("Pacific/Apia").isValid()) {
+        QTest::newRow("Samoa")
+            << QDate(2011, 12, 30) << QByteArray("Pacific/Apia")
+            << invalid << invalid;
+    }
     // TODO: find other zones with transitions at/crossing midnight.
 }
 
@@ -502,6 +511,7 @@ void tst_QDate::startOfDay_endOfDay()
     QFETCH(QTime, start);
     QFETCH(QTime, end);
     const QTimeZone zone(zoneName);
+    QVERIFY(zone.isValid());
     const bool isSystem = QTimeZone::systemTimeZone() == zone;
     QDateTime front(date.startOfDay(zone)), back(date.endOfDay(zone));
     if (end.isValid())
@@ -558,6 +568,7 @@ void tst_QDate::startOfDay_endOfDay_fixed_data()
     } data[] = {
         { "epoch", QDate(1970, 1, 1) },
         { "y2k-leap-day", QDate(2000, 2, 29) },
+        { "start-1900", QDate(1900, 1, 1) }, // QTBUG-99747
         // Just outside the start and end of 32-bit time_t:
         { "pre-sign32", QDate(start32sign.date().year(), 1, 1) },
         { "post-sign32", QDate(end32sign.date().year(), 12, 31) },
@@ -595,6 +606,17 @@ void tst_QDate::startOfDay_endOfDay_fixed()
         QCOMPARE(date.addDays(1).startOfDay(Qt::OffsetFromUTC, offset).addMSecs(-1), end);
         QCOMPARE(date.addDays(-1).endOfDay(Qt::OffsetFromUTC, offset).addMSecs(1), start);
     }
+
+    // Minimal testing for LocalTime and TimeZone
+    QCOMPARE(date.startOfDay(Qt::LocalTime).date(), date);
+    QCOMPARE(date.endOfDay(Qt::LocalTime).date(), date);
+#if QT_CONFIG(timezone)
+    const QTimeZone cet("Europe/Oslo");
+    if (cet.isValid()) {
+        QCOMPARE(date.startOfDay(cet).date(), date);
+        QCOMPARE(date.endOfDay(cet).date(), date);
+    }
+#endif
 }
 
 void tst_QDate::startOfDay_endOfDay_bounds()

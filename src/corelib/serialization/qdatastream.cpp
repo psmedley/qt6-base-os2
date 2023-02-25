@@ -557,6 +557,7 @@ void QDataStream::setByteOrder(ByteOrder bo)
     \value Qt_6_0 Version 20 (Qt 6.0)
     \value Qt_6_1 Same as Qt_6_0
     \value Qt_6_2 Same as Qt_6_0
+    \value Qt_6_3 Same as Qt_6_0
     \omitvalue Qt_DefaultCompiledVersion
 
     \sa setVersion(), version()
@@ -991,20 +992,6 @@ QDataStream &QDataStream::operator>>(double &f)
 
 /*!
     \overload
-    \since 5.9
-
-    Reads a floating point number from the stream into \a f,
-    using the standard IEEE 754 format. Returns a reference to the
-    stream.
-*/
-QDataStream &QDataStream::operator>>(qfloat16 &f)
-{
-    return *this >> reinterpret_cast<qint16&>(f);
-}
-
-
-/*!
-    \overload
 
     Reads the '\\0'-terminated string \a s from the stream and returns
     a reference to the stream.
@@ -1337,19 +1324,6 @@ QDataStream &QDataStream::operator<<(double f)
     return *this;
 }
 
-
-/*!
-    \fn QDataStream &QDataStream::operator<<(qfloat16 f)
-    \overload
-    \since 5.9
-
-    Writes a floating point number, \a f, to the stream using
-    the standard IEEE 754 format. Returns a reference to the stream.
-*/
-QDataStream &QDataStream::operator<<(qfloat16 f)
-{
-    return *this << reinterpret_cast<qint16&>(f);
-}
 
 /*!
     \overload

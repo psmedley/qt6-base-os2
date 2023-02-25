@@ -154,7 +154,7 @@ static bool futexNeedsWake(quintptr v)
     // low 31 bits of the high word (that is, bits 32-62). If we're not, then we only
     // use futexNeedsWakeAllBit to indicate anyone is waiting.
     if constexpr (futexHasWaiterCount)
-        return (v >> 32) > (unsigned(v));
+        return unsigned(quint64(v) >> 32) > unsigned(v);
     return v >> 31;
 }
 
@@ -356,7 +356,12 @@ void QSemaphore::release(int n)
         quintptr nn = unsigned(n);
         if (futexHasWaiterCount)
             nn |= quint64(nn) << 32;    // token count replicated in high word
-        quintptr prevValue = u.fetchAndAddRelease(nn);
+        quintptr prevValue = u.loadRelaxed();
+        quintptr newValue;
+        do { // loop just to ensure the operations are done atomically
+            newValue = prevValue + nn;
+            newValue &= (futexNeedsWakeAllBit - 1);
+        } while (!u.testAndSetRelease(prevValue, newValue, prevValue));
         if (futexNeedsWake(prevValue)) {
 #ifdef FUTEX_OP
             if (futexHasWaiterCount) {
@@ -378,7 +383,6 @@ void QSemaphore::release(int n)
                 quint32 oparg = 0;
                 quint32 cmp = FUTEX_OP_CMP_NE;
                 quint32 cmparg = 0;
-                u.fetchAndAndRelease(futexNeedsWakeAllBit - 1);
                 futexWakeOp(*futexLow32(&u), n, INT_MAX, *futexHigh32(&u), FUTEX_OP(op, oparg, cmp, cmparg));
                 return;
             }
@@ -390,7 +394,6 @@ void QSemaphore::release(int n)
             //    its acquisition anyway, so it has to wait;
             // 2) it did not see the new counter value, in which case its
             //    futexWait will fail.
-            u.fetchAndAndRelease(futexNeedsWakeAllBit - 1);
             if (futexHasWaiterCount) {
                 futexWakeAll(*futexLow32(&u));
                 futexWakeAll(*futexHigh32(&u));
@@ -484,6 +487,51 @@ bool QSemaphore::tryAcquire(int n, int timeout)
     d->avail -= n;
     return true;
 }
+
+/*!
+    \fn template <typename Rep, typename Period> QSemaphore::tryAcquire(int n, std::chrono::duration<Rep, Period> timeout)
+    \overload
+    \since 6.3
+*/
+
+/*!
+    \fn bool QSemaphore::try_acquire()
+    \since 6.3
+
+    This function is provided for \c{std::counting_semaphore} compatibility.
+
+    It is equivalent to calling \c{tryAcquire(1)}, where the function returns
+    \c true on acquiring the resource successfully.
+
+    \sa tryAcquire(), try_acquire_for(), try_acquire_until()
+*/
+
+/*!
+    \fn template <typename Rep, typename Period> bool QSemaphore::try_acquire_for(const std::chrono::duration<Rep, Period> &timeout)
+    \since 6.3
+
+    This function is provided for \c{std::counting_semaphore} compatibility.
+
+    It is equivalent to calling \c{tryAcquire(1, timeout)}, where the call
+    times out on the given \a timeout value. The function returns \c true
+    on accquiring the resource successfully.
+
+    \sa tryAcquire(), try_acquire(), try_acquire_until()
+*/
+
+/*!
+    \fn template <typename Clock, typename Duration> bool QSemaphore::try_acquire_until(const std::chrono::time_point<Clock, Duration> &tp)
+    \since 6.3
+
+    This function is provided for \c{std::counting_semaphore} compatibility.
+
+    It is equivalent to calling \c{tryAcquire(1, tp - Clock::now())},
+    which means that the \a tp (time point) is recorded, ignoring the
+    adjustments to \c{Clock} while waiting. The function returns \c true
+    on acquiring the resource successfully.
+
+    \sa tryAcquire(), try_acquire(), try_acquire_for()
+*/
 
 /*!
     \class QSemaphoreReleaser

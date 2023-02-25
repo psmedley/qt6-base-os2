@@ -112,7 +112,7 @@
 QT_BEGIN_NAMESPACE
 
 
-Q_OPENGL_EXPORT QImage qt_imageForBrush(int brushStyle, bool invert);
+Q_GUI_EXPORT QImage qt_imageForBrush(int brushStyle, bool invert);
 
 ////////////////////////////////// Private Methods //////////////////////////////////////////
 
@@ -2526,7 +2526,7 @@ void QOpenGL2PaintEngineEx::clip(const QVectorPath &path, Qt::ClipOperation op)
                 && qFuzzyIsNull(state()->matrix.m11())
                 && qFuzzyIsNull(state()->matrix.m22())))
         {
-            state()->rectangleClip = state()->rectangleClip.intersected(state()->matrix.mapRect(rect).toAlignedRect());
+            state()->rectangleClip &= qt_mapFillRect(rect, state()->matrix);
             d->updateClipScissorTest();
             return;
         }

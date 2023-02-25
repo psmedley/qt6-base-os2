@@ -110,6 +110,7 @@ private slots:
     void generatedMouseMove();
     void keepPendingUpdateRequests();
     void activateDeactivateEvent();
+    void touchToMouseTranslationByPopup();
 
 private:
     QPoint m_availableTopLeft;
@@ -293,7 +294,7 @@ public:
 #if !defined(Q_OS_MACOS)
         // FIXME: All platforms should send window-state change events, regardless
         // of the sync/async nature of the the underlying platform, but they don't.
-        connect(this, &QWindow::windowStateChanged, [=]() {
+        connect(this, &QWindow::windowStateChanged, [this]() {
             lastReceivedWindowState = windowState();
         });
 #endif
@@ -310,13 +311,6 @@ public:
         m_received[event->type()]++;
         m_order << event->type();
         switch (event->type()) {
-        case QEvent::Expose:
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
-            m_exposeRegion = static_cast<QExposeEvent *>(event)->region();
-QT_WARNING_POP
-            break;
-
         case QEvent::PlatformSurface:
             m_surfaceventType = static_cast<QPlatformSurfaceEvent *>(event)->surfaceEventType();
             break;
@@ -346,11 +340,6 @@ QT_WARNING_POP
         return m_order.indexOf(type);
     }
 
-    QRegion exposeRegion() const
-    {
-        return m_exposeRegion;
-    }
-
     QPlatformSurfaceEvent::SurfaceEventType surfaceEventType() const
     {
         return m_surfaceventType;
@@ -362,7 +351,6 @@ QT_WARNING_POP
 private:
     QHash<QEvent::Type, int> m_received;
     QList<QEvent::Type> m_order;
-    QRegion m_exposeRegion;
     QPlatformSurfaceEvent::SurfaceEventType m_surfaceventType;
 };
 
@@ -822,16 +810,6 @@ void tst_QWindow::isExposed()
     QTRY_VERIFY(window.received(QEvent::Expose) > 0);
     QTRY_VERIFY(window.isExposed());
 
-#ifndef Q_OS_WIN
-    // This is a top-level window so assuming it is completely exposed, the
-    // expose region must be (0, 0), (width, height). If this is not the case,
-    // the platform plugin is sending expose events with a region in an
-    // incorrect coordinate system.
-    QRect r = window.exposeRegion().boundingRect();
-    r = QRect(window.mapToGlobal(r.topLeft()), r.size());
-    QCOMPARE(r, window.geometry());
-#endif
-
     window.hide();
 
     QCoreApplication::processEvents();
@@ -976,6 +954,9 @@ public:
             if (spinLoopWhenPressed)
                 QCoreApplication::processEvents();
         }
+        if (closeOnTap)
+            this->close();
+
     }
     void mouseReleaseEvent(QMouseEvent *event) override
     {
@@ -1043,6 +1024,8 @@ public:
                     touchPressLocalPos = point.position();
                     touchPressGlobalPos = point.globalPosition();
                 }
+                if (closeOnTap)
+                    this->close();
                 break;
             case QEventPoint::State::Released:
                 ++touchReleasedCount;
@@ -1099,6 +1082,8 @@ public:
 
     const QPointingDevice *mouseDevice = nullptr;
     const QPointingDevice *touchDevice = nullptr;
+
+    bool closeOnTap = false;
 };
 
 static void simulateMouseClick(QWindow *target, const QPointF &local, const QPointF &global)
@@ -2713,7 +2698,7 @@ void tst_QWindow::activateDeactivateEvent()
         int activateCount = 0;
         int deactivateCount = 0;
     protected:
-        bool event(QEvent *e)
+        bool event(QEvent *e) override
         {
             switch (e->type()) {
             case QEvent::WindowActivate:
@@ -2743,6 +2728,36 @@ void tst_QWindow::activateDeactivateEvent()
     QVERIFY(QTest::qWaitForWindowActive(&w2));
     QCOMPARE(w1.deactivateCount, 1);
     QCOMPARE(w2.activateCount, 1);
+}
+
+void tst_QWindow::touchToMouseTranslationByPopup()
+{
+    InputTestWindow window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
+    window.ignoreTouch = true;
+    window.setGeometry(QRect(m_availableTopLeft, m_testWindowSize));
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    InputTestWindow popupWindow;
+    popupWindow.setGeometry(QRect(m_availableTopLeft + QPoint(20, 20),
+                                  QSize(m_testWindowSize.width(), m_testWindowSize.height() / 2)));
+    popupWindow.setFlag(Qt::Popup);
+    popupWindow.setTransientParent(&window);
+    popupWindow.ignoreTouch = true;
+    popupWindow.closeOnTap = true;
+    popupWindow.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&popupWindow));
+
+    QTest::touchEvent(&popupWindow, touchDevice).press(0, {1, 1}, &window);
+    QVERIFY(!popupWindow.isVisible());
+
+    // Omit touchpoint 0: because the popup was closed, touchpoint0.release is not sent.
+    const QPoint tp1(50, 1);
+    QTest::touchEvent(&window, touchDevice).press(1, tp1, &window);
+    QTRY_COMPARE(window.mousePressButton, int(Qt::LeftButton));
+    QTest::touchEvent(&window, touchDevice).release(1, tp1, &window);
+    QTRY_COMPARE(window.mouseReleaseButton, int(Qt::LeftButton));
 }
 
 #include <tst_qwindow.moc>

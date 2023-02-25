@@ -77,6 +77,8 @@
 
 #include <qtgui_tracepoints_p.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 // MSVC 19.28 does show spurious warning "C4723: potential divide by 0" for code that divides
@@ -140,7 +142,7 @@ QImageData * QImageData::create(const QSize &size, QImage::Format format)
     if (!params.isValid())
         return nullptr;
 
-    QScopedPointer<QImageData> d(new QImageData);
+    auto d = std::make_unique<QImageData>();
 
     switch (format) {
     case QImage::Format_Mono:
@@ -168,7 +170,7 @@ QImageData * QImageData::create(const QSize &size, QImage::Format format)
         return nullptr;
 
     d->ref.ref();
-    return d.take();
+    return d.release();
 }
 
 QImageData::~QImageData()
@@ -4967,7 +4969,8 @@ void QImage::convertToColorSpace(const QColorSpace &colorSpace)
         qWarning() << "QImage::convertToColorSpace: Output colorspace is not valid";
         return;
     }
-    detach();
+    if (d->colorSpace == colorSpace)
+        return;
     applyColorTransform(d->colorSpace.transformationToColorSpace(colorSpace));
     d->colorSpace = colorSpace;
 }
@@ -5009,6 +5012,7 @@ QColorSpace QImage::colorSpace() const
 */
 void QImage::applyColorTransform(const QColorTransform &transform)
 {
+    detach();
     if (!d)
         return;
     if (pixelFormat().colorModel() == QPixelFormat::Indexed) {
@@ -5051,14 +5055,14 @@ void QImage::applyColorTransform(const QColorTransform &transform)
     if (depth() > 32) {
         transformSegment = [&](int yStart, int yEnd) {
             for (int y = yStart; y < yEnd; ++y) {
-                QRgba64 *scanline = reinterpret_cast<QRgba64 *>(scanLine(y));
+                QRgba64 *scanline = reinterpret_cast<QRgba64 *>(d->data + y * d->bytes_per_line);
                 transform.d->apply(scanline, scanline, width(), flags);
             }
         };
     } else {
         transformSegment = [&](int yStart, int yEnd) {
             for (int y = yStart; y < yEnd; ++y) {
-                QRgb *scanline = reinterpret_cast<QRgb *>(scanLine(y));
+                QRgb *scanline = reinterpret_cast<QRgb *>(d->data + y * d->bytes_per_line);
                 transform.d->apply(scanline, scanline, width(), flags);
             }
         };
@@ -5689,3 +5693,5 @@ QMap<QString, QString> qt_getImageTextFromDescription(const QString &description
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qimage.cpp"

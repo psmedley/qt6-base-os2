@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2017 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: https://www.qt.io/licensing/
 **
@@ -127,7 +127,6 @@ public class QtActivityDelegate
     public static final int SYSTEM_UI_VISIBILITY_FULLSCREEN = 1;
     public static final int SYSTEM_UI_VISIBILITY_TRANSLUCENT = 2;
 
-    private static String m_environmentVariables = null;
     private static String m_applicationParameters = null;
 
     private int m_currentRotation = -1; // undefined
@@ -483,7 +482,7 @@ public class QtActivityDelegate
         });
     }
 
-    String getAppIconSize(Activity a)
+    int getAppIconSize(Activity a)
     {
         int size = a.getResources().getDimensionPixelSize(android.R.dimen.app_icon_size);
         if (size < 36 || size > 512) { // check size sanity
@@ -496,7 +495,8 @@ public class QtActivityDelegate
             if (size > 512)
                 size = 512;
         }
-        return "\tQT_ANDROID_APP_ICON_SIZE=" + size;
+
+        return size;
     }
 
     public void updateSelection(int selStart, int selEnd, int candidatesStart, int candidatesEnd)
@@ -594,6 +594,100 @@ public class QtActivityDelegate
         }
     }
 
+    private final DisplayManager.DisplayListener displayListener = new DisplayManager.DisplayListener()
+    {
+        @Override
+        public void onDisplayAdded(int displayId) { }
+
+        private boolean isSimilarRotation(int r1, int r2)
+        {
+         return (r1 == r2)
+                || (r1 == Surface.ROTATION_0 && r2 == Surface.ROTATION_180)
+                || (r1 == Surface.ROTATION_180 && r2 == Surface.ROTATION_0)
+                || (r1 == Surface.ROTATION_90 && r2 == Surface.ROTATION_270)
+                || (r1 == Surface.ROTATION_270 && r2 == Surface.ROTATION_90);
+        }
+
+        @Override
+        public void onDisplayChanged(int displayId)
+        {
+            Display display = (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+                 ? m_activity.getWindowManager().getDefaultDisplay()
+                 : m_activity.getDisplay();
+            m_currentRotation = display.getRotation();
+            m_layout.setActivityDisplayRotation(m_currentRotation);
+            // Process orientation change only if it comes after the size
+            // change, or if the screen is rotated by 180 degrees.
+            // Otherwise it will be processed in QtLayout.
+            if (isSimilarRotation(m_currentRotation, m_layout.displayRotation()))
+                QtNative.handleOrientationChanged(m_currentRotation, m_nativeOrientation);
+
+            float refreshRate = display.getRefreshRate();
+            QtNative.handleRefreshRateChanged(refreshRate);
+        }
+
+        @Override
+        public void onDisplayRemoved(int displayId) { }
+    };
+
+    public boolean updateActivity(Activity activity)
+    {
+        try {
+            // set new activity
+            loadActivity(activity);
+
+            // update the new activity content view to old layout
+            ViewGroup layoutParent = (ViewGroup)m_layout.getParent();
+            if (layoutParent != null)
+                layoutParent.removeView(m_layout);
+
+            m_activity.setContentView(m_layout);
+
+            // force c++ native activity object to update
+            return QtNative.updateNativeActivity();
+        } catch (Exception e) {
+            Log.w(QtNative.QtTAG, "Failed to update the activity.");
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    private void loadActivity(Activity activity)
+        throws NoSuchMethodException, PackageManager.NameNotFoundException
+    {
+        m_activity = activity;
+
+        QtNative.setActivity(m_activity, this);
+        setActionBarVisibility(false);
+
+        Class<?> activityClass = m_activity.getClass();
+        m_super_dispatchKeyEvent =
+                activityClass.getMethod("super_dispatchKeyEvent", KeyEvent.class);
+        m_super_onRestoreInstanceState =
+                activityClass.getMethod("super_onRestoreInstanceState", Bundle.class);
+        m_super_onRetainNonConfigurationInstance =
+                activityClass.getMethod("super_onRetainNonConfigurationInstance");
+        m_super_onSaveInstanceState =
+                activityClass.getMethod("super_onSaveInstanceState", Bundle.class);
+        m_super_onKeyDown =
+                activityClass.getMethod("super_onKeyDown", Integer.TYPE, KeyEvent.class);
+        m_super_onKeyUp =
+                activityClass.getMethod("super_onKeyUp", Integer.TYPE, KeyEvent.class);
+        m_super_onConfigurationChanged =
+                activityClass.getMethod("super_onConfigurationChanged", Configuration.class);
+        m_super_onActivityResult =
+                activityClass.getMethod("super_onActivityResult", Integer.TYPE, Integer.TYPE, Intent.class);
+        m_super_onWindowFocusChanged =
+                activityClass.getMethod("super_onWindowFocusChanged", Boolean.TYPE);
+        m_super_dispatchGenericMotionEvent =
+                activityClass.getMethod("super_dispatchGenericMotionEvent", MotionEvent.class);
+
+        m_softInputMode = m_activity.getPackageManager().getActivityInfo(m_activity.getComponentName(), 0).softInputMode;
+
+        DisplayManager displayManager = (DisplayManager)m_activity.getSystemService(Context.DISPLAY_SERVICE);
+        displayManager.registerDisplayListener(displayListener, null);
+    }
+
     public boolean loadApplication(Activity activity, ClassLoader classLoader, Bundle loaderParams)
     {
         /// check parameters integrity
@@ -603,10 +697,14 @@ public class QtActivityDelegate
             return false;
         }
 
-        m_activity = activity;
-        setActionBarVisibility(false);
-        QtNative.setActivity(m_activity, this);
-        QtNative.setClassLoader(classLoader);
+        try {
+            loadActivity(activity);
+            QtNative.setClassLoader(classLoader);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+
         if (loaderParams.containsKey(STATIC_INIT_CLASSES_KEY)) {
             for (String className: Objects.requireNonNull(loaderParams.getStringArray(STATIC_INIT_CLASSES_KEY))) {
                 if (className.length() == 0)
@@ -651,73 +749,21 @@ public class QtActivityDelegate
                                                loaderParams.getBoolean(EXTRACT_STYLE_MINIMAL_KEY));
         }
 
-        try {
-            m_super_dispatchKeyEvent = m_activity.getClass().getMethod("super_dispatchKeyEvent", KeyEvent.class);
-            m_super_onRestoreInstanceState = m_activity.getClass().getMethod("super_onRestoreInstanceState", Bundle.class);
-            m_super_onRetainNonConfigurationInstance = m_activity.getClass().getMethod("super_onRetainNonConfigurationInstance");
-            m_super_onSaveInstanceState = m_activity.getClass().getMethod("super_onSaveInstanceState", Bundle.class);
-            m_super_onKeyDown = m_activity.getClass().getMethod("super_onKeyDown", Integer.TYPE, KeyEvent.class);
-            m_super_onKeyUp = m_activity.getClass().getMethod("super_onKeyUp", Integer.TYPE, KeyEvent.class);
-            m_super_onConfigurationChanged = m_activity.getClass().getMethod("super_onConfigurationChanged", Configuration.class);
-            m_super_onActivityResult = m_activity.getClass().getMethod("super_onActivityResult", Integer.TYPE, Integer.TYPE, Intent.class);
-            m_super_onWindowFocusChanged = m_activity.getClass().getMethod("super_onWindowFocusChanged", Boolean.TYPE);
-            m_super_dispatchGenericMotionEvent = m_activity.getClass().getMethod("super_dispatchGenericMotionEvent", MotionEvent.class);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return false;
-        }
-
-        m_environmentVariables = loaderParams.getString(ENVIRONMENT_VARIABLES_KEY);
-        String additionalEnvironmentVariables = "QT_ANDROID_FONTS_MONOSPACE=Droid Sans Mono;Droid Sans;Droid Sans Fallback"
-                                              + "\tQT_ANDROID_FONTS_SERIF=Droid Serif"
-                                              + "\tHOME=" + m_activity.getFilesDir().getAbsolutePath()
-                                              + "\tTMPDIR=" + m_activity.getFilesDir().getAbsolutePath();
-
-        additionalEnvironmentVariables += "\tQT_ANDROID_FONTS=Roboto;Droid Sans;Droid Sans Fallback";
-
-        additionalEnvironmentVariables += getAppIconSize(activity);
-
-        if (m_environmentVariables != null && m_environmentVariables.length() > 0)
-            m_environmentVariables = additionalEnvironmentVariables + "\t" + m_environmentVariables;
-        else
-            m_environmentVariables = additionalEnvironmentVariables;
+        QtNative.setEnvironmentVariables(loaderParams.getString(ENVIRONMENT_VARIABLES_KEY));
+        QtNative.setEnvironmentVariable("QT_ANDROID_FONTS_MONOSPACE",
+                                        "Droid Sans Mono;Droid Sans;Droid Sans Fallback");
+        QtNative.setEnvironmentVariable("QT_ANDROID_FONTS_SERIF", "Droid Serif");
+        QtNative.setEnvironmentVariable("HOME", m_activity.getFilesDir().getAbsolutePath());
+        QtNative.setEnvironmentVariable("TMPDIR", m_activity.getFilesDir().getAbsolutePath());
+        QtNative.setEnvironmentVariable("QT_ANDROID_FONTS",
+                                        "Roboto;Droid Sans;Droid Sans Fallback");
+        QtNative.setEnvironmentVariable("QT_ANDROID_APP_ICON_SIZE",
+                                        String.valueOf(getAppIconSize(activity)));
 
         if (loaderParams.containsKey(APPLICATION_PARAMETERS_KEY))
             m_applicationParameters = loaderParams.getString(APPLICATION_PARAMETERS_KEY);
         else
             m_applicationParameters = "";
-
-        try {
-            m_softInputMode = m_activity.getPackageManager().getActivityInfo(m_activity.getComponentName(), 0).softInputMode;
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        DisplayManager.DisplayListener displayListener = new DisplayManager.DisplayListener() {
-            @Override
-            public void onDisplayAdded(int displayId) { }
-
-            @Override
-            public void onDisplayChanged(int displayId) {
-                Display display = (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
-                        ? m_activity.getWindowManager().getDefaultDisplay()
-                        : m_activity.getDisplay();
-                m_currentRotation = display.getRotation();
-                QtNative.handleOrientationChanged(m_currentRotation, m_nativeOrientation);
-                float refreshRate = display.getRefreshRate();
-                QtNative.handleRefreshRateChanged(refreshRate);
-            }
-
-            @Override
-            public void onDisplayRemoved(int displayId) { }
-        };
-
-        try {
-            DisplayManager displayManager = (DisplayManager) m_activity.getSystemService(Context.DISPLAY_SERVICE);
-            displayManager.registerDisplayListener(displayListener, null);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
 
         m_mainLib = QtNative.loadMainLibrary(m_mainLib, nativeLibsDir);
         return m_mainLib != null;
@@ -737,7 +783,9 @@ public class QtActivityDelegate
 
                     if (extras.containsKey("extraenvvars")) {
                         try {
-                            m_environmentVariables += "\t" + new String(Base64.decode(extras.getString("extraenvvars"), Base64.DEFAULT), "UTF-8");
+                            QtNative.setEnvironmentVariables(new String(
+                                    Base64.decode(extras.getString("extraenvvars"), Base64.DEFAULT),
+                                    "UTF-8"));
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -782,7 +830,7 @@ public class QtActivityDelegate
                 @Override
                 public void run() {
                     try {
-                        QtNative.startApplication(m_applicationParameters, m_environmentVariables, m_mainLib);
+                        QtNative.startApplication(m_applicationParameters, m_mainLib);
                         m_started = true;
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -807,7 +855,7 @@ public class QtActivityDelegate
                 m_splashScreenSticky = info.metaData.containsKey("android.app.splash_screen_sticky") && info.metaData.getBoolean("android.app.splash_screen_sticky");
                 int id = info.metaData.getInt(splashScreenKey);
                 m_splashScreen = new ImageView(m_activity);
-                m_splashScreen.setImageDrawable(m_activity.getResources().getDrawable(id));
+                m_splashScreen.setImageDrawable(m_activity.getResources().getDrawable(id, m_activity.getTheme()));
                 m_splashScreen.setScaleType(ImageView.ScaleType.FIT_XY);
                 m_splashScreen.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 m_layout.addView(m_splashScreen);
@@ -833,6 +881,7 @@ public class QtActivityDelegate
         else
             m_nativeOrientation = Configuration.ORIENTATION_PORTRAIT;
 
+        m_layout.setNativeOrientation(m_nativeOrientation);
         QtNative.handleOrientationChanged(rotation, m_nativeOrientation);
         m_currentRotation = rotation;
 
@@ -900,11 +949,11 @@ public class QtActivityDelegate
         m_splashScreen.startAnimation(fadeOut);
     }
 
-    public void notifyAccessibilityLocationChange()
+    public void notifyAccessibilityLocationChange(int viewId)
     {
         if (m_accessibilityDelegate == null)
             return;
-        m_accessibilityDelegate.notifyLocationChange();
+        m_accessibilityDelegate.notifyLocationChange(viewId);
     }
 
     public void notifyObjectHide(int viewId, int parentId)
@@ -1245,7 +1294,7 @@ public class QtActivityDelegate
             if (attr.type >= TypedValue.TYPE_FIRST_COLOR_INT && attr.type <= TypedValue.TYPE_LAST_COLOR_INT) {
                 m_activity.getWindow().setBackgroundDrawable(new ColorDrawable(attr.data));
             } else {
-                m_activity.getWindow().setBackgroundDrawable(m_activity.getResources().getDrawable(attr.resourceId));
+                m_activity.getWindow().setBackgroundDrawable(m_activity.getResources().getDrawable(attr.resourceId, m_activity.getTheme()));
             }
             if (m_dummyView != null) {
                 m_layout.removeView(m_dummyView);

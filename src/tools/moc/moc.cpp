@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2019 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: https://www.qt.io/licensing/
 **
@@ -62,6 +62,9 @@ bool Moc::parseClassHead(ClassDef *def)
         if (token == SEMIC || token == RANGLE)
             return false;
     } while (token);
+
+    // support attributes like "class [[deprecated]]] name"
+    skipCxxAttributes();
 
     if (!test(IDENTIFIER)) // typedef struct { ... }
         return false;
@@ -770,6 +773,12 @@ void Moc::parse()
                     case Q_OBJECT_TOKEN:
                         def.hasQObject = true;
                         break;
+                    case Q_GADGET_EXPORT_TOKEN:
+                        next(LPAREN);
+                        while (test(IDENTIFIER))
+                            {}
+                        next(RPAREN);
+                        Q_FALLTHROUGH();
                     case Q_GADGET_TOKEN:
                         def.hasQGadget = true;
                         break;
@@ -847,6 +856,12 @@ void Moc::parse()
                     if (def.classname != "Qt" && def.classname != "QObject" && def.superclassList.isEmpty())
                         error("Class contains Q_OBJECT macro but does not inherit from QObject");
                     break;
+                case Q_GADGET_EXPORT_TOKEN:
+                    next(LPAREN);
+                    while (test(IDENTIFIER))
+                        {}
+                    next(RPAREN);
+                    Q_FALLTHROUGH();
                 case Q_GADGET_TOKEN:
                     def.hasQGadget = true;
                     if (templateClass)
@@ -1708,7 +1723,7 @@ bool Moc::until(Token target) {
     }
 
     //when searching commas within the default argument, we should take care of template depth (anglecount)
-    // unfortunatelly, we do not have enough semantic information to know if '<' is the operator< or
+    // unfortunately, we do not have enough semantic information to know if '<' is the operator< or
     // the beginning of a template type. so we just use heuristics.
     int possible = -1;
 
@@ -1829,10 +1844,10 @@ void Moc::checkSuperClasses(ClassDef *def)
 void Moc::checkProperties(ClassDef *cdef)
 {
     //
-    // specify get function, for compatibiliy we accept functions
+    // specify get function, for compatibility we accept functions
     // returning pointers, or const char * for QByteArray.
     //
-    QDuplicateTracker<QByteArray> definedProperties;
+    QDuplicateTracker<QByteArray> definedProperties(cdef->propertyList.count());
     for (int i = 0; i < cdef->propertyList.count(); ++i) {
         PropertyDef &p = cdef->propertyList[i];
         if (definedProperties.hasSeen(p.name)) {

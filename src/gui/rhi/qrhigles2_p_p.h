@@ -58,6 +58,8 @@
 #include <QByteArray>
 #include <QSurface>
 
+#include <QtCore/private/qduplicatetracker_p.h>
+
 QT_BEGIN_NAMESPACE
 
 class QOpenGLExtensions;
@@ -108,6 +110,7 @@ struct QGles2RenderBuffer : public QRhiRenderBuffer
     GLuint stencilRenderbuffer = 0; // when packed depth-stencil not supported
     int samples;
     bool owns = true;
+    uint generation = 0;
     friend class QRhiGles2;
 };
 
@@ -139,7 +142,7 @@ inline bool operator!=(const QGles2SamplerData &a, const QGles2SamplerData &b)
 struct QGles2Texture : public QRhiTexture
 {
     QGles2Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, int depth,
-                  int sampleCount, Flags flags);
+                  int arraySize, int sampleCount, Flags flags);
     ~QGles2Texture();
     void destroy() override;
     bool create() override;
@@ -213,6 +216,7 @@ struct QGles2RenderTargetData
     int colorAttCount = 0;
     int dsAttCount = 0;
     bool srgbUpdateAndBlend = false;
+    QRhiRenderTargetAttachmentTracker::ResIdList currentResIdList;
 };
 
 struct QGles2ReferenceRenderTarget : public QRhiRenderTarget
@@ -521,6 +525,7 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 GLenum target;
                 GLuint texture;
                 int dstLevel;
+                int dstLayer;
             } blitFromRb;
             struct {
                 GLenum target;
@@ -752,6 +757,7 @@ public:
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
                                int depth,
+                               int arraySize,
                                int sampleCount,
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter,
@@ -871,10 +877,10 @@ public:
     void registerUniformIfActive(const QShaderDescription::BlockVariable &var,
                                  const QByteArray &namePrefix, int binding, int baseOffset,
                                  GLuint program,
-                                 QSet<int> *activeUniformLocations,
+                                 QDuplicateTracker<int, 256> *activeUniformLocations,
                                  QGles2UniformDescriptionVector *dst);
     void gatherUniforms(GLuint program, const QShaderDescription::UniformBlock &ub,
-                        QSet<int> *activeUniformLocations, QGles2UniformDescriptionVector *dst);
+                        QDuplicateTracker<int, 256> *activeUniformLocations, QGles2UniformDescriptionVector *dst);
     void gatherSamplers(GLuint program, const QShaderDescription::InOutVariable &v,
                         QGles2SamplerDescriptionVector *dst);
     void sanityCheckVertexFragmentInterface(const QShaderDescription &vsDesc, const QShaderDescription &fsDesc);
@@ -910,6 +916,7 @@ public:
               maxTextureSize(2048),
               maxDrawBuffers(4),
               maxSamples(16),
+              maxTextureArraySize(0),
               maxThreadGroupsPerDimension(0),
               maxThreadsPerThreadGroup(0),
               maxThreadGroupsX(0),
@@ -952,6 +959,7 @@ public:
         int maxTextureSize;
         int maxDrawBuffers;
         int maxSamples;
+        int maxTextureArraySize;
         int maxThreadGroupsPerDimension;
         int maxThreadsPerThreadGroup;
         int maxThreadGroupsX;

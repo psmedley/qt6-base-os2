@@ -52,7 +52,6 @@
 //
 
 #include <QtGui/private/qtguiglobal_p.h>
-#include <QtGui/private/qeventpoint_p.h>
 #include <QtCore/qurl.h>
 #include <QtGui/qevent.h>
 #include <QtGui/qwindow.h>
@@ -94,8 +93,6 @@ public:
     static QMutableSinglePointEvent *from(QSinglePointEvent *e) { return static_cast<QMutableSinglePointEvent *>(e); }
 
     static QMutableSinglePointEvent &from(QSinglePointEvent &e) { return static_cast<QMutableSinglePointEvent &>(e); }
-
-    QMutableEventPoint &mutablePoint() { return QMutableEventPoint::from(point(0)); }
 
     void setSource(Qt::MouseEventSource s) { m_source = s; }
 

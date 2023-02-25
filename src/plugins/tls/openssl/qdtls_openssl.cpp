@@ -607,7 +607,7 @@ bool DtlsState::init(QDtlsBasePrivate *dtlsBase, QUdpSocket *socket,
     Q_ASSERT(dtlsBase);
     Q_ASSERT(socket);
 
-    if (!tlsContext.data() && !initTls(dtlsBase))
+    if (!tlsContext && !initTls(dtlsBase))
         return false;
 
     udpSocket = socket;
@@ -634,7 +634,7 @@ void DtlsState::reset()
 
 bool DtlsState::initTls(QDtlsBasePrivate *dtlsBase)
 {
-    if (tlsContext.data())
+    if (tlsContext)
         return true;
 
     if (!QSslSocket::supportsSsl())
@@ -718,7 +718,7 @@ bool DtlsState::initCtxAndConnection(QDtlsBasePrivate *dtlsBase)
 bool DtlsState::initBIO(QDtlsBasePrivate *dtlsBase)
 {
     Q_ASSERT(dtlsBase);
-    Q_ASSERT(tlsContext.data() && tlsConnection.data());
+    Q_ASSERT(tlsContext && tlsConnection);
 
     BioMethod customMethod(q_BIO_meth_new(BIO_TYPE_DGRAM, dtlsbio::qdtlsMethodName),
                            dtlsutil::delete_bio_method);
@@ -1423,9 +1423,12 @@ void QDtlsPrivateOpenSSL::fetchNegotiatedParameters()
     // TLS 1.2, that's how it's set by OpenSSL (and that's what they are?).
 
     switch (q_SSL_version(dtls.tlsConnection.data())) {
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
     case DTLS1_VERSION:
         sessionProtocol = QSsl::DtlsV1_0;
         break;
+QT_WARNING_POP
     case DTLS1_2_VERSION:
         sessionProtocol = QSsl::DtlsV1_2;
         break;

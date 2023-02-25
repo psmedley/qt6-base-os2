@@ -161,6 +161,7 @@ public slots:
     void initTestCase();
     void cleanup();
 private slots:
+    void addActionOverloads();
     void getSetCheck();
     void fontPropagation();
     void fontPropagation2();
@@ -244,6 +245,7 @@ private slots:
     void persistentWinId();
     void showNativeChild();
     void closeAndShowNativeChild();
+    void closeAndShowWithNativeChild();
     void transientParent();
     void qobject_castInDestroyedSlot();
 
@@ -388,6 +390,8 @@ private slots:
 
     void focusProxy();
     void focusProxyAndInputMethods();
+    void imEnabledNotImplemented();
+
 #ifdef QT_BUILD_INTERNAL
     void scrollWithoutBackingStore();
 #endif
@@ -440,6 +444,10 @@ private slots:
     void setParentChangesFocus();
 
     void activateWhileModalHidden();
+
+#ifdef Q_OS_ANDROID
+    void showFullscreenAndroid();
+#endif
 
 private:
     const QString m_platform;
@@ -664,6 +672,72 @@ void tst_QWidget::initTestCase()
 void tst_QWidget::cleanup()
 {
     QTRY_VERIFY(QApplication::topLevelWidgets().isEmpty());
+}
+
+template <typename T>
+struct ImplicitlyConvertibleTo {
+    T t;
+    operator const T() const { return t; }
+    operator T() { return t; }
+};
+
+void testFunction0() {}
+void testFunction1(bool) {}
+
+void tst_QWidget::addActionOverloads()
+{
+    // almost exhaustive check of addAction() overloads:
+    // (text), (icon, text), (icon, text, shortcut), (text, shortcut)
+    // each with a good sample of ways to QObject::connect() to
+    // QAction::triggered(bool)
+    QWidget w;
+
+    // don't just pass QString etc - that'd be too easy (think QStringBuilder)
+    ImplicitlyConvertibleTo<QString> text = {QStringLiteral("foo")};
+    ImplicitlyConvertibleTo<QIcon> icon;
+
+    const auto check = [&](auto &...args) { // don't need to perfectly-forward, only lvalues passed
+        w.addAction(args...);
+
+        w.addAction(args..., &w, SLOT(deleteLater()));
+        w.addAction(args..., &w, &QObject::deleteLater);
+        w.addAction(args..., testFunction0);
+        w.addAction(args..., &w, testFunction0);
+        w.addAction(args..., testFunction1);
+        w.addAction(args..., &w, testFunction1);
+        w.addAction(args..., [&](bool b) { w.setEnabled(b); });
+        w.addAction(args..., &w, [&](bool b) { w.setEnabled(b); });
+
+        w.addAction(args..., &w, SLOT(deleteLater()), Qt::QueuedConnection);
+        w.addAction(args..., &w, &QObject::deleteLater, Qt::QueuedConnection);
+        // doesn't exist: w.addAction(args..., testFunction0, Qt::QueuedConnection);
+        w.addAction(args..., &w, testFunction0, Qt::QueuedConnection);
+        // doesn't exist: w.addAction(args..., testFunction1, Qt::QueuedConnection);
+        w.addAction(args..., &w, testFunction1, Qt::QueuedConnection);
+        // doesn't exist: w.addAction(args..., [&](bool b) { w.setEnabled(b); }, Qt::QueuedConnection);
+        w.addAction(args..., &w, [&](bool b) { w.setEnabled(b); }, Qt::QueuedConnection);
+    };
+    const auto check1 = [&](auto &arg, auto &...args) {
+        check(arg, args...);
+        check(std::as_const(arg), args...);
+    };
+    const auto check2 = [&](auto &arg1, auto &arg2, auto &...args) {
+        check1(arg1, arg2, args...);
+        check1(arg1, std::as_const(arg2), args...);
+    };
+    [[maybe_unused]]
+    const auto check3 = [&](auto &arg1, auto &arg2, auto &arg3) {
+        check2(arg1, arg2, arg3);
+        check2(arg1, arg2, std::as_const(arg3));
+    };
+
+    check1(text);
+    check2(icon, text);
+#ifndef QT_NO_SHORTCUT
+    ImplicitlyConvertibleTo<QKeySequence> keySequence = {Qt::CTRL | Qt::Key_C};
+    check2(text, keySequence);
+    check3(icon, text, keySequence);
+#endif
 }
 
 void tst_QWidget::fontPropagation()
@@ -1188,6 +1262,8 @@ void tst_QWidget::ignoreKeyEventsWhenDisabled_QTBUG27417()
     centerOnScreen(&lineEdit);
     lineEdit.setDisabled(true);
     lineEdit.show();
+    QTest::ignoreMessage(QtWarningMsg, "Keyboard event not accepted by receiving widget");
+    QTest::ignoreMessage(QtWarningMsg, "Keyboard event not accepted by receiving widget");
     QTest::keyClick(&lineEdit, Qt::Key_A);
     QTRY_VERIFY(lineEdit.text().isEmpty());
 }
@@ -2501,12 +2577,14 @@ void tst_QWidget::windowState()
 
     QPoint pos;
     QSize size = m_testWidgetSize;
-    if (QGuiApplicationPrivate::platformIntegration()->defaultWindowState(Qt::Widget)
-                                                       == Qt::WindowFullScreen) {
+    const Qt::WindowState defaultWidgetState =
+            QGuiApplicationPrivate::platformIntegration()->defaultWindowState(Qt::Widget);
+    if (defaultWidgetState == Qt::WindowFullScreen)
         size = QGuiApplication::primaryScreen()->size();
-    } else {
+    else if (defaultWidgetState == Qt::WindowMaximized)
+        size = QGuiApplication::primaryScreen()->availableSize();
+    else
         pos = QPoint(10, 10);
-    }
 
     QWidget widget1;
     widget1.move(pos);
@@ -2810,7 +2888,7 @@ void tst_QWidget::resizeEvent()
         wParent.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
         wParent.resize(m_testWidgetSize);
         ResizeWidget wChild(&wParent);
-        wParent.show();
+        QTestPrivate::androidCompatibleShow(&wParent);
         QVERIFY(QTest::qWaitForWindowExposed(&wParent));
         QCOMPARE (wChild.m_resizeEventCount, 1); // initial resize event before paint
         wParent.hide();
@@ -2819,7 +2897,7 @@ void tst_QWidget::resizeEvent()
             safeSize.setWidth(639);
         wChild.resize(safeSize);
         QCOMPARE (wChild.m_resizeEventCount, 1);
-        wParent.show();
+        QTestPrivate::androidCompatibleShow(&wParent);
         QCOMPARE (wChild.m_resizeEventCount, 2);
     }
 
@@ -2827,7 +2905,7 @@ void tst_QWidget::resizeEvent()
         ResizeWidget wTopLevel;
         wTopLevel.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
         wTopLevel.resize(m_testWidgetSize);
-        wTopLevel.show();
+        QTestPrivate::androidCompatibleShow(&wTopLevel);
         QVERIFY(QTest::qWaitForWindowExposed(&wTopLevel));
         QCOMPARE (wTopLevel.m_resizeEventCount, 1); // initial resize event before paint for toplevels
         wTopLevel.hide();
@@ -2836,7 +2914,7 @@ void tst_QWidget::resizeEvent()
             safeSize.setWidth(639);
         wTopLevel.resize(safeSize);
         QCOMPARE (wTopLevel.m_resizeEventCount, 1);
-        wTopLevel.show();
+        QTestPrivate::androidCompatibleShow(&wTopLevel);
         QVERIFY(QTest::qWaitForWindowExposed(&wTopLevel));
         QCOMPARE (wTopLevel.m_resizeEventCount, 2);
     }
@@ -3051,8 +3129,8 @@ void tst_QWidget::reparent()
     pal2.setColor(childTLW.backgroundRole(), Qt::yellow);
     childTLW.setPalette(pal2);
 
-    parent.show();
-    childTLW.show();
+    QTestPrivate::androidCompatibleShow(&parent);
+    QTestPrivate::androidCompatibleShow(&childTLW);
     QVERIFY(QTest::qWaitForWindowExposed(&parent));
 
     parent.move(parentPosition);
@@ -3062,7 +3140,7 @@ void tst_QWidget::reparent()
 
     child.setParent(nullptr, child.windowFlags() & ~Qt::WindowType_Mask);
     child.setGeometry(childPos.x(), childPos.y(), child.width(), child.height());
-    child.show();
+    QTestPrivate::androidCompatibleShow(&child);
 
 #if 0   // QTBUG-26424
     if (m_platform == QStringLiteral("xcb"))
@@ -4800,6 +4878,51 @@ void tst_QWidget::closeAndShowNativeChild()
     QVERIFY(!nativeChild->isHidden());
 }
 
+void tst_QWidget::closeAndShowWithNativeChild()
+{
+    bool dontCreateNativeWidgetSiblings = QApplication::testAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
+    auto resetAttribute = qScopeGuard([&]{
+        QApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings, dontCreateNativeWidgetSiblings);
+    });
+    QApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
+
+    QWidget topLevel;
+    QWidget *nativeChild = new QWidget;
+    nativeChild->setFixedSize(200, 200);
+    QWidget *nativeHiddenChild = new QWidget;
+    nativeHiddenChild->setFixedSize(200, 200);
+    QWidget *normalChild = new QWidget;
+    normalChild->setFixedSize(200, 200);
+
+    QHBoxLayout *layout = new QHBoxLayout;
+    layout->addWidget(nativeChild);
+    layout->addWidget(nativeHiddenChild);
+    layout->addWidget(normalChild);
+    topLevel.setLayout(layout);
+
+    nativeHiddenChild->hide();
+
+    topLevel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+    nativeChild->winId();
+    const QSize originalSize = topLevel.size();
+    topLevel.close();
+
+    // all children must have the same state
+    QCOMPARE(nativeChild->isHidden(), normalChild->isHidden());
+    QCOMPARE(nativeChild->isVisible(), normalChild->isVisible());
+    QCOMPARE(nativeChild->testAttribute(Qt::WA_WState_Visible),
+             normalChild->testAttribute(Qt::WA_WState_Visible));
+    QCOMPARE(nativeChild->testAttribute(Qt::WA_WState_Hidden),
+             normalChild->testAttribute(Qt::WA_WState_Hidden));
+    QCOMPARE(nativeChild->testAttribute(Qt::WA_WState_ExplicitShowHide),
+             normalChild->testAttribute(Qt::WA_WState_ExplicitShowHide));
+
+    topLevel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+    QCOMPARE(topLevel.size(), originalSize);
+}
+
 class ShowHideEventWidget : public QWidget
 {
 public:
@@ -5436,7 +5559,7 @@ void tst_QWidget::setWindowGeometry()
         QTRY_COMPARE(widget.geometry(), rect);
 
         // show() again, geometry() should still be the same
-        widget.show();
+        QTestPrivate::androidCompatibleShow(&widget);
         if (rect.isValid())
             QVERIFY(QTest::qWaitForWindowExposed(&widget));
         QTRY_COMPARE(widget.geometry(), rect);
@@ -5487,7 +5610,7 @@ void tst_QWidget::setWindowGeometry()
         QTRY_COMPARE(widget.geometry(), rect);
 
         // show() again, geometry() should still be the same
-        widget.show();
+        QTestPrivate::androidCompatibleShow(&widget);
         if (rect.isValid())
             QVERIFY(QTest::qWaitForWindowExposed(&widget));
         QTest::qWait(10);
@@ -5635,7 +5758,7 @@ void tst_QWidget::windowMoveResize()
         QTRY_COMPARE(widget.size(), rect.size());
 
         // show() again, pos() should be the same
-        widget.show();
+        QTestPrivate::androidCompatibleShow(&widget);
         if (rect.isValid())
             QVERIFY(QTest::qWaitForWindowExposed(&widget));
         QApplication::processEvents();
@@ -5706,7 +5829,7 @@ void tst_QWidget::windowMoveResize()
         QTRY_COMPARE(widget.size(), rect.size());
 
         // show() again, pos() should be the same
-        widget.show();
+        QTestPrivate::androidCompatibleShow(&widget);
         if (rect.isValid())
             QVERIFY(QTest::qWaitForWindowExposed(&widget));
         QTest::qWait(10);
@@ -6928,7 +7051,9 @@ void tst_QWidget::childEvents()
             << qMakePair(&widget, QEvent::Move)
             << qMakePair(&widget, QEvent::Resize)
             << qMakePair(&widget, QEvent::Show)
+#ifndef Q_OS_ANDROID
             << qMakePair(&widget, QEvent::CursorChange)
+#endif
             << qMakePair(&widget, QEvent::ShowToParent);
 
         QVERIFY2(spy.eventList() == expected,
@@ -7017,7 +7142,9 @@ void tst_QWidget::childEvents()
             << qMakePair(&widget, QEvent::Move)
             << qMakePair(&widget, QEvent::Resize)
             << qMakePair(&widget, QEvent::Show)
+#ifndef Q_OS_ANDROID
             << qMakePair(&widget, QEvent::CursorChange)
+#endif
             << qMakePair(&widget, QEvent::ShowToParent);
 
         QVERIFY2(spy.eventList() == expected,
@@ -7109,7 +7236,9 @@ void tst_QWidget::childEvents()
             << qMakePair(&widget, QEvent::Move)
             << qMakePair(&widget, QEvent::Resize)
             << qMakePair(&widget, QEvent::Show)
+#ifndef Q_OS_ANDROID
             << qMakePair(&widget, QEvent::CursorChange)
+#endif
             << qMakePair(&widget, QEvent::ShowToParent);
 
         QVERIFY2(spy.eventList() == expected,
@@ -7217,7 +7346,11 @@ void tst_QWidget::renderChildFillsBackground()
     QCoreApplication::processEvents();
     const QPixmap childPixmap = child.grab(QRect(QPoint(0, 0), QSize(-1, -1)));
     const QPixmap windowPixmap = window.grab(QRect(QPoint(0, 0), QSize(-1, -1)));
+#ifndef Q_OS_ANDROID
+    // On Android all widgets are shown maximized, so the pixmaps
+    // will be similar
     QEXPECT_FAIL("", "This test fails on all platforms", Continue);
+#endif
     QCOMPARE(childPixmap, windowPixmap);
 }
 
@@ -8903,7 +9036,6 @@ void tst_QWidget::opaqueChildren()
     QCOMPARE(qt_widget_private(&grandChild)->getOpaqueChildren(), QRegion());
 }
 
-
 class MaskSetWidget : public QWidget
 {
     Q_OBJECT
@@ -9409,6 +9541,10 @@ void tst_QWidget::translucentWidget()
     const QImage actual = widgetSnapshot.toImage().convertToFormat(QImage::Format_RGB32);
     QImage expected = pm.toImage().scaled(label.devicePixelRatio() * pm.size());
     expected.setDevicePixelRatio(label.devicePixelRatio());
+#ifdef Q_OS_ANDROID
+    // Android uses Format_ARGB32_Premultiplied by default
+    expected = expected.convertToFormat(QImage::Format_RGB32);
+#endif
     QCOMPARE(actual.size(),expected.size());
     QCOMPARE(actual,expected);
 
@@ -9941,6 +10077,8 @@ void tst_QWidget::enterLeaveOnWindowShowHide()
             secondary->show();
             if (!QTest::qWaitForWindowExposed(secondary))
                 QEXPECT_FAIL("", "Secondary window failed to show, test will fail", Abort);
+            if (secondaryWindowType == Qt::Dialog && QGuiApplication::platformName() == "windows")
+                QTest::qWait(1000); // on Windows, we have to wait for fade-in effects
         }
     };
 
@@ -9961,21 +10099,22 @@ void tst_QWidget::enterLeaveOnWindowShowHide()
     QVERIFY(QTest::qWaitForWindowActive(&widget));
 
     ++expectedEnter;
-    QTRY_COMPARE_WITH_TIMEOUT(widget.numEnterEvents, expectedEnter, 250);
+    QTRY_COMPARE_WITH_TIMEOUT(widget.numEnterEvents, expectedEnter, 1000);
     QCOMPARE(widget.enterPosition, widget.mapFromGlobal(cursorPos));
     QVERIFY(widget.underMouse());
 
     QTest::mouseClick(&widget, Qt::LeftButton, {}, widget.mapFromGlobal(cursorPos));
     ++expectedLeave;
-    QTRY_COMPARE_WITH_TIMEOUT(widget.numLeaveEvents, expectedLeave, 500);
+    QTRY_COMPARE_WITH_TIMEOUT(widget.numLeaveEvents, expectedLeave, 1000);
     QVERIFY(!widget.underMouse());
+    QTRY_VERIFY(QApplication::activeModalWidget() || QApplication::activePopupWidget());
     if (QApplication::activeModalWidget())
         QApplication::activeModalWidget()->close();
     else if (QApplication::activePopupWidget())
         QApplication::activePopupWidget()->close();
     ++expectedEnter;
     // Use default timeout, the test is flaky on Windows otherwise.
-    QVERIFY(QTest::qWaitFor([&]{ return widget.numEnterEvents >= expectedEnter; }));
+    QTRY_VERIFY(widget.numEnterEvents >= expectedEnter);
     // When a modal dialog closes we might get more than one enter event on macOS.
     // This seems to depend on timing, so we tolerate that flakiness for now.
     if (widget.numEnterEvents > expectedEnter && QGuiApplication::platformName() == "cocoa")
@@ -10511,6 +10650,9 @@ void tst_QWidget::activateWindow()
 
 void tst_QWidget::openModal_taskQTBUG_5804()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("This test hangs on Android");
+#endif
     class Widget : public QWidget
     {
     public:
@@ -10684,6 +10826,41 @@ void tst_QWidget::focusProxyAndInputMethods()
     QVERIFY(toplevel->hasFocus());
     QVERIFY(child->hasFocus());
     QCOMPARE(qApp->focusObject(), toplevel.data());
+}
+
+void tst_QWidget::imEnabledNotImplemented()
+{
+    // Check that a plain widget doesn't report that it supports IM. Only
+    // widgets that implements either Qt::ImEnabled, or the Qt4 backup
+    // solution, Qt::ImSurroundingText, should do so.
+    QWidget topLevel;
+    QWidget plain(&topLevel);
+    QLineEdit edit(&topLevel);
+    topLevel.show();
+
+    QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+    QApplication::setActiveWindow(&topLevel);
+    QVERIFY(QTest::qWaitForWindowActive(&topLevel));
+
+    // A plain widget should return false for ImEnabled
+    plain.setFocus(Qt::OtherFocusReason);
+    QCOMPARE(QApplication::focusWidget(), &plain);
+    QVariant imEnabled = QApplication::inputMethod()->queryFocusObject(Qt::ImEnabled, QVariant());
+    QVERIFY(imEnabled.isValid());
+    QVERIFY(!imEnabled.toBool());
+
+    // But a lineedit should return true
+    edit.setFocus(Qt::OtherFocusReason);
+    QCOMPARE(QApplication::focusWidget(), &edit);
+    imEnabled = QApplication::inputMethod()->queryFocusObject(Qt::ImEnabled, QVariant());
+    QVERIFY(imEnabled.isValid());
+    QVERIFY(imEnabled.toBool());
+
+    // ...even if it's read-only
+    edit.setReadOnly(true);
+    imEnabled = QApplication::inputMethod()->queryFocusObject(Qt::ImEnabled, QVariant());
+    QVERIFY(imEnabled.isValid());
+    QVERIFY(imEnabled.toBool());
 }
 
 #ifdef QT_BUILD_INTERNAL
@@ -11692,10 +11869,6 @@ void tst_QWidget::underMouse()
 
     // Mouse leaves popup and enters topLevelWidget, should cause leave for popup
     // but no enter to topLevelWidget.
-#ifdef Q_OS_DARWIN
-    // Artificial leave event needed for Cocoa.
-    QWindowSystemInterface::handleLeaveEvent(popupWindow);
-#endif
     QTest::mouseMove(popupWindow, popupWindow->mapFromGlobal(window->mapToGlobal(inWindowPoint)));
     QApplication::processEvents();
     QVERIFY(!topLevelWidget.underMouse());
@@ -11779,9 +11952,6 @@ public:
 // when mousing over it.
 void tst_QWidget::taskQTBUG_27643_enterEvents()
 {
-#ifdef Q_OS_MACOS
-    QSKIP("QTBUG-52974: this test can crash!");
-#endif
     // Move the mouse cursor to a safe location so it won't interfere
     QCursor::setPos(m_safeCursorPos);
 
@@ -12115,6 +12285,36 @@ void tst_QWidget::closeEvent()
     widget.windowHandle()->close();
     widget.windowHandle()->close();
     QCOMPARE(widget.closeCount, 1);
+
+    CloseCountingWidget widget2;
+    widget2.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget2));
+    widget2.close();
+    widget2.close();
+    QCOMPARE(widget2.closeCount, 1);
+    widget2.closeCount = 0;
+
+    widget2.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget2));
+    widget2.close();
+    QCOMPARE(widget2.closeCount, 1);
+
+    CloseCountingWidget widget3;
+    widget3.close();
+    widget3.close();
+    QEXPECT_FAIL("", "Closing a widget without a window will unconditionally send close events", Continue);
+    QCOMPARE(widget3.closeCount, 0);
+
+    QWidget parent;
+    CloseCountingWidget child;
+    child.setParent(&parent);
+    parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&parent));
+    child.close();
+    QCOMPARE(child.closeCount, 1);
+    child.close();
+    QEXPECT_FAIL("", "Closing a widget without a window will unconditionally send close events", Continue);
+    QCOMPARE(child.closeCount, 1);
 }
 
 void tst_QWidget::closeWithChildWindow()
@@ -12316,10 +12516,22 @@ protected:
 
 void tst_QWidget::deleteWindowInCloseEvent()
 {
-    // Just checking if closing this widget causes a crash
+#ifdef Q_OS_ANDROID
+    QSKIP("This test crashes on Android");
+#endif
+    QSignalSpy quitSpy(qApp, &QGuiApplication::lastWindowClosed);
+
+    // Closing this widget should not cause a crash
     auto widget = new DeleteOnCloseEventWidget;
-    widget->close();
-    QVERIFY(true);
+    widget->show();
+    QVERIFY(QTest::qWaitForWindowExposed(widget));
+    QTimer::singleShot(0, widget, [&]{
+        widget->close();
+    });
+    QApplication::exec();
+
+    // It should still result in a single lastWindowClosed emit
+    QCOMPARE(quitSpy.count(), 1);
 }
 
 /*!
@@ -12438,6 +12650,39 @@ void tst_QWidget::activateWhileModalHidden()
     QVERIFY(window.isActiveWindow());
     QCOMPARE(QApplication::activeWindow(), &window);
 }
+
+#ifdef Q_OS_ANDROID
+void tst_QWidget::showFullscreenAndroid()
+{
+    QWidget w;
+    w.setAutoFillBackground(true);
+    QPalette p = w.palette();
+    p.setColor(QPalette::Window, Qt::red);
+    w.setPalette(p);
+
+    // Need to toggle showFullScreen() twice, see QTBUG-101968
+    w.showFullScreen();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    w.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    w.showFullScreen();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+
+    // Make sure that the lower part of the screen contains the red widget, not
+    // the buttons.
+
+    const QRect fullGeometry = w.screen()->geometry();
+    // Take a rect of (20 x 20) from the bottom area
+    const QRect grabArea(10, fullGeometry.height() - 30, 20, 20);
+    const QImage img = grabFromWidget(&w, grabArea).toImage().convertedTo(QImage::Format_RGB32);
+
+    QPixmap expectedPix(20, 20);
+    expectedPix.fill(Qt::red);
+    const QImage expectedImg = expectedPix.toImage().convertedTo(QImage::Format_RGB32);
+
+    QCOMPARE(img, expectedImg);
+}
+#endif // Q_OS_ANDROID
 
 QTEST_MAIN(tst_QWidget)
 #include "tst_qwidget.moc"

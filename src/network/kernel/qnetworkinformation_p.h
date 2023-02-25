@@ -62,26 +62,45 @@ QT_BEGIN_NAMESPACE
 class Q_NETWORK_EXPORT QNetworkInformationBackend : public QObject
 {
     Q_OBJECT
+
+    using Reachability = QNetworkInformation::Reachability;
+    using TransportMedium = QNetworkInformation::TransportMedium;
+
 public:
+    static inline const char16_t PluginNames[4][22] = {
+        { u"networklistmanager" },
+        { u"scnetworkreachability" },
+        { u"android" },
+        { u"networkmanager" },
+    };
+    static constexpr int PluginNamesWindowsIndex = 0;
+    static constexpr int PluginNamesAppleIndex = 1;
+    static constexpr int PluginNamesAndroidIndex = 2;
+    static constexpr int PluginNamesLinuxIndex = 3;
+
     QNetworkInformationBackend() = default;
     ~QNetworkInformationBackend() override;
 
     virtual QString name() const = 0;
     virtual QNetworkInformation::Features featuresSupported() const = 0;
 
-    QNetworkInformation::Reachability reachability() const { return m_reachability; }
+    Reachability reachability() const { return m_reachability; }
     bool behindCaptivePortal() const { return m_behindCaptivePortal; }
+    TransportMedium transportMedium() const { return m_transportMedium; }
+    bool isMetered() const { return m_metered; }
 
 Q_SIGNALS:
-    void reachabilityChanged();
-    void behindCaptivePortalChanged();
+    void reachabilityChanged(Reachability reachability);
+    void behindCaptivePortalChanged(bool behindPortal);
+    void transportMediumChanged(TransportMedium medium);
+    void isMeteredChanged(bool isMetered);
 
 protected:
     void setReachability(QNetworkInformation::Reachability reachability)
     {
         if (m_reachability != reachability) {
             m_reachability = reachability;
-            emit reachabilityChanged();
+            emit reachabilityChanged(reachability);
         }
     }
 
@@ -89,13 +108,31 @@ protected:
     {
         if (m_behindCaptivePortal != behindPortal) {
             m_behindCaptivePortal = behindPortal;
-            emit behindCaptivePortalChanged();
+            emit behindCaptivePortalChanged(behindPortal);
+        }
+    }
+
+    void setTransportMedium(TransportMedium medium)
+    {
+        if (m_transportMedium != medium) {
+            m_transportMedium = medium;
+            emit transportMediumChanged(medium);
+        }
+    }
+
+    void setMetered(bool isMetered)
+    {
+        if (m_metered != isMetered) {
+            m_metered = isMetered;
+            emit isMeteredChanged(isMetered);
         }
     }
 
 private:
-    QNetworkInformation::Reachability m_reachability = QNetworkInformation::Reachability::Unknown;
+    Reachability m_reachability = Reachability::Unknown;
+    TransportMedium m_transportMedium = TransportMedium::Unknown;
     bool m_behindCaptivePortal = false;
+    bool m_metered = false;
 
     Q_DISABLE_COPY_MOVE(QNetworkInformationBackend)
     friend class QNetworkInformation;
@@ -105,12 +142,15 @@ private:
 class Q_NETWORK_EXPORT QNetworkInformationBackendFactory : public QObject
 {
     Q_OBJECT
+
+    using Features = QNetworkInformation::Features;
+
 public:
     QNetworkInformationBackendFactory();
     virtual ~QNetworkInformationBackendFactory();
     virtual QString name() const = 0;
-    virtual QNetworkInformationBackend *create(QNetworkInformation::Features requiredFeatures) const = 0;
-    virtual QNetworkInformation::Features featuresSupported() const = 0;
+    virtual QNetworkInformationBackend *create(Features requiredFeatures) const = 0;
+    virtual Features featuresSupported() const = 0;
 
 private:
     Q_DISABLE_COPY_MOVE(QNetworkInformationBackendFactory)

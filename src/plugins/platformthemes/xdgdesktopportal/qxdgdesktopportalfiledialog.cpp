@@ -48,6 +48,7 @@
 
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QMetaType>
 #include <QMimeType>
 #include <QMimeDatabase>
@@ -102,15 +103,12 @@ const QDBusArgument &operator >>(const QDBusArgument &arg, QXdgDesktopPortalFile
 class QXdgDesktopPortalFileDialogPrivate
 {
 public:
-    QXdgDesktopPortalFileDialogPrivate(QPlatformFileDialogHelper *nativeFileDialog)
+    QXdgDesktopPortalFileDialogPrivate(QPlatformFileDialogHelper *nativeFileDialog, uint fileChooserPortalVersion)
         : nativeFileDialog(nativeFileDialog)
+        , fileChooserPortalVersion(fileChooserPortalVersion)
     { }
 
-    WId winId = 0;
-    bool directoryMode = false;
-    bool modal = false;
-    bool multipleFiles = false;
-    bool saveFile = false;
+    QEventLoop loop;
     QString acceptLabel;
     QString directory;
     QString title;
@@ -121,19 +119,27 @@ public:
     QString selectedMimeTypeFilter;
     QString selectedNameFilter;
     QStringList selectedFiles;
-    QPlatformFileDialogHelper *nativeFileDialog = nullptr;
+    std::unique_ptr<QPlatformFileDialogHelper> nativeFileDialog;
+    uint fileChooserPortalVersion = 0;
+    bool failedToOpen = false;
+    bool directoryMode = false;
+    bool multipleFiles = false;
+    bool saveFile = false;
 };
 
-QXdgDesktopPortalFileDialog::QXdgDesktopPortalFileDialog(QPlatformFileDialogHelper *nativeFileDialog)
+QXdgDesktopPortalFileDialog::QXdgDesktopPortalFileDialog(QPlatformFileDialogHelper *nativeFileDialog, uint fileChooserPortalVersion)
     : QPlatformFileDialogHelper()
-    , d_ptr(new QXdgDesktopPortalFileDialogPrivate(nativeFileDialog))
+    , d_ptr(new QXdgDesktopPortalFileDialogPrivate(nativeFileDialog, fileChooserPortalVersion))
 {
     Q_D(QXdgDesktopPortalFileDialog);
 
     if (d->nativeFileDialog) {
-        connect(d->nativeFileDialog, SIGNAL(accept()), this, SIGNAL(accept()));
-        connect(d->nativeFileDialog, SIGNAL(reject()), this, SIGNAL(reject()));
+        connect(d->nativeFileDialog.get(), SIGNAL(accept()), this, SIGNAL(accept()));
+        connect(d->nativeFileDialog.get(), SIGNAL(reject()), this, SIGNAL(reject()));
     }
+
+    d->loop.connect(this, SIGNAL(accept()), SLOT(quit()));
+    d->loop.connect(this, SIGNAL(reject()), SLOT(quit()));
 }
 
 QXdgDesktopPortalFileDialog::~QXdgDesktopPortalFileDialog()
@@ -177,7 +183,7 @@ void QXdgDesktopPortalFileDialog::initializeDialog()
     setDirectory(options()->initialDirectory());
 }
 
-void QXdgDesktopPortalFileDialog::openPortal()
+void QXdgDesktopPortalFileDialog::openPortal(Qt::WindowFlags windowFlags, Qt::WindowModality windowModality, QWindow *parent)
 {
     Q_D(QXdgDesktopPortalFileDialog);
 
@@ -185,13 +191,13 @@ void QXdgDesktopPortalFileDialog::openPortal()
                                                           QLatin1String("/org/freedesktop/portal/desktop"),
                                                           QLatin1String("org.freedesktop.portal.FileChooser"),
                                                           d->saveFile ? QLatin1String("SaveFile") : QLatin1String("OpenFile"));
-    QString parentWindowId = QLatin1String("x11:") + QString::number(d->winId, 16);
+    QString parentWindowId = QLatin1String("x11:") + QString::number(parent ? parent->winId() : 0, 16);
 
     QVariantMap options;
     if (!d->acceptLabel.isEmpty())
         options.insert(QLatin1String("accept_label"), d->acceptLabel);
 
-    options.insert(QLatin1String("modal"), d->modal);
+    options.insert(QLatin1String("modal"), windowModality != Qt::NonModal);
     options.insert(QLatin1String("multiple"), d->multipleFiles);
     options.insert(QLatin1String("directory"), d->directoryMode);
 
@@ -199,8 +205,12 @@ void QXdgDesktopPortalFileDialog::openPortal()
         if (!d->directory.isEmpty())
             options.insert(QLatin1String("current_folder"), QFile::encodeName(d->directory).append('\0'));
 
-        if (!d->selectedFiles.isEmpty())
+        if (!d->selectedFiles.isEmpty()) {
+            // current_file for the file to be pre-selected, current_name for the file name to be pre-filled
+            // current_file accepts absolute path while current_name accepts just file name
             options.insert(QLatin1String("current_file"), QFile::encodeName(d->selectedFiles.first()).append('\0'));
+            options.insert(QLatin1String("current_name"), QFileInfo(d->selectedFiles.first()).fileName());
+        }
     }
 
     // Insert filters
@@ -290,10 +300,18 @@ void QXdgDesktopPortalFileDialog::openPortal()
 
     QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(message);
     QDBusPendingCallWatcher *watcher = new QDBusPendingCallWatcher(pendingCall);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this] (QDBusPendingCallWatcher *watcher) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [=] (QDBusPendingCallWatcher *watcher) {
         QDBusPendingReply<QDBusObjectPath> reply = *watcher;
-        if (reply.isError()) {
-            Q_EMIT reject();
+        // Any error means the dialog is not shown and we need to fallback
+        d->failedToOpen = reply.isError();
+        if (d->failedToOpen) {
+            if (d->nativeFileDialog) {
+                d->nativeFileDialog->show(windowFlags, windowModality, parent);
+                if (d->loop.isRunning())
+                    d->nativeFileDialog->exec();
+            } else {
+                Q_EMIT reject();
+            }
         } else {
             QDBusConnection::sessionBus().connect(nullptr,
                                                   reply.value().path(),
@@ -327,7 +345,7 @@ QUrl QXdgDesktopPortalFileDialog::directory() const
 {
     Q_D(const QXdgDesktopPortalFileDialog);
 
-    if (d->nativeFileDialog && (options()->fileMode() == QFileDialogOptions::Directory || options()->fileMode() == QFileDialogOptions::DirectoryOnly))
+    if (d->nativeFileDialog && useNativeFileDialog())
         return d->nativeFileDialog->directory();
 
     return d->directory;
@@ -349,7 +367,7 @@ QList<QUrl> QXdgDesktopPortalFileDialog::selectedFiles() const
 {
     Q_D(const QXdgDesktopPortalFileDialog);
 
-    if (d->nativeFileDialog && (options()->fileMode() == QFileDialogOptions::Directory || options()->fileMode() == QFileDialogOptions::DirectoryOnly))
+    if (d->nativeFileDialog && useNativeFileDialog())
         return d->nativeFileDialog->selectedFiles();
 
     QList<QUrl> files;
@@ -404,16 +422,13 @@ void QXdgDesktopPortalFileDialog::exec()
 {
     Q_D(QXdgDesktopPortalFileDialog);
 
-    if (d->nativeFileDialog && (options()->fileMode() == QFileDialogOptions::Directory || options()->fileMode() == QFileDialogOptions::DirectoryOnly)) {
+    if (d->nativeFileDialog && useNativeFileDialog()) {
         d->nativeFileDialog->exec();
         return;
     }
 
     // HACK we have to avoid returning until we emit that the dialog was accepted or rejected
-    QEventLoop loop;
-    loop.connect(this, SIGNAL(accept()), SLOT(quit()));
-    loop.connect(this, SIGNAL(reject()), SLOT(quit()));
-    loop.exec();
+    d->loop.exec();
 }
 
 void QXdgDesktopPortalFileDialog::hide()
@@ -430,13 +445,10 @@ bool QXdgDesktopPortalFileDialog::show(Qt::WindowFlags windowFlags, Qt::WindowMo
 
     initializeDialog();
 
-    d->modal = windowModality != Qt::NonModal;
-    d->winId = parent ? parent->winId() : 0;
-
-    if (d->nativeFileDialog && (options()->fileMode() == QFileDialogOptions::Directory || options()->fileMode() == QFileDialogOptions::DirectoryOnly))
+    if (d->nativeFileDialog && useNativeFileDialog(OpenFallback))
         return d->nativeFileDialog->show(windowFlags, windowModality, parent);
 
-    openPortal();
+    openPortal(windowFlags, windowModality, parent);
 
     return true;
 }
@@ -466,4 +478,23 @@ void QXdgDesktopPortalFileDialog::gotResponse(uint response, const QVariantMap &
     }
 }
 
+bool QXdgDesktopPortalFileDialog::useNativeFileDialog(QXdgDesktopPortalFileDialog::FallbackType fallbackType) const
+{
+    Q_D(const QXdgDesktopPortalFileDialog);
+
+    if (d->failedToOpen && fallbackType != OpenFallback)
+        return true;
+
+    if (d->fileChooserPortalVersion < 3) {
+        if (options()->fileMode() == QFileDialogOptions::Directory)
+            return true;
+        else if (options()->fileMode() == QFileDialogOptions::DirectoryOnly)
+            return true;
+    }
+
+    return false;
+}
+
 QT_END_NAMESPACE
+
+#include "moc_qxdgdesktopportalfiledialog_p.cpp"

@@ -107,6 +107,7 @@ class tst_QByteArrayView : public QObject
 {
     Q_OBJECT
 private slots:
+    // Note: much of the shared API is tested in ../qbytearrayapisymmetry/
     void constExpr() const;
     void basics() const;
     void literals() const;
@@ -268,6 +269,10 @@ void tst_QByteArrayView::constExpr() const
         static_assert(!bv2.empty());
         static_assert(bv2.size() == 5);
     }
+#if !defined(Q_CC_GNU) || defined(Q_CC_CLANG) || defined(Q_CC_INTEL)
+    // Below checks are disabled because of a compilation issue with GCC and
+    // -fsanitize=undefined. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=71962.
+    // Note: Q_CC_GNU is also defined for Clang and ICC, so we need to check those too.
     {
         static constexpr char hello[] = "Hello";
         constexpr QByteArrayView bv(hello);
@@ -302,6 +307,7 @@ void tst_QByteArrayView::constExpr() const
         static_assert(bv.back()  == 'o');
         static_assert(bv.last()  == 'o');
     }
+#endif
     {
         constexpr char *null = nullptr;
         constexpr QByteArrayView bv(null);

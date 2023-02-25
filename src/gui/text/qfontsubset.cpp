@@ -112,24 +112,6 @@ QByteArray QFontSubset::glyphName(unsigned short unicode, bool symbol)
     return buffer;
 }
 
-QByteArray QFontSubset::glyphName(unsigned int glyph, const QList<int> &reverseMap) const
-{
-    uint glyphIndex = glyph_indices[glyph];
-
-    if (glyphIndex == 0)
-        return "/.notdef";
-
-    QByteArray ba;
-    QPdf::ByteStream s(&ba);
-    if (reverseMap[glyphIndex] && reverseMap[glyphIndex] < 0x10000) {
-        s << '/' << glyphName(reverseMap[glyphIndex], false);
-    } else {
-        s << "/gl" << (int)glyphIndex;
-    }
-    return ba;
-}
-
-
 QByteArray QFontSubset::widthArray() const
 {
     Q_ASSERT(!widths.isEmpty());
@@ -1208,7 +1190,6 @@ QByteArray QFontSubset::toTruetype() const
     QList<QTtfGlyph> glyphs;
     glyphs.reserve(numGlyphs);
 
-    uint sumAdvances = 0;
     for (int i = 0; i < numGlyphs; ++i) {
         glyph_t g = glyph_indices.at(i);
         QPainterPath path;
@@ -1230,9 +1211,6 @@ QByteArray QFontSubset::toTruetype() const
 
         font.maxp.maxPoints = qMax(font.maxp.maxPoints, glyph.numPoints);
         font.maxp.maxContours = qMax(font.maxp.maxContours, glyph.numContours);
-
-        if (glyph.xMax > glyph.xMin)
-            sumAdvances += glyph.xMax - glyph.xMin;
 
 //         qDebug("adding glyph %d size=%d", glyph.index, glyph.data.size());
         glyphs.append(glyph);

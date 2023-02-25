@@ -33,6 +33,9 @@ function(qt_internal_add_benchmark target)
         ${exec_args}
     )
 
+
+    qt_internal_add_repo_local_defines(${target})
+
     # Disable the QT_NO_NARROWING_CONVERSIONS_IN_CONNECT define for benchmarks
     qt_internal_undefine_global_definition(${target} QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
 
@@ -146,6 +149,8 @@ function(qt_internal_setup_docker_test_fixture name)
 
     if(DEFINED QT_TESTSERVER_COMPOSE_FILE)
         set(TESTSERVER_COMPOSE_FILE ${QT_TESTSERVER_COMPOSE_FILE})
+    elseif(QNX)
+        set(TESTSERVER_COMPOSE_FILE "${QT_SOURCE_TREE}/tests/testserver/docker-compose-qemu-bridge-network.yml")
     else()
         set(TESTSERVER_COMPOSE_FILE "${QT_SOURCE_TREE}/tests/testserver/docker-compose-bridge-network.yml")
     endif()
@@ -236,6 +241,8 @@ function(qt_internal_add_test name)
             ENABLE_AUTOGEN_TOOLS ${arg_ENABLE_AUTOGEN_TOOLS}
             DISABLE_AUTOGEN_TOOLS ${arg_DISABLE_AUTOGEN_TOOLS}
         )
+
+        qt_internal_add_repo_local_defines(${name})
 
         # Disable the QT_NO_NARROWING_CONVERSIONS_IN_CONNECT define for tests
         qt_internal_undefine_global_definition(${name} QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
@@ -364,7 +371,7 @@ function(qt_internal_add_test name)
         endif()
     endif()
 
-    if(ANDROID OR IOS OR WINRT)
+    if(ANDROID OR IOS OR WINRT OR INTEGRITY)
         set(builtin_testdata TRUE)
     endif()
 
@@ -482,8 +489,9 @@ for this function. Will be ignored")
     # Prepend emulator to test command in generated cmake script instead. Keep in mind that
     # CROSSCOMPILING_EMULATOR don't check if actual cross compilation is configured,
     # emulator is prepended independently.
-    if(CMAKE_CROSSCOMPILING)
-        get_test_property(${arg_NAME} CROSSCOMPILING_EMULATOR crosscompiling_emulator)
+    set(crosscompiling_emulator "")
+    if(CMAKE_CROSSCOMPILING AND TARGET ${arg_NAME})
+        get_target_property(crosscompiling_emulator ${arg_NAME} CROSSCOMPILING_EMULATOR)
         if(NOT crosscompiling_emulator)
             set(crosscompiling_emulator "")
         else()

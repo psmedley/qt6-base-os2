@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
 ** Copyright (C) 2016 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
@@ -48,9 +48,7 @@
 #include <limits.h>
 #include <float.h>
 #include <cmath>
-#if __has_include(<variant>) && __cplusplus >= 201703L
 #include <variant>
-#endif
 #include <QRegularExpression>
 #include <QDir>
 #include <QBuffer>
@@ -312,6 +310,10 @@ private slots:
     void moveOperations();
     void equalsWithoutMetaObject();
 
+    void constructFromIncompatibleMetaType_data();
+    void constructFromIncompatibleMetaType();
+    void copyNonDefaultConstructible();
+
 private:
     void dataStream_data(QDataStream::Version version);
     void loadQVariantFromDataStream(QDataStream::Version version);
@@ -412,9 +414,11 @@ void tst_QVariant::isNull()
     QVariant var;
     QVERIFY( var.isNull() );
 
-    QString str1;
-    QVariant var1( str1 );
-    QVERIFY( !var1.isNull() );
+    QVariant empty = QString();
+    QVERIFY(empty.toString().isNull());
+    QVERIFY(!empty.isNull());
+    QVERIFY(empty.isValid());
+    QCOMPARE(empty.typeName(), "QString");
 
     QVariant var3( QString( "blah" ) );
     QVERIFY( !var3.isNull() );
@@ -4880,7 +4884,6 @@ void tst_QVariant::shouldDeleteVariantDataWorksForAssociative()
 
 void tst_QVariant::fromStdVariant()
 {
-#if __has_include(<variant>) && __cplusplus >= 201703L
     {
         typedef std::variant<int, bool> intorbool_t;
         intorbool_t stdvar = 5;
@@ -4911,7 +4914,6 @@ void tst_QVariant::fromStdVariant()
         QCOMPARE(qvar.type(), QVariant::Char);
         QCOMPARE(qvar.value<QChar>(), std::get<QChar>(stdvar));
     }
-#endif
 }
 
 void tst_QVariant::qt4UuidDataStream()
@@ -5130,6 +5132,76 @@ void tst_QVariant::equalsWithoutMetaObject()
     // Shouldn't crash
     QVERIFY(noMetaObjectVariant != qobjectVariant);
     QVERIFY(qobjectVariant != noMetaObjectVariant);
+}
+
+struct NonDefaultConstructible
+{
+   NonDefaultConstructible(int i) :i(i) {}
+   int i;
+   friend bool operator==(NonDefaultConstructible l, NonDefaultConstructible r)
+   { return l.i == r.i; }
+};
+
+template <> char *QTest::toString<NonDefaultConstructible>(const NonDefaultConstructible &ndc)
+{
+    return qstrdup('{' + QByteArray::number(ndc.i) + '}');
+}
+
+struct Indestructible
+{
+    Indestructible() {}
+    Indestructible(const Indestructible &) {}
+    Indestructible &operator=(const Indestructible &) { return *this; }
+private:
+    ~Indestructible() {}
+};
+
+void tst_QVariant::constructFromIncompatibleMetaType_data()
+{
+    QTest::addColumn<QMetaType>("type");
+    auto addRow = [](QMetaType meta) {
+        QTest::newRow(meta.name()) << meta;
+    };
+    addRow(QMetaType::fromType<void>());
+    addRow(QMetaType::fromType<NonDefaultConstructible>());
+    addRow(QMetaType::fromType<QObject>());
+    addRow(QMetaType::fromType<Indestructible>());
+}
+
+void tst_QVariant::constructFromIncompatibleMetaType()
+{
+   QFETCH(QMetaType, type);
+   // in that case, we run into a different condition (size == 0), and do not warn
+   if (QTest::currentDataTag() != QLatin1String("void"))
+      QTest::ignoreMessage(
+            QtWarningMsg,
+            "QVariant: Provided metatype does not support destruction, copy and default construction");
+   QVariant var(type, nullptr);
+   QVERIFY(!var.isValid());
+   QVERIFY(!var.metaType().isValid());
+
+   QVariant regular(1.0);
+   QVERIFY(!var.canView(type));
+   QVERIFY(!var.canConvert(type));
+   QVERIFY(!QVariant(regular).convert(type));
+}
+
+void tst_QVariant::copyNonDefaultConstructible()
+{
+    NonDefaultConstructible ndc(42);
+    QVariant var(QMetaType::fromType<NonDefaultConstructible>(), &ndc);
+    QVERIFY(var.isDetached());
+    QCOMPARE(var.metaType(), QMetaType::fromType<NonDefaultConstructible>());
+    QVERIFY(var.constData() != &ndc);
+
+    // qvariant_cast<T> and QVariant::value<T> don't compile
+    QCOMPARE(*static_cast<const NonDefaultConstructible *>(var.constData()), ndc);
+
+    QVariant var2 = var;
+    var2.detach();      // force another copy
+    QVERIFY(var2.isDetached());
+    QVERIFY(var2.constData() != var.constData());
+    QCOMPARE(var2, var);
 }
 
 QTEST_MAIN(tst_QVariant)

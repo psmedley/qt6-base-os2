@@ -270,11 +270,9 @@ private slots:
     void ibaseArray();
 
     // Double addDatabase() with same name leaves system in a state that breaks
-    // invalidQuery() if run later (but only on 6.2, not 6.3 or later - no idea
-    // why); so put this one last !
+    // invalidQuery() if run later; so put this one last !
     void prematureExec_data() { generic_data(); }
     void prematureExec();
-
 private:
     // returns all database connections
     void generic_data(const QString &engine=QString());
@@ -2897,7 +2895,6 @@ void tst_QSqlQuery::prematureExec()
         dbName = dbName.sliced(cut + 1);
 
     auto db = QSqlDatabase::addDatabase(dbName);
-    auto teardown = qScopeGuard([dbName]() { QSqlDatabase::removeDatabase(dbName); });
     QSqlQuery q(db);
 
     QTest::ignoreMessage(QtWarningMsg,

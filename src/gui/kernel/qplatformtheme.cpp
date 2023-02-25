@@ -64,6 +64,8 @@ QT_BEGIN_NAMESPACE
     \ingroup qpa
     \brief The QPlatformTheme class allows customizing the UI based on themes.
 
+    See the init_platform function in qguiapplication.cpp for the complete
+    platform initialization process.
 */
 
 /*!
@@ -166,6 +168,10 @@ QT_BEGIN_NAMESPACE
     \value InteractiveResizeAcrossScreens (bool) Whether using the whole virtual geometry of all the screens
                         as basis for the resize.
                         This enum value has been added in Qt 6.2.
+
+    \value ShowDirectoriesFirst (bool) Whether directories should be shown
+           first (before files) in file dialogs.
+           This enum value was added in Qt 6.2.
 
     \sa themeHint(), QStyle::pixelMetric()
 */
@@ -574,6 +580,8 @@ QVariant QPlatformTheme::defaultThemeHint(ThemeHint hint)
         return QVariant(10);
     case InteractiveResizeAcrossScreens:
         return true;
+    case ShowDirectoriesFirst:
+        return true;
     }
     return QVariant();
 }
@@ -788,3 +796,5 @@ unsigned QPlatformThemePrivate::currentKeyPlatforms()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qplatformtheme.cpp"

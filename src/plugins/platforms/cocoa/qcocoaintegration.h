@@ -124,17 +124,10 @@ public:
     NSToolbar *toolbar(QWindow *window) const;
     void clearToolbars();
 
-    void pushPopupWindow(QCocoaWindow *window);
-    QCocoaWindow *popPopupWindow();
-    QCocoaWindow *activePopupWindow() const;
-    QList<QCocoaWindow *> *popupWindowStack();
-
     void setApplicationIcon(const QIcon &icon) const override;
 
     void beep() const override;
     void quit() const override;
-
-    void closePopups(QWindow *forWindow = nullptr);
 
 private Q_SLOTS:
     void focusWindowChanged(QWindow *);
@@ -162,7 +155,6 @@ private:
     mutable QCocoaVulkanInstance *mCocoaVulkanInstance = nullptr;
 #endif
     QHash<QWindow *, NSToolbar *> mToolbars;
-    QList<QCocoaWindow *> m_popupWindowStack;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QCocoaIntegration::Options)

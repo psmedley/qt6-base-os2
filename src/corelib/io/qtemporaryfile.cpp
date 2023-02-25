@@ -343,7 +343,8 @@ void QTemporaryFileEngine::setFileName(const QString &file)
     QFSFileEngine::setFileName(file);
 }
 
-bool QTemporaryFileEngine::open(QIODevice::OpenMode openMode)
+bool QTemporaryFileEngine::open(QIODevice::OpenMode openMode,
+                                std::optional<QFile::Permissions> permissions)
 {
     Q_D(QFSFileEngine);
     Q_ASSERT(!isReallyOpen());
@@ -351,7 +352,7 @@ bool QTemporaryFileEngine::open(QIODevice::OpenMode openMode)
     openMode |= QIODevice::ReadWrite;
 
     if (!filePathIsTemplate)
-        return QFSFileEngine::open(openMode);
+        return QFSFileEngine::open(openMode, permissions);
 
     QTemporaryFileName tfn(templateName);
 
@@ -442,7 +443,7 @@ bool QTemporaryFileEngine::close()
 QString QTemporaryFileEngine::fileName(QAbstractFileEngine::FileName file) const
 {
     if (isUnnamedFile()) {
-        if (file == LinkName) {
+        if (file == AbsoluteLinkTarget) {
             // we know our file isn't (won't be) a symlink
             return QString();
         }
@@ -622,6 +623,9 @@ QString QTemporaryFilePrivate::defaultTemplateName()
     be placed into the temporary path as returned by QDir::tempPath().
     If you specify your own filename, a relative file path will not be placed in the
     temporary directory by default, but be relative to the current working directory.
+    It is important to specify the correct directory if the rename() function will be
+    called, as QTemporaryFile can only rename files within the same volume / filesystem
+    as the temporary file itself was created on.
 
     Specified filenames can contain the following template \c XXXXXX
     (six upper case "X" characters), which will be replaced by the
@@ -673,7 +677,11 @@ QTemporaryFile::QTemporaryFile()
 
     If \a templateName is a relative path, the path will be relative to the
     current working directory. You can use QDir::tempPath() to construct \a
-    templateName if you want use the system's temporary directory.
+    templateName if you want use the system's temporary directory. It is
+    important to specify the correct directory if the rename() function will be
+    called, as QTemporaryFile can only rename files within the same volume /
+    filesystem as the temporary file itself was created on.
+
 
     \sa open(), fileTemplate()
 */
@@ -706,7 +714,10 @@ QTemporaryFile::QTemporaryFile(QObject *parent)
 
     If \a templateName is a relative path, the path will be relative to the
     current working directory. You can use QDir::tempPath() to construct \a
-    templateName if you want use the system's temporary directory.
+    templateName if you want use the system's temporary directory. It is
+    important to specify the correct directory if the rename() function will be
+    called, as QTemporaryFile can only rename files within the same volume /
+    filesystem as the temporary file itself was created on.
 
     \sa open(), fileTemplate()
 */
@@ -825,7 +836,10 @@ QString QTemporaryFile::fileTemplate() const
 
     If \a name contains a relative file path, the path will be relative to the
     current working directory. You can use QDir::tempPath() to construct \a
-    name if you want use the system's temporary directory.
+    name if you want use the system's temporary directory. It is important to
+    specify the correct directory if the rename() function will be called, as
+    QTemporaryFile can only rename files within the same volume / filesystem as
+    the temporary file itself was created on.
 
    \sa fileTemplate()
 */
@@ -836,11 +850,22 @@ void QTemporaryFile::setFileTemplate(const QString &name)
 }
 
 /*!
-    \internal
+    Renames the current temporary file to \a newName and returns true if it
+    succeeded.
 
-    This is just a simplified version of QFile::rename() because we know a few
-    extra details about what kind of file we have. The documentation is hidden
-    from the user because QFile::rename() should be enough.
+    This function has an important difference compared to QFile::rename(): it
+    will not perform a copy+delete if the low-level system call to rename the
+    file fails, something that could happen if \a newName specifies a file in a
+    different volume or filesystem than the temporary file was created on. In
+    other words, QTemporaryFile only supports atomic file renaming.
+
+    This functionality is intended to support materializing the destination
+    file with all contents already present, so another process cannot see an
+    incomplete file in the process of being written. The \l QSaveFile class can
+    be used for a similar purpose too, particularly if the destination file is
+    not temporary.
+
+    \sa QSaveFile, QSaveFile::commit(), QFile::rename()
 */
 bool QTemporaryFile::rename(const QString &newName)
 {

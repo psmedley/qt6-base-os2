@@ -18,10 +18,6 @@ qhp.QtWidgets.virtualFolder       = qtwidgets
 qhp.QtWidgets.indexTitle          = Qt Widgets
 qhp.QtWidgets.indexRoot           =
 
-qhp.QtWidgets.filterAttributes    = qtwidgets $QT_VERSION qtrefdoc
-qhp.QtWidgets.customFilters.Qt.name = QtWidgets $QT_VERSION
-qhp.QtWidgets.customFilters.Qt.filterAttributes = qtwidgets $QT_VERSION
-
 qhp.QtWidgets.subprojects         = classes
 qhp.QtWidgets.subprojects.classes.title = C++ Classes
 qhp.QtWidgets.subprojects.classes.indexTitle = Qt Widgets C++ Classes
@@ -65,3 +61,6 @@ imagedirs   += images \
 navigation.landingpage = "Qt Widgets"
 navigation.cppclassespage = "Qt Widgets C++ Classes"
 manifestmeta.highlighted.names = "QtWidgets/Qt Widgets - Application Example"
+
+# Fail the documentation build if there are more warnings than the limit
+warninglimit = 0

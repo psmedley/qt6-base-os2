@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtTest module of the Qt Toolkit.
@@ -63,8 +63,10 @@ class QTestData;
 
 class Q_TESTLIB_EXPORT QAbstractTestLogger
 {
+    Q_DISABLE_COPY_MOVE(QAbstractTestLogger)
 public:
     enum IncidentTypes {
+        Skip,
         Pass,
         XFail,
         Fail,
@@ -76,14 +78,14 @@ public:
     };
 
     enum MessageTypes {
-        Warn,
-        QWarning,
         QDebug,
+        QInfo,
+        QWarning,
         QCritical,
         QFatal,
-        Skip,
+        // testlib's internal messages:
         Info,
-        QInfo
+        Warn
     };
 
     QAbstractTestLogger(const char *filename);
@@ -124,6 +126,8 @@ struct QTestCharBuffer
     {
         staticBuf[0] = '\0';
     }
+
+    Q_DISABLE_COPY_MOVE(QTestCharBuffer)
 
     inline ~QTestCharBuffer()
     {

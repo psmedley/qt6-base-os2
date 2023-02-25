@@ -39,6 +39,7 @@
 
 #include "qplatformdefs.h"
 #include "private/qabstractfileengine_p.h"
+#include "private/qfiledevice_p.h"
 #include "private/qfsfileengine_p.h"
 #include "qfilesystemengine_p.h"
 #include <qdebug.h>
@@ -95,7 +96,8 @@ QString QFSFileEnginePrivate::longFileName(const QString &path)
 /*
     \internal
 */
-bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode)
+bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode,
+                                      std::optional<QFile::Permissions> permissions)
 {
     Q_Q(QFSFileEngine);
 
@@ -115,11 +117,14 @@ bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode)
                                 ? OPEN_ALWAYS
                                 : OPEN_EXISTING;
     // Create the file handle.
-    SECURITY_ATTRIBUTES securityAtts = { sizeof(SECURITY_ATTRIBUTES), NULL, FALSE };
+    QNativeFilePermissions nativePermissions(permissions, false);
+    if (!nativePermissions.isOk())
+        return false;
+
     fileHandle = CreateFile((const wchar_t*)fileEntry.nativeFilePath().utf16(),
                             accessRights,
                             shareMode,
-                            &securityAtts,
+                            nativePermissions.securityAttributes(),
                             creationDisp,
                             FILE_ATTRIBUTE_NORMAL,
                             NULL);
@@ -646,7 +651,7 @@ QString QFSFileEngine::fileName(FileName file) const
             return entry.path();
         return entry.filePath();
     }
-    case LinkName:
+    case AbsoluteLinkTarget:
         return QFileSystemEngine::getLinkTarget(d->fileEntry, d->metaData).filePath();
     case BundleName:
         return QString();
@@ -871,17 +876,18 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size,
 bool QFSFileEnginePrivate::unmap(uchar *ptr)
 {
     Q_Q(QFSFileEngine);
-    if (!maps.contains(ptr)) {
+    const auto it = std::as_const(maps).find(ptr);
+    if (it == maps.cend()) {
         q->setError(QFile::PermissionsError, qt_error_string(ERROR_ACCESS_DENIED));
         return false;
     }
-    uchar *start = ptr - maps[ptr];
+    uchar *start = ptr - *it;
     if (!UnmapViewOfFile(start)) {
         q->setError(QFile::PermissionsError, qt_error_string());
         return false;
     }
 
-    maps.remove(ptr);
+    maps.erase(it);
     if (maps.isEmpty()) {
         ::CloseHandle(mapHandle);
         mapHandle = NULL;

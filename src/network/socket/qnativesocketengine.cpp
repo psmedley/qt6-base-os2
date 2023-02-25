@@ -476,16 +476,18 @@ bool QNativeSocketEngine::initialize(QAbstractSocket::SocketType socketType, QAb
     }
 
 
+#ifndef Q_OS_WASM
     // Make sure we receive out-of-band data
     if (socketType == QAbstractSocket::TcpSocket
         && !setOption(ReceiveOutOfBandData, 1)) {
         qWarning("QNativeSocketEngine::initialize unable to inline out-of-band data");
     }
+#endif
 
     // Before Qt 4.6, we always set the send and receive buffer size to 49152 as
     // this was found to be an optimal value. However, modern OS
     // all have some kind of auto tuning for this and we therefore don't set
-    // this explictly anymore.
+    // this explicitly anymore.
     // If it introduces any performance regressions for Qt 4.6.x (x > 0) then
     // it will be put back in.
     //
@@ -689,7 +691,7 @@ bool QNativeSocketEngine::bind(const QHostAddress &address, quint16 port)
 
     \sa bind(), accept()
 */
-bool QNativeSocketEngine::listen()
+bool QNativeSocketEngine::listen(int backlog)
 {
     Q_D(QNativeSocketEngine);
     Q_CHECK_VALID_SOCKETLAYER(QNativeSocketEngine::listen(), false);
@@ -701,11 +703,7 @@ bool QNativeSocketEngine::listen()
     Q_CHECK_TYPE(QNativeSocketEngine::listen(), QAbstractSocket::TcpSocket, false);
 #endif
 
-    // We're using a backlog of 50. Most modern kernels support TCP
-    // syncookies by default, and if they do, the backlog is ignored.
-    // When there is no support for TCP syncookies, this value is
-    // fine.
-    return d->nativeListen(50);
+    return d->nativeListen(backlog);
 }
 
 /*!

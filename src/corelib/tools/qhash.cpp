@@ -68,13 +68,124 @@
 #include <qrandom.h>
 #endif // QT_BOOTSTRAPPED
 
+#include <array>
 #include <limits.h>
+
+#ifdef Q_CC_GNU
+#  define Q_DECL_HOT_FUNCTION       __attribute__((hot))
+#else
+#  define Q_DECL_HOT_FUNCTION
+#endif
 
 QT_BEGIN_NAMESPACE
 
 // We assume that pointers and size_t have the same size. If that assumption should fail
 // on a platform the code selecting the different methods below needs to be fixed.
 static_assert(sizeof(size_t) == QT_POINTER_SIZE, "size_t and pointers have different size.");
+
+namespace {
+struct HashSeedStorage
+{
+    static constexpr int SeedCount = 2;
+    QBasicAtomicInteger<quintptr> seeds[SeedCount] = { Q_BASIC_ATOMIC_INITIALIZER(0), Q_BASIC_ATOMIC_INITIALIZER(0) };
+
+    constexpr HashSeedStorage() = default;
+
+    enum State {
+        OverriddenByEnvironment = -1,
+        JustInitialized,
+        AlreadyInitialized
+    };
+    struct StateResult {
+        quintptr requestedSeed;
+        State state;
+    };
+
+    StateResult state(int which = -1);
+    Q_DECL_HOT_FUNCTION QHashSeed currentSeed(int which)
+    {
+        return { state(which).requestedSeed };
+    }
+
+    void resetSeed()
+    {
+        if (state().state < AlreadyInitialized)
+            return;
+
+        // update the public seed
+        QRandomGenerator *generator = QRandomGenerator::system();
+        seeds[0].storeRelaxed(sizeof(size_t) > sizeof(quint32)
+                              ? generator->generate64() : generator->generate());
+    }
+
+    void clearSeed()
+    {
+        state();
+        seeds[0].storeRelaxed(0);   // always write (smaller code)
+    }
+
+private:
+    Q_DECL_COLD_FUNCTION Q_NEVER_INLINE StateResult initialize(int which) noexcept;
+    [[maybe_unused]] static void ensureConstexprConstructibility()
+    {
+        static_assert(std::is_trivially_destructible_v<HashSeedStorage>);
+        static constexpr HashSeedStorage dummy {};
+        Q_UNUSED(dummy);
+    }
+};
+
+[[maybe_unused]] HashSeedStorage::StateResult HashSeedStorage::initialize(int which) noexcept
+{
+    StateResult result = { 0, OverriddenByEnvironment };
+    bool ok;
+    int seed = qEnvironmentVariableIntValue("QT_HASH_SEED", &ok);
+    if (ok) {
+        if (seed) {
+            // can't use qWarning here (reentrancy)
+            fprintf(stderr, "QT_HASH_SEED: forced seed value is not 0; ignored.\n");
+        }
+
+        // we don't have to store to the seed, since it's pre-initialized by
+        // the compiler to zero
+        return result;
+    }
+
+    // update the full seed
+    auto x = qt_initial_random_value();
+    for (int i = 0; i < SeedCount; ++i) {
+        seeds[i].storeRelaxed(x.data[i]);
+        if (which == i)
+            result.requestedSeed = x.data[i];
+    }
+    result.state = JustInitialized;
+    return result;
+}
+
+inline HashSeedStorage::StateResult HashSeedStorage::state(int which)
+{
+    constexpr quintptr BadSeed = quintptr(Q_UINT64_C(0x5555'5555'5555'5555));
+    StateResult result = { BadSeed, AlreadyInitialized };
+
+#ifndef QT_BOOTSTRAPPED
+    static auto once = [&]() {
+        result = initialize(which);
+        return true;
+    }();
+    Q_UNUSED(once);
+#else
+    result = { 0, OverriddenByEnvironment };
+#endif
+
+    if (result.state == AlreadyInitialized && which >= 0)
+        return { seeds[which].loadRelaxed(), AlreadyInitialized };
+    return result;
+}
+} // unnamed namespace
+
+/*
+    The QHash seed itself.
+*/
+static HashSeedStorage qt_qhash_seed;
 
 /*
  * Hashing for memory segments is based on the public domain MurmurHash2 by
@@ -192,10 +303,7 @@ static inline uint64_t murmurhash(const void *key, uint64_t len, uint64_t seed) 
 // This is an inlined version of the SipHash implementation that is
 // trying to avoid some memcpy's from uint64 to uint8[] and back.
 //
-// The original algorithm uses a 128bit seed. Our public API only allows
-// for a 64bit seed, so we mix in the length of the string to get some more
-// bits for the seed.
-//
+
 // Use SipHash-1-2, which has similar performance characteristics as
 // stablehash() above, instead of the SipHash-2-4 default
 #define cROUNDS 1
@@ -222,7 +330,7 @@ static inline uint64_t murmurhash(const void *key, uint64_t len, uint64_t seed) 
   } while (0)
 
 
-static uint64_t siphash(const uint8_t *in, uint64_t inlen, const uint64_t seed)
+static uint64_t siphash(const uint8_t *in, uint64_t inlen, uint64_t seed, uint64_t seed2)
 {
     /* "somepseudorandomlygeneratedbytes" */
     uint64_t v0 = 0x736f6d6570736575ULL;
@@ -231,7 +339,7 @@ static uint64_t siphash(const uint8_t *in, uint64_t inlen, const uint64_t seed)
     uint64_t v3 = 0x7465646279746573ULL;
     uint64_t b;
     uint64_t k0 = seed;
-    uint64_t k1 = seed ^ inlen;
+    uint64_t k1 = seed2;
     int i;
     const uint8_t *end = in + (inlen & ~7ULL);
     const int left = inlen & 7;
@@ -252,7 +360,7 @@ static uint64_t siphash(const uint8_t *in, uint64_t inlen, const uint64_t seed)
     }
 
 
-#if defined(Q_CC_GNU) && Q_CC_GNU >= 700
+#if defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 700
     QT_WARNING_DISABLE_GCC("-Wimplicit-fallthrough")
 #endif
     switch (left) {
@@ -327,7 +435,7 @@ static uint64_t siphash(const uint8_t *in, uint64_t inlen, const uint64_t seed)
   } while (0)
 
 
-static uint siphash(const uint8_t *in, uint inlen, const uint seed)
+static uint siphash(const uint8_t *in, uint inlen, uint seed, uint seed2)
 {
     /* "somepseudorandomlygeneratedbytes" */
     uint v0 = 0x736f6d65U;
@@ -336,7 +444,7 @@ static uint siphash(const uint8_t *in, uint inlen, const uint seed)
     uint v3 = 0x74656462U;
     uint b;
     uint k0 = seed;
-    uint k1 = seed ^ inlen;
+    uint k1 = seed2;
     int i;
     const uint8_t *end = in + (inlen & ~3ULL);
     const int left = inlen & 3;
@@ -356,7 +464,7 @@ static uint siphash(const uint8_t *in, uint inlen, const uint seed)
         v0 ^= m;
     }
 
-#if defined(Q_CC_GNU) && Q_CC_GNU >= 700
+#if defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 700
     QT_WARNING_DISABLE_GCC("-Wimplicit-fallthrough")
 #endif
     switch (left) {
@@ -406,25 +514,11 @@ static uint siphash(const uint8_t *in, uint inlen, const uint seed)
 #undef QHASH_AES_SANITIZER_BUILD
 
 QT_FUNCTION_TARGET(AES)
-static size_t aeshash(const uchar *p, size_t len, size_t seed) noexcept
+static size_t aeshash(const uchar *p, size_t len, size_t seed, size_t seed2) noexcept
 {
-    __m128i key;
-    if (sizeof(size_t) == 8) {
-#ifdef Q_PROCESSOR_X86_64
-        quint64 seededlen = seed ^ len;
-        __m128i mseed = _mm_cvtsi64_si128(seed);
-        key = _mm_insert_epi64(mseed, seededlen, 1);
-#endif
-    } else {
-        quint32 replicated_len = quint16(len) | (quint32(quint16(len)) << 16);
-        __m128i mseed = _mm_cvtsi32_si128(int(seed));
-        key = _mm_insert_epi32(mseed, replicated_len, 1);
-        key = _mm_unpacklo_epi64(key, key);
-    }
-
     // This is inspired by the algorithm in the Go language. See:
-    // https://github.com/golang/go/blob/894abb5f680c040777f17f9f8ee5a5ab3a03cb94/src/runtime/asm_386.s#L902
-    // https://github.com/golang/go/blob/894abb5f680c040777f17f9f8ee5a5ab3a03cb94/src/runtime/asm_amd64.s#L903
+    // https://github.com/golang/go/blob/01b6cf09fc9f272d9db3d30b4c93982f4911d120/src/runtime/asm_amd64.s#L1105
+    // https://github.com/golang/go/blob/01b6cf09fc9f272d9db3d30b4c93982f4911d120/src/runtime/asm_386.s#L908
     //
     // Even though we're using the AESENC instruction from the CPU, this code
     // is not encryption and this routine makes no claim to be
@@ -442,59 +536,74 @@ static size_t aeshash(const uchar *p, size_t len, size_t seed) noexcept
         state0 = _mm_aesenc_si128(state0, state0);
     };
 
-    __m128i state0 = key;
+    // hash twice 16 bytes, running 2 scramble rounds of AES on itself
+    const auto hash2x16bytes = [](__m128i &state0, __m128i &state1, const __m128i *src0,
+            const __m128i *src1) QT_FUNCTION_TARGET(AES) {
+        __m128i data0 = _mm_loadu_si128(src0);
+        __m128i data1 = _mm_loadu_si128(src1);
+        state0 = _mm_xor_si128(data0, state0);
+        state1 = _mm_xor_si128(data1, state1);
+        state0 = _mm_aesenc_si128(state0, state0);
+        state1 = _mm_aesenc_si128(state1, state1);
+        state0 = _mm_aesenc_si128(state0, state0);
+        state1 = _mm_aesenc_si128(state1, state1);
+    };
+
+    __m128i mseed, mseed2;
+    if (sizeof(size_t) == 8) {
+#ifdef Q_PROCESSOR_X86_64
+        mseed = _mm_cvtsi64_si128(seed);
+        mseed2 = _mm_set1_epi64x(seed2);
+#endif
+    } else {
+        mseed = _mm_cvtsi32_si128(int(seed));
+        mseed2 = _mm_set1_epi32(int(seed2));
+    }
+
+    // mseed (epi16) = [ seed, seed >> 16, seed >> 32, seed >> 48, len, 0, 0, 0 ]
+    mseed = _mm_insert_epi16(mseed, short(seed), 4);
+    // mseed (epi16) = [ seed, seed >> 16, seed >> 32, seed >> 48, len, len, len, len ]
+    mseed = _mm_shufflehi_epi16(mseed, 0);
+
+    // merge with the process-global seed
+    __m128i key = _mm_xor_si128(mseed, mseed2);
+
+    // scramble the key
+    __m128i state0 = _mm_aesenc_si128(key, key);
+
     auto src = reinterpret_cast<const __m128i *>(p);
+    if (len >= sizeof(__m128i)) {
+        // unlike the Go code, we don't have more per-process seed
+        __m128i state1 = _mm_aesenc_si128(state0, mseed2);
 
-    if (len < 16)
-        goto lt16;
-    if (len < 32)
-        goto lt32;
+        const auto srcend = reinterpret_cast<const __m128i *>(p + len);
 
-    // rounds of 32 bytes
-    {
-        // Make state1 = ~state0:
-        __m128i one = _mm_cmpeq_epi64(key, key);
-        __m128i state1 = _mm_xor_si128(state0, one);
+        // main loop: scramble two 16-byte blocks
+        for ( ; src + 2 < srcend; src += 2)
+            hash2x16bytes(state0, state1, src, src + 1);
 
-        // do simplified rounds of 32 bytes: unlike the Go code, we only
-        // scramble twice and we keep 256 bits of state
-        const auto srcend = src + (len / 32);
-        while (src < srcend) {
-            __m128i data0 = _mm_loadu_si128(src);
-            __m128i data1 = _mm_loadu_si128(src + 1);
-            state0 = _mm_xor_si128(data0, state0);
-            state1 = _mm_xor_si128(data1, state1);
-            state0 = _mm_aesenc_si128(state0, state0);
-            state1 = _mm_aesenc_si128(state1, state1);
-            state0 = _mm_aesenc_si128(state0, state0);
-            state1 = _mm_aesenc_si128(state1, state1);
-            src += 2;
+        if (src + 1 < srcend) {
+            // epilogue: between 16 and 31 bytes
+            hash2x16bytes(state0, state1, src, srcend - 1);
+        } else if (src != srcend) {
+            // epilogue: between 1 and 16 bytes, overlap with the end
+            __m128i data = _mm_loadu_si128(srcend - 1);
+            hash16bytes(state0, data);
         }
+
+        // combine results:
         state0 = _mm_xor_si128(state0, state1);
-    }
-    len &= 0x1f;
-
-    // do we still have 16 or more bytes?
-    if (len & 0x10) {
-lt32:
-        __m128i data = _mm_loadu_si128(src);
-        hash16bytes(state0, data);
-        ++src;
-    }
-    len &= 0xf;
-
-lt16:
-    if (len) {
-        // load the last chunk of data
+    } else if (len) {
         // We're going to load 16 bytes and mask zero the part we don't care
         // (the hash of a short string is different from the hash of a longer
         // including NULLs at the end because the length is in the key)
         // WARNING: this may produce valgrind warnings, but it's safe
 
+        constexpr quintptr PageSize = 4096;
         __m128i data;
 
-        if (Q_LIKELY(quintptr(src + 1) & 0xff0)) {
-            // same page, we definitely can't fault:
+        if ((quintptr(src) & (PageSize / 2)) == 0) {
+            // lower half of the page:
             // load all 16 bytes and mask off the bytes past the end of the source
             static const qint8 maskarray[] = {
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -504,15 +613,14 @@ lt16:
             data = _mm_loadu_si128(src);
             data = _mm_and_si128(data, mask);
         } else {
-            // too close to the end of the page, it could fault:
+            // upper half of the page:
             // load 16 bytes ending at the data end, then shuffle them to the beginning
             static const qint8 shufflecontrol[] = {
                 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
             };
             __m128i control = _mm_loadu_si128(reinterpret_cast<const __m128i *>(shufflecontrol + 15 - len));
-            p = reinterpret_cast<const uchar *>(src - 1);
-            data = _mm_loadu_si128(reinterpret_cast<const __m128i *>(p + len));
+            data = _mm_loadu_si128(reinterpret_cast<const __m128i *>(p + len) - 1);
             data = _mm_shuffle_epi8(data, control);
         }
 
@@ -530,17 +638,16 @@ lt16:
 
 #if defined(Q_PROCESSOR_ARM) && QT_COMPILER_SUPPORTS_HERE(AES) && !defined(QHASH_AES_SANITIZER_BUILD) && !defined(QT_BOOTSTRAPPED)
 QT_FUNCTION_TARGET(AES)
-static size_t aeshash(const uchar *p, size_t len, size_t seed) noexcept
+static size_t aeshash(const uchar *p, size_t len, size_t seed, size_t seed2) noexcept
 {
     uint8x16_t key;
 #  if QT_POINTER_SIZE == 8
-    quint64 seededlen = seed ^ len;
-    uint64x2_t vseed = vcombine_u64(vcreate_u64(seed), vcreate_u64(seededlen));
+    uint64x2_t vseed = vcombine_u64(vcreate_u64(seed), vcreate_u64(seed2));
     key = vreinterpretq_u8_u64(vseed);
 #  else
-    quint32 replicated_len = quint16(len) | (quint32(quint16(len)) << 16);
+
     uint32x2_t vseed = vmov_n_u32(seed);
-    vseed = vset_lane_u32(replicated_len, vseed, 1);
+    vseed = vset_lane_u32(seed2, vseed, 1);
     key = vreinterpretq_u8_u32(vcombine_u32(vseed, vseed));
 #  endif
 
@@ -668,9 +775,14 @@ size_t qHashBits(const void *p, size_t size, size_t seed) noexcept
     // so help the compiler do dead code elimination
     seed = 0;
 #endif
+    // mix in the length as a secondary seed. For seed == 0, seed2 must be
+    // size, to match what we used to do prior to Qt 6.2.
+    size_t seed2 = size;
+    if (seed)
+        seed2 = qt_qhash_seed.currentSeed(1);
 #ifdef AESHASH
     if (seed && qCpuHasFeature(AES) && qCpuHasFeature(SSE4_2))
-        return aeshash(reinterpret_cast<const uchar *>(p), size, seed);
+        return aeshash(reinterpret_cast<const uchar *>(p), size, seed, seed2);
 #elif defined(Q_PROCESSOR_ARM) && QT_COMPILER_SUPPORTS_HERE(AES) && !defined(QHASH_AES_SANITIZER_BUILD) && !defined(QT_BOOTSTRAPPED)
 # if defined(Q_OS_LINUX)
     // Do specific runtime-only check as Yocto hard enables Crypto extension for
@@ -679,12 +791,12 @@ size_t qHashBits(const void *p, size_t size, size_t seed) noexcept
 # else
     if (seed && qCpuHasFeature(AES))
 # endif
-        return aeshash(reinterpret_cast<const uchar *>(p), size, seed);
+        return aeshash(reinterpret_cast<const uchar *>(p), size, seed, seed2);
 #endif
     if (size <= QT_POINTER_SIZE)
         return murmurhash(p, size, seed);
 
-    return siphash(reinterpret_cast<const uchar *>(p), size, seed);
+    return siphash(reinterpret_cast<const uchar *>(p), size, seed, seed2);
 }
 
 size_t qHash(const QByteArray &key, size_t seed) noexcept
@@ -721,65 +833,8 @@ size_t qHash(QLatin1String key, size_t seed) noexcept
 }
 
 /*!
-    \internal
-
-    Note: not \c{noexcept}, but called from a \c{noexcept} function and thus
-    will cause termination if any of the functions here throw.
-*/
-enum HashCreationMode { Initial, Reseed };
-static size_t qt_create_qhash_seed(HashCreationMode mode)
-{
-    size_t seed = 0;
-
-#ifdef QT_BOOTSTRAPPED
-    Q_UNUSED(mode)
-#else
-    bool ok;
-    seed = qEnvironmentVariableIntValue("QT_HASH_SEED", &ok);
-    if (ok) {
-        if (seed) {
-            // can't use qWarning here (reentrancy)
-            fprintf(stderr, "QT_HASH_SEED: forced seed value is not 0; ignored.\n");
-        }
-        seed = 1;   // QHashSeed::globalSeed subtracts 1
-    } else if (mode == Initial) {
-        auto data = qt_initial_random_value();
-        seed = data.data[0] ^ data.data[1];
-    } else if (sizeof(seed) > sizeof(uint)) {
-        seed = QRandomGenerator::system()->generate64();
-    } else {
-        seed = QRandomGenerator::system()->generate();
-    }
-#endif // QT_BOOTSTRAPPED
-
-    return seed;
-}
-
-/*
-    The QHash seed itself.
-
-    We store the seed value plus one, so the value zero is used to indicate the
-    seed is not initialized. This is corrected before passing to the user.
-*/
-static QBasicAtomicInteger<size_t> qt_qhash_seed = Q_BASIC_ATOMIC_INITIALIZER(0);
-
-/*!
-    \internal
-    \threadsafe
-
-    Initializes the seed and returns it.
-*/
-static size_t qt_initialize_qhash_seed()
-{
-    size_t theirSeed;               // another thread's seed
-    size_t ourSeed = qt_create_qhash_seed(Initial);
-    if (qt_qhash_seed.testAndSetRelaxed(0, ourSeed, theirSeed))
-        return ourSeed;
-    return theirSeed;
-}
-
-/*!
     \class QHashSeed
+    \inmodule QtCore
     \since 6.2
 
     The QHashSeed class is used to convey the QHash seed. This is used
@@ -832,11 +887,7 @@ static size_t qt_initialize_qhash_seed()
  */
 QHashSeed QHashSeed::globalSeed() noexcept
 {
-    size_t seed = qt_qhash_seed.loadRelaxed();
-    if (Q_UNLIKELY(seed == 0))
-        seed = qt_initialize_qhash_seed();
-
-    return { seed - 1 };
+    return qt_qhash_seed.currentSeed(0);
 }
 
 /*!
@@ -850,7 +901,7 @@ QHashSeed QHashSeed::globalSeed() noexcept
  */
 void QHashSeed::setDeterministicGlobalSeed()
 {
-    qt_qhash_seed.storeRelease(1);
+    qt_qhash_seed.clearSeed();
 }
 
 /*!
@@ -870,8 +921,7 @@ void QHashSeed::setDeterministicGlobalSeed()
  */
 void QHashSeed::resetRandomGlobalSeed()
 {
-    size_t seed = qt_create_qhash_seed(Reseed);
-    qt_qhash_seed.storeRelaxed(seed + 1);
+    qt_qhash_seed.resetSeed();
 }
 
 #if QT_DEPRECATED_SINCE(6,6)
@@ -1818,14 +1868,15 @@ size_t qHash(long double key, size_t seed) noexcept
     \sa count(), QMultiHash::contains()
 */
 
-/*! \fn template <class Key, class T> T QHash<Key, T>::value(const Key &key, const T &defaultValue = T()) const
+/*! \fn template <class Key, class T> T QHash<Key, T>::value(const Key &key) const
+    \fn template <class Key, class T> T QHash<Key, T>::value(const Key &key, const T &defaultValue) const
     \overload
 
     Returns the value associated with the \a key.
 
     If the hash contains no item with the \a key, the function
-    returns \a defaultValue, which is a \l{default-constructed value} if the
-    parameter has not been specified.
+    returns \a defaultValue, or a \l{default-constructed value} if this
+    parameter has not been supplied.
 */
 
 /*! \fn template <class Key, class T> T &QHash<Key, T>::operator[](const Key &key)
@@ -1888,11 +1939,13 @@ size_t qHash(long double key, size_t seed) noexcept
 */
 
 /*!
-    \fn template <class Key, class T> Key QHash<Key, T>::key(const T &value, const Key &defaultKey = Key()) const
+    \fn template <class Key, class T> Key QHash<Key, T>::key(const T &value) const
+    \fn template <class Key, class T> Key QHash<Key, T>::key(const T &value, const Key &defaultKey) const
     \since 4.3
 
-    Returns the first key mapped to \a value, or \a defaultKey if the
-    hash contains no item mapped to \a value.
+    Returns the first key mapped to \a value. If the hash contains no item
+    mapped to \a value, returns \a defaultKey, or a \l{default-constructed
+    value}{default-constructed key} if this parameter has not been supplied.
 
     This function can be slow (\l{linear time}), because QHash's
     internal data structure is optimized for fast lookup by key, not
@@ -2849,14 +2902,14 @@ size_t qHash(long double key, size_t seed) noexcept
     \sa keys(), values()
 */
 
-/*! \fn template <class Key, class T> T QMultiHash<Key, T>::value(const Key &key, const T &defaultValue = T()) const
-    \overload
+/*! \fn template <class Key, class T> T QMultiHash<Key, T>::value(const Key &key) const
+    \fn template <class Key, class T> T QMultiHash<Key, T>::value(const Key &key, const T &defaultValue) const
 
     Returns the value associated with the \a key.
 
     If the hash contains no item with the \a key, the function
-    returns \a defaultValue, which is a \l{default-constructed value} if the
-    parameter has not been specified.
+    returns \a defaultValue, or a \l{default-constructed value} if this
+    parameter has not been supplied.
 
     If there are multiple
     items for the \a key in the hash, the value of the most recently
@@ -3004,11 +3057,13 @@ size_t qHash(long double key, size_t seed) noexcept
 */
 
 /*!
-    \fn template <class Key, class T> Key QMultiHash<Key, T>::key(const T &value, const Key &defaultKey = Key()) const
+    \fn template <class Key, class T> Key QMultiHash<Key, T>::key(const T &value) const
+    \fn template <class Key, class T> Key QMultiHash<Key, T>::key(const T &value, const Key &defaultKey) const
     \since 4.3
 
-    Returns the first key mapped to \a value, or \a defaultKey if the
-    hash contains no item mapped to \a value.
+    Returns the first key mapped to \a value. If the hash contains no item
+    mapped to \a value, returns \a defaultKey, or a \l{default-constructed
+    value}{default-constructed key} if this parameter has not been supplied.
 
     This function can be slow (\l{linear time}), because QMultiHash's
     internal data structure is optimized for fast lookup by key, not

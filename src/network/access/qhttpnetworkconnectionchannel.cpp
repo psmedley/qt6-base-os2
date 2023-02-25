@@ -58,6 +58,8 @@
 
 #include "private/qnetconmonitor_p.h"
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 namespace
@@ -74,7 +76,7 @@ private:
 
 }
 
-// TODO: Put channel specific stuff here so it does not polute qhttpnetworkconnection.cpp
+// TODO: Put channel specific stuff here so it does not pollute qhttpnetworkconnection.cpp
 
 // Because in-flight when sending a request, the server might close our connection (because the persistent HTTP
 // connection times out)
@@ -242,7 +244,7 @@ void QHttpNetworkConnectionChannel::abort()
 
 bool QHttpNetworkConnectionChannel::sendRequest()
 {
-    Q_ASSERT(!protocolHandler.isNull());
+    Q_ASSERT(protocolHandler);
     return protocolHandler->sendRequest();
 }
 
@@ -255,7 +257,7 @@ bool QHttpNetworkConnectionChannel::sendRequest()
 void QHttpNetworkConnectionChannel::sendRequestDelayed()
 {
     QMetaObject::invokeMethod(this, [this] {
-        Q_ASSERT(!protocolHandler.isNull());
+        Q_ASSERT(protocolHandler);
         if (reply)
             protocolHandler->sendRequest();
     }, Qt::ConnectionType::QueuedConnection);
@@ -263,13 +265,13 @@ void QHttpNetworkConnectionChannel::sendRequestDelayed()
 
 void QHttpNetworkConnectionChannel::_q_receiveReply()
 {
-    Q_ASSERT(!protocolHandler.isNull());
+    Q_ASSERT(protocolHandler);
     protocolHandler->_q_receiveReply();
 }
 
 void QHttpNetworkConnectionChannel::_q_readyRead()
 {
-    Q_ASSERT(!protocolHandler.isNull());
+    Q_ASSERT(protocolHandler);
     protocolHandler->_q_readyRead();
 }
 
@@ -356,6 +358,13 @@ bool QHttpNetworkConnectionChannel::ensureConnection()
         QString connectHost = connection->d_func()->hostName;
         quint16 connectPort = connection->d_func()->port;
 
+        QHttpNetworkReply *potentialReply = connection->d_func()->predictNextRequestsReply();
+        if (potentialReply) {
+            QMetaObject::invokeMethod(potentialReply, "socketStartedConnecting", Qt::QueuedConnection);
+        } else if (h2RequestsToSend.count() > 0) {
+            QMetaObject::invokeMethod(h2RequestsToSend.values().at(0).second, "socketStartedConnecting", Qt::QueuedConnection);
+        }
+
 #ifndef QT_NO_NETWORKPROXY
         // HTTPS always use transparent proxy.
         if (connection->d_func()->networkProxy.type() != QNetworkProxy::NoProxy && !ssl) {
@@ -393,8 +402,8 @@ bool QHttpNetworkConnectionChannel::ensureConnection()
             // check whether we can re-use an existing SSL session
             // (meaning another socket in this connection has already
             // performed a full handshake)
-            if (!connection->sslContext().isNull())
-                QSslSocketPrivate::checkSettingSslContext(sslSocket, connection->sslContext());
+            if (auto ctx = connection->sslContext())
+                QSslSocketPrivate::checkSettingSslContext(sslSocket, std::move(ctx));
 
             sslSocket->setPeerVerifyName(connection->d_func()->peerVerifyName);
             sslSocket->connectToHostEncrypted(connectHost, connectPort, QIODevice::ReadWrite, networkLayerPreference);
@@ -471,18 +480,18 @@ void QHttpNetworkConnectionChannel::allDone()
             // trick with ProtocolHandlerDeleter, a QObject-derived class.
             // These dances below just make it somewhat exception-safe.
             // 1. Create a new owner:
-            QAbstractProtocolHandler *oldHandler = protocolHandler.data();
-            QScopedPointer<ProtocolHandlerDeleter> deleter(new ProtocolHandlerDeleter(oldHandler));
+            QAbstractProtocolHandler *oldHandler = protocolHandler.get();
+            auto deleter = std::make_unique<ProtocolHandlerDeleter>(oldHandler);
             // 2. Retire the old one:
-            protocolHandler.take();
+            Q_UNUSED(protocolHandler.release());
             // 3. Call 'deleteLater':
             deleter->deleteLater();
             // 3. Give up the ownerthip:
-            deleter.take();
+            Q_UNUSED(deleter.release());
 
             connection->fillHttp2Queue();
             protocolHandler.reset(new QHttp2ProtocolHandler(this));
-            QHttp2ProtocolHandler *h2c = static_cast<QHttp2ProtocolHandler *>(protocolHandler.data());
+            QHttp2ProtocolHandler *h2c = static_cast<QHttp2ProtocolHandler *>(protocolHandler.get());
             QMetaObject::invokeMethod(h2c, "_q_receiveReply", Qt::QueuedConnection);
             QMetaObject::invokeMethod(connection, "_q_startNextRequest", Qt::QueuedConnection);
             // If we only had one request sent with H2 allowed, we may fail to send
@@ -577,7 +586,7 @@ void QHttpNetworkConnectionChannel::detectPipeliningSupport()
     QByteArray serverHeaderField;
     if (
             // check for HTTP/1.1
-            (reply->d_func()->majorVersion == 1 && reply->d_func()->minorVersion == 1)
+            (reply->majorVersion() == 1 && reply->minorVersion() == 1)
             // check for not having connection close
             && (!reply->d_func()->isConnectionCloseEnabled())
             // check if it is still connected
@@ -925,12 +934,11 @@ void QHttpNetworkConnectionChannel::_q_connected()
     //channels[i].reconnectAttempts = 2;
     if (ssl || pendingEncrypt) { // FIXME: Didn't work properly with pendingEncrypt only, we should refactor this into an EncrypingState
 #ifndef QT_NO_SSL
-        if (connection->sslContext().isNull()) {
+        if (!connection->sslContext()) {
             // this socket is making the 1st handshake for this connection,
             // we need to set the SSL context so new sockets can reuse it
-            QSharedPointer<QSslContext> socketSslContext = QSslSocketPrivate::sslContext(static_cast<QSslSocket*>(socket));
-            if (!socketSslContext.isNull())
-                connection->setSslContext(socketSslContext);
+            if (auto socketSslContext = QSslSocketPrivate::sslContext(static_cast<QSslSocket*>(socket)))
+                connection->setSslContext(std::move(socketSslContext));
         }
 #endif
     } else if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeHTTP2Direct) {
@@ -989,11 +997,11 @@ void QHttpNetworkConnectionChannel::_q_error(QAbstractSocket::SocketError socket
             // we do not resend, but must report errors if any request is in progress (note, while
             // not in its sendRequest(), protocol handler switches the channel to IdleState, thus
             // this check is under this condition in 'if'):
-            if (protocolHandler.data()) {
+            if (protocolHandler) {
                 if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeHTTP2Direct
                     || (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeHTTP2
                         && switchedToHttp2)) {
-                    auto h2Handler = static_cast<QHttp2ProtocolHandler *>(protocolHandler.data());
+                    auto h2Handler = static_cast<QHttp2ProtocolHandler *>(protocolHandler.get());
                     h2Handler->handleConnectionClosure();
                 }
             }

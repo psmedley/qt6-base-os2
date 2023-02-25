@@ -74,7 +74,8 @@ public:
         NumDeviceTypes
     };
 
-    QInputDeviceManager(QObject *parent = nullptr);
+    explicit QInputDeviceManager(QObject *parent = nullptr);
+    ~QInputDeviceManager() override;
 
     int deviceCount(DeviceType type) const;
 
@@ -83,13 +84,14 @@ public:
     Qt::KeyboardModifiers keyboardModifiers() const;
     void setKeyboardModifiers(Qt::KeyboardModifiers mods);
 
-signals:
+Q_SIGNALS:
     void deviceListChanged(QInputDeviceManager::DeviceType type);
     void cursorPositionChangeRequested(const QPoint &pos);
 };
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QInputDeviceManager::DeviceType)
+QT_DECL_METATYPE_EXTERN_TAGGED(QInputDeviceManager::DeviceType,
+                               QInputDeviceManager__DeviceType, Q_GUI_EXPORT)
 
 #endif // QINPUTDEVICEMANAGER_P_H

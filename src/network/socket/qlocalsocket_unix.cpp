@@ -373,7 +373,7 @@ void QLocalSocketPrivate::_q_connectToSocket()
     fullServerName = connectingPathName;
     if (unixSocket.setSocketDescriptor(connectingSocket,
         QAbstractSocket::ConnectedState, connectingOpenMode)) {
-        q->QIODevice::open(connectingOpenMode | QIODevice::Unbuffered);
+        q->QIODevice::open(connectingOpenMode);
         q->emit connected();
     } else {
         QString function = QLatin1String("QLocalSocket::connectToServer");
@@ -496,6 +496,16 @@ qint64 QLocalSocket::readData(char *data, qint64 c)
 {
     Q_D(QLocalSocket);
     return d->unixSocket.read(data, c);
+}
+
+qint64 QLocalSocket::readLineData(char *data, qint64 maxSize)
+{
+    if (!maxSize)
+        return 0;
+
+    // QIODevice::readLine() reserves space for the trailing '\0' byte,
+    // so we must read 'maxSize + 1' bytes.
+    return d_func()->unixSocket.readLine(data, maxSize + 1);
 }
 
 qint64 QLocalSocket::skipData(qint64 maxSize)

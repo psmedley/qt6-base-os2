@@ -57,7 +57,7 @@
 #include <QWindow>
 
 #include <d3d11_1.h>
-#include <dxgi1_3.h>
+#include <dxgi1_5.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -96,13 +96,14 @@ struct QD3D11RenderBuffer : public QRhiRenderBuffer
     ID3D11RenderTargetView *rtv = nullptr;
     DXGI_FORMAT dxgiFormat;
     DXGI_SAMPLE_DESC sampleDesc;
+    uint generation = 0;
     friend class QRhiD3D11;
 };
 
 struct QD3D11Texture : public QRhiTexture
 {
     QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, int depth,
-                  int sampleCount, Flags flags);
+                  int arraySize, int sampleCount, Flags flags);
     ~QD3D11Texture();
     void destroy() override;
     bool create() override;
@@ -172,6 +173,8 @@ struct QD3D11RenderTargetData
     static const int MAX_COLOR_ATTACHMENTS = 8;
     ID3D11RenderTargetView *rtv[MAX_COLOR_ATTACHMENTS];
     ID3D11DepthStencilView *dsv = nullptr;
+
+    QRhiRenderTargetAttachmentTracker::ResIdList currentResIdList;
 };
 
 struct QD3D11ReferenceRenderTarget : public QRhiRenderTarget
@@ -532,9 +535,6 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
         currentGraphicsPipeline = nullptr;
         currentComputePipeline = nullptr;
         currentPipelineGeneration = 0;
-        resetCachedShaderResourceState();
-    }
-    void resetCachedShaderResourceState() {
         currentGraphicsSrb = nullptr;
         currentComputeSrb = nullptr;
         currentSrbGeneration = 0;
@@ -570,6 +570,7 @@ struct QD3D11SwapChain : public QRhiSwapChain
     QD3D11CommandBuffer cb;
     DXGI_FORMAT colorFormat;
     IDXGISwapChain *swapChain = nullptr;
+    UINT swapChainFlags = 0;
     static const int BUFFER_COUNT = 2;
     ID3D11Texture2D *backBufferTex;
     ID3D11RenderTargetView *backBufferRtv;
@@ -607,6 +608,7 @@ public:
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
                                int depth,
+                               int arraySize,
                                int sampleCount,
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter,
@@ -719,8 +721,9 @@ public:
     LUID adapterLuid = {};
     ID3DUserDefinedAnnotation *annotations = nullptr;
     IDXGIFactory1 *dxgiFactory = nullptr;
-    bool hasDxgi2 = false;
-    bool supportsFlipDiscardSwapchain = false;
+    bool supportsFlipSwapchain = false;
+    bool supportsAllowTearing = false;
+    bool forceFlipDiscard = false;
     bool deviceLost = false;
     QRhiD3D11NativeHandles nativeHandlesStruct;
     QRhiDriverInfo driverInfoStruct;

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2015 Alex Trotsenko <alex1973tr@gmail.com>
 ** Contact: https://www.qt.io/licensing/
 **
@@ -40,11 +40,18 @@
 
 #include "private/qringbuffer_p.h"
 #include "private/qbytearray_p.h"
+
+#include <type_traits>
+
 #include <string.h>
 
 QT_BEGIN_NAMESPACE
 
-void QRingChunk::allocate(int alloc)
+static_assert(std::is_nothrow_default_constructible_v<QRingChunk>);
+static_assert(std::is_nothrow_move_constructible_v<QRingChunk>);
+static_assert(std::is_nothrow_move_assignable_v<QRingChunk>);
+
+void QRingChunk::allocate(qsizetype alloc)
 {
     Q_ASSERT(alloc > 0 && size() == 0);
 
@@ -56,10 +63,8 @@ void QRingChunk::detach()
 {
     Q_ASSERT(isShared());
 
-    const int chunkSize = size();
-    QByteArray x(chunkSize, Qt::Uninitialized);
-    ::memcpy(x.data(), chunk.constData() + headOffset, chunkSize);
-    chunk = std::move(x);
+    const qsizetype chunkSize = size();
+    chunk = QByteArray(std::as_const(*this).data(), chunkSize);
     headOffset = 0;
     tailOffset = chunkSize;
 }
@@ -145,8 +150,8 @@ char *QRingBuffer::reserve(qint64 bytes)
 {
     Q_ASSERT(bytes > 0 && bytes < MaxByteArraySize);
 
-    const int chunkSize = qMax(basicBlockSize, int(bytes));
-    int tail = 0;
+    const qsizetype chunkSize = qMax(qint64(basicBlockSize), bytes);
+    qsizetype tail = 0;
     if (bufferSize == 0) {
         if (buffers.isEmpty())
             buffers.append(QRingChunk(chunkSize));
@@ -175,7 +180,7 @@ char *QRingBuffer::reserveFront(qint64 bytes)
 {
     Q_ASSERT(bytes > 0 && bytes < MaxByteArraySize);
 
-    const int chunkSize = qMax(basicBlockSize, int(bytes));
+    const qsizetype chunkSize = qMax(qint64(basicBlockSize), bytes);
     if (bufferSize == 0) {
         if (buffers.isEmpty())
             buffers.prepend(QRingChunk(chunkSize));
@@ -204,7 +209,7 @@ void QRingBuffer::chop(qint64 bytes)
     Q_ASSERT(bytes <= bufferSize);
 
     while (bytes > 0) {
-        const qint64 chunkSize = buffers.constLast().size();
+        const qsizetype chunkSize = buffers.constLast().size();
 
         if (buffers.size() == 1 || chunkSize > bytes) {
             QRingChunk &chunk = buffers.last();
@@ -361,6 +366,21 @@ void QRingBuffer::append(const QByteArray &qba)
     else
         buffers.last().assign(qba);
     bufferSize += qba.size();
+}
+
+/*!
+    \internal
+
+    Append a new buffer to the end
+*/
+void QRingBuffer::append(QByteArray &&qba)
+{
+    const auto qbaSize = qba.size();
+    if (bufferSize != 0 || buffers.isEmpty())
+        buffers.emplace_back(std::move(qba));
+    else
+        buffers.last().assign(std::move(qba));
+    bufferSize += qbaSize;
 }
 
 qint64 QRingBuffer::readLine(char *data, qint64 maxLength)

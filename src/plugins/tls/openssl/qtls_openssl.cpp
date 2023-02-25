@@ -349,7 +349,7 @@ int qt_OCSP_status_server_callback(SSL *ssl, void *ocspRequest)
         return SSL_TLSEXT_ERR_ALERT_FATAL;
 
     std::copy(response.data(), response.data() + response.size(), derCopy);
-    // We don't check the return value: internally OpenSSL simply assignes the
+    // We don't check the return value: internally OpenSSL simply assigns the
     // pointer (it assumes it now owns this memory btw!) and the length.
     q_SSL_set_tlsext_status_ocsp_resp(ssl, derCopy, response.size());
 
@@ -527,13 +527,13 @@ void TlsCryptographOpenSSL::init(QSslSocket *qObj, QSslSocketPrivate *dObj)
     caToFetch = QSslCertificate{};
 }
 
-void TlsCryptographOpenSSL::checkSettingSslContext(QSharedPointer<QSslContext> tlsContext)
+void TlsCryptographOpenSSL::checkSettingSslContext(std::shared_ptr<QSslContext> tlsContext)
 {
-    if (sslContextPointer.isNull())
-        sslContextPointer = tlsContext;
+    if (!sslContextPointer)
+        sslContextPointer = std::move(tlsContext);
 }
 
-QSharedPointer<QSslContext> TlsCryptographOpenSSL::sslContext() const
+std::shared_ptr<QSslContext> TlsCryptographOpenSSL::sslContext() const
 {
     return sslContextPointer;
 }
@@ -838,7 +838,7 @@ void TlsCryptographOpenSSL::continueHandshake()
     // Cache this SSL session inside the QSslContext
     if (!(configuration.testSslOption(QSsl::SslOptionDisableSessionSharing))) {
         if (!sslContextPointer->cacheSession(ssl)) {
-            sslContextPointer.clear(); // we could not cache the session
+            sslContextPointer.reset(); // we could not cache the session
         } else {
             // Cache the session for permanent usage as well
             if (!(configuration.testSslOption(QSsl::SslOptionDisableSessionPersistence))) {
@@ -1200,10 +1200,13 @@ QSsl::SslProtocol TlsCryptographOpenSSL::sessionProtocol() const
 
     const int ver = q_SSL_version(ssl);
     switch (ver) {
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
     case 0x301:
         return QSsl::TlsV1_0;
     case 0x302:
         return QSsl::TlsV1_1;
+QT_WARNING_POP
     case 0x303:
         return QSsl::TlsV1_2;
     case 0x304:
@@ -1405,7 +1408,7 @@ bool TlsCryptographOpenSSL::initSslContext()
 
     if (sslContextPointer->error() != QSslError::NoError) {
         setErrorAndEmit(d, QAbstractSocket::SslInvalidUserDataError, sslContextPointer->errorString());
-        sslContextPointer.clear(); // deletes the QSslContext
+        sslContextPointer.reset();
         return false;
     }
 
@@ -1533,7 +1536,7 @@ void TlsCryptographOpenSSL::destroySslContext()
         q_SSL_free(ssl);
         ssl = nullptr;
     }
-    sslContextPointer.clear();
+    sslContextPointer.reset();
 }
 
 void TlsCryptographOpenSSL::storePeerCertificates()

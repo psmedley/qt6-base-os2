@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2016 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -45,6 +45,8 @@
 #include "qvariant.h"
 #include "qdatetime.h"
 #include "qdebug.h"
+
+#include "QtCore/private/qgregoriancalendar_p.h" // for yearSharingWeekDays()
 
 #ifdef Q_OS_WIN
 #   include <qt_windows.h>
@@ -149,6 +151,7 @@ private:
 
     SubstitutionType substitution();
     QString substituteDigits(QString &&string);
+    QString yearFix(int year, int fakeYear, QString &&formatted);
 
     static QString winToQtFormat(QStringView sys_fmt);
 
@@ -395,13 +398,12 @@ QVariant QSystemLocalePrivate::standaloneMonthName(int month, QLocale::FormatTyp
             LOCALE_SMONTHNAME7, LOCALE_SMONTHNAME8, LOCALE_SMONTHNAME9,
             LOCALE_SMONTHNAME10, LOCALE_SMONTHNAME11, LOCALE_SMONTHNAME12 };
 
-    month -= 1;
-    if (month < 0 || month > 11)
+    if (month < 1 || month > 12)
         return {};
 
-    LCTYPE lctype = (type == QLocale::ShortFormat || type == QLocale::NarrowFormat)
-            ? short_month_map[month] : long_month_map[month];
-    return getLocaleInfo(lctype);
+    // Month is Jan = 1, ... Dec = 12; adjust by 1 to match array indexing from 0:
+    return getLocaleInfo(
+        (type == QLocale::LongFormat ? long_month_map : short_month_map)[month - 1]);
 }
 
 QVariant QSystemLocalePrivate::monthName(int month, QLocale::FormatType type)
@@ -428,20 +430,81 @@ QVariant QSystemLocalePrivate::monthName(int month, QLocale::FormatType type)
     return {};
 }
 
+static QString fourDigitYear(int year)
+{
+    // Return year formatted as an (at least) four digit number:
+    return QStringLiteral("%1").arg(year, 4, 10, QChar(u'0'));
+}
+
+QString QSystemLocalePrivate::yearFix(int year, int fakeYear, QString &&formatted)
+{
+    // Replace our ersatz fakeYear (that MS formats faithfully) with the correct
+    // form of year.  We know the two-digit short form of fakeYear can not be
+    // mistaken for the month or day-of-month in the formatted date.
+    Q_ASSERT(fakeYear >= 1970 && fakeYear <= 2400);
+    const bool matchTwo = year >= 0 && year % 100 == fakeYear % 100;
+    auto yearUsed = fourDigitYear(fakeYear);
+    QString sign(year < 0 ? 1 : 0, QLatin1Char('-'));
+    auto trueYear = fourDigitYear(year < 0 ? -year : year);
+    if (formatted.contains(yearUsed))
+        return std::move(formatted).replace(yearUsed, sign + trueYear);
+
+    auto tail = QStringView{yearUsed}.last(2);
+    Q_ASSERT(!matchTwo || tail == QString(sign + trueYear.last(2)));
+    if (formatted.contains(tail)) {
+        if (matchTwo)
+            return std::move(formatted);
+        return std::move(formatted).replace(tail.toString(), sign + trueYear.last(2));
+    }
+
+    // Localized digits, perhaps ?
+    // First call to substituteDigits() ensures zero is initialized:
+    trueYear = substituteDigits(std::move(trueYear));
+    if (zero != u'0') {
+        yearUsed = substituteDigits(std::move(yearUsed));
+        if (year < 0)
+            sign = negativeSign().toString();
+
+        if (formatted.contains(yearUsed))
+            return std::move(formatted).replace(yearUsed, sign + trueYear);
+
+        const int twoDigits = 2 * zero.size();
+        tail = QStringView{yearUsed}.last(twoDigits);
+        if (formatted.contains(tail)) {
+            if (matchTwo)
+                return std::move(formatted);
+            return std::move(formatted).replace(tail.toString(), sign + trueYear.last(twoDigits));
+        }
+    }
+    qWarning("Failed to fix up year in formatted date-string using %d for %d", fakeYear, year);
+    return std::move(formatted);
+}
+
 QVariant QSystemLocalePrivate::toString(QDate date, QLocale::FormatType type)
 {
     SYSTEMTIME st = {};
-    st.wYear = date.year();
+    const int year = date.year();
+    // st.wYear is unsigned; and GetDateFormat() is documented to not handle
+    // dates before 1601.
+    const bool fixup = year < 1601;
+    st.wYear = fixup ? QGregorianCalendar::yearSharingWeekDays(date) : year;
     st.wMonth = date.month();
     st.wDay = date.day();
+
+    Q_ASSERT(!fixup || st.wYear % 100 != st.wMonth);
+    Q_ASSERT(!fixup || st.wYear % 100 != st.wDay);
+    // i.e. yearFix() can trust a match of its fakeYear's last two digits to not
+    // be the month or day part of the formatted date.
 
     DWORD flags = (type == QLocale::LongFormat ? DATE_LONGDATE : DATE_SHORTDATE);
     wchar_t buf[255];
     if (getDateFormat(flags, &st, NULL, buf, 255)) {
-        QString format = QString::fromWCharArray(buf);
+        QString text = QString::fromWCharArray(buf);
+        if (fixup)
+            text = yearFix(year, st.wYear, std::move(text));
         if (substitution() == SAlways)
-            format = substituteDigits(std::move(format));
-        return format;
+            text = substituteDigits(std::move(text));
+        return text;
     }
     return {};
 }
@@ -461,10 +524,10 @@ QVariant QSystemLocalePrivate::toString(QTime time, QLocale::FormatType type)
 
     wchar_t buf[255];
     if (getTimeFormat(flags, &st, NULL, buf, 255)) {
-        QString format = QString::fromWCharArray(buf);
+        QString text = QString::fromWCharArray(buf);
         if (substitution() == SAlways)
-            format = substituteDigits(std::move(format));
-        return format;
+            text = substituteDigits(std::move(text));
+        return text;
     }
     return {};
 }
@@ -701,7 +764,7 @@ QString QSystemLocalePrivate::winToQtFormat(QStringView sys_fmt)
         }
 
         QChar c = sys_fmt.at(i);
-        int repeat = qt_repeatCount(sys_fmt.mid(i));
+        qsizetype repeat = qt_repeatCount(sys_fmt.mid(i));
 
         switch (c.unicode()) {
             // Date
@@ -1044,8 +1107,8 @@ static QString winIso639LangName(LCID id)
     if (!lang_code.isEmpty()) {
         const char *endptr;
         bool ok;
-        QByteArray latin1_lang_code = std::move(lang_code).toLatin1();
-        int i = qstrtoull(latin1_lang_code, &endptr, 16, &ok);
+        const QByteArray latin1 = std::move(lang_code).toLatin1();
+        const auto i = qstrntoull(latin1.data(), latin1.size(), &endptr, 16, &ok);
         if (ok && *endptr == '\0') {
             switch (i) {
                 case 0x814:
@@ -1087,7 +1150,7 @@ static QByteArray getWinLocaleName(LCID id)
         if (result == "C"
             || (!result.isEmpty() && qt_splitLocaleName(QString::fromLocal8Bit(result)))) {
             bool ok = false; // See if we have a Windows locale code instead of a locale name:
-            long id = qstrtoll(result.data(), 0, 0, &ok);
+            long id = qstrntoll(result.data(), result.size(), 0, 0, &ok);
             if (!ok || id == 0 || id < INT_MIN || id > INT_MAX) // Assume real locale name
                 return result;
             return winLangCodeToIsoName(int(id));

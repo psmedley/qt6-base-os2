@@ -123,13 +123,14 @@ struct QVkRenderBuffer : public QRhiRenderBuffer
     QVkTexture *backingTexture = nullptr;
     VkFormat vkformat;
     int lastActiveFrameSlot = -1;
+    uint generation = 0;
     friend class QRhiVulkan;
 };
 
 struct QVkTexture : public QRhiTexture
 {
     QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, int depth,
-               int sampleCount, Flags flags);
+               int arraySize, int sampleCount, Flags flags);
     ~QVkTexture();
     void destroy() override;
     bool create() override;
@@ -214,6 +215,7 @@ struct QVkRenderTargetData
     int colorAttCount = 0;
     int dsAttCount = 0;
     int resolveAttCount = 0;
+    QRhiRenderTargetAttachmentTracker::ResIdList currentResIdList;
     static const int MAX_COLOR_ATTACHMENTS = 8;
 };
 
@@ -682,6 +684,7 @@ public:
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
                                int depth,
+                               int arraySize,
                                int sampleCount,
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter,

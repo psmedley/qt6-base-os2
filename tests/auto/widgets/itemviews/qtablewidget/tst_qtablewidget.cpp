@@ -49,6 +49,7 @@ private slots:
     void initTestCase();
     void init();
     void getSetCheck();
+    void selectionRange();
     void clear();
     void clearContents();
     void rowCount();
@@ -155,6 +156,19 @@ void tst_QTableWidget::getSetCheck()
     QCOMPARE(var4, obj1.itemPrototype());
     obj1.setItemPrototype(nullptr);
     QCOMPARE(obj1.itemPrototype(), nullptr);
+}
+
+void tst_QTableWidget::selectionRange()
+{
+    QTableWidgetSelectionRange defaultSelection;
+    QTableWidgetSelectionRange selection(1, 2, 3, 4);
+
+    QTableWidgetSelectionRange copy(selection);
+    QCOMPARE(copy, selection);
+    QVERIFY(copy != defaultSelection);
+
+    defaultSelection = copy;
+    QCOMPARE(defaultSelection, copy);
 }
 
 void tst_QTableWidget::initTestCase()
@@ -639,11 +653,7 @@ void tst_QTableWidget::selectedSpannedCells() // QTBUG-255
 
     auto ranges = testWidget.selectedRanges();
     QCOMPARE(ranges.count(), expectedSelectionRangeCount);
-    // QTableWidgetSelectionRange::operator== is added in 6.3; but for now, check it the hard way
-    QCOMPARE(ranges.first().leftColumn(), expectedFirstSelectionRange.leftColumn());
-    QCOMPARE(ranges.first().rightColumn(), expectedFirstSelectionRange.rightColumn());
-    QCOMPARE(ranges.first().topRow(), expectedFirstSelectionRange.topRow());
-    QCOMPARE(ranges.first().bottomRow(), expectedFirstSelectionRange.bottomRow());
+    QCOMPARE(ranges.first(), expectedFirstSelectionRange);
 }
 
 void tst_QTableWidget::removeRow_data()

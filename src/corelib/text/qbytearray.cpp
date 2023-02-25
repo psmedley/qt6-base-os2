@@ -51,6 +51,7 @@
 #include "qstringalgorithms_p.h"
 #include "qscopedpointer.h"
 #include "qbytearray_p.h"
+#include "qstringconverter_p.h"
 #include <qdatastream.h>
 #include <qmath.h>
 
@@ -62,6 +63,8 @@
 #include <limits.h>
 #include <string.h>
 #include <stdlib.h>
+
+#include <algorithm>
 
 #define IS_RAW_DATA(d) ((d)->flags() & QArrayData::RawDataType)
 
@@ -424,6 +427,14 @@ int QtPrivate::compareMemory(QByteArrayView lhs, QByteArrayView rhs)
     // they matched qMin(l1, l2) bytes
     // so the longer one is lexically after the shorter one
     return lhs.size() == rhs.size() ? 0 : lhs.size() > rhs.size() ? 1 : -1;
+}
+
+/*!
+    \internal
+*/
+bool QtPrivate::isValidUtf8(QByteArrayView s) noexcept
+{
+    return QUtf8::isValidUtf8(s).isValidUtf8;
 }
 
 // the CRC table below is created by the following piece of code
@@ -918,8 +929,8 @@ QByteArray qUncompress(const uchar* data, qsizetype nbytes)
     comparison is limited to ASCII. Non-ASCII characters are treated as
     caseless, since their case depends on encoding. This affects functions that
     support a case insensitive option or that change the case of their
-    arguments. Functions that this affects include contains(), indexOf(),
-    lastIndexOf(), isLower(), isUpper(), toLower() and toUpper().
+    arguments. Functions that this affects include compare(), isLower(),
+    isUpper(), toLower() and toUpper().
 
     This issue does not apply to \l{QString}s since they represent characters
     using Unicode.
@@ -2616,8 +2627,8 @@ qsizetype QtPrivate::count(QByteArrayView haystack, QByteArrayView needle) noexc
     qsizetype num = 0;
     qsizetype i = -1;
     if (haystack.size() > 500 && needle.size() > 5) {
-        QByteArrayMatcher matcher(needle.data(), needle.size());
-        while ((i = matcher.indexIn(haystack.data(), haystack.size(), i + 1)) != -1)
+        QByteArrayMatcher matcher(needle);
+        while ((i = matcher.indexIn(haystack, i + 1)) != -1)
             ++num;
     } else {
         while ((i = haystack.indexOf(needle, i + 1)) != -1)
@@ -2734,28 +2745,6 @@ static constexpr inline bool isUpperCaseAscii(char c)
     return c >= 'A' && c <= 'Z';
 }
 
-/*!
-    Returns \c true if this byte array contains only ASCII uppercase letters,
-    otherwise returns \c false.
-    \since 5.12
-
-    \sa isLower(), toUpper()
-*/
-bool QByteArray::isUpper() const
-{
-    if (isEmpty())
-        return false;
-
-    const char *d = data();
-
-    for (qsizetype i = 0, max = size(); i < max; ++i) {
-        if (!isUpperCaseAscii(d[i]))
-            return false;
-    }
-
-    return true;
-}
-
 /*
     Returns true if \a c is an lowercase ASCII letter.
  */
@@ -2765,26 +2754,45 @@ static constexpr inline bool isLowerCaseAscii(char c)
 }
 
 /*!
-    Returns \c true if this byte array contains only lowercase ASCII letters,
-    otherwise returns \c false.
+    Returns \c true if this byte array is uppercase, that is, if
+    it's identical to its toUpper() folding.
+
+    Note that this does \e not mean that the byte array only contains
+    uppercase letters; only that it contains no ASCII lowercase letters.
+
+    \since 5.12
+
+    \sa isLower(), toUpper()
+*/
+bool QByteArray::isUpper() const
+{
+    return std::none_of(begin(), end(), isLowerCaseAscii);
+}
+
+/*!
+    Returns \c true if this byte array is lowercase, that is, if
+    it's identical to its toLower() folding.
+
+    Note that this does \e not mean that the byte array only contains
+    lowercase letters; only that it contains no ASCII uppercase letters.
+
     \since 5.12
 
     \sa isUpper(), toLower()
  */
 bool QByteArray::isLower() const
 {
-    if (isEmpty())
-        return false;
-
-    const char *d = data();
-
-    for (qsizetype i = 0, max = size(); i < max; ++i) {
-        if (!isLowerCaseAscii(d[i]))
-            return false;
-    }
-
-    return true;
+    return std::none_of(begin(), end(), isUpperCaseAscii);
 }
+
+/*!
+    \fn QByteArray::isValidUtf8() const
+
+    Returns \c true if this byte array contains valid UTF-8 encoded data,
+    or \c false otherwise.
+
+    \since 6.3
+*/
 
 /*!
     Returns a byte array that contains the first \a len bytes of this byte
@@ -3423,6 +3431,13 @@ QByteArray QByteArray::trimmed_helper(QByteArray &a)
     return QStringAlgorithms<QByteArray>::trimmed_helper(a);
 }
 
+QByteArrayView QtPrivate::trimmed(QByteArrayView view) noexcept
+{
+    auto start = view.begin();
+    auto stop = view.end();
+    QStringAlgorithms<QByteArrayView>::trimmed_helper_positions(start, stop);
+    return QByteArrayView(start, stop);
+}
 
 /*!
     Returns a byte array of size \a width that contains this byte array padded
@@ -3498,46 +3513,45 @@ QByteArray QByteArray::rightJustified(qsizetype width, char fill, bool truncate)
     return result;
 }
 
-bool QByteArray::isNull() const
+bool QByteArray::isNull() const noexcept
 {
     return d->isNull();
 }
 
-static qlonglong toIntegral_helper(const char *data, bool *ok, int base, qlonglong)
+auto QtPrivate::toSignedInteger(QByteArrayView data, int base) -> ParsedNumber<qlonglong>
 {
-    return QLocaleData::bytearrayToLongLong(data, base, ok);
-}
-
-static qulonglong toIntegral_helper(const char *data, bool *ok, int base, qulonglong)
-{
-    return QLocaleData::bytearrayToUnsLongLong(data, base, ok);
-}
-
-template <typename T> static inline
-T toIntegral_helper(const char *data, bool *ok, int base)
-{
-    using Int64 = typename std::conditional<std::is_unsigned<T>::value, qulonglong, qlonglong>::type;
-
 #if defined(QT_CHECK_RANGE)
     if (base != 0 && (base < 2 || base > 36)) {
         qWarning("QByteArray::toIntegral: Invalid base %d", base);
         base = 10;
     }
 #endif
-    if (!data) {
-        if (ok)
-            *ok = false;
-        return 0;
-    }
+    if (data.isEmpty())
+        return {};
 
-    // we select the right overload by the last, unused parameter
-    Int64 val = toIntegral_helper(data, ok, base, Int64());
-    if (T(val) != val) {
-        if (ok)
-            *ok = false;
-        val = 0;
+    bool ok = false;
+    const auto i = QLocaleData::bytearrayToLongLong(data, base, &ok);
+    if (ok)
+        return ParsedNumber(i);
+    return {};
+}
+
+auto QtPrivate::toUnsignedInteger(QByteArrayView data, int base) -> ParsedNumber<qulonglong>
+{
+#if defined(QT_CHECK_RANGE)
+    if (base != 0 && (base < 2 || base > 36)) {
+        qWarning("QByteArray::toIntegral: Invalid base %d", base);
+        base = 10;
     }
-    return T(val);
+#endif
+    if (data.isEmpty())
+        return {};
+
+    bool ok = false;
+    const auto u = QLocaleData::bytearrayToUnsLongLong(data, base, &ok);
+    if (ok)
+        return ParsedNumber(u);
+    return {};
 }
 
 /*!
@@ -3564,7 +3578,7 @@ T toIntegral_helper(const char *data, bool *ok, int base)
 
 qlonglong QByteArray::toLongLong(bool *ok, int base) const
 {
-    return toIntegral_helper<qlonglong>(nulTerminated().constData(), ok, base);
+    return QtPrivate::toIntegral<qlonglong>(qToByteArrayViewIgnoringNull(*this), ok, base);
 }
 
 /*!
@@ -3591,7 +3605,7 @@ qlonglong QByteArray::toLongLong(bool *ok, int base) const
 
 qulonglong QByteArray::toULongLong(bool *ok, int base) const
 {
-    return toIntegral_helper<qulonglong>(nulTerminated().constData(), ok, base);
+    return QtPrivate::toIntegral<qulonglong>(qToByteArrayViewIgnoringNull(*this), ok, base);
 }
 
 /*!
@@ -3620,7 +3634,7 @@ qulonglong QByteArray::toULongLong(bool *ok, int base) const
 
 int QByteArray::toInt(bool *ok, int base) const
 {
-    return toIntegral_helper<int>(nulTerminated().constData(), ok, base);
+    return QtPrivate::toIntegral<int>(qToByteArrayViewIgnoringNull(*this), ok, base);
 }
 
 /*!
@@ -3647,7 +3661,7 @@ int QByteArray::toInt(bool *ok, int base) const
 
 uint QByteArray::toUInt(bool *ok, int base) const
 {
-    return toIntegral_helper<uint>(nulTerminated().constData(), ok, base);
+    return QtPrivate::toIntegral<uint>(qToByteArrayViewIgnoringNull(*this), ok, base);
 }
 
 /*!
@@ -3677,7 +3691,7 @@ uint QByteArray::toUInt(bool *ok, int base) const
 */
 long QByteArray::toLong(bool *ok, int base) const
 {
-    return toIntegral_helper<long>(nulTerminated().constData(), ok, base);
+    return QtPrivate::toIntegral<long>(qToByteArrayViewIgnoringNull(*this), ok, base);
 }
 
 /*!
@@ -3705,7 +3719,7 @@ long QByteArray::toLong(bool *ok, int base) const
 */
 ulong QByteArray::toULong(bool *ok, int base) const
 {
-    return toIntegral_helper<ulong>(nulTerminated().constData(), ok, base);
+    return QtPrivate::toIntegral<ulong>(qToByteArrayViewIgnoringNull(*this), ok, base);
 }
 
 /*!
@@ -3732,7 +3746,7 @@ ulong QByteArray::toULong(bool *ok, int base) const
 
 short QByteArray::toShort(bool *ok, int base) const
 {
-    return toIntegral_helper<short>(nulTerminated().constData(), ok, base);
+    return QtPrivate::toIntegral<short>(qToByteArrayViewIgnoringNull(*this), ok, base);
 }
 
 /*!
@@ -3759,9 +3773,8 @@ short QByteArray::toShort(bool *ok, int base) const
 
 ushort QByteArray::toUShort(bool *ok, int base) const
 {
-    return toIntegral_helper<ushort>(nulTerminated().constData(), ok, base);
+    return QtPrivate::toIntegral<ushort>(qToByteArrayViewIgnoringNull(*this), ok, base);
 }
-
 
 /*!
     Returns the byte array converted to a \c double value.
@@ -3790,13 +3803,18 @@ ushort QByteArray::toUShort(bool *ok, int base) const
 
 double QByteArray::toDouble(bool *ok) const
 {
+    return QByteArrayView(*this).toDouble(ok);
+}
+
+auto QtPrivate::toDouble(QByteArrayView a) noexcept -> ParsedNumber<double>
+{
     bool nonNullOk = false;
     int processed = 0;
-    double d = qt_asciiToDouble(constData(), size(),
-                                nonNullOk, processed, WhitespacesAllowed);
-    if (ok)
-        *ok = nonNullOk;
-    return d;
+    double d = qt_asciiToDouble(a.data(), a.size(), nonNullOk, processed, WhitespacesAllowed);
+    if (nonNullOk)
+        return ParsedNumber{d};
+    else
+        return {};
 }
 
 /*!
@@ -3829,6 +3847,17 @@ float QByteArray::toFloat(bool *ok) const
     return QLocaleData::convertDoubleToFloat(toDouble(ok), ok);
 }
 
+auto QtPrivate::toFloat(QByteArrayView a) noexcept -> ParsedNumber<float>
+{
+    if (const auto r = toDouble(a)) {
+        bool ok = true;
+        const auto f = QLocaleData::convertDoubleToFloat(*r, &ok);
+        if (ok)
+            return ParsedNumber(f);
+    }
+    return {};
+}
+
 /*!
     \since 5.2
 
@@ -3850,19 +3879,21 @@ QByteArray QByteArray::toBase64(Base64Options options) const
     const char padchar = '=';
     qsizetype padlen = 0;
 
-    QByteArray tmp((size() + 2) / 3 * 4, Qt::Uninitialized);
+    const qsizetype sz = size();
+
+    QByteArray tmp((sz + 2) / 3 * 4, Qt::Uninitialized);
 
     qsizetype i = 0;
     char *out = tmp.data();
-    while (i < size()) {
+    while (i < sz) {
         // encode 3 bytes at a time
         int chunk = 0;
         chunk |= int(uchar(data()[i++])) << 16;
-        if (i == size()) {
+        if (i == sz) {
             padlen = 2;
         } else {
             chunk |= int(uchar(data()[i++])) << 8;
-            if (i == size())
+            if (i == sz)
                 padlen = 1;
             else
                 chunk |= int(uchar(data()[i++]));
@@ -4022,32 +4053,7 @@ QByteArray &QByteArray::setNum(qulonglong n, int base)
 
 QByteArray &QByteArray::setNum(double n, char format, int precision)
 {
-    QLocaleData::DoubleForm form = QLocaleData::DFDecimal;
-    uint flags = QLocaleData::ZeroPadExponent;
-
-    char lower = asciiLower(uchar(format));
-    if (format != lower)
-        flags |= QLocaleData::CapitalEorX;
-
-    switch (lower) {
-    case 'f':
-        form = QLocaleData::DFDecimal;
-        break;
-    case 'e':
-        form = QLocaleData::DFExponent;
-        break;
-    case 'g':
-        form = QLocaleData::DFSignificantDigits;
-        break;
-    default:
-#if defined(QT_CHECK_RANGE)
-        qWarning("QByteArray::setNum: Invalid format char '%c'", format);
-#endif
-        break;
-    }
-
-    *this = QLocaleData::c()->doubleToString(n, precision, form, -1, flags).toUtf8();
-    return *this;
+    return *this = QByteArray::number(n, format, precision);
 }
 
 /*!
@@ -4160,9 +4166,26 @@ QByteArray QByteArray::number(qulonglong n, int base)
 */
 QByteArray QByteArray::number(double n, char format, int precision)
 {
-    QByteArray s;
-    s.setNum(n, format, precision);
-    return s;
+    QLocaleData::DoubleForm form = QLocaleData::DFDecimal;
+
+    switch (asciiLower(format)) {
+        case 'f':
+            form = QLocaleData::DFDecimal;
+            break;
+        case 'e':
+            form = QLocaleData::DFExponent;
+            break;
+        case 'g':
+            form = QLocaleData::DFSignificantDigits;
+            break;
+        default:
+#if defined(QT_CHECK_RANGE)
+            qWarning("QByteArray::setNum: Invalid format char '%c'", format);
+#endif
+            break;
+    }
+
+    return qdtoAscii(n, form, precision, isUpperCaseAscii(format));
 }
 
 /*!
@@ -4335,7 +4358,7 @@ QByteArray::FromBase64Result QByteArray::fromBase64Encoding(QByteArray &&base64,
                                                     base64.size(),
                                                     base64.data(), // in-place
                                                     options);
-        base64.truncate(int(base64result.decodedLength));
+        base64.truncate(base64result.decodedLength);
         return { std::move(base64), base64result.status };
     }
 
@@ -4351,7 +4374,7 @@ QByteArray::FromBase64Result QByteArray::fromBase64Encoding(const QByteArray &ba
                                                 base64Size,
                                                 const_cast<char *>(result.constData()),
                                                 options);
-    result.truncate(int(base64result.decodedLength));
+    result.truncate(base64result.decodedLength);
     return { std::move(result), base64result.status };
 }
 

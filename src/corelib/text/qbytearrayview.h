@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -240,6 +240,40 @@ public:
     constexpr void chop(qsizetype n)
     { Q_ASSERT(n >= 0); Q_ASSERT(n <= size()); m_size -= n; }
 
+    // Defined in qbytearray.cpp:
+    [[nodiscard]] QByteArrayView trimmed() const noexcept
+    { return QtPrivate::trimmed(*this); }
+    [[nodiscard]] short toShort(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<short>(*this, ok, base); }
+    [[nodiscard]] ushort toUShort(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<ushort>(*this, ok, base); }
+    [[nodiscard]] int toInt(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<int>(*this, ok, base); }
+    [[nodiscard]] uint toUInt(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<uint>(*this, ok, base); }
+    [[nodiscard]] long toLong(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<long>(*this, ok, base); }
+    [[nodiscard]] ulong toULong(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<ulong>(*this, ok, base); }
+    [[nodiscard]] qlonglong toLongLong(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<qlonglong>(*this, ok, base); }
+    [[nodiscard]] qulonglong toULongLong(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<qulonglong>(*this, ok, base); }
+    [[nodiscard]] float toFloat(bool *ok = nullptr) const
+    {
+        const auto r = QtPrivate::toFloat(*this);
+        if (ok)
+            *ok = bool(r);
+        return r.value_or(0.0f);
+    }
+    [[nodiscard]] double toDouble(bool *ok = nullptr) const
+    {
+        const auto r = QtPrivate::toDouble(*this);
+        if (ok)
+            *ok = bool(r);
+        return r.value_or(0.0);
+    }
+
     [[nodiscard]] bool startsWith(QByteArrayView other) const noexcept
     { return QtPrivate::startsWith(*this, other); }
     [[nodiscard]] bool startsWith(char c) const noexcept
@@ -273,6 +307,8 @@ public:
     { return QtPrivate::count(*this, QByteArrayView(&ch, 1)); }
 
     inline int compare(QByteArrayView a, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
+
+    [[nodiscard]] inline bool isValidUtf8() const noexcept { return QtPrivate::isValidUtf8(*this); }
 
     //
     // STL compatibility API:

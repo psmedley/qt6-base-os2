@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
+** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2022 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -148,14 +148,43 @@ void QProcessEnvironmentPrivate::insert(const QProcessEnvironmentPrivate &other)
 }
 
 /*!
+    \enum QProcessEnvironment::Initialization
+
+    This enum contains a token that is used to disambiguate constructors.
+
+    \value InheritFromParent A QProcessEnvironment will be created that, when
+        set on a QProcess, causes it to inherit variables from its parent.
+
+    \since 6.3
+*/
+
+/*!
     Creates a new QProcessEnvironment object. This constructor creates an
     empty environment. If set on a QProcess, this will cause the current
-    environment variables to be removed.
+    environment variables to be removed (except for PATH and SystemRoot
+    on Windows).
 */
-QProcessEnvironment::QProcessEnvironment()
-    : d(nullptr)
-{
-}
+QProcessEnvironment::QProcessEnvironment() : d(new QProcessEnvironmentPrivate) { }
+
+/*!
+    Creates an object that when set on QProcess will cause it to be executed with
+    environment variables inherited from its parent process.
+
+    \note The created object does not store any environment variables by itself,
+    it just indicates to QProcess to arrange for inheriting the environment at the
+    time when the new process is started. Adding any environment variables to
+    the created object will disable inheritance of the environment and result in
+    an environment containing only the added environment variables.
+
+    If a modified version of the parent environment is wanted, start with the
+    return value of \c systemEnvironment() and modify that (but note that changes to
+    the parent process's environment after that is created won't be reflected
+    in the modified environment).
+
+    \sa inheritsFromParent(), systemEnvironment()
+    \since 6.3
+*/
+QProcessEnvironment::QProcessEnvironment(QProcessEnvironment::Initialization) noexcept { }
 
 /*!
     Frees the resources associated with this QProcessEnvironment object.
@@ -211,22 +240,18 @@ bool QProcessEnvironment::operator==(const QProcessEnvironment &other) const
 {
     if (d == other.d)
         return true;
-    if (d) {
-        if (other.d) {
-            return d->vars == other.d->vars;
-        } else {
-            return isEmpty();
-        }
-    } else {
-        return other.isEmpty();
-    }
+
+    return d && other.d && d->vars == other.d->vars;
 }
 
 /*!
     Returns \c true if this QProcessEnvironment object is empty: that is
     there are no key=value pairs set.
 
-    \sa clear(), systemEnvironment(), insert()
+    This method also returns \c true for objects that were constructed using
+    \c{QProcessEnvironment::InheritFromParent}.
+
+    \sa clear(), systemEnvironment(), insert(), inheritsFromParent()
 */
 bool QProcessEnvironment::isEmpty() const
 {
@@ -235,8 +260,23 @@ bool QProcessEnvironment::isEmpty() const
 }
 
 /*!
+    Returns \c true if this QProcessEnvironment was constructed using
+    \c{QProcessEnvironment::InheritFromParent}.
+
+    \since 6.3
+    \sa isEmpty()
+*/
+bool QProcessEnvironment::inheritsFromParent() const
+{
+    return !d;
+}
+
+/*!
     Removes all key=value pairs from this QProcessEnvironment object, making
     it empty.
+
+    If the environment was constructed using \c{QProcessEnvironment::InheritFromParent}
+    it remains unchanged.
 
     \sa isEmpty(), systemEnvironment()
 */
@@ -341,6 +381,9 @@ QStringList QProcessEnvironment::toStringList() const
 
     Returns a list containing all the variable names in this QProcessEnvironment
     object.
+
+    The returned list is empty for objects constructed using
+    \c{QProcessEnvironment::InheritFromParent}.
 */
 QStringList QProcessEnvironment::keys() const
 {
@@ -445,6 +488,61 @@ void QProcessPrivate::Channel::clear()
 
     \note QProcess is not supported on VxWorks, iOS, tvOS, or watchOS.
 
+    \section1 Finding the Executable
+
+    The program to be run can be set either by calling setProgram() or directly
+    in the start() call. The effect of calling start() with the program name
+    and arguments is equivalent to calling setProgram() and setArguments()
+    before that function and then calling the overload without those
+    parameters.
+
+    QProcess interprets the program name in one of three different ways,
+    similar to how Unix shells and the Windows command interpreter operate in
+    their own command-lines:
+
+    \list
+      \li If the program name is an absolute path, then that is the exact
+      executable that will be launched and QProcess performs no searching.
+
+      \li If the program name is a relative path with more than one path
+      component (that is, it contains at least one slash), the starting
+      directory where that relative path is searched is OS-dependent: on
+      Windows, it's the parent process' current working dir, while on Unix it's
+      the one set with setWorkingDirectory().
+
+      \li If the program name is a plain file name with no slashes, the
+      behavior is operating-system dependent. On Unix systems, QProcess will
+      search the \c PATH environment variable; on Windows, the search is
+      performed by the OS and will first the parent process' current directory
+      before the \c PATH environment variable (see the documentation for
+      \l{CreateProcess} for the full list).
+    \endlist
+
+    To avoid platform-dependent behavior or any issues with how the current
+    application was launched, it is adviseable to always pass an absolute path
+    to the executable to be launched. For auxiliary binaries shipped with the
+    application, one can construct such a path starting with
+    QCoreApplication::applicationDirPath(). Similarly, to explicitly run an
+    executable that is to be found relative to the directory set with
+    setWorkingDirectory(), use a program path starting with "./" or "../" as
+    the case may be.
+
+    On Windows, the ".exe" suffix is not required for most uses, except those
+    outlined in the \l{CreateProcess} documentation. Additionally, QProcess
+    will convert the Unix-style forward slashes to Windows path backslashes for
+    the program name. This allows code using QProcess to be written in a
+    cross-platform manner, as shown in the examples above.
+
+    QProcess does not support directly executing Unix shell or Windows command
+    interpreter built-in functions, such as \c{cmd.exe}'s \c dir command or the
+    Bourne shell's \c export. On Unix, even though many shell built-ins are
+    also provided as separate executables, their behavior may differ from those
+    implemented as built-ins. To run those commands, one should explicitly
+    execute the interpreter with suitable options. For Unix systems, launch
+    "/bin/sh" with two arguments: "-c" and a string with the command-line to be
+    run. For Windows, due to the non-standard way \c{cmd.exe} parses its
+    command-line, use setNativeArguments() (for example, "/c dir d:").
+
     \section1 Communicating via Channels
 
     Processes have two predefined output channels: The standard
@@ -524,15 +622,6 @@ void QProcessPrivate::Channel::clear()
     rocks!", without an event loop:
 
     \snippet process/process.cpp 0
-
-    \section1 Notes for Windows Users
-
-    Some Windows commands (for example, \c dir) are not provided by
-    separate applications, but by the command interpreter itself.
-    If you attempt to use QProcess to execute these commands directly,
-    it won't work. One possible solution is to execute the command
-    interpreter itself (\c{cmd.exe} on some Windows systems), and ask
-    the interpreter to execute the desired command.
 
     \sa QBuffer, QFile, QTcpSocket
 */
@@ -782,7 +871,9 @@ void QProcessPrivate::Channel::clear()
 QProcessPrivate::QProcessPrivate()
 {
     readBufferChunkSize = QRINGBUFFER_CHUNKSIZE;
+#ifndef Q_OS_WIN
     writeBufferChunkSize = QRINGBUFFER_CHUNKSIZE;
+#endif
 #ifdef Q_OS_OS2
     init();
 #endif
@@ -1667,11 +1758,11 @@ bool QProcess::isSequential() const
 */
 qint64 QProcess::bytesToWrite() const
 {
-    qint64 size = QIODevice::bytesToWrite();
 #ifdef Q_OS_WIN
-    size += d_func()->pipeWriterBytesToWrite();
+    return d_func()->pipeWriterBytesToWrite();
+#else
+    return QIODevice::bytesToWrite();
 #endif
-    return size;
 }
 
 /*!
@@ -1933,16 +2024,23 @@ QByteArray QProcess::readAllStandardOutput()
 */
 QByteArray QProcess::readAllStandardError()
 {
-    ProcessChannel tmp = readChannel();
-    setReadChannel(StandardError);
-    QByteArray data = readAll();
-    setReadChannel(tmp);
+    Q_D(QProcess);
+    QByteArray data;
+    if (d->processChannelMode == MergedChannels) {
+        qWarning("QProcess::readAllStandardError: Called with MergedChannels");
+    } else {
+        ProcessChannel tmp = readChannel();
+        setReadChannel(StandardError);
+        data = readAll();
+        setReadChannel(tmp);
+    }
     return data;
 }
 
 /*!
     Starts the given \a program in a new process, passing the command line
-    arguments in \a arguments.
+    arguments in \a arguments. See setProgram() for information about how
+    QProcess searches for the executable to be run.
 
     The QProcess object will immediately enter the Starting state. If the
     process starts successfully, QProcess will emit started(); otherwise,
@@ -2255,7 +2353,12 @@ QString QProcess::program() const
     Set the \a program to use when starting the process.
     This function must be called before start().
 
-    \sa start(), setArguments(), program()
+    If \a program is an absolute path, it specifies the exact executable that
+    will be launched. Relative paths will be resolved in a platform-specific
+    manner, which includes searching the \c PATH environment variable (see
+    \l{Finding the Executable} for details).
+
+    \sa start(), setArguments(), program(), QStandardPaths::findExecutable()
 */
 void QProcess::setProgram(const QString &program)
 {

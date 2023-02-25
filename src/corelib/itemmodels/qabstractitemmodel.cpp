@@ -60,6 +60,8 @@ QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcCheckIndex, "qt.core.qabstractitemmodel.checkindex")
 
+QT_IMPL_METATYPE_EXTERN(QModelIndexList)
+
 QPersistentModelIndexData *QPersistentModelIndexData::create(const QModelIndex &index)
 {
     Q_ASSERT(index.isValid()); // we will _never_ insert an invalid index in the list
@@ -2086,7 +2088,7 @@ bool QAbstractItemModel::clearItemData(const QModelIndex &index)
     by the \a index.
 
     \note If you do not have a value to return, return an \b invalid
-    QVariant instead of returning 0.
+    (default-constructed) QVariant.
 
     \sa Qt::ItemDataRole, setData(), headerData()
 */
@@ -3352,9 +3354,8 @@ bool QAbstractItemModel::beginMoveColumns(const QModelIndex &sourceParent, int s
     destinationChange.needsAdjust = destinationParent.isValid() && destinationParent.row() >= sourceLast && destinationParent.parent() == sourceParent;
     d->changes.push(destinationChange);
 
-    d->itemsAboutToBeMoved(sourceParent, sourceFirst, sourceLast, destinationParent, destinationChild, Qt::Horizontal);
-
     emit columnsAboutToBeMoved(sourceParent, sourceFirst, sourceLast, destinationParent, destinationChild, QPrivateSignal());
+    d->itemsAboutToBeMoved(sourceParent, sourceFirst, sourceLast, destinationParent, destinationChild, Qt::Horizontal);
     return true;
 }
 
@@ -3387,7 +3388,6 @@ void QAbstractItemModel::endMoveColumns()
       adjustedSource = createIndex(adjustedSource.row(), adjustedSource.column() + numMoved, adjustedSource.internalPointer());
 
     d->itemsMoved(adjustedSource, removeChange.first, removeChange.last, adjustedDestination, insertChange.first, Qt::Horizontal);
-
     emit columnsMoved(adjustedSource, removeChange.first, removeChange.last, adjustedDestination, insertChange.first, QPrivateSignal());
 }
 

@@ -40,6 +40,15 @@
 #ifndef QOPENGLCONTEXT_PLATFORM_H
 #define QOPENGLCONTEXT_PLATFORM_H
 
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is part of the native interface APIs. Usage of
+// this API may make your code source and binary incompatible
+// with future versions of Qt.
+//
+
 #ifndef QT_NO_OPENGL
 
 #include <QtGui/qtguiglobal.h>
@@ -58,6 +67,7 @@ struct __GLXcontextRec; typedef struct __GLXcontextRec *GLXContext;
 #if QT_CONFIG(egl)
 typedef void *EGLContext;
 typedef void *EGLDisplay;
+typedef void *EGLConfig;
 #endif
 
 #if !defined(Q_OS_MACOS) && defined(Q_CLANG_QDOC)
@@ -103,6 +113,8 @@ struct Q_GUI_EXPORT QEGLContext
     QT_DECLARE_NATIVE_INTERFACE(QEGLContext, 1, QOpenGLContext)
     static QOpenGLContext *fromNative(EGLContext context, EGLDisplay display, QOpenGLContext *shareContext = nullptr);
     virtual EGLContext nativeContext() const = 0;
+    virtual EGLConfig config() const = 0;
+    virtual EGLDisplay display() const = 0;
 };
 #endif
 

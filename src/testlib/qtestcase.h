@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtTest module of the Qt Toolkit.
@@ -93,11 +93,36 @@ do {\
 
 #ifndef QT_NO_EXCEPTIONS
 
+#  define QVERIFY_THROWS_NO_EXCEPTION(...) \
+    do { \
+        QT_TRY { \
+            __VA_ARGS__; \
+            /* success */ \
+        } QT_CATCH (const std::exception &e) { \
+            QTest::qCaught(nullptr, e.what(), __FILE__, __LINE__); \
+            return; \
+        } QT_CATCH (...) { \
+            QTest::qCaught(nullptr, nullptr, __FILE__, __LINE__); \
+            QT_RETHROW; \
+        } \
+    } while (false) \
+    /* end */
+
+#if QT_DEPRECATED_SINCE(6, 3)
+namespace QTest {
+QT_DEPRECATED_VERSION_X_6_3("Don't use QVERIFY_EXCEPTION_THROWN(expr, type) anymore, "
+                            "use QVERIFY_THROWS_EXCEPTION(type, expr...) instead")
+inline void useVerifyThrowsException() {}
+} // namespace QTest
 #  define QVERIFY_EXCEPTION_THROWN(expression, exceptiontype) \
+    QVERIFY_THROWS_EXCEPTION(exceptiontype, QTest::useVerifyThrowsException(); expression)
+#endif
+
+#  define QVERIFY_THROWS_EXCEPTION(exceptiontype, ...) \
     do {\
         QT_TRY {\
             QT_TRY {\
-                expression;\
+                __VA_ARGS__;\
                 QTest::qFail("Expected exception of type " #exceptiontype " to be thrown" \
                              " but no exception caught", __FILE__, __LINE__);\
                 return;\
@@ -105,13 +130,10 @@ do {\
                 /* success */\
             }\
         } QT_CATCH (const std::exception &e) {\
-            QByteArray msg = QByteArray() + "Expected exception of type " #exceptiontype \
-                             " to be thrown but std::exception caught with message: " + e.what(); \
-            QTest::qFail(msg.constData(), __FILE__, __LINE__);\
+            QTest::qCaught(#exceptiontype, e.what(), __FILE__, __LINE__);\
             return;\
         } QT_CATCH (...) {\
-            QTest::qFail("Expected exception of type " #exceptiontype " to be thrown" \
-                         " but unknown exception caught", __FILE__, __LINE__);\
+            QTest::qCaught(#exceptiontype, nullptr, __FILE__, __LINE__);\
             QT_RETHROW;\
         }\
     } while (false)
@@ -119,16 +141,26 @@ do {\
 #else // QT_NO_EXCEPTIONS
 
 /*
- * The expression passed to the macro should throw an exception and we can't
- * catch it because Qt has been compiled without exception support. We can't
+ * These macros check whether the expression passed throws exceptions, but we can't
+ * catch them to check because Qt has been compiled without exception support. We can't
  * skip the expression because it may have side effects and must be executed.
  * So, users must use Qt with exception support enabled if they use exceptions
  * in their code.
  */
-#  define QVERIFY_EXCEPTION_THROWN(expression, exceptiontype) \
-    static_assert(false, "Support of exceptions is disabled")
+#  define QVERIFY_THROWS_EXCEPTION(...) \
+    static_assert(false, "Support for exceptions is disabled")
+#  define QVERIFY_THROWS_NO_EXCEPTION(...) \
+    static_assert(false, "Support for exceptions is disabled")
 
 #endif // !QT_NO_EXCEPTIONS
+
+/* Ideally we would adapt qWaitFor(), or a variant on it, to implement roughly
+ * what the following provides as QTRY_LOOP_IMPL(); however, for now, the
+ * reporting of how much to increase the timeout to (if within a factor of two)
+ * on failure and the check for QTest::currentTestFailed() go beyond
+ * qWaitFor(). (We no longer care about the bug in MSVC < 2017 that precluded
+ * using qWaitFor() in the implementation here, see QTBUG-59096.)
+ */
 
 // NB: not do {...} while (0) wrapped, as qt_test_i is accessed after it
 #define QTRY_LOOP_IMPL(expr, timeoutValue, step) \
@@ -142,16 +174,12 @@ do {\
 
 #define QTRY_TIMEOUT_DEBUG_IMPL(expr, timeoutValue, step)\
     if (!(expr)) { \
-        QTRY_LOOP_IMPL((expr), (2 * timeoutValue), step);\
+        QTRY_LOOP_IMPL((expr), 2 * (timeoutValue), step);   \
         if (expr) { \
-            QString msg = QString::fromUtf8("QTestLib: This test case check (\"%1\") failed because the requested timeout (%2 ms) was too short, %3 ms would have been sufficient this time."); \
-            msg = msg.arg(QString::fromUtf8(#expr)).arg(timeoutValue).arg(timeoutValue + qt_test_i); \
-            QFAIL(qPrintable(msg)); \
+            QFAIL(qPrintable(QTest::Internal::formatTryTimeoutDebugMessage(u8"" #expr, timeoutValue, timeoutValue + qt_test_i))); \
         } \
     }
 
-// Ideally we'd use qWaitFor instead of QTRY_LOOP_IMPL, but due
-// to a compiler bug on MSVC < 2017 we can't (see QTBUG-59096)
 #define QTRY_IMPL(expr, timeout)\
     const int qt_test_step = timeout < 350 ? timeout / 7 + 1 : 50; \
     const int qt_test_timeoutValue = timeout; \
@@ -237,6 +265,8 @@ namespace QTest
 {
     namespace Internal {
 
+    Q_TESTLIB_EXPORT QString formatTryTimeoutDebugMessage(q_no_char8_t::QUtf8StringView expr, int timeout, int actual);
+
     template<typename T> // Output registered enums
     inline typename std::enable_if<QtPrivate::IsQEnumHelper<T>::Value, char*>::type toString(T e)
     {
@@ -260,7 +290,7 @@ namespace QTest
     inline typename std::enable_if<QtPrivate::IsQEnumHelper<F>::Value, char*>::type toString(QFlags<F> f)
     {
         const QMetaEnum me = QMetaEnum::fromType<F>();
-        return qstrdup(me.valueToKeys(int(f)).constData());
+        return qstrdup(me.valueToKeys(int(f.toInt())).constData());
     }
 
     template <typename F> // Fallback: Output hex value
@@ -268,7 +298,7 @@ namespace QTest
     {
         const size_t space = 3 + 2 * sizeof(unsigned); // 2 for 0x, two hex digits per byte, 1 for '\0'
         char *msg = new char[space];
-        qsnprintf(msg, space, "0x%x", unsigned(f));
+        qsnprintf(msg, space, "0x%x", unsigned(f.toInt()));
         return msg;
     }
 
@@ -308,14 +338,24 @@ namespace QTest
 
     Q_TESTLIB_EXPORT bool qVerify(bool statement, const char *statementStr, const char *description,
                                  const char *file, int line);
-    Q_TESTLIB_EXPORT void qFail(const char *statementStr, const char *file, int line);
+    Q_DECL_COLD_FUNCTION
+    Q_TESTLIB_EXPORT void qFail(const char *message, const char *file, int line);
     Q_TESTLIB_EXPORT void qSkip(const char *message, const char *file, int line);
     Q_TESTLIB_EXPORT bool qExpectFail(const char *dataIndex, const char *comment, TestFailMode mode,
                            const char *file, int line);
+    Q_DECL_COLD_FUNCTION
+    Q_TESTLIB_EXPORT void qCaught(const char *expected, const char *what, const char *file, int line);
+#if QT_DEPRECATED_SINCE(6, 3)
+    QT_DEPRECATED_VERSION_X_6_3("Use qWarning() instead")
     Q_TESTLIB_EXPORT void qWarn(const char *message, const char *file = nullptr, int line = 0);
+#endif
     Q_TESTLIB_EXPORT void ignoreMessage(QtMsgType type, const char *message);
 #if QT_CONFIG(regularexpression)
     Q_TESTLIB_EXPORT void ignoreMessage(QtMsgType type, const QRegularExpression &messagePattern);
+#endif
+    Q_TESTLIB_EXPORT void failOnWarning(const char *message);
+#if QT_CONFIG(regularexpression)
+    Q_TESTLIB_EXPORT void failOnWarning(const QRegularExpression &messagePattern);
 #endif
 
 #if QT_CONFIG(temporaryfile)
@@ -574,18 +614,7 @@ namespace QTest
 
 #undef QTEST_COMPARE_DECL
 
-#if QT_DEPRECATED_SINCE(6, 2)
-namespace QTestPrivate {
-QT_DEPRECATED_VERSION_X_6_2("Use qWarning() instead")
-Q_DECL_UNUSED static inline void qWarnMacro(const char *message, const char *file = nullptr, int line = 0)
-{
-    QTest::qWarn(message, file, line);
-}
-}
-#endif
-
-#define QWARN(msg) \
-    QTestPrivate::qWarnMacro(static_cast<const char *>(msg), __FILE__, __LINE__)
+#define QWARN(msg) QTest::qWarn(static_cast<const char *>(msg), __FILE__, __LINE__)
 
 QT_END_NAMESPACE
 

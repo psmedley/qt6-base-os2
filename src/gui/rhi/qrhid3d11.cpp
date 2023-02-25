@@ -51,8 +51,8 @@
 QT_BEGIN_NAMESPACE
 
 /*
-  Direct3D 11 backend. Provides a double-buffered flip model (FLIP_DISCARD)
-  swapchain. Textures and "static" buffers are USAGE_DEFAULT, leaving it to
+  Direct3D 11 backend. Provides a double-buffered flip model swapchain.
+  Textures and "static" buffers are USAGE_DEFAULT, leaving it to
   UpdateSubResource to upload the data in any way it sees fit. "Dynamic"
   buffers are USAGE_DYNAMIC and updating is done by mapping with WRITE_DISCARD.
   (so here QRhiBuffer keeps a copy of the buffer contents and all of it is
@@ -138,7 +138,7 @@ QRhiD3D11::QRhiD3D11(QRhiD3D11InitParams *params, QRhiD3D11NativeHandles *import
         if (importParams->dev && importParams->context) {
             dev = reinterpret_cast<ID3D11Device *>(importParams->dev);
             ID3D11DeviceContext *ctx = reinterpret_cast<ID3D11DeviceContext *>(importParams->context);
-            if (SUCCEEDED(ctx->QueryInterface(IID_ID3D11DeviceContext1, reinterpret_cast<void **>(&context)))) {
+            if (SUCCEEDED(ctx->QueryInterface(__uuidof(ID3D11DeviceContext1), reinterpret_cast<void **>(&context)))) {
                 // get rid of the ref added by QueryInterface
                 ctx->Release();
                 importedDeviceAndContext = true;
@@ -170,7 +170,7 @@ inline Int aligned(Int v, Int byteAlign)
 static IDXGIFactory1 *createDXGIFactory2()
 {
     IDXGIFactory1 *result = nullptr;
-    const HRESULT hr = CreateDXGIFactory2(0, IID_IDXGIFactory2, reinterpret_cast<void **>(&result));
+    const HRESULT hr = CreateDXGIFactory2(0, __uuidof(IDXGIFactory2), reinterpret_cast<void **>(&result));
     if (FAILED(hr)) {
         qWarning("CreateDXGIFactory2() failed to create DXGI factory: %s", qPrintable(comErrorMessage(hr)));
         result = nullptr;
@@ -181,7 +181,7 @@ static IDXGIFactory1 *createDXGIFactory2()
 static IDXGIFactory1 *createDXGIFactory1()
 {
     IDXGIFactory1 *result = nullptr;
-    const HRESULT hr = CreateDXGIFactory1(IID_IDXGIFactory1, reinterpret_cast<void **>(&result));
+    const HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void **>(&result));
     if (FAILED(hr)) {
         qWarning("CreateDXGIFactory1() failed to create DXGI factory: %s", qPrintable(comErrorMessage(hr)));
         result = nullptr;
@@ -199,19 +199,39 @@ bool QRhiD3D11::create(QRhi::Flags flags)
 
     dxgiFactory = createDXGIFactory2();
     if (dxgiFactory != nullptr) {
-        hasDxgi2 = true;
-        supportsFlipDiscardSwapchain = !qEnvironmentVariableIntValue("QT_D3D_NO_FLIP");
+        supportsFlipSwapchain = !qEnvironmentVariableIntValue("QT_D3D_NO_FLIP");
     } else {
         dxgiFactory = createDXGIFactory1();
-        hasDxgi2 = false;
-        supportsFlipDiscardSwapchain = false;
+        supportsFlipSwapchain = false;
     }
 
     if (dxgiFactory == nullptr)
         return false;
 
-    qCDebug(QRHI_LOG_INFO, "DXGI 1.2 = %s, FLIP_DISCARD swapchain supported = %s",
-            hasDxgi2 ? "true" : "false", supportsFlipDiscardSwapchain ? "true" : "false");
+    supportsAllowTearing = false;
+    forceFlipDiscard = false;
+    if (supportsFlipSwapchain) {
+        // For a FLIP_* swapchain Present(0, 0) is not necessarily
+        // sufficient to get non-blocking behavior, try using ALLOW_TEARING
+        // when available.
+        IDXGIFactory5 *factory5 = nullptr;
+        if (SUCCEEDED(dxgiFactory->QueryInterface(__uuidof(IDXGIFactory5), reinterpret_cast<void **>(&factory5)))) {
+            BOOL allowTearing = false;
+            if (SUCCEEDED(factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing))))
+                supportsAllowTearing = allowTearing;
+            factory5->Release();
+        }
+        // if we default to FLIP_SEQUENTIAL, have a way to request FLIP_DISCARD
+        forceFlipDiscard = qEnvironmentVariableIntValue("QT_D3D_FLIP_DISCARD");
+    }
+
+    qCDebug(QRHI_LOG_INFO, "FLIP_* swapchain supported = %s, ALLOW_TEARING supported = %s",
+            supportsFlipSwapchain ? "true" : "false",
+            supportsAllowTearing ? "true" : "false");
+
+    qCDebug(QRHI_LOG_INFO, "Default swap effect: %s",
+            supportsFlipSwapchain ? (forceFlipDiscard ? "FLIP_DISCARD" : "FLIP_SEQUENTIAL")
+                                  : "DISCARD");
 
     if (!importedDeviceAndContext) {
         IDXGIAdapter1 *adapter;
@@ -304,7 +324,7 @@ bool QRhiD3D11::create(QRhi::Flags flags)
             qWarning("Failed to create D3D11 device and context: %s", qPrintable(comErrorMessage(hr)));
             return false;
         }
-        if (SUCCEEDED(ctx->QueryInterface(IID_ID3D11DeviceContext1, reinterpret_cast<void **>(&context)))) {
+        if (SUCCEEDED(ctx->QueryInterface(__uuidof(ID3D11DeviceContext1), reinterpret_cast<void **>(&context)))) {
             ctx->Release();
         } else {
             qWarning("ID3D11DeviceContext1 not supported");
@@ -314,7 +334,7 @@ bool QRhiD3D11::create(QRhi::Flags flags)
         Q_ASSERT(dev && context);
         featureLevel = dev->GetFeatureLevel();
         IDXGIDevice *dxgiDev = nullptr;
-        if (SUCCEEDED(dev->QueryInterface(IID_IDXGIDevice, reinterpret_cast<void **>(&dxgiDev)))) {
+        if (SUCCEEDED(dev->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void **>(&dxgiDev)))) {
             IDXGIAdapter *adapter = nullptr;
             if (SUCCEEDED(dxgiDev->GetAdapter(&adapter))) {
                 DXGI_ADAPTER_DESC desc;
@@ -330,7 +350,7 @@ bool QRhiD3D11::create(QRhi::Flags flags)
         qCDebug(QRHI_LOG_INFO, "Using imported device %p", dev);
     }
 
-    if (FAILED(context->QueryInterface(IID_ID3DUserDefinedAnnotation, reinterpret_cast<void **>(&annotations))))
+    if (FAILED(context->QueryInterface(__uuidof(ID3DUserDefinedAnnotation), reinterpret_cast<void **>(&annotations))))
         annotations = nullptr;
 
     deviceLost = false;
@@ -389,7 +409,7 @@ void QRhiD3D11::reportLiveObjects(ID3D11Device *device)
 {
     // this works only when params.enableDebugLayer was true
     ID3D11Debug *debug;
-    if (SUCCEEDED(device->QueryInterface(IID_ID3D11Debug, reinterpret_cast<void **>(&debug)))) {
+    if (SUCCEEDED(device->QueryInterface(__uuidof(ID3D11Debug), reinterpret_cast<void **>(&debug)))) {
         debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
         debug->Release();
     }
@@ -541,6 +561,8 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::RenderTo3DTextureSlice:
         return true;
+    case QRhi::TextureArrays:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;
@@ -574,6 +596,8 @@ int QRhiD3D11::resourceLimit(QRhi::ResourceLimit limit) const
         return D3D11_CS_THREAD_GROUP_MAX_Y;
     case QRhi::MaxThreadGroupZ:
         return D3D11_CS_THREAD_GROUP_MAX_Z;
+    case QRhi::TextureArraySizeMax:
+        return D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION;
     case QRhi::MaxUniformBufferRange:
         return 65536;
     default:
@@ -631,10 +655,10 @@ QRhiRenderBuffer *QRhiD3D11::createRenderBuffer(QRhiRenderBuffer::Type type, con
 }
 
 QRhiTexture *QRhiD3D11::createTexture(QRhiTexture::Format format,
-                                      const QSize &pixelSize, int depth,
+                                      const QSize &pixelSize, int depth, int arraySize,
                                       int sampleCount, QRhiTexture::Flags flags)
 {
-    return new QD3D11Texture(this, format, pixelSize, depth, sampleCount, flags);
+    return new QD3D11Texture(this, format, pixelSize, depth, arraySize, sampleCount, flags);
 }
 
 QRhiSampler *QRhiD3D11::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
@@ -1141,7 +1165,9 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrame
     QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount + 1));
 
     if (!flags.testFlag(QRhi::SkipPresent)) {
-        const UINT presentFlags = 0;
+        UINT presentFlags = 0;
+        if (swapChainD->swapInterval == 0 && (swapChainD->swapChainFlags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING))
+            presentFlags |= DXGI_PRESENT_ALLOW_TEARING;
         HRESULT hr = swapChainD->swapChain->Present(swapChainD->swapInterval, presentFlags);
         if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
             qWarning("Device loss detected in Present()");
@@ -1758,6 +1784,8 @@ void QRhiD3D11::beginPass(QRhiCommandBuffer *cb,
         QD3D11TextureRenderTarget *rtTex = QRHI_RES(QD3D11TextureRenderTarget, rt);
         wantsColorClear = !rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
         wantsDsClear = !rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveDepthStencilContents);
+        if (!QRhiRenderTargetAttachmentTracker::isUpToDate<QD3D11Texture, QD3D11RenderBuffer>(rtTex->description(), rtD->currentResIdList))
+            rtTex->create();
     }
 
     cbD->commands.get().cmd = QD3D11CommandBuffer::Command::ResetShaderResources;
@@ -1785,7 +1813,7 @@ void QRhiD3D11::beginPass(QRhiCommandBuffer *cb,
     cbD->recordingPass = QD3D11CommandBuffer::RenderPass;
     cbD->currentTarget = rt;
 
-    cbD->resetCachedShaderResourceState();
+    cbD->resetCachedState();
 }
 
 void QRhiD3D11::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
@@ -1871,7 +1899,7 @@ void QRhiD3D11::beginComputePass(QRhiCommandBuffer *cb,
 
     cbD->recordingPass = QD3D11CommandBuffer::ComputePass;
 
-    cbD->resetCachedShaderResourceState();
+    cbD->resetCachedState();
 }
 
 void QRhiD3D11::endComputePass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
@@ -2894,6 +2922,7 @@ bool QD3D11RenderBuffer::create()
     QRHI_PROF;
     QRHI_PROF_F(newRenderBuffer(this, false, false, int(sampleDesc.Count)));
 
+    generation += 1;
     rhiD->registerResource(this);
     return true;
 }
@@ -2907,8 +2936,8 @@ QRhiTexture::Format QD3D11RenderBuffer::backingFormat() const
 }
 
 QD3D11Texture::QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, int depth,
-                             int sampleCount, Flags flags)
-    : QRhiTexture(rhi, format, pixelSize, depth, sampleCount, flags)
+                             int arraySize, int sampleCount, Flags flags)
+    : QRhiTexture(rhi, format, pixelSize, depth, arraySize, sampleCount, flags)
 {
     for (int i = 0; i < QRhi::MAX_MIP_LEVELS; ++i)
         perLevelViews[i] = nullptr;
@@ -2997,6 +3026,7 @@ bool QD3D11Texture::prepareCreate(QSize *adjustedSize)
     const bool isDepth = isDepthTextureFormat(m_format);
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool is3D = m_flags.testFlag(ThreeDimensional);
+    const bool isArray = m_flags.testFlag(TextureArray);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
     QRHI_RES_RHI(QRhiD3D11);
@@ -3025,9 +3055,22 @@ bool QD3D11Texture::prepareCreate(QSize *adjustedSize)
         qWarning("Texture cannot be both cube and 3D");
         return false;
     }
+    if (isArray && is3D) {
+        qWarning("Texture cannot be both array and 3D");
+        return false;
+    }
     m_depth = qMax(1, m_depth);
     if (m_depth > 1 && !is3D) {
         qWarning("Texture cannot have a depth of %d when it is not 3D", m_depth);
+        return false;
+    }
+    m_arraySize = qMax(0, m_arraySize);
+    if (m_arraySize > 0 && !isArray) {
+        qWarning("Texture cannot have an array size of %d when it is not an array", m_arraySize);
+        return false;
+    }
+    if (m_arraySize < 1 && isArray) {
+        qWarning("Texture is an array but array size is %d", m_arraySize);
         return false;
     }
 
@@ -3043,6 +3086,7 @@ bool QD3D11Texture::finishCreate()
     const bool isDepth = isDepthTextureFormat(m_format);
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool is3D = m_flags.testFlag(ThreeDimensional);
+    const bool isArray = m_flags.testFlag(TextureArray);
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
     memset(&srvDesc, 0, sizeof(srvDesc));
@@ -3051,14 +3095,27 @@ bool QD3D11Texture::finishCreate()
         srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
         srvDesc.TextureCube.MipLevels = mipLevelCount;
     } else {
-        if (sampleDesc.Count > 1) {
-            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMS;
-        } else if (is3D) {
-            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
-            srvDesc.Texture3D.MipLevels = mipLevelCount;
+        if (isArray) {
+            if (sampleDesc.Count > 1) {
+                srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMSARRAY;
+                srvDesc.Texture2DMSArray.FirstArraySlice = 0;
+                srvDesc.Texture2DMSArray.ArraySize = UINT(m_arraySize);
+            } else {
+                srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+                srvDesc.Texture2DArray.MipLevels = mipLevelCount;
+                srvDesc.Texture2DArray.FirstArraySlice = 0;
+                srvDesc.Texture2DArray.ArraySize = UINT(m_arraySize);
+            }
         } else {
-            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-            srvDesc.Texture2D.MipLevels = mipLevelCount;
+            if (sampleDesc.Count > 1) {
+                srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMS;
+            } else if (is3D) {
+                srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+                srvDesc.Texture3D.MipLevels = mipLevelCount;
+            } else {
+                srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+                srvDesc.Texture2D.MipLevels = mipLevelCount;
+            }
         }
     }
 
@@ -3081,6 +3138,7 @@ bool QD3D11Texture::create()
     const bool isDepth = isDepthTextureFormat(m_format);
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool is3D = m_flags.testFlag(ThreeDimensional);
+    const bool isArray = m_flags.testFlag(TextureArray);
 
     uint bindFlags = D3D11_BIND_SHADER_RESOURCE;
     uint miscFlags = isCube ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
@@ -3108,7 +3166,7 @@ bool QD3D11Texture::create()
         desc.Width = UINT(size.width());
         desc.Height = UINT(size.height());
         desc.MipLevels = mipLevelCount;
-        desc.ArraySize = isCube ? 6 : 1;
+        desc.ArraySize = isCube ? 6 : (isArray ? UINT(m_arraySize) : 1);
         desc.Format = dxgiFormat;
         desc.SampleDesc = sampleDesc;
         desc.Usage = D3D11_USAGE_DEFAULT;
@@ -3147,7 +3205,7 @@ bool QD3D11Texture::create()
         return false;
 
     QRHI_PROF;
-    QRHI_PROF_F(newTexture(this, true, int(mipLevelCount), isCube ? 6 : 1, int(sampleDesc.Count)));
+    QRHI_PROF_F(newTexture(this, true, int(mipLevelCount), isCube ? 6 : (isArray ? m_arraySize : 1), int(sampleDesc.Count)));
 
     owns = true;
     rhiD->registerResource(this);
@@ -3170,8 +3228,11 @@ bool QD3D11Texture::createFrom(QRhiTexture::NativeTexture src)
     if (!finishCreate())
         return false;
 
+    const bool isCube = m_flags.testFlag(CubeMap);
+    const bool isArray = m_flags.testFlag(TextureArray);
+
     QRHI_PROF;
-    QRHI_PROF_F(newTexture(this, false, int(mipLevelCount), m_flags.testFlag(CubeMap) ? 6 : 1, int(sampleDesc.Count)));
+    QRHI_PROF_F(newTexture(this, false, int(mipLevelCount), isCube ? 6 : (isArray ? m_arraySize : 1), int(sampleDesc.Count)));
 
     owns = false;
     QRHI_RES_RHI(QRhiD3D11);
@@ -3190,6 +3251,7 @@ ID3D11UnorderedAccessView *QD3D11Texture::unorderedAccessViewForLevel(int level)
         return perLevelViews[level];
 
     const bool isCube = m_flags.testFlag(CubeMap);
+    const bool isArray = m_flags.testFlag(TextureArray);
     const bool is3D = m_flags.testFlag(ThreeDimensional);
     D3D11_UNORDERED_ACCESS_VIEW_DESC desc;
     memset(&desc, 0, sizeof(desc));
@@ -3199,6 +3261,11 @@ ID3D11UnorderedAccessView *QD3D11Texture::unorderedAccessViewForLevel(int level)
         desc.Texture2DArray.MipSlice = UINT(level);
         desc.Texture2DArray.FirstArraySlice = 0;
         desc.Texture2DArray.ArraySize = 6;
+    } else if (isArray) {
+        desc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
+        desc.Texture2DArray.MipSlice = UINT(level);
+        desc.Texture2DArray.FirstArraySlice = 0;
+        desc.Texture2DArray.ArraySize = UINT(m_arraySize);
     } else if (is3D) {
         desc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE3D;
         desc.Texture3D.MipSlice = UINT(level);
@@ -3483,6 +3550,17 @@ bool QD3D11TextureRenderTarget::create()
                 rtvDesc.Texture2DArray.MipSlice = UINT(colorAtt.level());
                 rtvDesc.Texture2DArray.FirstArraySlice = UINT(colorAtt.layer());
                 rtvDesc.Texture2DArray.ArraySize = 1;
+            } else if (texD->flags().testFlag(QRhiTexture::TextureArray)) {
+                if (texD->sampleDesc.Count > 1) {
+                    rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMSARRAY;
+                    rtvDesc.Texture2DMSArray.FirstArraySlice = UINT(colorAtt.layer());
+                    rtvDesc.Texture2DMSArray.ArraySize = 1;
+                } else {
+                    rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+                    rtvDesc.Texture2DArray.MipSlice = UINT(colorAtt.level());
+                    rtvDesc.Texture2DArray.FirstArraySlice = UINT(colorAtt.layer());
+                    rtvDesc.Texture2DArray.ArraySize = 1;
+                }
             } else if (texD->flags().testFlag(QRhiTexture::ThreeDimensional)) {
                 rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE3D;
                 rtvDesc.Texture3D.MipSlice = UINT(colorAtt.level());
@@ -3556,12 +3634,17 @@ bool QD3D11TextureRenderTarget::create()
     d.dsv = dsv;
     d.rp = QRHI_RES(QD3D11RenderPassDescriptor, m_renderPassDesc);
 
+    QRhiRenderTargetAttachmentTracker::updateResIdList<QD3D11Texture, QD3D11RenderBuffer>(m_desc, &d.currentResIdList);
+
     rhiD->registerResource(this);
     return true;
 }
 
 QSize QD3D11TextureRenderTarget::pixelSize() const
 {
+    if (!QRhiRenderTargetAttachmentTracker::isUpToDate<QD3D11Texture, QD3D11RenderBuffer>(m_desc, d.currentResIdList))
+        const_cast<QD3D11TextureRenderTarget *>(this)->create();
+
     return d.pixelSize;
 }
 
@@ -4431,33 +4514,42 @@ bool QD3D11SwapChain::createOrResize()
     const DXGI_FORMAT srgbAdjustedFormat = m_flags.testFlag(sRGB) ?
                 DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
 
-    const UINT swapChainFlags = 0;
-
     QRHI_RES_RHI(QRhiD3D11);
-    bool useFlipDiscard = rhiD->hasDxgi2 && rhiD->supportsFlipDiscardSwapchain;
+    bool useFlipModel = rhiD->supportsFlipSwapchain;
+
+    // Take a shortcut for alpha: whatever the platform plugin does to enable
+    // transparency for our QWindow will be sufficient on the legacy (DISCARD)
+    // path. For FLIP_* we'd need to use DirectComposition (create a
+    // IDCompositionDevice/Target/Visual), avoid that for now. (this though
+    // means HDR and semi-transparent windows cannot be combined)
+    if (m_flags.testFlag(SurfaceHasPreMulAlpha) || m_flags.testFlag(SurfaceHasNonPreMulAlpha)) {
+        useFlipModel = false;
+        if (window->requestedFormat().alphaBufferSize() <= 0)
+            qWarning("Swapchain says surface has alpha but the window has no alphaBufferSize set. "
+                     "This may lead to problems.");
+    }
+
+    swapInterval = m_flags.testFlag(QRhiSwapChain::NoVSync) ? 0 : 1;
+    swapChainFlags = 0;
+
+    // A non-flip swapchain can do Present(0) as expected without
+    // ALLOW_TEARING, and ALLOW_TEARING is not compatible with it at all so the
+    // flag must not be set then. Whereas for flip we should use it, if
+    // supported, to get better results for 'unthrottled' presentation.
+    if (swapInterval == 0 && useFlipModel && rhiD->supportsAllowTearing)
+        swapChainFlags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+
     if (!swapChain) {
         HWND hwnd = reinterpret_cast<HWND>(window->winId());
         sampleDesc = rhiD->effectiveSampleCount(m_sampleCount);
 
-        // Take a shortcut for alpha: our QWindow is OpenGLSurface so whatever
-        // the platform plugin does to enable transparency for OpenGL window
-        // will be sufficient for us too on the legacy (DISCARD) path. For
-        // FLIP_DISCARD we'd need to use DirectComposition (create a
-        // IDCompositionDevice/Target/Visual), avoid that for now.
-        if (m_flags.testFlag(SurfaceHasPreMulAlpha) || m_flags.testFlag(SurfaceHasNonPreMulAlpha)) {
-            useFlipDiscard = false;
-            if (window->requestedFormat().alphaBufferSize() <= 0)
-                qWarning("Swapchain says surface has alpha but the window has no alphaBufferSize set. "
-                         "This may lead to problems.");
-        }
-
         HRESULT hr;
-        if (useFlipDiscard) {
-            // We use FLIP_DISCARD which implies a buffer count of 2 (as opposed to the
-            // old DISCARD with back buffer count == 1). This makes no difference for
-            // the rest of the stuff except that automatic MSAA is unsupported and
-            // needs to be implemented via a custom multisample render target and an
-            // explicit resolve.
+        if (useFlipModel) {
+            // We use a FLIP model swapchain which implies a buffer count of 2
+            // (as opposed to the old DISCARD with back buffer count == 1).
+            // This makes no difference for the rest of the stuff except that
+            // automatic MSAA is unsupported and needs to be implemented via a
+            // custom multisample render target and an explicit resolve.
 
             DXGI_SWAP_CHAIN_DESC1 desc;
             memset(&desc, 0, sizeof(desc));
@@ -4467,8 +4559,22 @@ bool QD3D11SwapChain::createOrResize()
             desc.SampleDesc.Count = 1;
             desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
             desc.BufferCount = BUFFER_COUNT;
-            desc.Scaling = DXGI_SCALING_STRETCH;
-            desc.SwapEffect = DXGI_SWAP_EFFECT(4); // DXGI_SWAP_EFFECT_FLIP_DISCARD
+
+            // Normally we'd want FLIP_DISCARD, but that comes with the default
+            // SCALING_STRETCH, as SCALING_NONE is documented to be only
+            // available for FLIP_SEQUENTIAl. The problem with stretch is that
+            // Qt Quick and similar apps typically running in resizable windows
+            // will not like how that looks in practice: the content will
+            // appear to be "jumping" around during a window resize. So choose
+            // sequential/none by default.
+            if (rhiD->forceFlipDiscard) {
+                desc.Scaling = DXGI_SCALING_STRETCH;
+                desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+            } else {
+                desc.Scaling = DXGI_SCALING_NONE;
+                desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+            }
+
             // Do not bother with AlphaMode, if won't work unless we go through
             // DirectComposition. Instead, we just take the other (DISCARD)
             // path for now when alpha is requested.
@@ -4480,9 +4586,9 @@ bool QD3D11SwapChain::createOrResize()
             if (SUCCEEDED(hr))
                 swapChain = sc1;
         } else {
-            // Windows 7 for instance. Use DISCARD mode. Regardless, keep on
-            // using our manual resolve for symmetry with the FLIP_DISCARD code
-            // path when MSAA is requested.
+            // Fallback: use DISCARD mode. Regardless, keep on using our manual
+            // resolve for symmetry with the FLIP_* code path when MSAA is
+            // requested. This has no HDR support.
 
             DXGI_SWAP_CHAIN_DESC desc;
             memset(&desc, 0, sizeof(desc));
@@ -4508,7 +4614,7 @@ bool QD3D11SwapChain::createOrResize()
         rhiD->dxgiFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_WINDOW_CHANGES);
     } else {
         releaseBuffers();
-        const UINT count = useFlipDiscard ? BUFFER_COUNT : 1;
+        const UINT count = useFlipModel ? BUFFER_COUNT : 1;
         HRESULT hr = swapChain->ResizeBuffers(count, UINT(pixelSize.width()), UINT(pixelSize.height()),
                                               colorFormat, swapChainFlags);
         if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
@@ -4521,7 +4627,7 @@ bool QD3D11SwapChain::createOrResize()
         }
     }
 
-    // This looks odd (for FLIP_DISCARD, esp. compared with backends for Vulkan
+    // This looks odd (for FLIP_*, esp. compared with backends for Vulkan
     // & co.) but the backbuffer is always at index 0, with magic underneath.
     // Some explanation from
     // https://docs.microsoft.com/en-us/windows/win32/direct3ddxgi/dxgi-1-4-improvements
@@ -4535,7 +4641,7 @@ bool QD3D11SwapChain::createOrResize()
     // swapchain."
 
     // So just query index 0 once (per resize) and be done with it.
-    HRESULT hr = swapChain->GetBuffer(0, IID_ID3D11Texture2D, reinterpret_cast<void **>(&backBufferTex));
+    HRESULT hr = swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&backBufferTex));
     if (FAILED(hr)) {
         qWarning("Failed to query swapchain backbuffer: %s", qPrintable(comErrorMessage(hr)));
         return false;
@@ -4578,7 +4684,6 @@ bool QD3D11SwapChain::createOrResize()
     currentFrameSlot = 0;
     frameCount = 0;
     ds = m_depthStencil ? QRHI_RES(QD3D11RenderBuffer, m_depthStencil) : nullptr;
-    swapInterval = m_flags.testFlag(QRhiSwapChain::NoVSync) ? 0 : 1;
 
     QD3D11ReferenceRenderTarget *rtD = QRHI_RES(QD3D11ReferenceRenderTarget, &rt);
     rtD->d.rp = QRHI_RES(QD3D11RenderPassDescriptor, m_renderPassDesc);

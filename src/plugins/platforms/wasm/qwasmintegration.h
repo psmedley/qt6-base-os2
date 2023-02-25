@@ -82,7 +82,6 @@ public:
     QWasmClipboard *getWasmClipboard() { return m_clipboard; }
 
     static QWasmIntegration *get() { return s_instance; }
-    static void QWasmBrowserExit();
 
     void addScreen(const emscripten::val &canvas);
     void removeScreen(const emscripten::val &canvas);
@@ -90,6 +89,7 @@ public:
     void resizeAllScreens();
     void updateDpi();
     void removeBackingStore(QWindow* window);
+    static quint64 getTimestamp();
 
 private:
     mutable QWasmFontDatabase *m_fontDb;

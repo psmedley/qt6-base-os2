@@ -127,6 +127,8 @@ private slots:
     void dockWidgetArea();
     void restoreState();
     void restoreStateFromPreviousVersion();
+    void restoreStateSizeChanged_data();
+    void restoreStateSizeChanged();
     void createPopupMenu();
     void hideBeforeLayout();
 #ifdef QT_BUILD_INTERNAL
@@ -1363,14 +1365,19 @@ void tst_QMainWindow::restoreState()
     dw.setObjectName(QLatin1String("dock"));
     mw.addDockWidget(Qt::LeftDockWidgetArea, &dw);
 
+    QWidgetPrivate *tbp = QWidgetPrivate::get(&tb);
+    QVERIFY(tbp->widgetItem);
+
     QByteArray state;
 
     state = mw.saveState();
     QVERIFY(mw.restoreState(state));
+    QVERIFY(tbp->widgetItem);
 
     state = mw.saveState(1);
     QVERIFY(!mw.restoreState(state));
     QVERIFY(mw.restoreState(state, 1));
+    QVERIFY(tbp->widgetItem);
 }
 
 //tests the restoration of the previous versions of window settings
@@ -1404,6 +1411,94 @@ void tst_QMainWindow::restoreStateFromPreviousVersion()
 
 }
 
+void tst_QMainWindow::restoreStateSizeChanged_data()
+{
+    QTest::addColumn<Qt::WindowState>("saveState");
+    QTest::addColumn<Qt::WindowState>("showState");
+    QTest::addColumn<bool>("sameSize");
+
+    QTest::addRow("fullscreen") << Qt::WindowFullScreen << Qt::WindowFullScreen << true;
+    QTest::addRow("maximized") << Qt::WindowMaximized << Qt::WindowMaximized << true;
+    QTest::addRow("maximized->normal") << Qt::WindowMaximized << Qt::WindowNoState << false;
+    QTest::addRow("fullscreen->normal") << Qt::WindowFullScreen << Qt::WindowNoState << false;
+    QTest::addRow("fullscreen->maximized") << Qt::WindowFullScreen << Qt::WindowMaximized << false;
+    QTest::addRow("maximized->fullscreen") << Qt::WindowMaximized << Qt::WindowFullScreen << true;
+}
+
+void tst_QMainWindow::restoreStateSizeChanged()
+{
+    QFETCH(Qt::WindowState, saveState);
+    QFETCH(Qt::WindowState, showState);
+    QFETCH(bool, sameSize);
+
+    auto createMainWindow = []{
+        QMainWindow *mainWindow = new QMainWindow;
+        mainWindow->move(QGuiApplication::primaryScreen()->availableGeometry().topLeft());
+        mainWindow->setCentralWidget(new QLabel("X"));
+        QDockWidget *dockWidget = new QDockWidget;
+        dockWidget->setObjectName("Dock Widget");
+        mainWindow->addDockWidget(Qt::LeftDockWidgetArea, dockWidget);
+        return mainWindow;
+    };
+
+    QByteArray geometryData;
+    QByteArray stateData;
+    int dockWidgetWidth = 0;
+    QRect normalGeometry;
+
+    {
+        auto mainWindow = QScopedPointer<QMainWindow>(createMainWindow());
+        mainWindow->setWindowState(saveState);
+        mainWindow->show();
+        QVERIFY(QTest::qWaitForWindowExposed(mainWindow.data()));
+        dockWidgetWidth = mainWindow->width() - 100;
+        QDockWidget *dockWidget = mainWindow->findChild<QDockWidget*>("Dock Widget");
+        mainWindow->resizeDocks({dockWidget}, {dockWidgetWidth}, Qt::Horizontal);
+        geometryData = mainWindow->saveGeometry();
+        stateData = mainWindow->saveState();
+        normalGeometry = mainWindow->normalGeometry();
+    }
+
+    auto mainWindow = QScopedPointer<QMainWindow>(createMainWindow());
+    mainWindow->restoreGeometry(geometryData);
+    QElapsedTimer timer;
+    timer.start();
+    mainWindow->restoreState(stateData);
+    mainWindow->setWindowState(showState);
+    mainWindow->show();
+    QVERIFY(QTest::qWaitForWindowExposed(mainWindow.data()));
+
+    QDockWidget *dockWidget = mainWindow->findChild<QDockWidget*>("Dock Widget");
+    QVERIFY(dockWidget);
+    QCOMPARE(mainWindow->normalGeometry().size(), normalGeometry.size());
+    if (sameSize) {
+        // The implementation discards the restored state 150ms after a resize
+        // event. If it takes too long to get here, then the test cannot pass anymore
+        // and we want to XFAIL rather then skip it with some information that might
+        // help us adjust the timeout in QMainWindowLayout.
+        bool expectFail = false;
+        const auto waitForLastResize = [&]() -> bool {
+            if (dockWidget->width() == dockWidgetWidth)
+                return true;
+            if (timer.elapsed() > 150) {
+                QMainWindowLayout *l = mainWindow->findChild<QMainWindowLayout *>();
+                Q_ASSERT(l);
+                if (!l->restoredState) {
+                    qWarning("Restored state discarded after %lld", timer.elapsed());
+                    expectFail = true;
+                    return true;
+                }
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(waitForLastResize(), 500);
+        if (expectFail) {
+            QEXPECT_FAIL("fullscreen", "Restored state probably discarded too early", Continue);
+            QEXPECT_FAIL("maximized->fullscreen", "Restored state probably discarded too early", Continue);
+        }
+        QCOMPARE(dockWidget->width(), dockWidgetWidth);
+    }
+}
 
 void tst_QMainWindow::createPopupMenu()
 {
@@ -1705,6 +1800,7 @@ void tst_QMainWindow::saveRestore()
             adw.apply(&mainWindow);
 
         mainWindow.show();
+
         mainWindow.restoreState(stateData);
 
         COMPARE_DOCK_WIDGET_GEOS(dockWidgetGeos, dockWidgetGeometries(&mainWindow));
@@ -1723,6 +1819,7 @@ void tst_QMainWindow::saveRestore()
         mainWindow.restoreState(stateData);
 
         mainWindow.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
         COMPARE_DOCK_WIDGET_GEOS(dockWidgetGeos, dockWidgetGeometries(&mainWindow));
     }
 }
@@ -1767,11 +1864,11 @@ void tst_QMainWindow::setCursor()
     QVERIFY(QTest::qWaitForWindowActive(&mw));
     QCOMPARE(cur.shape(), mw.cursor().shape());
 
-    QHoverEvent enterE(QEvent::HoverEnter, QPoint(10,10), QPoint());
+    QHoverEvent enterE(QEvent::HoverEnter, QPoint(10,10), QPoint(), QPoint());
     mw.event(&enterE);
     QCOMPARE(cur.shape(), mw.cursor().shape());
 
-    QHoverEvent leaveE(QEvent::HoverLeave, QPoint(), QPoint());
+    QHoverEvent leaveE(QEvent::HoverLeave, QPoint(), QPoint(), QPoint());
     mw.event(&leaveE);
     QCOMPARE(cur.shape(), mw.cursor().shape());
 }

@@ -297,7 +297,6 @@ QCocoaTheme::QCocoaTheme()
 QCocoaTheme::~QCocoaTheme()
 {
     reset();
-    qDeleteAll(m_fonts);
 }
 
 void QCocoaTheme::reset()
@@ -370,12 +369,9 @@ const QPalette *QCocoaTheme::palette(Palette type) const
 
 const QFont *QCocoaTheme::font(Font type) const
 {
-    if (m_fonts.isEmpty()) {
-        const auto *platformIntegration = QGuiApplicationPrivate::platformIntegration();
-        const auto *coreTextFontDb = static_cast<QCoreTextFontDatabase *>(platformIntegration->fontDatabase());
-        m_fonts = coreTextFontDb->themeFonts();
-    }
-    return m_fonts.value(type, nullptr);
+    const auto *platformIntegration = QGuiApplicationPrivate::platformIntegration();
+    const auto *coreTextFontDatabase = static_cast<QCoreTextFontDatabase *>(platformIntegration->fontDatabase());
+    return coreTextFontDatabase->themeFont(type);
 }
 
 //! \internal
@@ -452,7 +448,7 @@ QPixmap QCocoaTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) const
     if (iconType != 0) {
         QPixmap pixmap;
         IconRef icon = nullptr;
-        GetIconRef(kOnSystemDisk, kSystemIconsCreator, iconType, &icon);
+        QT_IGNORE_DEPRECATIONS(GetIconRef(kOnSystemDisk, kSystemIconsCreator, iconType, &icon));
 
         if (icon) {
             pixmap = qt_mac_convert_iconref(icon, size.width(), size.height());
@@ -527,6 +523,8 @@ QVariant QCocoaTheme::themeHint(ThemeHint hint) const
         return QVariant(bool([[NSApplication sharedApplication] presentationOptions] & NSApplicationPresentationFullScreen));
     case QPlatformTheme::InteractiveResizeAcrossScreens:
         return !NSScreen.screensHaveSeparateSpaces;
+    case QPlatformTheme::ShowDirectoriesFirst:
+        return false;
     default:
         break;
     }

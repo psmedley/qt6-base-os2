@@ -68,6 +68,10 @@ QT_BEGIN_NAMESPACE
 #pragma qt_no_master_include
 #endif
 
+#ifndef QT_NO_DATASTREAM
+class QDataStream;
+#endif
+
 class qfloat16
 {
     struct Wrap
@@ -201,6 +205,11 @@ QT_WARNING_DISABLE_FLOAT_COMPARE
 #undef QF16_MAKE_BOOL_OP_INT
 
 QT_WARNING_POP
+
+#ifndef QT_NO_DATASTREAM
+    friend Q_CORE_EXPORT QDataStream &operator<<(QDataStream &ds, qfloat16 f);
+    friend Q_CORE_EXPORT QDataStream &operator>>(QDataStream &ds, qfloat16 &f);
+#endif
 };
 
 Q_DECLARE_TYPEINFO(qfloat16, Q_PRIMITIVE_TYPE);
@@ -334,7 +343,7 @@ template <> inline auto qHypot(qfloat16 x, qfloat16 y)
     return qfloat16(qHypot(float(x), float(y)));
 #endif
 }
-#if __cpp_lib_hypot >= 201603L // Expected to be true
+#if defined(__cpp_lib_hypot) && __cpp_lib_hypot >= 201603L // Expected to be true
 // If any are not qfloat16, convert each qfloat16 to float:
 /* (The following splits the some-but-not-all-qfloat16 cases up, using
    (X|Y|Z)&~(X&Y&Z) = X ? ~(Y&Z) : Y|Z = X&~(Y&Z) | ~X&Y | ~X&~Y&Z,
@@ -368,7 +377,7 @@ inline auto qHypot(qfloat16 x, qfloat16 y, qfloat16 z)
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(qfloat16)
+QT_DECL_METATYPE_EXTERN(qfloat16, Q_CORE_EXPORT)
 
 namespace std {
 template<>

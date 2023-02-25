@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2019 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2013 John Layt <jlayt@kde.org>
 ** Contact: https://www.qt.io/licensing/
 **
@@ -54,6 +54,8 @@
 //
 
 #include <QtCore/private/qglobal_p.h>
+#include "qbytearrayview.h"
+#include "qstring.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -73,22 +75,30 @@ QT_BEGIN_NAMESPACE
     table removed
 */
 
-struct QZoneData {
+struct QZoneData
+{
     quint16 windowsIdKey;      // Windows ID Key
     quint16 territory;         // Territory of IANA ID's, AnyTerritory means No Territory
-    quint16 ianaIdIndex;      // All IANA ID's for the Windows ID and Country, space separated
+    quint16 ianaIdIndex;       // All IANA ID's for the Windows ID and Country, space separated
+    inline QLatin1String id() const;
+    inline auto ids() const { return id().tokenize(QLatin1String(" ")); }
 };
 
-struct QWindowsData {
+struct QWindowsData
+{
     quint16 windowsIdKey;      // Windows ID Key
     quint16 windowsIdIndex;    // Windows ID Literal
-    quint16 ianaIdIndex;      // Default IANA ID for the Windows ID
+    quint16 ianaIdIndex;       // Default IANA ID for the Windows ID
     qint32 offsetFromUtc;      // Standard Time Offset from UTC, used for quick look-ups
+    inline QByteArrayView windowsId() const;
+    inline QByteArrayView ianaId() const;
 };
 
-struct QUtcData {
-    quint16 ianaIdIndex;      // IANA ID's
+struct QUtcData
+{
+    quint16 ianaIdIndex;       // IANA ID
     qint32 offsetFromUtc;      // Offset form UTC is seconds
+    inline QByteArrayView id() const;
 };
 
 /*
@@ -115,7 +125,7 @@ struct QUtcData {
 // GENERATED PART STARTS HERE
 
 /*
-    This part of the file was generated on 2021-11-10 from the
+    This part of the file was generated on 2021-11-05 from the
     Common Locale Data Repository v40 file supplemental/windowsZones.xml
 
     http://www.unicode.org/cldr/
@@ -125,7 +135,7 @@ struct QUtcData {
 */
 
 // Windows ID Key, Territory Enum, IANA ID Index
-static const QZoneData zoneDataTable[] = {
+static constexpr QZoneData zoneDataTable[] = {
     {      1,     1,     0 }, // Afghanistan Standard Time / Afghanistan
     {      2,   248,    11 }, // Alaskan Standard Time / United States
     {      3,   248,   106 }, // Aleutian Standard Time / United States
@@ -493,11 +503,10 @@ static const QZoneData zoneDataTable[] = {
     {    137,   182,  7221 }, // West Pacific Standard Time / Papua New Guinea
     {    138,   193,  7242 }, // Yakutsk Standard Time / Russia
     {    139,    41,  7269 }, // Yukon Standard Time / Canada
-    {      0,     0,     0 } // Trailing zeroes
 };
 
 // Windows ID Key, Windows ID Index, IANA ID Index, UTC Offset
-static const QWindowsData windowsDataTable[] = {
+static constexpr QWindowsData windowsDataTable[] = {
     {      1,     0,     0, 16200 }, // Afghanistan Standard Time
     {      2,    26,  7303,-32400 }, // Alaskan Standard Time
     {      3,    48,   106,-36000 }, // Aleutian Standard Time
@@ -637,11 +646,10 @@ static const QWindowsData windowsDataTable[] = {
     {    137,  3150,  7221, 36000 }, // West Pacific Standard Time
     {    138,  3177,  7752, 32400 }, // Yakutsk Standard Time
     {    139,  3199,  7765,-25200 }, // Yukon Standard Time
-    {      0,     0,     0,     0 } // Trailing zeroes
 };
 
 // IANA ID Index, UTC Offset
-static const QUtcData utcDataTable[] = {
+static constexpr QUtcData utcDataTable[] = {
     {   7784,     0 }, // UTC
     {   7788,-50400 }, // UTC-14:00
     {   7798,-46800 }, // UTC-13:00
@@ -682,10 +690,9 @@ static const QUtcData utcDataTable[] = {
     {   8148, 43200 }, // UTC+12:00
     {   8158, 46800 }, // UTC+13:00
     {   8168, 50400 }, // UTC+14:00
-    {     0,      0 } // Trailing zeroes
 };
 
-static const char windowsIdData[] = {
+static constexpr char windowsIdData[] = {
 0x41, 0x66, 0x67, 0x68, 0x61, 0x6e, 0x69, 0x73, 0x74, 0x61, 0x6e, 0x20, 0x53, 0x74, 0x61, 0x6e, 0x64, 0x61, 0x72, 0x64,
 0x20, 0x54, 0x69, 0x6d, 0x65, 0x0, 0x41, 0x6c, 0x61, 0x73, 0x6b, 0x61, 0x6e, 0x20, 0x53, 0x74, 0x61, 0x6e, 0x64, 0x61,
 0x72, 0x64, 0x20, 0x54, 0x69, 0x6d, 0x65, 0x0, 0x41, 0x6c, 0x65, 0x75, 0x74, 0x69, 0x61, 0x6e, 0x20, 0x53, 0x74, 0x61,
@@ -849,7 +856,7 @@ static const char windowsIdData[] = {
 0x75, 0x6b, 0x6f, 0x6e, 0x20, 0x53, 0x74, 0x61, 0x6e, 0x64, 0x61, 0x72, 0x64, 0x20, 0x54, 0x69, 0x6d, 0x65, 0x0
 };
 
-static const char ianaIdData[] = {
+static constexpr char ianaIdData[] = {
 0x41, 0x73, 0x69, 0x61, 0x2f, 0x4b, 0x61, 0x62, 0x75, 0x6c, 0x0, 0x41, 0x6d, 0x65, 0x72, 0x69, 0x63, 0x61, 0x2f, 0x41,
 0x6e, 0x63, 0x68, 0x6f, 0x72, 0x61, 0x67, 0x65, 0x20, 0x41, 0x6d, 0x65, 0x72, 0x69, 0x63, 0x61, 0x2f, 0x4a, 0x75, 0x6e,
 0x65, 0x61, 0x75, 0x20, 0x41, 0x6d, 0x65, 0x72, 0x69, 0x63, 0x61, 0x2f, 0x4d, 0x65, 0x74, 0x6c, 0x61, 0x6b, 0x61, 0x74,
@@ -1261,6 +1268,11 @@ static const char ianaIdData[] = {
 0x43, 0x2b, 0x31, 0x33, 0x3a, 0x30, 0x30, 0x0, 0x55, 0x54, 0x43, 0x2b, 0x31, 0x34, 0x3a, 0x30, 0x30, 0x0
 };
 // GENERATED PART ENDS HERE
+
+inline QByteArrayView QWindowsData::windowsId() const { return windowsIdData + windowsIdIndex; }
+inline QByteArrayView QWindowsData::ianaId() const { return ianaIdData + ianaIdIndex; }
+inline QByteArrayView QUtcData::id() const { return ianaIdData + ianaIdIndex; }
+inline QLatin1String QZoneData::id() const { return QLatin1String(ianaIdData + ianaIdIndex); }
 
 QT_END_NAMESPACE
 

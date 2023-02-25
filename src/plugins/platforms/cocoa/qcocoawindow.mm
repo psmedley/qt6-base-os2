@@ -132,6 +132,7 @@ static void qRegisterNotificationCallbacks()
 Q_CONSTRUCTOR_FUNCTION(qRegisterNotificationCallbacks)
 
 const int QCocoaWindow::NoAlertRequest = -1;
+QPointer<QCocoaWindow> QCocoaWindow::s_windowUnderMouse;
 
 QCocoaWindow::QCocoaWindow(QWindow *win, WId nativeHandle)
     : QPlatformWindow(win)
@@ -139,7 +140,6 @@ QCocoaWindow::QCocoaWindow(QWindow *win, WId nativeHandle)
     , m_nsWindow(nil)
     , m_lastReportedWindowState(Qt::WindowNoState)
     , m_windowModality(Qt::NonModal)
-    , m_windowUnderMouse(false)
     , m_initialized(false)
     , m_inSetVisible(false)
     , m_inSetGeometry(false)
@@ -149,7 +149,6 @@ QCocoaWindow::QCocoaWindow(QWindow *win, WId nativeHandle)
     , m_registerTouchCount(0)
     , m_resizableTransientParent(false)
     , m_alertRequest(NoAlertRequest)
-    , m_monitor(nil)
     , m_drawContentBorderGradient(false)
     , m_topContentBorderThickness(0)
     , m_bottomContentBorderThickness(0)
@@ -199,24 +198,18 @@ QCocoaWindow::~QCocoaWindow()
     if ([m_view superview])
         [m_view removeFromSuperview];
 
-    removeMonitor();
-
     // Make sure to disconnect observer in all case if view is valid
     // to avoid notifications received when deleting when using Qt::AA_NativeWindows attribute
     if (!isForeignWindow())
         [[NSNotificationCenter defaultCenter] removeObserver:m_view];
 
-    if (QCocoaIntegration *cocoaIntegration = QCocoaIntegration::instance()) {
-        // While it is unlikely that this window will be in the popup stack
-        // during deletetion we clear any pointers here to make sure.
-        cocoaIntegration->popupWindowStack()->removeAll(this);
-
 #if QT_CONFIG(vulkan)
+    if (QCocoaIntegration *cocoaIntegration = QCocoaIntegration::instance()) {
         auto vulcanInstance = cocoaIntegration->getCocoaVulkanInstance();
         if (vulcanInstance)
             vulcanInstance->destroySurface(m_vulkanSurface);
-#endif
     }
+#endif
 
     // Must send notification before calling release, as doing it from
     // [QNSView dealloc] would mean that any weak references to the view
@@ -379,11 +372,6 @@ void QCocoaWindow::setVisible(bool visible)
         // so we can send the geometry change. FIXME: Get rid of this workaround.
         handleGeometryChange();
 
-        // Register popup windows. The Cocoa platform plugin will forward mouse events
-        // to them and close them when needed.
-        if (window()->type() == Qt::Popup || window()->type() == Qt::ToolTip)
-            QCocoaIntegration::instance()->pushPopupWindow(this);
-
         if (parentCocoaWindow) {
             // The parent window might have moved while this window was hidden,
             // update the window geometry if there is a parent.
@@ -436,21 +424,6 @@ void QCocoaWindow::setVisible(bool visible)
                 } else {
                     [m_view.window orderFront:nil];
                 }
-
-                // Close popup when clicking outside it
-                if (window()->type() == Qt::Popup && !(parentCocoaWindow && window()->transientParent()->isActive())) {
-                    removeMonitor();
-                    NSEventMask eventMask = NSEventMaskLeftMouseDown | NSEventMaskRightMouseDown
-                                          | NSEventMaskOtherMouseDown | NSEventMaskMouseMoved;
-                    m_monitor = [NSEvent addGlobalMonitorForEventsMatchingMask:eventMask handler:^(NSEvent *e) {
-                        const auto button = cocoaButton2QtButton(e);
-                        const auto buttons = currentlyPressedMouseButtons();
-                        const auto eventType = cocoaEvent2QtMouseEvent(e);
-                        const auto globalPoint = QCocoaScreen::mapFromNative(NSEvent.mouseLocation);
-                        const auto localPoint = window()->mapFromGlobal(globalPoint.toPoint());
-                        QWindowSystemInterface::handleMouseEvent(window(), localPoint, globalPoint, buttons, button, eventType);
-                    }];
-                }
             }
         }
 
@@ -491,11 +464,6 @@ void QCocoaWindow::setVisible(bool visible)
         } else {
             [m_view setHidden:YES];
         }
-
-        removeMonitor();
-
-        if (window()->type() == Qt::Popup || window()->type() == Qt::ToolTip)
-            QCocoaIntegration::instance()->popupWindowStack()->removeAll(this);
 
         if (parentCocoaWindow && window()->type() == Qt::Popup) {
             NSWindow *nativeParentWindow = parentCocoaWindow->nativeWindow();
@@ -562,39 +530,45 @@ NSInteger QCocoaWindow::windowLevel(Qt::WindowFlags flags)
 NSUInteger QCocoaWindow::windowStyleMask(Qt::WindowFlags flags)
 {
     const Qt::WindowType type = static_cast<Qt::WindowType>(int(flags & Qt::WindowType_Mask));
-    const bool frameless = (flags & Qt::FramelessWindowHint) || windowIsPopupType(type);
 
-    // Remove zoom button by disabling resize for CustomizeWindowHint windows, except for
-    // Qt::Tool windows (e.g. dock windows) which should always be resizable.
-    const bool resizable = !(flags & Qt::CustomizeWindowHint) || (type == Qt::Tool);
+    // Determine initial style mask based on whether the window should
+    // have a frame and title or not. The NSWindowStyleMaskBorderless
+    // and NSWindowStyleMaskTitled styles are mutually exclusive, with
+    // values of 0 and 1 correspondingly.
+    NSUInteger styleMask = [&]{
+        // Honor explicit requests for borderless windows
+        if (flags & Qt::FramelessWindowHint)
+            return NSWindowStyleMaskBorderless;
 
-    // Select base window type. Note that the value of NSBorderlessWindowMask is 0.
-    NSUInteger styleMask = (frameless || !resizable) ? NSWindowStyleMaskBorderless : NSWindowStyleMaskResizable;
+        // Popup windows should always be borderless
+        if (windowIsPopupType(type))
+            return NSWindowStyleMaskBorderless;
 
-    if (frameless) {
-        // Frameless windows do not display the traffic lights buttons for
-        // e.g. minimize, however StyleMaskMiniaturizable is required to allow
-        // programmatic minimize.
-        styleMask |= NSWindowStyleMaskMiniaturizable;
-    } else if (flags & Qt::CustomizeWindowHint) {
-        if (flags & Qt::WindowTitleHint)
-            styleMask |= NSWindowStyleMaskTitled;
-        if (flags & Qt::WindowCloseButtonHint)
-            styleMask |= NSWindowStyleMaskClosable;
-        if (flags & Qt::WindowMinimizeButtonHint)
-            styleMask |= NSWindowStyleMaskMiniaturizable;
-        if (flags & Qt::WindowMaximizeButtonHint)
-            styleMask |= NSWindowStyleMaskResizable;
-    } else {
-        styleMask |= NSWindowStyleMaskClosable | NSWindowStyleMaskTitled;
+        if (flags & Qt::CustomizeWindowHint) {
+            // CustomizeWindowHint turns off the default window title hints,
+            // so the choice is then up to the user via Qt::WindowTitleHint.
+            return flags & Qt::WindowTitleHint
+                ? NSWindowStyleMaskTitled
+                : NSWindowStyleMaskBorderless;
+        } else {
+            // Otherwise, default to using titled windows
+            return NSWindowStyleMaskTitled;
+        }
+    }();
 
-        if (type != Qt::Dialog)
-            styleMask |= NSWindowStyleMaskMiniaturizable;
-    }
+    // We determine which buttons to show in updateTitleBarButtons,
+    // so we can enable all the relevant style masks here to ensure
+    // that behaviors that don't involve the title bar buttons are
+    // working (for example minimizing frameless windows, or resizing
+    // windows that don't have zoom or fullscreen titlebar buttons).
+    styleMask |= NSWindowStyleMaskClosable
+               | NSWindowStyleMaskResizable
+               | NSWindowStyleMaskMiniaturizable;
 
     if (type == Qt::Tool)
         styleMask |= NSWindowStyleMaskUtilityWindow;
 
+    // FIXME: Remove use of deprecated style mask
     if (m_drawContentBorderGradient)
         styleMask |= NSWindowStyleMaskTexturedBackground;
 
@@ -607,20 +581,41 @@ NSUInteger QCocoaWindow::windowStyleMask(Qt::WindowFlags flags)
     return styleMask;
 }
 
-void QCocoaWindow::setWindowZoomButton(Qt::WindowFlags flags)
+bool QCocoaWindow::isFixedSize() const
+{
+    return windowMinimumSize().isValid() && windowMaximumSize().isValid()
+        && windowMinimumSize() == windowMaximumSize();
+}
+
+void QCocoaWindow::updateTitleBarButtons(Qt::WindowFlags windowFlags)
 {
     if (!isContentView())
         return;
 
-    // Disable the zoom (maximize) button for fixed-sized windows and customized
-    // no-WindowMaximizeButtonHint windows. From a Qt perspective it migth be expected
-    // that the button would be removed in the latter case, but disabling it is more
-    // in line with the platform style guidelines.
-    bool fixedSizeNoZoom = (windowMinimumSize().isValid() && windowMaximumSize().isValid()
-                            && windowMinimumSize() == windowMaximumSize());
-    bool customizeNoZoom = ((flags & Qt::CustomizeWindowHint)
-        && !(flags & (Qt::WindowMaximizeButtonHint | Qt::WindowFullscreenButtonHint)));
-    [[m_view.window standardWindowButton:NSWindowZoomButton] setEnabled:!(fixedSizeNoZoom || customizeNoZoom)];
+    NSWindow *window = m_view.window;
+
+    static constexpr std::pair<NSWindowButton, Qt::WindowFlags> buttons[] = {
+        { NSWindowCloseButton, Qt::WindowCloseButtonHint },
+        { NSWindowMiniaturizeButton, Qt::WindowMinimizeButtonHint},
+        { NSWindowZoomButton, Qt::WindowMaximizeButtonHint | Qt::WindowFullscreenButtonHint }
+    };
+
+    bool hideButtons = true;
+    for (const auto &[button, buttonHint] : buttons) {
+        bool enabled = true;
+        if (windowFlags & Qt::CustomizeWindowHint)
+            enabled = windowFlags & buttonHint;
+
+        if (button == NSWindowZoomButton && isFixedSize())
+            enabled = false;
+
+        [window standardWindowButton:button].enabled = enabled;
+        hideButtons &= !enabled;
+    }
+
+    // Hide buttons in case we disabled all of them
+    for (const auto &[button, buttonHint] : buttons)
+        [window standardWindowButton:button].hidden = hideButtons;
 }
 
 void QCocoaWindow::setWindowFlags(Qt::WindowFlags flags)
@@ -665,7 +660,7 @@ void QCocoaWindow::setWindowFlags(Qt::WindowFlags flags)
     if (!(flags & Qt::FramelessWindowHint))
         setWindowTitle(window()->title());
 
-    setWindowZoomButton(flags);
+    updateTitleBarButtons(flags);
 
     // Make window ignore mouse events if WindowTransparentForInput is set.
     // Note that ignoresMouseEvents has a special initial state where events
@@ -886,11 +881,6 @@ void QCocoaWindow::windowDidExitFullScreen()
     }
 }
 
-void QCocoaWindow::windowWillMiniaturize()
-{
-    QCocoaIntegration::instance()->closePopups(window());
-}
-
 void QCocoaWindow::windowDidMiniaturize()
 {
     if (!isContentView())
@@ -1084,7 +1074,7 @@ void QCocoaWindow::propagateSizeHints()
     window.contentMaxSize = NSSizeFromCGSize(windowMaximumSize().toCGSize());
 
     // The window may end up with a fixed size; in this case the zoom button should be disabled.
-    setWindowZoomButton(this->window()->flags());
+    updateTitleBarButtons(this->window()->flags());
 
     // sizeIncrement is observed to take values of (-1, -1) and (0, 0) for windows that should be
     // resizable and that have no specific size increment set. Cocoa expects (1.0, 1.0) in this case.
@@ -1211,12 +1201,6 @@ void QCocoaWindow::viewDidChangeGlobalFrame()
 // callback should make sure to filter out notifications if they do not
 // apply to that QCocoaWindow, e.g. if the window is not a content view.
 
-void QCocoaWindow::windowWillMove()
-{
-    // Close any open popups on window move
-    QCocoaIntegration::instance()->closePopups();
-}
-
 void QCocoaWindow::windowDidMove()
 {
     if (!isContentView())
@@ -1255,13 +1239,6 @@ void QCocoaWindow::windowDidBecomeKey()
     if (isForeignWindow())
         return;
 
-    if (m_windowUnderMouse) {
-        QPointF windowPoint;
-        QPointF screenPoint;
-        [qnsview_cast(m_view) convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
-        QWindowSystemInterface::handleEnterEvent(m_enterLeaveTargetWindow, windowPoint, screenPoint);
-    }
-
     QNSView *firstResponderView = qt_objc_cast<QNSView *>(m_view.window.firstResponder);
     if (!firstResponderView)
         return;
@@ -1283,13 +1260,18 @@ void QCocoaWindow::windowDidResignKey()
     if (isForeignWindow())
         return;
 
+    // Make sure popups are closed before we deliver activation changes, which are
+    // otherwise ignored by QApplication.
+    QGuiApplicationPrivate::instance()->closeAllPopups();
+
     // The current key window will be non-nil if another window became key. If that
     // window is a Qt window, we delay the window activation event until the didBecomeKey
     // notification is delivered to the active window, to ensure an atomic update.
     NSWindow *newKeyWindow = [NSApp keyWindow];
     if (newKeyWindow && newKeyWindow != m_view.window
-        && [newKeyWindow conformsToProtocol:@protocol(QNSWindowProtocol)])
+        && [newKeyWindow conformsToProtocol:@protocol(QNSWindowProtocol)]) {
         return;
+    }
 
     // Lost key window, go ahead and set the active window to zero
     if (!windowIsPopupType()) {
@@ -1375,13 +1357,6 @@ void QCocoaWindow::windowDidChangeScreen()
         // same screen.
         currentScreen->requestUpdate();
     }
-}
-
-void QCocoaWindow::windowWillClose()
-{
-    // Close any open popups on window closing.
-    if (window() && !windowIsPopupType(window()->type()))
-        QCocoaIntegration::instance()->closePopups();
 }
 
 // ----------------------- NSWindowDelegate callbacks -----------------------
@@ -1759,14 +1734,6 @@ QCocoaNSWindow *QCocoaWindow::createNSWindow(bool shouldBePanel)
 bool QCocoaWindow::alwaysShowToolWindow() const
 {
     return qt_mac_resolveOption(false, window(), "_q_macAlwaysShowToolWindow", "");
-}
-
-void QCocoaWindow::removeMonitor()
-{
-    if (!m_monitor)
-        return;
-    [NSEvent removeMonitor:m_monitor];
-    m_monitor = nil;
 }
 
 bool QCocoaWindow::setWindowModified(bool modified)

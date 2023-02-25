@@ -96,7 +96,6 @@ struct BMP_BITMAPV5HEADER {
     DWORD  bV5ProfileSize;
     DWORD  bV5Reserved;
 };
-static const int BMP_BITFIELDS = 3;
 
 static const char dibFormatC[] = "dib";
 
@@ -173,6 +172,18 @@ static bool qt_write_dibv5(QDataStream &s, QImage image)
     bi.bV5Intent        = BMP_LCS_GM_IMAGES;    //LCS_GM_IMAGES
 
     d->write(reinterpret_cast<const char*>(&bi), bi.bV5Size);
+    if (s.status() != QDataStream::Ok)
+        return false;
+
+    d->write(reinterpret_cast<const char *>(&bi.bV5RedMask), sizeof(bi.bV5RedMask));
+    if (s.status() != QDataStream::Ok)
+        return false;
+
+    d->write(reinterpret_cast<const char *>(&bi.bV5GreenMask), sizeof(bi.bV5GreenMask));
+    if (s.status() != QDataStream::Ok)
+        return false;
+
+    d->write(reinterpret_cast<const char *>(&bi.bV5BlueMask), sizeof(bi.bV5BlueMask));
     if (s.status() != QDataStream::Ok)
         return false;
 

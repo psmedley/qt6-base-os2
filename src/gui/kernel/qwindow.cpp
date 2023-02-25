@@ -234,6 +234,15 @@ QWindow::~QWindow()
         QGuiApplicationPrivate::currentMousePressWindow = nullptr;
 }
 
+QWindowPrivate::QWindowPrivate()
+    : QObjectPrivate()
+{
+    isWindow = true;
+}
+
+QWindowPrivate::~QWindowPrivate()
+    = default;
+
 void QWindowPrivate::init(QScreen *targetScreen)
 {
     Q_Q(QWindow);
@@ -247,7 +256,6 @@ void QWindowPrivate::init(QScreen *targetScreen)
     // before the screen list is populated.
     if (Q_UNLIKELY(!parentWindow && !topLevelScreen)) {
         qFatal("Cannot create window: no screens available");
-        exit(1);
     }
     QGuiApplicationPrivate::window_list.prepend(q);
 
@@ -332,7 +340,6 @@ void QWindow::setVisibility(Visibility v)
         break;
     default:
         Q_ASSERT(false);
-        break;
     }
 }
 
@@ -1753,13 +1760,7 @@ void QWindow::setGeometry(const QRect &rect)
         QScreen *newScreen = d->screenForGeometry(rect);
         if (newScreen && isTopLevel())
             d->setTopLevelScreen(newScreen, true);
-
-        QRect nativeRect;
-        if (newScreen && isTopLevel())
-            nativeRect = QHighDpi::toNativePixels(rect, newScreen);
-        else
-            nativeRect = QHighDpi::toNativeLocalPosition(rect, newScreen);
-        d->platformWindow->setGeometry(nativeRect);
+        d->platformWindow->setGeometry(QHighDpi::toNativeWindowGeometry(rect, this));
     } else {
         d->geometry = rect;
 
@@ -2010,9 +2011,7 @@ void QWindowPrivate::destroy()
     // Unset platformWindow before deleting, so that the destructor of the
     // platform window does not recurse back into the platform window via
     // this window during destruction (e.g. as a result of platform events).
-    QPlatformWindow *pw = platformWindow;
-    platformWindow = nullptr;
-    delete pw;
+    delete std::exchange(platformWindow, nullptr);
 
     if (QGuiApplicationPrivate::focus_window == q)
         QGuiApplicationPrivate::focus_window = q->parent();
@@ -2273,8 +2272,42 @@ bool QWindow::close()
     if (!d->platformWindow)
         return true;
 
-    QBoolBlocker inCloseReset(d->inClose);
-    return d->platformWindow->close();
+    // The window might be deleted during close,
+    // as a result of delivering the close event.
+    QPointer guard(this);
+    d->inClose = true;
+    bool success = d->platformWindow->close();
+    if (guard)
+        d->inClose = false;
+
+    return success;
+}
+
+bool QWindowPrivate::participatesInLastWindowClosed() const
+{
+    Q_Q(const QWindow);
+
+    if (!q->isTopLevel())
+        return false;
+
+    // Tool-tip widgets do not normally have Qt::WA_QuitOnClose,
+    // but since we do not have a similar flag for non-widget
+    // windows we need an explicit exclusion here as well.
+    if (q->type() == Qt::ToolTip)
+        return false;
+
+    // A window with a transient parent is not a primary window,
+    // it's a secondary window.
+    if (q->transientParent())
+        return false;
+
+    return true;
+}
+
+bool QWindowPrivate::treatAsVisible() const
+{
+    Q_Q(const QWindow);
+    return q->isVisible();
 }
 
 /*!
@@ -2451,20 +2484,25 @@ bool QWindow::event(QEvent *ev)
         break;
 #endif
 
-    case QEvent::Close:
+    case QEvent::Close: {
+
+        Q_D(QWindow);
+        const bool wasVisible = d->treatAsVisible();
+        const bool participatesInLastWindowClosed = d->participatesInLastWindowClosed();
+
+        // The window might be deleted in the close event handler
+        QPointer<QWindow> deletionGuard(this);
         closeEvent(static_cast<QCloseEvent*>(ev));
+
         if (ev->isAccepted()) {
-            Q_D(QWindow);
-            bool wasVisible = isVisible();
-            destroy();
-            if (wasVisible) {
-                // FIXME: This check for visibility is a workaround for both QWidgetWindow
-                // and QWindow having logic to emit lastWindowClosed, and possibly quit the
-                // application. We should find a better way to handle this.
-                d->maybeQuitOnLastWindowClosed();
-            }
+            if (deletionGuard)
+                destroy();
+            if (wasVisible && participatesInLastWindowClosed)
+                QGuiApplicationPrivate::instance()->maybeLastWindowClosed();
         }
+
         break;
+    }
 
     case QEvent::Expose:
         exposeEvent(static_cast<QExposeEvent *>(ev));
@@ -2817,34 +2855,6 @@ QPoint QWindowPrivate::globalPosition() const
 Q_GUI_EXPORT QWindowPrivate *qt_window_private(QWindow *window)
 {
     return window->d_func();
-}
-
-void QWindowPrivate::maybeQuitOnLastWindowClosed()
-{
-    if (!QCoreApplication::instance())
-        return;
-
-    Q_Q(QWindow);
-    if (!q->isTopLevel())
-        return;
-
-    QWindowList list = QGuiApplication::topLevelWindows();
-    bool lastWindowClosed = true;
-    for (int i = 0; i < list.size(); ++i) {
-        QWindow *w = list.at(i);
-        if (!w->isVisible() || w->transientParent() || w->type() == Qt::ToolTip)
-            continue;
-        lastWindowClosed = false;
-        break;
-    }
-    if (lastWindowClosed) {
-        QGuiApplicationPrivate::emitLastWindowClosed();
-
-        if (QGuiApplication::quitOnLastWindowClosed()) {
-            QCoreApplicationPrivate *applicationPrivate = static_cast<QCoreApplicationPrivate*>(QObjectPrivate::get(QCoreApplication::instance()));
-            applicationPrivate->maybeQuit();
-        }
-    }
 }
 
 QWindow *QWindowPrivate::topLevelWindow(QWindow::AncestorMode mode) const

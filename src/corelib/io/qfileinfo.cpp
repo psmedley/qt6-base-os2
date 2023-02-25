@@ -46,6 +46,8 @@
 
 QT_BEGIN_NAMESPACE
 
+QT_IMPL_METATYPE_EXTERN(QFileInfo)
+
 QString QFileInfoPrivate::getFileName(QAbstractFileEngine::FileName name) const
 {
     if (cache_enabled && !fileNames[(int)name].isNull())
@@ -67,7 +69,7 @@ QString QFileInfoPrivate::getFileName(QAbstractFileEngine::FileName name) const
                     ret = entry.path();
                 break;
             }
-            case QAbstractFileEngine::LinkName:
+            case QAbstractFileEngine::AbsoluteLinkTarget:
                 ret = QFileSystemEngine::getLinkTarget(fileEntry, metaData).filePath();
                 break;
             case QAbstractFileEngine::JunctionName:
@@ -179,7 +181,7 @@ uint QFileInfoPrivate::getFileFlags(QAbstractFileEngine::FileFlags request) cons
             req |= QAbstractFileEngine::Refresh;
 
         QAbstractFileEngine::FileFlags flags = fileEngine->fileFlags(req);
-        fileFlags |= uint(flags);
+        fileFlags |= uint(flags.toInt());
         setCachedFlag(cachedFlags);
     }
 
@@ -1073,8 +1075,8 @@ bool QFileInfo::isBundle() const
 }
 
 /*!
-    Returns \c true if this object points to a symbolic link or shortcut;
-    otherwise returns \c false.
+    Returns \c true if this object points to a symbolic link, shortcut,
+    or alias; otherwise returns \c false.
 
     Symbolic links exist on Unix (including \macos and iOS) and Windows
     and are typically created by the \c{ln -s} or \c{mklink} commands,
@@ -1082,8 +1084,9 @@ bool QFileInfo::isBundle() const
     the \l{symLinkTarget()}{link's target}.
 
     In addition, true will be returned for shortcuts (\c *.lnk files) on
-    Windows. This behavior is deprecated and will likely change in a future
-    version of Qt. Opening those will open the \c .lnk file itself.
+    Windows, and aliases on \macos. This behavior is deprecated and will
+    likely change in a future version of Qt. Opening a shortcut or alias
+    will open the \c .lnk or alias file itself.
 
     Example:
 
@@ -1115,7 +1118,8 @@ bool QFileInfo::isSymLink() const
     opens the \l{symLinkTarget()}{link's target}.
 
     In contrast to isSymLink(), false will be returned for shortcuts
-    (\c *.lnk files) on Windows. Use QFileInfo::isShortcut() instead.
+    (\c *.lnk files) on Windows and aliases on \macos.
+    Use QFileInfo::isShortcut() on Windows instead.
 
     \note If the symlink points to a non existing file, exists() returns
     false.
@@ -1224,7 +1228,7 @@ QString QFileInfo::symLinkTarget() const
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
         return QLatin1String("");
-    return d->getFileName(QAbstractFileEngine::LinkName);
+    return d->getFileName(QAbstractFileEngine::AbsoluteLinkTarget);
 }
 
 /*!
@@ -1361,7 +1365,7 @@ bool QFileInfo::permission(QFile::Permissions permissions) const
                 fseFlags,
                 [=]() { return (d->metaData.permissions() & permissions) == permissions; },
         [=]() {
-            return d->getFileFlags(feFlags) == uint(permissions);
+            return d->getFileFlags(feFlags) == uint(permissions.toInt());
         });
 }
 
@@ -1694,10 +1698,8 @@ QDebug operator<<(QDebug dbg, const QFileInfo &fi)
 
     QDirIterator it(dir);
     while (it.hasNext()) {
-        it.next();
-
         // Extract the QFileInfo from the iterator directly:
-        QFileInfo fi = it.fileInfo();
+        QFileInfo fi = it.nextFileInfo();
 
         ~~~
     }

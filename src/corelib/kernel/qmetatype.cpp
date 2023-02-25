@@ -39,9 +39,7 @@
 **
 ****************************************************************************/
 
-#define QT_QMETATYPE_BC_COMPAT 1
 #include "qmetatype.h"
-#undef QT_QMETATYPE_BC_COMPAT
 #include "qmetatype_p.h"
 #include "qobjectdefs.h"
 #include "qdatetime.h"
@@ -99,6 +97,7 @@ QT_BEGIN_NAMESPACE
 
 #define NS(x) QT_PREPEND_NAMESPACE(x)
 
+QT_IMPL_METATYPE_EXTERN_TAGGED(QtMetaTypePrivate::QPairVariantInterfaceImpl, QPairVariantInterfaceImpl)
 
 namespace {
 struct DefinedTypesFilter {
@@ -188,9 +187,9 @@ Q_GLOBAL_STATIC(QMetaTypeCustomRegistry, customTypeRegistry)
 const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInterface *type_d)
 {
     const char *name = nullptr;
-    QMetaTypeCustomRegistry *r = customTypeRegistry;
-    if (!r)
+    if (!customTypeRegistry.exists())
         return name;
+    QMetaTypeCustomRegistry *r = &*customTypeRegistry;
 
     QByteArrayView officialName(type_d->name);
     QReadLocker l(&r->lock);
@@ -212,6 +211,7 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
         if (it.value() == type_d && it.key() != officialName)
             otherNames << it.key();
     }
+    l.unlock();
     if (!otherNames.isEmpty())
         qWarning("QMetaType: type %s has more than one typedef alias: %s, %s",
                  type_d->name, name, otherNames.join(", ").constData());
@@ -530,18 +530,6 @@ bool QMetaType::isRegistered() const
     Returns id type hold by this QMetatype instance.
 */
 
-// keep in sync with version in header
-// ### Qt 7::remove BC helper
-int QMetaType::id() const
-{
-    if (d_ptr) {
-        if (int id = d_ptr->typeId.loadRelaxed())
-            return id;
-        return idHelper();
-    }
-    return 0;
-}
-
 /*!
     \internal
     The slowpath of id(). Precondition: d_ptr != nullptr
@@ -764,7 +752,7 @@ QPartialOrdering QMetaType::compare(const void *lhs, const void *rhs) const
 {
     if (!lhs || !rhs)
         return QPartialOrdering::Unordered;
-    if (d_ptr->flags & QMetaType::IsPointer)
+    if (d_ptr && d_ptr->flags & QMetaType::IsPointer)
         return threeWayCompare(*reinterpret_cast<const void * const *>(lhs),
                                *reinterpret_cast<const void * const *>(rhs));
     if (d_ptr && d_ptr->lessThan) {
@@ -1563,16 +1551,15 @@ static const struct : QMetaTypeModuleHelper
         }
         return false;
     }
-} metatypeHelper;
+} metatypeHelper = {};
 
-static const QMetaTypeModuleHelper *qMetaTypeCoreHelper = &metatypeHelper;
 Q_CORE_EXPORT const QMetaTypeModuleHelper *qMetaTypeGuiHelper = nullptr;
 Q_CORE_EXPORT const QMetaTypeModuleHelper *qMetaTypeWidgetsHelper = nullptr;
 
 static const QMetaTypeModuleHelper *qModuleHelperForType(int type)
 {
     if (type <= QMetaType::LastCoreType)
-        return qMetaTypeCoreHelper;
+        return &metatypeHelper;
     if (type >= QMetaType::FirstGuiType && type <= QMetaType::LastGuiType)
         return qMetaTypeGuiHelper;
     else if (type >= QMetaType::FirstWidgetsType && type <= QMetaType::LastWidgetsType)
@@ -1599,9 +1586,11 @@ public:
     bool insertIfNotContains(Key k, const T &f)
     {
         const QWriteLocker locker(&lock);
-        if (map.contains(k))
+        const qsizetype oldSize = map.size();
+        auto &e = map[k];
+        if (map.size() == oldSize) // already present
             return false;
-        map.insert(k, f);
+        e = f;
         return true;
     }
 
@@ -1638,41 +1627,41 @@ Q_GLOBAL_STATIC(QMetaTypeMutableViewRegistry, customTypesMutableViewRegistry)
     Registers the possibility of an implicit conversion from type From to type To in the meta
     type system. Returns \c true if the registration succeeded, otherwise false.
 
-    \snippet qmetatype/registerConverters.cpp [implicit]
+    \snippet qmetatype/registerConverters.cpp implicit
 */
 
 /*!
-    \fn template<typename From, typename To> static bool registerConverter(To(From::*function)() const)
+    \fn template<typename From, typename To> static bool QMetaType::registerConverter(To(From::*function)() const)
     \since 5.2
     \overload
     Registers a method \a function like To From::function() const as converter from type From
     to type To in the meta type system. Returns \c true if the registration succeeded, otherwise false.
 
-    \snippet qmetatype/registerConverters.cpp [member]
+    \snippet qmetatype/registerConverters.cpp member
 */
 
 /*!
-    \fn template<typename From, typename To> static bool registerConverter(To(From::*function)(bool*) const)
+    \fn template<typename From, typename To> static bool QMetaType::registerConverter(To(From::*function)(bool*) const)
     \since 5.2
     \overload
     Registers a method \a function like To From::function(bool *ok) const as converter from type From
     to type To in the meta type system. Returns \c true if the registration succeeded, otherwise false.
 
-    The \a ok pointer can be used by the function to indicate whether the conversion succeeded.
-    \snippet qmetatype/registerConverters.cpp [memberOk]
+    The \c ok pointer can be used by the function to indicate whether the conversion succeeded.
+    \snippet qmetatype/registerConverters.cpp memberOk
 
 */
 
 /*!
-    \fn template<typename From, typename To, typename UnaryFunction> static bool registerConverter(UnaryFunction function)
+    \fn template<typename From, typename To, typename UnaryFunction> static bool QMetaType::registerConverter(UnaryFunction function)
     \since 5.2
     \overload
     Registers a unary function object \a function as converter from type From
     to type To in the meta type system. Returns \c true if the registration succeeded, otherwise false.
 
-    \a function must take an instance of type \a From and return an instance of \a To. It can be a function
+    \a function must take an instance of type \c From and return an instance of \c To. It can be a function
     pointer, a lambda or a functor object.
-    \snippet qmetatype/registerConverters.cpp [unaryfunc]
+    \snippet qmetatype/registerConverters.cpp unaryfunc
 */
 
 /*!
@@ -1693,7 +1682,7 @@ bool QMetaType::registerConverterFunction(const ConverterFunction &f, QMetaType 
 }
 
 /*!
-    \fn template<typename From, typename To> static bool registerMutableView(To(From::*function)())
+    \fn template<typename From, typename To> static bool QMetaType::registerMutableView(To(From::*function)())
     \since 6.0
     \overload
     Registers a method \a function like \c {To From::function()} as mutable view of type \c {To} on
@@ -1702,7 +1691,7 @@ bool QMetaType::registerConverterFunction(const ConverterFunction &f, QMetaType 
 */
 
 /*!
-    \fn template<typename From, typename To, typename UnaryFunction> static bool registerMutableView(UnaryFunction function)
+    \fn template<typename From, typename To, typename UnaryFunction> static bool QMetaType::registerMutableView(UnaryFunction function)
     \since 6.0
     \overload
     Registers a unary function object \a function as mutable view of type To on type From
@@ -2589,11 +2578,12 @@ static inline int qMetaTypeStaticType(const char *typeName, int length)
 */
 static int qMetaTypeCustomType_unlocked(const char *typeName, int length)
 {
-    if (auto reg = customTypeRegistry()) {
+    if (customTypeRegistry.exists()) {
+        auto reg = &*customTypeRegistry;
 #if QT_CONFIG(thread)
         Q_ASSERT(!reg->lock.tryLockForWrite());
 #endif
-        if (auto ti = reg->aliases.value(QByteArray(typeName, length), nullptr)) {
+        if (auto ti = reg->aliases.value(QByteArray::fromRawData(typeName, length), nullptr)) {
             return ti->typeId;
         }
     }
@@ -2621,6 +2611,20 @@ void QMetaType::registerNormalizedTypedef(const NS(QByteArray) & normalizedTypeN
     }
 }
 
+
+static const QtPrivate::QMetaTypeInterface *interfaceForTypeNoWarning(int typeId)
+{
+    const QtPrivate::QMetaTypeInterface *iface = nullptr;
+    if (typeId >= QMetaType::User) {
+        if (customTypeRegistry.exists())
+            iface = customTypeRegistry->getCustomType(typeId);
+    } else {
+        if (auto moduleHelper = qModuleHelperForType(typeId))
+            iface = moduleHelper->interfaceForType(typeId);
+    }
+    return iface;
+}
+
 /*!
     Returns \c true if the datatype with ID \a type is registered;
     otherwise returns \c false.
@@ -2629,7 +2633,7 @@ void QMetaType::registerNormalizedTypedef(const NS(QByteArray) & normalizedTypeN
 */
 bool QMetaType::isRegistered(int type)
 {
-    return QMetaType(type).isRegistered();
+    return interfaceForTypeNoWarning(type) != nullptr;
 }
 
 template <bool tryNormalizedType>
@@ -2667,7 +2671,7 @@ static inline int qMetaTypeTypeImpl(const char *typeName, int length)
 */
 
 /*!
-    \a internal
+    \internal
 
     Similar to QMetaType::type(); the only difference is that this function
     doesn't attempt to normalize the type name (i.e., the lookup will fail
@@ -2987,15 +2991,7 @@ QMetaType QMetaType::fromName(QByteArrayView typeName)
 
 static const QtPrivate::QMetaTypeInterface *interfaceForType(int typeId)
 {
-    const QtPrivate::QMetaTypeInterface *iface = nullptr;
-    if (typeId >= QMetaType::User) {
-        if (auto reg = customTypeRegistry())
-            iface = reg->getCustomType(typeId);
-    } else {
-        if (auto moduleHelper = qModuleHelperForType(typeId))
-            iface = moduleHelper->interfaceForType(typeId);
-    }
-
+    const QtPrivate::QMetaTypeInterface *iface = interfaceForTypeNoWarning(typeId);
     if (!iface && typeId != QMetaType::UnknownType)
         qWarning("Trying to construct an instance of an invalid type, type id: %i", typeId);
 
@@ -3011,24 +3007,17 @@ static const QtPrivate::QMetaTypeInterface *interfaceForType(int typeId)
 QMetaType::QMetaType(int typeId) : QMetaType(interfaceForType(typeId)) {}
 
 namespace QtPrivate {
-#ifndef QT_BOOTSTRAPPED
-
-#if defined(Q_CC_MSVC) && defined(QT_BUILD_CORE_LIB)
-#define QT_METATYPE_TEMPLATE_EXPORT Q_CORE_EXPORT
-#else
-#define QT_METATYPE_TEMPLATE_EXPORT
-#endif
+#if !defined(QT_BOOTSTRAPPED) && !defined(Q_CC_MSVC)
 
 // Explicit instantiation definition
 #define QT_METATYPE_DECLARE_TEMPLATE_ITER(TypeName, Id, Name) \
-    template class QT_METATYPE_TEMPLATE_EXPORT QMetaTypeForType<Name>;
+    template class QMetaTypeForType<Name>;
 QT_FOR_EACH_STATIC_PRIMITIVE_TYPE(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_PRIMITIVE_POINTER(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_CLASS(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_POINTER(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_TEMPLATE(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 #undef QT_METATYPE_DECLARE_TEMPLATE_ITER
-#undef QT_METATYPE_TEMPLATE_EXPORT
 #endif
 }
 

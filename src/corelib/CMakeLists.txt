@@ -3,6 +3,7 @@
 # special case begin
 qt_find_package(Threads PROVIDED_TARGETS Threads::Threads)
 qt_find_package(WrapPCRE2 PROVIDED_TARGETS WrapPCRE2::WrapPCRE2)
+qt_find_package(WrapZLIB PROVIDED_TARGETS WrapZLIB::WrapZLIB)
 
 
 # compute the reverse relative path from QtCoreConfigExtras to the install prefix
@@ -35,7 +36,9 @@ qt_internal_add_module(Core
     NO_GENERATE_METATYPES # metatypes are extracted manually below
     EXCEPTIONS
     SOURCES
+        compat/removed_api.cpp
         global/archdetect.cpp
+        global/qcompare_impl.h
         global/qcompare.h
         global/qcompilerdetection.h
         global/qcontainerinfo.h
@@ -58,6 +61,10 @@ qt_internal_add_module(Core
         global/qsysinfo.h
         global/qsystemdetection.h
         global/qtypeinfo.h
+        global/qvolatile_p.h
+        global/q20algorithm.h
+        global/q20functional.h
+        global/q20iterator.h
         io/qabstractfileengine.cpp io/qabstractfileengine_p.h
         io/qbuffer.cpp io/qbuffer.h
         io/qdataurl.cpp io/qdataurl_p.h
@@ -92,10 +99,9 @@ qt_internal_add_module(Core
         io/qurlidna.cpp
         io/qurlquery.cpp io/qurlquery.h
         io/qurlrecode.cpp
-        itemmodels/qabstractitemmodel.cpp itemmodels/qabstractitemmodel.h itemmodels/qabstractitemmodel_p.h
-        itemmodels/qitemselectionmodel.cpp itemmodels/qitemselectionmodel.h itemmodels/qitemselectionmodel_p.h
         kernel/qabstracteventdispatcher.cpp kernel/qabstracteventdispatcher.h kernel/qabstracteventdispatcher_p.h
         kernel/qabstractnativeeventfilter.cpp kernel/qabstractnativeeventfilter.h
+        kernel/qapplicationstatic.h
         kernel/qassociativeiterable.cpp kernel/qassociativeiterable.h
         kernel/qbasictimer.cpp kernel/qbasictimer.h
         kernel/qbindingstorage.h
@@ -249,6 +255,7 @@ qt_internal_add_module(Core
     DEFINES
         QT_NO_FOREACH
         QT_NO_USING_NAMESPACE
+        QT_TYPESAFE_FLAGS
     INCLUDE_DIRECTORIES
         "${CMAKE_CURRENT_BINARY_DIR}/global" # special case
         "${CMAKE_CURRENT_BINARY_DIR}/kernel" # for moc_qobject.cpp to be found by qobject.cpp
@@ -258,8 +265,10 @@ qt_internal_add_module(Core
         ../3rdparty/tinycbor/src
     LIBRARIES
         Qt::GlobalConfigPrivate # special case
+        WrapZLIB::WrapZLIB
     PRECOMPILED_HEADER
         "global/qt_pch.h"
+    GENERATE_CPP_EXPORTS
     PUBLIC_LIBRARIES  # special case:
         Qt::Platform # special case:
     # special case begin
@@ -267,17 +276,27 @@ qt_internal_add_module(Core
     EXTRA_CMAKE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/Qt6CTestMacros.cmake"
     "${CMAKE_CURRENT_SOURCE_DIR}/Qt6CoreConfigureFileTemplate.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Qt6CoreDeploySupport.cmake"
     ${corelib_extra_cmake_files}
     # special case end
 )
+_qt_internal_setup_deploy_support()
 
-qt_update_ignore_pch_source(Core kernel/qmetatype.cpp )
+set(corelib_no_pch_sources
+    compat/removed_api.cpp
+)
+
+foreach(src ${corelib_no_pch_sources})
+    qt_update_ignore_pch_source(Core ${src})
+endforeach()
 
 # special case begin
 add_dependencies(Core qmodule_pri)
 
 if (NOT QT_NAMESPACE STREQUAL "")
     target_compile_definitions(Core PUBLIC "QT_NAMESPACE=${QT_NAMESPACE}")
+    set_target_properties(Core PROPERTIES _qt_namespace "${QT_NAMESPACE}")
+    set_property(TARGET Core APPEND PROPERTY EXPORT_PROPERTIES _qt_namespace)
 endif()
 
 qt_generate_qconfig_cpp(global/qconfig.cpp.in global/qconfig.cpp)
@@ -467,6 +486,7 @@ qt_internal_extend_target(Core CONDITION WIN32
         io/qstorageinfo_win.cpp
         io/qwindowspipereader.cpp io/qwindowspipereader_p.h
         io/qwindowspipewriter.cpp io/qwindowspipewriter_p.h
+        io/qntdll_p.h
         kernel/qcoreapplication_win.cpp
         kernel/qelapsedtimer_win.cpp
         kernel/qeventdispatcher_win.cpp kernel/qeventdispatcher_win_p.h
@@ -480,6 +500,7 @@ qt_internal_extend_target(Core CONDITION WIN32
     # DEFINES # special case: remove
     LIBRARIES
         advapi32
+        authz
         kernel32
         netapi32
         ole32
@@ -532,6 +553,8 @@ qt_internal_extend_target(Core CONDITION APPLE
     LIBRARIES
         ${FWCoreFoundation}
         ${FWFoundation}
+    PUBLIC_LIBRARIES
+        ${FWIOKit}
 )
 
 qt_internal_extend_target(Core CONDITION MACOS
@@ -542,7 +565,6 @@ qt_internal_extend_target(Core CONDITION MACOS
         ${FWSecurity}
     PUBLIC_LIBRARIES
         ${FWDiskArbitration}
-        ${FWIOKit}
 )
 
 qt_internal_extend_target(Core CONDITION INTEGRITY
@@ -556,10 +578,10 @@ qt_internal_extend_target(Core CONDITION INTEGRITY
         --pending_instantiations=128
 )
 
-# Workaround for QTBUG-90353
-# Remove if MinGW (our only supported gcc version < 9) is no longer supported
-qt_internal_extend_target(Core CONDITION GCC AND (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0.0")
-    PUBLIC_COMPILE_OPTIONS -Wno-error=invalid-offsetof
+# Workaround for QTBUG-101411
+# Remove if QCC (gcc version 8.3.0) for QNX 7.1.0 is no longer supported
+qt_internal_extend_target(Core CONDITION QCC AND (CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "8.3.0")
+    PUBLIC_COMPILE_OPTIONS $<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-offsetof>
 )
 
 #### Keys ignored in scope 14:.:.:corelib.pro:pathIsAbsolute(_ss_CMAKE_HOST_DATA_DIR):
@@ -569,23 +591,6 @@ qt_internal_extend_target(Core CONDITION GCC AND (CMAKE_CXX_COMPILER_VERSION VER
 #### Keys ignored in scope 15:.:.:corelib.pro:pathIsAbsolute(_ss_CMAKE_INSTALL_DATA_DIR):
 # CMAKE_INSTALL_DATA_DIR = "$$[QT_HOST_DATA]/"
 # CMAKE_INSTALL_DATA_DIR_IS_ABSOLUTE = "True"
-
-#### Keys ignored in scope 20:.:global:global/global.pri:QT_CPU_FEATURES__ss_QT_ARCH___contains___f16c:
-# f16c_cxx = "true"
-
-#### Keys ignored in scope 22:.:global:global/global.pri:CLANG OR intel_icl OR ICC:
-# f16c_cxx = "false"
-
-#### Keys ignored in scope 24:.:global:global/global.pri:GCC AND f16c AND x86SimdAlways:
-# f16c_cxx = "true"
-
-#### Keys ignored in scope 26:.:global:global/global.pri:MSVC AND QT_CPU_FEATURES__ss_QT_ARCH___contains___avx:
-# f16c_cxx = "true"
-
-#### Keys ignored in scope 27:.:global:global/global.pri:else:
-# f16c_cxx = "false"
-
-# qt_internal_extend_target(Core CONDITION _ss_f16c_cxx ... # special case remove: Handled manually
 
 # special case begin
 # Remove this because it's handled manually
@@ -600,23 +605,6 @@ qt_internal_extend_target(Core CONDITION GCC AND (CMAKE_CXX_COMPILER_VERSION VER
 qt_internal_extend_target(Core CONDITION LINUX AND QT_BUILD_SHARED_LIBS
     SOURCES
         global/minimum-linux_p.h
-)
-
-#### Keys ignored in scope 34:.:global:global/global.pri:precompile_header:
-# NO_PCH_ASM = "global/minimum-linux.S"
-# QMAKE_EXTRA_COMPILERS = "no_pch_assembler"
-# no_pch_assembler.commands = "$$QMAKE_CC" "-c" "$(CFLAGS)" "$(INCPATH)" "${QMAKE_FILE_IN}" "-o" "${QMAKE_FILE_OUT}"
-# no_pch_assembler.dependency_type = "TYPE_C"
-# no_pch_assembler.input = "NO_PCH_ASM"
-# no_pch_assembler.name = "compiling[no_pch]" "${QMAKE_FILE_IN}"
-# no_pch_assembler.output = "${QMAKE_VAR_OBJECTS_DIR}${QMAKE_FILE_BASE}$${firstQMAKE_EXT_OBJ}"
-
-#### Keys ignored in scope 35:.:global:global/global.pri:silent:
-# no_pch_assembler.commands = "@echo" "compiling[no_pch]" "${QMAKE_FILE_IN}" "&&"
-
-qt_internal_extend_target(Core CONDITION LINUX AND NOT precompile_header AND QT_BUILD_SHARED_LIBS
-    SOURCES
-        global/minimum-linux.S
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_slog2
@@ -634,7 +622,7 @@ target_sources(Core PRIVATE ${core_version_tagging_files})
 
 # Disable LTO, as the symbols disappear somehow under GCC
 # (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200)
-if(GCC AND FEATURE_ltcg)
+if(GCC)
     set_source_files_properties(${core_version_tagging_files}
                                 PROPERTIES COMPILE_OPTIONS "-fno-lto")
 endif()
@@ -702,36 +690,9 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_std_atomic64
         WrapAtomic::WrapAtomic
 )
 
-qt_internal_extend_target(Core CONDITION ICC
-    COMPILE_OPTIONS
-        -fp-model
-        strict
-)
-
-qt_internal_extend_target(Core CONDITION QT_FEATURE_system_zlib
-    LIBRARIES
-        WrapZLIB::WrapZLIB
-)
-
 qt_internal_extend_target(Core CONDITION NOT QT_FEATURE_system_zlib
-    SOURCES
-        ../3rdparty/zlib/src/adler32.c
-        ../3rdparty/zlib/src/compress.c
-        ../3rdparty/zlib/src/crc32.c
-        ../3rdparty/zlib/src/deflate.c
-        ../3rdparty/zlib/src/gzclose.c
-        ../3rdparty/zlib/src/gzlib.c
-        ../3rdparty/zlib/src/gzread.c
-        ../3rdparty/zlib/src/gzwrite.c
-        ../3rdparty/zlib/src/infback.c
-        ../3rdparty/zlib/src/inffast.c
-        ../3rdparty/zlib/src/inflate.c
-        ../3rdparty/zlib/src/inftrees.c
-        ../3rdparty/zlib/src/trees.c
-        ../3rdparty/zlib/src/uncompr.c
-        ../3rdparty/zlib/src/zutil.c
-    INCLUDE_DIRECTORIES
-        ../3rdparty/zlib/src
+    LIBRARIES
+        Qt::ZlibPrivate
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_commandlineparser
@@ -741,13 +702,15 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_commandlineparser
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_backtrace
+    DEFINES
+        BACKTRACE_HEADER="${Backtrace_HEADER}"
     LIBRARIES
         WrapBacktrace::WrapBacktrace
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_system_doubleconversion
     LIBRARIES
-        WrapDoubleConversion::WrapDoubleConversion
+        WrapSystemDoubleConversion::WrapSystemDoubleConversion
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_doubleconversion AND NOT QT_FEATURE_system_doubleconversion
@@ -788,7 +751,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_easingcurve
         tools/qtimeline.cpp tools/qtimeline.h
 )
 
-qt_internal_extend_target(Core CONDITION UNIX AND NOT HAIKU AND NOT INTEGRITY AND NOT VXWORKS AND NOT WASM AND (NOT ICC OR NOT MACOS)
+qt_internal_extend_target(Core CONDITION UNIX AND NOT HAIKU AND NOT INTEGRITY AND NOT VXWORKS AND NOT WASM AND NOT MACOS
     LIBRARIES
         m
 )
@@ -873,27 +836,27 @@ qt_internal_extend_target(Core CONDITION APPLE AND QT_FEATURE_timezone AND NOT N
         time/qtimezoneprivate_mac.mm
 )
 
-qt_internal_extend_target(Core CONDITION ANDROID AND QT_FEATURE_timezone AND NOT ANDROID_EMBEDDED AND (NACL OR NOT APPLE)
+qt_internal_extend_target(Core CONDITION QT_FEATURE_timezone AND ANDROID AND (NACL OR NOT APPLE)
     SOURCES
         time/qtimezoneprivate_android.cpp
 )
 
-qt_internal_extend_target(Core CONDITION QT_FEATURE_timezone AND UNIX AND (ANDROID_EMBEDDED OR NOT ANDROID) AND (NACL OR NOT APPLE)
+qt_internal_extend_target(Core CONDITION QT_FEATURE_timezone AND UNIX AND NOT ANDROID AND (NACL OR NOT APPLE)
     SOURCES
         time/qtimezoneprivate_tz.cpp
 )
 
-qt_internal_extend_target(Core CONDITION QT_FEATURE_icu AND QT_FEATURE_timezone AND (UNIX OR OS2) AND (ANDROID_EMBEDDED OR NOT ANDROID) AND (NACL OR NOT APPLE)
+qt_internal_extend_target(Core CONDITION QT_FEATURE_icu AND QT_FEATURE_timezone AND (UNIX OR OS2) AND NOT ANDROID AND (NACL OR NOT APPLE)
     SOURCES
         time/qtimezoneprivate_icu.cpp
 )
 
-qt_internal_extend_target(Core CONDITION QT_FEATURE_icu AND QT_FEATURE_timezone AND WIN32 AND (ANDROID_EMBEDDED OR NOT ANDROID) AND (NACL OR NOT APPLE)
+qt_internal_extend_target(Core CONDITION QT_FEATURE_icu AND QT_FEATURE_timezone AND WIN32 AND NOT ANDROID AND (NACL OR NOT APPLE)
     SOURCES
         time/qtimezoneprivate_icu.cpp
 )
 
-qt_internal_extend_target(Core CONDITION QT_FEATURE_timezone AND WIN32 AND NOT QT_FEATURE_icu AND (ANDROID_EMBEDDED OR NOT ANDROID) AND (NACL OR NOT APPLE)
+qt_internal_extend_target(Core CONDITION QT_FEATURE_timezone AND WIN32 AND NOT QT_FEATURE_icu AND NOT ANDROID AND (NACL OR NOT APPLE)
     SOURCES
         time/qtimezoneprivate_win.cpp
 )
@@ -905,7 +868,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_datetimeparser
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_zstd
     LIBRARIES
-        ZSTD::ZSTD
+        WrapZSTD::WrapZSTD
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_filesystemwatcher
@@ -997,7 +960,7 @@ qt_internal_extend_target(Core CONDITION UNIX AND NOT APPLE
         kernel/qelapsedtimer_unix.cpp
 )
 
-qt_internal_extend_target(Core CONDITION ANDROID AND NOT ANDROID_EMBEDDED
+qt_internal_extend_target(Core CONDITION ANDROID
     SOURCES
         io/qstandardpaths_android.cpp
         io/qstorageinfo_unix.cpp
@@ -1008,7 +971,7 @@ qt_internal_extend_target(Core CONDITION ANDROID AND NOT ANDROID_EMBEDDED
         platform/android/qandroidnativeinterface.cpp
 )
 
-qt_internal_extend_target(Core CONDITION HAIKU AND (ANDROID_EMBEDDED OR NOT ANDROID)
+qt_internal_extend_target(Core CONDITION HAIKU AND NOT ANDROID
     SOURCES
         io/qstandardpaths_haiku.cpp
         io/qstorageinfo_unix.cpp
@@ -1016,10 +979,16 @@ qt_internal_extend_target(Core CONDITION HAIKU AND (ANDROID_EMBEDDED OR NOT ANDR
         be
 )
 
-qt_internal_extend_target(Core CONDITION UNIX AND NOT APPLE AND NOT HAIKU AND (ANDROID_EMBEDDED OR NOT ANDROID)
+qt_internal_extend_target(Core CONDITION UNIX AND NOT APPLE AND NOT HAIKU AND NOT ANDROID
     SOURCES
         io/qstandardpaths_unix.cpp
         io/qstorageinfo_unix.cpp
+)
+
+qt_internal_extend_target(Core CONDITION QT_FEATURE_itemmodel
+    SOURCES
+        itemmodels/qabstractitemmodel.cpp itemmodels/qabstractitemmodel.h itemmodels/qabstractitemmodel_p.h
+        itemmodels/qitemselectionmodel.cpp itemmodels/qitemselectionmodel.h itemmodels/qitemselectionmodel_p.h
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_proxymodel
@@ -1054,19 +1023,24 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_stringlistmodel
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_library
     SOURCES
-        plugin/qelfparser_p.cpp plugin/qelfparser_p.h
         plugin/qlibrary.cpp plugin/qlibrary.h plugin/qlibrary_p.h
-        plugin/qmachparser.cpp plugin/qmachparser_p.h
-)
-
-qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND (UNIX OR OS2)
-    SOURCES
-        plugin/qlibrary_unix.cpp
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND WIN32
     SOURCES
+        plugin/qcoffpeparser.cpp plugin/qcoffpeparser_p.h
         plugin/qlibrary_win.cpp
+)
+qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND APPLE
+    SOURCES
+        plugin/qlibrary_unix.cpp
+        plugin/qmachparser.cpp plugin/qmachparser_p.h
+)
+
+qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND (UNIX OR OS2) AND NOT APPLE
+    SOURCES
+        plugin/qelfparser_p.cpp plugin/qelfparser_p.h
+        plugin/qlibrary_unix.cpp
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_dlopen AND QT_FEATURE_library
@@ -1303,21 +1277,6 @@ qt_internal_extend_target(Core CONDITION WASM
         kernel/qeventdispatcher_wasm.cpp kernel/qeventdispatcher_wasm_p.h
 )
 
-# special case begin
-# needs refinement for the other compiler specific cases.
-if(TEST_arch_${TEST_architecture_arch}_subarch_f16c)
-    # Equivalent to contains(QT_CPU_FEATURES.$$QT_ARCH, f16c)
-    qt_internal_extend_target(Core
-        DEFINES
-            QFLOAT16_INCLUDE_FAST
-    )
-else()
-    qt_internal_add_simd_part(Core SIMD f16c
-        SOURCES
-            global/qfloat16_f16c.c
-    )
-endif()
-
 set_source_files_properties(
     thread/qmutex_mac.cpp
     thread/qmutex_unix.cpp
@@ -1370,17 +1329,6 @@ qt_internal_create_tracepoints(Core qtcore.tracepoints)
 qt_internal_add_docs(Core
     doc/qtcore.qdocconf
 )
-
-# special case begin
-# Handle qtzlib.pro to create headers for the
-# QtZlibPrivate target, equivalent to Qt += zlib-private
-if(NOT QT_FEATURE_system_zlib)
-    qt_internal_add_module(ZlibPrivate
-        INTERNAL_MODULE
-        HEADER_MODULE
-        NO_CONFIG_HEADER_FILE
-    )
-endif()
 
 qt_internal_add_optimize_full_flags()
 

@@ -31,6 +31,7 @@
 #include <qlocale.h>
 #include <qcollator.h>
 #include <private/qglobal_p.h>
+#include <QScopeGuard>
 
 #include <cstring>
 
@@ -75,8 +76,8 @@ void tst_QCollator::basics()
     QCOMPARE(c3.locale(), de_AT);
 
     // posix implementation supports only C and default locale,
-    // so update it for Android build
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+    // so update it for Android and INTEGRITY builds
+#if defined(Q_OS_ANDROID) || defined(Q_OS_INTEGRITY)
     c3.setLocale(QLocale());
 #endif
     QCollatorSortKey key1 = c3.sortKey("test");
@@ -110,8 +111,8 @@ void tst_QCollator::moveSemantics()
 
     // test QCollatorSortKey move assignment
     // posix implementation supports only C and default locale,
-    // so update it for Android build
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+    // so update it for Android and INTEGRITY builds
+#if defined(Q_OS_ANDROID) || defined(Q_OS_INTEGRITY)
     c1.setLocale(QLocale());
 #endif
     QCollatorSortKey key1 = c1.sortKey("1");
@@ -276,12 +277,19 @@ void tst_QCollator::compare()
     QFETCH(int, punctuationResult);
 
     QCollator collator((QLocale(locale)));
+
+    // AFTER the QCollator initialization
+    auto localechanger = qScopeGuard([original = QLocale()] {
+        QLocale::setDefault(original);  // reset back to what it was
+    });
+    QLocale::setDefault(QLocale(locale));
+
     // Need to canonicalize sign to -1, 0 or 1, as .compare() can produce any -ve for <, any +ve for >.
     auto asSign = [](int compared) {
         return compared < 0 ? -1 : compared > 0 ? 1 : 0;
     };
 
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#if defined(Q_OS_ANDROID) || defined(Q_OS_INTEGRITY)
     if (collator.locale() != QLocale::c() && collator.locale() != QLocale::system().collation())
         QSKIP("POSIX implementation of collation only supports C and system collation locales");
 #endif
@@ -310,10 +318,17 @@ void tst_QCollator::compare()
     // NOTE: currently QCollatorSortKey::compare is not working
     // properly without icu: see QTBUG-88704 for details
     QCOMPARE(asSign(collator.compare(s1, s2)), result);
+    if (!numericMode)
+        QCOMPARE(asSign(QCollator::defaultCompare(s1, s2)), result);
 #if QT_CONFIG(icu)
     auto key1 = collator.sortKey(s1);
     auto key2 = collator.sortKey(s2);
     QCOMPARE(asSign(key1.compare(key2)), keyCompareResult);
+
+    key1 = QCollator::defaultSortKey(s1);
+    key2 = QCollator::defaultSortKey(s2);
+    if (!numericMode)
+        QCOMPARE(asSign(key1.compare(key2)), keyCompareResult);
 #endif
     collator.setCaseSensitivity(Qt::CaseInsensitive);
     QCOMPARE(asSign(collator.compare(s1, s2)), caseInsensitiveResult);

@@ -43,6 +43,7 @@
 #include <qlabel.h>
 #include <qmainwindow.h>
 #include <qtoolbar.h>
+#include <qsignalspy.h>
 #include <private/qwindow_p.h>
 #include <private/qguiapplication_p.h>
 #include <qpa/qplatformintegration.h>
@@ -106,6 +107,7 @@ private slots:
     void tst_dnd();
     void tst_dnd_events();
     void tst_dnd_propagation();
+    void tst_dnd_destroyOnDrop();
 #endif
 
     void tst_qtbug35600();
@@ -130,6 +132,8 @@ private slots:
 
     void mouseMoveWithPopup_data();
     void mouseMoveWithPopup();
+
+    void resetFocusObjectOnDestruction();
 
 private:
     QSize m_testWidgetSize;
@@ -267,9 +271,9 @@ void tst_QWidget_window::close()
         int spontClose = -1;
         int spontHide = -1;
     protected:
-        void hideEvent(QHideEvent *e)
+        void hideEvent(QHideEvent *e) override
         { spontHide = e->spontaneous() ? 1 : 0; }
-        void closeEvent(QCloseEvent *e)
+        void closeEvent(QCloseEvent *e) override
         { spontClose = e->spontaneous() ? 1 : 0; }
     };
 
@@ -939,6 +943,78 @@ void tst_QWidget_window::tst_dnd_propagation()
 
     QCOMPARE(target.mDndEvents, "enter leave enter drop ");
 }
+
+class ReparentSelfOnDropWidget : public QWidget
+{
+public:
+    ReparentSelfOnDropWidget(QWidget *newFutureParent)
+        : m_newFutureParent(newFutureParent)
+    {
+        setAcceptDrops(true);
+
+        const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
+        auto width = availableGeometry.width() / 6;
+        auto height = availableGeometry.height() / 4;
+
+        setGeometry(availableGeometry.x() + 200, availableGeometry.y() + 200, width, height);
+
+        QLabel *label = new QLabel(QStringLiteral("Test"), this);
+        label->setGeometry(40, 40, 60, 60);
+        label->setAcceptDrops(true);
+    }
+
+    void dragEnterEvent(QDragEnterEvent *event) override
+    {
+        event->accept();
+    }
+
+    void dragMoveEvent(QDragMoveEvent *event) override
+    {
+        event->acceptProposedAction();
+    }
+
+    void dropEvent(QDropEvent *event) override
+    {
+        event->accept();
+        // Turn 'this' from a top-level widget to a child widget.
+        // This destroys the QWidgetWindow since the widget is no longer top-level.
+        setParent(m_newFutureParent);
+    }
+
+private:
+    QWidget *m_newFutureParent;
+};
+
+void tst_QWidget_window::tst_dnd_destroyOnDrop()
+{
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("Wayland: This fails. Figure out why.");
+
+    QMimeData mimeData;
+    mimeData.setText(QLatin1String("testmimetext"));
+
+    QWidget newParent;
+    newParent.resize(400, 400);
+    newParent.show();
+    QVERIFY(QTest::qWaitForWindowActive(&newParent));
+
+    ReparentSelfOnDropWidget *target = new ReparentSelfOnDropWidget(&newParent);
+    target->show();
+    QVERIFY(QTest::qWaitForWindowActive(target));
+
+    Qt::DropActions supportedActions = Qt::DropAction::CopyAction;
+    QWindow *window = target->windowHandle();
+
+    auto posInsideDropTarget = QHighDpi::toNativePixels(QPoint(20, 20), window->screen());
+    auto posInsideLabel      = QHighDpi::toNativePixels(QPoint(60, 60), window->screen());
+
+    QWindowSystemInterface::handleDrag(window, &mimeData, posInsideDropTarget, supportedActions, {}, {});
+    QWindowSystemInterface::handleDrag(window, &mimeData, posInsideLabel, supportedActions, {}, {});
+    QWindowSystemInterface::handleDrop(window, &mimeData, posInsideLabel, supportedActions, {}, {});
+
+    QGuiApplication::processEvents();
+}
+
 #endif
 
 void tst_QWidget_window::tst_qtbug35600()
@@ -1572,6 +1648,39 @@ void tst_QWidget_window::mouseMoveWithPopup()
         && !QGuiApplication::platformName().startsWith(QLatin1String("windows"), Qt::CaseInsensitive))
         QEXPECT_FAIL("Dialog", "Platform specific behavior", Continue);
     QCOMPARE(topLevel.popup->mouseReleaseCount, 1);
+}
+
+void tst_QWidget_window::resetFocusObjectOnDestruction()
+{
+    QSignalSpy focusObjectChangedSpy(qApp, &QGuiApplication::focusObjectChanged);
+
+    // single top level widget that has focus
+    std::unique_ptr<QWidget> widget(new QWidget);
+    widget->setObjectName("Widget 1");
+    widget->setFocus();
+    widget->show();
+    QVERIFY(QTest::qWaitForWindowActive(widget.get()));
+
+    int activeCount = focusObjectChangedSpy.count();
+    widget.reset();
+    QVERIFY(focusObjectChangedSpy.count() > activeCount);
+    QCOMPARE(focusObjectChangedSpy.last().last().value<QObject*>(), nullptr);
+    focusObjectChangedSpy.clear();
+
+    // top level widget with focused child
+    widget.reset(new QWidget);
+    widget->setObjectName("Widget 2");
+    QWidget *child = new QWidget(widget.get());
+    child->setObjectName("Child widget");
+    child->setFocus();
+    widget->show();
+    QVERIFY(QTest::qWaitForWindowActive(widget.get()));
+
+    activeCount = focusObjectChangedSpy.count();
+    widget.reset();
+    // we might get more than one signal emission
+    QVERIFY(focusObjectChangedSpy.count() > activeCount);
+    QCOMPARE(focusObjectChangedSpy.last().last().value<QObject*>(), nullptr);
 }
 
 QTEST_MAIN(tst_QWidget_window)

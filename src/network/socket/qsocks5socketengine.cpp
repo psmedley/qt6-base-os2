@@ -56,6 +56,8 @@
 #include <qendian.h>
 #include <qnetworkinterface.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 static const int MaxWriteBufferSize = 128*1024;
@@ -144,7 +146,7 @@ static inline QString dump(const QByteArray &) { return QString(); }
 
 /*
    inserts the host address in buf at pos and updates pos.
-   if the func fails the data in buf and the vallue of pos is undefined
+   if the func fails the data in buf and the value of pos is undefined
 */
 static bool qt_socks5_set_host_address_and_port(const QHostAddress &address, quint16 port, QByteArray *pBuf)
 {
@@ -206,7 +208,7 @@ static bool qt_socks5_set_host_name_and_port(const QString &hostname, quint16 po
 
 
 /*
-   retrives the host address in buf at pos and updates pos.
+   retrieves the host address in buf at pos and updates pos.
    return 1 if OK, 0 if need more data, -1 if error
    if the func fails the value of the address and the pos is undefined
 */
@@ -1190,7 +1192,7 @@ void QSocks5SocketEnginePrivate::_q_controlSocketReadNotification()
             }
             if (buf.size()) {
                 QSOCKS5_DEBUG << dump(buf);
-                connectData->readBuffer.append(buf);
+                connectData->readBuffer.append(std::move(buf));
                 emitReadNotification();
             }
             break;
@@ -1317,7 +1319,7 @@ bool QSocks5SocketEngine::bind(const QHostAddress &addr, quint16 port)
 {
     Q_D(QSocks5SocketEngine);
 
-    // when bind wee will block until the bind is finished as the info from the proxy server is needed
+    // when bind we will block until the bind is finished as the info from the proxy server is needed
 
     QHostAddress address;
     if (addr.protocol() == QAbstractSocket::AnyIPProtocol)
@@ -1391,9 +1393,10 @@ bool QSocks5SocketEngine::bind(const QHostAddress &addr, quint16 port)
 }
 
 
-bool QSocks5SocketEngine::listen()
+bool QSocks5SocketEngine::listen(int backlog)
 {
     Q_D(QSocks5SocketEngine);
+    Q_UNUSED(backlog);
 
     QSOCKS5_Q_DEBUG << "listen()";
 
@@ -1911,9 +1914,9 @@ QSocks5SocketEngineHandler::createSocketEngine(QAbstractSocket::SocketType socke
         QSOCKS5_DEBUG << "not proxying";
         return nullptr;
     }
-    QScopedPointer<QSocks5SocketEngine> engine(new QSocks5SocketEngine(parent));
+    auto engine = std::make_unique<QSocks5SocketEngine>(parent);
     engine->setProxy(proxy);
-    return engine.take();
+    return engine.release();
 }
 
 QAbstractSocketEngine *QSocks5SocketEngineHandler::createSocketEngine(qintptr socketDescriptor, QObject *parent)

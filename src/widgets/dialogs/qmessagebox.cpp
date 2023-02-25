@@ -518,7 +518,7 @@ void QMessageBoxPrivate::setClickedButton(QAbstractButton *button)
     emit q->buttonClicked(clickedButton);
 
     auto resultCode = execReturnCode(button);
-    hide(resultCode);
+    close(resultCode);
     finalize(resultCode, dialogCodeForButton(button));
 }
 
@@ -749,8 +749,7 @@ void QMessageBoxPrivate::_q_clicked(QPlatformDialogHelper::StandardButton button
     When an escape button can't be determined using these rules,
     pressing \uicontrol Esc has no effect.
 
-    \sa QDialogButtonBox, {fowler}{GUI Design Handbook: Message Box}, {Standard Dialogs Example},
-        {Qt Widgets - Application Example}
+    \sa QDialogButtonBox, {Standard Dialogs Example}, {Qt Widgets - Application Example}
 */
 
 /*!
@@ -1420,8 +1419,10 @@ void QMessageBox::closeEvent(QCloseEvent *e)
         return;
     }
     QDialog::closeEvent(e);
-    d->clickedButton = d->detectedEscapeButton;
-    setResult(d->execReturnCode(d->detectedEscapeButton));
+    if (!d->clickedButton) {
+        d->clickedButton = d->detectedEscapeButton;
+        setResult(d->execReturnCode(d->detectedEscapeButton));
+    }
 }
 
 /*!
@@ -1932,33 +1933,7 @@ static QMessageBox::StandardButton newButton(int button)
     if (button == QMessageBox::NoButton || (button & NewButtonMask))
         return QMessageBox::StandardButton(button & QMessageBox::ButtonMask);
 
-#if QT_VERSION < 0x050000
-    // this is needed for binary compatibility with Qt 4.0 and 4.1
-    switch (button & Old_ButtonMask) {
-    case Old_Ok:
-        return QMessageBox::Ok;
-    case Old_Cancel:
-        return QMessageBox::Cancel;
-    case Old_Yes:
-        return QMessageBox::Yes;
-    case Old_No:
-        return QMessageBox::No;
-    case Old_Abort:
-        return QMessageBox::Abort;
-    case Old_Retry:
-        return QMessageBox::Retry;
-    case Old_Ignore:
-        return QMessageBox::Ignore;
-    case Old_YesAll:
-        return QMessageBox::YesToAll;
-    case Old_NoAll:
-        return QMessageBox::NoToAll;
-    default:
-        return QMessageBox::NoButton;
-    }
-#else
     return QMessageBox::NoButton;
-#endif
 }
 
 static bool detectedCompat(int button0, int button1, int button2)

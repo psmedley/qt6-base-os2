@@ -112,9 +112,9 @@ public:
 
     void swap(QDBusError &other) noexcept
     {
-        qSwap(code,   other.code);
-        qSwap(msg,    other.msg);
-        qSwap(nm,     other.nm);
+        std::swap(code, other.code);
+        msg.swap(other.msg);
+        nm.swap(other.nm);
     }
 
     ErrorType type() const;
@@ -140,7 +140,7 @@ Q_DBUS_EXPORT QDebug operator<<(QDebug, const QDBusError &);
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QDBusError)
+QT_DECL_METATYPE_EXTERN(QDBusError, Q_DBUS_EXPORT)
 #else
 QT_BEGIN_NAMESPACE
 class Q_DBUS_EXPORT QDBusError {}; // dummy class for moc

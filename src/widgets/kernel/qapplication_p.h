@@ -86,7 +86,7 @@ class QPointingDevice;
 class QGestureManager;
 #endif
 
-extern Q_GUI_EXPORT bool qt_is_gui_used;
+extern Q_GUI_EXPORT bool qt_is_tty_app;
 #ifndef QT_NO_CLIPBOARD
 extern QClipboard *qt_clipboard;
 #endif
@@ -105,8 +105,6 @@ public:
 
     virtual void notifyLayoutDirectionChange() override;
     virtual void notifyActiveWindowChange(QWindow *) override;
-
-    virtual bool shouldQuit() override;
 
     static bool autoSipEnabled;
     static QString desktopStyleKey();
@@ -145,6 +143,7 @@ public:
 
     static bool inPopupMode();
     bool popupActive() override { return inPopupMode(); }
+    bool closeAllPopups() override;
     void closePopup(QWidget *popup);
     void openPopup(QWidget *popup);
     static void setFocusWidget(QWidget *focus, Qt::FocusReason reason);

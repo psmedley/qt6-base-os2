@@ -53,6 +53,8 @@
 #include <qfile.h>
 #include <private/qnet_unix_p.h>
 
+#include "QtCore/qapplicationstatic.h"
+
 #include <sys/types.h>
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -122,7 +124,6 @@ static QFunctionPointer resolveSymbol(QLibrary &lib, const char *sym)
 
 LibResolv::LibResolv()
 {
-    QLibrary lib;
 #ifdef LIBRESOLV_SO
     lib.setFileName(QStringLiteral(LIBRESOLV_SO));
     if (!lib.load())
@@ -157,24 +158,7 @@ LibResolv::LibResolv()
     }
 }
 
-LibResolv* libResolv()
-{
-    static LibResolv* theLibResolv = nullptr;
-    static QBasicMutex theMutex;
-
-    const QMutexLocker locker(&theMutex);
-    if (theLibResolv == nullptr) {
-        theLibResolv = new LibResolv();
-        Q_ASSERT(QCoreApplication::instance());
-        QObject::connect(QCoreApplication::instance(), &QCoreApplication::destroyed, [] {
-            const QMutexLocker locker(&theMutex);
-            delete theLibResolv;
-            theLibResolv = nullptr;
-        });
-    }
-
-    return theLibResolv;
-}
+Q_APPLICATION_STATIC(LibResolv, libResolv)
 
 static void resolveLibrary(LibResolvFeature f)
 {

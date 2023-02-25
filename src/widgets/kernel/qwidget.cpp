@@ -1007,7 +1007,7 @@ void QWidgetPrivate::init(QWidget *parentWidget, Qt::WindowFlags f)
     data.window_modality = Qt::NonModal;
 
     data.sizehint_forced = 0;
-    data.is_closing = 0;
+    data.is_closing = false;
     data.in_show = 0;
     data.in_set_window_state = 0;
     data.in_destructor = false;
@@ -1101,6 +1101,11 @@ QWindow *QWidgetPrivate::_q_closestWindowHandle() const
 
 QScreen *QWidgetPrivate::associatedScreen() const
 {
+#if QT_CONFIG(graphicsview)
+    // embedded widgets never have a screen associated, let QWidget::screen fall back to toplevel
+    if (nearestGraphicsProxyWidget(q_func()))
+        return nullptr;
+#endif
     if (auto window = windowHandle(WindowHandleMode::Closest))
         return window->screen();
     return nullptr;
@@ -1468,7 +1473,7 @@ QWidget::~QWidget()
 
     if (isWindow() && isVisible() && internalWinId()) {
         QT_TRY {
-            d->close_helper(QWidgetPrivate::CloseNoEvent);
+            d->close();
         } QT_CATCH(...) {
             // if we're out of memory, at least hide the window.
             QT_TRY {
@@ -2577,7 +2582,16 @@ void QWidget::setStyleSheet(const QString& styleSheet)
     }
 
     if (proxy) { // style sheet update
-        if (d->polished)
+        bool repolish = d->polished;
+        if (!repolish) {
+            const auto childWidgets = findChildren<QWidget*>();
+            for (auto child : childWidgets) {
+                repolish = child->d_func()->polished;
+                if (repolish)
+                    break;
+            }
+        }
+        if (repolish)
             proxy->repolish(this);
         return;
     }
@@ -3207,6 +3221,127 @@ QList<QAction*> QWidget::actions() const
     Q_D(const QWidget);
     return d->actions;
 }
+
+/*!
+    \fn QAction *QWidget::addAction(const QString &text);
+    \fn QAction *QWidget::addAction(const QString &text, const QKeySequence &shortcut);
+    \fn QAction *QWidget::addAction(const QIcon &icon, const QString &text);
+    \fn QAction *QWidget::addAction(const QIcon &icon, const QString &text, const QKeySequence &shortcut);
+
+    \since 6.3
+
+    These convenience functions create a new action with text \a text,
+    icon \a icon and shortcut \a shortcut, if any.
+
+    The functions add the newly created action to the widget's
+    list of actions, and return it.
+
+    QWidget takes ownership of the returned QAction.
+*/
+QAction *QWidget::addAction(const QString &text)
+{
+    QAction *ret = new QAction(text, this);
+    addAction(ret);
+    return ret;
+}
+
+QAction *QWidget::addAction(const QIcon &icon, const QString &text)
+{
+    QAction *ret = new QAction(icon, text, this);
+    addAction(ret);
+    return ret;
+}
+
+QAction *QWidget::addAction(const QString &text, const QKeySequence &shortcut)
+{
+    QAction *ret = addAction(text);
+    ret->setShortcut(shortcut);
+    return ret;
+}
+
+QAction *QWidget::addAction(const QIcon &icon, const QString &text, const QKeySequence &shortcut)
+{
+    QAction *ret = addAction(icon, text);
+    ret->setShortcut(shortcut);
+    return ret;
+}
+
+/*!
+    \fn QAction *QWidget::addAction(const QString &text, const QObject *receiver, const char* member, Qt::ConnectionType type)
+    \fn QAction *QWidget::addAction(const QIcon &icon, const QString &text, const QObject *receiver, const char* member, Qt::ConnectionType type)
+    \fn QAction *QWidget::addAction(const QString &text, const QKeySequence &shortcut, const QObject *receiver, const char* member, Qt::ConnectionType type)
+    \fn QAction *QWidget::addAction(const QIcon &icon, const QString &text, const QKeySequence &shortcut, const QObject *receiver, const char* member, Qt::ConnectionType type)
+
+    \overload
+    \since 6.3
+
+    This convenience function creates a new action with the text \a
+    text, icon \a icon, and shortcut \a shortcut, if any.
+
+    The action's \l{QAction::triggered()}{triggered()} signal is connected
+    to the \a receiver's \a member slot. The function adds the newly created
+    action to the widget's list of actions and returns it.
+
+    QWidget takes ownership of the returned QAction.
+*/
+QAction *QWidget::addAction(const QString &text, const QObject *receiver, const char* member,
+                            Qt::ConnectionType type)
+{
+    QAction *action = addAction(text);
+    QObject::connect(action, SIGNAL(triggered(bool)), receiver, member, type);
+    return action;
+}
+
+QAction *QWidget::addAction(const QIcon &icon, const QString &text,
+                            const QObject *receiver, const char* member,
+                            Qt::ConnectionType type)
+{
+    QAction *action = addAction(icon, text);
+    QObject::connect(action, SIGNAL(triggered(bool)), receiver, member, type);
+    return action;
+}
+
+#if QT_CONFIG(shortcut)
+QAction *QWidget::addAction(const QString &text, const QKeySequence &shortcut,
+                            const QObject *receiver, const char* member,
+                            Qt::ConnectionType type)
+{
+    QAction *action = addAction(text, receiver, member, type);
+    action->setShortcut(shortcut);
+    return action;
+}
+
+QAction *QWidget::addAction(const QIcon &icon, const QString &text, const QKeySequence &shortcut,
+                            const QObject *receiver, const char* member,
+                            Qt::ConnectionType type)
+{
+    QAction *action = addAction(icon, text, receiver, member, type);
+    action->setShortcut(shortcut);
+    return action;
+}
+#endif // QT_CONFIG(shortcut)
+
+/*!
+    \fn template<typename...Args> QAction *QWidget::addAction(const QString &text, Args&&...args)
+    \fn template<typename...Args> QAction *QWidget::addAction(const QString &text, const QKeySequence &shortcut, Args&&...args)
+    \fn template<typename...Args> QAction *QWidget::addAction(const QIcon &icon, const QString &text, Args&&...args)
+    \fn template<typename...Args> QAction *QWidget::addAction(const QIcon &icon, const QString &text, const QKeySequence &shortcut, Args&&...args)
+
+    \since 6.3
+    \overload
+
+    These convenience functions create a new action with the text \a text,
+    icon \a icon, and shortcut \a shortcut, if any.
+
+    The action's \l{QAction::triggered()}{triggered()} signal is connected
+    as if by a call to QObject::connect(action, &QAction::triggered, args...),
+    perfectly forwarding \a args, including a possible Qt::ConnectionType.
+
+    The function adds the newly created action to the widget's list of
+    actions and returns it.
+
+    QWidget takes ownership of the returned QAction.
+*/
 #endif // QT_NO_ACTION
 
 /*!
@@ -5333,7 +5468,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
         QWidgetEffectSourcePrivate *sourced = static_cast<QWidgetEffectSourcePrivate *>
                                                          (source->d_func());
         if (!sourced->context) {
-            const QRegion effectRgn(rgn.boundingRect());
+            const QRegion effectRgn((flags & UseEffectRegionBounds) ? rgn.boundingRect() : rgn);
             QWidgetPaintContext context(pdev, effectRgn, offset, flags, sharedPainter, repaintManager);
             sourced->context = &context;
             if (!sharedPainter) {
@@ -5365,6 +5500,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
         }
     }
 #endif // QT_CONFIG(graphicseffect)
+    flags = flags & ~UseEffectRegionBounds;
 
     const bool alsoOnScreen = flags & DrawPaintOnScreen;
     const bool recursive = flags & DrawRecursive;
@@ -5402,6 +5538,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
                     beginBackingStorePainting();
 #endif
                     QPainter p(q);
+                    p.setRenderHint(QPainter::SmoothPixmapTransform);
                     paintBackground(&p, toBePainted, (asRoot || onScreen) ? (flags | DrawAsRoot) : DrawWidgetFlags());
 #ifndef QT_NO_OPENGL
                     endBackingStorePainting();
@@ -6396,11 +6533,15 @@ void QWidget::setFocus(Qt::FocusReason reason)
 
         QApplicationPrivate::setFocusWidget(f, reason);
 #ifndef QT_NO_ACCESSIBILITY
-        // menus update the focus manually and this would create bogus events
-        if (!(f->inherits("QMenuBar") || f->inherits("QMenu") || f->inherits("QMenuItem")))
-        {
-            QAccessibleEvent event(f, QAccessible::Focus);
-            QAccessible::updateAccessibility(&event);
+        // If the widget gets focus because its window becomes active, then the accessibility
+        // subsystem is already informed about the window opening, and also knows which child
+        // within the window has focus. Don't interrupt it by emitting another focus event.
+        if (reason != Qt::ActiveWindowFocusReason) {
+            // menus update the focus manually and this would create bogus events
+            if (!(f->inherits("QMenuBar") || f->inherits("QMenu") || f->inherits("QMenuItem"))) {
+                QAccessibleEvent event(f, QAccessible::Focus);
+                QAccessible::updateAccessibility(&event);
+            }
         }
 #endif
 #if QT_CONFIG(graphicsview)
@@ -6537,7 +6678,14 @@ void QWidget::clearFocus()
     }
 
     QTLWExtra *extra = window()->d_func()->maybeTopData();
-    QObject *originalFocusObject = (extra && extra->window) ? extra->window->focusObject() : nullptr;
+    QObject *originalFocusObject = nullptr;
+    if (extra && extra->window) {
+        originalFocusObject = extra->window->focusObject();
+        // the window's focus object might already be nullptr if we are in the destructor, but we still
+        // need to update QGuiApplication and input context if we have a focus widget.
+        if (!originalFocusObject)
+            originalFocusObject = focusWidget();
+    }
 
     QWidget *w = this;
     while (w) {
@@ -8259,18 +8407,20 @@ void QWidgetPrivate::hideChildren(bool spontaneous)
 
     The function is also called by the QWidget destructor, with \a mode set to CloseNoEvent.
 */
-bool QWidgetPrivate::close_helper(CloseMode mode)
+bool QWidgetPrivate::handleClose(CloseMode mode)
 {
     if (data.is_closing)
         return true;
 
+    // We might not have initiated the close, so update the state now that we know
+    data.is_closing = true;
+
     Q_Q(QWidget);
-    data.is_closing = 1;
-
     QPointer<QWidget> that = q;
-    QPointer<QWidget> parentWidget = (q->parentWidget() && !QObjectPrivate::get(q->parentWidget())->wasDeleted) ? q->parentWidget() : nullptr;
 
-    bool quitOnClose = q->testAttribute(Qt::WA_QuitOnClose);
+    if (data.in_destructor)
+        mode = CloseNoEvent;
+
     if (mode != CloseNoEvent) {
         QCloseEvent e;
         if (mode == CloseWithSpontaneousEvent)
@@ -8278,7 +8428,7 @@ bool QWidgetPrivate::close_helper(CloseMode mode)
         else
             QCoreApplication::sendEvent(q, &e);
         if (!that.isNull() && !e.isAccepted()) {
-            data.is_closing = 0;
+            data.is_closing = false;
             return false;
         }
     }
@@ -8287,32 +8437,8 @@ bool QWidgetPrivate::close_helper(CloseMode mode)
     if (!that.isNull() && !q->isHidden())
         q->hide();
 
-    // Attempt to close the application only if this has WA_QuitOnClose set and a non-visible parent
-    quitOnClose = quitOnClose && (parentWidget.isNull() || !parentWidget->isVisible());
-
-    if (quitOnClose) {
-        /* if there is no non-withdrawn primary window left (except
-           the ones without QuitOnClose), we emit the lastWindowClosed
-           signal */
-        QWidgetList list = QApplication::topLevelWidgets();
-        bool lastWindowClosed = true;
-        for (int i = 0; i < list.size(); ++i) {
-            QWidget *w = list.at(i);
-            if (!w->isVisible() || w->parentWidget() || !w->testAttribute(Qt::WA_QuitOnClose))
-                continue;
-            lastWindowClosed = false;
-            break;
-        }
-        if (lastWindowClosed) {
-            QGuiApplicationPrivate::emitLastWindowClosed();
-            QCoreApplicationPrivate *applicationPrivate = static_cast<QCoreApplicationPrivate*>(QObjectPrivate::get(QCoreApplication::instance()));
-            applicationPrivate->maybeQuit();
-        }
-    }
-
-
     if (!that.isNull()) {
-        data.is_closing = 0;
+        data.is_closing = false;
         if (q->testAttribute(Qt::WA_DeleteOnClose)) {
             q->setAttribute(Qt::WA_DeleteOnClose, false);
             q->deleteLater();
@@ -8346,15 +8472,25 @@ bool QWidgetPrivate::close_helper(CloseMode mode)
 
 bool QWidget::close()
 {
+    return d_func()->close();
+}
+
+bool QWidgetPrivate::close()
+{
+    // FIXME: We're not setting is_closing here, even though that would
+    // make sense, as the code below will not end up in handleClose to
+    // reset is_closing when there's a QWindow, but no QPlatformWindow,
+    // and we can't assume close is synchronous so we can't reset it here.
+
     // Close native widgets via QWindow::close() in order to run QWindow
-    // close code. The QWidget-specific close code in close_helper() will
+    // close code. The QWidget-specific close code in handleClose() will
     // in this case be called from the Close event handler in QWidgetWindow.
     if (QWindow *widgetWindow = windowHandle()) {
         if (widgetWindow->isTopLevel())
             return widgetWindow->close();
     }
 
-    return d_func()->close_helper(QWidgetPrivate::CloseWithEvent);
+    return handleClose(QWidgetPrivate::CloseWithEvent);
 }
 
 /*!
@@ -8773,16 +8909,22 @@ bool QWidget::event(QEvent *event)
         inputMethodEvent((QInputMethodEvent *) event);
         break;
 
-    case QEvent::InputMethodQuery:
-        if (testAttribute(Qt::WA_InputMethodEnabled)) {
+    case QEvent::InputMethodQuery: {
             QInputMethodQueryEvent *query = static_cast<QInputMethodQueryEvent *>(event);
             Qt::InputMethodQueries queries = query->queries();
             for (uint i = 0; i < 32; ++i) {
                 Qt::InputMethodQuery q = (Qt::InputMethodQuery)(int)(queries & (1<<i));
                 if (q) {
                     QVariant v = inputMethodQuery(q);
-                    if (q == Qt::ImEnabled && !v.isValid() && isEnabled())
-                        v = QVariant(true); // special case for Qt4 compatibility
+                    if (q == Qt::ImEnabled && !v.isValid() && isEnabled()) {
+                        // Qt:ImEnabled was added in Qt 5.3. So not all widgets support it, even
+                        // if they implement IM otherwise (by overriding inputMethodQuery()). Instead
+                        // they set the widget attribute Qt::WA_InputMethodEnabled. But this attribute
+                        // will only be set if the widget supports IM _and_ is not read-only. So for
+                        // read-only widgets, not all IM features will be supported when ImEnabled is
+                        // not implemented explicitly (e.g selection handles for read-only widgets on iOS).
+                        v = QVariant(testAttribute(Qt::WA_InputMethodEnabled));
+                    }
                     query->setValue(q, v);
                 }
             }
@@ -10883,6 +11025,13 @@ void QWidgetPrivate::update(T r)
 {
     Q_Q(QWidget);
 
+#ifndef QT_NO_OPENGL
+    if (renderToTexture && !q->isVisible()) {
+        renderToTextureReallyDirty = 1;
+        return;
+    }
+#endif
+
     if (!q->isVisible() || !q->updatesEnabled())
         return;
 
@@ -12918,4 +13067,4 @@ QDebug operator<<(QDebug debug, const QWidget *widget)
 QT_END_NAMESPACE
 
 #include "moc_qwidget.cpp"
-
+#include "moc_qwidget_p.cpp"

@@ -191,7 +191,9 @@ void QAndroidPlatformScreen::addWindow(QAndroidPlatformWindow *window)
     if (window->parent() && window->isRaster())
         return;
 
-    Q_ASSERT(!m_windowStack.contains(window));
+    if (m_windowStack.contains(window))
+        return;
+
     m_windowStack.prepend(window);
     if (window->isRaster()) {
         m_rasterSurfaces.ref();
@@ -208,10 +210,10 @@ void QAndroidPlatformScreen::removeWindow(QAndroidPlatformWindow *window)
     if (window->parent() && window->isRaster())
         return;
 
-
-    Q_ASSERT(m_windowStack.contains(window));
     m_windowStack.removeOne(window);
-    Q_ASSERT(!m_windowStack.contains(window));
+
+    if (m_windowStack.contains(window))
+        qWarning() << "Failed to remove window";
 
     if (window->isRaster()) {
         m_rasterSurfaces.deref();
@@ -283,12 +285,35 @@ void QAndroidPlatformScreen::setSize(const QSize &size)
     QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry(), availableGeometry());
 }
 
+void QAndroidPlatformScreen::setSizeParameters(const QSize &physicalSize, const QSize &size,
+                                               const QRect &availableGeometry)
+{
+    // The goal of this method is to set all geometry-related parameters
+    // at the same time and generate only one screen geometry change event.
+    m_physicalSize = physicalSize;
+    m_size = size;
+    // If available geometry has changed, the event will be handled in
+    // setAvailableGeometry. Otherwise we need to explicitly handle it to
+    // retain the behavior, because setSize() does the handling unconditionally.
+    if (m_availableGeometry != availableGeometry) {
+        setAvailableGeometry(availableGeometry);
+    } else {
+        QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry(),
+                                                           this->availableGeometry());
+    }
+}
+
 void QAndroidPlatformScreen::setRefreshRate(qreal refreshRate)
 {
     if (refreshRate == m_refreshRate)
         return;
     m_refreshRate = refreshRate;
     QWindowSystemInterface::handleScreenRefreshRateChange(QPlatformScreen::screen(), refreshRate);
+}
+
+void QAndroidPlatformScreen::setOrientation(Qt::ScreenOrientation orientation)
+{
+    QWindowSystemInterface::handleScreenOrientationChange(QPlatformScreen::screen(), orientation);
 }
 
 void QAndroidPlatformScreen::setAvailableGeometry(const QRect &rect)

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -461,7 +461,7 @@ Q_GUI_EXPORT QDataStream &operator<<(QDataStream &stream, const QTextFormat &fmt
 
         it = properties.find(QTextFormat::FontFamilies);
         if (it != properties.end()) {
-            properties[QTextFormat::FontFamily] = QVariant(it.value().toStringList().first());
+            properties[QTextFormat::OldFontFamily] = QVariant(it.value().toStringList().first());
             properties.erase(it);
         }
     }
@@ -489,12 +489,62 @@ Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextFormat &fmt)
             key = QTextFormat::FontStretch;
         else if (key == QTextFormat::OldTextUnderlineColor)
             key = QTextFormat::TextUnderlineColor;
-        else if (key == QTextFormat::FontFamily)
+        else if (key == QTextFormat::OldFontFamily)
             key = QTextFormat::FontFamilies;
         fmt.d->insertProperty(key, it.value());
     }
 
     return stream;
+}
+
+Q_GUI_EXPORT QDataStream &operator<<(QDataStream &stream, const QTextCharFormat &fmt)
+{
+    return stream << static_cast<const QTextFormat &>(fmt);
+}
+
+Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextCharFormat &fmt)
+{
+    return stream >> static_cast<QTextFormat &>(fmt);
+}
+
+Q_GUI_EXPORT QDataStream &operator<<(QDataStream &stream, const QTextBlockFormat &fmt)
+{
+    return stream << static_cast<const QTextFormat &>(fmt);
+}
+
+Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextBlockFormat &fmt)
+{
+    return stream >> static_cast<QTextFormat &>(fmt);
+}
+
+Q_GUI_EXPORT QDataStream &operator<<(QDataStream &stream, const QTextListFormat &fmt)
+{
+    return stream << static_cast<const QTextFormat &>(fmt);
+}
+
+Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextListFormat &fmt)
+{
+    return stream >> static_cast<QTextFormat &>(fmt);
+}
+
+Q_GUI_EXPORT QDataStream &operator<<(QDataStream &stream, const QTextFrameFormat &fmt)
+{
+    return stream << static_cast<const QTextFormat &>(fmt);
+}
+
+Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextFrameFormat &fmt)
+{
+    return stream >> static_cast<QTextFormat &>(fmt);
+}
+
+Q_GUI_EXPORT QDataStream &operator<<(QDataStream &stream, const QTextTableCellFormat &fmt)
+{
+    return stream << static_cast<const QTextFormat &>(fmt);
+}
+
+Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextTableCellFormat &fmt)
+{
+    return stream >> static_cast<QTextFormat &>(fmt);
 }
 #endif // QT_NO_DATASTREAM
 
@@ -611,6 +661,7 @@ Q_GUI_EXPORT QDataStream &operator>>(QDataStream &stream, QTextFormat &fmt)
     Character properties
 
     \value FontFamily e{This property has been deprecated.} Use QTextFormat::FontFamilies instead.
+    \omitvalue OldFontFamily
     \value FontFamilies
     \value FontStyleName
     \value FontPointSize
@@ -1483,7 +1534,21 @@ QTextCharFormat::QTextCharFormat(const QTextFormat &fmt)
     \sa setFont()
 */
 
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
 /*!
+    \fn QVariant QTextCharFormat::fontFamilies() const
+    \since 5.13
+
+    Returns the text format's font families.
+
+    \note This function returns a QVariant for historical reasons. It will be
+    corrected to return QStringList in Qt 7. The variant contains a QStringList
+    object, which can be extracted by calling \c{toStringList()} on it.
+
+    \sa font()
+*/
+#else
+/* // Qt 7 documents this function
     \fn QStringList QTextCharFormat::fontFamilies() const
     \since 5.13
 
@@ -1491,6 +1556,7 @@ QTextCharFormat::QTextCharFormat(const QTextFormat &fmt)
 
     \sa font()
 */
+#endif
 
 /*!
     \fn void QTextCharFormat::setFontStyleName(const QString &styleName)
@@ -1501,7 +1567,21 @@ QTextCharFormat::QTextCharFormat(const QTextFormat &fmt)
     \sa setFont(), QFont::setStyleName()
 */
 
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
 /*!
+    \fn QVariant QTextCharFormat::fontStyleName() const
+    \since 5.13
+
+    Returns the text format's font style name.
+
+    \note This function returns a QVariant for historical reasons. It will be
+    corrected to return QStringList in Qt 7. The variant contains a QStringList
+    object, which can be extracted by calling \c{toStringList()} on it.
+
+    \sa font(), QFont::styleName()
+*/
+#else
+/* // Qt 7 documents this function
     \fn QStringList QTextCharFormat::fontStyleName() const
     \since 5.13
 
@@ -1509,6 +1589,7 @@ QTextCharFormat::QTextCharFormat(const QTextFormat &fmt)
 
     \sa font(), QFont::styleName()
 */
+#endif
 
 /*!
     \fn void QTextCharFormat::setFontPointSize(qreal size)
@@ -3975,3 +4056,5 @@ QDebug operator<<(QDebug dbg, const QTextFormat &f)
 #endif
 
 QT_END_NAMESPACE
+
+#include "moc_qtextformat.cpp"

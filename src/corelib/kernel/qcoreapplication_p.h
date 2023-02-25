@@ -55,6 +55,7 @@
 #if QT_CONFIG(commandlineparser)
 #include "QtCore/qcommandlineoption.h"
 #endif
+#include "QtCore/qreadwritelock.h"
 #include "QtCore/qtranslator.h"
 #if QT_CONFIG(settings)
 #include "QtCore/qsettings.h"
@@ -132,12 +133,9 @@ public:
     QAtomicInt quitLockRef;
     void ref();
     void deref();
-    virtual bool shouldQuit() {
-      return true;
-    }
-
+    virtual bool canQuitAutomatically();
+    void quitAutomatically();
     virtual void quit();
-    void maybeQuit();
 
     static QBasicAtomicPointer<QThread> theMainThread;
     static QThread *mainThread();

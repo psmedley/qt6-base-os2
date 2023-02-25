@@ -194,6 +194,18 @@ void QCocoaMenuBar::syncMenu_helper(QPlatformMenu *menu, bool menubarUpdate)
     for (QCocoaMenuItem *item : cocoaMenu->items())
         cocoaMenu->syncMenuItem_helper(item, menubarUpdate);
 
+    const QString captionNoAmpersand = QString::fromNSString(cocoaMenu->nsMenu().title)
+                                       .remove(QLatin1Char('&'));
+    if (captionNoAmpersand == QCoreApplication::translate("QCocoaMenu", "Edit")) {
+        // prevent recursion from QCocoaMenu::insertMenuItem - when the menu is visible
+        // it calls syncMenu again. QCocoaMenu::setVisible just sets the bool, which then
+        // gets evaluated in the code after this block.
+        const bool wasVisible = cocoaMenu->isVisible();
+        cocoaMenu->setVisible(false);
+        insertDefaultEditItems(cocoaMenu);
+        cocoaMenu->setVisible(wasVisible);
+    }
+
     BOOL shouldHide = YES;
     if (cocoaMenu->isVisible()) {
         // If the NSMenu has no visible items, or only separators, we should hide it
@@ -328,7 +340,34 @@ void QCocoaMenuBar::updateMenuBarImmediately()
 
     [mergedItems release];
     [NSApp setMainMenu:mb->nsMenu()];
+    insertWindowMenu();
     [loader qtTranslateApplicationMenu];
+}
+
+void QCocoaMenuBar::insertWindowMenu()
+{
+    // For such an item/menu we get for 'free' an additional feature -
+    // a list of windows the application has created in the Dock's menu.
+
+    NSApplication *app = NSApplication.sharedApplication;
+    if (app.windowsMenu)
+        return;
+
+    NSMenu *mainMenu = app.mainMenu;
+    NSMenuItem *winMenuItem = [[[NSMenuItem alloc] initWithTitle:@"QtWindowMenu"
+                                                   action:nil keyEquivalent:@""] autorelease];
+    // We don't want to show this menu, nobody asked us to do so:
+    winMenuItem.hidden = YES;
+
+    winMenuItem.submenu = [[[NSMenu alloc] initWithTitle:@"QtWindowMenu"] autorelease];
+    [mainMenu insertItem:winMenuItem atIndex:mainMenu.itemArray.count];
+    app.windowsMenu = winMenuItem.submenu;
+
+    // Windows, created and 'ordered front' before, will not be in this menu:
+    for (NSWindow *win in app.windows) {
+        if (win.title && ![win.title isEqualToString:@""])
+            [app addWindowsItem:win title:win.title filename:NO];
+    }
 }
 
 QList<QCocoaMenuItem*> QCocoaMenuBar::merged() const
@@ -398,6 +437,48 @@ NSMenuItem *QCocoaMenuBar::itemForRole(QPlatformMenuItem::MenuRole role)
 QCocoaWindow *QCocoaMenuBar::cocoaWindow() const
 {
     return m_window.data();
+}
+
+void QCocoaMenuBar::insertDefaultEditItems(QCocoaMenu *menu)
+{
+    if (menu->items().isEmpty())
+        return;
+
+    NSMenu *nsEditMenu = menu->nsMenu();
+    if ([nsEditMenu itemAtIndex:nsEditMenu.numberOfItems - 1].action
+        == @selector(orderFrontCharacterPalette:)) {
+        for (auto defaultEditMenuItem : qAsConst(m_defaultEditMenuItems)) {
+            if (menu->items().contains(defaultEditMenuItem))
+                menu->removeMenuItem(defaultEditMenuItem);
+        }
+        qDeleteAll(m_defaultEditMenuItems);
+        m_defaultEditMenuItems.clear();
+    } else {
+        if (m_defaultEditMenuItems.isEmpty()) {
+            QCocoaMenuItem *separator = new QCocoaMenuItem;
+            separator->setIsSeparator(true);
+
+            QCocoaMenuItem *dictationItem = new QCocoaMenuItem;
+            dictationItem->setText(QCoreApplication::translate("QCocoaMenuItem", "Start Dictation..."));
+            QObject::connect(dictationItem, &QPlatformMenuItem::activated, this, []{
+                [NSApplication.sharedApplication performSelector:@selector(startDictation:)];
+            });
+
+            QCocoaMenuItem *emojiItem = new QCocoaMenuItem;
+            emojiItem->setText(QCoreApplication::translate("QCocoaMenuItem", "Emoji && Symbols"));
+            emojiItem->setShortcut(QKeyCombination(Qt::MetaModifier|Qt::ControlModifier, Qt::Key_Space));
+            QObject::connect(emojiItem, &QPlatformMenuItem::activated, this, []{
+                [NSApplication.sharedApplication orderFrontCharacterPalette:nil];
+            });
+
+            m_defaultEditMenuItems << separator << dictationItem << emojiItem;
+        }
+        for (auto defaultEditMenuItem : qAsConst(m_defaultEditMenuItems)) {
+            if (menu->items().contains(defaultEditMenuItem))
+                menu->removeMenuItem(defaultEditMenuItem);
+            menu->insertMenuItem(defaultEditMenuItem, nullptr);
+        }
+    }
 }
 
 QT_END_NAMESPACE

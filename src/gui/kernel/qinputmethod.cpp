@@ -426,13 +426,21 @@ QVariant QInputMethod::queryFocusObject(Qt::InputMethodQuery query, const QVaria
     if (!focusObject)
         return retval;
 
-    bool newMethodWorks = QMetaObject::invokeMethod(focusObject, "inputMethodQuery",
-                                                    Qt::DirectConnection,
-                                                    Q_RETURN_ARG(QVariant, retval),
-                                                    Q_ARG(Qt::InputMethodQuery, query),
-                                                    Q_ARG(QVariant, argument));
-    if (newMethodWorks)
-        return retval;
+    static const char *signature = "inputMethodQuery(Qt::InputMethodQuery,QVariant)";
+    const bool newMethodSupported = focusObject->metaObject()->indexOfMethod(signature) != -1;
+    if (newMethodSupported) {
+        const bool ok = QMetaObject::invokeMethod(focusObject, "inputMethodQuery",
+                                                        Qt::DirectConnection,
+                                                        Q_RETURN_ARG(QVariant, retval),
+                                                        Q_ARG(Qt::InputMethodQuery, query),
+                                                        Q_ARG(QVariant, argument));
+        Q_ASSERT(ok);
+        if (retval.isValid())
+            return retval;
+
+        // If the new API didn't have an answer to the query, we fall
+        // back to use the old event-based API.
+    }
 
     QInputMethodQueryEvent queryEvent(query);
     QCoreApplication::sendEvent(focusObject, &queryEvent);

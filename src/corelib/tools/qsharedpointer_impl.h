@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2020 Intel Corporation.
+** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2022 Intel Corporation.
 ** Copyright (C) 2019 Klarälvdalens Datakonsult AB.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -512,13 +512,9 @@ private:
         qt_ptr_swap(this->value, other.value);
     }
 
-#if defined(Q_NO_TEMPLATE_FRIENDS)
-public:
-#else
     template <class X> friend class QSharedPointer;
     template <class X> friend class QWeakPointer;
     template <class X, class Y> friend QSharedPointer<X> QtSharedPointer::copyAndSetPointer(X * ptr, const QSharedPointer<Y> &src);
-#endif
     void ref() const noexcept { d->weakref.ref(); d->strongref.ref(); }
 
     inline void internalSet(Data *o, T *actual)
@@ -587,6 +583,23 @@ public:
         other.value = nullptr;
     }
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_MOVE_AND_SWAP(QWeakPointer)
+
+    template <class X, IfCompatible<X> = true>
+    QWeakPointer(QWeakPointer<X> &&other) noexcept
+        : d(other.d), value(other.value)
+    {
+        other.d = nullptr;
+        other.value = nullptr;
+    }
+
+    template <class X, IfCompatible<X> = true>
+    QWeakPointer &operator=(QWeakPointer<X> &&other) noexcept
+    {
+        QWeakPointer moved(std::move(other));
+        swap(moved);
+        return *this;
+    }
+
     QWeakPointer &operator=(const QWeakPointer &other) noexcept
     {
         QWeakPointer copy(other);
@@ -638,10 +651,6 @@ public:
     // std::weak_ptr compatibility:
     inline QSharedPointer<T> lock() const { return toStrongRef(); }
 
-#if defined(QWEAKPOINTER_ENABLE_ARROW)
-    inline T *operator->() const { return data(); }
-#endif
-
     template <class X>
     bool operator==(const QWeakPointer<X> &o) const noexcept
     { return d == o.d && value == static_cast<const T *>(o.value); }
@@ -676,12 +685,9 @@ public:
 
 private:
     friend struct QtPrivate::EnableInternalData;
-#if defined(Q_NO_TEMPLATE_FRIENDS)
-public:
-#else
     template <class X> friend class QSharedPointer;
+    template <class X> friend class QWeakPointer;
     template <class X> friend class QPointer;
-#endif
 
     template <class X>
     inline QWeakPointer &assign(X *ptr)
@@ -738,12 +744,8 @@ public:
     inline QSharedPointer<T> sharedFromThis() { return QSharedPointer<T>(weakPointer); }
     inline QSharedPointer<const T> sharedFromThis() const { return QSharedPointer<const T>(weakPointer); }
 
-#ifndef Q_NO_TEMPLATE_FRIENDS
 private:
     template <class X> friend class QSharedPointer;
-#else
-public:
-#endif
     template <class X>
     inline void initializeFromSharedPointer(const QSharedPointer<X> &ptr) const
     {

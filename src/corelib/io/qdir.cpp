@@ -177,10 +177,8 @@ inline QStringList QDirPrivate::splitFilters(const QString &nameFilter, QChar se
 {
     if (sep.isNull())
         sep = getFilterSepChar(nameFilter);
-    const auto split = QStringView{nameFilter}.split(sep);
     QStringList ret;
-    ret.reserve(split.size());
-    for (const auto &e : split)
+    for (auto e : qTokenize(nameFilter, sep))
         ret.append(e.trimmed().toString());
     return ret;
 }
@@ -355,10 +353,8 @@ inline void QDirPrivate::initFileLists(const QDir &dir) const
     if (!fileListsInitialized) {
         QFileInfoList l;
         QDirIterator it(dir);
-        while (it.hasNext()) {
-            it.next();
-            l.append(it.fileInfo());
-        }
+        while (it.hasNext())
+            l.append(it.nextFileInfo());
         sortFileList(sort, l, &files, &fileInfos);
         fileListsInitialized = true;
     }
@@ -1116,7 +1112,7 @@ void QDir::setSearchPaths(const QString &prefix, const QStringList &searchPaths)
     }
 
     QWriteLocker lock(&QCoreGlobalData::instance()->dirSearchPathsLock);
-    QMap<QString, QStringList> &paths = QCoreGlobalData::instance()->dirSearchPaths;
+    QHash<QString, QStringList> &paths = QCoreGlobalData::instance()->dirSearchPaths;
     if (searchPaths.isEmpty()) {
         paths.remove(prefix);
     } else {
@@ -1412,10 +1408,8 @@ QStringList QDir::entryList(const QStringList &nameFilters, Filters filters,
 
     QFileInfoList l;
     QDirIterator it(d->dirEntry.filePath(), nameFilters, filters);
-    while (it.hasNext()) {
-        it.next();
-        l.append(it.fileInfo());
-    }
+    while (it.hasNext())
+        l.append(it.nextFileInfo());
     QStringList ret;
     d->sortFileList(sort, l, &ret, nullptr);
     return ret;
@@ -1454,10 +1448,8 @@ QFileInfoList QDir::entryInfoList(const QStringList &nameFilters, Filters filter
 
     QFileInfoList l;
     QDirIterator it(d->dirEntry.filePath(), nameFilters, filters);
-    while (it.hasNext()) {
-        it.next();
-        l.append(it.fileInfo());
-    }
+    while (it.hasNext())
+        l.append(it.nextFileInfo());
     QFileInfoList ret;
     d->sortFileList(sort, l, nullptr, &ret);
     return ret;
@@ -1468,9 +1460,42 @@ QFileInfoList QDir::entryInfoList(const QStringList &nameFilters, Filters filter
 
     Returns \c true on success; otherwise returns \c false.
 
-    If the directory already exists when this function is called, it will return false.
+    If the directory already exists when this function is called, it will return \c false.
+
+    The permissions of the created directory are set to \a{permissions}.
+
+    On POSIX systems the permissions are influenced by the value of \c umask.
+
+    On Windows the permissions are emulated using ACLs. These ACLs may be in non-canonical
+    order when the group is granted less permissions than others. Files and directories with
+    such permissions will generate warnings when the Security tab of the Properties dialog
+    is opened. Granting the group all permissions granted to others avoids such warnings.
 
     \sa rmdir()
+
+    \since 6.3
+*/
+bool QDir::mkdir(const QString &dirName, QFile::Permissions permissions) const
+{
+    const QDirPrivate *d = d_ptr.constData();
+
+    if (dirName.isEmpty()) {
+        qWarning("QDir::mkdir: Empty or null file name");
+        return false;
+    }
+
+    QString fn = filePath(dirName);
+    if (!d->fileEngine)
+        return QFileSystemEngine::createDirectory(QFileSystemEntry(fn), false, permissions);
+    return d->fileEngine->mkdir(fn, false, permissions);
+}
+
+/*!
+    \overload
+    Creates a sub-directory called \a dirName with default permissions.
+
+    On POSIX systems the default is to grant all permissions allowed by \c umask.
+    On Windows, the new directory inherits its permissions from its parent directory.
 */
 bool QDir::mkdir(const QString &dirName) const
 {
@@ -1595,8 +1620,7 @@ bool QDir::removeRecursively()
     // not empty -- we must empty it first
     QDirIterator di(dirPath, QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
     while (di.hasNext()) {
-        di.next();
-        const QFileInfo& fi = di.fileInfo();
+        const QFileInfo fi = di.nextFileInfo();
         const QString &filePath = di.filePath();
         bool ok;
         if (fi.isDir() && !fi.isSymLink()) {

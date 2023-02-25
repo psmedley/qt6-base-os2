@@ -1,5 +1,3 @@
-# Generated from test.pro.
-
 #####################################################################
 ## tst_qtextstream Test:
 #####################################################################
@@ -21,6 +19,7 @@ qt_internal_add_test(tst_qtextstream
         Qt::Network
         Qt::TestPrivate
     TESTDATA ${test_data}
+    QT_TEST_SERVER_LIST "cyrus"
 )
 
 # Resources:
@@ -54,9 +53,12 @@ qt_internal_add_resource(tst_qtextstream "qtextstream_integrity"
 endif()
 
 ## Scopes:
-#####################################################################
 
 qt_internal_extend_target(tst_qtextstream CONDITION builtin_testdata OR INTEGRITY
     DEFINES
         BUILTIN_TESTDATA
 )
+
+if(QT_FEATURE_process)
+  add_dependencies(tst_qtextstream stdinProcess readAllStdinProcess readLineStdinProcess)
+endif()

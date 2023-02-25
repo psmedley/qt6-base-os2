@@ -96,6 +96,7 @@ private slots:
     void toHtml2();
 
     void setFragmentMarkersInHtmlExport();
+    void setMediaRule();
 
     void toHtmlBodyBgColor();
     void toHtmlBodyBgColorRgba();
@@ -295,6 +296,7 @@ void tst_QTextDocument::init()
             "\"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
             "<html><head><meta name=\"qrichtext\" content=\"1\" /><meta charset=\"utf-8\" /><style type=\"text/css\">\n"
             "p, li { white-space: pre-wrap; }\n"
+            "hr { height: 1px; border-width: 0; }\n"
             "</style></head>"
             "<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:%4;\">\n");
     htmlHead = htmlHead.arg(defaultFont.family())
@@ -614,9 +616,6 @@ void tst_QTextDocument::task240325()
     QCOMPARE(doc->blockCount(), 1);
     for (QTextBlock block = doc->begin() ; block!=doc->end() ; block = block.next()) {
         QTextLayout *layout = block.layout();
-#ifdef Q_OS_ANDROID
-        QEXPECT_FAIL("", "QTBUG-69242", Abort);
-#endif
         QCOMPARE(layout->lineCount(), 4);
 
         for (int lineIdx=0;lineIdx<layout->lineCount();++lineIdx) {
@@ -1507,7 +1506,19 @@ void tst_QTextDocument::toHtml_data()
         QTest::newRow("horizontal-ruler-with-width") << QTextDocumentFragment::fromHtml("<hr width=\"50%\"/>")
                                                   <<
                                                       QString("EMPTYBLOCK") +
-                                                      QString("<hr width=\"50%\"/>");
+                                                      QString("<hr width=\"50%\" />");
+    }
+    {
+        QTest::newRow("horizontal-ruler-with-color") << QTextDocumentFragment::fromHtml("<hr style=\"background-color:green;\"/>")
+                                                     <<
+                                                        QString("EMPTYBLOCK") +
+                                                        QString("<hr style=\"background-color:#008000;\"/>");
+    }
+    {
+        QTest::newRow("horizontal-ruler-with-width-and-color") << QTextDocumentFragment::fromHtml("<hr width=\"50%\" style=\"background-color:green;\"/>")
+                                                     <<
+                                                        QString("EMPTYBLOCK") +
+                                                        QString("<hr width=\"50%\" style=\"background-color:#008000;\"/>");
     }
     {
         CREATE_DOC_AND_CURSOR();
@@ -1900,6 +1911,39 @@ void tst_QTextDocument::setFragmentMarkersInHtmlExport()
     }
 }
 
+void tst_QTextDocument::setMediaRule()
+{
+    {
+        CREATE_DOC_AND_CURSOR();
+        doc.setDefaultStyleSheet("@media screen { p { background:#000000 } } @media print { p { background:#ffffff } }");
+        doc.setHtml("<p>Hello World</p>");
+
+        QString expected = htmlHead;
+        expected += QString("<p style=\" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; background-color:#000000;\"><span style=\" background-color:#000000;\">Hello World</span></p>") + htmlTail;
+        QCOMPARE(doc.toHtml(), expected);
+    }
+    {
+        CREATE_DOC_AND_CURSOR();
+        doc.setDefaultStyleSheet("@media screen { p { background:#000000 } } @media print { p { background:#ffffff } }");
+        doc.setMetaInformation(QTextDocument::CssMedia, "screen");
+        doc.setHtml("<p>Hello World</p>");
+
+        QString expected = htmlHead;
+        expected += QString("<p style=\" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; background-color:#000000;\"><span style=\" background-color:#000000;\">Hello World</span></p>") + htmlTail;
+        QCOMPARE(doc.toHtml(), expected);
+    }
+    {
+        CREATE_DOC_AND_CURSOR();
+        doc.setDefaultStyleSheet("@media screen { p { background:#000000 } } @media print { p { background:#ffffff } }");
+        doc.setMetaInformation(QTextDocument::CssMedia, "print");
+        doc.setHtml("<p>Hello World</p>");
+
+        QString expected = htmlHead;
+        expected += QString("<p style=\" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; background-color:#ffffff;\"><span style=\" background-color:#ffffff;\">Hello World</span></p>") + htmlTail;
+        QCOMPARE(doc.toHtml(), expected);
+    }
+}
+
 void tst_QTextDocument::toHtmlBodyBgColor()
 {
     CREATE_DOC_AND_CURSOR();
@@ -1910,20 +1954,12 @@ void tst_QTextDocument::toHtmlBodyBgColor()
     fmt.setBackground(QColor("#0000ff"));
     doc.rootFrame()->setFrameFormat(fmt);
 
-    QString expectedHtml("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" "
-            "\"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-            "<html><head><meta name=\"qrichtext\" content=\"1\" /><meta charset=\"utf-8\" /><style type=\"text/css\">\n"
-            "p, li { white-space: pre-wrap; }\n"
-            "</style></head>"
-            "<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:%4;\""
-            " bgcolor=\"#0000ff\">\n"
-            "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
-            "</body></html>");
+    QString expectedHtml = htmlHead;
+    expectedHtml.insert(htmlHead.length() - 2, " bgcolor=\"#0000ff\"");
+    expectedHtml += "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
+             + htmlTail;
 
-    expectedHtml = expectedHtml.arg(defaultFont.family())
-                           .arg(cssFontSizeString(defaultFont))
-                           .arg(defaultFont.weight())
-                           .arg((defaultFont.italic() ? "italic" : "normal"));
+    writeActualAndExpected(QTest::currentDataTag(), doc.toHtml(), expectedHtml);
 
     QCOMPARE(doc.toHtml(), expectedHtml);
 }
@@ -1938,20 +1974,12 @@ void tst_QTextDocument::toHtmlBodyBgColorRgba()
     fmt.setBackground(QColor(255, 0, 0, 51));
     doc.rootFrame()->setFrameFormat(fmt);
 
-    QString expectedHtml("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" "
-            "\"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-            "<html><head><meta name=\"qrichtext\" content=\"1\" /><meta charset=\"utf-8\" /><style type=\"text/css\">\n"
-            "p, li { white-space: pre-wrap; }\n"
-            "</style></head>"
-            "<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:%4;\""
-            " bgcolor=\"rgba(255,0,0,0.2)\">\n"
-            "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
-            "</body></html>");
+    QString expectedHtml = htmlHead;
+    expectedHtml.insert(htmlHead.length() - 2, " bgcolor=\"rgba(255,0,0,0.2)\"");
+    expectedHtml += "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
+             + htmlTail;
 
-    expectedHtml = expectedHtml.arg(defaultFont.family())
-                           .arg(cssFontSizeString(defaultFont))
-                           .arg(defaultFont.weight())
-                           .arg((defaultFont.italic() ? "italic" : "normal"));
+    writeActualAndExpected(QTest::currentDataTag(), doc.toHtml(), expectedHtml);
 
     QCOMPARE(doc.toHtml(), expectedHtml);
 }
@@ -1966,20 +1994,12 @@ void tst_QTextDocument::toHtmlBodyBgColorTransparent()
     fmt.setBackground(QColor(255, 0, 0, 0));
     doc.rootFrame()->setFrameFormat(fmt);
 
-    QString expectedHtml("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" "
-            "\"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-            "<html><head><meta name=\"qrichtext\" content=\"1\" /><meta charset=\"utf-8\" /><style type=\"text/css\">\n"
-            "p, li { white-space: pre-wrap; }\n"
-            "</style></head>"
-            "<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:%4;\""
-            " bgcolor=\"transparent\">\n"
-            "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
-            "</body></html>");
+    QString expectedHtml = htmlHead;
+    expectedHtml.insert(htmlHead.length() - 2, " bgcolor=\"transparent\"");
+    expectedHtml += "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
+             + htmlTail;
 
-    expectedHtml = expectedHtml.arg(defaultFont.family())
-                           .arg(cssFontSizeString(defaultFont))
-                           .arg(defaultFont.weight())
-                           .arg((defaultFont.italic() ? "italic" : "normal"));
+    writeActualAndExpected(QTest::currentDataTag(), doc.toHtml(), expectedHtml);
 
     QCOMPARE(doc.toHtml(), expectedHtml);
 }
@@ -2040,21 +2060,13 @@ void tst_QTextDocument::toHtmlDefaultFontSpacingProperties()
     fnt.setWordSpacing(15);
     doc.setDefaultFont(fnt);
 
-    QString expectedOutput = QString("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" "
-                                     "\"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-                                     "<html><head><meta name=\"qrichtext\" content=\"1\" />"
-                                     "<meta charset=\"utf-8\" /><style type=\"text/css\">\n"
-                                     "p, li { white-space: pre-wrap; }\n"
-                                     "</style></head>"
-                                     "<body style=\" font-family:'%1'; font-size:%2; "
-                                     "font-weight:%3; font-style:%4; letter-spacing:13px; "
-                                     "word-spacing:15px;\">\n"
-                                     "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
-                                     "</body></html>");
-    expectedOutput = expectedOutput.arg(defaultFont.family())
-                                   .arg(cssFontSizeString(defaultFont))
-                                   .arg(defaultFont.weight())
-                                   .arg((defaultFont.italic() ? "italic" : "normal"));
+    QString expectedOutput = htmlHead;
+    expectedOutput.insert(htmlHead.length() - 3, " letter-spacing:13px; word-spacing:15px;");
+    expectedOutput +=
+            "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
+            + htmlTail;
+
+    writeActualAndExpected(QTest::currentTestFunction(), doc.toHtml(), expectedOutput);
 
     QCOMPARE(doc.toHtml(), expectedOutput);
 }
@@ -2068,23 +2080,13 @@ void tst_QTextDocument::toHtmlTextDecorationUnderline()
     fnt.setUnderline(true);
     doc.setDefaultFont(fnt);
 
-    QString expectedOutput =
-            QString("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" "
-                    "\"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-                    "<html><head><meta name=\"qrichtext\" content=\"1\" />"
-                    "<meta charset=\"utf-8\" /><style type=\"text/css\">\n"
-                    "p, li { white-space: pre-wrap; }\n"
-                    "</style></head>"
-                    "<body style=\" font-family:'%1'; font-size:%2; "
-                    "font-weight:%3; font-style:%4; text-decoration: underline;\">\n"
-                    "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; "
-                    "margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Some text</p>"
-                    "</body></html>");
+    QString expectedOutput = htmlHead;
+    expectedOutput.insert(htmlHead.length() - 3, " text-decoration: underline;");
+    expectedOutput +=
+            "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Some text</p>"
+            + htmlTail;
 
-    expectedOutput = expectedOutput.arg(doc.defaultFont().family())
-                             .arg(cssFontSizeString(doc.defaultFont()))
-                             .arg(doc.defaultFont().weight())
-                             .arg((doc.defaultFont().italic() ? "italic" : "normal"));
+    writeActualAndExpected("toHtmlTextDecorationUnderline1", doc.toHtml(), expectedOutput);
 
     QCOMPARE(doc.toHtml(), expectedOutput);
 
@@ -2093,26 +2095,17 @@ void tst_QTextDocument::toHtmlTextDecorationUnderline()
     cursor.select(QTextCursor::Document);
     cursor.mergeCharFormat(format);
 
-    QString expectedOutput2 =
-            QString("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" "
-                    "\"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-                    "<html><head><meta name=\"qrichtext\" content=\"1\" />"
-                    "<meta charset=\"utf-8\" /><style type=\"text/css\">\n"
-                    "p, li { white-space: pre-wrap; }\n"
-                    "</style></head>"
-                    "<body style=\" font-family:'%1'; font-size:%2; "
-                    "font-weight:%3; font-style:%4; text-decoration: underline;\">\n"
-                    "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; "
-                    "margin-right:0px; -qt-block-indent:0; text-indent:0px;\">"
-                    "<span style=\" text-decoration:none;\">Some text</span></p>"
-                    "</body></html>");
+    expectedOutput = htmlHead;
+    expectedOutput.insert(htmlHead.length() - 3, " text-decoration: underline;");
+    expectedOutput +=
+            "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; "
+            "margin-right:0px; -qt-block-indent:0; text-indent:0px;\">"
+            "<span style=\" text-decoration:none;\">Some text</span></p>"
+            + htmlTail;
 
-    expectedOutput2 = expectedOutput2.arg(doc.defaultFont().family())
-                              .arg(cssFontSizeString(doc.defaultFont()))
-                              .arg(doc.defaultFont().weight())
-                              .arg((doc.defaultFont().italic() ? "italic" : "normal"));
+    writeActualAndExpected("toHtmlTextDecorationUnderline2", doc.toHtml(), expectedOutput);
 
-    QCOMPARE(doc.toHtml(), expectedOutput2);
+    QCOMPARE(doc.toHtml(), expectedOutput);
 }
 
 void tst_QTextDocument::capitalizationHtmlInExport()
@@ -2335,14 +2328,18 @@ void tst_QTextDocument::clonePreservesMetaInformation()
 {
     const QString title("Foobar");
     const QString url("about:blank");
+    const QString media("print");
     doc->setHtml("<html><head><title>" + title + "</title></head><body>Hrm</body></html>");
     doc->setMetaInformation(QTextDocument::DocumentUrl, url);
+    doc->setMetaInformation(QTextDocument::CssMedia, media);
     QCOMPARE(doc->metaInformation(QTextDocument::DocumentTitle), title);
     QCOMPARE(doc->metaInformation(QTextDocument::DocumentUrl), url);
+    QCOMPARE(doc->metaInformation(QTextDocument::CssMedia), media);
 
     QTextDocument *clone = doc->clone();
     QCOMPARE(clone->metaInformation(QTextDocument::DocumentTitle), title);
     QCOMPARE(clone->metaInformation(QTextDocument::DocumentUrl), url);
+    QCOMPARE(clone->metaInformation(QTextDocument::CssMedia), media);
     delete clone;
 }
 
@@ -2991,21 +2988,11 @@ const QString backgroundImage_html("<body><table><tr><td background=\"foo.png\">
 
 void tst_QTextDocument::backgroundImage_checkExpectedHtml(const QTextDocument &doc)
 {
-    QString expectedHtml("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" "
-            "\"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-            "<html><head><meta name=\"qrichtext\" content=\"1\" /><meta charset=\"utf-8\" /><style type=\"text/css\">\n"
-            "p, li { white-space: pre-wrap; }\n"
-            "</style></head>"
-            "<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:%4;\">\n"
+    QString expectedHtml = htmlHead +
             "<table border=\"0\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px;\" cellspacing=\"2\" cellpadding=\"0\">"
             "\n<tr>\n<td background=\"foo.png\">"
             "\n<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
-            "</td></tr></table></body></html>");
-
-    expectedHtml = expectedHtml.arg(defaultFont.family())
-                           .arg(cssFontSizeString(defaultFont))
-                           .arg(defaultFont.weight())
-                           .arg((defaultFont.italic() ? "italic" : "normal"));
+            "</td></tr></table>" + htmlTail;
 
     writeActualAndExpected(QTest::currentTestFunction(), doc.toHtml(), expectedHtml);
 

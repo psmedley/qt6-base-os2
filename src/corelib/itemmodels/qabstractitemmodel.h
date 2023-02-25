@@ -539,6 +539,6 @@ inline size_t qHash(const QModelIndex &index, size_t seed = 0) noexcept
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QModelIndexList)
+QT_DECL_METATYPE_EXTERN(QModelIndexList, Q_CORE_EXPORT)
 
 #endif // QABSTRACTITEMMODEL_H

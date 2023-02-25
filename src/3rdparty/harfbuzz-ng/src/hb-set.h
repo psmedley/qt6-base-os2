@@ -94,6 +94,9 @@ hb_set_clear (hb_set_t *set);
 HB_EXTERN hb_bool_t
 hb_set_is_empty (const hb_set_t *set);
 
+HB_EXTERN void
+hb_set_invert (hb_set_t *set);
+
 HB_EXTERN hb_bool_t
 hb_set_has (const hb_set_t *set,
 	    hb_codepoint_t  codepoint);
@@ -106,6 +109,11 @@ HB_EXTERN void
 hb_set_add_range (hb_set_t       *set,
 		  hb_codepoint_t  first,
 		  hb_codepoint_t  last);
+
+HB_EXTERN void
+hb_set_add_sorted_array (hb_set_t             *set,
+		         const hb_codepoint_t *sorted_codepoints,
+		         unsigned int          num_codepoints);
 
 HB_EXTERN void
 hb_set_del (hb_set_t       *set,
@@ -177,6 +185,12 @@ hb_set_previous_range (const hb_set_t *set,
 		       hb_codepoint_t *first,
 		       hb_codepoint_t *last);
 
+/* Pass HB_SET_VALUE_INVALID in to get started. */
+HB_EXTERN unsigned int
+hb_set_next_many (const hb_set_t *set,
+		  hb_codepoint_t  codepoint,
+		  hb_codepoint_t *out,
+		  unsigned int    size);
 
 HB_END_DECLS
 

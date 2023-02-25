@@ -71,6 +71,7 @@ public:
     void startAsyncRead();
     void stop();
     void drainAndStop();
+    void stopAndClear();
 
     void setMaxReadBufferSize(qint64 size);
     qint64 maxReadBufferSize() const { return readBufferMaxSize; }
@@ -78,6 +79,8 @@ public:
     bool isPipeClosed() const { return pipeBroken; }
     qint64 bytesAvailable() const;
     qint64 read(char *data, qint64 maxlen);
+    qint64 readLine(char *data, qint64 maxlen);
+    qint64 skip(qint64 maxlen);
     bool canReadLine() const;
     DWORD checkPipeState();
     bool checkForReadyRead() { return consumePendingAndEmit(false); }
@@ -96,6 +99,7 @@ protected:
 private:
     enum State { Stopped, Running, Draining };
 
+    void startAsyncReadHelper(QMutexLocker<QMutex> *locker);
     void startAsyncReadLocked();
     void cancelAsyncRead(State newState);
     static void CALLBACK waitCallback(PTP_CALLBACK_INSTANCE instance, PVOID context,

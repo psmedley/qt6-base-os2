@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2018 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtTest module of the Qt Toolkit.
@@ -115,32 +115,50 @@ void QTapTestLogger::outputTestLine(bool ok, int testNumber, QTestCharBuffer &di
 void QTapTestLogger::addIncident(IncidentTypes type, const char *description,
                                    const char *file, int line)
 {
-    if (m_wasExpectedFail && (type == Pass || type == BlacklistedPass)) {
+    if (m_wasExpectedFail && (type == Pass || type == BlacklistedPass
+                              || type == XFail || type == BlacklistedXFail)) {
         // XFail comes with a corresponding Pass incident, but we only want
         // to emit a single test point for it, so skip the this pass.
         return;
     }
+    m_wasExpectedFail = type == XFail || type == BlacklistedXFail;
+    const bool ok = type == Pass || type == BlacklistedPass || type == Skip
+                    || type == XPass || type == BlacklistedXPass;
 
-    bool ok = type == Pass || type == XPass || type == BlacklistedPass || type == BlacklistedXPass;
-
-    QTestCharBuffer directive;
-    if (type == XFail || type == XPass || type == BlacklistedFail || type == BlacklistedPass
-            || type == BlacklistedXFail || type == BlacklistedXPass) {
+    const char *const incident = [type]() {
+        switch (type) {
         // We treat expected or blacklisted failures/passes as TODO-failures/passes,
         // which should be treated as soft issues by consumers. Not all do though :/
-        QTest::qt_asprintf(&directive, " # TODO %s", description);
+        case BlacklistedPass:
+        case XFail: case BlacklistedXFail:
+        case XPass: case BlacklistedXPass:
+        case BlacklistedFail:
+            return "TODO";
+        case Skip:
+            return "SKIP";
+        case Pass:
+        case Fail:
+            break;
+        }
+        return static_cast<const char *>(nullptr);
+    }();
+
+    QTestCharBuffer directive;
+    if (incident) {
+        QTest::qt_asprintf(&directive, " # %s%s%s", incident,
+                           qstrlen(description) ? " " : "", description);
     }
 
     int testNumber = QTestLog::totalCount();
-    if (type == XFail || type == BlacklistedXFail) {
-        // The global test counter hasn't been updated yet for XFail
+    // That counts Pass, Fail, Skip and blacklisted; the XFail will eventually
+    // be added to it as a Pass, but that hasn't heppened yet, so count it now:
+    if (m_wasExpectedFail)
         testNumber += 1;
-    }
 
     outputTestLine(ok, testNumber, directive);
 
     if (!ok) {
-        // All failures need a diagnostics sections to not confuse consumers
+        // All failures need a diagnostics section to not confuse consumers
 
         // The indent needs to be two spaces for maximum compatibility
         #define YAML_INDENT "  "
@@ -203,18 +221,13 @@ void QTapTestLogger::addIncident(IncidentTypes type, const char *description,
                 );
 
                 outputString(diagnosticsYamlish.data());
-            } else {
+            } else
+#endif
+            {
                 QTestCharBuffer unparsableDescription;
-                QTest::qt_asprintf(&unparsableDescription,
-                    YAML_INDENT "# %s\n", description);
+                QTest::qt_asprintf(&unparsableDescription, YAML_INDENT "# %s\n", description);
                 outputString(unparsableDescription.data());
             }
-#else
-            QTestCharBuffer unparsableDescription;
-            QTest::qt_asprintf(&unparsableDescription,
-                YAML_INDENT "# %s\n", description);
-            outputString(unparsableDescription.data());
-#endif
         }
 
         if (file) {
@@ -237,8 +250,6 @@ void QTapTestLogger::addIncident(IncidentTypes type, const char *description,
 
         outputString(YAML_INDENT "...\n");
     }
-
-    m_wasExpectedFail = (type == XFail || type == BlacklistedXFail);
 }
 
 void QTapTestLogger::addMessage(MessageTypes type, const QString &message,
@@ -246,13 +257,7 @@ void QTapTestLogger::addMessage(MessageTypes type, const QString &message,
 {
     Q_UNUSED(file);
     Q_UNUSED(line);
-
-    if (type == Skip) {
-        QTestCharBuffer directive;
-        QTest::qt_asprintf(&directive, " # SKIP %s", message.toUtf8().constData());
-        outputTestLine(/* ok  = */ true, QTestLog::totalCount(), directive);
-        return;
-    }
+    Q_UNUSED(type);
 
     QTestCharBuffer diagnostics;
     QTest::qt_asprintf(&diagnostics, "# %s\n", qPrintable(message));

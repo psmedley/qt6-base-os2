@@ -179,9 +179,7 @@ struct StringTransform
 };
 
 QFuture<QString> fooString =
-  QtConcurrent::filteredReduced<QString>(strings,
-                                         StartsWith(QLatin1String("Foo")),
-                                         StringTransform());
+        QtConcurrent::filteredReduced(strings, StartsWith(QLatin1String("Foo")), StringTransform());
 //! [14]
 
 //! [15]
@@ -198,7 +196,7 @@ QList<int> results = future.results();
 
 // add up all even integers
 QList<int> list3 { 1, 2, 3, 4 };
-int sum = QtConcurrent::filteredReduced<int>(list3,
+QFuture<int> sum = QtConcurrent::filteredReduced(list3,
     [](int x) {
         return (x & 1) == 0;
     },
@@ -215,7 +213,7 @@ void intSumReduce(int &sum, int x)
 }
 
 QList<int> list { 1, 2, 3, 4 };
-int sum = QtConcurrent::filteredReduced(list,
+QFuture<int> sum = QtConcurrent::filteredReduced(list,
     [] (int x) {
         return (x & 1) == 0;
     },
@@ -230,7 +228,7 @@ bool keepEvenIntegers(int x)
 }
 
 QList<int> list { 1, 2, 3, 4 };
-int sum = QtConcurrent::filteredReduced<int>(list,
+QFuture<int> sum = QtConcurrent::filteredReduced(list,
     keepEvenIntegers,
     [](int &sum, int x) {
         sum += x;

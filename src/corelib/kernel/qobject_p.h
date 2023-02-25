@@ -57,7 +57,6 @@
 #include "QtCore/qlist.h"
 #include "QtCore/qobject.h"
 #include "QtCore/qpointer.h"
-#include "QtCore/qreadwritelock.h"
 #include "QtCore/qsharedpointer.h"
 #include "QtCore/qvariant.h"
 #include "QtCore/qproperty.h"
@@ -98,9 +97,9 @@ public:
 
 class Q_CORE_EXPORT QObjectPrivate : public QObjectData
 {
+public:
     Q_DECLARE_PUBLIC(QObject)
 
-public:
     struct ExtraData
     {
         ExtraData(QObjectPrivate *ptr) : parent(ptr) { }
@@ -276,8 +275,10 @@ public:
             if (c)
                 deleteOrphaned(c);
             SignalVector *v = signalVector.loadRelaxed();
-            if (v)
+            if (v) {
+                v->~SignalVector();
                 free(v);
+            }
         }
 
         // must be called on the senders connection data
@@ -308,14 +309,19 @@ public:
             if (vector && vector->allocated > size)
                 return;
             size = (size + 7) & ~7;
-            SignalVector *newVector = reinterpret_cast<SignalVector *>(malloc(sizeof(SignalVector) + (size + 1) * sizeof(ConnectionList)));
+            void *ptr = malloc(sizeof(SignalVector) + (size + 1) * sizeof(ConnectionList));
+            auto newVector = new (ptr) SignalVector;
+
             int start = -1;
             if (vector) {
+                // not (yet) existing trait:
+                //static_assert(std::is_relocatable_v<SignalVector>);
+                //static_assert(std::is_relocatable_v<ConnectionList>);
                 memcpy(newVector, vector, sizeof(SignalVector) + (vector->allocated + 1) * sizeof(ConnectionList));
                 start = vector->count();
             }
             for (int i = start; i < int(size); ++i)
-                newVector->at(i) = ConnectionList();
+                new (&newVector->at(i)) ConnectionList();
             newVector->next = nullptr;
             newVector->allocated = size;
 
@@ -452,7 +458,7 @@ inline void QObjectPrivate::checkForIncompatibleLibraryVersion(int version) cons
 
 inline bool QObjectPrivate::isDeclarativeSignalConnected(uint signal_index) const
 {
-    return declarativeData && QAbstractDeclarativeData::isSignalConnected
+    return !isDeletingChildren && declarativeData && QAbstractDeclarativeData::isSignalConnected
             && QAbstractDeclarativeData::isSignalConnected(declarativeData, q_func(), signal_index);
 }
 
@@ -467,10 +473,41 @@ inline void QObjectPrivate::disconnectNotify(const QMetaMethod &signal)
 }
 
 namespace QtPrivate {
-template<typename Func, typename Args, typename R> class QPrivateSlotObject : public QSlotObjectBase
+
+template <typename Func>
+struct FunctionStorageByValue
+{
+    Func f;
+    Func &func() noexcept { return f; }
+};
+
+template <typename Func>
+struct FunctionStorageEmptyBaseClassOptimization : Func
+{
+    Func &func() noexcept { return *this; }
+    using Func::Func;
+};
+
+template <typename Func>
+using FunctionStorage = typename std::conditional_t<
+        std::conjunction_v<
+            std::is_empty<Func>,
+            std::negation<std::is_final<Func>>
+        >,
+        FunctionStorageEmptyBaseClassOptimization<Func>,
+        FunctionStorageByValue<Func>
+    >;
+
+template <typename ObjPrivate> inline void assertObjectType(QObjectPrivate *d)
+{
+    using Obj = std::remove_pointer_t<decltype(std::declval<ObjPrivate *>()->q_func())>;
+    assertObjectType<Obj>(d->q_ptr);
+}
+
+template<typename Func, typename Args, typename R>
+class QPrivateSlotObject : public QSlotObjectBase, private FunctionStorage<Func>
 {
     typedef QtPrivate::FunctionPointer<Func> FuncType;
-    Func function;
     static void impl(int which, QSlotObjectBase *this_, QObject *r, void **a, bool *ret)
     {
         switch (which) {
@@ -478,17 +515,17 @@ template<typename Func, typename Args, typename R> class QPrivateSlotObject : pu
                 delete static_cast<QPrivateSlotObject*>(this_);
                 break;
             case Call:
-                FuncType::template call<Args, R>(static_cast<QPrivateSlotObject*>(this_)->function,
+                FuncType::template call<Args, R>(static_cast<QPrivateSlotObject*>(this_)->func(),
                                                  static_cast<typename FuncType::Object *>(QObjectPrivate::get(r)), a);
                 break;
             case Compare:
-                *ret = *reinterpret_cast<Func *>(a) == static_cast<QPrivateSlotObject*>(this_)->function;
+                *ret = *reinterpret_cast<Func *>(a) == static_cast<QPrivateSlotObject*>(this_)->func();
                 break;
             case NumOperations: ;
         }
     }
 public:
-    explicit QPrivateSlotObject(Func f) : QSlotObjectBase(&impl), function(f) {}
+    explicit QPrivateSlotObject(Func f) : QSlotObjectBase(&impl), FunctionStorage<Func>{std::move(f)} {}
 };
 } //namespace QtPrivate
 
@@ -631,7 +668,7 @@ struct Q_CORE_EXPORT QDynamicMetaObjectData
     virtual ~QDynamicMetaObjectData();
     virtual void objectDestroyed(QObject *) { delete this; }
 
-    virtual QAbstractDynamicMetaObject *toDynamicMetaObject(QObject *) = 0;
+    virtual QMetaObject *toDynamicMetaObject(QObject *) = 0;
     virtual int metaCall(QObject *, QMetaObject::Call, int _id, void **) = 0;
 };
 
@@ -639,7 +676,7 @@ struct Q_CORE_EXPORT QAbstractDynamicMetaObject : public QDynamicMetaObjectData,
 {
     ~QAbstractDynamicMetaObject();
 
-    QAbstractDynamicMetaObject *toDynamicMetaObject(QObject *) override { return this; }
+    QMetaObject *toDynamicMetaObject(QObject *) override { return this; }
     virtual int createProperty(const char *, const char *) { return -1; }
     int metaCall(QObject *, QMetaObject::Call c, int _id, void **a) override
     { return metaCall(c, _id, a); }

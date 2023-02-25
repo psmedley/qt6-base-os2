@@ -403,6 +403,8 @@ public:
         Zarma = 325,
         Zhuang = 326,
         Zulu = 327,
+        Kaingang = 328,
+        Nheengatu = 329,
 
         Afan = Oromo,
         Bengali = Bangla,
@@ -424,7 +426,7 @@ public:
         Uigur = Uyghur,
         Walamo = Wolaytta,
 
-        LastLanguage = Zulu
+        LastLanguage = Nheengatu
     };
 
     enum Script : ushort {
@@ -926,6 +928,7 @@ public:
 
     QLocale();
     explicit QLocale(const QString &name);
+    explicit QLocale(QStringView name);
     QLocale(Language language, Territory territory);
     QLocale(Language language, Script script = AnyScript, Territory territory = AnyTerritory);
     QLocale(const QLocale &other);
@@ -952,7 +955,6 @@ public:
     QString nativeCountryName() const;
 #endif
 
-#if QT_STRINGVIEW_LEVEL < 2
     short toShort(const QString &s, bool *ok = nullptr) const
     { return toShort(qToStringViewIgnoringNull(s), ok); }
     ushort toUShort(const QString &s, bool *ok = nullptr) const
@@ -973,7 +975,6 @@ public:
     { return toFloat(qToStringViewIgnoringNull(s), ok); }
     double toDouble(const QString &s, bool *ok = nullptr) const
     { return toDouble(qToStringViewIgnoringNull(s), ok); }
-#endif
 
     short toShort(QStringView s, bool *ok = nullptr) const;
     ushort toUShort(QStringView s, bool *ok = nullptr) const;
@@ -998,13 +999,11 @@ public:
     QString toString(float f, char format = 'g', int precision = 6) const
     { return toString(double(f), format, precision); }
 
-#if QT_STRINGVIEW_LEVEL < 2
     // (Can't inline first two: passing by value doesn't work when only forward-declared.)
     QString toString(QDate date, const QString &format) const;
     QString toString(QTime time, const QString &format) const;
     QString toString(const QDateTime &dateTime, const QString &format) const
     { return toString(dateTime, qToStringViewIgnoringNull(format)); }
-#endif
     QString toString(QDate date, QStringView format) const;
     QString toString(QTime time, QStringView format) const;
     QString toString(const QDateTime &dateTime, QStringView format) const;
@@ -1083,8 +1082,29 @@ public:
 
     QStringList uiLanguages() const;
 
+    enum LanguageCodeType {
+        ISO639Part1 = 1 << 0,
+        ISO639Part2B = 1 << 1,
+        ISO639Part2T = 1 << 2,
+        ISO639Part3 = 1 << 3,
+        LegacyLanguageCode = 1 << 15,
+
+        ISO639Part2 = ISO639Part2B | ISO639Part2T,
+        ISO639Alpha2 = ISO639Part1,
+        ISO639Alpha3 = ISO639Part2 | ISO639Part3,
+        ISO639 = ISO639Alpha2 | ISO639Alpha3,
+
+        AnyLanguageCode = -1
+    };
+    Q_DECLARE_FLAGS(LanguageCodeTypes, LanguageCodeType)
+
+#if QT_CORE_REMOVED_SINCE(6, 3)
     static QString languageToCode(Language language);
     static Language codeToLanguage(QStringView languageCode) noexcept;
+#endif
+    static QString languageToCode(Language language, LanguageCodeTypes codeTypes = AnyLanguageCode);
+    static Language codeToLanguage(QStringView languageCode,
+                                   LanguageCodeTypes codeTypes = AnyLanguageCode) noexcept;
     static QString territoryToCode(Territory territory);
     static Territory codeToTerritory(QStringView territoryCode) noexcept;
 #if QT_DEPRECATED_SINCE(6, 6)
@@ -1141,6 +1161,7 @@ private:
 };
 Q_DECLARE_SHARED(QLocale)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QLocale::NumberOptions)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QLocale::LanguageCodeTypes)
 
 #ifndef QT_NO_DATASTREAM
 Q_CORE_EXPORT QDataStream &operator<<(QDataStream &, const QLocale &);

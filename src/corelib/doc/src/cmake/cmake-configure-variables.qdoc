@@ -1,0 +1,303 @@
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the documentation of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:FDL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Free Documentation License Usage
+** Alternatively, this file may be used under the terms of the GNU Free
+** Documentation License version 1.3 as published by the Free Software
+** Foundation and appearing in the file included in the packaging of
+** this file. Please review the following information to ensure
+** the GNU Free Documentation License version 1.3 requirements
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
+** $QT_END_LICENSE$
+**
+****************************************************************************/
+
+/* NOTE: The variables documented here are available when running CMake, they
+**       are not available in a deployment script. Both these and the set of
+**       deploy-time variables are all members of the cmake-variables-qtcore
+**       group.
+**/
+
+/*!
+\group cmake-variables-qtcore
+\title CMake Variables in Qt6 Core
+
+The following CMake variables are defined when Qt6::Core is loaded, for instance
+with
+
+\badcode
+find_package(Qt6 REQUIRED COMPONENTS Core)
+\endcode
+
+\sa{CMake Variable Reference}
+*/
+
+*/*!
+\page cmake-variable-ANDROID_NDK_HOST_SYSTEM_NAME.html
+\ingroup cmake-variables-qtcore
+
+\title ANDROID_NDK_HOST_SYSTEM_NAME
+\target cmake-variable-ANDROID_NDK_HOST_SYSTEM_NAME
+
+\summary {Android-specific architecture of the host system.}
+
+\cmakevariablesince 6.0
+\preliminarycmakevariable
+\cmakevariableandroidonly
+
+This is normally set by the Android NDK toolchain file. It is written out as
+part of the deployment settings for a target.
+
+\sa{qt6_android_generate_deployment_settings}{qt_android_generate_deployment_settings()}
+*/
+
+/*!
+\page cmake-variable-ANDROID_SDK_ROOT.html
+\ingroup cmake-variables-qtcore
+
+\title ANDROID_SDK_ROOT
+\target cmake-variable-ANDROID_SDK_ROOT
+
+\summary {Location of the Android SDK.}
+
+\cmakevariablesince 6.0
+\preliminarycmakevariable
+\cmakevariableandroidonly
+
+This specifies the location of the Android SDK when building for the Android platform.
+It is written out as part of the deployment settings for a target.
+
+\sa{qt6_android_generate_deployment_settings}{qt_android_generate_deployment_settings()}.
+*/
+
+/*!
+\page cmake-variable-QT_ANDROID_APPLICATION_ARGUMENTS.html
+\ingroup cmake-variables-qtcore
+
+\title QT_ANDROID_APPLICATION_ARGUMENTS
+\target cmake-variable-QT_ANDROID_APPLICATION_ARGUMENTS
+
+\summary {List of arguments to pass to Android applications.}
+
+\cmakevariablesince 6.0
+\preliminarycmakevariable
+\cmakevariableandroidonly
+
+This contains a list of arguments to be passed to Android applications. It is written
+out as part of the deployment settings for a target.
+
+\sa{qt6_android_generate_deployment_settings}{qt_android_generate_deployment_settings()}
+*/
+
+/*!
+\page cmake-variable-QT_ANDROID_BUILD_ALL_ABIS.html
+\ingroup cmake-variables-qtcore
+
+\title QT_ANDROID_BUILD_ALL_ABIS
+\target cmake-variable-QT_ANDROID_BUILD_ALL_ABIS
+
+\summary {Enables building multi-ABI packages using the autodetected Qt for Android SDK list.}
+
+\cmakevariablesince 6.3
+\preliminarycmakevariable
+\cmakevariableandroidonly
+
+The option automatically detects available ABIs of Qt for Android and uses them to
+build a package. The automatic detection expects the default directory structure
+supplied by the Qt installer, with the corresponding naming of the directories.
+\include cmake-android-supported-abis.qdocinc
+The typical directory structure looks as below:
+\badcode
+/path/to/Qt/6.x.x
+    android_armv7
+    android_arm64_v8a
+    android_x86
+    android_x86_64
+    ...
+\endcode
+The auto-detected paths can be customized using one of \c{QT_PATH_ANDROID_ABI_<ABI>} variables.
+
+The variable is set to FALSE by default.
+
+\sa{QT_PATH_ANDROID_ABI_<ABI>}
+*/
+
+/*!
+\page cmake-variable-QT_ANDROID_ABIS.html
+\ingroup cmake-variables-qtcore
+
+\title QT_ANDROID_ABIS
+\target cmake-variable-QT_ANDROID_ABIS
+
+\summary {List of ABIs that the project packages are built for.}
+
+\cmakevariablesince 6.3
+\preliminarycmakevariable
+\cmakevariableandroidonly
+
+This variable specifies a list of ABIs to be used to build the project packages.
+\include cmake-android-supported-abis.qdocinc
+Each ABI should have the corresponding Qt for Android either installed or
+user-built. It's possible to specify the path to the Qt for Android ABI using
+the corresponding \c{QT_PATH_ANDROID_ABI_<ABI>} variable.
+
+\note \c{QT_ANDROID_BUILD_ALL_ABIS} has the higher priority and ignores the
+QT_ANDROID_ABIS logic.
+
+\sa{QT_PATH_ANDROID_ABI_<ABI>}, {QT_ANDROID_BUILD_ALL_ABIS}
+*/
+
+/*!
+\page cmake-variable-QT_PATH_ANDROID_ABI.html
+\ingroup cmake-variables-qtcore
+
+\title QT_PATH_ANDROID_ABI_<ABI>
+\target cmake-variable-QT_PATH_ANDROID_ABI_<ABI>
+
+\summary {Set of variables to specify the path to Qt for Android for the corresponding ABI.}
+
+\cmakevariablesince 6.3
+\preliminarycmakevariable
+\cmakevariableandroidonly
+
+Each variable can be used to specify the path to Qt for Android for the corresponding ABI.
+\include cmake-android-supported-abis.qdocinc
+
+\sa{cmake-variable-QT_ANDROID_ABIS}{QT_ANDROID_ABIS}
+*/
+
+/*!
+\page cmake-variable-QT_HOST_PATH.html
+\ingroup cmake-variables-qtcore
+
+\title QT_HOST_PATH
+\target cmake-variable-QT_HOST_PATH
+
+\summary {Location of the host Qt installation when cross-compiling.}
+
+\cmakevariablesince 6.0
+\preliminarycmakevariable
+
+When cross-compiling, this must be set to the install location of Qt for the host
+platform. It is used to locate tools to be run on the host (\l{moc}, \l{rcc},
+\l{androiddeployqt}, and so on).
+*/
+
+/*!
+\page cmake-variable-QT_NO_SET_XCODE_DEVELOPMENT_TEAM_ID.html
+\ingroup cmake-variables-qtcore
+
+\title QT_NO_SET_XCODE_DEVELOPMENT_TEAM_ID
+\target cmake-variable-QT_NO_SET_XCODE_DEVELOPMENT_TEAM_ID
+
+\summary {Disables providing a fallback team ID during target finalization on iOS.}
+
+\cmakevariablesince 6.1
+
+When finalizing an executable target on iOS,
+\l{qt6_finalize_target}{qt_finalize_target()} will populate the target's
+\c XCODE_ATTRIBUTE_DEVELOPMENT_TEAM property if it hasn't been set.
+Set \c QT_NO_SET_XCODE_DEVELOPMENT_TEAM_ID to true if you want to prevent this.
+*/
+
+/*!
+\page cmake-variable-QT_NO_SET_XCODE_BUNDLE_IDENTIFIER.html
+\ingroup cmake-variables-qtcore
+
+\title QT_NO_SET_XCODE_BUNDLE_IDENTIFIER
+\target cmake-variable-QT_NO_SET_XCODE_BUNDLE_IDENTIFIER
+
+\summary {Disables providing a fallback app bundle ID during target finalization on iOS.}
+
+\cmakevariablesince 6.1
+
+When finalizing an executable target on iOS,
+\l{qt6_finalize_target}{qt_finalize_target()} will populate the target's
+\c XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER and
+\c MACOSX_BUNDLE_GUI_IDENTIFIER properties if they haven't been set.
+Set \c QT_NO_SET_XCODE_BUNDLE_IDENTIFIER to true if you want to prevent this.
+*/
+
+/*!
+\page cmake-variable-QT_ENABLE_VERBOSE_DEPLOYMENT.html
+\ingroup cmake-variables-qtcore
+
+\title QT_ENABLE_VERBOSE_DEPLOYMENT
+\target cmake-variable-QT_ENABLE_VERBOSE_DEPLOYMENT
+
+\summary {Enables verbose mode of deployment tools}
+
+\cmakevariablesince 6.3
+\preliminarycmakevariable
+
+Enables verbose mode of the \l androiddeployqt deployment tool when it is called
+internally at build time, usually during target finalization.
+
+This variable also changes the default verbosity of install-time deployment
+scripts for other platforms (see \l{qt_deploy_runtime_dependencies()}), but it
+must be set before the first \c{find_package(Qt6)} call to have that effect.
+*/
+
+/*!
+\page cmake-variable-QT_DEPLOY_SUPPORT.html
+\ingroup cmake-variables-qtcore
+
+\title QT_DEPLOY_SUPPORT
+\target cmake-variable-QT_DEPLOY_SUPPORT
+
+\summary {Name of the file to include for setting up deployment support.}
+
+\cmakevariablesince 6.3
+\preliminarycmakevariable
+\note The value of this variable should never be modified by project code.
+
+This configure-phase variable is set by the Core package. It is intended to be
+used as the first line of any deployment script to ensure access to the
+deployment APIs provided by Qt. Such deployment scripts do not run during
+CMake's configure phase, they are executed during installation or as
+part of a post-build rule.
+
+The following example shows one way the variable would be used when installing
+an application, along with its runtime dependencies:
+
+\include cmake-deploy-runtime-dependencies.qdocinc
+
+\sa qt_deploy_runtime_dependencies(), qt_deploy_qml_imports()
+*/
+
+/*!
+\page cmake-variable-QT_NO_STANDARD_PROJECT_SETUP.html
+\ingroup cmake-variables-qtcore
+
+\title QT_NO_STANDARD_PROJECT_SETUP
+\target cmake-variable-QT_NO_STANDARD_PROJECT_SETUP
+
+\summary {Prevents subsequent calls to qt_standard_project_setup() from making any changes.}
+
+\cmakevariablesince 6.3
+\preliminarycmakevariable
+
+The \l{qt6_standard_project_setup}{qt_standard_project_setup()} command is
+typically called in the top level \c{CMakeLists.txt} file of a project. In some
+scenarios, such projects may be absorbed as a child project of a larger project
+hierarchy. A parent project may want to prevent any child project from applying
+changes to the setup. The parent project can achieve this by setting
+\c{QT_NO_STANDARD_PROJECT_SETUP} to true before bringing in the child project
+via \l{add_subdirectory()}, \l{FetchContent_MakeAvailable()} or other similar
+methods provided by CMake.
+
+\sa {qt6_standard_project_setup}{qt_standard_project_setup()}
+*/

@@ -43,6 +43,7 @@
 #include <QtCore/qlibraryinfo.h>
 #include <QtCore/private/qlocking_p.h>
 #include <QtCore/qstandardpaths.h>
+#include <QtCore/qstringtokenizer.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qcoreapplication.h>
@@ -54,9 +55,8 @@
 
 // We can't use the default macros because this would lead to recursion.
 // Instead let's define our own one that unconditionally logs...
-#define debugMsg QMessageLogger(__FILE__, __LINE__, __FUNCTION__, "qt.core.logging").debug
-#define warnMsg QMessageLogger(__FILE__, __LINE__, __FUNCTION__, "qt.core.logging").warning
-
+#define debugMsg QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, "qt.core.logging").debug
+#define warnMsg QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, "qt.core.logging").warning
 
 QT_BEGIN_NAMESPACE
 
@@ -186,11 +186,10 @@ void QLoggingRule::parse(QStringView pattern)
     \internal
     Parses configuration from \a content.
 */
-void QLoggingSettingsParser::setContent(const QString &content)
+void QLoggingSettingsParser::setContent(QStringView content)
 {
     _rules.clear();
-    const auto lines = QStringView{content}.split(QLatin1Char('\n'));
-    for (const auto &line : lines)
+    for (auto line : qTokenize(content, u'\n'))
         parseNextLine(line);
 }
 
@@ -354,8 +353,11 @@ void QLoggingRegistry::registerCategory(QLoggingCategory *cat, QtMsgType enableF
 {
     const auto locker = qt_scoped_lock(registryMutex);
 
-    if (!categories.contains(cat)) {
-        categories.insert(cat, enableForLevel);
+    const auto oldSize = categories.size();
+    auto &e = categories[cat];
+    if (categories.size() != oldSize) {
+        // new entry
+        e = enableForLevel;
         (*categoryFilter)(cat);
     }
 }
@@ -368,6 +370,20 @@ void QLoggingRegistry::unregisterCategory(QLoggingCategory *cat)
 {
     const auto locker = qt_scoped_lock(registryMutex);
     categories.remove(cat);
+}
+
+/*!
+    \since 6.3
+    \internal
+
+    Registers the environment variable \a environment as the control variable
+    for enabling debugging by default for category \a categoryName. The
+    category name must start with "qt."
+*/
+void QLoggingRegistry::registerEnvironmentOverrideForCategory(QByteArrayView categoryName,
+                                                              QByteArrayView environment)
+{
+    qtCategoryEnvironmentOverrides.insert(categoryName, environment);
 }
 
 /*!
@@ -451,8 +467,16 @@ void QLoggingRegistry::defaultCategoryFilter(QLoggingCategory *cat)
     //   qt.debug=false
     if (const char *categoryName = cat->categoryName()) {
         // == "qt" or startsWith("qt.")
-        if (strcmp(categoryName, "qt") == 0 || strncmp(categoryName, "qt.", 3) == 0)
+        if (strcmp(categoryName, "qt") == 0) {
             debug = false;
+        } else if (strncmp(categoryName, "qt.", 3) == 0) {
+            // may be overridden
+            auto it = reg->qtCategoryEnvironmentOverrides.find(categoryName);
+            if (it == reg->qtCategoryEnvironmentOverrides.end())
+                debug = false;
+            else
+                debug = qEnvironmentVariableIntValue(it.value().data());
+        }
     }
 
     const auto categoryName = QLatin1String(cat->categoryName());

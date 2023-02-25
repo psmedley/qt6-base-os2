@@ -64,7 +64,7 @@ public:
     inline explicit QDBusObjectPath(const QString &path);
     explicit QDBusObjectPath(QString &&p) : m_path(std::move(p)) { doCheck(); }
 
-    void swap(QDBusObjectPath &other) noexcept { qSwap(m_path, other.m_path); }
+    void swap(QDBusObjectPath &other) noexcept { m_path.swap(other.m_path); }
 
     inline void setPath(const QString &path);
 
@@ -119,7 +119,7 @@ public:
     inline explicit QDBusSignature(const QString &signature);
     explicit QDBusSignature(QString &&sig) : m_signature(std::move(sig)) { doCheck(); }
 
-    void swap(QDBusSignature &other) noexcept { qSwap(m_signature, other.m_signature); }
+    void swap(QDBusSignature &other) noexcept { m_signature.swap(other.m_signature); }
 
     inline void setSignature(const QString &signature);
 
@@ -169,7 +169,7 @@ public:
     inline explicit QDBusVariant(const QVariant &variant);
     explicit QDBusVariant(QVariant &&v) noexcept : m_variant(std::move(v)) {}
 
-    void swap(QDBusVariant &other) noexcept { qSwap(m_variant, other.m_variant); }
+    void swap(QDBusVariant &other) noexcept { m_variant.swap(other.m_variant); }
 
     inline void setVariant(const QVariant &variant);
 
@@ -189,9 +189,9 @@ inline bool operator==(const QDBusVariant &v1, const QDBusVariant &v2)
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QDBusVariant)
-Q_DECLARE_METATYPE(QDBusObjectPath)
-Q_DECLARE_METATYPE(QDBusSignature)
+QT_DECL_METATYPE_EXTERN(QDBusVariant, Q_DBUS_EXPORT)
+QT_DECL_METATYPE_EXTERN(QDBusObjectPath, Q_DBUS_EXPORT)
+QT_DECL_METATYPE_EXTERN(QDBusSignature, Q_DBUS_EXPORT)
 
 #endif // QT_NO_DBUS
 #endif

@@ -55,7 +55,7 @@ const char * QWasmScreen::m_canvasResizeObserverCallbackContextPropertyName = "d
 QWasmScreen::QWasmScreen(const emscripten::val &canvas)
     : m_canvas(canvas)
     , m_compositor(new QWasmCompositor(this))
-    , m_eventTranslator(new QWasmEventTranslator(this))
+    , m_eventTranslator(new QWasmEventTranslator())
 {
     updateQScreenAndCanvasRenderSize();
     m_canvas.call<void>("focus");
@@ -216,7 +216,7 @@ void QWasmScreen::updateQScreenAndCanvasRenderSize()
     QPoint position(rect["left"].as<int>() - offset.x(), rect["top"].as<int>() - offset.y());
 
     setGeometry(QRect(position, cssSize.toSize()));
-    m_compositor->redrawWindowContent();
+    m_compositor->requestUpdateAllWindows();
 }
 
 void QWasmScreen::canvasResizeObserverCallback(emscripten::val entries, emscripten::val)

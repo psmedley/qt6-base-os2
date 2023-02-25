@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2018 Intel Corporation.
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -54,8 +54,15 @@ private slots:
 };
 
 tst_QPlugin::tst_QPlugin()
-    : dir(QFINDTESTDATA("plugins"))
 {
+    // On Android the plugins must be located in the APK's libs subdir
+#ifndef Q_OS_ANDROID
+    dir = QFINDTESTDATA("plugins");
+#else
+    const QStringList paths = QCoreApplication::libraryPaths();
+    if (!paths.isEmpty())
+        dir = paths.first();
+#endif
 }
 
 void tst_QPlugin::initTestCase()
@@ -138,11 +145,9 @@ void tst_QPlugin::scanInvalidPlugin_data()
     QTest::addColumn<QString>("errMsg");
 
     // CBOR metadata
-    QByteArray cprefix = "QTMETADATA !1234";
-    cprefix[12] = 0; // current version
-    cprefix[13] = QT_VERSION_MAJOR;
-    cprefix[14] = QT_VERSION_MINOR;
-    cprefix[15] = qPluginArchRequirements();
+    static constexpr QPluginMetaData::MagicHeader header = {};
+    static constexpr qsizetype MagicLen = sizeof(header.magic);
+    QByteArray cprefix(reinterpret_cast<const char *>(&header), sizeof(header));
 
     QByteArray cborValid = [] {
         QCborMap m;
@@ -153,27 +158,27 @@ void tst_QPlugin::scanInvalidPlugin_data()
     }();
     QTest::newRow("cbor-control") << (cprefix + cborValid) << true << "";
 
-    cprefix[12] = 1;
-    QTest::newRow("cbor-major-too-new") << (cprefix + cborValid) << false
-                                        << " Invalid metadata version";
-
-    cprefix[12] = 0;
-    cprefix[13] = QT_VERSION_MAJOR + 1;
+    cprefix[MagicLen + 1] = QT_VERSION_MAJOR + 1;
     QTest::newRow("cbor-major-too-new") << (cprefix + cborValid) << false << "";
 
-    cprefix[13] = QT_VERSION_MAJOR - 1;
+    cprefix[MagicLen + 1] = QT_VERSION_MAJOR - 1;
     QTest::newRow("cbor-major-too-old") << (cprefix + cborValid) << false << "";
 
-    cprefix[13] = QT_VERSION_MAJOR;
-    cprefix[14] = QT_VERSION_MINOR + 1;
+    cprefix[MagicLen + 1] = QT_VERSION_MAJOR;
+    cprefix[MagicLen + 2] = QT_VERSION_MINOR + 1;
     QTest::newRow("cbor-minor-too-new") << (cprefix + cborValid) << false << "";
 
+    cprefix[MagicLen + 2] = QT_VERSION_MINOR;
     QTest::newRow("cbor-invalid") << (cprefix + "\xff") << false
                                   << " Metadata parsing error: Invalid CBOR stream: unexpected 'break' byte";
     QTest::newRow("cbor-not-map1") << (cprefix + "\x01") << false
                                    << " Unexpected metadata contents";
     QTest::newRow("cbor-not-map2") << (cprefix + "\x81\x01") << false
                                    << " Unexpected metadata contents";
+
+    ++cprefix[MagicLen + 0];
+    QTest::newRow("cbor-major-too-new") << (cprefix + cborValid) << false
+                                        << " Invalid metadata version";
 }
 
 static const char invalidPluginSignature[] = "qplugin testfile";
@@ -235,6 +240,11 @@ void tst_QPlugin::scanInvalidPlugin()
         memcpy(data + offset, metadata.constData(), metadata.size());
         memset(data + offset + metadata.size(), 0, 512 - metadata.size());
     }
+
+#if defined(Q_OS_QNX)
+    // On QNX plugin access is still too early
+    QTest::qSleep(1000);
+#endif
 
     // now try to load this
     QFETCH(bool, loads);

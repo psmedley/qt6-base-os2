@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -47,64 +47,64 @@ private slots:
     void test2();
     void test3_data();
     void test3();
+
+    void multiFail();
+private:
+    void logNames(const char *caller);
+    void table_data();
 };
 
+void tst_Subtest::logNames(const char *caller)
+{
+    auto orNull = [](const char *s) { return s ? s : "(null)"; };
+    qDebug("%s %s %s", caller, orNull(QTest::currentTestFunction()),
+           orNull(QTest::currentDataTag()));
+}
 
 void tst_Subtest::initTestCase()
 {
-    qDebug() << "initTestCase"
-             << (QTest::currentTestFunction() ? QTest::currentTestFunction() : "(null)")
-             << (QTest::currentDataTag() ? QTest::currentDataTag() : "(null)");
+    logNames("initTestCase");
 }
 
 void tst_Subtest::cleanupTestCase()
 {
-    qDebug() << "cleanupTestCase"
-             << (QTest::currentTestFunction() ? QTest::currentTestFunction() : "(null)")
-             << (QTest::currentDataTag() ? QTest::currentDataTag() : "(null)");
+    logNames("cleanupTestCase");
 }
 
 void tst_Subtest::init()
 {
-    qDebug() << "init"
-             << (QTest::currentTestFunction() ? QTest::currentTestFunction() : "(null)")
-             << (QTest::currentDataTag() ? QTest::currentDataTag() : "(null)");
+    logNames("init");
 }
 
 void tst_Subtest::cleanup()
 {
-    qDebug() << "cleanup"
-             << (QTest::currentTestFunction() ? QTest::currentTestFunction() : "(null)")
-             << (QTest::currentDataTag() ? QTest::currentDataTag() : "(null)");
+    logNames("cleanup");
 }
 
 void tst_Subtest::test1()
 {
-    qDebug() << "test1"
-             << (QTest::currentTestFunction() ? QTest::currentTestFunction() : "(null)")
-             << (QTest::currentDataTag() ? QTest::currentDataTag() : "(null)");
+    logNames("test1");
 }
 
-void tst_Subtest::test2_data()
+void tst_Subtest::table_data()
 {
-    qDebug() << "test2_data"
-             << (QTest::currentTestFunction() ? QTest::currentTestFunction() : "(null)")
-             << (QTest::currentDataTag() ? QTest::currentDataTag() : "(null)");
-
     QTest::addColumn<QString>("str");
 
     QTest::newRow("data0") << QString("hello0");
     QTest::newRow("data1") << QString("hello1");
     QTest::newRow("data2") << QString("hello2");
+}
 
+void tst_Subtest::test2_data()
+{
+    logNames("test2_data");
+    table_data();
     qDebug() << "test2_data end";
 }
 
 void tst_Subtest::test2()
 {
-    qDebug() << "test2"
-             << (QTest::currentTestFunction() ? QTest::currentTestFunction() : "(null)")
-             << (QTest::currentDataTag() ? QTest::currentDataTag() : "(null)");
+    logNames("test2");
 
     static int count = 0;
 
@@ -116,31 +116,31 @@ void tst_Subtest::test2()
 
 void tst_Subtest::test3_data()
 {
-    qDebug() << "test3_data"
-             << (QTest::currentTestFunction() ? QTest::currentTestFunction() : "(null)")
-             << (QTest::currentDataTag() ? QTest::currentDataTag() : "(null)");
-
-    QTest::addColumn<QString>("str");
-
-    QTest::newRow("data0") << QString("hello0");
-    QTest::newRow("data1") << QString("hello1");
-    QTest::newRow("data2") << QString("hello2");
-
+    logNames("test3_data");
+    table_data();
     qDebug() << "test3_data end";
 }
 
 void tst_Subtest::test3()
 {
-    qDebug() << "test2"
-             << (QTest::currentTestFunction() ? QTest::currentTestFunction() : "(null)")
-             << (QTest::currentDataTag() ? QTest::currentDataTag() : "(null)");
+    logNames("test3");
 
     QFETCH(QString, str);
 
     // second and third time we call this it should FAIL
     QCOMPARE(str, QString("hello0"));
 
-    qDebug() << "test2 end";
+    qDebug() << "test3 end";
+}
+
+void tst_Subtest::multiFail()
+{
+    // Simulates tests which call a shared function that does common checks, or
+    // that do checks in code run asynchronously from a messae loop.
+    for (int i = 0; i < 10; ++i)
+        []() { QFAIL("This failure message should be repeated ten times"); }();
+    // FIXME QTBUG-95661: it gets counted as eleven failures, of course.
+    QFAIL("But this test should only contribute one to the failure count");
 }
 
 QTEST_MAIN(tst_Subtest)

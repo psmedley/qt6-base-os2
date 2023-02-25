@@ -154,7 +154,7 @@ QAndroidBinder QAndroidParcelPrivate::readBinder() const
 /*!
     \class QAndroidParcel
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \brief Wraps the most important methods of Android Parcel class.
 
     The QAndroidParcel is a convenience class that wraps the most important
@@ -270,7 +270,7 @@ QJniObject QAndroidParcel::handle() const
 /*!
     \class QAndroidBinder
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \brief Wraps the most important methods of Android Binder class.
 
     The QAndroidBinder is a convenience class that wraps the most important
@@ -407,7 +407,7 @@ QJniObject QAndroidBinder::handle() const
 /*!
     \class QAndroidServiceConnection
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \brief Wraps the most important methods of Android ServiceConnection class.
 
     The QAndroidServiceConnection is a convenience abstract class which wraps the
@@ -502,19 +502,22 @@ public:
 
     int globalRequestCode(int localRequestCode) const
     {
-        if (!localToGlobalRequestCode.contains(localRequestCode)) {
+        const auto oldSize = localToGlobalRequestCode.size();
+        auto &e = localToGlobalRequestCode[localRequestCode];
+        if (localToGlobalRequestCode.size() != oldSize) {
+            // new entry, populate:
             int globalRequestCode = uniqueActivityRequestCode();
-            localToGlobalRequestCode[localRequestCode] = globalRequestCode;
+            e = globalRequestCode;
             globalToLocalRequestCode[globalRequestCode] = localRequestCode;
         }
-        return localToGlobalRequestCode.value(localRequestCode);
+        return e;
     }
 
     bool handleActivityResult(jint requestCode, jint resultCode, jobject data)
     {
-        if (globalToLocalRequestCode.contains(requestCode)) {
-            q->handleActivityResult(globalToLocalRequestCode.value(requestCode),
-                                    resultCode, QJniObject(data));
+        const auto it = std::as_const(globalToLocalRequestCode).find(requestCode);
+        if (it != globalToLocalRequestCode.cend()) {
+            q->handleActivityResult(*it, resultCode, QJniObject(data));
             return true;
         }
 
@@ -530,7 +533,7 @@ public:
 /*!
   \class QAndroidActivityResultReceiver
   \preliminary
-  \inmodule QtCore
+  \inmodule QtCorePrivate
   \since 6.2
   \brief Interface used for callbacks from onActivityResult() in the main Android activity.
 
@@ -625,7 +628,7 @@ public:
 /*!
     \class QAndroidService
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \brief Wraps the most important methods of Android Service class.
 
     The QAndroidService is a convenience class that wraps the most important
@@ -694,7 +697,7 @@ QAndroidBinder* QAndroidService::onBind(const QAndroidIntent &/*intent*/)
 /*!
     \class QAndroidIntent
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \brief Wraps the most important methods of Android Intent class.
 
     The QAndroidIntent is a convenience class that wraps the most important
@@ -821,10 +824,11 @@ QJniObject QAndroidIntent::handle() const
 /*!
     \namespace QtAndroidPrivate
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \since 6.2
-    \brief The QtAndroid namespace provides miscellaneous functions to aid Android development.
-    \inheaderfile QtAndroid
+    \brief The QtAndroidPrivate namespace provides miscellaneous functions
+           to aid Android development.
+    \inheaderfile QtCore/private/qandroidextras_p.h
 */
 
 /*!
@@ -1227,7 +1231,7 @@ QtAndroidPrivate::requestPermission(QtAndroidPrivate::PermissionType permission)
     promise->start();
     const auto nativePermissions = nativeStringsFromPermission(permission);
 
-    if (nativePermissions.size() > 0) {
+    if (nativePermissions.size() > 0 && QtAndroidPrivate::acquireAndroidDeadlockProtector()) {
         requestPermissionsInternal(nativePermissions).then(
                     [promise, permission](QFuture<QtAndroidPrivate::PermissionResult> future) {
             auto AuthorizedCount = future.results().count(QtAndroidPrivate::Authorized);
@@ -1239,6 +1243,7 @@ QtAndroidPrivate::requestPermission(QtAndroidPrivate::PermissionType permission)
             } else {
                 promise->addResult(QtAndroidPrivate::Denied, 0);
             }
+            QtAndroidPrivate::releaseAndroidDeadlockProtector();
             promise->finish();
         });
 

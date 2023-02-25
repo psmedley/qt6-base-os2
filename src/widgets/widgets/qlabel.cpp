@@ -183,8 +183,7 @@ QLabelPrivate::~QLabelPrivate()
     was a button (inheriting from QAbstractButton), triggering the
     mnemonic would emulate a button click.
 
-    \sa QLineEdit, QTextEdit, QPixmap, QMovie,
-        {fowler}{GUI Design Handbook: Label}
+    \sa QLineEdit, QTextEdit, QPixmap, QMovie
 */
 
 #ifndef QT_NO_PICTURE
@@ -378,9 +377,6 @@ void QLabel::setPixmap(const QPixmap &pixmap)
         d->clearContents();
         d->pixmap = new QPixmap(pixmap);
     }
-
-    if (d->pixmap->depth() == 1 && !d->pixmap->mask())
-        d->pixmap->setMask(*((QBitmap *)d->pixmap));
 
     d->updateLabel();
 }
@@ -604,7 +600,7 @@ QSize QLabelPrivate::sizeForWidth(int w) const
 
     if (pixmap && !pixmap->isNull()) {
         br = pixmap->rect();
-        br.setSize(br.size() / pixmap->devicePixelRatio());
+        br.setSize(pixmap->deviceIndependentSize().toSize());
 #ifndef QT_NO_PICTURE
     } else if (picture && !picture->isNull()) {
         br = picture->boundingRect();
@@ -612,7 +608,7 @@ QSize QLabelPrivate::sizeForWidth(int w) const
 #if QT_CONFIG(movie)
     } else if (movie && !movie->currentPixmap().isNull()) {
         br = movie->currentPixmap().rect();
-        br.setSize(br.size() / movie->currentPixmap().devicePixelRatio());
+        br.setSize(movie->currentPixmap().deviceIndependentSize().toSize());
 #endif
     } else if (isTextLabel) {
         int align = QStyle::visualAlignment(textDirection(), QFlag(this->align));
@@ -1129,8 +1125,10 @@ void QLabel::paintEvent(QPaintEvent *)
 #endif
     if (d->pixmap && !d->pixmap->isNull()) {
         QPixmap pix;
-        if (d->scaledcontents) {
-            QSize scaledSize = cr.size() * devicePixelRatio();
+        const qreal dpr = devicePixelRatio();
+        if (d->scaledcontents || dpr != d->pixmap->devicePixelRatio()) {
+            QSize scaledSize = d->scaledcontents ? (cr.size() * dpr)
+                               : (d->pixmap->size() * (dpr / d->pixmap->devicePixelRatio()));
             if (!d->scaledpixmap || d->scaledpixmap->size() != scaledSize) {
                 if (!d->cachedimage)
                     d->cachedimage = new QImage(d->pixmap->toImage());
@@ -1139,7 +1137,7 @@ void QLabel::paintEvent(QPaintEvent *)
                     d->cachedimage->scaled(scaledSize,
                                            Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
                 d->scaledpixmap = new QPixmap(QPixmap::fromImage(std::move(scaledImage)));
-                d->scaledpixmap->setDevicePixelRatio(devicePixelRatio());
+                d->scaledpixmap->setDevicePixelRatio(dpr);
             }
             pix = *d->scaledpixmap;
         } else

@@ -321,7 +321,7 @@ static const struct QTextHtmlEntity { const char name[9]; char16_t code; } entit
 };
 static_assert(MAX_ENTITY == sizeof entities / sizeof *entities);
 
-#if defined(Q_CC_MSVC) && _MSC_VER < 1600
+#if defined(Q_CC_MSVC_ONLY) && _MSC_VER < 1600
 bool operator<(const QTextHtmlEntity &entity1, const QTextHtmlEntity &entity2)
 {
     return QLatin1String(entity1.name) < QLatin1String(entity2.name);
@@ -1453,6 +1453,8 @@ void QTextHtmlParserNode::applyCssDeclarations(const QList<QCss::Declaration> &d
             applyBackgroundImage(bgImage, resourceProvider);
         } else if (bgBrush.style() != Qt::NoBrush) {
             charFormat.setBackground(bgBrush);
+            if (id == Html_hr)
+                blockFormat.setProperty(QTextFormat::BackgroundBrush, bgBrush);
         }
     }
 }
@@ -2163,7 +2165,7 @@ QList<QCss::Declaration> QTextHtmlParser::declarationsForNode(int node) const
     for (int i = 0; i < inlineStyleSheets.count(); ++i, ++idx)
         selector.styleSheets[idx] = inlineStyleSheets.at(i);
 
-    selector.medium = QLatin1String("screen");
+    selector.medium = resourceProvider ? resourceProvider->metaInformation(QTextDocument::CssMedia) : QLatin1String("screen");
 
     QCss::StyleSelector::NodePtr n;
     n.id = node;

@@ -60,8 +60,8 @@
 Q_FORWARD_DECLARE_CF_TYPE(CTFontDescriptor);
 Q_FORWARD_DECLARE_CF_TYPE(CTFont);
 
-Q_DECLARE_METATYPE(QCFType<CGFontRef>);
-Q_DECLARE_METATYPE(QCFType<CFURLRef>);
+QT_DECL_METATYPE_EXTERN_TAGGED(QCFType<CGFontRef>, QCFType_CGFontRef, Q_GUI_EXPORT)
+QT_DECL_METATYPE_EXTERN_TAGGED(QCFType<CFURLRef>, QCFType_CFURLRef, Q_GUI_EXPORT)
 
 QT_BEGIN_NAMESPACE
 
@@ -83,20 +83,17 @@ public:
     bool fontsAlwaysScalable() const override;
     QList<int> standardSizes() const override;
 
-    // For iOS and OS X platform themes
+    // For iOS and macOS platform themes
     QFont *themeFont(QPlatformTheme::Font) const;
-    const QHash<QPlatformTheme::Font, QFont *> &themeFonts() const;
-
-protected:
-    mutable QSet<CTFontDescriptorRef> m_systemFontDescriptors;
 
 private:
+    void populateThemeFonts();
     void populateFromDescriptor(CTFontDescriptorRef font, const QString &familyName = QString(), QFontDatabasePrivate::ApplicationFont *applicationFont = nullptr);
     static CFArrayRef fallbacksForFamily(const QString &family);
 
-    mutable QString defaultFontName;
+    QHash<QPlatformTheme::Font, QFont *> m_themeFonts;
+    QHash<QString, QList<QCFType<CTFontDescriptorRef>>> m_systemFontDescriptors;
 
-    mutable QHash<QPlatformTheme::Font, QFont *> m_themeFonts;
     bool m_hasPopulatedAliases;
 };
 

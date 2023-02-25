@@ -205,10 +205,14 @@ static QJsonValue convertExtendedTypeToJson(QCborContainerPrivate *d)
 
     switch (tag) {
     case qint64(QCborKnownTags::Url):
-        // use the fullly-encoded URL form
+#ifdef QT_BOOTSTRAPPED
+        break;
+#else
+        // use the fully-encoded URL form
         if (d->elements.at(1).type == QCborValue::String)
             return QUrl::fromEncoded(d->byteData(1)->asByteArrayView()).toString(QUrl::FullyEncoded);
         Q_FALLTHROUGH();
+#endif
 
     case qint64(QCborKnownTags::DateTimeString):
     case qint64(QCborKnownTags::ExpectedBase64url):
@@ -876,6 +880,18 @@ QCborArray QCborArray::fromJsonArray(const QJsonArray &array)
 }
 
 /*!
+    \overload
+    \since 6.3
+ */
+QCborArray QCborArray::fromJsonArray(QJsonArray &&array) noexcept
+{
+    QCborArray result;
+    result.d = std::exchange(array.a, {});
+    return result;
+
+}
+
+/*!
     Converts the CBOR values to QVariant using QCborValue::toVariant() and
     "stringifies" all the CBOR keys in this map, returning the QVariantMap that
     results from that association list.
@@ -986,6 +1002,17 @@ QCborMap QCborMap::fromJsonObject(const QJsonObject &obj)
 {
     QCborMap result;
     result.d = obj.o;
+    return result;
+}
+
+/*!
+    \overload
+    \since 6.3
+ */
+QCborMap QCborMap::fromJsonObject(QJsonObject &&obj) noexcept
+{
+    QCborMap result;
+    result.d = std::exchange(obj.o, {});
     return result;
 }
 

@@ -42,7 +42,11 @@
 #include "private/qsimd_p.h"
 #include <cmath> // for fpclassify()'s return values
 
+#include <QtCore/qdatastream.h>
+
 QT_BEGIN_NAMESPACE
+
+QT_IMPL_METATYPE_EXTERN(qfloat16)
 
 /*!
     \class qfloat16
@@ -189,25 +193,44 @@ int qfloat16::fpClassify() const noexcept
     exactness is stronger the smaller the numbers are.
  */
 
-#if QT_COMPILER_SUPPORTS(F16C)
+#if QT_COMPILER_SUPPORTS_HERE(F16C)
 static inline bool hasFastF16()
 {
-    // All processors with F16C also support AVX, but YMM registers
-    // might not be supported by the OS, or they might be disabled.
-    return qCpuHasFeature(F16C) && qCpuHasFeature(AVX);
+    // qsimd.cpp:detectProcessorFeatures() turns off this feature if AVX
+    // state-saving is not enabled by the OS
+    return qCpuHasFeature(F16C);
 }
 
-extern "C" {
-#ifdef QFLOAT16_INCLUDE_FAST
-#  define f16cextern    static
-#else
-#  define f16cextern    extern
-#endif
+QT_FUNCTION_TARGET(F16C)
+static void qFloatToFloat16_fast(quint16 *out, const float *in, qsizetype len) noexcept
+{
+    qsizetype i = 0;
+    int epilog_i;
+    for (; i < len - 7; i += 8)
+        _mm_storeu_si128((__m128i *)(out + i), _mm256_cvtps_ph(_mm256_loadu_ps(in + i), 0));
+    if (i < len - 3) {
+        _mm_storel_epi64((__m128i *)(out + i), _mm_cvtps_ph(_mm_loadu_ps(in + i), 0));
+        i += 4;
+    }
+    // Inlining "qfloat16::qfloat16(float f)":
+    for (epilog_i = 0; i < len && epilog_i < 3; ++i, ++epilog_i)
+        out[i] = _mm_extract_epi16(_mm_cvtps_ph(_mm_set_ss(in[i]), 0), 0);
+}
 
-f16cextern void qFloatToFloat16_fast(quint16 *out, const float *in, qsizetype len) noexcept;
-f16cextern void qFloatFromFloat16_fast(float *out, const quint16 *in, qsizetype len) noexcept;
-
-#undef f16cextern
+QT_FUNCTION_TARGET(F16C)
+static void qFloatFromFloat16_fast(float *out, const quint16 *in, qsizetype len) noexcept
+{
+    qsizetype i = 0;
+    int epilog_i;
+    for (; i < len - 7; i += 8)
+        _mm256_storeu_ps(out + i, _mm256_cvtph_ps(_mm_loadu_si128((const __m128i *)(in + i))));
+    if (i < len - 3) {
+        _mm_storeu_ps(out + i, _mm_cvtph_ps(_mm_loadl_epi64((const __m128i *)(in + i))));
+        i += 4;
+    }
+    // Inlining "qfloat16::operator float()":
+    for (epilog_i = 0; i < len && epilog_i < 3; ++i, ++epilog_i)
+        out[i] = _mm_cvtss_f32(_mm_cvtph_ps(_mm_cvtsi32_si128(in[i])));
 }
 
 #elif defined(__ARM_FP16_FORMAT_IEEE) && defined(__ARM_NEON__) && (__ARM_FP & 2)
@@ -289,9 +312,41 @@ Q_CORE_EXPORT void qFloatFromFloat16(float *out, const qfloat16 *in, qsizetype l
         out[i] = float(in[i]);
 }
 
+#ifndef QT_NO_DATASTREAM
+/*!
+    \fn qfloat16::operator<<(QDataStream &ds, qfloat16 f)
+    \relates QDataStream
+    \since 5.9
+
+    Writes a floating point number, \a f, to the stream \a ds using
+    the standard IEEE 754 format. Returns a reference to the stream.
+
+    \note In Qt versions prior to 6.3, this was a member function on
+    QDataStream.
+*/
+QDataStream &operator<<(QDataStream &ds, qfloat16 f)
+{
+    return ds << f.b16;
+}
+
+/*!
+    \fn qfloat16::operator>>(QDataStream &ds, qfloat16 &f)
+    \relates QDataStream
+    \since 5.9
+
+    Reads a floating point number from the stream \a ds into \a f,
+    using the standard IEEE 754 format. Returns a reference to the
+    stream.
+
+    \note In Qt versions prior to 6.3, this was a member function on
+    QDataStream.
+*/
+QDataStream &operator>>(QDataStream &ds, qfloat16 &f)
+{
+    return ds >> f.b16;
+}
+#endif
+
 QT_END_NAMESPACE
 
 #include "qfloat16tables.cpp"
-#ifdef QFLOAT16_INCLUDE_FAST
-#  include "qfloat16_f16c.c"
-#endif

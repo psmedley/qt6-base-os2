@@ -189,7 +189,7 @@ public:
         {
 
             iterator r = *this;
-            i++;
+            ++*this;
             return r;
         }
 
@@ -202,7 +202,7 @@ public:
         iterator operator--(int)
         {
             iterator r = *this;
-            i--;
+            --*this;
             return r;
         }
 
@@ -326,7 +326,7 @@ public:
         {
 
             const_iterator r = *this;
-            i++;
+            ++*this;
             return r;
         }
 
@@ -339,7 +339,7 @@ public:
         const_iterator operator--(int)
         {
             const_iterator r = *this;
-            i--;
+            --*this;
             return r;
         }
 
@@ -417,7 +417,7 @@ private:
     struct is_marked_transparent_type : std::false_type { };
 
     template <class X>
-    struct is_marked_transparent_type<X, typename X::is_transparent> : std::true_type { };
+    struct is_marked_transparent_type<X, std::void_t<typename X::is_transparent>> : std::true_type { };
 
     template <class X>
     using is_marked_transparent = typename std::enable_if<
@@ -607,12 +607,13 @@ public:
 
     bool remove(const Key &key)
     {
-        auto it = binary_find(key);
-        if (it != end()) {
-            erase(it);
-            return true;
-        }
-        return false;
+        return do_remove(find(key));
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    bool remove(const X &key)
+    {
+        return do_remove(find(key));
     }
 
     iterator erase(iterator it)
@@ -623,50 +624,60 @@ public:
 
     T take(const Key &key)
     {
-        auto it = binary_find(key);
-        if (it != end()) {
-            T result = std::move(it.value());
-            erase(it);
-            return result;
-        }
-        return {};
+        return do_take(find(key));
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    T take(const X &key)
+    {
+        return do_take(find(key));
     }
 
     bool contains(const Key &key) const
     {
-        return binary_find(key) != end();
+        return find(key) != end();
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    bool contains(const X &key) const
+    {
+        return find(key) != end();
     }
 
     T value(const Key &key, const T &defaultValue) const
     {
-        auto it = binary_find(key);
+        auto it = find(key);
+        return it == end() ? defaultValue : it.value();
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    T value(const X &key, const T &defaultValue) const
+    {
+        auto it = find(key);
         return it == end() ? defaultValue : it.value();
     }
 
     T value(const Key &key) const
     {
-        auto it = binary_find(key);
+        auto it = find(key);
+        return it == end() ? T() : it.value();
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    T value(const X &key) const
+    {
+        auto it = find(key);
         return it == end() ? T() : it.value();
     }
 
     T &operator[](const Key &key)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.keys.insert(toKeysIterator(it), key);
-            return *c.values.insert(toValuesIterator(it), T());
-        }
-        return it.value();
+        return try_emplace(key).first.value();
     }
 
     T &operator[](Key &&key)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.keys.insert(toKeysIterator(it), key);
-            return *c.values.insert(toValuesIterator(it), T());
-        }
-        return it.value();
+        return try_emplace(std::move(key)).first.value();
     }
 
     T operator[](const Key &key) const
@@ -676,51 +687,22 @@ public:
 
     std::pair<iterator, bool> insert(const Key &key, const T &value)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.values.insert(toValuesIterator(it), value);
-            auto k = c.keys.insert(toKeysIterator(it), key);
-            return { fromKeysIterator(k), true };
-        } else {
-            it.value() = value;
-            return {it, false};
-        }
+        return insert_or_assign(key, value);
     }
 
     std::pair<iterator, bool> insert(Key &&key, const T &value)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.values.insert(toValuesIterator(it), value);
-            return { fromKeysIterator(c.keys.insert(toKeysIterator(it), std::move(key))), true };
-        } else {
-            *toValuesIterator(it) = value;
-            return {it, false};
-        }
+        return insert_or_assign(std::move(key), value);
     }
 
     std::pair<iterator, bool> insert(const Key &key, T &&value)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.values.insert(toValuesIterator(it), std::move(value));
-            return { fromKeysIterator(c.keys.insert(toKeysIterator(it), key)), true };
-        } else {
-            *toValuesIterator(it) = std::move(value);
-            return {it, false};
-        }
+        return insert_or_assign(key, std::move(value));
     }
 
     std::pair<iterator, bool> insert(Key &&key, T &&value)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.values.insert(toValuesIterator(it), std::move(value));
-            return { fromKeysIterator(c.keys.insert(toKeysIterator(it), std::move(key))), true };
-        } else {
-            *toValuesIterator(it) = std::move(value);
-            return {it, false};
-        }
+        return insert_or_assign(std::move(key), std::move(value));
     }
 
     template <typename...Args>
@@ -838,14 +820,38 @@ public:
         return fromKeysIterator(std::lower_bound(c.keys.begin(), c.keys.end(), key, key_comp()));
     }
 
-    iterator find(const key_type &k)
+    iterator find(const Key &key)
     {
-        return binary_find(k);
+        return { &c, std::as_const(*this).find(key).i };
     }
 
-    const_iterator find(const key_type &k) const
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    iterator find(const X &key)
     {
-        return binary_find(k);
+        return { &c, std::as_const(*this).find(key).i };
+    }
+
+    const_iterator find(const Key &key) const
+    {
+        auto it = lower_bound(key);
+        if (it != end()) {
+            if (!key_compare::operator()(key, it.key()))
+                return it;
+            it = end();
+        }
+        return it;
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    const_iterator find(const X &key) const
+    {
+        auto it = lower_bound(key);
+        if (it != end()) {
+            if (!key_compare::operator()(key, it.key()))
+                return it;
+            it = end();
+        }
+        return it;
     }
 
     key_compare key_comp() const noexcept
@@ -859,6 +865,25 @@ public:
     }
 
 private:
+    bool do_remove(iterator it)
+    {
+        if (it != end()) {
+            erase(it);
+            return true;
+        }
+        return false;
+    }
+
+    T do_take(iterator it)
+    {
+        if (it != end()) {
+            T result = std::move(it.value());
+            erase(it);
+            return result;
+        }
+        return {};
+    }
+
     template <class InputIt, is_compatible_iterator<InputIt> = nullptr>
     void initWithRange(InputIt first, InputIt last)
     {
@@ -936,22 +961,6 @@ private:
         std::inplace_merge(p.begin(), p.begin() + s, p.end(), IndexedKeyComparator(this));
         applyPermutation(p);
         makeUnique();
-    }
-
-    iterator binary_find(const Key &key)
-    {
-        return { &c, std::as_const(*this).binary_find(key).i };
-    }
-
-    const_iterator binary_find(const Key &key) const
-    {
-        auto it = lower_bound(key);
-        if (it != end()) {
-            if (!key_compare::operator()(key, it.key()))
-                return it;
-            it = end();
-        }
-        return it;
     }
 
     void ensureOrderedUnique()

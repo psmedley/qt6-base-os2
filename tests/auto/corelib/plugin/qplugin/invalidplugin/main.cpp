@@ -28,6 +28,7 @@
 
 #include <qplugin.h>
 
+// be careful when updating to V2, the header is different on ELF systems
 QT_PLUGIN_METADATA_SECTION
 static const char pluginMetaData[512] = {
     'q', 'p', 'l', 'u', 'g', 'i', 'n', ' ',

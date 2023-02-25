@@ -146,16 +146,39 @@ bool QDialogPrivate::canBeNativeDialog() const
 /*!
     \internal
 
-    Properly hides dialog and sets the \a resultCode.
+    Properly closes dialog and sets the \a resultCode.
  */
-void QDialogPrivate::hide(int resultCode)
+void QDialogPrivate::close(int resultCode)
 {
     Q_Q(QDialog);
 
     q->setResult(resultCode);
-    q->hide();
 
-    close_helper(QWidgetPrivate::CloseNoEvent);
+    if (!data.is_closing) {
+        // Until Qt 6.3 we didn't close dialogs, so they didn't receive a QCloseEvent.
+        // It is likely that subclasses implement closeEvent and handle them as rejection
+        // (like QMessageBox and QProgressDialog do), so eat those events.
+        struct CloseEventEater : QObject
+        {
+            using QObject::QObject;
+        protected:
+            bool eventFilter(QObject *o, QEvent *e) override
+            {
+                if (e->type() == QEvent::Close)
+                    return true;
+                return QObject::eventFilter(o, e);
+            }
+        } closeEventEater;
+        q->installEventFilter(&closeEventEater);
+        QWidgetPrivate::close();
+    } else {
+        // If the close was initiated outside of QDialog we will end up
+        // here via QDialog::closeEvent calling reject(), in which case
+        // we need to hide the dialog to ensure QDialog::closeEvent does
+        // not ignore the close event. FIXME: Why is QDialog doing this?
+        q->hide();
+    }
+
     resetModalitySetByOpen();
 }
 
@@ -357,8 +380,7 @@ void QDialogPrivate::deletePlatformHelper()
 
     \snippet dialogs/dialogs.cpp 0
 
-    \sa QDialogButtonBox, QTabWidget, QWidget, QProgressDialog,
-        {fowler}{GUI Design Handbook: Dialogs, Standard}, {Extension Example},
+    \sa QDialogButtonBox, QTabWidget, QWidget, QProgressDialog, {Extension Example},
         {Standard Dialogs Example}
 */
 
@@ -632,7 +654,7 @@ int QDialog::exec()
 void QDialog::done(int r)
 {
     Q_D(QDialog);
-    d->hide(r);
+    d->close(r);
     d->finalize(r, r);
 }
 

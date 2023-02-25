@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -38,7 +38,7 @@
 #include <QtTest/private/qtesthelpers_p.h>
 #ifdef Q_OS_WIN
 # include <shlwapi.h>
-# include <windows.h>
+# include <qt_windows.h>
 #endif
 #ifdef Q_OS_UNIX // for geteuid()
 # include <sys/types.h>
@@ -316,7 +316,7 @@ void tst_QTemporaryDir::nonWritableCurrentDir()
 {
 #ifdef Q_OS_UNIX
 
-#  if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#  ifdef Q_OS_ANDROID
     const char nonWritableDir[] = "/data";
 #  else
     const char nonWritableDir[] = "/home";

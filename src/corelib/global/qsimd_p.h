@@ -340,7 +340,7 @@ enum CPUFeatures {
     QSimdInitialized        = 1
 };
 
-static const quint64 qCompilerCpuFeatures = 0
+static const uint64_t qCompilerCpuFeatures = 0
 #if defined __ARM_NEON__
         | CpuFeatureNEON
 #endif
@@ -390,6 +390,50 @@ static inline quint64 qCpuFeatures()
 
 #define qCpuHasFeature(feature)     (((qCompilerCpuFeatures & CpuFeature ## feature) == CpuFeature ## feature) \
                                      || ((qCpuFeatures() & CpuFeature ## feature) == CpuFeature ## feature))
+
+/*
+    Small wrapper around x86's PAUSE and ARM's YIELD instructions.
+
+    This is completely different from QThread::yieldCurrentThread(), which is
+    an OS-level operation that takes the whole thread off the CPU.
+
+    This is just preventing one SMT thread from filling a core's pipeline with
+    speculated further loop iterations (which need to be expensively flushed on
+    final success) when it could just give those pipeline slots to a second SMT
+    thread that can do something useful with the core, such as unblocking this
+    SMT thread :)
+
+    So, instead of
+
+        while (!condition)
+            ;
+
+    it's better to use
+
+        while (!condition)
+            qYieldCpu();
+*/
+static inline void qYieldCpu()
+{
+#if defined(Q_PROCESSOR_X86)
+    _mm_pause();
+#elif defined(Q_PROCESSOR_ARM) && Q_PROCESSOR_ARM >= 7 /* yield was added in ARMv7 */
+#  if __has_builtin(__builtin_arm_yield) /* e.g. Clang */
+    __builtin_arm_yield();
+#  elif defined(Q_OS_INTEGRITY) || \
+        (defined(Q_CC_GNU) && !defined(Q_CC_CLANG))
+    /*
+       - Integrity is missing the arm_acle.h header
+       - GCC doesn't have __yield() in arm_acle.h
+         https://stackoverflow.com/a/70076751/134841
+         https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105416
+    */
+    asm volatile("yield"); /* this works everywhere */
+#  else
+    __yield(); /* this is what should work everywhere */
+#  endif
+#endif
+}
 
 inline bool qHasHwrng()
 {

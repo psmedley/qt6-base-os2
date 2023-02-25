@@ -103,16 +103,18 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
-    \fn QByteArray QByteArrayList::join() const
-
-    Joins all the byte arrays into a single byte array.
-*/
-
-/*!
     \fn QByteArray QByteArrayList::join(const QByteArray &separator) const
 
     Joins all the byte arrays into a single byte array with each
     element separated by the given \a separator.
+*/
+
+/*!
+    \fn QByteArray QByteArrayList::join(QByteArrayView separator) const
+    \since 6.3
+
+    Joins all the byte arrays into a single byte array with each
+    element separated by the given \a separator, if any.
 */
 
 /*!
@@ -136,7 +138,7 @@ static qsizetype QByteArrayList_joinedSize(const QByteArrayList *that, qsizetype
     return totalLength;
 }
 
-QByteArray QtPrivate::QByteArrayList_join(const QByteArrayList *that, const char *sep, int seplen)
+QByteArray QtPrivate::QByteArrayList_join(const QByteArrayList *that, const char *sep, qsizetype seplen)
 {
     QByteArray res;
     if (const qsizetype joinedSize = QByteArrayList_joinedSize(that, seplen))

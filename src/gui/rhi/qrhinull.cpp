@@ -162,6 +162,8 @@ int QRhiNull::resourceLimit(QRhi::ResourceLimit limit) const
         return 0;
     case QRhi::MaxThreadGroupZ:
         return 0;
+    case QRhi::TextureArraySizeMax:
+        return 2048;
     case QRhi::MaxUniformBufferRange:
         return 65536;
     default:
@@ -221,10 +223,10 @@ QRhiRenderBuffer *QRhiNull::createRenderBuffer(QRhiRenderBuffer::Type type, cons
 }
 
 QRhiTexture *QRhiNull::createTexture(QRhiTexture::Format format,
-                                     const QSize &pixelSize, int depth,
+                                     const QSize &pixelSize, int depth, int arraySize,
                                      int sampleCount, QRhiTexture::Flags flags)
 {
-    return new QNullTexture(this, format, pixelSize, depth, sampleCount, flags);
+    return new QNullTexture(this, format, pixelSize, depth, arraySize, sampleCount, flags);
 }
 
 QRhiSampler *QRhiNull::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
@@ -551,12 +553,18 @@ void QRhiNull::beginPass(QRhiCommandBuffer *cb,
                          QRhiResourceUpdateBatch *resourceUpdates,
                          QRhiCommandBuffer::BeginPassFlags flags)
 {
-    Q_UNUSED(rt);
     Q_UNUSED(colorClearValue);
     Q_UNUSED(depthStencilClearValue);
     Q_UNUSED(flags);
+
     if (resourceUpdates)
         resourceUpdate(cb, resourceUpdates);
+
+    if (rt->resourceType() == QRhiRenderTarget::TextureRenderTarget) {
+        QNullTextureRenderTarget *rtTex = QRHI_RES(QNullTextureRenderTarget, rt);
+        if (!QRhiRenderTargetAttachmentTracker::isUpToDate<QNullTexture, QNullRenderBuffer>(rtTex->description(), rtTex->d.currentResIdList))
+            rtTex->create();
+    }
 }
 
 void QRhiNull::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
@@ -658,6 +666,7 @@ bool QNullRenderBuffer::create()
         destroy();
 
     valid = true;
+    generation += 1;
 
     QRHI_PROF;
     QRHI_PROF_F(newRenderBuffer(this, false, false, 1));
@@ -673,8 +682,8 @@ QRhiTexture::Format QNullRenderBuffer::backingFormat() const
 }
 
 QNullTexture::QNullTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, int depth,
-                           int sampleCount, Flags flags)
-    : QRhiTexture(rhi, format, pixelSize, depth, sampleCount, flags)
+                           int arraySize, int sampleCount, Flags flags)
+    : QRhiTexture(rhi, format, pixelSize, depth, arraySize, sampleCount, flags)
 {
 }
 
@@ -705,11 +714,13 @@ bool QNullTexture::create()
     QRHI_RES_RHI(QRhiNull);
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool is3D = m_flags.testFlag(ThreeDimensional);
+    const bool isArray = m_flags.testFlag(TextureArray);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
     QSize size = m_pixelSize.isEmpty() ? QSize(1, 1) : m_pixelSize;
     m_depth = qMax(1, m_depth);
     const int mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
-    const int layerCount = is3D ? m_depth : (isCube ? 6 : 1);
+    m_arraySize = qMax(0, m_arraySize);
+    const int layerCount = is3D ? m_depth : (isCube ? 6 : (isArray ? m_arraySize : 1));
 
     if (m_format == RGBA8) {
         image.resize(layerCount);
@@ -721,6 +732,8 @@ bool QNullTexture::create()
             }
         }
     }
+
+    generation += 1;
 
     QRHI_PROF;
     QRHI_PROF_F(newTexture(this, true, mipLevelCount, layerCount, 1));
@@ -739,12 +752,15 @@ bool QNullTexture::createFrom(QRhiTexture::NativeTexture src)
 
     QRHI_RES_RHI(QRhiNull);
     const bool isCube = m_flags.testFlag(CubeMap);
+    const bool isArray = m_flags.testFlag(TextureArray);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
     QSize size = m_pixelSize.isEmpty() ? QSize(1, 1) : m_pixelSize;
     const int mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
 
+    generation += 1;
+
     QRHI_PROF;
-    QRHI_PROF_F(newTexture(this, false, mipLevelCount, isCube ? 6 : 1, 1));
+    QRHI_PROF_F(newTexture(this, false, mipLevelCount, isCube ? 6 : (isArray ? m_arraySize : 1), 1));
     rhiD->registerResource(this);
 
     return true;
@@ -866,11 +882,15 @@ bool QNullTextureRenderTarget::create()
     } else if (m_desc.depthTexture()) {
         d.pixelSize = m_desc.depthTexture()->pixelSize();
     }
+    QRhiRenderTargetAttachmentTracker::updateResIdList<QNullTexture, QNullRenderBuffer>(m_desc, &d.currentResIdList);
     return true;
 }
 
 QSize QNullTextureRenderTarget::pixelSize() const
 {
+    if (!QRhiRenderTargetAttachmentTracker::isUpToDate<QNullTexture, QNullRenderBuffer>(m_desc, d.currentResIdList))
+        const_cast<QNullTextureRenderTarget *>(this)->create();
+
     return d.pixelSize;
 }
 

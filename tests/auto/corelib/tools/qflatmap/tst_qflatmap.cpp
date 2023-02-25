@@ -52,10 +52,15 @@ private slots:
     void extraction();
     void iterators();
     void statefulComparator();
-    void transparency();
+    void transparency_using();
+    void transparency_struct();
     void try_emplace_and_insert_or_assign();
     void viewIterators();
     void varLengthArray();
+
+private:
+    template <typename Compare>
+    void transparency_impl();
 };
 
 void tst_QFlatMap::constructing()
@@ -405,17 +410,35 @@ void tst_QFlatMap::statefulComparator()
     QVERIFY(m2.key_comp().count > m1.key_comp().count);
 }
 
-void tst_QFlatMap::transparency()
+void tst_QFlatMap::transparency_using()
 {
     struct StringViewCompare
     {
-        using is_transparent = void;
-        bool operator()(const QStringView &lhs, const QStringView &rhs) const
+        using is_transparent [[maybe_unused]] = void;
+        bool operator()(QAnyStringView lhs, QAnyStringView rhs) const
         {
             return lhs < rhs;
         }
     };
+    transparency_impl<StringViewCompare>();
+}
 
+void tst_QFlatMap::transparency_struct()
+{
+    struct StringViewCompare
+    {
+        struct is_transparent {};
+        bool operator()(QAnyStringView lhs, QAnyStringView rhs) const
+        {
+            return lhs < rhs;
+        }
+    };
+    transparency_impl<StringViewCompare>();
+}
+
+template <typename StringViewCompare>
+void tst_QFlatMap::transparency_impl()
+{
     using Map = QFlatMap<QString, QString, StringViewCompare>;
     auto m = Map{ { "one", "een" }, { "two", "twee" }, { "three", "dree" } };
 
@@ -424,8 +447,21 @@ void tst_QFlatMap::transparency()
     const QStringView sv2{numbers.constData() + 4, 3};
     const QStringView sv3{numbers.constData() + 8, 5};
     QCOMPARE(m.lower_bound(sv1).value(), "een");
+    QCOMPARE(m.value(sv1), "een");
     QCOMPARE(m.lower_bound(sv2).value(), "twee");
+    QCOMPARE(m.value(sv2), "twee");
     QCOMPARE(m.lower_bound(sv3).value(), "dree");
+    QCOMPARE(m.value(sv3), "dree");
+
+    QVERIFY(m.contains(sv2));
+    auto twee = m.take(sv2);
+    static_assert(std::is_same_v<decltype(twee), QString>);
+    QCOMPARE(twee, "twee");
+    QVERIFY(!m.contains(sv2));
+
+    QVERIFY(m.contains(QLatin1String("one")));
+    QVERIFY(m.remove(QAnyStringView(u8"one")));
+    QVERIFY(!m.contains(QLatin1String("one")));
 }
 
 void tst_QFlatMap::try_emplace_and_insert_or_assign()

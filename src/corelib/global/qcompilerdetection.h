@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Copyright (C) 2016 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -83,11 +83,14 @@
 #  endif
 
 #elif defined(_MSC_VER)
-#  ifdef __clang__
-#    define Q_CC_CLANG ((__clang_major__ * 100) + __clang_minor__)
-#  endif
 #  define Q_CC_MSVC (_MSC_VER)
 #  define Q_CC_MSVC_NET
+#  define Q_CC_MSVC_ONLY Q_CC_MSVC
+#  ifdef __clang__
+#    undef Q_CC_MSVC_ONLY
+#    define Q_CC_CLANG ((__clang_major__ * 100) + __clang_minor__)
+#    define Q_CC_CLANG_ONLY Q_CC_CLANG
+#  endif
 #  define Q_OUTOFLINE_TEMPLATE inline
 #  define Q_COMPILER_MANGLES_RETURN_TYPE
 #  define Q_FUNC_INFO __FUNCSIG__
@@ -104,6 +107,10 @@
 #  define QT_MAKE_CHECKED_ARRAY_ITERATOR(x, N) stdext::make_checked_array_iterator(x, size_t(N)) // Since _MSC_VER >= 1500
 /* Intel C++ disguising as Visual C++: the `using' keyword avoids warnings */
 #  if defined(__INTEL_COMPILER)
+#    undef Q_CC_MSVC_ONLY
+#    ifdef Q_CC_CLANG_ONLY
+#      undef Q_CC_CLANG_ONLY
+#    endif
 #    define Q_DECL_VARIABLE_DEPRECATED
 #    define Q_CC_INTEL  __INTEL_COMPILER
 #  endif
@@ -156,31 +163,32 @@
 #  elif defined(__clang__)
 /* Clang also masquerades as GCC */
 #    if defined(__apple_build_version__)
-#      /* http://en.wikipedia.org/wiki/Xcode#Toolchain_Versions */
-#      if __apple_build_version__ >= 8020041
-#        define Q_CC_CLANG 309
-#      elif __apple_build_version__ >= 8000038
-#        define Q_CC_CLANG 308
-#      elif __apple_build_version__ >= 7000053
-#        define Q_CC_CLANG 306
-#      elif __apple_build_version__ >= 6000051
-#        define Q_CC_CLANG 305
-#      elif __apple_build_version__ >= 5030038
-#        define Q_CC_CLANG 304
-#      elif __apple_build_version__ >= 5000275
-#        define Q_CC_CLANG 303
-#      elif __apple_build_version__ >= 4250024
-#        define Q_CC_CLANG 302
-#      elif __apple_build_version__ >= 3180045
-#        define Q_CC_CLANG 301
-#      elif __apple_build_version__ >= 2111001
-#        define Q_CC_CLANG 300
+      // The Clang version reported by Apple Clang in __clang_major__
+      // and __clang_minor__ does _not_ reflect the actual upstream
+      // version of the compiler. To allow consumers to use a single
+      // define to verify the Clang version we hard-code the versions
+      // based on the best available info we have about the actual
+      // version: http://en.wikipedia.org/wiki/Xcode#Toolchain_Versions
+#      if __apple_build_version__   >= 13160021 // Xcode 13.3
+#        define Q_CC_CLANG 1300
+#      elif __apple_build_version__ >= 13000029 // Xcode 13.0
+#        define Q_CC_CLANG 1200
+#      elif __apple_build_version__ >= 12050022 // Xcode 12.5
+#        define Q_CC_CLANG 1110
+#      elif __apple_build_version__ >= 12000032 // Xcode 12.0
+#        define Q_CC_CLANG 1000
+#      elif __apple_build_version__ >= 11030032 // Xcode 11.4
+#        define Q_CC_CLANG 900
+#      elif __apple_build_version__ >= 11000033 // Xcode 11.0
+#        define Q_CC_CLANG 800
 #      else
-#        error "Unknown Apple Clang version"
+#        error "Unsupported Apple Clang version"
 #      endif
 #    else
+       // Non-Apple Clang, so we trust the versions reported
 #      define Q_CC_CLANG ((__clang_major__ * 100) + __clang_minor__)
 #    endif
+#    define Q_CC_CLANG_ONLY Q_CC_CLANG
 #    if __has_builtin(__builtin_assume)
 #      define Q_ASSUME_IMPL(expr)   __builtin_assume(expr)
 #    else
@@ -203,6 +211,7 @@
 #    endif
 #  else
 /* Plain GCC */
+#    define Q_CC_GNU_ONLY Q_CC_GNU
 #    if Q_CC_GNU >= 405
 #      define Q_ASSUME_IMPL(expr)  if (expr){} else __builtin_unreachable()
 #      define Q_UNREACHABLE_IMPL() __builtin_unreachable()
@@ -409,15 +418,6 @@
    documentation. It also follows conventions like _BOOL and this documented */
 #  elif defined(sinix)
 #    define Q_CC_CDS
-
-/* The MIPSpro compiler defines __EDG */
-#  elif defined(__sgi)
-#    define Q_CC_MIPS
-#    define Q_NO_TEMPLATE_FRIENDS
-#    if defined(_COMPILER_VERSION) && (_COMPILER_VERSION >= 740)
-#      define Q_OUTOFLINE_TEMPLATE inline
-#      pragma set woff 3624,3625,3649 /* turn off some harmless warnings */
-#    endif
 #  endif
 
 /* VxWorks' DIAB toolchain has an additional EDG type C++ compiler
@@ -446,9 +446,6 @@
 #    if __SUNPRO_CC >= 0x550
 #      define Q_DECL_EXPORT     __global
 #    endif
-#    if __SUNPRO_CC < 0x5a0
-#      define Q_NO_TEMPLATE_FRIENDS
-#    endif
 #    if !defined(_BOOL)
 #      error "Compiler not supported"
 #    endif
@@ -466,26 +463,6 @@
 #    error "Compiler not supported"
 #  endif
 #  define Q_BROKEN_TEMPLATE_SPECIALIZATION
-
-#elif defined(Q_OS_HPUX)
-/* __HP_aCC was not defined in first aCC releases */
-#  if defined(__HP_aCC) || __cplusplus >= 199707L
-#    define Q_NO_TEMPLATE_FRIENDS
-#    define Q_CC_HPACC
-#    define Q_FUNC_INFO         __PRETTY_FUNCTION__
-#    if __HP_aCC-0 < 060000
-#      define QT_NO_TEMPLATE_TEMPLATE_PARAMETERS
-#      define Q_DECL_EXPORT     __declspec(dllexport)
-#      define Q_DECL_IMPORT     __declspec(dllimport)
-#    endif
-#    if __HP_aCC-0 >= 062000
-#      define Q_DECL_EXPORT     __attribute__((visibility("default")))
-#      define Q_DECL_HIDDEN     __attribute__((visibility("hidden")))
-#      define Q_DECL_IMPORT     Q_DECL_EXPORT
-#    endif
-#  else
-#    error "Compiler not supported"
-#  endif
 
 #else
 #  error "Qt has not been tested with this compiler - see http://www.qt-project.org/"
@@ -658,7 +635,7 @@
 #  endif
 #endif
 
-#if defined(Q_CC_CLANG) && !defined(Q_CC_INTEL) && !defined(Q_CC_MSVC)
+#if defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
 /* General C++ features */
 #  define Q_COMPILER_RESTRICTED_VLA
 #  if __has_feature(attribute_deprecated_with_message)
@@ -817,16 +794,13 @@
 #    endif
 #  endif
 
-#endif // Q_CC_CLANG &&  !Q_CC_INTEL && !Q_CC_MSVC
-
-#if defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
 #  ifndef Q_DECL_UNUSED
 #    define Q_DECL_UNUSED __attribute__((__unused__))
 #  endif
 #  define Q_DECL_UNUSED_MEMBER Q_DECL_UNUSED
-#endif
+#endif //  defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
 
-#if defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && !defined(Q_CC_CLANG)
+#if defined(Q_CC_GNU_ONLY)
 #  define Q_COMPILER_RESTRICTED_VLA
 #  if Q_CC_GNU >= 403
 //   GCC supports binary literals in C, C++98 and C++11 modes
@@ -929,7 +903,7 @@
 #  endif
 #endif
 
-#if defined(Q_CC_MSVC)
+#if defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
 #  if defined(__cplusplus)
        /* C++11 features supported in VC8 = VC2005: */
 #      define Q_COMPILER_VARIADIC_MACROS
@@ -987,7 +961,7 @@
 #      define Q_COMPILER_CONSTEXPR
 #    endif
 #  endif /* __cplusplus */
-#endif /* Q_CC_MSVC */
+#endif // defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
 
 #ifdef Q_COMPILER_UNICODE_STRINGS
 #  define Q_STDLIB_UNICODE_STRINGS
@@ -1146,10 +1120,8 @@
 #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
 #endif
 
-#if defined(__cpp_enumerator_attributes) && __cpp_enumerator_attributes >= 201411
-#  define Q_DECL_ENUMERATOR_DEPRECATED Q_DECL_DEPRECATED
-#  define Q_DECL_ENUMERATOR_DEPRECATED_X(x) Q_DECL_DEPRECATED_X(x)
-#endif
+#define Q_DECL_ENUMERATOR_DEPRECATED Q_DECL_DEPRECATED
+#define Q_DECL_ENUMERATOR_DEPRECATED_X(x) Q_DECL_DEPRECATED_X(x)
 
 /*
  * Fallback macros to certain compiler features
@@ -1184,12 +1156,6 @@
 #endif
 #ifndef Q_DECL_DEPRECATED_X
 #  define Q_DECL_DEPRECATED_X(text) Q_DECL_DEPRECATED
-#endif
-#ifndef Q_DECL_ENUMERATOR_DEPRECATED
-#  define Q_DECL_ENUMERATOR_DEPRECATED
-#endif
-#ifndef Q_DECL_ENUMERATOR_DEPRECATED_X
-#  define Q_DECL_ENUMERATOR_DEPRECATED_X(x)
 #endif
 #ifndef Q_DECL_EXPORT
 #  define Q_DECL_EXPORT
@@ -1239,7 +1205,11 @@
  * "Weak overloads" - makes an otherwise confliciting overload weaker
  * (by making it a template)
  */
-#define Q_WEAK_OVERLOAD template <typename = void>
+#ifndef Q_CLANG_QDOC
+#  define Q_WEAK_OVERLOAD template <typename = void>
+#else
+#  define Q_WEAK_OVERLOAD
+#endif
 
 /*
  * Warning/diagnostic handling
@@ -1359,7 +1329,7 @@
 #endif
 #endif
 #ifndef Q_FALLTHROUGH
-#  if (defined(Q_CC_GNU) && Q_CC_GNU >= 700) && !defined(Q_CC_INTEL)
+#  if defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 700
 #    define Q_FALLTHROUGH() __attribute__((fallthrough))
 #  else
 #    define Q_FALLTHROUGH() (void)0

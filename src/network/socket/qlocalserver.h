@@ -71,7 +71,7 @@ public:
         WorldAccessOption = 0x7,
         AbstractNamespaceOption = 0x8
     };
-    Q_FLAG(SocketOption)
+    Q_ENUM(SocketOption)
     Q_DECLARE_FLAGS(SocketOptions, SocketOption)
     Q_FLAG(SocketOptions)
 
@@ -92,6 +92,9 @@ public:
     QAbstractSocket::SocketError serverError() const;
     void setMaxPendingConnections(int numConnections);
     bool waitForNewConnection(int msec = 0, bool *timedOut = nullptr);
+
+    void setListenBacklogSize(int size);
+    int listenBacklogSize() const;
 
     void setSocketOptions(SocketOptions options);
     SocketOptions socketOptions() const;

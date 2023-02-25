@@ -5,6 +5,9 @@ set(__qt_toolchain_used_variables
     QT_TOOLCHAIN_RELOCATABLE_PREFIX
     QT_HOST_PATH
     QT_HOST_PATH_CMAKE_DIR
+    QT_REQUIRE_HOST_PATH_CHECK
+    QT_ADDITIONAL_PACKAGES_PREFIX_PATH
+    QT_ADDITIONAL_HOST_PACKAGES_PREFIX_PATH
 )
 @init_additional_used_variables@
 
@@ -95,8 +98,14 @@ if(QT_ADDITIONAL_PACKAGES_PREFIX_PATH)
 endif()
 if(DEFINED ENV{QT_ADDITIONAL_PACKAGES_PREFIX_PATH}
     AND NOT "$ENV{QT_ADDITIONAL_PACKAGES_PREFIX_PATH}" STREQUAL "")
+    set(__qt_env_additional_packages_prefixes $ENV{QT_ADDITIONAL_PACKAGES_PREFIX_PATH})
+    if(NOT CMAKE_HOST_WIN32)
+        string(REPLACE ":" ";" __qt_env_additional_packages_prefixes
+            "${__qt_env_additional_packages_prefixes}")
+    endif()
     list(APPEND __qt_toolchain_additional_packages_prefixes
-         $ENV{QT_ADDITIONAL_PACKAGES_PREFIX_PATH})
+        ${__qt_env_additional_packages_prefixes})
+    unset(__qt_env_additional_packages_prefixes)
 endif()
 
 if(__qt_toolchain_additional_packages_prefixes)
@@ -147,16 +156,27 @@ endif()
 
 # Set up QT_HOST_PATH and do sanity checks.
 # A host path is required when cross-compiling but optional when doing a native build.
-set(__qt_toolchain_host_path_required "@qt_host_path_required@")
+# Requiredness can be overridden via variable.
+if(DEFINED QT_REQUIRE_HOST_PATH_CHECK)
+    set(__qt_toolchain_host_path_required "${QT_REQUIRE_HOST_PATH_CHECK}")
+else()
+    set(__qt_toolchain_host_path_required "@qt_host_path_required@")
+endif()
 set(__qt_toolchain_initial_qt_host_path
     "@qt_host_path_absolute@")
 set(__qt_toolchain_initial_qt_host_path_cmake_dir
     "@qt_host_path_cmake_dir_absolute@")
 
-# Prefer initially configured path if none was explicitly set.
-if(NOT DEFINED QT_HOST_PATH AND __qt_toolchain_initial_qt_host_path
-      AND EXISTS "${__qt_toolchain_initial_qt_host_path}")
-    set(QT_HOST_PATH "${__qt_toolchain_initial_qt_host_path}" CACHE PATH "")
+# QT_HOST_PATH precedence:
+# - cache variable / command line option
+# - environment variable
+# - initial QT_HOST_PATH when qtbase was configured (and the directory exists)
+if(NOT DEFINED QT_HOST_PATH)
+    if(DEFINED ENV{QT_HOST_PATH})
+        set(QT_HOST_PATH "$ENV{QT_HOST_PATH}" CACHE PATH "")
+    else(__qt_toolchain_initial_qt_host_path AND EXISTS "${__qt_toolchain_initial_qt_host_path}")
+        set(QT_HOST_PATH "${__qt_toolchain_initial_qt_host_path}" CACHE PATH "")
+    endif()
 endif()
 
 if(NOT QT_HOST_PATH STREQUAL "")

@@ -58,6 +58,7 @@
 #include <qmetaobject.h>
 #include <qtextlayout.h>
 #include <private/qabstractitemdelegate_p.h>
+#include <private/qabstractitemmodel_p.h>
 #include <private/qtextengine_p.h>
 #include <qdebug.h>
 #include <qlocale.h>
@@ -432,7 +433,7 @@ void QItemDelegate::paint(QPainter *painter,
     Qt::CheckState checkState = Qt::Unchecked;
     value = index.data(Qt::CheckStateRole);
     if (value.isValid()) {
-        checkState = static_cast<Qt::CheckState>(value.toInt());
+        checkState = QtPrivate::legacyEnumValueFromModelData<Qt::CheckState>(value);
         checkRect = doCheck(opt, opt.rect, value);
     }
 
@@ -1051,10 +1052,10 @@ QRect QItemDelegate::rect(const QStyleOptionViewItem &option,
             break;
         case QMetaType::QPixmap: {
             const QPixmap &pixmap = qvariant_cast<QPixmap>(value);
-            return QRect(QPoint(0, 0), pixmap.size() / pixmap.devicePixelRatio() ); }
+            return QRect(QPoint(0, 0), pixmap.deviceIndependentSize().toSize()); }
         case QMetaType::QImage: {
             const QImage &image = qvariant_cast<QImage>(value);
-            return QRect(QPoint(0, 0), image.size() /  image.devicePixelRatio() ); }
+            return QRect(QPoint(0, 0), image.deviceIndependentSize().toSize()); }
         case QMetaType::QIcon: {
             QIcon::Mode mode = d->iconMode(option.state);
             QIcon::State state = d->iconState(option.state);
@@ -1193,7 +1194,7 @@ bool QItemDelegate::editorEvent(QEvent *event,
         return false;
     }
 
-    Qt::CheckState state = static_cast<Qt::CheckState>(value.toInt());
+    Qt::CheckState state = QtPrivate::legacyEnumValueFromModelData<Qt::CheckState>(value);
     if (flags & Qt::ItemIsUserTristate)
         state = ((Qt::CheckState)((state + 1) % 3));
     else
@@ -1220,7 +1221,7 @@ QStyleOptionViewItem QItemDelegate::setOptions(const QModelIndex &index,
     // set text alignment
     value = index.data(Qt::TextAlignmentRole);
     if (value.isValid())
-        opt.displayAlignment = Qt::Alignment(value.toInt());
+        opt.displayAlignment = QtPrivate::legacyFlagValueFromModelData<Qt::Alignment>(value);
 
     // set foreground brush
     value = index.data(Qt::ForegroundRole);

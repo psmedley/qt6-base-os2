@@ -203,7 +203,7 @@ int boundedValue = qBound(minValue, myValue, maxValue);
 
 
 //! [16]
-#if QT_VERSION >= 0x040100
+#if QT_VERSION >= QT_VERSION_CHECK(4, 1, 0)
     QIcon icon = style()->standardIcon(QStyle::SP_TrashIcon);
 #else
     QPixmap pixmap = style()->standardPixmap(QStyle::SP_TrashIcon);
@@ -512,6 +512,20 @@ void TheClass::addLabels()
 }
 //! [qttrid_noop]
 
+//! [qttrid_n_noop]
+static const char * const ids[] = {
+    //% "%n foo(s) found."
+    QT_TRID_N_NOOP("qtn_foo"),
+    //% "%n bar(s) found."
+    QT_TRID_N_NOOP("qtn_bar"),
+    0
+};
+
+QString result(int type, int n)
+{
+    return qtTrId(ids[type], n);
+}
+//! [qttrid_n_noop]
 
 //! [37]
 qWarning("%s: %s", qUtf8Printable(key), qUtf8Printable(value));
@@ -718,7 +732,7 @@ bool readConfiguration(const QFile &file)
 //! [qt-version-check]
 #include <QtGlobal>
 
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
 #include <QtWidgets>
 #else
 #include <QtGui>

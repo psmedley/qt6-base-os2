@@ -191,8 +191,9 @@ bool QHttpSocketEngine::bind(const QHostAddress &, quint16)
     return false;
 }
 
-bool QHttpSocketEngine::listen()
+bool QHttpSocketEngine::listen(int backlog)
 {
+    Q_UNUSED(backlog);
     qWarning("Operation is not supported");
     setError(QAbstractSocket::UnsupportedSocketOperationError,
              QLatin1String("Unsupported socket operation"));
@@ -578,7 +579,7 @@ void QHttpSocketEngine::slotSocketReadNotification()
         d->pendingResponseData -= uint(skipped);
         if (d->pendingResponseData > 0)
             return;
-        if (d->reply->d_func()->statusCode == 407)
+        if (d->reply->statusCode() == 407)
             d->state = SendAuthentication;
     }
 
@@ -790,7 +791,7 @@ void QHttpSocketEngine::emitReadNotification()
 {
     Q_D(QHttpSocketEngine);
     // if there is a connection notification pending we have to emit the readNotification
-    // incase there is connection error. This is only needed for Windows, but it does not
+    // in case there is connection error. This is only needed for Windows, but it does not
     // hurt in other cases.
     if ((d->readNotificationEnabled && !d->readNotificationPending) || d->connectionNotificationPending) {
         d->readNotificationPending = true;

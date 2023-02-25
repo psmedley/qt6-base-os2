@@ -43,13 +43,12 @@
 #include <QtWidgets/qtwidgetsglobal.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qalgorithms.h>
+#include <QtCore/qhashfunctions.h>
 
 QT_BEGIN_NAMESPACE
 
 class QVariant;
 class QSizePolicy;
-
-Q_DECL_CONST_FUNCTION inline size_t qHash(QSizePolicy key, size_t seed = 0) noexcept;
 
 class Q_WIDGETS_EXPORT QSizePolicy
 {
@@ -122,7 +121,7 @@ public:
     constexpr bool operator==(const QSizePolicy& s) const noexcept { return data == s.data; }
     constexpr bool operator!=(const QSizePolicy& s) const noexcept { return data != s.data; }
 
-    friend Q_DECL_CONST_FUNCTION size_t qHash(QSizePolicy key, size_t seed) noexcept { return qHash(key.data, seed); }
+    friend Q_DECL_CONST_FUNCTION size_t qHash(QSizePolicy key, size_t seed = 0) noexcept { return qHash(key.data, seed); }
 
     operator QVariant() const;
 
@@ -199,6 +198,7 @@ private:
 Q_DECLARE_TYPEINFO(QSizePolicy, Q_PRIMITIVE_TYPE);
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QSizePolicy::ControlTypes)
+Q_DECLARE_MIXED_ENUM_OPERATORS(int, QSizePolicy::Policy, QSizePolicy::PolicyFlag)
 
 #ifndef QT_NO_DATASTREAM
 Q_WIDGETS_EXPORT QDataStream &operator<<(QDataStream &, const QSizePolicy &);

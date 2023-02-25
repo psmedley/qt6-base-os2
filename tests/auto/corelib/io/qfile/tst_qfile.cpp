@@ -186,6 +186,8 @@ private slots:
     void ungetChar();
     void createFile();
     void createFileNewOnly();
+    void createFilePermissions_data();
+    void createFilePermissions();
     void openFileExistingOnly();
     void append();
     void permissions_data();
@@ -1292,6 +1294,56 @@ void tst_QFile::createFileNewOnly()
     QFile::remove("createme.txt");
 }
 
+void tst_QFile::createFilePermissions_data()
+{
+    QTest::addColumn<QFile::Permissions>("permissions");
+
+    for (int u = 0; u < 8; ++u) {
+        for (int g = 0; g < 8; ++g) {
+            for (int o = 0; o < 8; ++o) {
+                auto permissions = QFileDevice::Permissions::fromInt((u << 12) | (g << 4) | o);
+                QTest::addRow("%04x", permissions.toInt()) << permissions;
+            }
+        }
+    }
+}
+
+void tst_QFile::createFilePermissions()
+{
+    QFETCH(QFile::Permissions, permissions);
+
+#ifdef Q_OS_WIN
+    QScopedValueRollback<int> ntfsMode(qt_ntfs_permission_lookup);
+    ++qt_ntfs_permission_lookup;
+#endif
+#ifdef Q_OS_UNIX
+    auto restoreMask = qScopeGuard([oldMask = umask(0)] { umask(oldMask); });
+#endif
+
+    const QFile::Permissions setPermissions = {
+        QFile::ReadOther, QFile::WriteOther, QFile::ExeOther,
+        QFile::ReadGroup, QFile::WriteGroup, QFile::ExeGroup,
+        QFile::ReadOwner, QFile::WriteOwner, QFile::ExeOwner
+    };
+
+    const QString fileName = u"createme.txt"_qs;
+
+    QFile::remove(fileName);
+    QVERIFY(!QFile::exists(fileName));
+
+    QFile f(fileName);
+    auto removeFile = qScopeGuard([&f] {
+        f.close();
+        f.remove();
+    });
+    QVERIFY2(f.open(QIODevice::WriteOnly, permissions), msgOpenFailed(f).constData());
+
+    QVERIFY(QFile::exists(fileName));
+
+    auto actualPermissions = QFileInfo(fileName).permissions();
+    QCOMPARE(actualPermissions & setPermissions, permissions);
+}
+
 void tst_QFile::openFileExistingOnly()
 {
     QFile::remove("dontcreateme.txt");
@@ -2232,35 +2284,10 @@ class MyEngine : public QAbstractFileEngine
 {
 public:
     MyEngine(int n) { number = n; }
-    virtual ~MyEngine() {}
 
-    void setFileName(const QString &) override {}
-    bool open(QIODevice::OpenMode) override { return false; }
-    bool close() override { return false; }
-    bool flush() override { return false; }
     qint64 size() const override { return 123 + number; }
-    qint64 at() const { return -1; }
-    bool seek(qint64) override { return false; }
-    bool isSequential() const override { return false; }
-    qint64 read(char *, qint64) override { return -1; }
-    qint64 write(const char *, qint64) override { return -1; }
-    bool remove() override { return false; }
-    bool copy(const QString &) override { return false; }
-    bool rename(const QString &) override { return false; }
-    bool link(const QString &) override { return false; }
-    bool mkdir(const QString &, bool) const override { return false; }
-    bool rmdir(const QString &, bool) const override { return false; }
-    bool setSize(qint64) override { return false; }
     QStringList entryList(QDir::Filters, const QStringList &) const override { return QStringList(); }
-    bool caseSensitive() const override { return false; }
-    bool isRelativePath() const override { return false; }
-    FileFlags fileFlags(FileFlags) const override { return { }; }
-    bool chmod(uint) { return false; }
     QString fileName(FileName) const override { return name; }
-    uint ownerId(FileOwner) const override { return 0; }
-    QString owner(FileOwner) const override { return QString(); }
-    QDateTime fileTime(FileTime) const override { return QDateTime(); }
-    bool setFileTime(const QDateTime &, FileTime) override { return false; }
 
 private:
     int number;
@@ -2937,8 +2964,11 @@ void tst_QFile::handle()
     QVERIFY(fd > 2);
     QCOMPARE(int(file.handle()), fd);
     char c = '\0';
-    const auto readResult = QT_READ(int(file.handle()), &c, 1);
-    QCOMPARE(readResult, static_cast<decltype(readResult)>(1));
+    {
+        const auto readResult = QT_READ(int(file.handle()), &c, 1);
+        decltype(readResult) expected = 1;
+        QCOMPARE(readResult, expected);
+    }
     QCOMPARE(c, '/');
 
     // test if the QFile and the handle remain in sync
@@ -3828,8 +3858,8 @@ void tst_QFile::moveToTrash_data()
 
 void tst_QFile::moveToTrash()
 {
-#ifdef Q_OS_ANDROID
-    QSKIP("Android doesn't implement a trash bin");
+#if defined(Q_OS_ANDROID) or defined(Q_OS_WEBOS)
+    QSKIP("This platform doesn't implement a trash bin");
 #endif
     QFETCH(QString, source);
     QFETCH(bool, create);
@@ -3955,12 +3985,26 @@ void tst_QFile::stdfilesystem()
     path = "tile-fest";
     QVERIFY(file.rename(path));
     QVERIFY(fs::exists(path));
+#ifdef Q_OS_WIN
+    fs::path linkfile { "test-link.lnk" };
+#else
     fs::path linkfile { "test-link" };
+#endif
     QVERIFY(file.link(linkfile));
     QVERIFY(fs::exists(linkfile));
+    QVERIFY(QFile::remove(linkfile));
+    QVERIFY(QFile::link(file.filesystemFileName(), linkfile));
+    QVERIFY(fs::exists(linkfile));
+    QCOMPARE(QFileInfo(QFile::filesystemSymLinkTarget(linkfile)),
+             QFileInfo(file.filesystemFileName()));
+    QCOMPARE(QFileInfo(QFile(linkfile).filesystemSymLinkTarget()),
+             QFileInfo(file.filesystemFileName()));
 
     fs::path copyfile { "copy-file" };
     QVERIFY(file.copy(copyfile));
+    QVERIFY(fs::exists(copyfile));
+    QVERIFY(QFile::remove(copyfile));
+    QVERIFY(QFile::copy(file.filesystemFileName(), copyfile));
     QVERIFY(fs::exists(copyfile));
 
     QFileDevice::Permissions p = QFile::permissions(path);
@@ -3970,6 +4014,10 @@ void tst_QFile::stdfilesystem()
     else if (p.testFlag(QFile::ReadOwner))
         p.setFlag(QFile::ReadOwner, false);
     QVERIFY(QFile::setPermissions(path, p));
+
+    path = "test-exists";
+    fs::create_directory(path);
+    QVERIFY(QFile::exists(path) == fs::exists(path));
 #else
     QSKIP("Not supported");
 #endif

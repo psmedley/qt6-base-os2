@@ -122,10 +122,10 @@ private:
     { }
 };
 
-class QFutureCallOutInterface
+class Q_CORE_EXPORT QFutureCallOutInterface
 {
 public:
-    virtual ~QFutureCallOutInterface() {}
+    virtual ~QFutureCallOutInterface();
     virtual void postCallOutEvent(const QFutureCallOutEvent &) = 0;
     virtual void callOutInterfaceDisconnected() = 0;
 };
@@ -134,6 +134,7 @@ class QFutureInterfaceBasePrivate
 {
 public:
     QFutureInterfaceBasePrivate(QFutureInterfaceBase::State initialState);
+    ~QFutureInterfaceBasePrivate();
 
     // When the last QFuture<T> reference is removed, we need to make
     // sure that data stored in the ResultStore is cleaned out.
@@ -167,10 +168,24 @@ public:
     QElapsedTimer progressTime;
     QWaitCondition waitCondition;
     QWaitCondition pausedWaitCondition;
-    // ### TODO: put m_results and m_exceptionStore into a union (see QTBUG-92045)
-    QtPrivate::ResultStoreBase m_results;
-    QtPrivate::ExceptionStore m_exceptionStore;
-    QString m_progressText;
+
+    union Data {
+        QtPrivate::ResultStoreBase m_results;
+        QtPrivate::ExceptionStore m_exceptionStore;
+
+#ifndef QT_NO_EXCEPTIONS
+        void setException(const std::exception_ptr &e)
+        {
+            m_results.~ResultStoreBase();
+            new (&m_exceptionStore) QtPrivate::ExceptionStore();
+            m_exceptionStore.setException(e);
+        }
+#endif
+
+        ~Data() { }
+    };
+    Data data = { QtPrivate::ResultStoreBase() };
+
     QRunnable *runnable = nullptr;
     QThreadPool *m_pool = nullptr;
     // Wrapper for continuation
@@ -179,13 +194,20 @@ public:
 
     RefCount refCount = 1;
     QAtomicInt state; // reads and writes can happen unprotected, both must be atomic
+
     int m_progressValue = 0; // TQ
-    int m_progressMinimum = 0; // TQ
-    int m_progressMaximum = 0; // TQ
+    struct ProgressData
+    {
+        int minimum = 0; // TQ
+        int maximum = 0; // TQ
+        QString text;
+    };
+    QScopedPointer<ProgressData> m_progress;
+
     int m_expectedResultCount = 0;
-    bool manualProgress = false; // only accessed from executing thread
     bool launchAsync = false;
     bool isValid = false;
+    bool hasException = false;
 
     inline QThreadPool *pool() const
     { return m_pool ? m_pool : QThreadPool::globalInstance(); }
@@ -195,6 +217,7 @@ public:
     int internal_resultCount() const;
     bool internal_isResultReadyAt(int index) const;
     bool internal_waitForNextResult();
+    bool internal_updateProgressValue(int progress);
     bool internal_updateProgress(int progress, const QString &progressText = QString());
     void internal_setThrottled(bool enable);
     void sendCallOut(const QFutureCallOutEvent &callOut);
@@ -203,7 +226,6 @@ public:
     void disconnectOutputInterface(QFutureCallOutInterface *iface);
 
     void setState(QFutureInterfaceBase::State state);
-
 };
 
 QT_END_NAMESPACE

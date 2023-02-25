@@ -45,6 +45,7 @@
 #include "qcocoawindow.h"
 #include "qcocoahelpers.h"
 #include "qcocoaeventdispatcher.h"
+#include "qcocoaintegration.h"
 
 #include <qpa/qwindowsysteminterface.h>
 #include <qoperatingsystemversion.h>
@@ -248,6 +249,7 @@ OSStatus CGSClearWindowTags(const CGSConnectionID, const CGSWindowID, int *, int
 {
     // Member variables
     QPointer<QCocoaWindow> m_platformWindow;
+    bool m_isMinimizing;
 }
 
 - (instancetype)initWithContentRect:(NSRect)contentRect styleMask:(NSWindowStyleMask)style
@@ -258,6 +260,8 @@ OSStatus CGSClearWindowTags(const CGSConnectionID, const CGSWindowID, int *, int
     // of the getters below. We need to set up the platform window reference first, so
     // we can properly reflect the window's state during initialization.
     m_platformWindow = window;
+
+    m_isMinimizing = false;
 
     return [super initWithContentRect:contentRect styleMask:style backing:backingStoreType defer:defer screen:screen];
 }
@@ -373,15 +377,50 @@ OSStatus CGSClearWindowTags(const CGSConnectionID, const CGSWindowID, int *, int
     // close open popups. Presses within the window's content are handled to do that in the
     // NSView::mouseDown implementation.
     if (theEvent.type == NSEventTypeLeftMouseDown && mouseEventInFrameStrut)
-        [qnsview_cast(m_platformWindow->view()) closePopups:theEvent];
+        QGuiApplicationPrivate::instance()->closeAllPopups();
 
     [super sendEvent:theEvent];
 
     if (!m_platformWindow)
         return; // Platform window went away while processing event
 
+    // Cocoa will not deliver mouse events to a window that is modally blocked (by Cocoa,
+    // not Qt). However, an active popup is expected to grab any mouse event within the
+    // application, so we need to handle those explicitly and trust Qt's isWindowBlocked
+    // implementation to eat events that shouldn't be delivered anyway.
+    if (isMouseEvent(theEvent) && QGuiApplicationPrivate::instance()->popupActive()
+        && QGuiApplicationPrivate::instance()->isWindowBlocked(m_platformWindow->window(), nullptr)) {
+        qCDebug(lcQpaWindow) << "Mouse event over modally blocked window" << m_platformWindow->window()
+                             << "while popup is open - redirecting";
+        [qnsview_cast(m_platformWindow->view()) handleMouseEvent:theEvent];
+    }
     if (m_platformWindow->frameStrutEventsEnabled() && mouseEventInFrameStrut)
         [qnsview_cast(m_platformWindow->view()) handleFrameStrutMouseEvent:theEvent];
+}
+
+- (void)miniaturize:(id)sender
+{
+    QBoolBlocker miniaturizeTracker(m_isMinimizing, true);
+    [super miniaturize:sender];
+}
+
+- (NSButton *)standardWindowButton:(NSWindowButton)buttonType
+{
+    NSButton *button = [super standardWindowButton:buttonType];
+
+    // When an NSWindow is asked to minimize it will check the
+    // NSWindowMiniaturizeButton for enablement before continuing,
+    // even if the style mask includes NSWindowStyleMaskMiniaturizable.
+    // To ensure that a window can be minimized, even when the
+    // minimize button has been disabled in response to the user
+    // setting CustomizeWindowHint, we temporarily return a default
+    // minimize-button that we haven't modified in updateTitleBarButtons.
+    // This ensures the window can be minimized, without visually
+    // toggling the actual minimize-button on and off.
+    if (buttonType == NSWindowMiniaturizeButton && m_isMinimizing && !button.enabled)
+        return [NSWindow standardWindowButton:buttonType forStyleMask:self.styleMask];
+
+    return button;
 }
 
 - (void)closeAndRelease

@@ -109,9 +109,9 @@ QT_BEGIN_NAMESPACE
     \list
     \li \e {Mastering Regular Expressions} (Third Edition) by Jeffrey E. F.
     Friedl, ISBN 0-596-52812-4;
-    \li the \l{http://pcre.org/pcre.txt} {pcrepattern(3)} man page, describing
-    the pattern syntax supported by PCRE (the reference implementation of
-    Perl-compatible regular expressions);
+    \li the \l{https://pcre.org/original/doc/html/pcrepattern.html}
+    {pcrepattern(3)} man page, describing the pattern syntax supported by PCRE
+    (the reference implementation of Perl-compatible regular expressions);
     \li the \l{http://perldoc.perl.org/perlre.html} {Perl's regular expression
     documentation} and the \l{http://perldoc.perl.org/perlretut.html} {Perl's
     regular expression tutorial}.
@@ -910,7 +910,7 @@ void QRegularExpressionPrivate::compilePattern()
     options |= PCRE2_UTF;
 
     PCRE2_SIZE patternErrorOffset;
-    compiledPattern = pcre2_compile_16(reinterpret_cast<PCRE2_SPTR16>(pattern.utf16()),
+    compiledPattern = pcre2_compile_16(reinterpret_cast<PCRE2_SPTR16>(pattern.constData()),
                                        pattern.length(),
                                        options,
                                        &errorCode,
@@ -1265,6 +1265,12 @@ void QRegularExpressionPrivate::doMatch(QRegularExpressionMatchPrivate *priv,
         PCRE2_SIZE *ovector = pcre2_get_ovector_pointer_16(matchData);
         qsizetype *const capturedOffsets = priv->capturedOffsets.data();
 
+        // We rely on the fact that capturing groups that did not
+        // capture anything have offset -1, but PCRE technically
+        // returns "PCRE2_UNSET". Test that out, better safe than
+        // sorry...
+        static_assert(qsizetype(PCRE2_UNSET) == qsizetype(-1), "Internal error: PCRE2 changed its API");
+
         for (int i = 0; i < priv->capturedCount * 2; ++i)
             capturedOffsets[i] = qsizetype(ovector[i]);
 
@@ -1446,6 +1452,8 @@ QString QRegularExpression::pattern() const
 */
 void QRegularExpression::setPattern(const QString &pattern)
 {
+    if (d->pattern == pattern)
+        return;
     d.detach();
     d->isDirty = true;
     d->pattern = pattern;
@@ -1469,6 +1477,8 @@ QRegularExpression::PatternOptions QRegularExpression::patternOptions() const
 */
 void QRegularExpression::setPatternOptions(PatternOptions options)
 {
+    if (d->patternOptions == options)
+        return;
     d.detach();
     d->isDirty = true;
     d->patternOptions = options;
@@ -1786,12 +1796,10 @@ size_t qHash(const QRegularExpression &key, size_t seed) noexcept
     return qHashMulti(seed, key.d->pattern, key.d->patternOptions);
 }
 
-#if QT_STRINGVIEW_LEVEL < 2
 /*!
     \fn QString QRegularExpression::escape(const QString &str)
     \overload
 */
-#endif // QT_STRINGVIEW_LEVEL < 2
 
 /*!
     \since 5.15
@@ -1848,13 +1856,11 @@ QString QRegularExpression::escape(QStringView str)
     return result;
 }
 
-#if QT_STRINGVIEW_LEVEL < 2
 /*!
     \since 5.12
     \fn QString QRegularExpression::wildcardToRegularExpression(const QString &pattern, WildcardConversionOptions options)
     \overload
 */
-#endif // QT_STRINGVIEW_LEVEL < 2
 
 /*!
     \since 6.0
@@ -1883,7 +1889,7 @@ QString QRegularExpression::escape(QStringView str)
 
     By default, the returned regular expression is fully anchored. In other
     words, there is no need of calling anchoredPattern() again on the
-    result. To get an a regular expression that is not anchored, pass
+    result. To get a regular expression that is not anchored, pass
     UnanchoredWildcardConversion as the conversion \a options.
 
     This implementation follows closely the definition
@@ -2024,13 +2030,11 @@ QRegularExpression QRegularExpression::fromWildcard(QStringView pattern, Qt::Cas
     return QRegularExpression(wildcardToRegularExpression(pattern, options), reOptions);
 }
 
-#if QT_STRINGVIEW_LEVEL < 2
 /*!
     \fn QRegularExpression::anchoredPattern(const QString &expression)
     \since 5.12
     \overload
 */
-#endif // QT_STRINGVIEW_LEVEL < 2
 
 /*!
     \since 5.15
@@ -2184,11 +2188,68 @@ QRegularExpression::MatchOptions QRegularExpressionMatch::matchOptions() const
 
     If the regular expression did not match, this function returns -1.
 
-    \sa captured(), capturedStart(), capturedEnd(), capturedLength()
+    \sa hasCaptured(), captured(), capturedStart(), capturedEnd(), capturedLength()
 */
 int QRegularExpressionMatch::lastCapturedIndex() const
 {
     return d->capturedCount - 1;
+}
+
+/*!
+    \fn bool QRegularExpressionMatch::hasCaptured(const QString &name) const
+    \fn bool QRegularExpressionMatch::hasCaptured(QStringView name) const
+    \since 6.3
+
+    Returns true if the capturing group named \a name captured something
+    in the subject string, and false otherwise (or if there is no
+    capturing group called \a name).
+
+    \note Some capturing groups in a regular expression may not have
+    captured anything even if the regular expression matched. This may
+    happen, for instance, if a conditional operator is used in the
+    pattern:
+
+    \snippet code/src_corelib_text_qregularexpression.cpp 36
+
+    Similarly, a capturing group may capture a substring of length 0;
+    this function will return \c{true} for such a capturing group.
+
+    \sa captured(), hasMatch()
+*/
+bool QRegularExpressionMatch::hasCaptured(QStringView name) const
+{
+    const int nth = d->regularExpression.d->captureIndexForName(name);
+    return hasCaptured(nth);
+}
+
+/*!
+    \since 6.3
+
+    Returns true if the \a nth capturing group captured something
+    in the subject string, and false otherwise (or if there is no
+    such capturing group).
+
+    \note The implicit capturing group number 0 captures the substring
+    matched by the entire pattern.
+
+    \note Some capturing groups in a regular expression may not have
+    captured anything even if the regular expression matched. This may
+    happen, for instance, if a conditional operator is used in the
+    pattern:
+
+    \snippet code/src_corelib_text_qregularexpression.cpp 36
+
+    Similarly, a capturing group may capture a substring of length 0;
+    this function will return \c{true} for such a capturing group.
+
+    \sa captured(), lastCapturedIndex(), hasMatch()
+*/
+bool QRegularExpressionMatch::hasCaptured(int nth) const
+{
+    if (nth < 0 || nth > lastCapturedIndex())
+        return false;
+
+    return d->capturedOffsets.at(nth * 2) != -1;
 }
 
 /*!
@@ -2224,7 +2285,7 @@ QString QRegularExpressionMatch::captured(int nth) const
 */
 QStringView QRegularExpressionMatch::capturedView(int nth) const
 {
-    if (nth < 0 || nth > lastCapturedIndex())
+    if (!hasCaptured(nth))
         return QStringView();
 
     qsizetype start = capturedStart(nth);
@@ -2235,7 +2296,6 @@ QStringView QRegularExpressionMatch::capturedView(int nth) const
     return d->subject.mid(start, capturedLength(nth));
 }
 
-#if QT_STRINGVIEW_LEVEL < 2
 /*! \fn QString QRegularExpressionMatch::captured(const QString &name) const
 
     Returns the substring captured by the capturing group named \a name.
@@ -2246,7 +2306,6 @@ QStringView QRegularExpressionMatch::capturedView(int nth) const
     \sa capturedView(), capturedStart(), capturedEnd(), capturedLength(),
     QString::isNull()
 */
-#endif // QT_STRINGVIEW_LEVEL < 2
 
 /*!
     \since 5.10
@@ -2318,7 +2377,7 @@ QStringList QRegularExpressionMatch::capturedTexts() const
 */
 qsizetype QRegularExpressionMatch::capturedStart(int nth) const
 {
-    if (nth < 0 || nth > lastCapturedIndex())
+    if (!hasCaptured(nth))
         return -1;
 
     return d->capturedOffsets.at(nth * 2);
@@ -2347,13 +2406,12 @@ qsizetype QRegularExpressionMatch::capturedLength(int nth) const
 */
 qsizetype QRegularExpressionMatch::capturedEnd(int nth) const
 {
-    if (nth < 0 || nth > lastCapturedIndex())
+    if (!hasCaptured(nth))
         return -1;
 
     return d->capturedOffsets.at(nth * 2 + 1);
 }
 
-#if QT_STRINGVIEW_LEVEL < 2
 /*! \fn qsizetype QRegularExpressionMatch::capturedStart(const QString &name) const
 
     Returns the offset inside the subject string corresponding to the starting
@@ -2384,7 +2442,6 @@ qsizetype QRegularExpressionMatch::capturedEnd(int nth) const
 
     \sa capturedStart(), capturedLength(), captured()
 */
-#endif // QT_STRINGVIEW_LEVEL < 2
 
 /*!
     \since 5.10
@@ -2694,7 +2751,7 @@ QtPrivate::QRegularExpressionMatchIteratorRangeBasedForIterator begin(const QReg
 */
 QDataStream &operator<<(QDataStream &out, const QRegularExpression &re)
 {
-    out << re.pattern() << quint32(re.patternOptions());
+    out << re.pattern() << quint32(re.patternOptions().toInt());
     return out;
 }
 
@@ -2711,7 +2768,7 @@ QDataStream &operator>>(QDataStream &in, QRegularExpression &re)
     quint32 patternOptions;
     in >> pattern >> patternOptions;
     re.setPattern(pattern);
-    re.setPatternOptions(QRegularExpression::PatternOptions(patternOptions));
+    re.setPatternOptions(QRegularExpression::PatternOptions::fromInt(patternOptions));
     return in;
 }
 #endif

@@ -41,7 +41,8 @@
 #define QTCONCURRENT_FUNCTIONWRAPPERS_H
 
 #include <QtConcurrent/qtconcurrentcompilertest.h>
-#include <QtCore/QStringList>
+#include <QtConcurrent/qtconcurrentreducekernel.h>
+#include <QtCore/qfuture.h>
 
 #include <tuple>
 
@@ -129,7 +130,6 @@ struct ReduceResultType<R(*)(A...)>
     using ResultType = typename std::tuple_element<0, std::tuple<A...>>::type;
 };
 
-#if defined(__cpp_noexcept_function_type) && __cpp_noexcept_function_type >= 201510
 template <class U, class V>
 struct ReduceResultType<void(*)(U&,V) noexcept>
 {
@@ -141,7 +141,48 @@ struct ReduceResultType<T(C::*)(U) noexcept>
 {
     using ResultType = C;
 };
-#endif
+
+template<class T, class Enable = void>
+inline constexpr bool hasCallOperator_v = false;
+
+template<class T>
+inline constexpr bool hasCallOperator_v<T, std::void_t<decltype(&T::operator())>> = true;
+
+template<class T, class Enable = void>
+inline constexpr bool isIterator_v = false;
+
+template<class T>
+inline constexpr bool isIterator_v<T, std::void_t<typename std::iterator_traits<T>::value_type>> =
+        true;
+
+template <class Callable, class Sequence>
+using isInvocable = std::is_invocable<Callable, typename std::decay_t<Sequence>::value_type>;
+
+template <class InitialValueType, class ResultType>
+inline constexpr bool isInitialValueCompatible_v = std::conjunction_v<
+        std::is_convertible<InitialValueType, ResultType>,
+        std::negation<std::is_same<std::decay_t<InitialValueType>, QtConcurrent::ReduceOption>>>;
+
+template<class Callable, class Enable = void>
+struct ReduceResultTypeHelper
+{
+};
+
+template <class Callable>
+struct ReduceResultTypeHelper<Callable,
+        typename std::enable_if_t<std::is_function_v<std::remove_pointer_t<std::decay_t<Callable>>>
+                                  || std::is_member_function_pointer_v<std::decay_t<Callable>>>>
+{
+    using type = typename QtPrivate::ReduceResultType<std::decay_t<Callable>>::ResultType;
+};
+
+template <class Callable>
+struct ReduceResultTypeHelper<Callable,
+        typename std::enable_if_t<!std::is_function_v<std::remove_pointer_t<std::decay_t<Callable>>>
+                                  && hasCallOperator_v<std::decay_t<Callable>>>>
+{
+    using type = std::decay_t<typename QtPrivate::ArgResolver<Callable>::First>;
+};
 
 // -- MapSequenceResultType
 
@@ -154,12 +195,6 @@ struct MapSequenceResultType
     typedef InputSequence ResultType;
 };
 
-template <class MapFunctor>
-struct MapSequenceResultType<QStringList, MapFunctor>
-{
-    typedef QList<QtPrivate::MapResultType<QStringList, MapFunctor>> ResultType;
-};
-
 #ifndef QT_NO_TEMPLATE_TEMPLATE_PARAMETERS
 
 template <template <typename...> class InputSequence, typename MapFunctor, typename ...T>
@@ -169,14 +204,6 @@ struct MapSequenceResultType<InputSequence<T...>, MapFunctor>
 };
 
 #endif // QT_NO_TEMPLATE_TEMPLATE_PARAMETER
-
-template<typename Sequence>
-struct SequenceHolder
-{
-    SequenceHolder(const Sequence &s) : sequence(s) { }
-    SequenceHolder(Sequence &&s) : sequence(std::move(s)) { }
-    Sequence sequence;
-};
 
 } // namespace QtPrivate.
 

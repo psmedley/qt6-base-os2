@@ -48,10 +48,6 @@
 #include "qeventloop_p.h"
 #include <private/qthread_p.h>
 
-#ifdef Q_OS_WASM
-#include <emscripten.h>
-#endif
-
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -92,6 +88,7 @@ QT_BEGIN_NAMESPACE
     \omitvalue X11ExcludeTimers
     \omitvalue EventLoopExec
     \omitvalue DialogExec
+    \omitvalue ApplicationExec
 
     \sa processEvents()
 */
@@ -217,15 +214,6 @@ int QEventLoop::exec(ProcessEventsFlags flags)
     if (app && app->thread() == thread())
         QCoreApplication::removePostedEvents(app, QEvent::Quit);
 
-#ifdef Q_OS_WASM
-    // Partial support for nested event loops: Make the runtime throw a JavaSrcript
-    // exception, which returns control to the browser while preserving the C++ stack.
-    // Event processing then continues as normal. The sleep call below never returns.
-    // QTBUG-70185
-    if (threadData->loopLevel > 1)
-        emscripten_sleep(1);
-#endif
-
     while (!d->exit.loadAcquire())
         processEvents(flags | WaitForMoreEvents | EventLoopExec);
 
@@ -288,17 +276,6 @@ void QEventLoop::exit(int returnCode)
     d->returnCode.storeRelaxed(returnCode);
     d->exit.storeRelease(true);
     threadData->eventDispatcher.loadRelaxed()->interrupt();
-
-#ifdef Q_OS_WASM
-    // QEventLoop::exec() never returns in emscripten. We implement approximate behavior here.
-    // QTBUG-70185
-    if (threadData->loopLevel == 1) {
-        emscripten_force_exit(returnCode);
-    } else {
-        d->inExec = false;
-        --threadData->loopLevel;
-    }
-#endif
 }
 
 /*!

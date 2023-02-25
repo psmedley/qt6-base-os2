@@ -339,11 +339,14 @@ void QXcbBasicConnection::initializeXRandr()
                                     XCB_RANDR_MINOR_VERSION);
     if (!xrandrQuery || (xrandrQuery->major_version < 1 ||
                         (xrandrQuery->major_version == 1 && xrandrQuery->minor_version < 2))) {
-        qCWarning(lcQpaXcb, "failed to initialize XRandr");
+        qCWarning(lcQpaXcb, "failed to initialize XRandr 1.2");
         return;
     }
 
     m_hasXRandr = true;
+
+    m_xrandr1Minor = xrandrQuery->minor_version;
+
     m_xrandrFirstEvent = reply->first_event;
 }
 
@@ -355,7 +358,9 @@ void QXcbBasicConnection::initializeXInput2()
         return;
     }
 
-    auto xinputQuery = Q_XCB_REPLY(xcb_input_xi_query_version, m_xcbConnection, 2, 2);
+    // depending on whether bundled xcb is used we may support different XCB protocol versions.
+    auto xinputQuery = Q_XCB_REPLY(xcb_input_xi_query_version, m_xcbConnection,
+                                   2, XCB_INPUT_MINOR_VERSION);
     if (!xinputQuery || xinputQuery->major_version != 2) {
         qCWarning(lcQpaXcb, "X server does not support XInput 2");
         return;
@@ -416,3 +421,5 @@ void QXcbBasicConnection::initializeXKB()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qxcbconnection_basic.cpp"

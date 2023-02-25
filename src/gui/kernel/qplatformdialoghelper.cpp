@@ -771,7 +771,7 @@ const char QPlatformFileDialogHelper::filterRegExp[] =
 QStringList QPlatformFileDialogHelper::cleanFilterList(const QString &filter)
 {
 #if QT_CONFIG(regularexpression)
-    QRegularExpression regexp(QString::fromLatin1(filterRegExp));
+    static const QRegularExpression regexp(QString::fromLatin1(filterRegExp));
     Q_ASSERT(regexp.isValid());
     QString f = filter;
     QRegularExpressionMatch match = regexp.match(filter);
@@ -1002,3 +1002,5 @@ void QPlatformMessageDialogHelper::setOptions(const QSharedPointer<QMessageDialo
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qplatformdialoghelper.cpp"

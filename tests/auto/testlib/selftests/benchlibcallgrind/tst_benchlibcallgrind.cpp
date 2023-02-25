@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -26,13 +26,12 @@
 **
 ****************************************************************************/
 
-
-#include <QtCore/QCoreApplication>
 #include <QTest>
+#include <QtCore/QCoreApplication>
 
-/* This test must be explicitly enabled since there are no compile tests for valgrind.h */
-#ifdef QT_BUG236484
-#include <valgrind/valgrind.h>
+#if __has_include(<valgrind/valgrind.h>)
+#  include <valgrind/valgrind.h>
+#  define HAVE_VALGRIND_H
 #endif
 
 class tst_BenchlibCallgrind: public QObject
@@ -40,16 +39,14 @@ class tst_BenchlibCallgrind: public QObject
     Q_OBJECT
 
 private slots:
-#ifdef QT_BUG236484
     void failInChildProcess();
-#endif
 
     void twoHundredMillionInstructions();
 };
 
-#ifdef QT_BUG236484
 void tst_BenchlibCallgrind::failInChildProcess()
 {
+#ifdef HAVE_VALGRIND_H
     static double f = 1.0;
     QBENCHMARK {
         for (int i = 0; i < 1000000; ++i) {
@@ -57,14 +54,14 @@ void tst_BenchlibCallgrind::failInChildProcess()
             if (RUNNING_ON_VALGRIND) QFAIL("Running under valgrind!");
         }
     }
-}
+#else
+    QSKIP("Skipping test because I can't see <valgrind/valgrind.h> - is valgrind installed ?");
 #endif
+}
 
 void tst_BenchlibCallgrind::twoHundredMillionInstructions()
 {
-#if !defined(__GNUC__) || !defined(__i386)
-    QSKIP("This test is only defined for gcc and x86.");
-#else
+#if defined(__GNUC__) && (defined(__i386) || defined(__x86_64))
     QBENCHMARK {
         __asm__ __volatile__(
             "mov $100000000,%%eax   \n"
@@ -76,17 +73,25 @@ void tst_BenchlibCallgrind::twoHundredMillionInstructions()
             : /* clobber */ "eax"
         );
     }
+#else
+    QSKIP("This test is only implemented for gcc on x86.");
 #endif
 }
 
-int main(int argc, char *argv[])
-{
+QTEST_MAIN_WRAPPER(tst_BenchlibCallgrind,
     std::vector<const char*> args(argv, argv + argc);
-    args.push_back("-callgrind");
-    argc = args.size();
-    argv = const_cast<char**>(&args[0]);
+    // Add the -callgrind argument unless (it's there anyway or) we're the
+    // recursive invocation with -callgrindchild passed.
+    if (std::find_if(args.begin(), args.end(),
+                     [](const char *arg) {
+                         return qstrcmp(arg, "-callgrindchild") == 0
+                             || qstrcmp(arg, "-callgrind") == 0;
+                     }) == args.end()) {
+        args.push_back("-callgrind");
+        argc = args.size();
+        argv = const_cast<char**>(&args[0]);
+    }
+    QTEST_MAIN_SETUP())
 
-    QTEST_MAIN_IMPL(tst_BenchlibCallgrind)
-}
-
+#undef HAVE_VALGRIND_H
 #include "tst_benchlibcallgrind.moc"

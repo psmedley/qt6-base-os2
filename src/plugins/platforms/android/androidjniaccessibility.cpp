@@ -68,6 +68,7 @@ namespace QtAndroidAccessibility
     static jmethodID m_setEnabledMethodID = 0;
     static jmethodID m_setFocusableMethodID = 0;
     static jmethodID m_setFocusedMethodID = 0;
+    static jmethodID m_setHeadingMethodID = 0;
     static jmethodID m_setScrollableMethodID = 0;
     static jmethodID m_setTextSelectionMethodID = 0;
     static jmethodID m_setVisibleToUserMethodID = 0;
@@ -79,7 +80,7 @@ namespace QtAndroidAccessibility
     // Because of that almost every method here is split into two parts.
     // The _helper part is executed in the context of m_accessibilityContext
     // on the main thread. The other part is executed in Java thread.
-    static QObject *m_accessibilityContext = nullptr;
+    static QPointer<QObject> m_accessibilityContext = nullptr;
 
     // This method is called from the Qt main thread, and normally a
     // QGuiApplication instance will be used as a parent.
@@ -93,7 +94,13 @@ namespace QtAndroidAccessibility
     template <typename Func, typename Ret>
     void runInObjectContext(QObject *context, Func &&func, Ret *retVal)
     {
-        QMetaObject::invokeMethod(context, func, Qt::BlockingQueuedConnection, retVal);
+        if (!QtAndroid::blockEventLoopsWhenSuspended()
+            || QGuiApplication::applicationState() != Qt::ApplicationSuspended) {
+            QMetaObject::invokeMethod(context, func, Qt::BlockingQueuedConnection, retVal);
+        } else {
+            __android_log_print(ANDROID_LOG_WARN, m_qtTag,
+                                "Could not run accessibility call in object context, event loop suspended.");
+        }
     }
 
     void initialize()
@@ -131,9 +138,9 @@ namespace QtAndroidAccessibility
         return iface;
     }
 
-    void notifyLocationChange()
+    void notifyLocationChange(uint accessibilityObjectId)
     {
-        QtAndroid::notifyAccessibilityLocationChange();
+        QtAndroid::notifyAccessibilityLocationChange(accessibilityObjectId);
     }
 
     static int parentId_helper(int objectId); // forward declaration
@@ -429,10 +436,13 @@ if (!clazz) { \
                 desc = iface->text(QAccessible::Value);
                 hasValue = !desc.isEmpty();
             }
-            if (!hasValue) {
-                if (!desc.isEmpty())
-                    desc.append(QChar(QChar::Space));
-                desc.append(textFromValue(iface));
+            if (!hasValue && iface->valueInterface()) {
+                const QString valueStr = textFromValue(iface);
+                if (!valueStr.isEmpty()) {
+                    if (!desc.isEmpty())
+                        desc.append(QChar(QChar::Space));
+                    desc.append(valueStr);
+                }
             }
         }
         return desc;
@@ -460,6 +470,7 @@ if (!clazz) { \
     {
         bool valid = false;
         QAccessible::State state;
+        QAccessible::Role role;
         QStringList actions;
         QString description;
         bool hasTextSelection = false;
@@ -474,6 +485,7 @@ if (!clazz) { \
         if (iface && iface->isValid()) {
             info.valid = true;
             info.state = iface->state();
+            info.role = iface->role();
             info.actions = QAccessibleBridgeUtils::effectiveActionNames(iface);
             info.description = descriptionForInterface(iface);
             QAccessibleTextInterface *textIface = iface->textInterface();
@@ -517,9 +529,11 @@ if (!clazz) { \
         env->CallVoidMethod(node, m_setEnabledMethodID, !info.state.disabled);
         env->CallVoidMethod(node, m_setFocusableMethodID, (bool)info.state.focusable);
         env->CallVoidMethod(node, m_setFocusedMethodID, (bool)info.state.focused);
+        if (m_setHeadingMethodID)
+            env->CallVoidMethod(node, m_setHeadingMethodID, info.role == QAccessible::Heading);
         env->CallVoidMethod(node, m_setVisibleToUserMethodID, !info.state.invisible);
         env->CallVoidMethod(node, m_setScrollableMethodID, hasIncreaseAction || hasDecreaseAction);
-        env->CallVoidMethod(node, m_setClickableMethodID, hasClickableAction);
+        env->CallVoidMethod(node, m_setClickableMethodID, hasClickableAction || info.role == QAccessible::Link);
 
         // Add ACTION_CLICK
         if (hasClickableAction)
@@ -583,6 +597,9 @@ if (!clazz) { \
         GET_AND_CHECK_STATIC_METHOD(m_setEnabledMethodID, nodeInfoClass, "setEnabled", "(Z)V");
         GET_AND_CHECK_STATIC_METHOD(m_setFocusableMethodID, nodeInfoClass, "setFocusable", "(Z)V");
         GET_AND_CHECK_STATIC_METHOD(m_setFocusedMethodID, nodeInfoClass, "setFocused", "(Z)V");
+        if (QtAndroidPrivate::androidSdkVersion() >= 28) {
+            GET_AND_CHECK_STATIC_METHOD(m_setHeadingMethodID, nodeInfoClass, "setHeading", "(Z)V");
+        }
         GET_AND_CHECK_STATIC_METHOD(m_setScrollableMethodID, nodeInfoClass, "setScrollable", "(Z)V");
         GET_AND_CHECK_STATIC_METHOD(m_setVisibleToUserMethodID, nodeInfoClass, "setVisibleToUser", "(Z)V");
         GET_AND_CHECK_STATIC_METHOD(m_setTextSelectionMethodID, nodeInfoClass, "setTextSelection", "(II)V");

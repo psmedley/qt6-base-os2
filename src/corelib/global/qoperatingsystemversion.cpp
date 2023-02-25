@@ -38,6 +38,7 @@
 ****************************************************************************/
 
 #include "qoperatingsystemversion.h"
+
 #if !defined(Q_OS_DARWIN) && !defined(Q_OS_WIN)
 #include "qoperatingsystemversion_p.h"
 #endif
@@ -49,7 +50,7 @@
 #include <qversionnumber.h>
 #include <qdebug.h>
 
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
 #include <QJniObject>
 #endif
 
@@ -145,18 +146,21 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
-    \fn QOperatingSystemVersion QOperatingSystemVersion::current()
-
     Returns a QOperatingSystemVersion indicating the current OS and its version number.
 
     \sa currentType()
 */
-#if !defined(Q_OS_DARWIN) && !defined(Q_OS_WIN) && !defined(Q_OS_OS2)
 QOperatingSystemVersion QOperatingSystemVersion::current()
 {
-    QOperatingSystemVersion version;
+    return QOperatingSystemVersionBase::current();
+}
+
+#if !defined(Q_OS_DARWIN) && !defined(Q_OS_WIN) && !defined(Q_OS_OS2)
+QOperatingSystemVersionBase QOperatingSystemVersionBase::current_impl()
+{
+    QOperatingSystemVersionBase version;
     version.m_os = currentType();
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
 #ifndef QT_BOOTSTRAPPED
     const QVersionNumber v = QVersionNumber::fromString(QJniObject::getStaticObjectField(
         "android/os/Build$VERSION", "RELEASE", "Ljava/lang/String;").toString());
@@ -224,6 +228,12 @@ QOperatingSystemVersion QOperatingSystemVersion::current()
 #endif
     return version;
 }
+
+QOperatingSystemVersionBase QOperatingSystemVersionBase::current()
+{
+    static const QOperatingSystemVersionBase v = current_impl();
+    return v;
+}
 #endif
 
 static inline int compareVersionComponents(int lhs, int rhs)
@@ -231,8 +241,8 @@ static inline int compareVersionComponents(int lhs, int rhs)
     return lhs >= 0 && rhs >= 0 ? lhs - rhs : 0;
 }
 
-int QOperatingSystemVersion::compare(const QOperatingSystemVersion &v1,
-                                     const QOperatingSystemVersion &v2)
+int QOperatingSystemVersionBase::compare(QOperatingSystemVersionBase v1,
+                                         QOperatingSystemVersionBase v2)
 {
     if (v1.m_major == v2.m_major) {
         if (v1.m_minor == v2.m_minor) {
@@ -331,32 +341,37 @@ int QOperatingSystemVersion::compare(const QOperatingSystemVersion &v1,
 */
 QString QOperatingSystemVersion::name() const
 {
-    switch (type()) {
-    case QOperatingSystemVersion::Windows:
+    return QOperatingSystemVersionBase::name();
+}
+
+QString QOperatingSystemVersionBase::name(QOperatingSystemVersionBase osversion)
+{
+    switch (osversion.type()) {
+    case QOperatingSystemVersionBase::Windows:
         return QStringLiteral("Windows");
-    case QOperatingSystemVersion::MacOS: {
-        if (majorVersion() < 10)
+    case QOperatingSystemVersionBase::MacOS: {
+        if (osversion.majorVersion() < 10)
             return QStringLiteral("Mac OS");
-        if (majorVersion() == 10 && minorVersion() < 8)
+        if (osversion.majorVersion() == 10 && osversion.minorVersion() < 8)
             return QStringLiteral("Mac OS X");
-        if (majorVersion() == 10 && minorVersion() < 12)
+        if (osversion.majorVersion() == 10 && osversion.minorVersion() < 12)
             return QStringLiteral("OS X");
         return QStringLiteral("macOS");
     }
-    case QOperatingSystemVersion::IOS: {
-        if (majorVersion() < 4)
+    case QOperatingSystemVersionBase::IOS: {
+        if (osversion.majorVersion() < 4)
             return QStringLiteral("iPhone OS");
         return QStringLiteral("iOS");
     }
-    case QOperatingSystemVersion::TvOS:
+    case QOperatingSystemVersionBase::TvOS:
         return QStringLiteral("tvOS");
-    case QOperatingSystemVersion::WatchOS:
+    case QOperatingSystemVersionBase::WatchOS:
         return QStringLiteral("watchOS");
-    case QOperatingSystemVersion::Android:
+    case QOperatingSystemVersionBase::Android:
         return QStringLiteral("Android");
-    case QOperatingSystemVersion::OS2:
+    case QOperatingSystemVersionBase::OS2:
         return QStringLiteral("OS/2");
-    case QOperatingSystemVersion::Unknown:
+    case QOperatingSystemVersionBase::Unknown:
     default:
         return QString();
     }
@@ -370,11 +385,13 @@ QString QOperatingSystemVersion::name() const
 */
 bool QOperatingSystemVersion::isAnyOfType(std::initializer_list<OSType> types) const
 {
-    for (const auto &t : qAsConst(types)) {
-        if (type() == t)
-            return true;
-    }
-    return false;
+    // ### Qt7: Remove this function
+    return std::find(types.begin(), types.end(), type()) != types.end();
+}
+
+bool QOperatingSystemVersionBase::isAnyOfType(std::initializer_list<OSType> types, OSType type)
+{
+    return std::find(types.begin(), types.end(), type) != types.end();
 }
 
 /*!
@@ -408,6 +425,54 @@ const QOperatingSystemVersion QOperatingSystemVersion::Windows8_1 =
  */
 const QOperatingSystemVersion QOperatingSystemVersion::Windows10 =
     QOperatingSystemVersion(QOperatingSystemVersion::Windows, 10);
+
+/*!
+    \variable QOperatingSystemVersion::Windows10_1809
+    \brief a version corresponding to Windows 10 1809 (version 10.0.17763).
+    \since 6.3
+ */
+
+/*!
+    \variable QOperatingSystemVersion::Windows10_1903
+    \brief a version corresponding to Windows 10 1903 (version 10.0.18362).
+    \since 6.3
+ */
+
+/*!
+    \variable QOperatingSystemVersion::Windows10_1909
+    \brief a version corresponding to Windows 10 1909 (version 10.0.18363).
+    \since 6.3
+ */
+
+/*!
+    \variable QOperatingSystemVersion::Windows10_2004
+    \brief a version corresponding to Windows 10 2004 (version 10.0.19041).
+    \since 6.3
+ */
+
+/*!
+    \variable QOperatingSystemVersion::Windows10_20H2
+    \brief a version corresponding to Windows 10 20H2 (version 10.0.19042).
+    \since 6.3
+ */
+
+/*!
+    \variable QOperatingSystemVersion::Windows10_21H1
+    \brief a version corresponding to Windows 10 21H1 (version 10.0.19043).
+    \since 6.3
+ */
+
+/*!
+    \variable QOperatingSystemVersion::Windows10_21H2
+    \brief a version corresponding to Windows 10 21H2 (version 10.0.19044).
+    \since 6.3
+ */
+
+/*!
+    \variable QOperatingSystemVersion::Windows11
+    \brief a version corresponding to Windows 11 (version 10.0.22000).
+    \since 6.3
+ */
 
 /*!
     \variable QOperatingSystemVersion::OSXMavericks
@@ -485,6 +550,14 @@ const QOperatingSystemVersion QOperatingSystemVersion::MacOSBigSur = [] {
 #endif
         return QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 10, 16);
 }();
+
+/*!
+    \variable QOperatingSystemVersion::MacOSMonterey
+    \brief a version corresponding to macOS Monterey (version 12).
+    \since 6.3
+ */
+const QOperatingSystemVersion QOperatingSystemVersion::MacOSMonterey =
+    QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 12, 0);
 
 /*!
     \variable QOperatingSystemVersion::AndroidJellyBean

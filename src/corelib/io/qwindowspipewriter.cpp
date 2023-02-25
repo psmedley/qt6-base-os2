@@ -41,6 +41,7 @@
 #include "qwindowspipewriter_p.h"
 #include <qcoreapplication.h>
 #include <QMutexLocker>
+#include <QPointer>
 
 QT_BEGIN_NAMESPACE
 
@@ -52,6 +53,7 @@ QWindowsPipeWriter::QWindowsPipeWriter(HANDLE pipeWriteEnd, QObject *parent)
       waitObject(NULL),
       pendingBytesWrittenValue(0),
       lastError(ERROR_SUCCESS),
+      completionState(NoError),
       stopped(true),
       writeSequenceStarted(false),
       bytesWrittenPending(false),
@@ -70,6 +72,19 @@ QWindowsPipeWriter::~QWindowsPipeWriter()
     CloseThreadpoolWait(waitObject);
     CloseHandle(eventHandle);
     CloseHandle(syncHandle);
+}
+
+/*!
+    Assigns the handle to this writer. The handle must be valid.
+    Call this function if data was buffered before getting the handle.
+ */
+void QWindowsPipeWriter::setHandle(HANDLE hPipeWriteEnd)
+{
+    Q_ASSERT(!stopped);
+
+    handle = hPipeWriteEnd;
+    QMutexLocker locker(&mutex);
+    startAsyncWriteHelper(&locker);
 }
 
 /*!
@@ -102,16 +117,6 @@ void QWindowsPipeWriter::stop()
 }
 
 /*!
-    Returns \c true if async operation is in progress or a bytesWritten
-    signal is pending.
- */
-bool QWindowsPipeWriter::isWriteOperationActive() const
-{
-    QMutexLocker locker(&mutex);
-    return writeSequenceStarted || bytesWrittenPending;
-}
-
-/*!
     Returns the number of bytes that are waiting to be written.
  */
 qint64 QWindowsPipeWriter::bytesToWrite() const
@@ -121,40 +126,62 @@ qint64 QWindowsPipeWriter::bytesToWrite() const
 }
 
 /*!
-    Writes data to the pipe.
- */
-bool QWindowsPipeWriter::write(const QByteArray &ba)
+    Returns \c true if async operation is in progress.
+*/
+bool QWindowsPipeWriter::isWriteOperationActive() const
 {
-    QMutexLocker locker(&mutex);
-
-    if (lastError != ERROR_SUCCESS)
-        return false;
-
-    writeBuffer.append(ba);
-    if (writeSequenceStarted)
-        return true;
-
-    stopped = false;
-    startAsyncWriteLocked();
-
-    // Do not post the event, if the write operation will be completed asynchronously.
-    if (!bytesWrittenPending)
-        return true;
-
-    if (!winEventActPosted) {
-        winEventActPosted = true;
-        locker.unlock();
-        QCoreApplication::postEvent(this, new QEvent(QEvent::WinEventAct));
-    } else {
-        locker.unlock();
-    }
-
-    SetEvent(syncHandle);
-    return true;
+    return completionState == NoError && bytesToWrite() != 0;
 }
 
 /*!
-    Starts a new write sequence. Thread-safety should be ensured by the caller.
+    Writes a shallow copy of \a ba to the internal buffer.
+ */
+void QWindowsPipeWriter::write(const QByteArray &ba)
+{
+    if (completionState != WriteDisabled)
+        writeImpl(ba);
+}
+
+/*!
+    Writes data to the internal buffer.
+ */
+void QWindowsPipeWriter::write(const char *data, qint64 size)
+{
+    if (completionState != WriteDisabled)
+        writeImpl(data, size);
+}
+
+template <typename... Args>
+inline void QWindowsPipeWriter::writeImpl(Args... args)
+{
+    QMutexLocker locker(&mutex);
+
+    writeBuffer.append(args...);
+
+    if (writeSequenceStarted || (lastError != ERROR_SUCCESS))
+        return;
+
+    stopped = false;
+
+    // If we don't have an assigned handle yet, defer writing until
+    // setHandle() is called.
+    if (handle != INVALID_HANDLE_VALUE)
+        startAsyncWriteHelper(&locker);
+}
+
+void QWindowsPipeWriter::startAsyncWriteHelper(QMutexLocker<QMutex> *locker)
+{
+    startAsyncWriteLocked();
+
+    // Do not post the event, if the write operation will be completed asynchronously.
+    if (!bytesWrittenPending && lastError == ERROR_SUCCESS)
+        return;
+
+    notifyCompleted(locker);
+}
+
+/*!
+    Starts a new write sequence.
  */
 void QWindowsPipeWriter::startAsyncWriteLocked()
 {
@@ -171,12 +198,12 @@ void QWindowsPipeWriter::startAsyncWriteLocked()
                 // Operation has been queued and will complete in the future.
                 writeSequenceStarted = true;
                 SetThreadpoolWait(waitObject, eventHandle, NULL);
-                return;
+                break;
             }
         }
 
         if (!writeCompleted(errorCode, numberOfBytesWritten))
-            return;
+            break;
     }
 }
 
@@ -212,17 +239,9 @@ void QWindowsPipeWriter::waitCallback(PTP_CALLBACK_INSTANCE instance, PVOID cont
     if (pipeWriter->writeCompleted(errorCode, numberOfBytesTransfered))
         pipeWriter->startAsyncWriteLocked();
 
-    if (pipeWriter->lastError == ERROR_SUCCESS && !pipeWriter->winEventActPosted) {
-        pipeWriter->winEventActPosted = true;
-        locker.unlock();
-        QCoreApplication::postEvent(pipeWriter, new QEvent(QEvent::WinEventAct));
-    } else {
-        locker.unlock();
-    }
-
-    // We set the event only after unlocking to avoid additional context
-    // switches due to the released thread immediately running into the lock.
-    SetEvent(pipeWriter->syncHandle);
+    // We post the notification even if the write operation failed,
+    // to unblock the main thread, in case it is waiting for the event.
+    pipeWriter->notifyCompleted(&locker);
 }
 
 /*!
@@ -231,21 +250,43 @@ void QWindowsPipeWriter::waitCallback(PTP_CALLBACK_INSTANCE instance, PVOID cont
  */
 bool QWindowsPipeWriter::writeCompleted(DWORD errorCode, DWORD numberOfBytesWritten)
 {
-    if (errorCode == ERROR_SUCCESS) {
-        Q_ASSERT(numberOfBytesWritten == DWORD(writeBuffer.nextDataBlockSize()));
-
+    switch (errorCode) {
+    case ERROR_SUCCESS:
         bytesWrittenPending = true;
         pendingBytesWrittenValue += numberOfBytesWritten;
         writeBuffer.free(numberOfBytesWritten);
         return true;
+    case ERROR_PIPE_NOT_CONNECTED: // the other end has closed the pipe
+    case ERROR_OPERATION_ABORTED: // the operation was canceled
+    case ERROR_NO_DATA: // the pipe is being closed
+        break;
+    default:
+        qErrnoWarning(errorCode, "QWindowsPipeWriter: write failed.");
+        break;
     }
 
+    // The buffer is not cleared here, because the write progress
+    // should appear on the main thread synchronously.
     lastError = errorCode;
-    writeBuffer.clear();
-    // The other end has closed the pipe. This can happen in QLocalSocket. Do not warn.
-    if (errorCode != ERROR_OPERATION_ABORTED && errorCode != ERROR_NO_DATA)
-        qErrnoWarning(errorCode, "QWindowsPipeWriter: write failed.");
     return false;
+}
+
+/*!
+    Posts a notification event to the main thread.
+ */
+void QWindowsPipeWriter::notifyCompleted(QMutexLocker<QMutex> *locker)
+{
+    if (!winEventActPosted) {
+        winEventActPosted = true;
+        locker->unlock();
+        QCoreApplication::postEvent(this, new QEvent(QEvent::WinEventAct));
+    } else {
+        locker->unlock();
+    }
+
+    // We set the event only after unlocking to avoid additional context
+    // switches due to the released thread immediately running into the lock.
+    SetEvent(syncHandle);
 }
 
 /*!
@@ -273,14 +314,13 @@ bool QWindowsPipeWriter::consumePendingAndEmit(bool allowWinActPosting)
     if (allowWinActPosting)
         winEventActPosted = false;
 
-    if (!bytesWrittenPending)
-        return false;
-
-    // Reset the state even if we don't emit bytesWritten().
-    // It's a defined behavior to not re-emit this signal recursively.
-    bytesWrittenPending = false;
-    qint64 numberOfBytesWritten = pendingBytesWrittenValue;
-    pendingBytesWrittenValue = 0;
+    const qint64 numberOfBytesWritten = pendingBytesWrittenValue;
+    const bool emitBytesWritten = bytesWrittenPending;
+    if (emitBytesWritten) {
+        bytesWrittenPending = false;
+        pendingBytesWrittenValue = 0;
+    }
+    const DWORD dwError = lastError;
 
     locker.unlock();
 
@@ -288,41 +328,25 @@ bool QWindowsPipeWriter::consumePendingAndEmit(bool allowWinActPosting)
     if (stopped)
         return false;
 
-    emit bytesWritten(numberOfBytesWritten);
-    return true;
-}
-
-bool QWindowsPipeWriter::waitForNotification(const QDeadlineTimer &deadline)
-{
-    do {
-        DWORD waitRet = WaitForSingleObjectEx(syncHandle, deadline.remainingTime(), TRUE);
-        if (waitRet == WAIT_OBJECT_0)
-            return true;
-
-        if (waitRet != WAIT_IO_COMPLETION)
-            return false;
-
-        // Some I/O completion routine was called. Wait some more.
-    } while (!deadline.hasExpired());
-
-    return false;
-}
-
-/*!
-    Waits for the completion of the asynchronous write operation.
-    Returns \c true, if we've emitted the bytesWritten signal.
- */
-bool QWindowsPipeWriter::waitForWrite(int msecs)
-{
-    QDeadlineTimer timer(msecs);
-
-    // Make sure that 'syncHandle' was triggered by the thread pool callback.
-    while (isWriteOperationActive() && waitForNotification(timer)) {
-        if (consumePendingAndEmit(false))
-            return true;
+    // Trigger 'ErrorDetected' state only once. This state must be set before
+    // emitting the bytesWritten() signal. Otherwise, the write sequence will
+    // be considered not finished, and we may hang if a slot connected
+    // to bytesWritten() calls waitForBytesWritten().
+    if (dwError != ERROR_SUCCESS && completionState == NoError) {
+        QPointer<QWindowsPipeWriter> alive(this);
+        completionState = ErrorDetected;
+        if (emitBytesWritten)
+            emit bytesWritten(numberOfBytesWritten);
+        if (alive) {
+            writeBuffer.clear();
+            completionState = WriteDisabled;
+            emit writeFailed();
+        }
+    } else if (emitBytesWritten) {
+        emit bytesWritten(numberOfBytesWritten);
     }
 
-    return false;
+    return emitBytesWritten;
 }
 
 QT_END_NAMESPACE

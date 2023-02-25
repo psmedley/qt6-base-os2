@@ -76,7 +76,9 @@ class QFileInfo;
 
 class Q_GUI_EXPORT QPlatformTheme
 {
+    Q_GADGET
     Q_DECLARE_PRIVATE(QPlatformTheme)
+
 public:
     Q_DISABLE_COPY_MOVE(QPlatformTheme)
 
@@ -119,7 +121,9 @@ public:
         IconFallbackSearchPaths,
         MouseQuickSelectionThreshold,
         InteractiveResizeAcrossScreens,
+        ShowDirectoriesFirst,
     };
+    Q_ENUM(ThemeHint)
 
     enum DialogType {
         FileDialog,
@@ -186,6 +190,7 @@ public:
         EditorFont,
         NFonts
     };
+    Q_ENUM(Font)
 
     enum StandardPixmap {  // Keep in sync with QStyle::StandardPixmap
         TitleBarMenuButton,

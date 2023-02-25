@@ -248,16 +248,20 @@ static qreal qConvertToRealNumber(const QVariant::Private *d, bool *ok)
 // the type of d has already been set, but other field are not set
 static void customConstruct(QVariant::Private *d, const void *copy)
 {
-    QtPrivate::QMetaTypeInterface *iface = d->typeInterface();
+    const QtPrivate::QMetaTypeInterface *iface = d->typeInterface();
     if (!(iface && iface->size)) {
         *d = QVariant::Private();
         return;
     }
+    if (!iface->copyCtr || (!copy && !iface->defaultCtr)) {
+        // QVariant requires type to be copy and default constructible
+        *d = QVariant::Private();
+        qWarning("QVariant: Provided metatype does not support "
+                 "destruction, copy and default construction");
+        return;
+    }
 
     if (QVariant::Private::canUseInternalSpace(iface)) {
-        // QVariant requires type to be copy and default constructible
-        Q_ASSERT(iface->copyCtr);
-        Q_ASSERT(iface->defaultCtr);
         if (copy)
             iface->copyCtr(iface, &d->data, copy);
         else
@@ -527,15 +531,12 @@ QVariant::QVariant(const QVariant &p)
 {
     if (d.is_shared) {
         d.data.shared->ref.ref();
-        return;
-    }
-    QtPrivate::QMetaTypeInterface *iface = d.typeInterface();
-    auto other = p.constData();
-    if (iface) {
+    } else if (const QtPrivate::QMetaTypeInterface *iface = d.typeInterface()) {
+        auto other = p.constData();
         if (other)
-            iface->copyCtr(iface, &d, other);
+            iface->copyCtr(iface, &d.data, other);
         else
-            iface->defaultCtr(iface, &d);
+            iface->defaultCtr(iface, &d.data);
     }
 }
 
@@ -814,6 +815,9 @@ QVariant::QVariant(const QVariant &p)
     instead to construct variants from the pointer types represented by
     \c QMetaType::VoidStar, and \c QMetaType::QObjectStar.
 
+    If \a type does not support copy and default construction, the variant will
+    be invalid.
+
     \sa QVariant::fromValue(), QMetaType::Type
 */
 QVariant::QVariant(QMetaType type, const void *copy) : d(type)
@@ -1019,7 +1023,7 @@ QVariant &QVariant::operator=(const QVariant &variant)
         d = variant.d;
     } else {
         d = variant.d;
-        QtPrivate::QMetaTypeInterface *iface = d.typeInterface();
+        const QtPrivate::QMetaTypeInterface *iface = d.typeInterface();
         const void *other = variant.constData();
         if (iface) {
             if (other)
@@ -1155,17 +1159,17 @@ static const ushort mapIdFromQt3ToCurrent[MapFromThreeCount] =
 #endif
 };
 
-// enum values needed to map Qt5 based type id's to Qt6 based ones
-enum Qt5Types {
-    Qt5UserType = 1024,
-    Qt5LastCoreType = QMetaType::QCborMap,
-    Qt5FirstGuiType = 64,
-    Qt5LastGuiType = 87,
-    Qt5SizePolicy = 121,
-    Qt5RegExp = 27,
-    Qt5KeySequence = 75,
-    Qt5QQuaternion = 85
-};
+// values needed to map Qt5 based type id's to Qt6 based ones
+constexpr int Qt5UserType = 1024;
+constexpr int Qt5LastCoreType = QMetaType::QCborMap;
+constexpr int Qt5FirstGuiType = 64;
+constexpr int Qt5LastGuiType = 87;
+constexpr int Qt5SizePolicy = 121;
+constexpr int Qt5RegExp = 27;
+constexpr int Qt5KeySequence = 75;
+constexpr int Qt5QQuaternion = 85;
+
+constexpr int Qt6ToQt5GuiTypeDelta = qToUnderlying(QMetaType::FirstGuiType) - Qt5FirstGuiType;
 
 /*!
     Internal function for loading a variant from stream \a s. Use the
@@ -1205,7 +1209,7 @@ void QVariant::load(QDataStream &s)
         if (typeId == Qt5UserType) {
             typeId = QMetaType::User;
         } else if (typeId >= Qt5FirstGuiType && typeId <= Qt5LastGuiType) {
-            typeId += QMetaType::FirstGuiType - Qt5FirstGuiType;
+            typeId += Qt6ToQt5GuiTypeDelta;
         } else if (typeId == Qt5SizePolicy) {
             typeId = QMetaType::QSizePolicy;
         } else if (typeId == Qt5RegExp) {
@@ -1273,7 +1277,7 @@ void QVariant::save(QDataStream &s) const
             typeId = Qt5UserType;
             saveAsUserType = true;
         } else if (typeId >= QMetaType::FirstGuiType && typeId <= QMetaType::LastGuiType) {
-            typeId -= QMetaType::FirstGuiType - Qt5FirstGuiType;
+            typeId -= Qt6ToQt5GuiTypeDelta;
             if (typeId > Qt5LastGuiType) {
                 typeId = Qt5UserType;
                 saveAsUserType = true;

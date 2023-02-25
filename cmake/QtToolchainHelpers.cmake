@@ -27,6 +27,7 @@ set(__qt_chainload_toolchain_file \"\${__qt_initially_configured_toolchain_file}
     endif()
 
     if(VCPKG_CHAINLOAD_TOOLCHAIN_FILE)
+        file(TO_CMAKE_PATH "${VCPKG_CHAINLOAD_TOOLCHAIN_FILE}" VCPKG_CHAINLOAD_TOOLCHAIN_FILE)
         list(APPEND init_vcpkg
              "set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE \"${VCPKG_CHAINLOAD_TOOLCHAIN_FILE}\")")
     endif()
@@ -178,18 +179,33 @@ set(__qt_chainload_toolchain_file \"\${__qt_initially_configured_toolchain_file}
         if(UIKIT)
             list(APPEND init_platform
                 "set(CMAKE_SYSTEM_NAME \"${CMAKE_SYSTEM_NAME}\" CACHE STRING \"\")")
-            list(APPEND init_platform "if(CMAKE_GENERATOR STREQUAL \"Xcode\" AND NOT QT_NO_XCODE_EMIT_EPN)")
-            list(APPEND init_platform "    set_property(GLOBAL PROPERTY XCODE_EMIT_EFFECTIVE_PLATFORM_NAME OFF)")
-            list(APPEND init_platform "endif()")
         endif()
     elseif(ANDROID)
-        foreach(var ANDROID_NATIVE_API_LEVEL ANDROID_STL ANDROID_ABI
-                ANDROID_SDK_ROOT ANDROID_NDK_ROOT)
+        list(APPEND init_platform
+"# Detect Android SDK/NDK from environment before loading the Android platform toolchain file."
+"if(NOT DEFINED ANDROID_SDK_ROOT)"
+"    if(NOT \"\$ENV{ANDROID_SDK_ROOT}\" STREQUAL \"\")"
+"        set(ANDROID_SDK_ROOT \"\$ENV{ANDROID_SDK_ROOT}\" CACHE STRING \"Path to the Android SDK\")"
+"    endif()"
+"endif()"
+"if(NOT DEFINED ANDROID_NDK_ROOT)"
+"    if(NOT \"\$ENV{ANDROID_NDK_ROOT}\" STREQUAL \"\")"
+"        set(ANDROID_NDK_ROOT \"\$ENV{ANDROID_NDK_ROOT}\" CACHE STRING \"Path to the Android NDK\")"
+"    endif()"
+"endif()"
+        )
+
+        foreach(var ANDROID_PLATFORM ANDROID_NATIVE_API_LEVEL ANDROID_STL
+                ANDROID_ABI ANDROID_SDK_ROOT ANDROID_NDK_ROOT)
             list(APPEND init_additional_used_variables
                 "list(APPEND __qt_toolchain_used_variables ${var})")
         endforeach()
+
         list(APPEND init_platform
-             "set(ANDROID_NATIVE_API_LEVEL \"${ANDROID_NATIVE_API_LEVEL}\" CACHE STRING \"\")")
+            "if(NOT DEFINED ANDROID_PLATFORM AND NOT DEFINED ANDROID_NATIVE_API_LEVEL)")
+        list(APPEND init_platform
+            "    set(ANDROID_PLATFORM \"${ANDROID_PLATFORM}\" CACHE STRING \"\")")
+        list(APPEND init_platform "endif()")
         list(APPEND init_platform "set(ANDROID_STL \"${ANDROID_STL}\" CACHE STRING \"\")")
         list(APPEND init_platform "set(ANDROID_ABI \"${ANDROID_ABI}\" CACHE STRING \"\")")
         list(APPEND init_platform "if (NOT DEFINED ANDROID_SDK_ROOT)")

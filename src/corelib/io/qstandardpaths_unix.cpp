@@ -360,10 +360,8 @@ static QStringList xdgDataDirs()
         dirs.append(QString::fromLatin1("/usr/share"));
 #endif
     } else {
-        const auto parts = QStringView{xdgDataDirsEnv}.split(QDir::listSeparator(), Qt::SkipEmptyParts);
-
         // Normalize paths, skip relative paths
-        for (const auto &dir : parts) {
+        for (const auto dir : qTokenize(xdgDataDirsEnv, u':')) {
             if (dir.startsWith(QLatin1Char('/')))
                 dirs.push_back(QDir::cleanPath(dir.toString()));
         }

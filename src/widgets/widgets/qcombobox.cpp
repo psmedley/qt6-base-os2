@@ -92,7 +92,8 @@ QComboBoxPrivate::QComboBoxPrivate()
       shownOnce(false),
       duplicatesEnabled(false),
       frame(true),
-      inserting(false)
+      inserting(false),
+      hidingPopup(false)
 {
 }
 
@@ -1042,8 +1043,7 @@ QComboBox::QComboBox(QComboBoxPrivate &dd, QWidget *parent)
     of the view(), e.g., by using
     \l{QAbstractItemView::}{setSelectionMode()}.
 
-    \sa QLineEdit, QSpinBox, QRadioButton, QButtonGroup,
-        {fowler}{GUI Design Handbook: Combo Box, Drop-Down List Box}
+    \sa QLineEdit, QSpinBox, QRadioButton, QButtonGroup
 */
 
 void QComboBoxPrivate::init()
@@ -2171,7 +2171,11 @@ void QComboBoxPrivate::setCurrentIndex(const QModelIndex &mi)
         }
         updateLineEditGeometry();
     }
-    if (indexChanged) {
+    // If the model was reset to an empty, currentIndex will be invalidated
+    // (because it's a QPersistentModelIndex), but the index change will never
+    // be advertised. So we need an explicit check for such condition.
+    const bool modelResetToEmpty = !normalized.isValid() && indexBeforeChange != -1;
+    if (indexChanged || modelResetToEmpty) {
         q->update();
         _q_emitCurrentIndexChanged(currentIndex);
     }
@@ -2559,8 +2563,8 @@ bool QComboBoxPrivate::showNativePopup()
 #ifdef Q_OS_MACOS
     // The Cocoa popup will swallow any mouse release event.
     // We need to fake one here to un-press the button.
-    QMouseEvent mouseReleased(QEvent::MouseButtonRelease, q->pos(), Qt::LeftButton,
-                              Qt::MouseButtons(Qt::LeftButton), Qt::KeyboardModifiers());
+    QMouseEvent mouseReleased(QEvent::MouseButtonRelease, q->pos(), q->mapToGlobal(QPoint(0, 0)),
+                              Qt::LeftButton, Qt::MouseButtons(Qt::LeftButton), {});
     QCoreApplication::sendEvent(q, &mouseReleased);
 #endif
 
@@ -2837,6 +2841,13 @@ void QComboBox::showPopup()
 void QComboBox::hidePopup()
 {
     Q_D(QComboBox);
+    if (d->hidingPopup)
+        return;
+    d->hidingPopup = true;
+    // can't use QBoolBlocker on a bitfield
+    auto resetHidingPopup = qScopeGuard([d]{
+        d->hidingPopup = false;
+    });
     if (d->container && d->container->isVisible()) {
 #if QT_CONFIG(effects)
         QSignalBlocker modelBlocker(d->model);

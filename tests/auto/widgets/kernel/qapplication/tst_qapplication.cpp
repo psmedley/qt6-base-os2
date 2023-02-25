@@ -125,6 +125,7 @@ private slots:
     void desktopSettingsAware();
 
     void setActiveWindow();
+    void activateDeactivateEvent();
 
     void focusWidget();
     void focusChanged();
@@ -239,10 +240,12 @@ void tst_QApplication::staticSetup()
         EventWatcher()
         {
             qApp->installEventFilter(this);
+#if QT_DEPRECATED_SINCE(6, 0)
 QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
             QObject::connect(qApp, &QApplication::paletteChanged, [&]{ ++palette_changed; });
             QObject::connect(qApp, &QApplication::fontChanged, [&]{ ++font_changed; });
 QT_WARNING_POP
+#endif
         }
 
     protected:
@@ -272,8 +275,13 @@ QT_WARNING_POP
     font.setBold(!font.bold());
     qApp->setFont(font);
     QApplication::processEvents();
+#if QT_DEPRECATED_SINCE(6, 0)
     QCOMPARE(watcher.palette_changed, 2);
     QCOMPARE(watcher.font_changed, 2);
+#else
+    QCOMPARE(watcher.palette_changed, 1);
+    QCOMPARE(watcher.font_changed, 1);
+#endif
 }
 
 
@@ -1565,6 +1573,53 @@ void tst_QApplication::setActiveWindow()
     QApplication::setActiveWindow(w); // needs this on twm (focus follows mouse)
     QVERIFY(pb1->hasFocus());
     delete w;
+}
+
+void tst_QApplication::activateDeactivateEvent()
+{
+    // Ensure that QWindows (other than QWidgetWindow)
+    // are activated / deactivated.
+    class Window : public QWindow
+    {
+    public:
+        using QWindow::QWindow;
+
+        int activateCount = 0;
+        int deactivateCount = 0;
+    protected:
+        bool event(QEvent *e) override
+        {
+            switch (e->type()) {
+            case QEvent::WindowActivate:
+                ++activateCount;
+                break;
+            case QEvent::WindowDeactivate:
+                ++deactivateCount;
+                break;
+            default:
+                break;
+            }
+            return QWindow::event(e);
+        }
+    };
+
+    int argc = 0;
+    QApplication app(argc, nullptr);
+
+    Window w1;
+    Window w2;
+
+    w1.show();
+    w1.requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(&w1));
+    QCOMPARE(w1.activateCount, 1);
+    QCOMPARE(w1.deactivateCount, 0);
+
+    w2.show();
+    w2.requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(&w2));
+    QCOMPARE(w1.deactivateCount, 1);
+    QCOMPARE(w2.activateCount, 1);
 }
 
 void tst_QApplication::focusWidget()

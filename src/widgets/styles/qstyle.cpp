@@ -573,8 +573,9 @@ QRect QStyle::itemPixmapRect(const QRect &rect, int alignment, const QPixmap &pi
     int x, y, w, h;
     rect.getRect(&x, &y, &w, &h);
 
-    const int pixmapWidth = pixmap.width()/pixmap.devicePixelRatio();
-    const int pixmapHeight = pixmap.height()/pixmap.devicePixelRatio();
+    QSizeF pixmapSize = pixmap.deviceIndependentSize();
+    const int pixmapWidth = pixmapSize.width();
+    const int pixmapHeight = pixmapSize.height();
 
     if ((alignment & Qt::AlignVCenter) == Qt::AlignVCenter)
         y += h/2 - pixmapHeight/2;
@@ -1503,21 +1504,19 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
 
     \value PM_SubMenuOverlap The horizontal overlap between a submenu and its parent.
 
-    \value PM_TreeViewIndentation The indentation of items in a tree view.
-           This enum value has been introduced in Qt 5.4.
+    \value [since 5.4] PM_TreeViewIndentation The indentation of items in a tree view.
 
     \value PM_HeaderDefaultSectionSizeHorizontal The default size of sections
            in a horizontal header. This enum value has been introduced in Qt 5.5.
     \value PM_HeaderDefaultSectionSizeVertical The default size of sections
            in a vertical header. This enum value has been introduced in Qt 5.5.
 
-    \value PM_TitleBarButtonIconSize The size of button icons on a title bar.
-           This enum value has been introduced in Qt 5.8.
-    \value PM_TitleBarButtonSize The size of buttons on a title bar.
-           This enum value has been introduced in Qt 5.8.
+    \value [since 5.8] PM_TitleBarButtonIconSize The size of button icons on a title bar.
+    \value [since 5.8] PM_TitleBarButtonSize The size of buttons on a title bar.
 
-    \value PM_LineEditIconSize The default size for icons in a line edit.
-           This enum value has been introduced in Qt 6.2.
+    \value [since 6.2] PM_LineEditIconSize The default size for icons in a line edit.
+
+    \value [since 6.3] PM_LineEditIconMargin The margin around icons in a line edit.
 
     \value PM_CustomBase Base value for custom pixel metrics.  Custom
     values must be greater than this value.
@@ -1849,6 +1848,9 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
     spinbox mouse clicks.
     \value SH_SpinBox_ClickAutoRepeatThreshold  Auto-repeat threshold for
     spinbox mouse clicks.
+    \value [since 6.3] SH_SpinBox_SelectOnStep  Whether changing the value using
+    the buttons or up/down keys automatically selects the text.
+
     \value SH_ToolTipLabel_Opacity  An integer indicating the opacity for
     the tip label, 0 is completely transparent, 255 is completely
     opaque.
@@ -2013,6 +2015,11 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
            of a QTabBar.
            This enum value has been introduced in Qt 6.1.
 
+    \value SH_Table_AlwaysDrawLeftTopGridLines
+           Determines if the far left and top grid lines are drawn in a table or
+           not when the header is hidden. Defaults to false.
+           This enum value has been introduced in Qt 6.3.
+
     \sa styleHint()
 */
 
@@ -2104,21 +2111,15 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
     \value SP_MediaSeekBackward Icon indicating that media should seek backward.
     \value SP_MediaVolume Icon indicating a volume control.
     \value SP_MediaVolumeMuted Icon indicating a muted volume control.
-    \value SP_LineEditClearButton Icon for a standard clear button in a QLineEdit. This enum value was added in Qt 5.2.
-    \value SP_DialogYesToAllButton Icon for a standard YesToAll button in a QDialogButtonBox.
-        This enum value was added in Qt 5.14.
-    \value SP_DialogNoToAllButton Icon for a standard NoToAll button in a QDialogButtonBox.
-        This enum value was added in Qt 5.14.
-    \value SP_DialogSaveAllButton Icon for a standard SaveAll button in a QDialogButtonBox.
-       This enum value was added in Qt 5.14.
-    \value SP_DialogAbortButton Icon for a standard Abort button in a QDialogButtonBox.
-       This enum value was added in Qt 5.14.
-    \value SP_DialogRetryButton Icon for a standard Retry button in a QDialogButtonBox.
-       This enum value was added in Qt 5.14.
-    \value SP_DialogIgnoreButton Icon for a standard Ignore button in a QDialogButtonBox.
-       This enum value was added in Qt 5.14.
-    \value SP_RestoreDefaultsButton Icon for a standard RestoreDefaults button in a QDialogButtonBox.
-       This enum value was added in Qt 5.14.
+    \value [since 5.2] SP_LineEditClearButton Icon for a standard clear button in a QLineEdit.
+    \value [since 5.14] SP_DialogYesToAllButton Icon for a standard YesToAll button in a QDialogButtonBox.
+    \value [since 5.14] SP_DialogNoToAllButton Icon for a standard NoToAll button in a QDialogButtonBox.
+    \value [since 5.14] SP_DialogSaveAllButton Icon for a standard SaveAll button in a QDialogButtonBox.
+    \value [since 5.14] SP_DialogAbortButton Icon for a standard Abort button in a QDialogButtonBox.
+    \value [since 5.14] SP_DialogRetryButton Icon for a standard Retry button in a QDialogButtonBox.
+    \value [since 5.14] SP_DialogIgnoreButton Icon for a standard Ignore button in a QDialogButtonBox.
+    \value [since 5.14] SP_RestoreDefaultsButton Icon for a standard RestoreDefaults button in a QDialogButtonBox.
+    \value [since 6.3] SP_TabCloseButton Icon for the close button in the tab of a QTabBar.
     \value SP_CustomBase  Base value for custom standard pixmaps;
     custom values must be greater than this value.
 
@@ -2261,8 +2262,8 @@ int QStyle::sliderPositionFromValue(int min, int max, int logicalValue, int span
     if (logicalValue > max)
         return upsideDown ? span : min;
 
-    uint range = max - min;
-    uint p = upsideDown ? max - logicalValue : logicalValue - min;
+    const uint range = qint64(max) - min;
+    const uint p = upsideDown ? qint64(max) - logicalValue : qint64(logicalValue) - min;
 
     if (range > (uint)INT_MAX/4096) {
         double dpos = (double(p))/(double(range)/span);
@@ -2304,15 +2305,15 @@ int QStyle::sliderValueFromPosition(int min, int max, int pos, int span, bool up
     if (pos >= span)
         return upsideDown ? min : max;
 
-    uint range = max - min;
+    const qint64 range = qint64(max) - min;
 
     if ((uint)span > range) {
-        int tmp = (2 * pos * range + span) / (2 * span);
+        const int tmp = (2 * range * pos + span) / (qint64(2) * span);
         return upsideDown ? max - tmp : tmp + min;
     } else {
-        uint div = range / span;
-        uint mod = range % span;
-        int tmp = pos * div + (2 * pos * mod + span) / (2 * span);
+        const qint64 div = range / span;
+        const qint64 mod = range % span;
+        const int tmp = pos * div + (2 * mod * pos + span) / (qint64(2) * span);
         return upsideDown ? max - tmp : tmp + min;
     }
     // equiv. to min + (pos*range)/span + 0.5

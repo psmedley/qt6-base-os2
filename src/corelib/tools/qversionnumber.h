@@ -93,8 +93,8 @@ class QVersionNumber
 
         SegmentStorage(const QList<int> &seg)
         {
-            if (dataFitsInline(seg.begin(), seg.size()))
-                setInlineData(seg.begin(), seg.size());
+            if (dataFitsInline(seg.data(), seg.size()))
+                setInlineData(seg.data(), seg.size());
             else
                 pointer_segments = new QList<int>(seg);
         }
@@ -136,15 +136,15 @@ class QVersionNumber
 
         explicit SegmentStorage(QList<int> &&seg)
         {
-            if (dataFitsInline(seg.cbegin(), seg.size()))
-                setInlineData(seg.cbegin(), seg.size());
+            if (dataFitsInline(std::as_const(seg).data(), seg.size()))
+                setInlineData(std::as_const(seg).data(), seg.size());
             else
                 pointer_segments = new QList<int>(std::move(seg));
         }
         SegmentStorage(std::initializer_list<int> args)
         {
-            if (dataFitsInline(args.begin(), int(args.size()))) {
-                setInlineData(args.begin(), int(args.size()));
+            if (dataFitsInline(std::data(args), int(args.size()))) {
+                setInlineData(std::data(args), int(args.size()));
             } else {
                 pointer_segments = new QList<int>(args);
             }
@@ -268,7 +268,7 @@ public:
 
     [[nodiscard]] Q_CORE_EXPORT static int compare(const QVersionNumber &v1, const QVersionNumber &v2) noexcept;
 
-    [[nodiscard]] Q_CORE_EXPORT static Q_DECL_PURE_FUNCTION QVersionNumber commonPrefix(const QVersionNumber &v1, const QVersionNumber &v2);
+    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber commonPrefix(const QVersionNumber &v1, const QVersionNumber &v2);
 
     [[nodiscard]] Q_CORE_EXPORT QString toString() const;
 #if QT_STRINGVIEW_LEVEL < 2
@@ -462,7 +462,7 @@ Q_CORE_EXPORT QDebug operator<<(QDebug, const QTypeRevision &revision);
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QVersionNumber)
-Q_DECLARE_METATYPE(QTypeRevision)
+QT_DECL_METATYPE_EXTERN(QVersionNumber, Q_CORE_EXPORT)
+QT_DECL_METATYPE_EXTERN(QTypeRevision, Q_CORE_EXPORT)
 
 #endif // QVERSIONNUMBER_H

@@ -2668,8 +2668,7 @@ void QStyleSheetStyle::setProperties(QWidget *w)
 
     {
         // scan decls for final occurrence of each "qproperty"
-        QDuplicateTracker<QString> propertySet;
-        propertySet.reserve(decls.size());
+        QDuplicateTracker<QString> propertySet(decls.size());
         for (int i = decls.count() - 1; i >= 0; --i) {
             const QString property = decls.at(i).d->property;
             if (!property.startsWith(QLatin1String("qproperty-"), Qt::CaseInsensitive))
@@ -3317,7 +3316,7 @@ void QStyleSheetStyle::drawComplexControl(ComplexControl cc, const QStyleOptionC
                 if (customDropDownArrow)
                     toolOpt.features &= ~(QStyleOptionToolButton::Menu | QStyleOptionToolButton::HasMenu);
             }
-            const bool customMenuIndicator = (!customDropDown && drawMenuIndicator)
+            const bool customMenuIndicator = (!drawDropDown && drawMenuIndicator)
                                           && hasStyleRule(w, PseudoElement_ToolButtonMenuIndicator);
             if (customMenuIndicator)
                 toolOpt.features &= ~QStyleOptionToolButton::HasMenu;
@@ -3336,18 +3335,22 @@ void QStyleSheetStyle::drawComplexControl(ComplexControl cc, const QStyleOptionC
                         rule.drawBackground(p, toolOpt.rect);
                 }
 
-                // Let base or windows style draw the button
-                // set drawDropDown and drawMenuIndicator flags to false,
-                // unless customDropDownArrow needs to be drawn
-                if (rule.baseStyleCanDraw() && !(tool->features & QStyleOptionToolButton::Arrow)) {
-                    baseStyle()->drawComplexControl(cc, &toolOpt, p, w);
-                } else {
-                    QWindowsStyle::drawComplexControl(cc, &toolOpt, p, w);
-                }
-                if (!customDropDownArrow) {
-                    drawDropDown      = false;
+                QStyleOptionToolButton nativeToolOpt(toolOpt);
+                // don't draw natively if we have a custom rule for menu indicators and/or buttons
+                if (customMenuIndicator)
+                    nativeToolOpt.features &= ~(QStyleOptionToolButton::Menu | QStyleOptionToolButton::HasMenu);
+                if (customDropDown || customDropDownArrow)
+                    nativeToolOpt.features &= ~(QStyleOptionToolButton::Menu | QStyleOptionToolButton::HasMenu | QStyleOptionToolButton::MenuButtonPopup);
+                // Let base or windows style draw the button, which will include the menu-button
+                if (rule.baseStyleCanDraw() && !(tool->features & QStyleOptionToolButton::Arrow))
+                    baseStyle()->drawComplexControl(cc, &nativeToolOpt, p, w);
+                else
+                    QWindowsStyle::drawComplexControl(cc, &nativeToolOpt, p, w);
+                // if we did draw natively, don't draw custom
+                if (nativeToolOpt.features & (QStyleOptionToolButton::Menu | QStyleOptionToolButton::HasMenu))
                     drawMenuIndicator = false;
-                }
+                if (nativeToolOpt.features & QStyleOptionToolButton::MenuButtonPopup && !customDropDownArrow)
+                    drawDropDown = false;
             } else {
                 rule.drawRule(p, opt->rect);
                 toolOpt.rect = rule.contentsRect(opt->rect);
@@ -3384,9 +3387,10 @@ void QStyleSheetStyle::drawComplexControl(ComplexControl cc, const QStyleOptionC
                 }
             } else if (drawMenuIndicator) {
                 QRenderRule subRule = renderRule(w, opt, PseudoElement_ToolButtonMenuIndicator);
-                QRect r = subRule.hasGeometry()
-                        ? positionRect(w, subRule, PseudoElement_ToolButtonMenuIndicator, toolOpt.rect, toolOpt.direction)
-                        : subRule.contentsRect(opt->rect);
+
+                // content padding does not impact the indicator, so use the original rect to
+                // calculate position of the sub element within the toplevel rule
+                QRect r = positionRect(w, rule, subRule, PseudoElement_ToolButtonMenuIndicator, opt->rect, toolOpt.direction);
                 if (subRule.hasDrawable()) {
                     subRule.drawRule(p, r);
                 } else {
@@ -3427,7 +3431,6 @@ void QStyleSheetStyle::drawComplexControl(ComplexControl cc, const QStyleOptionC
                 }
                 subRule.drawRule(p, arrowRect);
             }
-
             return;
         }
         break;
@@ -4367,13 +4370,37 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                                                            vopt->state & QStyle::State_Selected ? QPalette::Highlight : QPalette::Base);
                 QWindowsStyle::drawControl(ce, &optCopy, p, w);
             } else {
+                p->save();
                 if (hasStyleRule(w, PseudoElement_Indicator)) {
-                    subRule.configurePalette(&optCopy.palette, vopt->state & QStyle::State_Selected ? QPalette::HighlightedText : QPalette::Text,
-                                                            vopt->state & QStyle::State_Selected ? QPalette::Highlight : QPalette::Base);
-                } else {
-                    subRule.configurePalette(&optCopy.palette, QPalette::Text, QPalette::NoRole);
+                    // there is a rule for the indicator, but no rule for the item itself (otherwise
+                    // the previous path would have been taken); only draw the indicator using the
+                    // rule (via QWindows/QCommonStyle), then let the base style handle the rest.
+                    QStyleOptionViewItem optIndicator(*vopt);
+                    subRule.configurePalette(&optIndicator.palette,
+                                            vopt->state & QStyle::State_Selected
+                                                        ? QPalette::HighlightedText
+                                                        : QPalette::Text,
+                                            vopt->state & QStyle::State_Selected
+                                                        ? QPalette::Highlight
+                                                        : QPalette::Base);
+                    // only draw the indicator; no text or background
+                    optIndicator.backgroundBrush = Qt::NoBrush; // no background
+                    optIndicator.text.clear();
+                    QWindowsStyle::drawControl(ce, &optIndicator, p, w);
+                    // Now draw text, background, and highlight, but not the indicator  with the
+                    // base style. Since we can't turn off HasCheckIndicator to prevent the base
+                    // style from drawing the check indicator again (it would change how the item
+                    // gets laid out) we have to clip the indicator that's already been painted.
+                    const QRect checkRect = subElementRect(QStyle::SE_ItemViewItemCheckIndicator,
+                                                           &optIndicator, w);
+                    const QRegion clipRegion = QRegion(p->hasClipping() ? p->clipRegion()
+                                                                        : QRegion(optIndicator.rect))
+                                             - checkRect;
+                    p->setClipRegion(clipRegion);
                 }
+                subRule.configurePalette(&optCopy.palette, QPalette::Text, QPalette::NoRole);
                 baseStyle()->drawControl(ce, &optCopy, p, w);
+                p->restore();
             }
             return;
         }
@@ -4391,6 +4418,7 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
     case CE_TabBarTabLabel:
     case CE_TabBarTabShape:
         if (const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(opt)) {
+            const auto foregroundRole = w ? w->foregroundRole() : QPalette::WindowText;
             QRenderRule subRule = renderRule(w, opt, PseudoElement_TabBarTab);
             QRect r = positionRect(w, subRule, PseudoElement_TabBarTab, opt->rect, opt->direction);
             if (ce == CE_TabBarTabShape && subRule.hasDrawable() && tab->shape < QTabBar::TriangularNorth) {
@@ -4398,7 +4426,7 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                 return;
             }
             QStyleOptionTab tabCopy(*tab);
-            subRule.configurePalette(&tabCopy.palette, QPalette::WindowText, QPalette::Base);
+            subRule.configurePalette(&tabCopy.palette, foregroundRole, QPalette::Base);
             QFont oldFont = p->font();
             if (subRule.hasFont)
                 p->setFont(subRule.font.resolve(p->font()));
@@ -4618,11 +4646,14 @@ void QStyleSheetStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *op
 
     case PE_PanelLineEdit:
         if (const QStyleOptionFrame *frm = qstyleoption_cast<const QStyleOptionFrame *>(opt)) {
-            if (QWidget *container = containerWidget(w); container != w) {
-                QRenderRule containerRule = renderRule(container, opt);
-                if (!containerRule.hasNativeBorder() || !containerRule.baseStyleCanDraw())
-                    return;
-                rule = containerRule;
+            // Fall back to container widget's render rule
+            if (w) {
+                if (QWidget *container = containerWidget(w); container != w) {
+                    QRenderRule containerRule = renderRule(container, opt);
+                    if (!containerRule.hasNativeBorder() || !containerRule.baseStyleCanDraw())
+                        return;
+                    rule = containerRule;
+                }
             }
 
             if (rule.hasNativeBorder()) {

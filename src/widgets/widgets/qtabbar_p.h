@@ -101,6 +101,10 @@ public:
 
     QRect hoverRect;
     QPoint dragStartPosition;
+    QPoint mousePosition = {-1, -1};
+#if QT_CONFIG(wheelevent)
+    QPoint accumulatedAngleDelta;
+#endif
     QSize iconSize;
     QToolButton* rightB = nullptr; // right or bottom
     QToolButton* leftB = nullptr; // left or top

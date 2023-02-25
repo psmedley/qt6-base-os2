@@ -272,6 +272,7 @@ qt_internal_add_module(Gui
         "painting/qdrawhelper.cpp" # special case
     PRECOMPILED_HEADER
         "kernel/qt_gui_pch.h"
+    GENERATE_CPP_EXPORTS
 )
 
 # Resources:
@@ -323,6 +324,13 @@ if(QT_FEATURE_opengl)
     if(QT_FEATURE_opengles2)
         find_package(GLESv2)
         target_link_libraries(Gui PUBLIC GLESv2::GLESv2)
+
+        if(INTEGRITY AND _qt_igy_gui_libs)
+            find_package(IntegrityPlatformGraphics)
+            target_link_libraries(Gui
+                INTERFACE $<LINK_ONLY:IntegrityPlatformGraphics::IntegrityPlatformGraphics>)
+        endif()
+
     elseif(NOT QT_FEATURE_opengl_dynamic)
         target_link_libraries(Gui PUBLIC WrapOpenGL::WrapOpenGL)
     endif()

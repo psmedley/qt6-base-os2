@@ -57,6 +57,12 @@
 #include <QtCore/private/qfilesystemmetadata_p.h>
 #include <qhash.h>
 
+#include <optional>
+
+#ifdef Q_OS_UNIX
+#include <sys/types.h> // for mode_t
+#endif
+
 #ifndef QT_NO_FSFILEENGINE
 
 QT_BEGIN_NAMESPACE
@@ -79,7 +85,7 @@ public:
     explicit QFSFileEngine(const QString &file);
     ~QFSFileEngine();
 
-    bool open(QIODevice::OpenMode openMode) override;
+    bool open(QIODevice::OpenMode openMode, std::optional<QFile::Permissions> permissions) override;
     bool open(QIODevice::OpenMode flags, FILE *fh);
     bool close() override;
     bool flush() override;
@@ -93,7 +99,8 @@ public:
     bool rename(const QString &newName) override;
     bool renameOverwrite(const QString &newName) override;
     bool link(const QString &newName) override;
-    bool mkdir(const QString &dirName, bool createParentDirectories) const override;
+    bool mkdir(const QString &dirName, bool createParentDirectories,
+               std::optional<QFile::Permissions> permissions) const override;
     bool rmdir(const QString &dirName, bool recurseParentDirectories) const override;
     bool setSize(qint64 size) override;
     bool caseSensitive() const override;
@@ -153,7 +160,7 @@ public:
     QFileSystemEntry fileEntry;
     QIODevice::OpenMode openMode;
 
-    bool nativeOpen(QIODevice::OpenMode openMode);
+    bool nativeOpen(QIODevice::OpenMode openMode, std::optional<QFile::Permissions> permissions);
     bool openFh(QIODevice::OpenMode flags, FILE *fh);
     bool openFd(QIODevice::OpenMode flags, int fd);
     bool nativeClose();
@@ -199,7 +206,11 @@ public:
 #elif defined(Q_OS_OS2)
     QMultiHash<uchar *, QPair<int /*offset % PageSize*/, size_t /*length + offset % PageSize*/> > maps;
 #else
-    QHash<uchar *, QPair<int /*offset % PageSize*/, size_t /*length + offset % PageSize*/> > maps;
+    struct StartAndLength {
+        int start;     // offset % PageSize
+        size_t length; // length + offset % PageSize
+    };
+    QHash<uchar *, StartAndLength> maps;
 #endif
     int fd;
 
@@ -241,6 +252,10 @@ protected:
     void init();
 
     QAbstractFileEngine::FileFlags getPermissions(QAbstractFileEngine::FileFlags type) const;
+
+#ifdef Q_OS_UNIX
+    bool nativeOpenImpl(QIODevice::OpenMode openMode, mode_t mode);
+#endif
 };
 
 QT_END_NAMESPACE

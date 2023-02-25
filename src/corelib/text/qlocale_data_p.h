@@ -51,6 +51,8 @@
 // We mean it.
 //
 
+#include <array>
+#include <QtCore/qendian.h>
 #include <QtCore/private/qglobal_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -64,20 +66,37 @@ struct TerritoryLanguage
     quint16 territoryId;
     QLocale::MeasurementSystem system;
 };
-static const TerritoryLanguage ImperialMeasurementSystems[] = {
+static constexpr TerritoryLanguage ImperialMeasurementSystems[] = {
     { QLocale::English, QLocale::UnitedStates, QLocale::ImperialUSSystem },
     { QLocale::English, QLocale::UnitedStatesMinorOutlyingIslands, QLocale::ImperialUSSystem },
     { QLocale::Spanish, QLocale::UnitedStates, QLocale::ImperialUSSystem },
     { QLocale::Hawaiian, QLocale::UnitedStates, QLocale::ImperialUSSystem },
     { QLocale::English, QLocale::UnitedKingdom, QLocale::ImperialUKSystem }
 };
-static const int ImperialMeasurementSystemsCount =
-    sizeof(ImperialMeasurementSystems)/sizeof(ImperialMeasurementSystems[0]);
+
+/*
+  Storage for alpha codes with length of up to 4 allowing efficient comparison.
+*/
+struct alignas(uint32_t) AlphaCode {
+    char code[4];
+
+    bool isValid() const noexcept { return asU32() != 0; }
+    bool operator==(AlphaCode other) const noexcept { return asU32() == other.asU32(); }
+private:
+    uint32_t asU32() const noexcept { return qFromUnaligned<uint32_t>(code); }
+};
+
+struct LanguageCodeEntry {
+    AlphaCode part1;
+    AlphaCode part2B;
+    AlphaCode part2T;
+    AlphaCode part3;
+};
 
 // GENERATED PART STARTS HERE
 
 /*
-    This part of the file was generated on 2021-11-09 from the
+    This part of the file was generated on 2021-12-03 from the
     Common Locale Data Repository v40
 
     http://www.unicode.org/cldr/
@@ -87,7 +106,7 @@ static const int ImperialMeasurementSystemsCount =
     edited) CLDR data; see qtbase/util/locale_database/.
 */
 
-static const QLocaleId likely_subtags[] = {
+static constexpr QLocaleId likely_subtags[] = {
     {   2,   0,   0 }, {   2,  27,  90 }, // ab -> ab_Cyrl_GE
     {   3,   0,   0 }, {   3,  66,  77 }, // aa -> aa_Latn_ET
     {   4,   0,   0 }, {   4,  66, 216 }, // af -> af_Latn_ZA
@@ -477,6 +496,8 @@ static const QLocaleId likely_subtags[] = {
     { 325,   0,   0 }, { 325,  66, 170 }, // dje -> dje_Latn_NE
     { 326,   0,   0 }, { 326,  66,  50 }, // za -> za_Latn_CN
     { 327,   0,   0 }, { 327,  66, 216 }, // zu -> zu_Latn_ZA
+    { 328,   0,   0 }, { 328,  66,  32 }, // kgp -> kgp_Latn_BR
+    { 329,   0,   0 }, { 329,  66,  32 }, // yrl -> yrl_Latn_BR
     {   0,  66,   1 }, { 299,  66,   1 }, // und_Latn_AF -> tk_Latn_AF
     {   0,   0,   1 }, { 228,   4,   1 }, // und_AF -> fa_Arab_AF
     {   0,   0,   2 }, { 275,  66,   2 }, // und_AX -> sv_Latn_AX
@@ -817,7 +838,7 @@ static const QLocaleId likely_subtags[] = {
     {   0, 141,   0 }, { 255, 141,  50 }  // und_Yiii -> ii_Yiii_CN
 };
 
-static const quint16 locale_index[] = {
+static constexpr quint16 locale_index[] = {
      0, // AnyLanguage
      0, // C
      1, // Abkhazian
@@ -1146,10 +1167,12 @@ static const quint16 locale_index[] = {
    617, // Zarma
      0, // Zhuang
    618, // Zulu
+   619, // Kaingang
+   620, // Nheengatu
      0 // trailing 0
 };
 
-static const QLocaleData locale_data[] = {
+static constexpr QLocaleData locale_data[] = {
    //  lang  script   terr lStrt lpMid lpEnd lPair lDelm  dec  group prcnt  zero minus plus   exp  qtOpn qtEnd altQO altQE lDFmt sDFmt lTFmt sTFmt slDay lDays ssDys sDays snDay nDays   am    pm   byte siQnt iecQn crSym crDsp crFmt crFNg ntLng ntTer                                                                                                                                                        currISO   curDgt curRnd dow1st  wknd+  wknd- grpTop grpMid grpEnd
     {      1,     0,     0,    0,    0,    0,    0,    6,    0,    1,    2,    3,    4,    5,    6,    7,    7,    8,    8,    0,   17,    0,    0,    0,    0,   56,   56,   83,   96,    0,    0,    0,    5,   22,    0,    0,    0,    0,    0,    0,  6,  6,  6,  6,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 17, 10, 10,  8, 56, 56, 27, 27, 13, 13,  2,  2,  5, 17, 23,  0,  0,  4,  0,  0,  0,    {0,0,0},      2,     1,     1,     6,     7,     1,     3,     3 }, // C/AnyScript/AnyTerritory
     {      2,    27,    90,    0,    0,    0,    0,    6,    0,    1,    2,    3,    4,    5,    9,   10,   11,   12,   13,   27,   44,    0,    0,   56,   56,   56,   56,   83,   83,    0,    0,    0,    5,   22,    0,    0,    4,    0,    0,    0,  6,  6,  6,  6,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 17, 10, 10,  5, 27, 27, 27, 27, 13, 13,  2,  2,  4, 17, 23,  1,  0,  5,  0,  0,  0, {71,69,76},      2,     1,     1,     6,     7,     1,     3,     3 }, // Abkhazian/Cyrillic/Georgia
@@ -1770,10 +1793,14 @@ static const QLocaleData locale_data[] = {
     {    324,    66,    25,    0,    0,    0,    0,    6,    0,    1,    2,    3,    4,    5,    9,   10,   11,   12,   13, 1691,   87,    0,    1,21425,21468,21536,21536,21568,21568,  796,  832, 1346, 1309,   22,  124, 5368,    9,   13, 6078, 6096,  6,  6,  6,  6,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 16,  8, 10,  3, 43, 68, 32, 32, 13, 13,  5,  5, 11, 37, 23,  5, 26,  4,  6, 10,  6, {88,79,70},      0,     0,     1,     6,     7,     1,     3,     3 }, // Yoruba/Latin/Benin
     {    325,    66,   170,    0,    0,    0,    0,    6,    0,   14,    2,    3,    4,    5,    9,   10,   11,   12,   13,   71,   87,    0,    0,21581,21581, 9714, 9714,21633,21633,  689,  715,    0,    5,   22,  124, 3182,    0,    0, 6102, 5712,  6,  6,  6,  6,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 16,  8, 10,  5, 52, 52, 27, 27, 13, 13,  8, 10,  4, 17, 23,  5, 16,  4,  0, 10,  5, {88,79,70},      0,     0,     1,     6,     7,     1,     3,     3 }, // Zarma/Latin/Niger
     {    327,    66,   216,    0,    0, 1133, 1142,    6,    0,    1,    2,    3,    4,    5,    9,   10,   11,   12,   13,  321,  339,    0,    0,21646,21646,21719,21719,21746,21746,    0,    0,    0,    5,   22,    1, 5394,    9,   13, 6112, 6119,  6,  6,  9,  8,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 18,  6, 10,  5, 73, 73, 27, 27, 13, 13,  2,  2,  5, 17, 23,  1, 20,  4,  6,  7, 17, {90,65,82},      2,     1,     7,     6,     7,     1,     3,     3 }, // Zulu/Latin/South Africa
+    {    328,    66,    32,    0,    0, 1150, 1150,    6,    1,    0,    2,    3,    4,    5,    9,   10,   11,   12,   13, 1707,  127,    0,    0,21759,21759,21845,21845,21879,21879,    0,    0, 1357,    5,   22,    1, 5414,    4,    0, 6136, 6143,  6,  6,  9,  9,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 23, 10, 10,  5, 86, 86, 34, 34, 20, 20,  2,  2,  7, 17, 23,  2, 12,  5,  0,  7,  6, {66,82,76},      2,     1,     7,     6,     7,     1,     3,     3 }, // Kaingang/Latin/Brazil
+    {    329,    66,    32,    0,    0, 1159, 1159,    6,    1,    0,    2,    3,    4,    5,    9,   10,   11,   12,   13,    0,  127,    0,    0,21899,21899,21963,21963,21990,21990,    0,    0, 1364,    5,   22,    1, 5426,    4,    0, 6149, 6157,  6,  6, 10, 10,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 17, 10, 10,  5, 64, 64, 27, 27, 13, 13,  2,  2,  8, 17, 23,  2, 15,  5,  0,  8,  6, {66,82,76},      2,     1,     7,     6,     7,     1,     3,     3 }, // Nheengatu/Latin/Brazil
+    {    329,    66,    54,    0,    0, 1159, 1159,    6,    1,    0,    2,    3,    4,    5,    9,   10,   11,   12,   13,    0,  127,   10,   22,21899,21899,21963,21963,21990,21990,  129,  124, 1364,    5,   22,    2, 5441,    4,    0, 6163, 6170,  6,  6, 10, 10,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 17, 10, 12,  7, 64, 64, 27, 27, 13, 13,  5,  5,  8, 17, 23,  1, 17,  5,  0,  7,  8, {67,79,80},      2,     0,     7,     6,     7,     1,     3,     3 }, // Nheengatu/Latin/Colombia
+    {    329,    66,   254,    0,    0, 1159, 1159,    6,    1,    0,    2,    3,    4,    5,    9,   10,   11,   12,   13,    0,  127,   10,   22,21899,21899,21963,21963,21990,21990,  129,  124, 1364,    5,   22,  316, 5458,    4,    0, 6163, 6178,  6,  6, 10, 10,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 17, 10, 12,  7, 64, 64, 27, 27, 13, 13,  5,  5,  8, 17, 23,  4, 22,  5,  0,  7,  9, {86,69,83},      2,     1,     7,     6,     7,     1,     3,     3 }, // Nheengatu/Latin/Venezuela
     {      0,     0,     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,    {0,0,0},      0,     0,     0,     0,     0,     0,     0,     0 } // trailing zeros
 };
 
-static const char16_t list_pattern_part_data[] = {
+static constexpr char16_t list_pattern_part_data[] = {
 0x25, 0x31, 0x2c, 0x20, 0x25, 0x32, 0x3b, 0x25, 0x31, 0x20, 0x65, 0x6e, 0x20, 0x25, 0x32, 0x25, 0x31, 0x20, 0x64, 0x68,
 0x65, 0x20, 0x25, 0x32, 0x25, 0x31, 0x1363, 0x20, 0x25, 0x32, 0x25, 0x31, 0x2c, 0x20, 0x12a5, 0x1293, 0x20, 0x25, 0x32, 0x25,
 0x31, 0x20, 0x12a5, 0x1293, 0x20, 0x25, 0x32, 0x25, 0x31, 0x20, 0x648, 0x25, 0x32, 0x61b, 0x25, 0x31, 0x20, 0x587, 0x20, 0x25,
@@ -1831,17 +1858,18 @@ static const char16_t list_pattern_part_data[] = {
 0x20, 0x627, 0x648, 0x631, 0x20, 0x25, 0x32, 0x25, 0x31, 0x20, 0x76, 0x61, 0x20, 0x25, 0x32, 0x25, 0x31, 0x20, 0x76, 0xe0,
 0x20, 0x25, 0x32, 0x25, 0x31, 0x2c, 0x20, 0x61, 0x28, 0x63, 0x29, 0x20, 0x25, 0x32, 0x25, 0x31, 0x20, 0x61, 0x28, 0x63,
 0x29, 0x20, 0x25, 0x32, 0x25, 0x31, 0x20, 0x5d0, 0x5d5, 0x5df, 0x20, 0x25, 0x32, 0x25, 0x31, 0x2c, 0x20, 0x6e, 0x65, 0x2d,
-0x25, 0x32, 0x25, 0x31, 0x20, 0x6e, 0x65, 0x2d, 0x25, 0x32
+0x25, 0x32, 0x25, 0x31, 0x20, 0x6e, 0x65, 0x2d, 0x25, 0x32, 0x25, 0x31, 0x20, 0x6b, 0x61, 0x72, 0x20, 0x25, 0x32, 0x25,
+0x31, 0x20, 0x61, 0x73, 0x75, 0xed, 0x20, 0x25, 0x32
 };
 
-static const char16_t single_character_data[] = {
+static constexpr char16_t single_character_data[] = {
 0x2e, 0x2c, 0x25, 0x30, 0x2d, 0x2b, 0x65, 0x22, 0x27, 0x45, 0x201c, 0x201d, 0x2018, 0x2019, 0xa0, 0x201e, 0x201a, 0xab, 0xbb, 0x2039,
 0x203a, 0x66b, 0x66c, 0x66a, 0x61c, 0x660, 0x61c, 0x2d, 0x61c, 0x2b, 0x627, 0x633, 0x200e, 0x25, 0x200e, 0x200e, 0x2d, 0x200e, 0x2b, 0x9e6,
 0x2212, 0x1040, 0x300c, 0x300d, 0x300e, 0x300f, 0x200f, 0x2d, 0x200f, 0x2b, 0xd804, 0xdd36, 0xd7, 0x31, 0x30, 0x5e, 0xf20, 0x202f, 0x2e41, 0xd83a,
 0xdd50, 0x6f0, 0x200e, 0x2b, 0x200e, 0xd7, 0x6f1, 0x6f0, 0x5e, 0x966, 0xb7, 0x31, 0x30, 0x5e, 0x200e, 0x2212, 0x1c50, 0x415
 };
 
-static const char16_t date_format_data[] = {
+static constexpr char16_t date_format_data[] = {
 0x64, 0x64, 0x64, 0x64, 0x2c, 0x20, 0x64, 0x20, 0x4d, 0x4d, 0x4d, 0x4d, 0x20, 0x79, 0x79, 0x79, 0x79, 0x64, 0x20, 0x4d,
 0x4d, 0x4d, 0x20, 0x79, 0x79, 0x79, 0x79, 0x79, 0x79, 0x79, 0x79, 0x20, 0x4d, 0x4d, 0x4d, 0x4d, 0x20, 0x64, 0x2c, 0x20,
 0x64, 0x64, 0x64, 0x64, 0x79, 0x79, 0x79, 0x79, 0x2d, 0x4d, 0x4d, 0x2d, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x20, 0x64,
@@ -1927,10 +1955,11 @@ static const char16_t date_format_data[] = {
 0x20, 0x4d, 0x4d, 0x4d, 0x4d, 0x20, 0x64, 0x64, 0x64, 0x64, 0x20, 0x6a9, 0x648, 0x646, 0x6cc, 0x64, 0x64, 0x64, 0x64, 0x2c,
 0x20, 0x64, 0x20, 0x4d, 0x4d, 0x4d, 0x2c, 0x20, 0x79, 0x79, 0x79, 0x79, 0x64, 0x64, 0x64, 0x64, 0x2c, 0x20, 0x64, 0x5d8,
 0x5df, 0x20, 0x4d, 0x4d, 0x4d, 0x4d, 0x20, 0x79, 0x79, 0x79, 0x79, 0x64, 0x64, 0x64, 0x64, 0x2c, 0x20, 0x64, 0x20, 0x4d,
-0x4d, 0x4d, 0x20, 0x79, 0x79, 0x79, 0x79
+0x4d, 0x4d, 0x20, 0x79, 0x79, 0x79, 0x79, 0x64, 0x64, 0x64, 0x64, 0x2c, 0x20, 0x64, 0x20, 0x27, 0x6e, 0x65, 0x27, 0x20,
+0x4d, 0x4d, 0x4d, 0x4d, 0x2c, 0x20, 0x79, 0x79, 0x79, 0x79
 };
 
-static const char16_t time_format_data[] = {
+static constexpr char16_t time_format_data[] = {
 0x48, 0x48, 0x3a, 0x6d, 0x6d, 0x3a, 0x73, 0x73, 0x20, 0x74, 0x68, 0x3a, 0x6d, 0x6d, 0x3a, 0x73, 0x73, 0x20, 0x41, 0x50,
 0x20, 0x74, 0x68, 0x3a, 0x6d, 0x6d, 0x20, 0x41, 0x50, 0x68, 0x3a, 0x6d, 0x6d, 0x3a, 0x73, 0x73, 0x20, 0x41, 0x50, 0x2c,
 0x20, 0x74, 0x41, 0x50, 0x20, 0x68, 0x2e, 0x6d, 0x6d, 0x2e, 0x73, 0x73, 0x20, 0x74, 0x48, 0x48, 0x3a, 0x6d, 0x6d, 0x3a,
@@ -1958,7 +1987,7 @@ static const char16_t time_format_data[] = {
 0x48, 0x3a, 0x6d, 0x6d, 0x20, 0x27, 0x68, 0x6f, 0x64, 0x17a, 0x27, 0x2e
 };
 
-static const char16_t days_data[] = {
+static constexpr char16_t days_data[] = {
 0x53, 0x75, 0x6e, 0x64, 0x61, 0x79, 0x3b, 0x4d, 0x6f, 0x6e, 0x64, 0x61, 0x79, 0x3b, 0x54, 0x75, 0x65, 0x73, 0x64, 0x61,
 0x79, 0x3b, 0x57, 0x65, 0x64, 0x6e, 0x65, 0x73, 0x64, 0x61, 0x79, 0x3b, 0x54, 0x68, 0x75, 0x72, 0x73, 0x64, 0x61, 0x79,
 0x3b, 0x46, 0x72, 0x69, 0x64, 0x61, 0x79, 0x3b, 0x53, 0x61, 0x74, 0x75, 0x72, 0x64, 0x61, 0x79, 0x53, 0x75, 0x6e, 0x3b,
@@ -3046,10 +3075,23 @@ static const char16_t days_data[] = {
 0x73, 0x69, 0x74, 0x68, 0x61, 0x74, 0x68, 0x75, 0x3b, 0x55, 0x4c, 0x77, 0x65, 0x73, 0x69, 0x6e, 0x65, 0x3b, 0x55, 0x4c,
 0x77, 0x65, 0x73, 0x69, 0x68, 0x6c, 0x61, 0x6e, 0x75, 0x3b, 0x55, 0x4d, 0x67, 0x71, 0x69, 0x62, 0x65, 0x6c, 0x6f, 0x53,
 0x6f, 0x6e, 0x3b, 0x4d, 0x73, 0x6f, 0x3b, 0x42, 0x69, 0x6c, 0x3b, 0x54, 0x68, 0x61, 0x3b, 0x53, 0x69, 0x6e, 0x3b, 0x48,
-0x6c, 0x61, 0x3b, 0x4d, 0x67, 0x71, 0x53, 0x3b, 0x4d, 0x3b, 0x42, 0x3b, 0x54, 0x3b, 0x53, 0x3b, 0x48, 0x3b, 0x4d
+0x6c, 0x61, 0x3b, 0x4d, 0x67, 0x71, 0x53, 0x3b, 0x4d, 0x3b, 0x42, 0x3b, 0x54, 0x3b, 0x53, 0x3b, 0x48, 0x3b, 0x4d, 0x6e,
+0x75, 0x6d, 0x129, 0x67, 0x67, 0x75, 0x3b, 0x70, 0x69, 0x72, 0x2d, 0x6b, 0x75, 0x72, 0xe3, 0x2d, 0x68, 0xe1, 0x3b, 0x72,
+0xe9, 0x67, 0x72, 0x65, 0x2d, 0x6b, 0x75, 0x72, 0xe3, 0x2d, 0x68, 0xe1, 0x3b, 0x74, 0x1ebd, 0x67, 0x74, 0x169, 0x2d, 0x6b,
+0x75, 0x72, 0xe3, 0x2d, 0x68, 0xe1, 0x3b, 0x76, 0x1ebd, 0x6e, 0x68, 0x6b, 0xe3, 0x67, 0x72, 0x61, 0x2d, 0x6b, 0x75, 0x72,
+0xe3, 0x2d, 0x68, 0xe1, 0x3b, 0x70, 0xe9, 0x6e, 0x6b, 0x61, 0x72, 0x2d, 0x6b, 0x75, 0x72, 0xe3, 0x2d, 0x68, 0xe1, 0x3b,
+0x73, 0x61, 0x76, 0x6e, 0x75, 0x6e, 0x75, 0x6d, 0x2e, 0x3b, 0x70, 0x69, 0x72, 0x2e, 0x3b, 0x72, 0xe9, 0x67, 0x2e, 0x3b,
+0x74, 0x1ebd, 0x67, 0x2e, 0x3b, 0x76, 0x1ebd, 0x6e, 0x2e, 0x3b, 0x70, 0xe9, 0x6e, 0x2e, 0x3b, 0x73, 0x61, 0x76, 0x2e, 0x4e,
+0x2e, 0x3b, 0x50, 0x2e, 0x3b, 0x52, 0x2e, 0x3b, 0x54, 0x2e, 0x3b, 0x56, 0x2e, 0x3b, 0x50, 0x2e, 0x3b, 0x53, 0x2e, 0x6d,
+0x69, 0x74, 0x75, 0xfa, 0x3b, 0x6d, 0x75, 0x72, 0x61, 0x6b, 0x69, 0x70, 0xed, 0x3b, 0x6d, 0x75, 0x72, 0x61, 0x6b, 0xed,
+0x2d, 0x6d, 0x75, 0x6b, 0x169, 0x69, 0x3b, 0x6d, 0x75, 0x72, 0x61, 0x6b, 0xed, 0x2d, 0x6d, 0x75, 0x73, 0x61, 0x70, 0xed,
+0x72, 0x69, 0x3b, 0x73, 0x75, 0x70, 0x61, 0x70, 0xe1, 0x3b, 0x79, 0x75, 0x6b, 0x75, 0x61, 0x6b, 0xfa, 0x3b, 0x73, 0x61,
+0x75, 0x72, 0xfa, 0x6d, 0x69, 0x74, 0x3b, 0x6d, 0x75, 0x72, 0x3b, 0x6d, 0x6d, 0x6b, 0x3b, 0x6d, 0x6d, 0x73, 0x3b, 0x73,
+0x75, 0x70, 0x3b, 0x79, 0x75, 0x6b, 0x3b, 0x73, 0x61, 0x75, 0x4d, 0x3b, 0x4d, 0x3b, 0x4d, 0x3b, 0x4d, 0x3b, 0x53, 0x3b,
+0x59, 0x3b, 0x53
 };
 
-static const char16_t byte_unit_data[] = {
+static constexpr char16_t byte_unit_data[] = {
 0x62, 0x79, 0x74, 0x65, 0x73, 0x6b, 0x42, 0x3b, 0x4d, 0x42, 0x3b, 0x47, 0x42, 0x3b, 0x54, 0x42, 0x3b, 0x50, 0x42, 0x3b,
 0x45, 0x42, 0x4b, 0x69, 0x42, 0x3b, 0x4d, 0x69, 0x42, 0x3b, 0x47, 0x69, 0x42, 0x3b, 0x54, 0x69, 0x42, 0x3b, 0x50, 0x69,
 0x42, 0x3b, 0x45, 0x69, 0x42, 0x67, 0x72, 0x65, 0x65, 0x70, 0x62, 0x61, 0x6a, 0x74, 0x1263, 0x12ed, 0x1275, 0x12aa, 0x1263, 0x3b,
@@ -3117,10 +3159,11 @@ static const char16_t byte_unit_data[] = {
 0x54, 0x42, 0x3b, 0x67e, 0x6cc, 0x20, 0x628, 0x6cc, 0x3b, 0x45, 0x42, 0x62, 0x65, 0x69, 0x74, 0x69, 0x61, 0x75, 0xe0, 0x77,
 0x1ecd, 0x301, 0x6e, 0x20, 0x62, 0xe1, 0xec, 0x74, 0xec, 0x6b, 0xe9, 0x62, 0xe1, 0xec, 0x74, 0xec, 0x3b, 0x4d, 0x42, 0x3b,
 0x6a, 0xed, 0x62, 0xe1, 0xec, 0x74, 0xec, 0x3b, 0x54, 0xed, 0x62, 0xe1, 0xec, 0x74, 0xec, 0x3b, 0x50, 0xed, 0x62, 0xe1,
-0xec, 0x74, 0xec, 0x3b, 0x45, 0x42, 0xe0, 0x77, 0x254, 0x301, 0x6e, 0x20, 0x62, 0xe1, 0xec, 0x74, 0xec
+0xec, 0x74, 0xec, 0x3b, 0x45, 0x42, 0xe0, 0x77, 0x254, 0x301, 0x6e, 0x20, 0x62, 0xe1, 0xec, 0x74, 0xec, 0x62, 0x79, 0x74,
+0x65, 0x20, 0x61, 0x67, 0x62, 0x79, 0x74, 0x65, 0x2d, 0x69, 0x74, 0x61
 };
 
-static const char16_t am_data[] = {
+static constexpr char16_t am_data[] = {
 0x41, 0x4d, 0x76, 0x6d, 0x2e, 0x61, 0x2e, 0x67, 0x41, 0x4e, 0x65, 0x20, 0x70, 0x61, 0x72, 0x61, 0x64, 0x69, 0x74, 0x65,
 0x73, 0x1325, 0x12cb, 0x1275, 0x635, 0x9aa, 0x9c2, 0x9f0, 0x9cd, 0x9ac, 0x9be, 0x9b9, 0x9cd, 0x9a8, 0x64, 0x65, 0x20, 0x6c, 0x61, 0x20,
 0x6d, 0x61, 0xf1, 0x61, 0x6e, 0x61, 0x69, 0x63, 0x68, 0x65, 0x68, 0x65, 0x61, 0x76, 0x6f, 0x410, 0x41c, 0x73, 0xe1, 0x72,
@@ -3164,7 +3207,7 @@ static const char16_t am_data[] = {
 0x300
 };
 
-static const char16_t pm_data[] = {
+static constexpr char16_t pm_data[] = {
 0x50, 0x4d, 0x6e, 0x6d, 0x2e, 0x61, 0x2e, 0x6b, 0x45, 0x57, 0x65, 0x20, 0x70, 0x61, 0x73, 0x64, 0x69, 0x74, 0x65, 0x73,
 0x12a8, 0x1230, 0x12d3, 0x1275, 0x645, 0x985, 0x9aa, 0x9f0, 0x9be, 0x9b9, 0x9cd, 0x9a8, 0x64, 0x65, 0x20, 0x6c, 0x61, 0x20, 0x74, 0x61,
 0x72, 0x64, 0x65, 0x69, 0x63, 0x68, 0x61, 0x6d, 0x74, 0x68, 0x69, 0x41f, 0x41c, 0x63, 0x25b, 0x25b, 0x301, 0x6e, 0x6b, 0x6f,
@@ -3209,7 +3252,7 @@ static const char16_t pm_data[] = {
 0x5db, 0x5de, 0x5d9, 0x5d8, 0x5d0, 0x5b8, 0x5d2, 0x1ecc, 0x300, 0x73, 0xe1, 0x6e, 0x186, 0x300, 0x73, 0xe1, 0x6e
 };
 
-static const char16_t currency_symbol_data[] = {
+static constexpr char16_t currency_symbol_data[] = {
 0x20be, 0x52, 0x24, 0x46, 0x43, 0x46, 0x41, 0x47, 0x48, 0x20b5, 0x4c, 0x65, 0x6b, 0xeb, 0x20ac, 0x64, 0x65, 0x6e, 0x1265, 0x122d,
 0x62c, 0x2e, 0x645, 0x2e, 0x200f, 0x62f, 0x2e, 0x62c, 0x2e, 0x200f, 0x62f, 0x2e, 0x628, 0x2e, 0x200f, 0x46, 0x64, 0x6a, 0x4e, 0x66,
 0x6b, 0x62f, 0x2e, 0x639, 0x2e, 0x200f, 0x20aa, 0x62f, 0x2e, 0x623, 0x2e, 0x200f, 0x62f, 0x2e, 0x643, 0x2e, 0x200f, 0x644, 0x2e, 0x644,
@@ -3230,7 +3273,7 @@ static const char16_t currency_symbol_data[] = {
 0x45e, 0x43c
 };
 
-static const char16_t currency_display_name_data[] = {
+static constexpr char16_t currency_display_name_data[] = {
 0x53, 0x75, 0x69, 0x64, 0x2d, 0x41, 0x66, 0x72, 0x69, 0x6b, 0x61, 0x61, 0x6e, 0x73, 0x65, 0x20, 0x72, 0x61, 0x6e, 0x64,
 0x4e, 0x61, 0x6d, 0x69, 0x62, 0x69, 0x65, 0x73, 0x65, 0x20, 0x64, 0x6f, 0x6c, 0x6c, 0x61, 0x72, 0x43, 0x46, 0x41, 0x20,
 0x46, 0xe0, 0x6c, 0xe2, 0x14b, 0x20, 0x42, 0x45, 0x41, 0x43, 0x47, 0x68, 0x61, 0x6e, 0x61, 0x20, 0x53, 0x69, 0x64, 0x69,
@@ -3501,17 +3544,20 @@ static const char16_t currency_display_name_data[] = {
 0x65, 0x4d, 0x7a, 0x61, 0x6e, 0x7a, 0x69, 0x20, 0x41, 0x66, 0x72, 0x69, 0x6b, 0x61, 0x4e, 0xe1, 0xed, 0x72, 0xe0, 0x20,
 0x4e, 0xe0, 0xec, 0x6a, 0xed, 0x72, 0xed, 0xe0, 0x46, 0x61, 0x72, 0x61, 0x6e, 0x73, 0xec, 0x20, 0xec, 0x77, 0x254, 0x300,
 0x2d, 0x6f, 0x6f, 0x72, 0xf9, 0x6e, 0x20, 0x41, 0x66, 0xed, 0x72, 0xed, 0x6b, 0xe0, 0x69, 0x2d, 0x53, 0x6f, 0x75, 0x74,
-0x68, 0x20, 0x41, 0x66, 0x72, 0x69, 0x63, 0x61, 0x6e, 0x20, 0x52, 0x61, 0x6e, 0x64
+0x68, 0x20, 0x41, 0x66, 0x72, 0x69, 0x63, 0x61, 0x6e, 0x20, 0x52, 0x61, 0x6e, 0x64, 0x4d, 0x72, 0x61, 0x73, 0x69, 0x72,
+0x20, 0x52, 0x65, 0x6a, 0x61, 0x72, 0x52, 0x65, 0x61, 0x75, 0x20, 0x42, 0x72, 0x61, 0x73, 0x69, 0x75, 0x77, 0x61, 0x72,
+0x61, 0x50, 0x65, 0x73, 0x6f, 0x20, 0x4b, 0x75, 0x72, 0x169, 0x62, 0x69, 0x79, 0x61, 0x77, 0x61, 0x72, 0x61, 0x42, 0x75,
+0x72, 0x69, 0x77, 0x61, 0x72, 0x69, 0x20, 0x57, 0x65, 0x6e, 0x65, 0x73, 0x75, 0x65, 0x72, 0x61, 0x77, 0x61, 0x72, 0x61
 };
 
-static const char16_t currency_format_data[] = {
+static constexpr char16_t currency_format_data[] = {
 0x25, 0x31, 0x25, 0x32, 0x25, 0x32, 0xa0, 0x25, 0x31, 0x25, 0x32, 0x25, 0x31, 0x28, 0x25, 0x32, 0x25, 0x31, 0x29, 0x25,
 0x31, 0xa0, 0x25, 0x32, 0x28, 0x25, 0x31, 0xa0, 0x25, 0x32, 0x29, 0x28, 0x25, 0x31, 0x25, 0x32, 0x29, 0x28, 0x25, 0x32,
 0xa0, 0x25, 0x31, 0x29, 0x25, 0x32, 0x2d, 0x25, 0x31, 0x25, 0x32, 0x2212, 0x25, 0x31, 0x25, 0x32, 0x2d, 0xa0, 0x25, 0x31,
 0x200e, 0x25, 0x32, 0xa0, 0x25, 0x31, 0x200e, 0x28, 0x25, 0x32, 0xa0, 0x25, 0x31, 0x29
 };
 
-static const char16_t endonyms_data[] = {
+static constexpr char16_t endonyms_data[] = {
 0x41, 0x66, 0x72, 0x69, 0x6b, 0x61, 0x61, 0x6e, 0x73, 0x53, 0x75, 0x69, 0x64, 0x2d, 0x41, 0x66, 0x72, 0x69, 0x6b, 0x61,
 0x4e, 0x61, 0x6d, 0x69, 0x62, 0x69, 0xeb, 0x41, 0x67, 0x68, 0x65, 0x6d, 0x4b, 0xe0, 0x6d, 0xe0, 0x6c, 0xfb, 0x14b, 0x41,
 0x6b, 0x61, 0x6e, 0x47, 0x61, 0x61, 0x6e, 0x61, 0x73, 0x68, 0x71, 0x69, 0x70, 0x53, 0x68, 0x71, 0x69, 0x70, 0xeb, 0x72,
@@ -3818,10 +3864,13 @@ static const char16_t endonyms_data[] = {
 0x4b, 0x65, 0x6d, 0x65, 0x6c, 0xfa, 0x6e, 0x5d9, 0x5d9, 0x5b4, 0x5d3, 0x5d9, 0x5e9, 0x5d5, 0x5d5, 0x5e2, 0x5dc, 0x5d8, 0xc8, 0x64,
 0xe8, 0x20, 0x59, 0x6f, 0x72, 0xf9, 0x62, 0xe1, 0x4e, 0xe0, 0xec, 0x6a, 0xed, 0x72, 0xed, 0xe0, 0x42, 0x25b, 0x300, 0x6e,
 0x25b, 0x300, 0x5a, 0x61, 0x72, 0x6d, 0x61, 0x63, 0x69, 0x69, 0x6e, 0x65, 0x69, 0x73, 0x69, 0x5a, 0x75, 0x6c, 0x75, 0x69,
-0x4e, 0x69, 0x6e, 0x67, 0x69, 0x7a, 0x69, 0x6d, 0x75, 0x20, 0x41, 0x66, 0x72, 0x69, 0x6b, 0x61
+0x4e, 0x69, 0x6e, 0x67, 0x69, 0x7a, 0x69, 0x6d, 0x75, 0x20, 0x41, 0x66, 0x72, 0x69, 0x6b, 0x61, 0x6b, 0x61, 0x6e, 0x68,
+0x67, 0xe1, 0x67, 0x4d, 0x72, 0x61, 0x73, 0x69, 0x72, 0x6e, 0x68, 0x65, 0x1ebd, 0x67, 0x61, 0x74, 0x75, 0x42, 0x72, 0x61,
+0x73, 0x69, 0x75, 0xf1, 0x65, 0x6e, 0x67, 0x61, 0x74, 0xfa, 0x4b, 0x75, 0x72, 0x169, 0x62, 0x69, 0x79, 0x61, 0x57, 0x65,
+0x6e, 0x65, 0x73, 0x75, 0x65, 0x72, 0x61
 };
 
-static const char language_name_list[] =
+static constexpr char language_name_list[] =
 "Default\0"
 "C\0"
 "Abkhazian\0"
@@ -4150,9 +4199,11 @@ static const char language_name_list[] =
 "Zarma\0"
 "Zhuang\0"
 "Zulu\0"
+"Kaingang\0"
+"Nheengatu\0"
 ;
 
-static const quint16 language_name_index[] = {
+static constexpr quint16 language_name_index[] = {
      0, // AnyLanguage
      8, // C
     10, // Abkhazian
@@ -4481,9 +4532,11 @@ static const quint16 language_name_index[] = {
   2721, // Zarma
   2727, // Zhuang
   2734, // Zulu
+  2739, // Kaingang
+  2748, // Nheengatu
 };
 
-static const char script_name_list[] =
+static constexpr char script_name_list[] =
 "Default\0"
 "Adlam\0"
 "Ahom\0"
@@ -4628,7 +4681,7 @@ static const char script_name_list[] =
 "Yi\0"
 ;
 
-static const quint16 script_name_index[] = {
+static constexpr quint16 script_name_index[] = {
      0, // AnyScript
      8, // Adlam
     14, // Ahom
@@ -4773,7 +4826,7 @@ static const quint16 script_name_index[] = {
   1312, // Yi
 };
 
-static const char territory_name_list[] =
+static constexpr char territory_name_list[] =
 "Default\0"
 "Afghanistan\0"
 "Aland Islands\0"
@@ -5038,7 +5091,7 @@ static const char territory_name_list[] =
 "Zimbabwe\0"
 ;
 
-static const quint16 territory_name_index[] = {
+static constexpr quint16 territory_name_index[] = {
      0, // AnyTerritory
      8, // Afghanistan
     20, // Aland Islands
@@ -5303,338 +5356,340 @@ static const quint16 territory_name_index[] = {
   2824, // Zimbabwe
 };
 
-static const unsigned char language_code_list[] =
-"  \0" // AnyLanguage
-"  \0" // C
-"ab\0" // Abkhazian
-"aa\0" // Afar
-"af\0" // Afrikaans
-"agq" // Aghem
-"ak\0" // Akan
-"akk" // Akkadian
-"bss" // Akoose
-"sq\0" // Albanian
-"ase" // American Sign Language
-"am\0" // Amharic
-"egy" // Ancient Egyptian
-"grc" // Ancient Greek
-"ar\0" // Arabic
-"an\0" // Aragonese
-"arc" // Aramaic
-"hy\0" // Armenian
-"as\0" // Assamese
-"ast" // Asturian
-"asa" // Asu
-"cch" // Atsam
-"av\0" // Avaric
-"ae\0" // Avestan
-"ay\0" // Aymara
-"az\0" // Azerbaijani
-"ksf" // Bafia
-"ban" // Balinese
-"bm\0" // Bambara
-"bax" // Bamun
-"bn\0" // Bangla
-"bas" // Basaa
-"ba\0" // Bashkir
-"eu\0" // Basque
-"bbc" // Batak Toba
-"be\0" // Belarusian
-"bem" // Bemba
-"bez" // Bena
-"bho" // Bhojpuri
-"bi\0" // Bislama
-"byn" // Blin
-"brx" // Bodo
-"bs\0" // Bosnian
-"br\0" // Breton
-"bug" // Buginese
-"bg\0" // Bulgarian
-"my\0" // Burmese
-"yue" // Cantonese
-"ca\0" // Catalan
-"ceb" // Cebuano
-"tzm" // Central Atlas Tamazight
-"ckb" // Central Kurdish
-"ccp" // Chakma
-"ch\0" // Chamorro
-"ce\0" // Chechen
-"chr" // Cherokee
-"cic" // Chickasaw
-"cgg" // Chiga
-"zh\0" // Chinese
-"cu\0" // Church
-"cv\0" // Chuvash
-"ksh" // Colognian
-"cop" // Coptic
-"kw\0" // Cornish
-"co\0" // Corsican
-"cr\0" // Cree
-"hr\0" // Croatian
-"cs\0" // Czech
-"da\0" // Danish
-"dv\0" // Divehi
-"doi" // Dogri
-"dua" // Duala
-"nl\0" // Dutch
-"dz\0" // Dzongkha
-"ebu" // Embu
-"en\0" // English
-"myv" // Erzya
-"eo\0" // Esperanto
-"et\0" // Estonian
-"ee\0" // Ewe
-"ewo" // Ewondo
-"fo\0" // Faroese
-"fj\0" // Fijian
-"fil" // Filipino
-"fi\0" // Finnish
-"fr\0" // French
-"fur" // Friulian
-"ff\0" // Fulah
-"gd\0" // Gaelic
-"gaa" // Ga
-"gl\0" // Galician
-"lg\0" // Ganda
-"gez" // Geez
-"ka\0" // Georgian
-"de\0" // German
-"got" // Gothic
-"el\0" // Greek
-"gn\0" // Guarani
-"gu\0" // Gujarati
-"guz" // Gusii
-"ht\0" // Haitian
-"ha\0" // Hausa
-"haw" // Hawaiian
-"he\0" // Hebrew
-"hz\0" // Herero
-"hi\0" // Hindi
-"ho\0" // Hiri Motu
-"hu\0" // Hungarian
-"is\0" // Icelandic
-"io\0" // Ido
-"ig\0" // Igbo
-"smn" // Inari Sami
-"id\0" // Indonesian
-"inh" // Ingush
-"ia\0" // Interlingua
-"ie\0" // Interlingue
-"iu\0" // Inuktitut
-"ik\0" // Inupiaq
-"ga\0" // Irish
-"it\0" // Italian
-"ja\0" // Japanese
-"jv\0" // Javanese
-"kaj" // Jju
-"dyo" // Jola Fonyi
-"kea" // Kabuverdianu
-"kab" // Kabyle
-"kkj" // Kako
-"kl\0" // Kalaallisut
-"kln" // Kalenjin
-"kam" // Kamba
-"kn\0" // Kannada
-"kr\0" // Kanuri
-"ks\0" // Kashmiri
-"kk\0" // Kazakh
-"ken" // Kenyang
-"km\0" // Khmer
-"quc" // Kiche
-"ki\0" // Kikuyu
-"rw\0" // Kinyarwanda
-"kv\0" // Komi
-"kg\0" // Kongo
-"kok" // Konkani
-"ko\0" // Korean
-"kfo" // Koro
-"ses" // Koyraboro Senni
-"khq" // Koyra Chiini
-"kpe" // Kpelle
-"kj\0" // Kuanyama
-"ku\0" // Kurdish
-"nmg" // Kwasio
-"ky\0" // Kyrgyz
-"lkt" // Lakota
-"lag" // Langi
-"lo\0" // Lao
-"la\0" // Latin
-"lv\0" // Latvian
-"lez" // Lezghian
-"li\0" // Limburgish
-"ln\0" // Lingala
-"lzh" // Literary Chinese
-"lt\0" // Lithuanian
-"jbo" // Lojban
-"dsb" // Lower Sorbian
-"nds" // Low German
-"lu\0" // Luba Katanga
-"smj" // Lule Sami
-"luo" // Luo
-"lb\0" // Luxembourgish
-"luy" // Luyia
-"mk\0" // Macedonian
-"jmc" // Machame
-"mai" // Maithili
-"mgh" // Makhuwa Meetto
-"kde" // Makonde
-"mg\0" // Malagasy
-"ml\0" // Malayalam
-"ms\0" // Malay
-"mt\0" // Maltese
-"man" // Mandingo
-"mni" // Manipuri
-"gv\0" // Manx
-"mi\0" // Maori
-"arn" // Mapuche
-"mr\0" // Marathi
-"mh\0" // Marshallese
-"mas" // Masai
-"mzn" // Mazanderani
-"men" // Mende
-"mer" // Meru
-"mgo" // Meta
-"moh" // Mohawk
-"mn\0" // Mongolian
-"mfe" // Morisyen
-"mua" // Mundang
-"mus" // Muscogee
-"naq" // Nama
-"na\0" // Nauru
-"nv\0" // Navajo
-"ng\0" // Ndonga
-"ne\0" // Nepali
-"new" // Newari
-"nnh" // Ngiemboon
-"jgo" // Ngomba
-"pcm" // Nigerian Pidgin
-"nqo" // Nko
-"lrc" // Northern Luri
-"se\0" // Northern Sami
-"nso" // Northern Sotho
-"nd\0" // North Ndebele
-"nb\0" // Norwegian Bokmal
-"nn\0" // Norwegian Nynorsk
-"nus" // Nuer
-"ny\0" // Nyanja
-"nyn" // Nyankole
-"oc\0" // Occitan
-"or\0" // Odia
-"oj\0" // Ojibwa
-"sga" // Old Irish
-"non" // Old Norse
-"peo" // Old Persian
-"om\0" // Oromo
-"osa" // Osage
-"os\0" // Ossetic
-"pal" // Pahlavi
-"pau" // Palauan
-"pi\0" // Pali
-"pap" // Papiamento
-"ps\0" // Pashto
-"fa\0" // Persian
-"phn" // Phoenician
-"pl\0" // Polish
-"pt\0" // Portuguese
-"prg" // Prussian
-"pa\0" // Punjabi
-"qu\0" // Quechua
-"ro\0" // Romanian
-"rm\0" // Romansh
-"rof" // Rombo
-"rn\0" // Rundi
-"ru\0" // Russian
-"rwk" // Rwa
-"ssy" // Saho
-"sah" // Sakha
-"saq" // Samburu
-"sm\0" // Samoan
-"sg\0" // Sango
-"sbp" // Sangu
-"sa\0" // Sanskrit
-"sat" // Santali
-"sc\0" // Sardinian
-"saz" // Saurashtra
-"seh" // Sena
-"sr\0" // Serbian
-"ksb" // Shambala
-"sn\0" // Shona
-"ii\0" // Sichuan Yi
-"scn" // Sicilian
-"sid" // Sidamo
-"szl" // Silesian
-"sd\0" // Sindhi
-"si\0" // Sinhala
-"sms" // Skolt Sami
-"sk\0" // Slovak
-"sl\0" // Slovenian
-"xog" // Soga
-"so\0" // Somali
-"sdh" // Southern Kurdish
-"sma" // Southern Sami
-"st\0" // Southern Sotho
-"nr\0" // South Ndebele
-"es\0" // Spanish
-"zgh" // Standard Moroccan Tamazight
-"su\0" // Sundanese
-"sw\0" // Swahili
-"ss\0" // Swati
-"sv\0" // Swedish
-"gsw" // Swiss German
-"syr" // Syriac
-"shi" // Tachelhit
-"ty\0" // Tahitian
-"blt" // Tai Dam
-"dav" // Taita
-"tg\0" // Tajik
-"ta\0" // Tamil
-"trv" // Taroko
-"twq" // Tasawaq
-"tt\0" // Tatar
-"te\0" // Telugu
-"teo" // Teso
-"th\0" // Thai
-"bo\0" // Tibetan
-"tig" // Tigre
-"ti\0" // Tigrinya
-"tkl" // Tokelau
-"tpi" // Tok Pisin
-"to\0" // Tongan
-"ts\0" // Tsonga
-"tn\0" // Tswana
-"tr\0" // Turkish
-"tk\0" // Turkmen
-"tvl" // Tuvalu
-"kcg" // Tyap
-"uga" // Ugaritic
-"uk\0" // Ukrainian
-"hsb" // Upper Sorbian
-"ur\0" // Urdu
-"ug\0" // Uyghur
-"uz\0" // Uzbek
-"vai" // Vai
-"ve\0" // Venda
-"vi\0" // Vietnamese
-"vo\0" // Volapuk
-"vun" // Vunjo
-"wa\0" // Walloon
-"wae" // Walser
-"wbp" // Warlpiri
-"cy\0" // Welsh
-"bgn" // Western Balochi
-"fy\0" // Western Frisian
-"wal" // Wolaytta
-"wo\0" // Wolof
-"xh\0" // Xhosa
-"yav" // Yangben
-"yi\0" // Yiddish
-"yo\0" // Yoruba
-"dje" // Zarma
-"za\0" // Zhuang
-"zu\0" // Zulu
-;
+constexpr std::array<LanguageCodeEntry, 330> languageCodeList {
+    LanguageCodeEntry {{},           {{'u', 'n', 'd'}}, {{'u', 'n', 'd'}}, {{'u', 'n', 'd'}}}, // AnyLanguage
+    LanguageCodeEntry {{},           {{'u', 'n', 'd'}}, {{'u', 'n', 'd'}}, {{'u', 'n', 'd'}}}, // C
+    LanguageCodeEntry {{{'a', 'b'}}, {{'a', 'b', 'k'}}, {{'a', 'b', 'k'}}, {{'a', 'b', 'k'}}}, // Abkhazian
+    LanguageCodeEntry {{{'a', 'a'}}, {{'a', 'a', 'r'}}, {{'a', 'a', 'r'}}, {{'a', 'a', 'r'}}}, // Afar
+    LanguageCodeEntry {{{'a', 'f'}}, {{'a', 'f', 'r'}}, {{'a', 'f', 'r'}}, {{'a', 'f', 'r'}}}, // Afrikaans
+    LanguageCodeEntry {{},           {},                {},                {{'a', 'g', 'q'}}}, // Aghem
+    LanguageCodeEntry {{{'a', 'k'}}, {{'a', 'k', 'a'}}, {{'a', 'k', 'a'}}, {{'a', 'k', 'a'}}}, // Akan
+    LanguageCodeEntry {{},           {{'a', 'k', 'k'}}, {{'a', 'k', 'k'}}, {{'a', 'k', 'k'}}}, // Akkadian
+    LanguageCodeEntry {{},           {},                {},                {{'b', 's', 's'}}}, // Akoose
+    LanguageCodeEntry {{{'s', 'q'}}, {{'a', 'l', 'b'}}, {{'s', 'q', 'i'}}, {{'s', 'q', 'i'}}}, // Albanian
+    LanguageCodeEntry {{},           {},                {},                {{'a', 's', 'e'}}}, // American Sign Language
+    LanguageCodeEntry {{{'a', 'm'}}, {{'a', 'm', 'h'}}, {{'a', 'm', 'h'}}, {{'a', 'm', 'h'}}}, // Amharic
+    LanguageCodeEntry {{},           {{'e', 'g', 'y'}}, {{'e', 'g', 'y'}}, {{'e', 'g', 'y'}}}, // Ancient Egyptian
+    LanguageCodeEntry {{},           {{'g', 'r', 'c'}}, {{'g', 'r', 'c'}}, {{'g', 'r', 'c'}}}, // Ancient Greek
+    LanguageCodeEntry {{{'a', 'r'}}, {{'a', 'r', 'a'}}, {{'a', 'r', 'a'}}, {{'a', 'r', 'a'}}}, // Arabic
+    LanguageCodeEntry {{{'a', 'n'}}, {{'a', 'r', 'g'}}, {{'a', 'r', 'g'}}, {{'a', 'r', 'g'}}}, // Aragonese
+    LanguageCodeEntry {{},           {{'a', 'r', 'c'}}, {{'a', 'r', 'c'}}, {{'a', 'r', 'c'}}}, // Aramaic
+    LanguageCodeEntry {{{'h', 'y'}}, {{'a', 'r', 'm'}}, {{'h', 'y', 'e'}}, {{'h', 'y', 'e'}}}, // Armenian
+    LanguageCodeEntry {{{'a', 's'}}, {{'a', 's', 'm'}}, {{'a', 's', 'm'}}, {{'a', 's', 'm'}}}, // Assamese
+    LanguageCodeEntry {{},           {{'a', 's', 't'}}, {{'a', 's', 't'}}, {{'a', 's', 't'}}}, // Asturian
+    LanguageCodeEntry {{},           {},                {},                {{'a', 's', 'a'}}}, // Asu
+    LanguageCodeEntry {{},           {},                {},                {{'c', 'c', 'h'}}}, // Atsam
+    LanguageCodeEntry {{{'a', 'v'}}, {{'a', 'v', 'a'}}, {{'a', 'v', 'a'}}, {{'a', 'v', 'a'}}}, // Avaric
+    LanguageCodeEntry {{{'a', 'e'}}, {{'a', 'v', 'e'}}, {{'a', 'v', 'e'}}, {{'a', 'v', 'e'}}}, // Avestan
+    LanguageCodeEntry {{{'a', 'y'}}, {{'a', 'y', 'm'}}, {{'a', 'y', 'm'}}, {{'a', 'y', 'm'}}}, // Aymara
+    LanguageCodeEntry {{{'a', 'z'}}, {{'a', 'z', 'e'}}, {{'a', 'z', 'e'}}, {{'a', 'z', 'e'}}}, // Azerbaijani
+    LanguageCodeEntry {{},           {},                {},                {{'k', 's', 'f'}}}, // Bafia
+    LanguageCodeEntry {{},           {{'b', 'a', 'n'}}, {{'b', 'a', 'n'}}, {{'b', 'a', 'n'}}}, // Balinese
+    LanguageCodeEntry {{{'b', 'm'}}, {{'b', 'a', 'm'}}, {{'b', 'a', 'm'}}, {{'b', 'a', 'm'}}}, // Bambara
+    LanguageCodeEntry {{},           {},                {},                {{'b', 'a', 'x'}}}, // Bamun
+    LanguageCodeEntry {{{'b', 'n'}}, {{'b', 'e', 'n'}}, {{'b', 'e', 'n'}}, {{'b', 'e', 'n'}}}, // Bangla
+    LanguageCodeEntry {{},           {{'b', 'a', 's'}}, {{'b', 'a', 's'}}, {{'b', 'a', 's'}}}, // Basaa
+    LanguageCodeEntry {{{'b', 'a'}}, {{'b', 'a', 'k'}}, {{'b', 'a', 'k'}}, {{'b', 'a', 'k'}}}, // Bashkir
+    LanguageCodeEntry {{{'e', 'u'}}, {{'b', 'a', 'q'}}, {{'e', 'u', 's'}}, {{'e', 'u', 's'}}}, // Basque
+    LanguageCodeEntry {{},           {},                {},                {{'b', 'b', 'c'}}}, // Batak Toba
+    LanguageCodeEntry {{{'b', 'e'}}, {{'b', 'e', 'l'}}, {{'b', 'e', 'l'}}, {{'b', 'e', 'l'}}}, // Belarusian
+    LanguageCodeEntry {{},           {{'b', 'e', 'm'}}, {{'b', 'e', 'm'}}, {{'b', 'e', 'm'}}}, // Bemba
+    LanguageCodeEntry {{},           {},                {},                {{'b', 'e', 'z'}}}, // Bena
+    LanguageCodeEntry {{},           {{'b', 'h', 'o'}}, {{'b', 'h', 'o'}}, {{'b', 'h', 'o'}}}, // Bhojpuri
+    LanguageCodeEntry {{{'b', 'i'}}, {{'b', 'i', 's'}}, {{'b', 'i', 's'}}, {{'b', 'i', 's'}}}, // Bislama
+    LanguageCodeEntry {{},           {{'b', 'y', 'n'}}, {{'b', 'y', 'n'}}, {{'b', 'y', 'n'}}}, // Blin
+    LanguageCodeEntry {{},           {},                {},                {{'b', 'r', 'x'}}}, // Bodo
+    LanguageCodeEntry {{{'b', 's'}}, {{'b', 'o', 's'}}, {{'b', 'o', 's'}}, {{'b', 'o', 's'}}}, // Bosnian
+    LanguageCodeEntry {{{'b', 'r'}}, {{'b', 'r', 'e'}}, {{'b', 'r', 'e'}}, {{'b', 'r', 'e'}}}, // Breton
+    LanguageCodeEntry {{},           {{'b', 'u', 'g'}}, {{'b', 'u', 'g'}}, {{'b', 'u', 'g'}}}, // Buginese
+    LanguageCodeEntry {{{'b', 'g'}}, {{'b', 'u', 'l'}}, {{'b', 'u', 'l'}}, {{'b', 'u', 'l'}}}, // Bulgarian
+    LanguageCodeEntry {{{'m', 'y'}}, {{'b', 'u', 'r'}}, {{'m', 'y', 'a'}}, {{'m', 'y', 'a'}}}, // Burmese
+    LanguageCodeEntry {{},           {},                {},                {{'y', 'u', 'e'}}}, // Cantonese
+    LanguageCodeEntry {{{'c', 'a'}}, {{'c', 'a', 't'}}, {{'c', 'a', 't'}}, {{'c', 'a', 't'}}}, // Catalan
+    LanguageCodeEntry {{},           {{'c', 'e', 'b'}}, {{'c', 'e', 'b'}}, {{'c', 'e', 'b'}}}, // Cebuano
+    LanguageCodeEntry {{},           {},                {},                {{'t', 'z', 'm'}}}, // Central Atlas Tamazight
+    LanguageCodeEntry {{},           {},                {},                {{'c', 'k', 'b'}}}, // Central Kurdish
+    LanguageCodeEntry {{},           {},                {},                {{'c', 'c', 'p'}}}, // Chakma
+    LanguageCodeEntry {{{'c', 'h'}}, {{'c', 'h', 'a'}}, {{'c', 'h', 'a'}}, {{'c', 'h', 'a'}}}, // Chamorro
+    LanguageCodeEntry {{{'c', 'e'}}, {{'c', 'h', 'e'}}, {{'c', 'h', 'e'}}, {{'c', 'h', 'e'}}}, // Chechen
+    LanguageCodeEntry {{},           {{'c', 'h', 'r'}}, {{'c', 'h', 'r'}}, {{'c', 'h', 'r'}}}, // Cherokee
+    LanguageCodeEntry {{},           {},                {},                {{'c', 'i', 'c'}}}, // Chickasaw
+    LanguageCodeEntry {{},           {},                {},                {{'c', 'g', 'g'}}}, // Chiga
+    LanguageCodeEntry {{{'z', 'h'}}, {{'c', 'h', 'i'}}, {{'z', 'h', 'o'}}, {{'z', 'h', 'o'}}}, // Chinese
+    LanguageCodeEntry {{{'c', 'u'}}, {{'c', 'h', 'u'}}, {{'c', 'h', 'u'}}, {{'c', 'h', 'u'}}}, // Church
+    LanguageCodeEntry {{{'c', 'v'}}, {{'c', 'h', 'v'}}, {{'c', 'h', 'v'}}, {{'c', 'h', 'v'}}}, // Chuvash
+    LanguageCodeEntry {{},           {},                {},                {{'k', 's', 'h'}}}, // Colognian
+    LanguageCodeEntry {{},           {{'c', 'o', 'p'}}, {{'c', 'o', 'p'}}, {{'c', 'o', 'p'}}}, // Coptic
+    LanguageCodeEntry {{{'k', 'w'}}, {{'c', 'o', 'r'}}, {{'c', 'o', 'r'}}, {{'c', 'o', 'r'}}}, // Cornish
+    LanguageCodeEntry {{{'c', 'o'}}, {{'c', 'o', 's'}}, {{'c', 'o', 's'}}, {{'c', 'o', 's'}}}, // Corsican
+    LanguageCodeEntry {{{'c', 'r'}}, {{'c', 'r', 'e'}}, {{'c', 'r', 'e'}}, {{'c', 'r', 'e'}}}, // Cree
+    LanguageCodeEntry {{{'h', 'r'}}, {{'h', 'r', 'v'}}, {{'h', 'r', 'v'}}, {{'h', 'r', 'v'}}}, // Croatian
+    LanguageCodeEntry {{{'c', 's'}}, {{'c', 'z', 'e'}}, {{'c', 'e', 's'}}, {{'c', 'e', 's'}}}, // Czech
+    LanguageCodeEntry {{{'d', 'a'}}, {{'d', 'a', 'n'}}, {{'d', 'a', 'n'}}, {{'d', 'a', 'n'}}}, // Danish
+    LanguageCodeEntry {{{'d', 'v'}}, {{'d', 'i', 'v'}}, {{'d', 'i', 'v'}}, {{'d', 'i', 'v'}}}, // Divehi
+    LanguageCodeEntry {{},           {{'d', 'o', 'i'}}, {{'d', 'o', 'i'}}, {{'d', 'o', 'i'}}}, // Dogri
+    LanguageCodeEntry {{},           {{'d', 'u', 'a'}}, {{'d', 'u', 'a'}}, {{'d', 'u', 'a'}}}, // Duala
+    LanguageCodeEntry {{{'n', 'l'}}, {{'d', 'u', 't'}}, {{'n', 'l', 'd'}}, {{'n', 'l', 'd'}}}, // Dutch
+    LanguageCodeEntry {{{'d', 'z'}}, {{'d', 'z', 'o'}}, {{'d', 'z', 'o'}}, {{'d', 'z', 'o'}}}, // Dzongkha
+    LanguageCodeEntry {{},           {},                {},                {{'e', 'b', 'u'}}}, // Embu
+    LanguageCodeEntry {{{'e', 'n'}}, {{'e', 'n', 'g'}}, {{'e', 'n', 'g'}}, {{'e', 'n', 'g'}}}, // English
+    LanguageCodeEntry {{},           {{'m', 'y', 'v'}}, {{'m', 'y', 'v'}}, {{'m', 'y', 'v'}}}, // Erzya
+    LanguageCodeEntry {{{'e', 'o'}}, {{'e', 'p', 'o'}}, {{'e', 'p', 'o'}}, {{'e', 'p', 'o'}}}, // Esperanto
+    LanguageCodeEntry {{{'e', 't'}}, {{'e', 's', 't'}}, {{'e', 's', 't'}}, {{'e', 's', 't'}}}, // Estonian
+    LanguageCodeEntry {{{'e', 'e'}}, {{'e', 'w', 'e'}}, {{'e', 'w', 'e'}}, {{'e', 'w', 'e'}}}, // Ewe
+    LanguageCodeEntry {{},           {{'e', 'w', 'o'}}, {{'e', 'w', 'o'}}, {{'e', 'w', 'o'}}}, // Ewondo
+    LanguageCodeEntry {{{'f', 'o'}}, {{'f', 'a', 'o'}}, {{'f', 'a', 'o'}}, {{'f', 'a', 'o'}}}, // Faroese
+    LanguageCodeEntry {{{'f', 'j'}}, {{'f', 'i', 'j'}}, {{'f', 'i', 'j'}}, {{'f', 'i', 'j'}}}, // Fijian
+    LanguageCodeEntry {{},           {{'f', 'i', 'l'}}, {{'f', 'i', 'l'}}, {{'f', 'i', 'l'}}}, // Filipino
+    LanguageCodeEntry {{{'f', 'i'}}, {{'f', 'i', 'n'}}, {{'f', 'i', 'n'}}, {{'f', 'i', 'n'}}}, // Finnish
+    LanguageCodeEntry {{{'f', 'r'}}, {{'f', 'r', 'e'}}, {{'f', 'r', 'a'}}, {{'f', 'r', 'a'}}}, // French
+    LanguageCodeEntry {{},           {{'f', 'u', 'r'}}, {{'f', 'u', 'r'}}, {{'f', 'u', 'r'}}}, // Friulian
+    LanguageCodeEntry {{{'f', 'f'}}, {{'f', 'u', 'l'}}, {{'f', 'u', 'l'}}, {{'f', 'u', 'l'}}}, // Fulah
+    LanguageCodeEntry {{{'g', 'd'}}, {{'g', 'l', 'a'}}, {{'g', 'l', 'a'}}, {{'g', 'l', 'a'}}}, // Gaelic
+    LanguageCodeEntry {{},           {{'g', 'a', 'a'}}, {{'g', 'a', 'a'}}, {{'g', 'a', 'a'}}}, // Ga
+    LanguageCodeEntry {{{'g', 'l'}}, {{'g', 'l', 'g'}}, {{'g', 'l', 'g'}}, {{'g', 'l', 'g'}}}, // Galician
+    LanguageCodeEntry {{{'l', 'g'}}, {{'l', 'u', 'g'}}, {{'l', 'u', 'g'}}, {{'l', 'u', 'g'}}}, // Ganda
+    LanguageCodeEntry {{},           {{'g', 'e', 'z'}}, {{'g', 'e', 'z'}}, {{'g', 'e', 'z'}}}, // Geez
+    LanguageCodeEntry {{{'k', 'a'}}, {{'g', 'e', 'o'}}, {{'k', 'a', 't'}}, {{'k', 'a', 't'}}}, // Georgian
+    LanguageCodeEntry {{{'d', 'e'}}, {{'g', 'e', 'r'}}, {{'d', 'e', 'u'}}, {{'d', 'e', 'u'}}}, // German
+    LanguageCodeEntry {{},           {{'g', 'o', 't'}}, {{'g', 'o', 't'}}, {{'g', 'o', 't'}}}, // Gothic
+    LanguageCodeEntry {{{'e', 'l'}}, {{'g', 'r', 'e'}}, {{'e', 'l', 'l'}}, {{'e', 'l', 'l'}}}, // Greek
+    LanguageCodeEntry {{{'g', 'n'}}, {{'g', 'r', 'n'}}, {{'g', 'r', 'n'}}, {{'g', 'r', 'n'}}}, // Guarani
+    LanguageCodeEntry {{{'g', 'u'}}, {{'g', 'u', 'j'}}, {{'g', 'u', 'j'}}, {{'g', 'u', 'j'}}}, // Gujarati
+    LanguageCodeEntry {{},           {},                {},                {{'g', 'u', 'z'}}}, // Gusii
+    LanguageCodeEntry {{{'h', 't'}}, {{'h', 'a', 't'}}, {{'h', 'a', 't'}}, {{'h', 'a', 't'}}}, // Haitian
+    LanguageCodeEntry {{{'h', 'a'}}, {{'h', 'a', 'u'}}, {{'h', 'a', 'u'}}, {{'h', 'a', 'u'}}}, // Hausa
+    LanguageCodeEntry {{},           {{'h', 'a', 'w'}}, {{'h', 'a', 'w'}}, {{'h', 'a', 'w'}}}, // Hawaiian
+    LanguageCodeEntry {{{'h', 'e'}}, {{'h', 'e', 'b'}}, {{'h', 'e', 'b'}}, {{'h', 'e', 'b'}}}, // Hebrew
+    LanguageCodeEntry {{{'h', 'z'}}, {{'h', 'e', 'r'}}, {{'h', 'e', 'r'}}, {{'h', 'e', 'r'}}}, // Herero
+    LanguageCodeEntry {{{'h', 'i'}}, {{'h', 'i', 'n'}}, {{'h', 'i', 'n'}}, {{'h', 'i', 'n'}}}, // Hindi
+    LanguageCodeEntry {{{'h', 'o'}}, {{'h', 'm', 'o'}}, {{'h', 'm', 'o'}}, {{'h', 'm', 'o'}}}, // Hiri Motu
+    LanguageCodeEntry {{{'h', 'u'}}, {{'h', 'u', 'n'}}, {{'h', 'u', 'n'}}, {{'h', 'u', 'n'}}}, // Hungarian
+    LanguageCodeEntry {{{'i', 's'}}, {{'i', 'c', 'e'}}, {{'i', 's', 'l'}}, {{'i', 's', 'l'}}}, // Icelandic
+    LanguageCodeEntry {{{'i', 'o'}}, {{'i', 'd', 'o'}}, {{'i', 'd', 'o'}}, {{'i', 'd', 'o'}}}, // Ido
+    LanguageCodeEntry {{{'i', 'g'}}, {{'i', 'b', 'o'}}, {{'i', 'b', 'o'}}, {{'i', 'b', 'o'}}}, // Igbo
+    LanguageCodeEntry {{},           {{'s', 'm', 'n'}}, {{'s', 'm', 'n'}}, {{'s', 'm', 'n'}}}, // Inari Sami
+    LanguageCodeEntry {{{'i', 'd'}}, {{'i', 'n', 'd'}}, {{'i', 'n', 'd'}}, {{'i', 'n', 'd'}}}, // Indonesian
+    LanguageCodeEntry {{},           {{'i', 'n', 'h'}}, {{'i', 'n', 'h'}}, {{'i', 'n', 'h'}}}, // Ingush
+    LanguageCodeEntry {{{'i', 'a'}}, {{'i', 'n', 'a'}}, {{'i', 'n', 'a'}}, {{'i', 'n', 'a'}}}, // Interlingua
+    LanguageCodeEntry {{{'i', 'e'}}, {{'i', 'l', 'e'}}, {{'i', 'l', 'e'}}, {{'i', 'l', 'e'}}}, // Interlingue
+    LanguageCodeEntry {{{'i', 'u'}}, {{'i', 'k', 'u'}}, {{'i', 'k', 'u'}}, {{'i', 'k', 'u'}}}, // Inuktitut
+    LanguageCodeEntry {{{'i', 'k'}}, {{'i', 'p', 'k'}}, {{'i', 'p', 'k'}}, {{'i', 'p', 'k'}}}, // Inupiaq
+    LanguageCodeEntry {{{'g', 'a'}}, {{'g', 'l', 'e'}}, {{'g', 'l', 'e'}}, {{'g', 'l', 'e'}}}, // Irish
+    LanguageCodeEntry {{{'i', 't'}}, {{'i', 't', 'a'}}, {{'i', 't', 'a'}}, {{'i', 't', 'a'}}}, // Italian
+    LanguageCodeEntry {{{'j', 'a'}}, {{'j', 'p', 'n'}}, {{'j', 'p', 'n'}}, {{'j', 'p', 'n'}}}, // Japanese
+    LanguageCodeEntry {{{'j', 'v'}}, {{'j', 'a', 'v'}}, {{'j', 'a', 'v'}}, {{'j', 'a', 'v'}}}, // Javanese
+    LanguageCodeEntry {{},           {},                {},                {{'k', 'a', 'j'}}}, // Jju
+    LanguageCodeEntry {{},           {},                {},                {{'d', 'y', 'o'}}}, // Jola Fonyi
+    LanguageCodeEntry {{},           {},                {},                {{'k', 'e', 'a'}}}, // Kabuverdianu
+    LanguageCodeEntry {{},           {{'k', 'a', 'b'}}, {{'k', 'a', 'b'}}, {{'k', 'a', 'b'}}}, // Kabyle
+    LanguageCodeEntry {{},           {},                {},                {{'k', 'k', 'j'}}}, // Kako
+    LanguageCodeEntry {{{'k', 'l'}}, {{'k', 'a', 'l'}}, {{'k', 'a', 'l'}}, {{'k', 'a', 'l'}}}, // Kalaallisut
+    LanguageCodeEntry {{},           {},                {},                {{'k', 'l', 'n'}}}, // Kalenjin
+    LanguageCodeEntry {{},           {{'k', 'a', 'm'}}, {{'k', 'a', 'm'}}, {{'k', 'a', 'm'}}}, // Kamba
+    LanguageCodeEntry {{{'k', 'n'}}, {{'k', 'a', 'n'}}, {{'k', 'a', 'n'}}, {{'k', 'a', 'n'}}}, // Kannada
+    LanguageCodeEntry {{{'k', 'r'}}, {{'k', 'a', 'u'}}, {{'k', 'a', 'u'}}, {{'k', 'a', 'u'}}}, // Kanuri
+    LanguageCodeEntry {{{'k', 's'}}, {{'k', 'a', 's'}}, {{'k', 'a', 's'}}, {{'k', 'a', 's'}}}, // Kashmiri
+    LanguageCodeEntry {{{'k', 'k'}}, {{'k', 'a', 'z'}}, {{'k', 'a', 'z'}}, {{'k', 'a', 'z'}}}, // Kazakh
+    LanguageCodeEntry {{},           {},                {},                {{'k', 'e', 'n'}}}, // Kenyang
+    LanguageCodeEntry {{{'k', 'm'}}, {{'k', 'h', 'm'}}, {{'k', 'h', 'm'}}, {{'k', 'h', 'm'}}}, // Khmer
+    LanguageCodeEntry {{},           {},                {},                {{'q', 'u', 'c'}}}, // Kiche
+    LanguageCodeEntry {{{'k', 'i'}}, {{'k', 'i', 'k'}}, {{'k', 'i', 'k'}}, {{'k', 'i', 'k'}}}, // Kikuyu
+    LanguageCodeEntry {{{'r', 'w'}}, {{'k', 'i', 'n'}}, {{'k', 'i', 'n'}}, {{'k', 'i', 'n'}}}, // Kinyarwanda
+    LanguageCodeEntry {{{'k', 'v'}}, {{'k', 'o', 'm'}}, {{'k', 'o', 'm'}}, {{'k', 'o', 'm'}}}, // Komi
+    LanguageCodeEntry {{{'k', 'g'}}, {{'k', 'o', 'n'}}, {{'k', 'o', 'n'}}, {{'k', 'o', 'n'}}}, // Kongo
+    LanguageCodeEntry {{},           {{'k', 'o', 'k'}}, {{'k', 'o', 'k'}}, {{'k', 'o', 'k'}}}, // Konkani
+    LanguageCodeEntry {{{'k', 'o'}}, {{'k', 'o', 'r'}}, {{'k', 'o', 'r'}}, {{'k', 'o', 'r'}}}, // Korean
+    LanguageCodeEntry {{},           {},                {},                {{'k', 'f', 'o'}}}, // Koro
+    LanguageCodeEntry {{},           {},                {},                {{'s', 'e', 's'}}}, // Koyraboro Senni
+    LanguageCodeEntry {{},           {},                {},                {{'k', 'h', 'q'}}}, // Koyra Chiini
+    LanguageCodeEntry {{},           {{'k', 'p', 'e'}}, {{'k', 'p', 'e'}}, {{'k', 'p', 'e'}}}, // Kpelle
+    LanguageCodeEntry {{{'k', 'j'}}, {{'k', 'u', 'a'}}, {{'k', 'u', 'a'}}, {{'k', 'u', 'a'}}}, // Kuanyama
+    LanguageCodeEntry {{{'k', 'u'}}, {{'k', 'u', 'r'}}, {{'k', 'u', 'r'}}, {{'k', 'u', 'r'}}}, // Kurdish
+    LanguageCodeEntry {{},           {},                {},                {{'n', 'm', 'g'}}}, // Kwasio
+    LanguageCodeEntry {{{'k', 'y'}}, {{'k', 'i', 'r'}}, {{'k', 'i', 'r'}}, {{'k', 'i', 'r'}}}, // Kyrgyz
+    LanguageCodeEntry {{},           {},                {},                {{'l', 'k', 't'}}}, // Lakota
+    LanguageCodeEntry {{},           {},                {},                {{'l', 'a', 'g'}}}, // Langi
+    LanguageCodeEntry {{{'l', 'o'}}, {{'l', 'a', 'o'}}, {{'l', 'a', 'o'}}, {{'l', 'a', 'o'}}}, // Lao
+    LanguageCodeEntry {{{'l', 'a'}}, {{'l', 'a', 't'}}, {{'l', 'a', 't'}}, {{'l', 'a', 't'}}}, // Latin
+    LanguageCodeEntry {{{'l', 'v'}}, {{'l', 'a', 'v'}}, {{'l', 'a', 'v'}}, {{'l', 'a', 'v'}}}, // Latvian
+    LanguageCodeEntry {{},           {{'l', 'e', 'z'}}, {{'l', 'e', 'z'}}, {{'l', 'e', 'z'}}}, // Lezghian
+    LanguageCodeEntry {{{'l', 'i'}}, {{'l', 'i', 'm'}}, {{'l', 'i', 'm'}}, {{'l', 'i', 'm'}}}, // Limburgish
+    LanguageCodeEntry {{{'l', 'n'}}, {{'l', 'i', 'n'}}, {{'l', 'i', 'n'}}, {{'l', 'i', 'n'}}}, // Lingala
+    LanguageCodeEntry {{},           {},                {},                {{'l', 'z', 'h'}}}, // Literary Chinese
+    LanguageCodeEntry {{{'l', 't'}}, {{'l', 'i', 't'}}, {{'l', 'i', 't'}}, {{'l', 'i', 't'}}}, // Lithuanian
+    LanguageCodeEntry {{},           {{'j', 'b', 'o'}}, {{'j', 'b', 'o'}}, {{'j', 'b', 'o'}}}, // Lojban
+    LanguageCodeEntry {{},           {{'d', 's', 'b'}}, {{'d', 's', 'b'}}, {{'d', 's', 'b'}}}, // Lower Sorbian
+    LanguageCodeEntry {{},           {{'n', 'd', 's'}}, {{'n', 'd', 's'}}, {{'n', 'd', 's'}}}, // Low German
+    LanguageCodeEntry {{{'l', 'u'}}, {{'l', 'u', 'b'}}, {{'l', 'u', 'b'}}, {{'l', 'u', 'b'}}}, // Luba Katanga
+    LanguageCodeEntry {{},           {{'s', 'm', 'j'}}, {{'s', 'm', 'j'}}, {{'s', 'm', 'j'}}}, // Lule Sami
+    LanguageCodeEntry {{},           {{'l', 'u', 'o'}}, {{'l', 'u', 'o'}}, {{'l', 'u', 'o'}}}, // Luo
+    LanguageCodeEntry {{{'l', 'b'}}, {{'l', 't', 'z'}}, {{'l', 't', 'z'}}, {{'l', 't', 'z'}}}, // Luxembourgish
+    LanguageCodeEntry {{},           {},                {},                {{'l', 'u', 'y'}}}, // Luyia
+    LanguageCodeEntry {{{'m', 'k'}}, {{'m', 'a', 'c'}}, {{'m', 'k', 'd'}}, {{'m', 'k', 'd'}}}, // Macedonian
+    LanguageCodeEntry {{},           {},                {},                {{'j', 'm', 'c'}}}, // Machame
+    LanguageCodeEntry {{},           {{'m', 'a', 'i'}}, {{'m', 'a', 'i'}}, {{'m', 'a', 'i'}}}, // Maithili
+    LanguageCodeEntry {{},           {},                {},                {{'m', 'g', 'h'}}}, // Makhuwa Meetto
+    LanguageCodeEntry {{},           {},                {},                {{'k', 'd', 'e'}}}, // Makonde
+    LanguageCodeEntry {{{'m', 'g'}}, {{'m', 'l', 'g'}}, {{'m', 'l', 'g'}}, {{'m', 'l', 'g'}}}, // Malagasy
+    LanguageCodeEntry {{{'m', 'l'}}, {{'m', 'a', 'l'}}, {{'m', 'a', 'l'}}, {{'m', 'a', 'l'}}}, // Malayalam
+    LanguageCodeEntry {{{'m', 's'}}, {{'m', 'a', 'y'}}, {{'m', 's', 'a'}}, {{'m', 's', 'a'}}}, // Malay
+    LanguageCodeEntry {{{'m', 't'}}, {{'m', 'l', 't'}}, {{'m', 'l', 't'}}, {{'m', 'l', 't'}}}, // Maltese
+    LanguageCodeEntry {{},           {{'m', 'a', 'n'}}, {{'m', 'a', 'n'}}, {{'m', 'a', 'n'}}}, // Mandingo
+    LanguageCodeEntry {{},           {{'m', 'n', 'i'}}, {{'m', 'n', 'i'}}, {{'m', 'n', 'i'}}}, // Manipuri
+    LanguageCodeEntry {{{'g', 'v'}}, {{'g', 'l', 'v'}}, {{'g', 'l', 'v'}}, {{'g', 'l', 'v'}}}, // Manx
+    LanguageCodeEntry {{{'m', 'i'}}, {{'m', 'a', 'o'}}, {{'m', 'r', 'i'}}, {{'m', 'r', 'i'}}}, // Maori
+    LanguageCodeEntry {{},           {{'a', 'r', 'n'}}, {{'a', 'r', 'n'}}, {{'a', 'r', 'n'}}}, // Mapuche
+    LanguageCodeEntry {{{'m', 'r'}}, {{'m', 'a', 'r'}}, {{'m', 'a', 'r'}}, {{'m', 'a', 'r'}}}, // Marathi
+    LanguageCodeEntry {{{'m', 'h'}}, {{'m', 'a', 'h'}}, {{'m', 'a', 'h'}}, {{'m', 'a', 'h'}}}, // Marshallese
+    LanguageCodeEntry {{},           {{'m', 'a', 's'}}, {{'m', 'a', 's'}}, {{'m', 'a', 's'}}}, // Masai
+    LanguageCodeEntry {{},           {},                {},                {{'m', 'z', 'n'}}}, // Mazanderani
+    LanguageCodeEntry {{},           {{'m', 'e', 'n'}}, {{'m', 'e', 'n'}}, {{'m', 'e', 'n'}}}, // Mende
+    LanguageCodeEntry {{},           {},                {},                {{'m', 'e', 'r'}}}, // Meru
+    LanguageCodeEntry {{},           {},                {},                {{'m', 'g', 'o'}}}, // Meta
+    LanguageCodeEntry {{},           {{'m', 'o', 'h'}}, {{'m', 'o', 'h'}}, {{'m', 'o', 'h'}}}, // Mohawk
+    LanguageCodeEntry {{{'m', 'n'}}, {{'m', 'o', 'n'}}, {{'m', 'o', 'n'}}, {{'m', 'o', 'n'}}}, // Mongolian
+    LanguageCodeEntry {{},           {},                {},                {{'m', 'f', 'e'}}}, // Morisyen
+    LanguageCodeEntry {{},           {},                {},                {{'m', 'u', 'a'}}}, // Mundang
+    LanguageCodeEntry {{},           {{'m', 'u', 's'}}, {{'m', 'u', 's'}}, {{'m', 'u', 's'}}}, // Muscogee
+    LanguageCodeEntry {{},           {},                {},                {{'n', 'a', 'q'}}}, // Nama
+    LanguageCodeEntry {{{'n', 'a'}}, {{'n', 'a', 'u'}}, {{'n', 'a', 'u'}}, {{'n', 'a', 'u'}}}, // Nauru
+    LanguageCodeEntry {{{'n', 'v'}}, {{'n', 'a', 'v'}}, {{'n', 'a', 'v'}}, {{'n', 'a', 'v'}}}, // Navajo
+    LanguageCodeEntry {{{'n', 'g'}}, {{'n', 'd', 'o'}}, {{'n', 'd', 'o'}}, {{'n', 'd', 'o'}}}, // Ndonga
+    LanguageCodeEntry {{{'n', 'e'}}, {{'n', 'e', 'p'}}, {{'n', 'e', 'p'}}, {{'n', 'e', 'p'}}}, // Nepali
+    LanguageCodeEntry {{},           {{'n', 'e', 'w'}}, {{'n', 'e', 'w'}}, {{'n', 'e', 'w'}}}, // Newari
+    LanguageCodeEntry {{},           {},                {},                {{'n', 'n', 'h'}}}, // Ngiemboon
+    LanguageCodeEntry {{},           {},                {},                {{'j', 'g', 'o'}}}, // Ngomba
+    LanguageCodeEntry {{},           {},                {},                {{'p', 'c', 'm'}}}, // Nigerian Pidgin
+    LanguageCodeEntry {{},           {{'n', 'q', 'o'}}, {{'n', 'q', 'o'}}, {{'n', 'q', 'o'}}}, // Nko
+    LanguageCodeEntry {{},           {},                {},                {{'l', 'r', 'c'}}}, // Northern Luri
+    LanguageCodeEntry {{{'s', 'e'}}, {{'s', 'm', 'e'}}, {{'s', 'm', 'e'}}, {{'s', 'm', 'e'}}}, // Northern Sami
+    LanguageCodeEntry {{},           {{'n', 's', 'o'}}, {{'n', 's', 'o'}}, {{'n', 's', 'o'}}}, // Northern Sotho
+    LanguageCodeEntry {{{'n', 'd'}}, {{'n', 'd', 'e'}}, {{'n', 'd', 'e'}}, {{'n', 'd', 'e'}}}, // North Ndebele
+    LanguageCodeEntry {{{'n', 'b'}}, {{'n', 'o', 'b'}}, {{'n', 'o', 'b'}}, {{'n', 'o', 'b'}}}, // Norwegian Bokmal
+    LanguageCodeEntry {{{'n', 'n'}}, {{'n', 'n', 'o'}}, {{'n', 'n', 'o'}}, {{'n', 'n', 'o'}}}, // Norwegian Nynorsk
+    LanguageCodeEntry {{},           {},                {},                {{'n', 'u', 's'}}}, // Nuer
+    LanguageCodeEntry {{{'n', 'y'}}, {{'n', 'y', 'a'}}, {{'n', 'y', 'a'}}, {{'n', 'y', 'a'}}}, // Nyanja
+    LanguageCodeEntry {{},           {{'n', 'y', 'n'}}, {{'n', 'y', 'n'}}, {{'n', 'y', 'n'}}}, // Nyankole
+    LanguageCodeEntry {{{'o', 'c'}}, {{'o', 'c', 'i'}}, {{'o', 'c', 'i'}}, {{'o', 'c', 'i'}}}, // Occitan
+    LanguageCodeEntry {{{'o', 'r'}}, {{'o', 'r', 'i'}}, {{'o', 'r', 'i'}}, {{'o', 'r', 'i'}}}, // Odia
+    LanguageCodeEntry {{{'o', 'j'}}, {{'o', 'j', 'i'}}, {{'o', 'j', 'i'}}, {{'o', 'j', 'i'}}}, // Ojibwa
+    LanguageCodeEntry {{},           {{'s', 'g', 'a'}}, {{'s', 'g', 'a'}}, {{'s', 'g', 'a'}}}, // Old Irish
+    LanguageCodeEntry {{},           {{'n', 'o', 'n'}}, {{'n', 'o', 'n'}}, {{'n', 'o', 'n'}}}, // Old Norse
+    LanguageCodeEntry {{},           {{'p', 'e', 'o'}}, {{'p', 'e', 'o'}}, {{'p', 'e', 'o'}}}, // Old Persian
+    LanguageCodeEntry {{{'o', 'm'}}, {{'o', 'r', 'm'}}, {{'o', 'r', 'm'}}, {{'o', 'r', 'm'}}}, // Oromo
+    LanguageCodeEntry {{},           {{'o', 's', 'a'}}, {{'o', 's', 'a'}}, {{'o', 's', 'a'}}}, // Osage
+    LanguageCodeEntry {{{'o', 's'}}, {{'o', 's', 's'}}, {{'o', 's', 's'}}, {{'o', 's', 's'}}}, // Ossetic
+    LanguageCodeEntry {{},           {{'p', 'a', 'l'}}, {{'p', 'a', 'l'}}, {{'p', 'a', 'l'}}}, // Pahlavi
+    LanguageCodeEntry {{},           {{'p', 'a', 'u'}}, {{'p', 'a', 'u'}}, {{'p', 'a', 'u'}}}, // Palauan
+    LanguageCodeEntry {{{'p', 'i'}}, {{'p', 'l', 'i'}}, {{'p', 'l', 'i'}}, {{'p', 'l', 'i'}}}, // Pali
+    LanguageCodeEntry {{},           {{'p', 'a', 'p'}}, {{'p', 'a', 'p'}}, {{'p', 'a', 'p'}}}, // Papiamento
+    LanguageCodeEntry {{{'p', 's'}}, {{'p', 'u', 's'}}, {{'p', 'u', 's'}}, {{'p', 'u', 's'}}}, // Pashto
+    LanguageCodeEntry {{{'f', 'a'}}, {{'p', 'e', 'r'}}, {{'f', 'a', 's'}}, {{'f', 'a', 's'}}}, // Persian
+    LanguageCodeEntry {{},           {{'p', 'h', 'n'}}, {{'p', 'h', 'n'}}, {{'p', 'h', 'n'}}}, // Phoenician
+    LanguageCodeEntry {{{'p', 'l'}}, {{'p', 'o', 'l'}}, {{'p', 'o', 'l'}}, {{'p', 'o', 'l'}}}, // Polish
+    LanguageCodeEntry {{{'p', 't'}}, {{'p', 'o', 'r'}}, {{'p', 'o', 'r'}}, {{'p', 'o', 'r'}}}, // Portuguese
+    LanguageCodeEntry {{},           {},                {},                {{'p', 'r', 'g'}}}, // Prussian
+    LanguageCodeEntry {{{'p', 'a'}}, {{'p', 'a', 'n'}}, {{'p', 'a', 'n'}}, {{'p', 'a', 'n'}}}, // Punjabi
+    LanguageCodeEntry {{{'q', 'u'}}, {{'q', 'u', 'e'}}, {{'q', 'u', 'e'}}, {{'q', 'u', 'e'}}}, // Quechua
+    LanguageCodeEntry {{{'r', 'o'}}, {{'r', 'u', 'm'}}, {{'r', 'o', 'n'}}, {{'r', 'o', 'n'}}}, // Romanian
+    LanguageCodeEntry {{{'r', 'm'}}, {{'r', 'o', 'h'}}, {{'r', 'o', 'h'}}, {{'r', 'o', 'h'}}}, // Romansh
+    LanguageCodeEntry {{},           {},                {},                {{'r', 'o', 'f'}}}, // Rombo
+    LanguageCodeEntry {{{'r', 'n'}}, {{'r', 'u', 'n'}}, {{'r', 'u', 'n'}}, {{'r', 'u', 'n'}}}, // Rundi
+    LanguageCodeEntry {{{'r', 'u'}}, {{'r', 'u', 's'}}, {{'r', 'u', 's'}}, {{'r', 'u', 's'}}}, // Russian
+    LanguageCodeEntry {{},           {},                {},                {{'r', 'w', 'k'}}}, // Rwa
+    LanguageCodeEntry {{},           {},                {},                {{'s', 's', 'y'}}}, // Saho
+    LanguageCodeEntry {{},           {{'s', 'a', 'h'}}, {{'s', 'a', 'h'}}, {{'s', 'a', 'h'}}}, // Sakha
+    LanguageCodeEntry {{},           {},                {},                {{'s', 'a', 'q'}}}, // Samburu
+    LanguageCodeEntry {{{'s', 'm'}}, {{'s', 'm', 'o'}}, {{'s', 'm', 'o'}}, {{'s', 'm', 'o'}}}, // Samoan
+    LanguageCodeEntry {{{'s', 'g'}}, {{'s', 'a', 'g'}}, {{'s', 'a', 'g'}}, {{'s', 'a', 'g'}}}, // Sango
+    LanguageCodeEntry {{},           {},                {},                {{'s', 'b', 'p'}}}, // Sangu
+    LanguageCodeEntry {{{'s', 'a'}}, {{'s', 'a', 'n'}}, {{'s', 'a', 'n'}}, {{'s', 'a', 'n'}}}, // Sanskrit
+    LanguageCodeEntry {{},           {{'s', 'a', 't'}}, {{'s', 'a', 't'}}, {{'s', 'a', 't'}}}, // Santali
+    LanguageCodeEntry {{{'s', 'c'}}, {{'s', 'r', 'd'}}, {{'s', 'r', 'd'}}, {{'s', 'r', 'd'}}}, // Sardinian
+    LanguageCodeEntry {{},           {},                {},                {{'s', 'a', 'z'}}}, // Saurashtra
+    LanguageCodeEntry {{},           {},                {},                {{'s', 'e', 'h'}}}, // Sena
+    LanguageCodeEntry {{{'s', 'r'}}, {{'s', 'r', 'p'}}, {{'s', 'r', 'p'}}, {{'s', 'r', 'p'}}}, // Serbian
+    LanguageCodeEntry {{},           {},                {},                {{'k', 's', 'b'}}}, // Shambala
+    LanguageCodeEntry {{{'s', 'n'}}, {{'s', 'n', 'a'}}, {{'s', 'n', 'a'}}, {{'s', 'n', 'a'}}}, // Shona
+    LanguageCodeEntry {{{'i', 'i'}}, {{'i', 'i', 'i'}}, {{'i', 'i', 'i'}}, {{'i', 'i', 'i'}}}, // Sichuan Yi
+    LanguageCodeEntry {{},           {{'s', 'c', 'n'}}, {{'s', 'c', 'n'}}, {{'s', 'c', 'n'}}}, // Sicilian
+    LanguageCodeEntry {{},           {{'s', 'i', 'd'}}, {{'s', 'i', 'd'}}, {{'s', 'i', 'd'}}}, // Sidamo
+    LanguageCodeEntry {{},           {},                {},                {{'s', 'z', 'l'}}}, // Silesian
+    LanguageCodeEntry {{{'s', 'd'}}, {{'s', 'n', 'd'}}, {{'s', 'n', 'd'}}, {{'s', 'n', 'd'}}}, // Sindhi
+    LanguageCodeEntry {{{'s', 'i'}}, {{'s', 'i', 'n'}}, {{'s', 'i', 'n'}}, {{'s', 'i', 'n'}}}, // Sinhala
+    LanguageCodeEntry {{},           {{'s', 'm', 's'}}, {{'s', 'm', 's'}}, {{'s', 'm', 's'}}}, // Skolt Sami
+    LanguageCodeEntry {{{'s', 'k'}}, {{'s', 'l', 'o'}}, {{'s', 'l', 'k'}}, {{'s', 'l', 'k'}}}, // Slovak
+    LanguageCodeEntry {{{'s', 'l'}}, {{'s', 'l', 'v'}}, {{'s', 'l', 'v'}}, {{'s', 'l', 'v'}}}, // Slovenian
+    LanguageCodeEntry {{},           {},                {},                {{'x', 'o', 'g'}}}, // Soga
+    LanguageCodeEntry {{{'s', 'o'}}, {{'s', 'o', 'm'}}, {{'s', 'o', 'm'}}, {{'s', 'o', 'm'}}}, // Somali
+    LanguageCodeEntry {{},           {},                {},                {{'s', 'd', 'h'}}}, // Southern Kurdish
+    LanguageCodeEntry {{},           {{'s', 'm', 'a'}}, {{'s', 'm', 'a'}}, {{'s', 'm', 'a'}}}, // Southern Sami
+    LanguageCodeEntry {{{'s', 't'}}, {{'s', 'o', 't'}}, {{'s', 'o', 't'}}, {{'s', 'o', 't'}}}, // Southern Sotho
+    LanguageCodeEntry {{{'n', 'r'}}, {{'n', 'b', 'l'}}, {{'n', 'b', 'l'}}, {{'n', 'b', 'l'}}}, // South Ndebele
+    LanguageCodeEntry {{{'e', 's'}}, {{'s', 'p', 'a'}}, {{'s', 'p', 'a'}}, {{'s', 'p', 'a'}}}, // Spanish
+    LanguageCodeEntry {{},           {{'z', 'g', 'h'}}, {{'z', 'g', 'h'}}, {{'z', 'g', 'h'}}}, // Standard Moroccan Tamazight
+    LanguageCodeEntry {{{'s', 'u'}}, {{'s', 'u', 'n'}}, {{'s', 'u', 'n'}}, {{'s', 'u', 'n'}}}, // Sundanese
+    LanguageCodeEntry {{{'s', 'w'}}, {{'s', 'w', 'a'}}, {{'s', 'w', 'a'}}, {{'s', 'w', 'a'}}}, // Swahili
+    LanguageCodeEntry {{{'s', 's'}}, {{'s', 's', 'w'}}, {{'s', 's', 'w'}}, {{'s', 's', 'w'}}}, // Swati
+    LanguageCodeEntry {{{'s', 'v'}}, {{'s', 'w', 'e'}}, {{'s', 'w', 'e'}}, {{'s', 'w', 'e'}}}, // Swedish
+    LanguageCodeEntry {{},           {{'g', 's', 'w'}}, {{'g', 's', 'w'}}, {{'g', 's', 'w'}}}, // Swiss German
+    LanguageCodeEntry {{},           {{'s', 'y', 'r'}}, {{'s', 'y', 'r'}}, {{'s', 'y', 'r'}}}, // Syriac
+    LanguageCodeEntry {{},           {},                {},                {{'s', 'h', 'i'}}}, // Tachelhit
+    LanguageCodeEntry {{{'t', 'y'}}, {{'t', 'a', 'h'}}, {{'t', 'a', 'h'}}, {{'t', 'a', 'h'}}}, // Tahitian
+    LanguageCodeEntry {{},           {},                {},                {{'b', 'l', 't'}}}, // Tai Dam
+    LanguageCodeEntry {{},           {},                {},                {{'d', 'a', 'v'}}}, // Taita
+    LanguageCodeEntry {{{'t', 'g'}}, {{'t', 'g', 'k'}}, {{'t', 'g', 'k'}}, {{'t', 'g', 'k'}}}, // Tajik
+    LanguageCodeEntry {{{'t', 'a'}}, {{'t', 'a', 'm'}}, {{'t', 'a', 'm'}}, {{'t', 'a', 'm'}}}, // Tamil
+    LanguageCodeEntry {{},           {},                {},                {{'t', 'r', 'v'}}}, // Taroko
+    LanguageCodeEntry {{},           {},                {},                {{'t', 'w', 'q'}}}, // Tasawaq
+    LanguageCodeEntry {{{'t', 't'}}, {{'t', 'a', 't'}}, {{'t', 'a', 't'}}, {{'t', 'a', 't'}}}, // Tatar
+    LanguageCodeEntry {{{'t', 'e'}}, {{'t', 'e', 'l'}}, {{'t', 'e', 'l'}}, {{'t', 'e', 'l'}}}, // Telugu
+    LanguageCodeEntry {{},           {},                {},                {{'t', 'e', 'o'}}}, // Teso
+    LanguageCodeEntry {{{'t', 'h'}}, {{'t', 'h', 'a'}}, {{'t', 'h', 'a'}}, {{'t', 'h', 'a'}}}, // Thai
+    LanguageCodeEntry {{{'b', 'o'}}, {{'t', 'i', 'b'}}, {{'b', 'o', 'd'}}, {{'b', 'o', 'd'}}}, // Tibetan
+    LanguageCodeEntry {{},           {{'t', 'i', 'g'}}, {{'t', 'i', 'g'}}, {{'t', 'i', 'g'}}}, // Tigre
+    LanguageCodeEntry {{{'t', 'i'}}, {{'t', 'i', 'r'}}, {{'t', 'i', 'r'}}, {{'t', 'i', 'r'}}}, // Tigrinya
+    LanguageCodeEntry {{},           {{'t', 'k', 'l'}}, {{'t', 'k', 'l'}}, {{'t', 'k', 'l'}}}, // Tokelau
+    LanguageCodeEntry {{},           {{'t', 'p', 'i'}}, {{'t', 'p', 'i'}}, {{'t', 'p', 'i'}}}, // Tok Pisin
+    LanguageCodeEntry {{{'t', 'o'}}, {{'t', 'o', 'n'}}, {{'t', 'o', 'n'}}, {{'t', 'o', 'n'}}}, // Tongan
+    LanguageCodeEntry {{{'t', 's'}}, {{'t', 's', 'o'}}, {{'t', 's', 'o'}}, {{'t', 's', 'o'}}}, // Tsonga
+    LanguageCodeEntry {{{'t', 'n'}}, {{'t', 's', 'n'}}, {{'t', 's', 'n'}}, {{'t', 's', 'n'}}}, // Tswana
+    LanguageCodeEntry {{{'t', 'r'}}, {{'t', 'u', 'r'}}, {{'t', 'u', 'r'}}, {{'t', 'u', 'r'}}}, // Turkish
+    LanguageCodeEntry {{{'t', 'k'}}, {{'t', 'u', 'k'}}, {{'t', 'u', 'k'}}, {{'t', 'u', 'k'}}}, // Turkmen
+    LanguageCodeEntry {{},           {{'t', 'v', 'l'}}, {{'t', 'v', 'l'}}, {{'t', 'v', 'l'}}}, // Tuvalu
+    LanguageCodeEntry {{},           {},                {},                {{'k', 'c', 'g'}}}, // Tyap
+    LanguageCodeEntry {{},           {{'u', 'g', 'a'}}, {{'u', 'g', 'a'}}, {{'u', 'g', 'a'}}}, // Ugaritic
+    LanguageCodeEntry {{{'u', 'k'}}, {{'u', 'k', 'r'}}, {{'u', 'k', 'r'}}, {{'u', 'k', 'r'}}}, // Ukrainian
+    LanguageCodeEntry {{},           {{'h', 's', 'b'}}, {{'h', 's', 'b'}}, {{'h', 's', 'b'}}}, // Upper Sorbian
+    LanguageCodeEntry {{{'u', 'r'}}, {{'u', 'r', 'd'}}, {{'u', 'r', 'd'}}, {{'u', 'r', 'd'}}}, // Urdu
+    LanguageCodeEntry {{{'u', 'g'}}, {{'u', 'i', 'g'}}, {{'u', 'i', 'g'}}, {{'u', 'i', 'g'}}}, // Uyghur
+    LanguageCodeEntry {{{'u', 'z'}}, {{'u', 'z', 'b'}}, {{'u', 'z', 'b'}}, {{'u', 'z', 'b'}}}, // Uzbek
+    LanguageCodeEntry {{},           {{'v', 'a', 'i'}}, {{'v', 'a', 'i'}}, {{'v', 'a', 'i'}}}, // Vai
+    LanguageCodeEntry {{{'v', 'e'}}, {{'v', 'e', 'n'}}, {{'v', 'e', 'n'}}, {{'v', 'e', 'n'}}}, // Venda
+    LanguageCodeEntry {{{'v', 'i'}}, {{'v', 'i', 'e'}}, {{'v', 'i', 'e'}}, {{'v', 'i', 'e'}}}, // Vietnamese
+    LanguageCodeEntry {{{'v', 'o'}}, {{'v', 'o', 'l'}}, {{'v', 'o', 'l'}}, {{'v', 'o', 'l'}}}, // Volapuk
+    LanguageCodeEntry {{},           {},                {},                {{'v', 'u', 'n'}}}, // Vunjo
+    LanguageCodeEntry {{{'w', 'a'}}, {{'w', 'l', 'n'}}, {{'w', 'l', 'n'}}, {{'w', 'l', 'n'}}}, // Walloon
+    LanguageCodeEntry {{},           {},                {},                {{'w', 'a', 'e'}}}, // Walser
+    LanguageCodeEntry {{},           {},                {},                {{'w', 'b', 'p'}}}, // Warlpiri
+    LanguageCodeEntry {{{'c', 'y'}}, {{'w', 'e', 'l'}}, {{'c', 'y', 'm'}}, {{'c', 'y', 'm'}}}, // Welsh
+    LanguageCodeEntry {{},           {},                {},                {{'b', 'g', 'n'}}}, // Western Balochi
+    LanguageCodeEntry {{{'f', 'y'}}, {{'f', 'r', 'y'}}, {{'f', 'r', 'y'}}, {{'f', 'r', 'y'}}}, // Western Frisian
+    LanguageCodeEntry {{},           {{'w', 'a', 'l'}}, {{'w', 'a', 'l'}}, {{'w', 'a', 'l'}}}, // Wolaytta
+    LanguageCodeEntry {{{'w', 'o'}}, {{'w', 'o', 'l'}}, {{'w', 'o', 'l'}}, {{'w', 'o', 'l'}}}, // Wolof
+    LanguageCodeEntry {{{'x', 'h'}}, {{'x', 'h', 'o'}}, {{'x', 'h', 'o'}}, {{'x', 'h', 'o'}}}, // Xhosa
+    LanguageCodeEntry {{},           {},                {},                {{'y', 'a', 'v'}}}, // Yangben
+    LanguageCodeEntry {{{'y', 'i'}}, {{'y', 'i', 'd'}}, {{'y', 'i', 'd'}}, {{'y', 'i', 'd'}}}, // Yiddish
+    LanguageCodeEntry {{{'y', 'o'}}, {{'y', 'o', 'r'}}, {{'y', 'o', 'r'}}, {{'y', 'o', 'r'}}}, // Yoruba
+    LanguageCodeEntry {{},           {},                {},                {{'d', 'j', 'e'}}}, // Zarma
+    LanguageCodeEntry {{{'z', 'a'}}, {{'z', 'h', 'a'}}, {{'z', 'h', 'a'}}, {{'z', 'h', 'a'}}}, // Zhuang
+    LanguageCodeEntry {{{'z', 'u'}}, {{'z', 'u', 'l'}}, {{'z', 'u', 'l'}}, {{'z', 'u', 'l'}}}, // Zulu
+    LanguageCodeEntry {{},           {},                {},                {{'k', 'g', 'p'}}}, // Kaingang
+    LanguageCodeEntry {{},           {},                {},                {{'y', 'r', 'l'}}}, // Nheengatu
+};
 
-static const unsigned char script_code_list[] =
+static constexpr unsigned char script_code_list[] =
 "Zzzz" // AnyScript
 "Adlm" // Adlam
 "Ahom" // Ahom
@@ -5779,7 +5834,7 @@ static const unsigned char script_code_list[] =
 "Yiii" // Yi
 ;
 
-static const unsigned char territory_code_list[] =
+static constexpr unsigned char territory_code_list[] =
 "ZZ\0" // AnyTerritory
 "AF\0" // Afghanistan
 "AX\0" // Aland Islands

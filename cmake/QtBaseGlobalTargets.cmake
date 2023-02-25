@@ -219,7 +219,6 @@ qt_copy_or_install(FILES
                    cmake/QtCompilerFlags.cmake
                    cmake/QtCompilerOptimization.cmake
                    cmake/QtConfigDependencies.cmake.in
-                   cmake/QtCopyFileIfDifferent.cmake
                    cmake/QtDeferredDependenciesHelpers.cmake
                    cmake/QtDbusHelpers.cmake
                    cmake/QtDocsHelpers.cmake
@@ -280,6 +279,8 @@ qt_copy_or_install(FILES
                    cmake/QtWasmHelpers.cmake
                    cmake/QtWrapperScriptHelpers.cmake
                    cmake/QtWriteArgsFile.cmake
+                   cmake/modulecppexports.h.in
+                   cmake/modulecppexports_p.h.in
     DESTINATION "${__GlobalConfig_install_dir}"
 )
 
@@ -291,14 +292,34 @@ qt_copy_or_install(DIRECTORY cmake/platforms
 # Install public config.tests files.
 qt_copy_or_install(DIRECTORY
     "config.tests/static_link_order"
+    "config.tests/binary_for_strip"
     DESTINATION "${__GlobalConfig_install_dir}/config.tests"
 )
+
+# Install qt-internal-strip and qt-internal-ninja files.
+set(__qt_internal_strip_wrappers
+    libexec/qt-internal-strip.in
+    libexec/qt-internal-strip.bat.in
+    libexec/qt-internal-ninja.in
+    libexec/qt-internal-ninja.bat.in
+)
+qt_copy_or_install(PROGRAMS
+    ${__qt_internal_strip_wrappers}
+    DESTINATION "${__GlobalConfig_install_dir}/libexec"
+)
+if(QT_WILL_INSTALL)
+    foreach(__qt_internal_strip_wrapper ${__qt_internal_strip_wrappers})
+        file(COPY "${__qt_internal_strip_wrapper}"
+             DESTINATION "${__GlobalConfig_build_dir}/libexec")
+    endforeach()
+endif()
 
 # Install public CMake files.
 # The functions defined inside can be used in both public projects and while building Qt.
 # Usually we put such functions into Qt6CoreMacros.cmake, but that's getting bloated.
 # These files will be included by Qt6Config.cmake.
 set(__public_cmake_helpers
+    cmake/QtCopyFileIfDifferent.cmake
     cmake/QtFeature.cmake
     cmake/QtFeatureCommon.cmake
     cmake/QtPublicCMakeHelpers.cmake
@@ -371,3 +392,5 @@ endif()
 qt_path_join(__qt_libexec_install_dir "${QT_INSTALL_DIR}" "${INSTALL_LIBEXECDIR}")
 qt_copy_or_install(FILES coin/instructions/qmake/ensure_pro_file.cmake
     DESTINATION "${__qt_libexec_install_dir}")
+qt_copy_or_install(PROGRAMS "util/testrunner/qt-testrunner.py"
+                   DESTINATION "${__qt_libexec_install_dir}")

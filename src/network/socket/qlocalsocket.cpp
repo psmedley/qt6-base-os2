@@ -166,6 +166,11 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
+    \fn qint64 QLocalSocket::readLineData(char *data, qint64 maxSize)
+    \reimp
+*/
+
+/*!
     \fn qint64 QLocalSocket::skipData(qint64 maxSize)
     \reimp
 */
@@ -202,7 +207,14 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn void QLocalSocket::close()
-    \reimp
+
+    Closes the I/O device for the socket and calls disconnectFromServer()
+    to close the socket's connection.
+
+    See QIODevice::close() for a description of the actions that occur when an I/O
+    device is closed.
+
+    \sa abort()
 */
 
 /*!
@@ -383,6 +395,8 @@ QLocalSocket::QLocalSocket(QObject * parent)
     : QIODevice(*new QLocalSocketPrivate, parent)
 {
     Q_D(QLocalSocket);
+
+    d->readBufferChunkSize = 0; // force QIODevice unbuffered mode
     d->init();
 }
 
@@ -391,7 +405,7 @@ QLocalSocket::QLocalSocket(QObject * parent)
  */
 QLocalSocket::~QLocalSocket()
 {
-    QLocalSocket::close();
+    abort();
 #if !defined(Q_OS_WIN) && !defined(QT_LOCALSOCKET_TCP)
     Q_D(QLocalSocket);
     d->unixSocket.setParent(nullptr);

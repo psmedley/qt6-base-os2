@@ -43,6 +43,7 @@
 #include "qhostinfo_p.h"
 #include <qplatformdefs.h>
 
+#include "QtCore/qapplicationstatic.h"
 #include "QtCore/qscopedpointer.h"
 #include <qabstracteventdispatcher.h>
 #include <qcoreapplication.h>
@@ -58,7 +59,7 @@
 #  include <unistd.h>
 #  include <netdb.h>
 #  include <netinet/in.h>
-#  if defined(AI_ADDRCONFIG)
+#  if defined(AI_ADDRCONFIG) && !defined(Q_OS_WASM)
 #    define Q_ADDRCONFIG          AI_ADDRCONFIG
 #  endif
 #elif defined Q_OS_WIN
@@ -103,24 +104,7 @@ std::pair<OutputIt1, OutputIt2> separate_if(InputIt first, InputIt last, OutputI
     return std::make_pair(dest1, dest2);
 }
 
-QHostInfoLookupManager* theHostInfoLookupManager()
-{
-    static QHostInfoLookupManager* theManager = nullptr;
-    static QBasicMutex theMutex;
-
-    const QMutexLocker locker(&theMutex);
-    if (theManager == nullptr) {
-        theManager = new QHostInfoLookupManager();
-        Q_ASSERT(QCoreApplication::instance());
-        QObject::connect(QCoreApplication::instance(), &QCoreApplication::destroyed, [] {
-            const QMutexLocker locker(&theMutex);
-            delete theManager;
-            theManager = nullptr;
-        });
-    }
-
-    return theManager;
-}
+Q_APPLICATION_STATIC(QHostInfoLookupManager, theHostInfoLookupManager)
 
 }
 
@@ -398,11 +382,16 @@ QHostInfo QHostInfo::fromName(const QString &name)
     qDebug("QHostInfo::fromName(\"%s\")",name.toLatin1().constData());
 #endif
 
+#ifdef Q_OS_WASM
+    return QHostInfoAgent::lookup(name);
+#else
     QHostInfo hostInfo = QHostInfoAgent::fromName(name);
     QHostInfoLookupManager* manager = theHostInfoLookupManager();
     manager->cache.put(name, hostInfo);
     return hostInfo;
+#endif
 }
+
 
 QHostInfo QHostInfoAgent::reverseLookup(const QHostAddress &address)
 {
@@ -827,6 +816,20 @@ int QHostInfo::lookupHostImpl(const QString &name,
         return id;
     }
 
+#ifdef Q_OS_WASM
+    // Resolve the host name directly without using a thread or cache,
+    // since Emscripten's host lookup is fast. Emscripten maintains an internal
+    // mapping of hosts and addresses for the purposes of WebSocket socket
+    // tunnelling, and does not perform an actual host lookup.
+    QHostInfo hostInfo = QHostInfoAgent::lookup(name);
+    hostInfo.setLookupId(id);
+
+    QHostInfoResult result(receiver, slotObj);
+    if (receiver && member)
+        QObject::connect(&result, SIGNAL(resultsReady(QHostInfo)),
+                        receiver, member, Qt::QueuedConnection);
+    result.postResultsReady(hostInfo);
+#else
     QHostInfoLookupManager *manager = theHostInfoLookupManager();
 
     if (Q_LIKELY(manager)) {
@@ -853,6 +856,7 @@ int QHostInfo::lookupHostImpl(const QString &name,
                                 receiver, member, Qt::QueuedConnection);
         manager->scheduleLookup(runnable);
     }
+#endif // Q_OS_WASM
     return id;
 }
 

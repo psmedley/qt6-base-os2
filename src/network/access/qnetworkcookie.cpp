@@ -664,7 +664,8 @@ static QDateTime parseDateString(const QByteArray &dateString)
     int zoneOffset = -1;
 
     // hour:minute:second.ms pm
-    QRegularExpression timeRx(QLatin1String("(\\d{1,2}):(\\d{1,2})(:(\\d{1,2})|)(\\.(\\d{1,3})|)((\\s{0,}(am|pm))|)"));
+    static const QRegularExpression timeRx(
+            u"(\\d\\d?):(\\d\\d?)(?::(\\d\\d?)(?:\\.(\\d{1,3}))?)?(?:\\s*(am|pm))?"_qs);
 
     int at = 0;
     while (at < dateString.length()) {
@@ -744,21 +745,21 @@ static QDateTime parseDateString(const QByteArray &dateString)
             && (dateString[at + 2] == ':' || dateString[at + 1] == ':')) {
             // While the date can be found all over the string the format
             // for the time is set and a nice regexp can be used.
-            QRegularExpressionMatch match;
-            int pos = QString::fromLatin1(dateString).indexOf(timeRx, at, &match);
-            if (pos != -1) {
-                QStringList list = match.capturedTexts();
-                int h = match.captured(1).toInt();
-                int m = match.captured(2).toInt();
-                int s = match.captured(4).toInt();
-                int ms = match.captured(6).toInt();
-                QString ampm = match.captured(9);
+            // This string needs to stay for as long as the QRegularExpressionMatch is used,
+            // or else we get use-after-free issues:
+            QString dateToString = QString::fromLatin1(dateString);
+            if (auto match = timeRx.match(dateToString, at); match.hasMatch()) {
+                int h = match.capturedView(1).toInt();
+                int m = match.capturedView(2).toInt();
+                int s = match.capturedView(3).toInt();
+                int ms = match.capturedView(4).toInt();
+                QStringView ampm = match.capturedView(5);
                 if (h < 12 && !ampm.isEmpty())
                     if (ampm == QLatin1String("pm"))
                         h += 12;
                 time = QTime(h, m, s, ms);
 #ifdef PARSEDATESTRINGDEBUG
-                qDebug() << "Time:" << list << timeRx.matchedLength();
+                qDebug() << "Time:" << match.capturedTexts() << match.capturedLength();
 #endif
                 at += match.capturedLength();
                 continue;
@@ -1124,3 +1125,5 @@ QDebug operator<<(QDebug s, const QNetworkCookie &cookie)
 #endif
 
 QT_END_NAMESPACE
+
+#include "moc_qnetworkcookie.cpp"

@@ -41,6 +41,7 @@
 
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qthread.h>
+#include <QtCore/qsocketnotifier.h>
 
 #include "emscripten.h"
 #include <emscripten/html5.h>
@@ -94,7 +95,7 @@ bool qt_asyncify_suspend()
 }
 
 // Wakes any currently suspended main thread. Returns true if the main
-// thread was suspended, in which case it will now be asynchonously woken.
+// thread was suspended, in which case it will now be asynchronously woken.
 bool qt_asyncify_resume()
 {
     if (!g_is_asyncify_suspended)
@@ -122,6 +123,7 @@ QEventDispatcherWasm *QEventDispatcherWasm::g_mainThreadEventDispatcher = nullpt
 QVector<QEventDispatcherWasm *> QEventDispatcherWasm::g_secondaryThreadEventDispatchers;
 std::mutex QEventDispatcherWasm::g_secondaryThreadEventDispatchersMutex;
 #endif
+std::multimap<int, QSocketNotifier *> QEventDispatcherWasm::g_socketNotifiers;
 
 QEventDispatcherWasm::QEventDispatcherWasm()
     : QAbstractEventDispatcher()
@@ -156,7 +158,7 @@ QEventDispatcherWasm::QEventDispatcherWasm()
 
 QEventDispatcherWasm::~QEventDispatcherWasm()
 {
-    qCDebug(lcEventDispatcher) << "Detroying QEventDispatcherWasm instance" << this;
+    qCDebug(lcEventDispatcher) << "Destroying QEventDispatcherWasm instance" << this;
 
     delete m_timerInfo;
 
@@ -169,6 +171,11 @@ QEventDispatcherWasm::~QEventDispatcherWasm()
     {
         if (m_timerId > 0)
             emscripten_clear_timeout(m_timerId);
+        if (!g_socketNotifiers.empty()) {
+            qWarning("QEventDispatcherWasm: main thread event dispatcher deleted with active socket notifiers");
+            clearEmscriptenSocketCallbacks();
+            g_socketNotifiers.clear();
+        }
         g_mainThreadEventDispatcher = nullptr;
     }
 }
@@ -195,7 +202,7 @@ bool QEventDispatcherWasm::processEvents(QEventLoop::ProcessEventsFlags flags)
     if (isMainThreadEventDispatcher()) {
         if (flags & QEventLoop::DialogExec)
             handleDialogExec();
-        else if (flags & QEventLoop::EventLoopExec)
+        else if (flags & QEventLoop::ApplicationExec)
             handleApplicationExec();
     }
 
@@ -219,19 +226,45 @@ bool QEventDispatcherWasm::processEvents(QEventLoop::ProcessEventsFlags flags)
 
     hasPendingEvents = qGlobalPostedEventsCount() > 0;
     QCoreApplication::sendPostedEvents();
+    processWindowSystemEvents(flags);
     return hasPendingEvents;
+}
+
+void QEventDispatcherWasm::processWindowSystemEvents(QEventLoop::ProcessEventsFlags flags)
+{
+    Q_UNUSED(flags);
 }
 
 void QEventDispatcherWasm::registerSocketNotifier(QSocketNotifier *notifier)
 {
-    Q_UNUSED(notifier);
-    qWarning("QEventDispatcherWasm::registerSocketNotifier: socket notifiers are not supported");
+    if (!emscripten_is_main_runtime_thread()) {
+        qWarning("QEventDispatcherWasm::registerSocketNotifier: socket notifiers on secondary threads are not supported");
+        return;
+    }
+
+    if (g_socketNotifiers.empty())
+        setEmscriptenSocketCallbacks();
+
+    g_socketNotifiers.insert({notifier->socket(), notifier});
 }
 
 void QEventDispatcherWasm::unregisterSocketNotifier(QSocketNotifier *notifier)
 {
-    Q_UNUSED(notifier);
-    qWarning("QEventDispatcherWasm::unregisterSocketNotifier: socket notifiers are not supported");
+    if (!emscripten_is_main_runtime_thread()) {
+        qWarning("QEventDispatcherWasm::registerSocketNotifier: socket notifiers on secondary threads are not supported");
+        return;
+    }
+
+    auto notifiers = g_socketNotifiers.equal_range(notifier->socket());
+    for (auto it = notifiers.first; it != notifiers.second; ++it) {
+        if (it->second == notifier) {
+            g_socketNotifiers.erase(it);
+            break;
+        }
+    }
+
+    if (g_socketNotifiers.empty())
+        clearEmscriptenSocketCallbacks();
 }
 
 void QEventDispatcherWasm::registerTimer(int timerId, qint64 interval, Qt::TimerType timerType, QObject *object)
@@ -442,7 +475,7 @@ void QEventDispatcherWasm::callProcessEvents(void *context)
 
     // In the unlikely event that we get a callProcessEvents() call for
     // a previous main thread event dispatcher (i.e. the QApplication
-    // object was deleted and crated again): just ignore it and return.
+    // object was deleted and created again): just ignore it and return.
     if (context != g_mainThreadEventDispatcher)
         return;
 
@@ -498,6 +531,9 @@ void QEventDispatcherWasm::updateNativeTimer()
 
         if (m_timerTargetTime != 0 && newTargetTime >= m_timerTargetTime)
             return; // existing timer is good
+
+        qCDebug(lcEventDispatcherTimers)
+                << "Created new native timer with wait" << toWaitDuration << "timeout" << newTargetTime;
         emscripten_clear_timeout(m_timerId);
         m_timerId = emscripten_set_timeout(&QEventDispatcherWasm::callProcessTimers, toWaitDuration, this);
         m_timerTargetTime = newTargetTime;
@@ -525,22 +561,18 @@ void QEventDispatcherWasm::updateNativeTimer()
 }
 
 // Static timer activation callback. Must be called on the main thread
-// and will then either process timers on the main thrad or wake and
+// and will then either process timers on the main thread or wake and
 // process timers on a secondary thread.
 void QEventDispatcherWasm::callProcessTimers(void *context)
 {
     Q_ASSERT(emscripten_is_main_runtime_thread());
 
-    // "context" is a pointer to the event dispatcher which
-    // should process the timer, but may be a stale pointer
-    // to a now-deleted event dispatcher object. Code below
-    // verfies the pointer by comparing it to the known "live"
-    // event dispatchers.
-    Q_ASSERT(context);
-    QEventDispatcherWasm *eventDispatcher = reinterpret_cast<QEventDispatcherWasm *>(context);
+
+    // Note: "context" may be a stale pointer here,
+    // take care before casting and dereferencing!
 
     // Process timers on this thread if this is the main event dispatcher
-    if (eventDispatcher == g_mainThreadEventDispatcher) {
+    if (reinterpret_cast<QEventDispatcherWasm *>(context) == g_mainThreadEventDispatcher) {
         g_mainThreadEventDispatcher->m_timerTargetTime = 0;
         g_mainThreadEventDispatcher->processTimers();
         return;
@@ -549,12 +581,117 @@ void QEventDispatcherWasm::callProcessTimers(void *context)
     // Wake and process timers on the secondary thread if this a secondary thread dispatcher
 #if QT_CONFIG(thread)
     std::lock_guard<std::mutex> lock(g_secondaryThreadEventDispatchersMutex);
-    if (g_secondaryThreadEventDispatchers.contains(eventDispatcher)) {
+    if (g_secondaryThreadEventDispatchers.contains(context)) {
+        QEventDispatcherWasm *eventDispatcher = reinterpret_cast<QEventDispatcherWasm *>(context);
         eventDispatcher->m_timerTargetTime = 0;
         eventDispatcher->m_processTimers = true;
         eventDispatcher->wakeUp();
     }
 #endif
+}
+
+void QEventDispatcherWasm::setEmscriptenSocketCallbacks()
+{
+    qCDebug(lcEventDispatcher) << "setEmscriptenSocketCallbacks";
+
+    emscripten_set_socket_error_callback(nullptr, QEventDispatcherWasm::socketError);
+    emscripten_set_socket_open_callback(nullptr, QEventDispatcherWasm::socketOpen);
+    emscripten_set_socket_listen_callback(nullptr, QEventDispatcherWasm::socketListen);
+    emscripten_set_socket_connection_callback(nullptr, QEventDispatcherWasm::socketConnection);
+    emscripten_set_socket_message_callback(nullptr, QEventDispatcherWasm::socketMessage);
+    emscripten_set_socket_close_callback(nullptr, QEventDispatcherWasm::socketClose);
+}
+
+void QEventDispatcherWasm::clearEmscriptenSocketCallbacks()
+{
+    qCDebug(lcEventDispatcher) << "clearEmscriptenSocketCallbacks";
+
+    emscripten_set_socket_error_callback(nullptr, nullptr);
+    emscripten_set_socket_open_callback(nullptr, nullptr);
+    emscripten_set_socket_listen_callback(nullptr, nullptr);
+    emscripten_set_socket_connection_callback(nullptr, nullptr);
+    emscripten_set_socket_message_callback(nullptr, nullptr);
+    emscripten_set_socket_close_callback(nullptr, nullptr);
+}
+
+void QEventDispatcherWasm::socketError(int socket, int err, const char* msg, void *context)
+{
+    Q_UNUSED(err);
+    Q_UNUSED(msg);
+    Q_UNUSED(context);
+
+    qCDebug(lcEventDispatcher) << "QEventDispatcherWasm::socketError" << socket;
+
+    auto notifiersRange = g_socketNotifiers.equal_range(socket);
+    std::vector<std::pair<int, QSocketNotifier *>> notifiers(notifiersRange.first, notifiersRange.second);
+    for (auto [_, notifier]: notifiers) {
+        QEvent event(QEvent::SockAct);
+        QCoreApplication::sendEvent(notifier, &event);
+    }
+}
+
+void QEventDispatcherWasm::socketOpen(int socket, void *context)
+{
+    Q_UNUSED(context);
+
+    qCDebug(lcEventDispatcher) << "QEventDispatcherWasm::socketOpen" << socket;
+
+    auto notifiersRange = g_socketNotifiers.equal_range(socket);
+    std::vector<std::pair<int, QSocketNotifier *>> notifiers(notifiersRange.first, notifiersRange.second);
+    for (auto [_, notifier]: notifiers) {
+        if (notifier->type() == QSocketNotifier::Write) {
+            QEvent event(QEvent::SockAct);
+            QCoreApplication::sendEvent(notifier, &event);
+        }
+    }
+}
+
+void QEventDispatcherWasm::socketListen(int socket, void *context)
+{
+    Q_UNUSED(socket);
+    Q_UNUSED(context);
+
+    qCDebug(lcEventDispatcher) << "QEventDispatcherWasm::socketListen" << socket;
+}
+
+void QEventDispatcherWasm::socketConnection(int socket, void *context)
+{
+    Q_UNUSED(context);
+    Q_UNUSED(socket);
+
+    qCDebug(lcEventDispatcher) << "QEventDispatcherWasm::socketConnection" << socket;
+}
+
+void QEventDispatcherWasm::socketMessage(int socket, void *context)
+{
+    Q_UNUSED(context);
+
+    qCDebug(lcEventDispatcher) << "QEventDispatcherWasm::socketMessage" << socket;
+
+    auto notifiersRange = g_socketNotifiers.equal_range(socket);
+    std::vector<std::pair<int, QSocketNotifier *>> notifiers(notifiersRange.first, notifiersRange.second);
+    for (auto [_, notifier]: notifiers) {
+        if (notifier->type() == QSocketNotifier::Read) {
+            QEvent event(QEvent::SockAct);
+            QCoreApplication::sendEvent(notifier, &event);
+        }
+    }
+}
+
+void QEventDispatcherWasm::socketClose(int socket, void *context)
+{
+    Q_UNUSED(context);
+
+    qCDebug(lcEventDispatcher) << "QEventDispatcherWasm::socketClose" << socket;
+
+    auto notifiersRange = g_socketNotifiers.equal_range(socket);
+    std::vector<std::pair<int, QSocketNotifier *>> notifiers(notifiersRange.first, notifiersRange.second);
+    for (auto [_, notifier]: notifiers) {
+        if (notifier->type() == QSocketNotifier::Write) {
+            QEvent event(QEvent::SockAct);
+            QCoreApplication::sendEvent(notifier, &event);
+        }
+    }
 }
 
 #if QT_CONFIG(thread)

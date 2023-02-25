@@ -47,7 +47,10 @@ QT_BEGIN_NAMESPACE
 Q_DECLARE_LOGGING_CATEGORY(lcNetInfoAndroid)
 Q_LOGGING_CATEGORY(lcNetInfoAndroid, "qt.network.info.android");
 
-static const QString backendName = QStringLiteral("android");
+static QString backendName() {
+    return QString::fromUtf16(QNetworkInformationBackend::PluginNames
+                                      [QNetworkInformationBackend::PluginNamesAndroidIndex]);
+}
 
 class QAndroidNetworkInformationBackend : public QNetworkInformationBackend
 {
@@ -56,7 +59,7 @@ public:
     QAndroidNetworkInformationBackend();
     ~QAndroidNetworkInformationBackend() { m_valid = false; }
 
-    QString name() const override { return backendName; }
+    QString name() const override { return backendName(); }
     QNetworkInformation::Features featuresSupported() const override
     {
         return featuresSupportedStatic();
@@ -65,13 +68,18 @@ public:
     static QNetworkInformation::Features featuresSupportedStatic()
     {
         using Feature = QNetworkInformation::Feature;
-        return QNetworkInformation::Features(Feature::Reachability | Feature::CaptivePortal);
+        return QNetworkInformation::Features(Feature::Reachability | Feature::CaptivePortal
+                                             | Feature::TransportMedium);
     }
 
     bool isValid() { return m_valid; }
 
 private:
     Q_DISABLE_COPY_MOVE(QAndroidNetworkInformationBackend);
+
+    void updateConnectivity(AndroidConnectivityManager::AndroidConnectivity connectivity);
+    void updateTransportMedium(AndroidConnectivityManager::AndroidTransport transport);
+
     bool m_valid = false;
 };
 
@@ -83,7 +91,7 @@ class QAndroidNetworkInformationBackendFactory : public QNetworkInformationBacke
 public:
     QAndroidNetworkInformationBackendFactory() = default;
     ~QAndroidNetworkInformationBackendFactory() = default;
-    QString name() const override { return backendName; }
+    QString name() const override { return backendName(); }
     QNetworkInformation::Features featuresSupported() const override
     {
         return QAndroidNetworkInformationBackend::featuresSupportedStatic();
@@ -111,24 +119,63 @@ QAndroidNetworkInformationBackend::QAndroidNetworkInformationBackend()
         return;
     m_valid = true;
     setReachability(QNetworkInformation::Reachability::Unknown);
-    connect(conman, &AndroidConnectivityManager::connectivityChanged, this, [this, conman]() {
-        static const auto mapState = [](AndroidConnectivityManager::AndroidConnectivity state) {
-            switch (state) {
-            case AndroidConnectivityManager::AndroidConnectivity::Connected:
-                return QNetworkInformation::Reachability::Online;
-            case AndroidConnectivityManager::AndroidConnectivity::Disconnected:
-                return QNetworkInformation::Reachability::Disconnected;
-            case AndroidConnectivityManager::AndroidConnectivity::Unknown:
-            default:
-                return QNetworkInformation::Reachability::Unknown;
-            }
-        };
-
-        setReachability(mapState(conman->networkConnectivity()));
-    });
+    connect(conman, &AndroidConnectivityManager::connectivityChanged, this,
+            &QAndroidNetworkInformationBackend::updateConnectivity);
 
     connect(conman, &AndroidConnectivityManager::captivePortalChanged, this,
             &QAndroidNetworkInformationBackend::setBehindCaptivePortal);
+
+    connect(conman, &AndroidConnectivityManager::transportMediumChanged, this,
+            &QAndroidNetworkInformationBackend::updateTransportMedium);
+
+    connect(conman, &AndroidConnectivityManager::meteredChanged, this,
+            &QAndroidNetworkInformationBackend::setMetered);
+}
+
+void QAndroidNetworkInformationBackend::updateConnectivity(
+        AndroidConnectivityManager::AndroidConnectivity connectivity)
+{
+    using AndroidConnectivity = AndroidConnectivityManager::AndroidConnectivity;
+    static const auto mapState = [](AndroidConnectivity state) {
+        switch (state) {
+        case AndroidConnectivity::Connected:
+            return QNetworkInformation::Reachability::Online;
+        case AndroidConnectivity::Disconnected:
+            return QNetworkInformation::Reachability::Disconnected;
+        case AndroidConnectivity::Unknown:
+        default:
+            return QNetworkInformation::Reachability::Unknown;
+        }
+    };
+
+    setReachability(mapState(connectivity));
+}
+
+void QAndroidNetworkInformationBackend::updateTransportMedium(
+        AndroidConnectivityManager::AndroidTransport transport)
+{
+    using AndroidTransport = AndroidConnectivityManager::AndroidTransport;
+    using TransportMedium = QNetworkInformation::TransportMedium;
+    static const auto mapTransport = [](AndroidTransport state) -> TransportMedium {
+        switch (state) {
+        case AndroidTransport::Cellular:
+            return TransportMedium::Cellular;
+        case AndroidTransport::WiFi:
+            return TransportMedium::WiFi;
+        case AndroidTransport::Bluetooth:
+            return TransportMedium::Bluetooth;
+        case AndroidTransport::Ethernet:
+            return TransportMedium::Ethernet;
+        // These are not covered yet (but may be in the future)
+        case AndroidTransport::Usb:
+        case AndroidTransport::LoWPAN:
+        case AndroidTransport::WiFiAware:
+        case AndroidTransport::Unknown:
+            return TransportMedium::Unknown;
+        }
+    };
+
+    setTransportMedium(mapTransport(transport));
 }
 
 QT_END_NAMESPACE

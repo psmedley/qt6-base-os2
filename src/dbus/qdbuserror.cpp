@@ -53,6 +53,8 @@
 
 QT_BEGIN_NAMESPACE
 
+QT_IMPL_METATYPE_EXTERN(QDBusError)
+
 static constexpr const auto errorMessages = qOffsetStringArray(
     "NoError",
     "other",
@@ -353,6 +355,8 @@ QDebug operator<<(QDebug dbg, const QDBusError &msg)
 */
 
 QT_END_NAMESPACE
+
+#include "moc_qdbuserror.cpp"
 
 #endif // QT_NO_DBUS
 

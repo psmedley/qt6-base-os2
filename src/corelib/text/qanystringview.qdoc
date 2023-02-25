@@ -103,7 +103,7 @@
     \section2 Sizes and Sub-Strings
 
     All sizes and positions in QAnyStringView functions are in the
-    encoding's code points (that is, UTF-16 surrogate pairs count as
+    encoding's code units (that is, UTF-16 surrogate pairs count as
     two for the purposes of these functions, the same as in QString,
     and UTF-8 multibyte sequences count as two, three or four,
     depending on their length).
@@ -164,7 +164,7 @@
     The range \c{[first,last)} must remain valid for the lifetime of
     this string view object.
 
-    Passing \c \nullptr as \a first is safe if \a last is \nullptr, too,
+    Passing \nullptr as \a first is safe if \a last is \nullptr, too,
     and results in a null string view.
 
     The behavior is undefined if \a last precedes \a first, or \a first
@@ -263,7 +263,7 @@
 /*!
     \fn const void *QAnyStringView::data() const
 
-    Returns a const pointer to the first character in the string.
+    Returns a const pointer to the first character in the string view.
 
     \note The character array represented by the return value is \e not null-terminated.
 
@@ -333,7 +333,7 @@
 /*!
     \fn QChar QAnyStringView::front() const
 
-    Returns the first character in the string.
+    Returns the first character in the string view.
 
     This function is provided for STL compatibility.
 
@@ -346,7 +346,7 @@
 /*!
     \fn QChar QAnyStringView::back() const
 
-    Returns the last character in the string.
+    Returns the last character in the string view.
 
     This function is provided for STL compatibility.
 
@@ -387,7 +387,7 @@
 
     Convert \a s to a QAnyStringView ignoring \c{s.isNull()}.
 
-    Returns a string-view that references \a{s}'s data, but is never null.
+    Returns a string view that references \a{s}'s data, but is never null.
 
     This is a faster way to convert a QString or QByteArray to a QAnyStringView,
     if null QStrings or QByteArrays can legitimately be treated as empty ones.

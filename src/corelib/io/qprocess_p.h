@@ -84,7 +84,6 @@ class QSocketNotifier;
 class QWindowsPipeReader;
 class QWindowsPipeWriter;
 class QWinEventNotifier;
-class QTimer;
 
 #ifdef Q_OS_WIN
 class QProcEnvKey : public QString
@@ -302,9 +301,13 @@ public:
     bool _q_canReadStandardOutput();
     bool _q_canReadStandardError();
 #ifdef Q_OS_WIN
+    qint64 pipeWriterBytesToWrite() const;
     void _q_bytesWritten(qint64 bytes);
-#endif
+    void _q_writeFailed();
+#else
     bool _q_canWrite();
+    bool writeToStdin();
+#endif
     bool _q_startupNotification();
     void _q_processDied();
 #if defined(Q_OS_OS2)
@@ -348,6 +351,7 @@ public:
     std::function<void(void)> childProcessModifier;
 #endif
     QProcessEnvironment environment;
+    QProcessEnvironment environment = QProcessEnvironment::InheritFromParent;
 
 #ifdef Q_OS_OS2
     enum PipeType { InPipe = 0, OutPipe = 1, ErrPipe = 2 };
@@ -360,7 +364,6 @@ public:
     QSocketNotifier *stateNotifier = nullptr;
     int forkfd = -1;
 #else
-    QTimer *stdinWriteTrigger = nullptr;
     QWinEventNotifier *processFinishedNotifier = nullptr;
 #endif
 
@@ -386,7 +389,6 @@ public:
     STARTUPINFOW createStartupInfo();
     bool callCreateProcess(QProcess::CreateProcessArguments *cpargs);
     bool drainOutputPipes();
-    qint64 pipeWriterBytesToWrite() const;
 #endif
 #ifdef Q_OS_OS2
     void init();
@@ -421,7 +423,6 @@ public:
 
     qint64 bytesAvailableInChannel(const Channel *channel) const;
     qint64 readFromChannel(const Channel *channel, char *data, qint64 maxlen);
-    bool writeToStdin();
 
 #ifndef Q_OS_OS2
     void destroyPipe(Q_PIPE pipe[2]);

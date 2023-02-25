@@ -27,7 +27,7 @@
 ****************************************************************************/
 
 #include <QtTest/QTest>
-#include <qvarlengtharray.h>
+#include <QVarLengthArray>
 #include <qvariant.h>
 #include <qscopeguard.h>
 #include <qscopedvaluerollback.h>
@@ -72,8 +72,10 @@ private slots:
     void defaultConstructor_int() { defaultConstructor<int>(); }
     void defaultConstructor_QString() { defaultConstructor<QString>(); }
     void append();
+#if QT_DEPRECATED_SINCE(6, 3)
     void prepend();
-    void insertToEmpty();
+#endif
+    void emplace();
     void move_int_1() { move_int<1>(); }
     void move_int_2() { move_int<2>(); }
     void move_int_3() { move_int<3>(); }
@@ -169,6 +171,9 @@ void tst_QVarLengthArray::append()
     v2.append(5);
 }
 
+#if QT_DEPRECATED_SINCE(6, 3)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
 void tst_QVarLengthArray::prepend()
 {
     QVarLengthArray<QString, 2> v;
@@ -187,35 +192,52 @@ void tst_QVarLengthArray::prepend()
     v.prepend(v.back());
     QCOMPARE(v.front(), v.back());
 }
+QT_WARNING_POP
+#endif // QT_DEPRECATED_SINCE(6, 3)
 
-void tst_QVarLengthArray::insertToEmpty()
+void tst_QVarLengthArray::emplace()
 {
-    // test growing from empty arrays
-    QVarLengthArray<QString> emptyArrDefaultPrealloc;
-    QCOMPARE(emptyArrDefaultPrealloc.size(), 0);
-    emptyArrDefaultPrealloc.insert(emptyArrDefaultPrealloc.cend(), QString());
-    QCOMPARE(emptyArrDefaultPrealloc.size(), 1);
-    emptyArrDefaultPrealloc.resize(1024);
-    QCOMPARE(emptyArrDefaultPrealloc.size(), 1024);
-    emptyArrDefaultPrealloc.resize(0);
-    QCOMPARE(emptyArrDefaultPrealloc.size(), 0);
-    emptyArrDefaultPrealloc.squeeze();
-    QCOMPARE(emptyArrDefaultPrealloc.size(), 0);
-    emptyArrDefaultPrealloc.insert(emptyArrDefaultPrealloc.cend(), QString());
-    QCOMPARE(emptyArrDefaultPrealloc.size(), 1);
+    {
+        QVarLengthArray<QString, 2> strings;
+        strings.emplace_back();
+        QCOMPARE(strings.size(), 1);
+        QCOMPARE(strings.front().isNull(), true);
+        strings.emplace(strings.begin(), 42, u'x');
+        QCOMPARE(strings.size(), 2);
+        QCOMPARE(strings.back().isNull(), true);
+        QCOMPARE(strings.front(), QString(42, u'x'));
+        auto &r = strings.emplace_back(42, u'y');
+        QCOMPARE(&r, &strings.back());
+        QCOMPARE(strings.size(), 3);
+        QCOMPARE(strings.back(), QString(42, u'y'));
 
-    QVarLengthArray<QString, 1> emptyArrSmallPrealloc;
-    QCOMPARE(emptyArrSmallPrealloc.size(), 0);
-    emptyArrSmallPrealloc.insert(emptyArrSmallPrealloc.cend(), QString());
-    QCOMPARE(emptyArrSmallPrealloc.size(), 1);
-    emptyArrSmallPrealloc.resize(1024);
-    QCOMPARE(emptyArrSmallPrealloc.size(), 1024);
-    emptyArrSmallPrealloc.resize(0);
-    QCOMPARE(emptyArrSmallPrealloc.size(), 0);
-    emptyArrSmallPrealloc.squeeze();
-    QCOMPARE(emptyArrSmallPrealloc.size(), 0);
-    emptyArrSmallPrealloc.insert(emptyArrSmallPrealloc.cend(), QString());
-    QCOMPARE(emptyArrSmallPrealloc.size(), 1);
+        // test growing from empty arrays
+        QVarLengthArray<QString> emptyArrDefaultPrealloc;
+        QCOMPARE(emptyArrDefaultPrealloc.size(), 0);
+        emptyArrDefaultPrealloc.emplace_back();
+        QCOMPARE(emptyArrDefaultPrealloc.size(), 1);
+        emptyArrDefaultPrealloc.resize(1024);
+        QCOMPARE(emptyArrDefaultPrealloc.size(), 1024);
+        emptyArrDefaultPrealloc.resize(0);
+        QCOMPARE(emptyArrDefaultPrealloc.size(), 0);
+        emptyArrDefaultPrealloc.squeeze();
+        QCOMPARE(emptyArrDefaultPrealloc.size(), 0);
+        emptyArrDefaultPrealloc.emplace_back();
+        QCOMPARE(emptyArrDefaultPrealloc.size(), 1);
+
+        QVarLengthArray<QString, 1> emptyArrSmallPrealloc;
+        QCOMPARE(emptyArrSmallPrealloc.size(), 0);
+        emptyArrSmallPrealloc.emplace_back();
+        QCOMPARE(emptyArrSmallPrealloc.size(), 1);
+        emptyArrSmallPrealloc.resize(1024);
+        QCOMPARE(emptyArrSmallPrealloc.size(), 1024);
+        emptyArrSmallPrealloc.resize(0);
+        QCOMPARE(emptyArrSmallPrealloc.size(), 0);
+        emptyArrSmallPrealloc.squeeze();
+        QCOMPARE(emptyArrSmallPrealloc.size(), 0);
+        emptyArrSmallPrealloc.emplace_back();
+        QCOMPARE(emptyArrSmallPrealloc.size(), 1);
+    }
 }
 
 template <qsizetype N>
@@ -414,19 +436,39 @@ void tst_QVarLengthArray::appendIsStronglyExceptionSafe()
     };
 
     {
-        // ### TODO: QVLA isn't exception-safe when throwing during reallocation,
-        // ### so check with size() < capacity() for now
         QVarLengthArray<Thrower, 2> vla(1);
         {
             Thrower t;
             const QScopedValueRollback rb(throwOnCopyNow, true);
-            QVERIFY_EXCEPTION_THROWN(vla.push_back(t), int);
+            QVERIFY_THROWS_EXCEPTION(int, vla.push_back(t));
             QCOMPARE(vla.size(), 1);
         }
         {
             const QScopedValueRollback rb(throwOnMoveNow, true);
-            QVERIFY_EXCEPTION_THROWN(vla.push_back({}), int);
+            QVERIFY_THROWS_EXCEPTION(int, vla.push_back({}));
             QCOMPARE(vla.size(), 1);
+        }
+        vla.push_back({});
+        QCOMPARE(vla.size(), 2);
+        {
+            Thrower t;
+            {
+                // tests the copy inside append()
+                const QScopedValueRollback rb(throwOnCopyNow, true);
+                QVERIFY_THROWS_EXCEPTION(int, vla.push_back(t));
+                QCOMPARE(vla.size(), 2);
+            }
+            {
+                // tests the move inside reallocate()
+                const QScopedValueRollback rb(throwOnMoveNow, true);
+                QVERIFY_THROWS_EXCEPTION(int, vla.push_back(t));
+                QCOMPARE(vla.size(), 2);
+            }
+        }
+        {
+            const QScopedValueRollback rb(throwOnMoveNow, true);
+            QVERIFY_THROWS_EXCEPTION(int, vla.push_back({}));
+            QCOMPARE(vla.size(), 2);
         }
     }
 #endif
@@ -985,7 +1027,6 @@ void tst_QVarLengthArray::count()
 
 void tst_QVarLengthArray::cpp17ctad()
 {
-#ifdef __cpp_deduction_guides
 #define QVERIFY_IS_VLA_OF(obj, Type) \
     QVERIFY2((std::is_same<decltype(obj), QVarLengthArray<Type>>::value), \
              QMetaType::fromType<decltype(obj)::value_type>().name())
@@ -1005,10 +1046,6 @@ void tst_QVarLengthArray::cpp17ctad()
     CHECK(QString, QStringLiteral("one"), QStringLiteral("two"), QStringLiteral("three"));
 #undef QVERIFY_IS_VLA_OF
 #undef CHECK
-#else
-    QSKIP("This test requires C++17 Constructor Template Argument Deduction support enabled in the compiler.");
-#endif
-
 }
 
 void tst_QVarLengthArray::first()
@@ -1309,7 +1346,7 @@ void tst_QVarLengthArray::insertMove()
         QCOMPARE(MyBase::liveCount, 6);
         QCOMPARE(MyBase::movedCount, 2);
 
-        vec.prepend(std::move(m1));
+        vec.insert(vec.cbegin(), std::move(m1));
         QVERIFY(m1.wasConstructedAt(nullptr));
         QVERIFY(vec.at(0).wasConstructedAt(&m1));
         QVERIFY(vec.at(1).wasConstructedAt(&m3));
@@ -1381,7 +1418,7 @@ void tst_QVarLengthArray::nonCopyable()
     QVERIFY(!val4);
     QVERIFY(ptr3 == vec.at(0).get());
     QVERIFY(ptr4 == vec.at(1).get());
-    vec.prepend(std::move(val1));
+    vec.insert(vec.cbegin(), std::move(val1));
     QVERIFY(!val1);
     QVERIFY(ptr1 == vec.at(0).get());
     QVERIFY(ptr3 == vec.at(1).get());

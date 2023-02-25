@@ -351,6 +351,7 @@ QTextDocument *QTextDocument::clone(QObject *parent) const
     QTextDocumentPrivate *priv = doc->d_func();
     priv->title = d->title;
     priv->url = d->url;
+    priv->cssMedia = d->cssMedia;
     priv->pageSize = d->pageSize;
     priv->indentWidth = d->indentWidth;
     priv->defaultTextOption = d->defaultTextOption;
@@ -1135,6 +1136,8 @@ QString QTextDocument::metaInformation(MetaInformation info) const
         return d->title;
     case DocumentUrl:
         return d->url;
+    case CssMedia:
+        return d->cssMedia;
     }
     return QString();
 }
@@ -1154,6 +1157,9 @@ void QTextDocument::setMetaInformation(MetaInformation info, const QString &stri
         break;
     case DocumentUrl:
         d->url = string;
+        break;
+    case CssMedia:
+        d->cssMedia = string;
         break;
     }
 }
@@ -1242,11 +1248,14 @@ void QTextDocument::setPlainText(const QString &text)
     "<b>bold</b> text" will produce text where the first word has a font
     weight that gives it a bold appearance: "\b{bold} text".
 
+    To select a css media rule other than the default "screen" rule,
+    use setMetaInformation() with 'CssMedia' as "info" parameter.
+
     \note It is the responsibility of the caller to make sure that the
     text is correctly decoded when a QString containing HTML is created
     and passed to setHtml().
 
-    \sa setPlainText(), {Supported HTML Subset}
+    \sa setPlainText(), {Supported HTML Subset}, setMetaInformation()
 */
 
 #ifndef QT_NO_TEXTHTMLPARSER
@@ -1286,8 +1295,11 @@ void QTextDocument::setHtml(const QString &html)
     \value DocumentTitle    The title of the document.
     \value DocumentUrl      The url of the document. The loadResource() function uses
                             this url as the base when loading relative resources.
+    \value CssMedia         This value is used to select the corresponding '@media'
+                            rule, if any, from a specified CSS stylesheet when setHtml()
+                            is called. This enum value has been introduced in Qt 6.3.
 
-    \sa metaInformation(), setMetaInformation()
+    \sa metaInformation(), setMetaInformation(), setHtml()
 */
 
 static bool findInBlock(const QTextBlock &block, const QString &expression, int offset,
@@ -2359,6 +2371,7 @@ QString QTextHtmlExporter::toHtml(ExportMode mode)
         html += QString::fromLatin1("<title>") + title + QString::fromLatin1("</title>");
     html += QLatin1String("<style type=\"text/css\">\n");
     html += QLatin1String("p, li { white-space: pre-wrap; }\n");
+    html += QLatin1String("hr { height: 1px; border-width: 0; }\n");
     html += QLatin1String("</style>");
     html += QLatin1String("</head><body");
 
@@ -3047,8 +3060,15 @@ void QTextHtmlExporter::emitBlock(const QTextBlock &block)
         QTextLength width = blockFormat.lengthProperty(QTextFormat::BlockTrailingHorizontalRulerWidth);
         if (width.type() != QTextLength::VariableLength)
             emitTextLength("width", width);
-        else
-            html += QLatin1Char(' ');
+        html += QLatin1Char(' ');
+
+        if (blockFormat.hasProperty(QTextFormat::BackgroundBrush)) {
+            html += QLatin1String("style=\"");
+            html += QLatin1String("background-color:");
+            html += colorValue(qvariant_cast<QBrush>(blockFormat.property(QTextFormat::BackgroundBrush)).color());
+            html += QLatin1Char(';');
+            html += QLatin1Char('\"');
+        }
 
         html += QLatin1String("/>");
         return;
@@ -3532,3 +3552,5 @@ QList<QTextFormat> QTextDocument::allFormats() const
 */
 
 QT_END_NAMESPACE
+
+#include "moc_qtextdocument.cpp"

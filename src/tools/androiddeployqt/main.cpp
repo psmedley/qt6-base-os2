@@ -36,10 +36,10 @@
 #include <QDebug>
 #include <QDataStream>
 #include <QXmlStreamReader>
-#include <QDateTime>
 #include <QStandardPaths>
 #include <QUuid>
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QRegularExpression>
 #include <QSettings>
 
@@ -59,41 +59,9 @@
 #define QT_POPEN_READ "r"
 #endif
 
-class ActionTimer
-{
-    qint64 started;
-public:
-    ActionTimer() = default;
-    void start()
-    {
-        started = QDateTime::currentMSecsSinceEpoch();
-    }
-    int elapsed()
-    {
-        return int(QDateTime::currentMSecsSinceEpoch() - started);
-    }
-};
-
 static const bool mustReadOutputAnyway = true; // pclose seems to return the wrong error code unless we read the output
 
 static QStringList dependenciesForDepfile;
-
-void deleteRecursively(const QString &dirName)
-{
-    QDir dir(dirName);
-    if (!dir.exists())
-        return;
-
-    const QFileInfoList entries = dir.entryInfoList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs);
-    for (const QFileInfo &entry : entries) {
-        if (entry.isDir())
-            deleteRecursively(entry.absoluteFilePath());
-        else
-            QFile::remove(entry.absoluteFilePath());
-    }
-
-    QDir().rmdir(dirName);
-}
 
 FILE *openProcess(const QString &command)
 {
@@ -117,6 +85,16 @@ struct QtDependency
 
     QString relativePath;
     QString absolutePath;
+};
+
+struct QtInstallDirectoryWithTriple
+{
+    QtInstallDirectoryWithTriple(const QString &dir = QString(), const QString &t = QString()) :
+        qtInstallDirectory(dir), triple(t), enabled(false) {}
+
+    QString qtInstallDirectory;
+    QString triple;
+    bool enabled;
 };
 
 struct Options
@@ -156,7 +134,9 @@ struct Options
     bool timing;
     bool build;
     bool auxMode;
-    ActionTimer timer;
+    bool noRccBundleCleanup = false;
+    bool copyDependenciesOnly = false;
+    QElapsedTimer timer;
 
     // External tools
     QString sdkPath;
@@ -167,7 +147,11 @@ struct Options
 
     // Build paths
     QString qtInstallDirectory;
+    QString qtHostDirectory;
     std::vector<QString> extraPrefixDirs;
+    // Unlike 'extraPrefixDirs', the 'extraLibraryDirs' key doesn't expect the 'lib' subfolder
+    // when looking for dependencies.
+    std::vector<QString> extraLibraryDirs;
     QString androidSourceDirectory;
     QString outputDirectory;
     QString inputFileName;
@@ -192,7 +176,7 @@ struct Options
 
     // Build information
     QString androidPlatform;
-    QHash<QString, QString> architectures;
+    QHash<QString, QtInstallDirectoryWithTriple> architectures;
     QString currentArchitecture;
     QString toolchainPrefix;
     QString ndkHost;
@@ -233,9 +217,10 @@ struct Options
     QString installLocation;
 
     // Per architecture collected information
-    void clear(const QString &arch)
+    void setCurrentQtArchitecture(const QString &arch, const QString &directory)
     {
         currentArchitecture = arch;
+        qtInstallDirectory = directory;
     }
     typedef QPair<QString, QString> BundledFile;
     QHash<QString, QList<BundledFile>> bundledFiles;
@@ -357,7 +342,7 @@ QString fileArchitecture(const Options &options, const QString &path)
         return {};
     }
 
-    readElf = QLatin1String("%1 -needed-libs %2").arg(shellQuote(readElf), shellQuote(path));
+    readElf = QLatin1String("%1 --needed-libs %2").arg(shellQuote(readElf), shellQuote(path));
 
     FILE *readElfCommand = openProcess(readElf);
     if (!readElfCommand) {
@@ -407,7 +392,7 @@ void deleteMissingFiles(const Options &options, const QDir &srcDir, const QDir &
                 fprintf(stdout, "%s not found in %s, removing it.\n", qPrintable(dst.fileName()), qPrintable(srcDir.absolutePath()));
 
             if (dst.isDir())
-                deleteRecursively(dst.absolutePath());
+                QDir{dst.absolutePath()}.removeRecursively();
             else
                 QFile::remove(dst.absoluteFilePath());
         }
@@ -576,6 +561,12 @@ Options parseOptions()
             options.auxMode = true;
         } else if (argument.compare(QLatin1String("--qml-importscanner-binary"), Qt::CaseInsensitive) == 0) {
             options.qmlImportScannerBinaryPath = arguments.at(++i).trimmed();
+        } else if (argument.compare(QLatin1String("--no-rcc-bundle-cleanup"),
+                                    Qt::CaseInsensitive) == 0) {
+            options.noRccBundleCleanup = true;
+        } else if (argument.compare(QLatin1String("--copy-dependencies-only"),
+                                    Qt::CaseInsensitive) == 0) {
+            options.copyDependenciesOnly = true;
         }
     }
 
@@ -690,10 +681,19 @@ void printHelp()
                     "       qmlimportscanner binary is located using the Qt directory\n"
                     "       specified in the input file.\n"
                     "\n"
-                    "   --depfile <path/to/depfile>: Output a dependency file.\n"
+                    "    --depfile <path/to/depfile>: Output a dependency file.\n"
                     "\n"
-                    "   --builddir <path/to/build/directory>: build directory. Necessary when\n"
+                    "    --builddir <path/to/build/directory>: build directory. Necessary when\n"
                     "       generating a depfile because ninja requires relative paths.\n"
+                    "\n"
+                    "    --no-rcc-bundle-cleanup: skip cleaning rcc bundle directory after\n"
+                    "       running androiddeployqt. This option simplifies debugging of\n"
+                    "       the resource bundle content, but it should not be used when deploying\n"
+                    "       a project, since it litters the 'assets' directory.\n"
+                    "\n"
+                    "    --copy-dependencies-only: resolve application dependencies and stop\n"
+                    "       deploying process after all libraries and resources that the\n"
+                    "       application depends on have been copied.\n"
                     "\n"
                     "    --help: Displays this information.\n",
                     qPrintable(QCoreApplication::arguments().at(0))
@@ -912,7 +912,50 @@ bool readInputFile(Options *options)
             fprintf(stderr, "No Qt directory in json file %s\n", qPrintable(options->inputFileName));
             return false;
         }
-        options->qtInstallDirectory = qtInstallDirectory.toString();
+
+        if (qtInstallDirectory.isObject()) {
+            const QJsonObject object = qtInstallDirectory.toObject();
+            for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+                if (it.value().isUndefined()) {
+                    fprintf(stderr, "Invalid architecture: %s\n",
+                            qPrintable(it.value().toString()));
+                    return false;
+                }
+                if (it.value().isNull())
+                    continue;
+                options->architectures.insert(it.key(),
+                                              QtInstallDirectoryWithTriple(it.value().toString()));
+            }
+        } else if (qtInstallDirectory.isString()) {
+            // Format for Qt < 6 or when using the tool with Qt >= 6 but in single arch.
+            // We assume Qt > 5.14 where all architectures are in the same directory.
+            const QString directory = qtInstallDirectory.toString();
+            QtInstallDirectoryWithTriple qtInstallDirectoryWithTriple(directory);
+            options->architectures.insert(QLatin1String("arm64-v8a"), qtInstallDirectoryWithTriple);
+            options->architectures.insert(QLatin1String("armeabi-v7a"), qtInstallDirectoryWithTriple);
+            options->architectures.insert(QLatin1String("x86"), qtInstallDirectoryWithTriple);
+            options->architectures.insert(QLatin1String("x86_64"), qtInstallDirectoryWithTriple);
+            // In Qt < 6 rcc and qmlimportscanner are installed in the host and install directories
+            // In Qt >= 6 rcc and qmlimportscanner are only installed in the host directory
+            // So setting the "qtHostDir" is not necessary with Qt < 6.
+            options->qtHostDirectory = directory;
+        } else {
+            fprintf(stderr, "Invalid format for Qt install prefixes in json file %s.\n",
+                    qPrintable(options->inputFileName));
+            return false;
+        }
+    }
+    {
+        const QJsonValue qtHostDirectory = jsonObject.value(QLatin1String("qtHostDir"));
+        if (!qtHostDirectory.isUndefined()) {
+            if (qtHostDirectory.isString()) {
+                options->qtHostDirectory = qtHostDirectory.toString();
+            } else {
+                fprintf(stderr, "Invalid format for Qt host directory in json file %s.\n",
+                        qPrintable(options->inputFileName));
+                return false;
+            }
+        }
     }
 
     {
@@ -920,6 +963,14 @@ bool readInputFile(Options *options)
         options->extraPrefixDirs.reserve(extraPrefixDirs.size());
         for (const QJsonValue prefix : extraPrefixDirs) {
             options->extraPrefixDirs.push_back(prefix.toString());
+        }
+    }
+
+    {
+        const auto extraLibraryDirs = jsonObject.value(QLatin1String("extraLibraryDirs")).toArray();
+        options->extraLibraryDirs.reserve(extraLibraryDirs.size());
+        for (const QJsonValue path : extraLibraryDirs) {
+            options->extraLibraryDirs.push_back(path.toString());
         }
     }
 
@@ -978,7 +1029,13 @@ bool readInputFile(Options *options)
             }
             if (it.value().isNull())
                 continue;
-            options->architectures.insert(it.key(), it.value().toString());
+            if (!options->architectures.contains(it.key())) {
+                fprintf(stderr, "Architecture %s unknown (%s).", qPrintable(it.key()),
+                        qPrintable(options->architectures.keys().join(QLatin1Char(','))));
+                return false;
+            }
+            options->architectures[it.key()].triple = it.value().toString();
+            options->architectures[it.key()].enabled = true;
         }
     }
 
@@ -1050,7 +1107,7 @@ bool readInputFile(Options *options)
                     options->rootPaths.push_back(path.toString());
             }
         } else {
-            options->rootPaths.push_back(options->inputFileName);
+            options->rootPaths.push_back(QFileInfo(options->inputFileName).absolutePath());
         }
     }
 
@@ -1081,6 +1138,8 @@ bool readInputFile(Options *options)
         options->applicationBinary = applicationBinary.toString();
         if (options->build) {
             for (auto it = options->architectures.constBegin(); it != options->architectures.constEnd(); ++it) {
+                if (!it->enabled)
+                    continue;
                 auto appBinaryPath = QLatin1String("%1/libs/%2/lib%3_%2.so").arg(options->outputDirectory, it.key(), options->applicationBinary);
                 if (!QFile::exists(appBinaryPath)) {
                     fprintf(stderr, "Cannot find application binary in build dir %s.\n", qPrintable(appBinaryPath));
@@ -1402,6 +1461,8 @@ bool updateLibsXml(Options *options)
     QString extraLibs;
 
     for (auto it = options->architectures.constBegin(); it != options->architectures.constEnd(); ++it) {
+        if (!it->enabled)
+            continue;
         QString libsPath = QLatin1String("libs/") + it.key() + QLatin1Char('/');
 
         qtLibs += QLatin1String("        <item>%1;%2</item>\n").arg(it.key(), options->stdCppName);
@@ -1437,8 +1498,10 @@ bool updateLibsXml(Options *options)
 
                     plugin = qtDependency.relativePath;
                 }
-                if (qtDependency.relativePath.contains(QLatin1String("libQt5OpenGL"))
-                        || qtDependency.relativePath.contains(QLatin1String("libQt5Quick"))) {
+                if (qtDependency.relativePath.contains(
+                            QString::asprintf("libQt%dOpenGL", QT_VERSION_MAJOR))
+                    || qtDependency.relativePath.contains(
+                            QString::asprintf("libQt%dQuick", QT_VERSION_MAJOR))) {
                     options->usesOpenGL |= true;
                     break;
                 }
@@ -1619,6 +1682,17 @@ bool updateAndroidFiles(Options &options)
 
 static QString absoluteFilePath(const Options *options, const QString &relativeFileName)
 {
+    // Use extraLibraryDirs as the extra library lookup folder if it is expected to find a file in
+    // any $prefix/lib folder.
+    // Library directories from a build tree(extraLibraryDirs) have the higher priority.
+    if (relativeFileName.startsWith(QLatin1String("lib/"))) {
+        for (const auto &dir : options->extraLibraryDirs) {
+            const QString path = dir + QLatin1Char('/') + relativeFileName.mid(sizeof("lib/") - 1);
+            if (QFile::exists(path))
+                return path;
+        }
+    }
+
     for (const auto &prefix : options->extraPrefixDirs) {
         const QString path = prefix + QLatin1Char('/') + relativeFileName;
         if (QFile::exists(path))
@@ -1775,7 +1849,7 @@ QStringList getQtLibsFromElf(const Options &options, const QString &fileName)
         return QStringList();
     }
 
-    readElf = QLatin1String("%1 -needed-libs %2").arg(shellQuote(readElf), shellQuote(fileName));
+    readElf = QLatin1String("%1 --needed-libs %2").arg(shellQuote(readElf), shellQuote(fileName));
 
     FILE *readElfCommand = openProcess(readElf);
     if (!readElfCommand) {
@@ -1871,7 +1945,8 @@ QString defaultLibexecDir()
 }
 
 bool goodToCopy(const Options *options, const QString &file, QStringList *unmetDependencies);
-bool checkQmlFileInRootPaths(const Options *options, const QString &absolutePath);
+bool checkCanImportFromRootPaths(const Options *options, const QString &absolutePath,
+                                 const QUrl &moduleUrl);
 
 bool scanImports(Options *options, QSet<QString> *usedDependencies)
 {
@@ -1879,23 +1954,35 @@ bool scanImports(Options *options, QSet<QString> *usedDependencies)
         fprintf(stdout, "Scanning for QML imports.\n");
 
     QString qmlImportScanner;
-    if (!options->qmlImportScannerBinaryPath.isEmpty())
+    if (!options->qmlImportScannerBinaryPath.isEmpty()) {
         qmlImportScanner = options->qmlImportScannerBinaryPath;
-    else
-        qmlImportScanner = options->qtInstallDirectory + QLatin1String("/bin/qmlimportscanner");
+    } else {
+        qmlImportScanner = options->qtInstallDirectory + QLatin1Char('/') + defaultLibexecDir()
+                + QLatin1String("/qmlimportscanner");
+    }
 #if defined(Q_OS_WIN32)
     qmlImportScanner += QLatin1String(".exe");
 #endif
 
     QStringList importPaths;
-    importPaths += shellQuote(options->qtInstallDirectory + QLatin1String("/qml"));
 
+    // In Conan's case, qtInstallDirectory will point only to qtbase installed files, which
+    // lacks a qml directory. We don't want to pass it as an import path if it doesn't exist
+    // because it will cause qmlimportscanner to fail.
+    // This also covers the case when only qtbase is installed in a regular Qt build.
+    const QString mainImportPath = options->qtInstallDirectory + QLatin1String("/qml");
+    if (QFile::exists(mainImportPath))
+        importPaths += shellQuote(mainImportPath);
+
+    // These are usually provided by CMake in the deployment json file from paths specified
+    // in CMAKE_FIND_ROOT_PATH. They might not have qml modules.
     for (const QString &prefix : options->extraPrefixDirs)
-        if (QDir().exists(prefix + QLatin1String("/qml")))
+        if (QFile::exists(prefix + QLatin1String("/qml")))
             importPaths += shellQuote(prefix + QLatin1String("/qml"));
 
+    // These are provided by both CMake and qmake.
     for (const QString &qmlImportPath : qAsConst(options->qmlImportPaths)) {
-        if (QDir().exists(qmlImportPath)) {
+        if (QFile::exists(qmlImportPath)) {
             importPaths += shellQuote(qmlImportPath);
         } else {
             fprintf(stderr, "Warning: QML import path %s does not exist.\n",
@@ -1985,7 +2072,7 @@ bool scanImports(Options *options, QSet<QString> *usedDependencies)
                     qPrintable(object.value(QLatin1String("name")).toString()));
         } else {
             if (options->verbose)
-                fprintf(stdout, "  -- Adding '%s' as QML dependency\n", path.toLocal8Bit().constData());
+                fprintf(stdout, "  -- Adding '%s' as QML dependency\n", qPrintable(path));
 
             QFileInfo info(path);
 
@@ -2000,7 +2087,9 @@ bool scanImports(Options *options, QSet<QString> *usedDependencies)
             if (!absolutePath.endsWith(QLatin1Char('/')))
                 absolutePath += QLatin1Char('/');
 
-            if (checkQmlFileInRootPaths(options, absolutePath)) {
+            const QUrl url(object.value(QLatin1String("name")).toString());
+
+            if (checkCanImportFromRootPaths(options, info.absolutePath(), url)) {
                 if (options->verbose)
                     fprintf(stdout, "    -- Skipping because path is in QML root path.\n");
                 continue;
@@ -2025,40 +2114,79 @@ bool scanImports(Options *options, QSet<QString> *usedDependencies)
                 return false;
             }
 
-            QDir dir(importPathOfThisImport);
-            importPathOfThisImport = dir.absolutePath() + QLatin1Char('/');
+            importPathOfThisImport = QDir(importPathOfThisImport).absolutePath() + QLatin1Char('/');
+            QList<QtDependency> qmlImportsDependencies;
+            auto collectQmlDependency = [&usedDependencies, &qmlImportsDependencies,
+                                         &importPathOfThisImport](const QString &filePath) {
+                if (!usedDependencies->contains(filePath)) {
+                    usedDependencies->insert(filePath);
+                    qmlImportsDependencies += QtDependency(
+                            QLatin1String("qml/") + filePath.mid(importPathOfThisImport.size()),
+                            filePath);
+                }
+            };
 
-            const QList<QtDependency> fileNames = findFilesRecursively(*options, info, importPathOfThisImport);
-            for (QtDependency fileName : fileNames) {
-                if (usedDependencies->contains(fileName.absolutePath))
-                    continue;
-
-                usedDependencies->insert(fileName.absolutePath);
-
+            QString plugin = object.value(QLatin1String("plugin")).toString();
+            bool pluginIsOptional = object.value(QLatin1String("pluginIsOptional")).toBool();
+            QFileInfo pluginFileInfo = QFileInfo(
+                    path + QLatin1Char('/') + QLatin1String("lib") + plugin + QLatin1Char('_')
+                    + options->currentArchitecture + QLatin1String(".so"));
+            QString pluginFilePath = pluginFileInfo.absoluteFilePath();
+            QSet<QString> remainingDependencies;
+            if (pluginFileInfo.exists() && checkArchitecture(*options, pluginFilePath)
+                && readDependenciesFromElf(options, pluginFilePath, usedDependencies,
+                                           &remainingDependencies)) {
+                collectQmlDependency(pluginFilePath);
+            } else if (!pluginIsOptional) {
                 if (options->verbose)
-                    fprintf(stdout, "    -- Appending dependency found by qmlimportscanner: %s\n", qPrintable(fileName.absolutePath));
+                    fprintf(stdout, "    -- Skipping because the required plugin is missing.\n");
+                continue;
+            }
 
-                // Put all imports in default import path in assets
-                fileName.relativePath.prepend(QLatin1String("qml/"));
-                options->qtDependencies[options->currentArchitecture].append(fileName);
+            QFileInfo qmldirFileInfo = QFileInfo(path + QLatin1Char('/') + QLatin1String("qmldir"));
+            if (qmldirFileInfo.exists()) {
+                collectQmlDependency(qmldirFileInfo.absoluteFilePath());
+            }
 
-                if (fileName.absolutePath.endsWith(QLatin1String(".so")) && checkArchitecture(*options, fileName.absolutePath)) {
-                    QSet<QString> remainingDependencies;
-                    if (!readDependenciesFromElf(options, fileName.absolutePath, usedDependencies, &remainingDependencies))
-                        return false;
+            QString prefer = object.value(QLatin1String("prefer")).toString();
+            // If the preferred location of Qml files points to the Qt resources, this means
+            // that all Qml files has been embedded into plugin and we should not copy them to the
+            // android rcc bundle
+            if (!prefer.startsWith(QLatin1String(":/"))) {
+                QVariantList qmlFiles =
+                        object.value(QLatin1String("components")).toArray().toVariantList();
+                qmlFiles.append(object.value(QLatin1String("scripts")).toArray().toVariantList());
+                bool qmlFilesMissing = false;
+                for (const auto &qmlFileEntry : qmlFiles) {
+                    QFileInfo fileInfo(qmlFileEntry.toString());
+                    if (!fileInfo.exists()) {
+                        qmlFilesMissing = true;
+                        break;
+                    }
+                    collectQmlDependency(fileInfo.absoluteFilePath());
+                }
 
+                if (qmlFilesMissing) {
+                    if (options->verbose)
+                        fprintf(stdout,
+                                "    -- Skipping because the required qml files are missing.\n");
+                    continue;
                 }
             }
+
+            options->qtDependencies[options->currentArchitecture].append(qmlImportsDependencies);
         }
     }
 
     return true;
 }
 
-bool checkQmlFileInRootPaths(const Options *options, const QString &absolutePath)
+bool checkCanImportFromRootPaths(const Options *options, const QString &absolutePath,
+                                 const QUrl &moduleUrl)
 {
+    const QString pathFromUrl = QLatin1String("/") + moduleUrl.toString().replace(QLatin1Char('.'), QLatin1Char('/'));
     for (auto rootPath : options->rootPaths) {
-        if (absolutePath.startsWith(rootPath))
+        if ((rootPath + pathFromUrl) == absolutePath)
             return true;
     }
     return false;
@@ -2136,8 +2264,10 @@ bool createRcc(const Options &options)
         fprintf(stderr, "Cannot set current dir to: %s\n", qPrintable(currentDir));
         return false;
     }
-    QFile::remove(QLatin1String("%1/android_rcc_bundle.qrc").arg(assetsDir));
-    QDir{QLatin1String("%1/android_rcc_bundle").arg(assetsDir)}.removeRecursively();
+    if (!options.noRccBundleCleanup) {
+        QFile::remove(QLatin1String("%1/android_rcc_bundle.qrc").arg(assetsDir));
+        QDir{QLatin1String("%1/android_rcc_bundle").arg(assetsDir)}.removeRecursively();
+    }
     return res;
 }
 
@@ -2281,7 +2411,7 @@ bool copyQtFiles(Options *options)
     if (options->verbose) {
         switch (options->deploymentMechanism) {
         case Options::Bundled:
-            fprintf(stdout, "Copying %zd dependencies from Qt into package.\n", size_t(options->qtDependencies.size()));
+            fprintf(stdout, "Copying %zd dependencies from Qt into package.\n", size_t(options->qtDependencies[options->currentArchitecture].size()));
             break;
         };
     }
@@ -2473,15 +2603,16 @@ static GradleProperties readGradleProperties(const QString &path)
 
 static bool mergeGradleProperties(const QString &path, GradleProperties properties)
 {
-    QFile::remove(path + QLatin1Char('~'));
-    QFile::rename(path, path + QLatin1Char('~'));
+    const QString oldPathStr = path + QLatin1Char('~');
+    QFile::remove(oldPathStr);
+    QFile::rename(path, oldPathStr);
     QFile file(path);
     if (!file.open(QIODevice::Truncate | QIODevice::WriteOnly | QIODevice::Text)) {
         fprintf(stderr, "Can't open file: %s for writing\n", qPrintable(file.fileName()));
         return false;
     }
 
-    QFile oldFile(path + QLatin1Char('~'));
+    QFile oldFile(oldPathStr);
     if (oldFile.open(QIODevice::ReadOnly)) {
         while (!oldFile.atEnd()) {
             QByteArray line(oldFile.readLine());
@@ -2497,6 +2628,7 @@ static bool mergeGradleProperties(const QString &path, GradleProperties properti
             file.write(line);
         }
         oldFile.close();
+        QFile::remove(oldPathStr);
     }
 
     for (GradleProperties::const_iterator it = properties.begin(); it != properties.end(); ++it)
@@ -2552,6 +2684,8 @@ bool buildAndroidProject(const Options &options)
         gradleProperties["androidBuildToolsVersion"] = options.sdkBuildToolsVersion.toLocal8Bit();
     QString abiList;
     for (auto it = options.architectures.constBegin(); it != options.architectures.constEnd(); ++it) {
+        if (!it->enabled)
+            continue;
         if (abiList.size())
             abiList.append(u",");
         abiList.append(it.key());
@@ -2729,7 +2863,9 @@ bool copyStdCpp(Options *options)
     if (options->verbose)
         fprintf(stdout, "Copying STL library\n");
 
-    QString stdCppPath = QLatin1String("%1/%2/lib%3.so").arg(options->stdCppPath, options->architectures[options->currentArchitecture], options->stdCppName);
+    const QString triple = options->architectures[options->currentArchitecture].triple;
+    const QString stdCppPath = QLatin1String("%1/%2/lib%3.so").arg(options->stdCppPath, triple,
+                                                                   options->stdCppName);
     if (!QFile::exists(stdCppPath)) {
         fprintf(stderr, "STL library does not exist at %s\n", qPrintable(stdCppPath));
         fflush(stdout);
@@ -3035,12 +3171,19 @@ bool writeDependencyFile(const Options &options)
     if (options.verbose)
         fprintf(stdout, "Writing dependency file.\n");
 
+    QString relativeTargetPath;
+    if (options.copyDependenciesOnly) {
+        // When androiddeploy Qt is running in copyDependenciesOnly mode we need to use
+        // the timestamp file as the target to collect dependencies.
+        QString timestampAbsPath = QFileInfo(options.depFilePath).absolutePath() + QLatin1String("/timestamp");
+        relativeTargetPath = QDir(options.buildDirectory).relativeFilePath(timestampAbsPath);
+    } else {
+        relativeTargetPath = QDir(options.buildDirectory).relativeFilePath(options.apkPath);
+    }
+
     QFile depFile(options.depFilePath);
-
-    QString relativeApkPath = QDir(options.buildDirectory).relativeFilePath(options.apkPath);
-
     if (depFile.open(QIODevice::WriteOnly)) {
-        depFile.write(escapeAndEncodeDependencyPath(relativeApkPath));
+        depFile.write(escapeAndEncodeDependencyPath(relativeTargetPath));
         depFile.write(": ");
 
         for (const auto &file : dependenciesForDepfile) {
@@ -3069,7 +3212,7 @@ int main(int argc, char *argv[])
         return CannotReadInputFile;
 
     if (Q_UNLIKELY(options.timing))
-        fprintf(stdout, "[TIMING] %d ms: Read input file\n", options.timer.elapsed());
+        fprintf(stdout, "[TIMING] %lld ns: Read input file\n", options.timer.nsecsElapsed());
 
     fprintf(stdout,
 //          "012345678901234567890123456789012345678901234567890123456789012345678901"
@@ -3088,61 +3231,73 @@ int main(int argc, char *argv[])
                 : "No"
             );
 
-    if (options.build && !options.auxMode) {
-        cleanAndroidFiles(options);
-        if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Cleaned Android file\n", options.timer.elapsed());
-
-        if (!copyAndroidTemplate(options))
-            return CannotCopyAndroidTemplate;
-
-        if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Copied Android template\n", options.timer.elapsed());
-    }
+    bool androidTemplatetCopied = false;
 
     for (auto it = options.architectures.constBegin(); it != options.architectures.constEnd(); ++it) {
-        options.clear(it.key());
+        if (!it->enabled)
+            continue;
+        options.setCurrentQtArchitecture(it.key(), it.value().qtInstallDirectory);
+
+        // All architectures have a copy of the gradle files but only one set needs to be copied.
+        if (!androidTemplatetCopied && options.build && !options.auxMode && !options.copyDependenciesOnly) {
+            cleanAndroidFiles(options);
+            if (Q_UNLIKELY(options.timing))
+                fprintf(stdout, "[TIMING] %lld ns: Cleaned Android file\n", options.timer.nsecsElapsed());
+
+            if (!copyAndroidTemplate(options))
+                return CannotCopyAndroidTemplate;
+
+            if (Q_UNLIKELY(options.timing))
+                fprintf(stdout, "[TIMING] %lld ns: Copied Android template\n", options.timer.nsecsElapsed());
+            androidTemplatetCopied = true;
+        }
 
         if (!readDependencies(&options))
             return CannotReadDependencies;
 
         if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Read dependencies\n", options.timer.elapsed());
+            fprintf(stdout, "[TIMING] %lld ns: Read dependencies\n", options.timer.nsecsElapsed());
 
         if (!copyQtFiles(&options))
             return CannotCopyQtFiles;
 
         if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Copied Qt files\n", options.timer.elapsed());
+            fprintf(stdout, "[TIMING] %lld ns: Copied Qt files\n", options.timer.nsecsElapsed());
 
         if (!copyAndroidExtraLibs(&options))
             return CannotCopyAndroidExtraLibs;
 
         if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Copied extra libs\n", options.timer.elapsed());
+            fprintf(stdout, "[TIMING] %lld ms: Copied extra libs\n", options.timer.nsecsElapsed());
 
         if (!copyAndroidExtraResources(&options))
             return CannotCopyAndroidExtraResources;
 
         if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Copied extra resources\n", options.timer.elapsed());
+            fprintf(stdout, "[TIMING] %lld ns: Copied extra resources\n", options.timer.nsecsElapsed());
 
         if (!options.auxMode) {
             if (!copyStdCpp(&options))
                 return CannotCopyGnuStl;
 
             if (Q_UNLIKELY(options.timing))
-                fprintf(stdout, "[TIMING] %d ms: Copied GNU STL\n", options.timer.elapsed());
+                fprintf(stdout, "[TIMING] %lld ns: Copied GNU STL\n", options.timer.nsecsElapsed());
         }
 
         if (!containsApplicationBinary(&options))
             return CannotFindApplicationBinary;
 
         if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Checked for application binary\n", options.timer.elapsed());
+            fprintf(stdout, "[TIMING] %lld ns: Checked for application binary\n", options.timer.nsecsElapsed());
 
         if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Bundled Qt libs\n", options.timer.elapsed());
+            fprintf(stdout, "[TIMING] %lld ns: Bundled Qt libs\n", options.timer.nsecsElapsed());
+    }
+
+    if (options.copyDependenciesOnly) {
+        if (!options.depFilePath.isEmpty())
+            writeDependencyFile(options);
+        return 0;
     }
 
     if (!createRcc(options))
@@ -3160,22 +3315,22 @@ int main(int argc, char *argv[])
             return CannotCopyAndroidSources;
 
         if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Copied android sources\n", options.timer.elapsed());
+            fprintf(stdout, "[TIMING] %lld ns: Copied android sources\n", options.timer.nsecsElapsed());
 
         if (!updateAndroidFiles(options))
             return CannotUpdateAndroidFiles;
 
         if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Updated files\n", options.timer.elapsed());
+            fprintf(stdout, "[TIMING] %lld ns: Updated files\n", options.timer.nsecsElapsed());
 
         if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Created project\n", options.timer.elapsed());
+            fprintf(stdout, "[TIMING] %lld ns: Created project\n", options.timer.nsecsElapsed());
 
         if (!buildAndroidProject(options))
             return CannotBuildAndroidProject;
 
         if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Built project\n", options.timer.elapsed());
+            fprintf(stdout, "[TIMING] %lld ns: Built project\n", options.timer.nsecsElapsed());
 
         if (!options.keyStore.isEmpty() && !signPackage(options))
             return CannotSignPackage;
@@ -3184,14 +3339,14 @@ int main(int argc, char *argv[])
             return CannotCopyApk;
 
         if (Q_UNLIKELY(options.timing))
-            fprintf(stdout, "[TIMING] %d ms: Signed package\n", options.timer.elapsed());
+            fprintf(stdout, "[TIMING] %lld ns: Signed package\n", options.timer.nsecsElapsed());
     }
 
     if (options.installApk && !installApk(options))
         return CannotInstallApk;
 
     if (Q_UNLIKELY(options.timing))
-        fprintf(stdout, "[TIMING] %d ms: Installed APK\n", options.timer.elapsed());
+        fprintf(stdout, "[TIMING] %lld ns: Installed APK\n", options.timer.nsecsElapsed());
 
     if (!options.depFilePath.isEmpty())
         writeDependencyFile(options);

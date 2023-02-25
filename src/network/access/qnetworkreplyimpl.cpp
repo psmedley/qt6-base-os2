@@ -51,6 +51,8 @@
 
 QT_BEGIN_NAMESPACE
 
+QT_IMPL_METATYPE_EXTERN_TAGGED(QSharedPointer<char>, QSharedPointer_char)
+
 inline QNetworkReplyImplPrivate::QNetworkReplyImplPrivate()
     : backend(nullptr), outgoingData(nullptr),
       copyDevice(nullptr),
@@ -154,7 +156,7 @@ void QNetworkReplyImplPrivate::_q_copyReadyRead()
 
     QVariant totalSize = cookedHeaders.value(QNetworkRequest::ContentLengthHeader);
     pauseNotificationHandling();
-    // emit readyRead before downloadProgress incase this will cause events to be
+    // emit readyRead before downloadProgress in case this will cause events to be
     // processed and we get into a recursive call (as in QProgressDialog).
     emit q->readyRead();
     if (downloadProgressSignalChoke.elapsed() >= progressSignalInterval) {
@@ -193,7 +195,7 @@ void QNetworkReplyImplPrivate::_q_bufferOutgoingData()
 
     if (!outgoingDataBuffer) {
         // first call, create our buffer
-        outgoingDataBuffer = QSharedPointer<QRingBuffer>::create();
+        outgoingDataBuffer = std::make_shared<QRingBuffer>();
 
         QObject::connect(outgoingData, SIGNAL(readyRead()), q, SLOT(_q_bufferOutgoingData()));
         QObject::connect(outgoingData, SIGNAL(readChannelFinished()), q, SLOT(_q_bufferOutgoingDataFinished()));
@@ -249,7 +251,7 @@ void QNetworkReplyImplPrivate::setup(QNetworkAccessManager::Operation op, const 
     // The synchronous HTTP is a corner case, we will put all upload data in one big QByteArray in the outgoingDataBuffer.
     // Yes, this is not the most efficient thing to do, but on the other hand synchronous XHR needs to die anyway.
     if (synchronousHttpAttribute.toBool() && outgoingData) {
-        outgoingDataBuffer = QSharedPointer<QRingBuffer>::create();
+        outgoingDataBuffer = std::make_shared<QRingBuffer>();
         qint64 previousDataSize = 0;
         do {
             previousDataSize = outgoingDataBuffer->size();
@@ -517,7 +519,7 @@ void QNetworkReplyImplPrivate::appendDownstreamDataSignalEmissions()
     // important: At the point of this readyRead(), the data parameter list must be empty,
     // else implicit sharing will trigger memcpy when the user is reading data!
     emit q->readyRead();
-    // emit readyRead before downloadProgress incase this will cause events to be
+    // emit readyRead before downloadProgress in case this will cause events to be
     // processed and we get into a recursive call (as in QProgressDialog).
     if (downloadProgressSignalChoke.elapsed() >= progressSignalInterval) {
         downloadProgressSignalChoke.restart();
@@ -610,7 +612,7 @@ void QNetworkReplyImplPrivate::appendDownstreamDataDownloadBuffer(qint64 bytesRe
     downloadBufferCurrentSize = bytesReceived;
 
     // Only emit readyRead when actual data is there
-    // emit readyRead before downloadProgress incase this will cause events to be
+    // emit readyRead before downloadProgress in case this will cause events to be
     // processed and we get into a recursive call (as in QProgressDialog).
     if (bytesDownloaded > 0)
         emit q->readyRead();
@@ -734,6 +736,7 @@ void QNetworkReplyImplPrivate::readFromBackend()
         if (backend->bytesAvailable())
             emit q->readyRead();
     } else {
+        bool anyBytesRead = false;
         while (backend->bytesAvailable()
                && (!readBufferMaxSize || buffer.size() < readBufferMaxSize)) {
             qint64 toRead = qMin(nextDownstreamBlockSize(), backend->bytesAvailable());
@@ -743,8 +746,10 @@ void QNetworkReplyImplPrivate::readFromBackend()
             qint64 bytesRead = backend->read(data, toRead);
             Q_ASSERT(bytesRead <= toRead);
             buffer.chop(toRead - bytesRead);
-            emit q->readyRead();
+            anyBytesRead |= bytesRead > 0;
         }
+        if (anyBytesRead)
+            emit q->readyRead();
     }
 }
 

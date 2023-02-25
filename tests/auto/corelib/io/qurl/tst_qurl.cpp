@@ -2084,8 +2084,9 @@ void tst_QUrl::hasQuery()
 
 void tst_QUrl::nameprep()
 {
-    QUrl url(QString::fromUtf8("http://www.fu""\xc3""\x9f""ball.de/"));
-    QCOMPARE(url.toString(), QString::fromLatin1("http://www.fussball.de/"));
+    // U+FB01 LATIN SMALL LIGATURE FI
+    QUrl url(u"http://www.\uFB01le.de/"_qs);
+    QCOMPARE(url.toString(), QStringLiteral(u"http://www.file.de/"));
 }
 
 void tst_QUrl::isValid()
@@ -2148,14 +2149,15 @@ void tst_QUrl::isValid()
     }
 
     {
-        QUrl url = QUrl::fromEncoded("foo://%f0%9f%93%99.example.la/g");
+        // U+1F100 DIGIT ZERO FULL STOP
+        QUrl url = QUrl::fromEncoded("foo://%f0%9f%84%80.example.la/g");
         QVERIFY(!url.isValid());
         QVERIFY(url.toString().isEmpty());
         QCOMPARE(url.path(), QString("/g"));
-        url.setHost("%f0%9f%93%99.example.la/");
+        url.setHost("%f0%9f%84%80.example.la/");
         QVERIFY(!url.isValid());
         QVERIFY(url.toString().isEmpty());
-        url.setHost("\xf0\x9f\x93\x99.example.la/");
+        url.setHost("\xf0\x9f\x84\x80.example.la/");
         QVERIFY(!url.isValid());
         QVERIFY(url.toString().isEmpty());
         QVERIFY2(url.errorString().contains("Invalid hostname"),

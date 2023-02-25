@@ -2044,7 +2044,9 @@ void QTextDocumentLayoutPrivate::drawBlock(const QPointF &offset, QPainter *pain
             rect.setRight((fd->size.width - fd->rightMargin).toReal());
         }
 
-        fillBackground(painter, rect, bg, r.topLeft());
+        // in the case of <hr>, the background-color CSS style fills only the rule's thickness instead of the whole line
+        if (!blockFormat.hasProperty(QTextFormat::BlockTrailingHorizontalRulerWidth))
+            fillBackground(painter, rect, bg, r.topLeft());
     }
 
     QList<QTextLayout::FormatRange> selections;
@@ -2104,7 +2106,10 @@ void QTextDocumentLayoutPrivate::drawBlock(const QPointF &offset, QPainter *pain
 
     if (blockFormat.hasProperty(QTextFormat::BlockTrailingHorizontalRulerWidth)) {
         const qreal width = blockFormat.lengthProperty(QTextFormat::BlockTrailingHorizontalRulerWidth).value(r.width());
-        painter->setPen(context.palette.color(QPalette::Dark));
+        const auto color = blockFormat.hasProperty(QTextFormat::BackgroundBrush)
+                         ? qvariant_cast<QBrush>(blockFormat.property(QTextFormat::BackgroundBrush)).color()
+                         : context.palette.color(QPalette::Dark);
+        painter->setPen(color);
         qreal y = r.bottom();
         if (bl.length() == 1)
             y = r.top() + r.height() / 2;
@@ -3418,19 +3423,21 @@ void QTextDocumentLayoutPrivate::layoutFlow(QTextFrame::Iterator it, QTextLayout
 static inline void getLineHeightParams(const QTextBlockFormat &blockFormat, const QTextLine &line, qreal scaling,
                                        QFixed *lineAdjustment, QFixed *lineBreakHeight, QFixed *lineHeight, QFixed *lineBottom)
 {
+    const qreal height = line.height();
+    const int lineHeightType = blockFormat.lineHeightType();
     qreal rawHeight = qCeil(line.ascent() + line.descent() + line.leading());
     *lineHeight = QFixed::fromReal(blockFormat.lineHeight(rawHeight, scaling));
-    *lineBottom = QFixed::fromReal(blockFormat.lineHeight(line.height(), scaling));
+    *lineBottom = QFixed::fromReal(blockFormat.lineHeight(height, scaling));
 
-    if (blockFormat.lineHeightType() == QTextBlockFormat::FixedHeight || blockFormat.lineHeightType() == QTextBlockFormat::MinimumHeight) {
+    if (lineHeightType == QTextBlockFormat::FixedHeight || lineHeightType == QTextBlockFormat::MinimumHeight) {
         *lineBreakHeight = *lineBottom;
-        if (blockFormat.lineHeightType() == QTextBlockFormat::FixedHeight)
+        if (lineHeightType == QTextBlockFormat::FixedHeight)
             *lineAdjustment = QFixed::fromReal(line.ascent() + qMax(line.leading(), qreal(0.0))) - ((*lineHeight * 4) / 5);
         else
-            *lineAdjustment = QFixed::fromReal(line.height()) - *lineHeight;
+            *lineAdjustment = QFixed::fromReal(height) - *lineHeight;
     }
     else {
-        *lineBreakHeight = QFixed::fromReal(line.height());
+        *lineBreakHeight = QFixed::fromReal(height);
         *lineAdjustment = 0;
     }
 }

@@ -43,6 +43,7 @@
 #include "qlist.h"
 #include "qmap.h"
 #include "qdebug.h"
+#include "qscopeguard.h"
 #include <qt_windows.h>
 
 // See "Accessing an Alternate Registry View" at:
@@ -386,14 +387,14 @@ public:
 
     void remove(const QString &uKey) override;
     void set(const QString &uKey, const QVariant &value) override;
-    bool get(const QString &uKey, QVariant *value) const override;
+    std::optional<QVariant> get(const QString &uKey) const override;
     QStringList children(const QString &uKey, ChildSpec spec) const override;
     void clear() override;
     void sync() override;
     void flush() override;
     bool isWritable() const override;
     HKEY writeHandle() const;
-    bool readKey(HKEY parentHandle, const QString &rSubKey, QVariant *value) const;
+    std::optional<QVariant> readKey(HKEY parentHandle, const QString &rSubKey) const;
     QString fileName() const override;
 
 private:
@@ -477,7 +478,7 @@ QWinSettingsPrivate::QWinSettingsPrivate(QString rPath, REGSAM access)
         regList.append(RegistryKey(keyName, rPath.mid(keyLength+1), false, access));
 }
 
-bool QWinSettingsPrivate::readKey(HKEY parentHandle, const QString &rSubKey, QVariant *value) const
+std::optional<QVariant> QWinSettingsPrivate::readKey(HKEY parentHandle, const QString &rSubKey) const
 {
     QString rSubkeyName = keyName(rSubKey);
     QString rSubkeyPath = keyPath(rSubKey);
@@ -485,16 +486,16 @@ bool QWinSettingsPrivate::readKey(HKEY parentHandle, const QString &rSubKey, QVa
     // open a handle on the subkey
     HKEY handle = openKey(parentHandle, KEY_READ, rSubkeyPath, access);
     if (handle == 0)
-        return false;
+        return std::nullopt;
+
+    const auto closeKey = qScopeGuard([handle] { RegCloseKey(handle); });
 
     // get the size and type of the value
     DWORD dataType;
     DWORD dataSize;
     LONG res = RegQueryValueEx(handle, reinterpret_cast<const wchar_t *>(rSubkeyName.utf16()), 0, &dataType, 0, &dataSize);
-    if (res != ERROR_SUCCESS) {
-        RegCloseKey(handle);
-        return false;
-    }
+    if (res != ERROR_SUCCESS)
+        return std::nullopt;
 
     // workaround for rare cases where trailing '\0' are missing in registry
     if (dataType == REG_SZ || dataType == REG_EXPAND_SZ)
@@ -506,10 +507,8 @@ bool QWinSettingsPrivate::readKey(HKEY parentHandle, const QString &rSubKey, QVa
     QByteArray data(dataSize, 0);
     res = RegQueryValueEx(handle, reinterpret_cast<const wchar_t *>(rSubkeyName.utf16()), 0, 0,
                            reinterpret_cast<unsigned char*>(data.data()), &dataSize);
-    if (res != ERROR_SUCCESS) {
-        RegCloseKey(handle);
-        return false;
-    }
+    if (res != ERROR_SUCCESS)
+        return std::nullopt;
 
     switch (dataType) {
         case REG_EXPAND_SZ:
@@ -518,9 +517,7 @@ bool QWinSettingsPrivate::readKey(HKEY parentHandle, const QString &rSubKey, QVa
             if (dataSize) {
                 s = QString::fromWCharArray(reinterpret_cast<const wchar_t *>(data.constData()));
             }
-            if (value != 0)
-                *value = stringToVariant(s);
-            break;
+            return stringToVariant(s);
         }
 
         case REG_MULTI_SZ: {
@@ -536,9 +533,7 @@ bool QWinSettingsPrivate::readKey(HKEY parentHandle, const QString &rSubKey, QVa
                     l.append(s);
                 }
             }
-            if (value != 0)
-                *value = stringListToVariantList(l);
-            break;
+            return stringListToVariantList(l);
         }
 
         case REG_NONE:
@@ -547,9 +542,7 @@ bool QWinSettingsPrivate::readKey(HKEY parentHandle, const QString &rSubKey, QVa
             if (dataSize) {
                 s = QString::fromWCharArray(reinterpret_cast<const wchar_t *>(data.constData()), data.size() / 2);
             }
-            if (value != 0)
-                *value = stringToVariant(s);
-            break;
+            return stringToVariant(s);
         }
 
         case REG_DWORD_BIG_ENDIAN:
@@ -557,29 +550,22 @@ bool QWinSettingsPrivate::readKey(HKEY parentHandle, const QString &rSubKey, QVa
             Q_ASSERT(data.size() == sizeof(int));
             int i;
             memcpy(reinterpret_cast<char*>(&i), data.constData(), sizeof(int));
-            if (value != 0)
-                *value = i;
-            break;
+            return i;
         }
 
         case REG_QWORD: {
             Q_ASSERT(data.size() == sizeof(qint64));
             qint64 i;
             memcpy(reinterpret_cast<char*>(&i), data.constData(), sizeof(qint64));
-            if (value != 0)
-                *value = i;
-            break;
+            return i;
         }
 
         default:
             qWarning("QSettings: Unknown data %d type in Windows registry", static_cast<int>(dataType));
-            if (value != 0)
-                *value = QVariant();
             break;
     }
 
-    RegCloseKey(handle);
-    return true;
+    return std::nullopt;
 }
 
 HKEY QWinSettingsPrivate::writeHandle() const
@@ -749,20 +735,21 @@ void QWinSettingsPrivate::set(const QString &uKey, const QVariant &value)
     RegCloseKey(handle);
 }
 
-bool QWinSettingsPrivate::get(const QString &uKey, QVariant *value) const
+std::optional<QVariant> QWinSettingsPrivate::get(const QString &uKey) const
 {
     QString rKey = escapedKey(uKey);
 
     for (const RegistryKey &r : regList) {
         HKEY handle = r.handle();
-        if (handle != 0 && readKey(handle, rKey, value))
-            return true;
-
+        if (handle != 0) {
+            if (auto result = readKey(handle, rKey))
+                return result;
+        }
         if (!fallbacks)
-            return false;
+            return std::nullopt;
     }
 
-    return false;
+    return std::nullopt;
 }
 
 QStringList QWinSettingsPrivate::children(const QString &uKey, ChildSpec spec) const

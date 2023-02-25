@@ -20,9 +20,8 @@ function(qt_internal_add_executable name)
     endif()
 
     _qt_internal_create_executable(${name})
-    if (ANDROID)
-        qt_android_generate_deployment_settings("${name}")
-        qt_android_add_apk_target("${name}")
+    if(ANDROID)
+        _qt_internal_android_executable_finalizer(${name})
     endif()
 
     if(arg_QT_APP AND QT_FEATURE_debug_and_release AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.19.0")
@@ -31,7 +30,7 @@ function(qt_internal_add_executable name)
     endif()
 
     if(WASM)
-        qt6_wasm_add_target_helpers("${name}")
+        _qt_internal_wasm_add_target_helpers("${name}")
     endif()
     if (arg_VERSION)
         if(arg_VERSION MATCHES "[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+")
@@ -71,6 +70,9 @@ function(qt_internal_add_executable name)
     endif()
 
     qt_set_common_target_properties(${name})
+
+    qt_internal_add_repo_local_defines(${name})
+
     if(ANDROID)
         # The above call to qt_set_common_target_properties() sets the symbol
         # visibility to hidden, but for Android, we need main() to not be hidden

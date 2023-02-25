@@ -45,10 +45,9 @@
         #include "private/qsslkey_p.h"
         #define TEST_CRYPTO
     #endif
-    // TLSTODO: find another solution, for now this code
-    // (OpenSSL specific) is a part of plugin, not in
-    // QtNetwork anymore.
-    //    #include "private/qsslsocket_openssl_symbols_p.h"
+    #ifndef QT_NO_OPENSSL
+        #include "../shared/qopenssl_symbols.h"
+    #endif
 #endif
 
 #if QT_CONFIG(ssl)
@@ -116,9 +115,11 @@ private:
     QString testDataDir;
 
     bool fileContainsUnsupportedEllipticCurve(const QString &fileName) const;
+    bool algorithmsSupported(const QString &fileName) const;
     QVector<QString> unsupportedCurves;
 
     bool isOpenSsl = false;
+    bool isOpenSslResolved = false;
     bool isSecureTransport = false;
     bool isSchannel = false;
 };
@@ -151,8 +152,17 @@ tst_QSslKey::tst_QSslKey()
     // Alas, we don't use network-private (and why?).
     const auto backendName = QSslSocket::activeBackend();
     isOpenSsl = backendName == QStringLiteral("openssl");
-    if (!isOpenSsl)
+
+    if (isOpenSsl) {
+#if !defined(QT_NO_OPENSSL) && defined(QT_BUILD_INTERNAL)
+        isOpenSslResolved = qt_auto_test_resolve_OpenSSL_symbols();
+#else
+        isOpenSslResolved = false; // not 'unused variable' anymore.
+#endif
+    } else {
         isSecureTransport = backendName == QStringLiteral("securetransport");
+    }
+
     if (!isOpenSsl && !isSecureTransport)
         isSchannel = backendName == QStringLiteral("schannel");
 #else
@@ -168,6 +178,34 @@ bool tst_QSslKey::fileContainsUnsupportedEllipticCurve(const QString &fileName) 
     }
     return false;
 }
+
+bool tst_QSslKey::algorithmsSupported(const QString &fileName) const
+{
+    if (isSchannel && fileName.contains("RC2-64")) // Schannel treats RC2 as 128 bit
+        return false;
+
+    if (isSchannel || isSecureTransport) {
+        // No AES support in the generic back-end, PKCS#12 algorithms not supported either.
+        return !(fileName.contains(QRegularExpression("-aes\\d\\d\\d-")) || fileName.contains("pkcs8-pkcs12"));
+    }
+
+#if OPENSSL_VERSION_MAJOR < 3
+    // If it's not built with OpenSSL or it's OpenSSL v < 3.
+    return true;
+#else
+    // OpenSSL v3 first introduced the notion of 'providers'. Many algorithms
+    // were moved into the 'legacy' provider. While they are still supported in theory,
+    // the 'legacy' provider is NOT loaded by default and we are not loading it either.
+    // Thus, some of the keys we are using in tst_QSslKey would fail the test. We
+    // have to filter them out.
+    const auto name = fileName.toLower();
+    if (name.contains("-des."))
+        return false;
+
+    return !name.contains("-rc2-") && !name.contains("-rc4-");
+#endif
+}
+
 
 void tst_QSslKey::initTestCase()
 {
@@ -237,17 +275,8 @@ void tst_QSslKey::createPlainTestRows(bool pemOnly)
         if (pemOnly && keyInfo.format != QSsl::EncodingFormat::Pem)
             continue;
 
-        if (isSchannel) {
-            if (keyInfo.fileInfo.fileName().contains("RC2-64"))
-                continue; // Schannel treats RC2 as 128 bit
-        }
-
-        if (isSchannel || isSecureTransport) {
-            if (keyInfo.fileInfo.fileName().contains(QRegularExpression("-aes\\d\\d\\d-")))
-                continue; // No AES support in the generic back-end
-            if (keyInfo.fileInfo.fileName().contains("pkcs8-pkcs12"))
-                continue; // The generic back-end doesn't support PKCS#12 algorithms
-        }
+        if (!algorithmsSupported(keyInfo.fileInfo.fileName()))
+            continue;
 
         QTest::newRow(keyInfo.fileInfo.fileName().toLatin1())
             << keyInfo.fileInfo.absoluteFilePath() << keyInfo.algorithm << keyInfo.type
@@ -289,13 +318,8 @@ void tst_QSslKey::constructorHandle()
 {
 #ifndef QT_BUILD_INTERNAL
     QSKIP("This test requires -developer-build.");
-#endif // previously, else, see if 0 below.
-
-// TLSTODO: OpenSSL-specific code and symbols are now
-// part of 'openssl' plugin, not in QtNetwork anymore.
-// For now - disabling.
-#if 0
-    if (!QSslSocket::supportsSsl())
+#else
+    if (!isOpenSslResolved)
         return;
 
     QFETCH(QString, absFilePath);
@@ -350,8 +374,7 @@ void tst_QSslKey::constructorHandle()
     QCOMPARE(key.type(), type);
     QCOMPARE(key.length(), length);
     QCOMPARE(q_EVP_PKEY_cmp(origin, handle), 1);
-
-#endif // if 0
+#endif
 }
 
 #endif // !QT_NO_OPENSSL
@@ -547,9 +570,15 @@ void tst_QSslKey::passphraseChecks_data()
     const QByteArray pass("123");
     const QByteArray aesPass("1234");
 
+#if OPENSSL_VERSION_MAJOR < 3
+    // DES and RC2 are not provided by default in OpenSSL v3.
+    // This part is for either non-OpenSSL build, or OpenSSL v < 3.x.
     QTest::newRow("DES") << QString(testDataDir + "rsa-with-passphrase-des.pem") << pass;
-    QTest::newRow("3DES") << QString(testDataDir + "rsa-with-passphrase-3des.pem") << pass;
     QTest::newRow("RC2") << QString(testDataDir + "rsa-with-passphrase-rc2.pem") << pass;
+#endif // OPENSSL_VERSION_MAJOR
+
+    QTest::newRow("3DES") << QString(testDataDir + "rsa-with-passphrase-3des.pem") << pass;
+
 #if defined(QT_NO_OPENSSL) || !defined(OPENSSL_NO_AES)
     QTest::newRow("AES128") << QString(testDataDir + "rsa-with-passphrase-aes128.pem") << aesPass;
     QTest::newRow("AES192") << QString(testDataDir + "rsa-with-passphrase-aes192.pem") << aesPass;
@@ -646,6 +675,9 @@ void tst_QSslKey::encrypt_data()
     QTest::addColumn<QByteArray>("iv");
 
     QByteArray iv("abcdefgh");
+#if OPENSSL_VERSION_MAJOR < 3
+    // Either non-OpenSSL build, or OpenSSL v < 3
+    // (with DES and other legacy algorithms available by default)
     QTest::newRow("DES-CBC, length 0")
         << Cipher::DesCbc << QByteArray("01234567")
         << QByteArray()
@@ -735,6 +767,7 @@ void tst_QSslKey::encrypt_data()
         << QByteArray(8, 'a')
         << QByteArray::fromHex("5AEC1A5B295660B02613454232F7DECE")
         << iv;
+#endif // OPENSSL_VERSION_MAJOR
 
 #if defined(QT_NO_OPENSSL) || !defined(OPENSSL_NO_AES)
     // AES needs a longer IV

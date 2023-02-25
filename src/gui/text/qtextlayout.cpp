@@ -1327,7 +1327,20 @@ void QTextLayout::drawCursor(QPainter *p, const QPointF &pos, int cursorPosition
     QPainter::CompositionMode origCompositionMode = p->compositionMode();
     if (p->paintEngine()->hasFeature(QPaintEngine::RasterOpModes))
         p->setCompositionMode(QPainter::RasterOp_NotDestination);
-    p->fillRect(QRectF(x, y, qreal(width), (base + cursorDescent).toReal()), p->pen().brush());
+    const QTransform &deviceTransform = p->deviceTransform();
+    const qreal xScale = deviceTransform.m11();
+    if (deviceTransform.type() != QTransform::TxScale || std::trunc(xScale) == xScale) {
+        p->fillRect(QRectF(x, y, qreal(width), (base + cursorDescent).toReal()), p->pen().brush());
+    } else {
+        // Ensure consistently rendered cursor width under fractional scaling
+        const QPen origPen = p->pen();
+        QPen pen(origPen.brush(), qRound(width * xScale), Qt::SolidLine, Qt::FlatCap);
+        pen.setCosmetic(true);
+        const qreal center = x + qreal(width) / 2;
+        p->setPen(pen);
+        p->drawLine(QPointF(center, y), QPointF(center, y + (base + cursorDescent).toReal()));
+        p->setPen(origPen);
+    }
     p->setCompositionMode(origCompositionMode);
     if (toggleAntialiasing)
         p->setRenderHint(QPainter::Antialiasing, false);
@@ -2504,7 +2517,7 @@ void QTextLine::draw(QPainter *painter, const QPointF &position) const
     draw_internal(painter, position, nullptr);
 }
 
-void QTextLine::draw_internal(QPainter *p, const QPointF &pos,
+void QTextLine::draw_internal(QPainter *p, const QPointF &origPos,
                               const QTextLayout::FormatRange *selection) const
 {
 #ifndef QT_NO_RAWFONT
@@ -2522,7 +2535,7 @@ void QTextLine::draw_internal(QPainter *p, const QPointF &pos,
             && selection->start + selection->length > line.from) {
 
             const qreal lineHeight = line.height().toReal();
-            QRectF r(pos.x() + line.x.toReal(), pos.y() + line.y.toReal(),
+            QRectF r(origPos.x() + line.x.toReal(), origPos.y() + line.y.toReal(),
                      lineHeight / 2, QFontMetrics(eng->font()).horizontalAdvance(QLatin1Char(' ')));
             setPenAndDrawBackground(p, QPen(), selection->format, r);
             p->setPen(pen);
@@ -2530,9 +2543,13 @@ void QTextLine::draw_internal(QPainter *p, const QPointF &pos,
         return;
     }
 
-    static QRectF maxFixedRect(QPointF(-QFIXED_MAX, -QFIXED_MAX), QPointF(QFIXED_MAX, QFIXED_MAX));
-    if (!maxFixedRect.contains(pos))
-        return;
+    static QRectF maxFixedRect(-QFIXED_MAX / 2, -QFIXED_MAX / 2, QFIXED_MAX, QFIXED_MAX);
+    const bool xlateToFixedRange = !maxFixedRect.contains(origPos);
+    QPointF pos;
+    if (Q_LIKELY(!xlateToFixedRange))
+        pos = origPos;
+    else
+        p->translate(origPos);
 
     QTextLineItemIterator iterator(eng, index, pos, selection);
     QFixed lineBase = line.base();
@@ -2724,6 +2741,9 @@ void QTextLine::draw_internal(QPainter *p, const QPointF &pos,
         }
     }
     eng->drawDecorations(p);
+
+    if (xlateToFixedRange)
+        p->translate(-origPos);
 
     if (eng->hasFormats())
         p->setPen(pen);

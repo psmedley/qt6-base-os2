@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -63,26 +63,27 @@ enum StrayCharacterMode {
 };
 
 // API note: this function can't process a number with more than 2.1 billion digits
-double qt_asciiToDouble(const char *num, qsizetype numLen, bool &ok, int &processed,
-                        StrayCharacterMode strayCharMode = TrailingJunkProhibited);
-void qt_doubleToAscii(double d, QLocaleData::DoubleForm form, int precision, char *buf, int bufSize,
+[[nodiscard]] double qt_asciiToDouble(const char *num, qsizetype numLen, bool &ok, int &processed,
+                                      StrayCharacterMode strayCharMode = TrailingJunkProhibited);
+void qt_doubleToAscii(double d, QLocaleData::DoubleForm form, int precision,
+                      char *buf, qsizetype bufSize,
                       bool &sign, int &length, int &decpt);
 
-QString qulltoa(qulonglong l, int base, const QStringView zero);
-Q_CORE_EXPORT QString qdtoa(qreal d, int *decpt, int *sign);
+[[nodiscard]] QString qulltoBasicLatin(qulonglong l, int base, bool negative);
+[[nodiscard]] QString qulltoa(qulonglong l, int base, const QStringView zero);
+[[nodiscard]] Q_CORE_EXPORT QString qdtoa(qreal d, int *decpt, int *sign);
+[[nodiscard]] QString qdtoBasicLatin(double d, QLocaleData::DoubleForm form,
+                                     int precision, bool uppercase);
+[[nodiscard]] QByteArray qdtoAscii(double d, QLocaleData::DoubleForm form,
+                                   int precision, bool uppercase);
 
-inline bool isZero(double d)
+[[nodiscard]] constexpr inline bool isZero(double d)
 {
-    uchar *ch = (uchar *)&d;
-    if (QSysInfo::ByteOrder == QSysInfo::BigEndian) {
-        return !(ch[0] & 0x7F || ch[1] || ch[2] || ch[3] || ch[4] || ch[5] || ch[6] || ch[7]);
-    } else {
-        return !(ch[7] & 0x7F || ch[6] || ch[5] || ch[4] || ch[3] || ch[2] || ch[1] || ch[0]);
-    }
+    return d == 0; // Amusingly, compilers do not grumble.
 }
 
 // Enough space for the digits before the decimal separator:
-inline int wholePartSpace(double d)
+[[nodiscard]] inline int wholePartSpace(double d)
 {
     Q_ASSERT(d >= 0); // caller should call qAbs() if needed
     // Optimize for numbers between -512k and 512k - otherwise, use the
@@ -92,30 +93,34 @@ inline int wholePartSpace(double d)
 
 // Returns code-point of same kind (UCS2 or UCS4) as zero; digit is 0 through 9
 template <typename UcsInt>
-inline UcsInt unicodeForDigit(uint digit, UcsInt zero)
+[[nodiscard]] inline UcsInt unicodeForDigit(uint digit, UcsInt zero)
 {
     // Must match QLocaleData::numericToCLocale()'s digit-digestion.
     Q_ASSERT(digit < 10);
     if (!digit)
         return zero;
 
-    // See QTBUG-85409: Suzhou's digits are U+3007, U+2021, ..., U+3029
+    // See QTBUG-85409: Suzhou's digits are U+3007, U+3021, ..., U+3029
     if (zero == u'\u3007')
         return u'\u3020' + digit;
-    // At CLDR 36.1, no other number system's digits were discontinuous.
+    // In util/locale_database/ldml.py, LocaleScanner.numericData() asserts no
+    // other number system in CLDR has discontinuous digits.
 
     return zero + digit;
 }
 
-Q_CORE_EXPORT double qstrntod(const char *s00, qsizetype len, char const **se, bool *ok);
-inline double qstrtod(const char *s00, char const **se, bool *ok)
+[[nodiscard]] Q_CORE_EXPORT double qstrntod(const char *s00, qsizetype len,
+                                            char const **se, bool *ok);
+[[nodiscard]] inline double qstrtod(const char *s00, char const **se, bool *ok)
 {
     qsizetype len = qsizetype(strlen(s00));
     return qstrntod(s00, len, se, ok);
 }
 
-qlonglong qstrtoll(const char *nptr, const char **endptr, int base, bool *ok);
-qulonglong qstrtoull(const char *nptr, const char **endptr, int base, bool *ok);
+[[nodiscard]] qlonglong qstrntoll(const char *nptr, qsizetype size, const char **endptr,
+                                  int base, bool *ok);
+[[nodiscard]] qulonglong qstrntoull(const char *nptr, qsizetype size, const char **endptr,
+                                    int base, bool *ok);
 
 QT_END_NAMESPACE
 

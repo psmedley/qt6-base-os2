@@ -66,6 +66,7 @@ private slots:
     void stackWidgetOpaqueChildIsVisible();
     void offscreen();
     void offscreenThenOnscreen();
+    void paintWhileHidden();
 
 #ifdef QT_BUILD_INTERNAL
     void staticTextDanglingPointer();
@@ -152,6 +153,9 @@ void tst_QOpenGLWidget::clearAndGrab()
 
 void tst_QOpenGLWidget::clearAndResizeAndGrab()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
+#endif
     QScopedPointer<QOpenGLWidget> w(new ClearWidget(0, 640, 480));
     w->resize(640, 480);
     w->show();
@@ -272,6 +276,9 @@ void tst_QOpenGLWidget::reparentToAlreadyCreated()
 
 void tst_QOpenGLWidget::reparentToNotYetCreated()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
+#endif
     QWidget w1;
     PainterWidget *glw = new PainterWidget(&w1);
     w1.resize(640, 480);
@@ -346,6 +353,9 @@ void CountingGraphicsView::drawForeground(QPainter *, const QRectF &)
 
 void tst_QOpenGLWidget::asViewport()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
+#endif
     // Have a QGraphicsView with a QOpenGLWidget as its viewport.
     QGraphicsScene scene;
     scene.addItem(new QGraphicsRectItem(10, 10, 100, 100));
@@ -394,6 +404,9 @@ public:
 
 void tst_QOpenGLWidget::requestUpdate()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
+#endif
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This fails. Figure out why.");
 
@@ -421,6 +434,9 @@ public:
 
 void tst_QOpenGLWidget::fboRedirect()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
+#endif
     FboCheckWidget w;
     w.resize(640, 480);
     w.show();
@@ -436,6 +452,9 @@ void tst_QOpenGLWidget::fboRedirect()
 
 void tst_QOpenGLWidget::showHide()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
+#endif
     QScopedPointer<ClearWidget> w(new ClearWidget(0, 800, 600));
     w->resize(800, 600);
     w->show();
@@ -462,6 +481,9 @@ void tst_QOpenGLWidget::showHide()
 
 void tst_QOpenGLWidget::nativeWindow()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
+#endif
     QScopedPointer<ClearWidget> w(new ClearWidget(0, 800, 600));
     w->resize(800, 600);
     w->show();
@@ -585,6 +607,9 @@ void tst_QOpenGLWidget::stackWidgetOpaqueChildIsVisible()
     QSKIP("QScreen::grabWindow() doesn't work properly on OSX HighDPI screen: QTBUG-46803");
     return;
 #endif
+#ifdef Q_OS_ANDROID
+    QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
+#endif
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This fails. Figure out why.");
     if (QGuiApplication::platformName().startsWith(QLatin1String("offscreen"), Qt::CaseInsensitive))
@@ -671,6 +696,9 @@ void tst_QOpenGLWidget::offscreen()
 
 void tst_QOpenGLWidget::offscreenThenOnscreen()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
+#endif
     QScopedPointer<ClearWidget> w(new ClearWidget(0, 800, 600));
     w->resize(800, 600);
 
@@ -692,6 +720,33 @@ void tst_QOpenGLWidget::offscreenThenOnscreen()
     QCOMPARE(image.width(), w->width());
     QCOMPARE(image.height(), w->height());
     QVERIFY(image.pixel(30, 40) == qRgb(0, 0, 255));
+}
+
+void tst_QOpenGLWidget::paintWhileHidden()
+{
+#ifdef Q_OS_ANDROID
+    QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
+#endif
+    QScopedPointer<QWidget> tlw(new QWidget);
+    tlw->resize(640, 480);
+
+    ClearWidget *w = new ClearWidget(0, 640, 480);
+    w->setParent(tlw.data());
+    w->setClearColor(0, 0, 1);
+
+    tlw->show();
+    QVERIFY(QTest::qWaitForWindowExposed(tlw.data()));
+
+    // QTBUG-101620: Now make visible=false and call update and see if we get to
+    // paintEvent/paintGL eventually, to ensure the updating of the texture is
+    // not optimized permanently away even though there is no composition
+    // on-screen at the point when update() is called.
+
+    w->setVisible(false);
+    w->m_paintCalled = 0;
+    w->update();
+    w->setVisible(true);
+    QTRY_VERIFY(w->m_paintCalled > 0);
 }
 
 class StaticTextPainterWidget : public QOpenGLWidget

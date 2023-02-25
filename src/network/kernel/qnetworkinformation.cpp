@@ -417,6 +417,7 @@ QNetworkInformationBackendFactory::~QNetworkInformationBackendFactory()
 
 /*!
     \class QNetworkInformation
+    \inmodule QtNetwork
     \since 6.1
     \brief QNetworkInformation exposes various network information
     through native backends.
@@ -451,6 +452,17 @@ QNetworkInformationBackendFactory::~QNetworkInformationBackendFactory()
         If the plugin supports this feature then the \c isBehindCaptivePortal
         property will provide useful results. Otherwise it will always return
         \c{false}.
+
+    \value TransportMedium
+        If the plugin supports this feature then the \c transportMedium
+        property will provide useful results. Otherwise it will always return
+        \c{TransportMedium::Unknown}.
+        See also QNetworkInformation::TransportMedium.
+
+    \value Metered
+        If the plugin supports this feature then the \c isMetered
+        property will provide useful results. Otherwise it will always return
+        \c{false}.
 */
 
 /*!
@@ -477,16 +489,45 @@ QNetworkInformationBackendFactory::~QNetworkInformationBackendFactory()
 */
 
 /*!
+    \enum QNetworkInformation::TransportMedium
+    \since 6.3
+
+    Lists the currently recognized media with which one can connect to the
+    internet.
+
+    \value Unknown
+        Returned if either the OS reports no active medium, the active medium is
+        not recognized by Qt, or the TransportMedium feature is not supported.
+    \value Ethernet
+        Indicates that the currently active connection is using ethernet.
+        Note: This value may also be returned when Windows is connected to a
+        Bluetooth personal area network.
+    \value Cellular
+        Indicates that the currently active connection is using a cellular
+        network.
+    \value WiFi
+        Indicates that the currently active connection is using Wi-Fi.
+    \value Bluetooth
+        Indicates that the currently active connection is connected using
+        Bluetooth.
+
+    \sa QNetworkInformation::transportMedium
+*/
+
+/*!
     \internal ctor
 */
 QNetworkInformation::QNetworkInformation(QNetworkInformationBackend *backend)
     : QObject(*(new QNetworkInformationPrivate(backend)))
 {
     connect(backend, &QNetworkInformationBackend::reachabilityChanged, this,
-            [this]() { emit reachabilityChanged(d_func()->backend->reachability()); });
-    connect(backend, &QNetworkInformationBackend::behindCaptivePortalChanged, this, [this]() {
-        emit isBehindCaptivePortalChanged(d_func()->backend->behindCaptivePortal());
-    });
+            &QNetworkInformation::reachabilityChanged);
+    connect(backend, &QNetworkInformationBackend::behindCaptivePortalChanged, this,
+            &QNetworkInformation::isBehindCaptivePortalChanged);
+    connect(backend, &QNetworkInformationBackend::transportMediumChanged, this,
+            &QNetworkInformation::transportMediumChanged);
+    connect(backend, &QNetworkInformationBackend::isMeteredChanged, this,
+           &QNetworkInformation::isMeteredChanged);
 }
 
 /*!
@@ -530,6 +571,39 @@ bool QNetworkInformation::isBehindCaptivePortal() const
 }
 
 /*!
+    \property QNetworkInformation::transportMedium
+    \brief The currently active transport medium for the application
+    \since 6.3
+
+    This property returns the currently active transport medium for the
+    application, on operating systems where such information is available.
+
+    When the current transport medium changes a signal is emitted, this can,
+    for instance, occur when a user leaves the range of a WiFi network, unplugs
+    their ethernet cable or enables Airplane mode.
+*/
+QNetworkInformation::TransportMedium QNetworkInformation::transportMedium() const
+{
+    return d_func()->backend->transportMedium();
+}
+
+/*!
+    \property QNetworkInformation::isMetered
+    \brief Check if the current connection is metered
+    \since 6.3
+
+    This property returns whether the current connection is (known to be)
+    metered or not. You can use this as a guiding factor to decide whether your
+    application should perform certain network requests or uploads.
+    For instance, you may not want to upload logs or diagnostics while this
+    property is \c true.
+*/
+bool QNetworkInformation::isMetered() const
+{
+    return d_func()->backend->isMetered();
+}
+
+/*!
     Returns the name of the currently loaded backend.
 */
 QString QNetworkInformation::backendName() const
@@ -547,11 +621,72 @@ bool QNetworkInformation::supports(Features features) const
 }
 
 /*!
+    \since 6.3
+
+    Returns all the supported features of the current backend.
+*/
+QNetworkInformation::Features QNetworkInformation::supportedFeatures() const
+{
+    return d_func()->backend->featuresSupported();
+}
+
+/*!
+    \since 6.3
+
+    Attempts to load the platform-default backend.
+
+    This platform-to-plugin mapping is as follows:
+
+    \table
+    \header
+        \li Platform
+        \li Plugin-name
+    \row
+        \li Windows
+        \li networklistmanager
+    \row
+        \li Apple (macOS/iOS)
+        \li scnetworkreachability
+    \row
+        \li Android
+        \li android
+    \row
+        \li Linux
+        \li networkmanager
+    \endtable
+
+    This function is provided for convenience where the default for a given
+    platform is good enough. If you are not using the default plugins you must
+    use one of the other load() overloads.
+
+    Returns \c true if it managed to load the backend or if it was already
+    loaded. Returns \c false otherwise.
+
+    \sa instance(), load()
+*/
+bool QNetworkInformation::loadDefaultBackend()
+{
+    int index = -1;
+#ifdef Q_OS_WIN
+    index = QNetworkInformationBackend::PluginNamesWindowsIndex;
+#elif defined(Q_OS_DARWIN)
+    index = QNetworkInformationBackend::PluginNamesAppleIndex;
+#elif defined(Q_OS_ANDROID)
+    index = QNetworkInformationBackend::PluginNamesAndroidIndex;
+#elif defined(Q_OS_LINUX)
+    index = QNetworkInformationBackend::PluginNamesLinuxIndex;
+#endif
+    if (index == -1)
+        return false;
+    return load(QNetworkInformationBackend::PluginNames[index]);
+}
+
+/*!
     Attempts to load a backend whose name matches \a backend
     (case insensitively).
 
     Returns \c true if it managed to load the requested backend or
-    if it was already loaded. Returns \c false otherwise
+    if it was already loaded. Returns \c false otherwise.
 
     \sa instance
 */
@@ -565,7 +700,7 @@ bool QNetworkInformation::load(QStringView backend)
     Load a backend which supports \a features.
 
     Returns \c true if it managed to load the requested backend or
-    if it was already loaded. Returns \c false otherwise
+    if it was already loaded. Returns \c false otherwise.
 
     \sa instance
 */

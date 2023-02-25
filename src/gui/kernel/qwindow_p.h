@@ -62,8 +62,6 @@
 
 QT_BEGIN_NAMESPACE
 
-#define QWINDOWSIZE_MAX ((1<<24)-1)
-
 class Q_GUI_EXPORT QWindowPrivate : public QObjectPrivate
 {
     Q_DECLARE_PUBLIC(QWindow)
@@ -75,15 +73,11 @@ public:
         WindowFrameExclusive
     };
 
-    QWindowPrivate()
-        : QObjectPrivate()
-    {
-        isWindow = true;
-    }
+    QWindowPrivate();
+    ~QWindowPrivate() override;
 
     void init(QScreen *targetScreen = nullptr);
 
-    void maybeQuitOnLastWindowClosed();
 #ifndef QT_NO_CURSOR
     void setCursor(const QCursor *c = nullptr);
     bool applyCursor();
@@ -120,6 +114,9 @@ public:
     virtual QRectF closestAcceptableGeometry(const QRectF &rect) const;
 
     virtual void processSafeAreaMarginsChanged() {}
+
+    virtual bool participatesInLastWindowClosed() const;
+    virtual bool treatAsVisible() const;
 
     bool isPopup() const { return (windowFlags & Qt::WindowType_Mask) == Qt::Popup; }
     void setAutomaticPositionAndResizeEnabled(bool a)

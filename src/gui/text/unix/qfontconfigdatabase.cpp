@@ -276,7 +276,12 @@ static const char specialLanguages[][6] = {
     "", // Chorasmian
     "", // DivesAkuru
     "", // KhitanSmallScript
-    "" // Yezidi
+    "", // Yezidi
+    "", // CyproMinoan
+    "", // OldUyghur
+    "", // Tangsa
+    "", // Toto
+    "", // Vithkuqi
 };
 static_assert(sizeof specialLanguages / sizeof *specialLanguages == QChar::ScriptCount);
 
@@ -588,6 +593,8 @@ void QFontconfigDatabase::populateFontDatabase()
         fonts = FcFontList(nullptr, pattern, os);
         FcObjectSetDestroy(os);
         FcPatternDestroy(pattern);
+        if (!fonts)
+            return;
     }
 
     for (int i = 0; i < fonts->nfont; i++)
@@ -810,8 +817,7 @@ QStringList QFontconfigDatabase::fallbacksForFamily(const QString &family, QFont
     FcPatternDestroy(pattern);
 
     if (fontSet) {
-        QDuplicateTracker<QString> duplicates;
-        duplicates.reserve(fontSet->nfont + 1);
+        QDuplicateTracker<QString> duplicates(fontSet->nfont + 1);
         (void)duplicates.hasSeen(family.toCaseFolded());
         for (int i = 0; i < fontSet->nfont; i++) {
             FcChar8 *value = nullptr;

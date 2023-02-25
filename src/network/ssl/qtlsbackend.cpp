@@ -52,6 +52,7 @@
 
 #include <QtCore/private/qfactoryloader_p.h>
 
+#include "QtCore/qapplicationstatic.h"
 #include <QtCore/qbytearray.h>
 #include <QtCore/qmutex.h>
 
@@ -60,8 +61,8 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
-                          (QTlsBackend_iid, QStringLiteral("/tls")))
+Q_APPLICATION_STATIC(QFactoryLoader, loader, QTlsBackend_iid,
+                     QStringLiteral("/tls"))
 
 namespace {
 
@@ -92,7 +93,7 @@ public:
 
         static QBasicMutex mutex;
         const QMutexLocker locker(&mutex);
-        if (loaded)
+        if (backends.size())
             return true;
 
 #if QT_CONFIG(library)
@@ -102,7 +103,7 @@ public:
         while (loader->instance(index))
             ++index;
 
-        return loaded = true;
+        return true;
     }
 
     QList<QString> backendNames()
@@ -139,7 +140,6 @@ public:
 private:
     std::vector<QTlsBackend *> backends;
     QMutex collectionMutex;
-    bool loaded = false;
 };
 
 } // Unnamed namespace
@@ -202,6 +202,12 @@ QTlsBackend::QTlsBackend()
 {
     if (backends())
         backends->addBackend(this);
+
+    if (QCoreApplication::instance()) {
+        connect(QCoreApplication::instance(), &QCoreApplication::destroyed, this, [this] {
+            delete this;
+        });
+    }
 }
 
 /*!
@@ -805,17 +811,26 @@ QSslCipher QTlsBackend::createCiphersuite(const QString &descriptionOneLine, int
         ciph.d->isNull = false;
         ciph.d->name = descriptionList.at(0).toString();
 
-        QString protoString = descriptionList.at(1).toString();
-        ciph.d->protocolString = protoString;
+        QStringView protoString = descriptionList.at(1);
+        ciph.d->protocolString = protoString.toString();
         ciph.d->protocol = QSsl::UnknownProtocol;
-        if (protoString == QLatin1String("TLSv1"))
-            ciph.d->protocol = QSsl::TlsV1_0;
-        else if (protoString == QLatin1String("TLSv1.1"))
-            ciph.d->protocol = QSsl::TlsV1_1;
-        else if (protoString == QLatin1String("TLSv1.2"))
-            ciph.d->protocol = QSsl::TlsV1_2;
-        else if (protoString == QLatin1String("TLSv1.3"))
-            ciph.d->protocol = QSsl::TlsV1_3;
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
+        if (protoString.startsWith(u"TLSv1")) {
+            QStringView tail = protoString.sliced(5);
+            if (tail.startsWith(u'.')) {
+                tail = tail.sliced(1);
+                if (tail == u"3")
+                    ciph.d->protocol = QSsl::TlsV1_3;
+                else if (tail == u"2")
+                    ciph.d->protocol = QSsl::TlsV1_2;
+                else if (tail == u"1")
+                    ciph.d->protocol = QSsl::TlsV1_1;
+            } else if (tail.isEmpty()) {
+                ciph.d->protocol = QSsl::TlsV1_0;
+            }
+        }
+QT_WARNING_POP
 
         if (descriptionList.at(2).startsWith(QLatin1String("Kx=")))
             ciph.d->keyExchangeMethod = descriptionList.at(2).mid(3).toString();
@@ -1860,7 +1875,7 @@ TlsCryptograph::~TlsCryptograph() = default;
 
     \sa sslContext()
 */
-void TlsCryptograph::checkSettingSslContext(QSharedPointer<QSslContext> tlsContext)
+void TlsCryptograph::checkSettingSslContext(std::shared_ptr<QSslContext> tlsContext)
 {
     Q_UNUSED(tlsContext);
 }
@@ -1873,7 +1888,7 @@ void TlsCryptograph::checkSettingSslContext(QSharedPointer<QSslContext> tlsConte
 
     \sa checkSettingSslContext()
 */
-QSharedPointer<QSslContext> TlsCryptograph::sslContext() const
+std::shared_ptr<QSslContext> TlsCryptograph::sslContext() const
 {
     return {};
 }

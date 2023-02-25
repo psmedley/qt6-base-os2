@@ -969,8 +969,8 @@ inline uint QXmlStreamReaderPrivate::peekChar()
   */
 bool QXmlStreamReaderPrivate::scanUntil(const char *str, short tokenToInject)
 {
-    int pos = textBuffer.size();
-    int oldLineNumber = lineNumber;
+    const qsizetype pos = textBuffer.size();
+    const auto oldLineNumber = lineNumber;
 
     uint c;
     while ((c = getChar()) != StreamEOF) {
@@ -1017,7 +1017,7 @@ bool QXmlStreamReaderPrivate::scanUntil(const char *str, short tokenToInject)
 
 bool QXmlStreamReaderPrivate::scanString(const char *str, short tokenToInject, bool requireSpace)
 {
-    int n = 0;
+    qsizetype n = 0;
     while (str[n]) {
         uint c = getChar();
         if (c != ushort(str[n])) {
@@ -1030,12 +1030,11 @@ bool QXmlStreamReaderPrivate::scanString(const char *str, short tokenToInject, b
         }
         ++n;
     }
-    for (int i = 0; i < n; ++i)
-        textBuffer += QChar(ushort(str[i]));
+    textBuffer += QLatin1String(str, n);
     if (requireSpace) {
-        int s = fastScanSpace();
+        const qsizetype s = fastScanSpace();
         if (!s || atEnd) {
-            int pos = textBuffer.size() - n - s;
+            qsizetype pos = textBuffer.size() - n - s;
             putString(textBuffer, pos);
             textBuffer.resize(pos);
             return false;
@@ -1145,9 +1144,9 @@ bool QXmlStreamReaderPrivate::scanAttType()
  encountered.
 
  */
-inline int QXmlStreamReaderPrivate::fastScanLiteralContent()
+inline qsizetype QXmlStreamReaderPrivate::fastScanLiteralContent()
 {
-    int n = 0;
+    qsizetype n = 0;
     uint c;
     while ((c = getChar()) != StreamEOF) {
         switch (ushort(c)) {
@@ -1195,9 +1194,9 @@ inline int QXmlStreamReaderPrivate::fastScanLiteralContent()
     return n;
 }
 
-inline int QXmlStreamReaderPrivate::fastScanSpace()
+inline qsizetype QXmlStreamReaderPrivate::fastScanSpace()
 {
-    int n = 0;
+    qsizetype n = 0;
     uint c;
     while ((c = getChar()) != StreamEOF) {
         switch (c) {
@@ -1228,9 +1227,9 @@ inline int QXmlStreamReaderPrivate::fastScanSpace()
   Used for text nodes essentially. That is, characters appearing
   inside elements.
  */
-inline int QXmlStreamReaderPrivate::fastScanContentCharList()
+inline qsizetype QXmlStreamReaderPrivate::fastScanContentCharList()
 {
-    int n = 0;
+    qsizetype n = 0;
     uint c;
     while ((c = getChar()) != StreamEOF) {
         switch (ushort(c)) {
@@ -1241,7 +1240,7 @@ inline int QXmlStreamReaderPrivate::fastScanContentCharList()
             return n;
         case ']': {
             isWhitespace = false;
-            int pos = textBuffer.size();
+            const qsizetype pos = textBuffer.size();
             textBuffer += QChar(ushort(c));
             ++n;
             while ((c = getChar()) == ']') {
@@ -1292,14 +1291,14 @@ inline int QXmlStreamReaderPrivate::fastScanContentCharList()
     return n;
 }
 
-inline int QXmlStreamReaderPrivate::fastScanName(int *prefix)
+inline qsizetype QXmlStreamReaderPrivate::fastScanName(qint16 *prefix)
 {
-    int n = 0;
+    qsizetype n = 0;
     uint c;
     while ((c = getChar()) != StreamEOF) {
         if (n >= 4096) {
             // This is too long to be a sensible name, and
-            // can exhaust memory
+            // can exhaust memory, or the range of decltype(*prefix)
             return 0;
         }
         switch (c) {
@@ -1338,7 +1337,7 @@ inline int QXmlStreamReaderPrivate::fastScanName(int *prefix)
         case ':':
             if (prefix) {
                 if (*prefix == 0) {
-                    *prefix = n+2;
+                    *prefix = qint16(n + 2);
                 } else { // only one colon allowed according to the namespace spec.
                     putChar(c);
                     return n;
@@ -1356,7 +1355,7 @@ inline int QXmlStreamReaderPrivate::fastScanName(int *prefix)
 
     if (prefix)
         *prefix = 0;
-    int pos = textBuffer.size() - n;
+    qsizetype pos = textBuffer.size() - n;
     putString(textBuffer, pos);
     textBuffer.resize(pos);
     return 0;
@@ -1413,9 +1412,9 @@ static inline NameChar fastDetermineNameChar(QChar ch)
     return NotName;
 }
 
-inline int QXmlStreamReaderPrivate::fastScanNMTOKEN()
+inline qsizetype QXmlStreamReaderPrivate::fastScanNMTOKEN()
 {
-    int n = 0;
+    qsizetype n = 0;
     uint c;
     while ((c = getChar()) != StreamEOF) {
         if (fastDetermineNameChar(QChar(c)) == NotName) {
@@ -1427,7 +1426,7 @@ inline int QXmlStreamReaderPrivate::fastScanNMTOKEN()
         }
     }
 
-    int pos = textBuffer.size() - n;
+    qsizetype pos = textBuffer.size() - n;
     putString(textBuffer, pos);
     textBuffer.resize(pos);
 
@@ -1479,7 +1478,7 @@ void QXmlStreamReaderPrivate::putReplacementInAttributeValue(QStringView s)
 
 uint QXmlStreamReaderPrivate::getChar_helper()
 {
-    const int BUFFER_SIZE = 8192;
+    constexpr qsizetype BUFFER_SIZE = 8192;
     characterOffset += readBufferPos;
     readBufferPos = 0;
     if (readBuffer.size())
@@ -1720,7 +1719,7 @@ void QXmlStreamReaderPrivate::checkPublicLiteral(QStringView publicId)
 
     const ushort *data = reinterpret_cast<const ushort *>(publicId.constData());
     uchar c = 0;
-    int i;
+    qsizetype i;
     for (i = publicId.size() - 1; i >= 0; --i) {
         if (data[i] < 256)
             switch ((c = data[i])) {
@@ -2307,7 +2306,7 @@ QXmlStreamAttribute::QXmlStreamAttribute(const QString &namespaceUri, const QStr
  */
 QXmlStreamAttribute::QXmlStreamAttribute(const QString &qualifiedName, const QString &value)
 {
-    int colon = qualifiedName.indexOf(QLatin1Char(':'));
+    qsizetype colon = qualifiedName.indexOf(u':');
     m_name = qualifiedName.mid(colon + 1);
     m_qualifiedName = qualifiedName;
     m_value = value;
@@ -2857,7 +2856,7 @@ public:
     void write(const XmlStringRef &);
     void write(const QString &);
     void writeEscaped(const QString &, bool escapeWhitespace = false);
-    void write(const char *s, int len);
+    void write(const char *s, qsizetype len);
     template <int N> void write(const char (&s)[N]) { write(s, N - 1); }
     bool finishStartElement(bool contents = true);
     void writeStartElement(const QString &namespaceUri, const QString &name);
@@ -2945,8 +2944,7 @@ void QXmlStreamWriterPrivate::writeEscaped(const QString &s, bool escapeWhitespa
 {
     QString escaped;
     escaped.reserve(s.size());
-    for ( int i = 0; i < s.size(); ++i ) {
-        QChar c = s.at(i);
+    for (QChar c : s) {
         switch (c.unicode()) {
         case '<':
             escaped.append(QLatin1String("&lt;"));
@@ -2994,7 +2992,7 @@ void QXmlStreamWriterPrivate::writeEscaped(const QString &s, bool escapeWhitespa
 }
 
 // Writes utf8
-void QXmlStreamWriterPrivate::write(const char *s, int len)
+void QXmlStreamWriterPrivate::write(const char *s, qsizetype len)
 {
     if (device) {
         if (hasIoError)
@@ -3724,9 +3722,8 @@ void QXmlStreamWriter::writeCurrentToken(const QXmlStreamReader &reader)
         break;
     case QXmlStreamReader::StartElement: {
         writeStartElement(reader.namespaceUri().toString(), reader.name().toString());
-        QXmlStreamNamespaceDeclarations namespaceDeclarations = reader.namespaceDeclarations();
-        for (int i = 0; i < namespaceDeclarations.size(); ++i) {
-            const QXmlStreamNamespaceDeclaration &namespaceDeclaration = namespaceDeclarations.at(i);
+        const QXmlStreamNamespaceDeclarations decls = reader.namespaceDeclarations();
+        for (const auto &namespaceDeclaration : decls) {
             writeNamespace(namespaceDeclaration.namespaceUri().toString(),
                            namespaceDeclaration.prefix().toString());
         }

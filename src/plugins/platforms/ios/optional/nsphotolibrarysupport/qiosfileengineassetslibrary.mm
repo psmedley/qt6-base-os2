@@ -353,8 +353,11 @@ ALAsset *QIOSFileEngineAssetsLibrary::loadAsset() const
     return m_data->m_asset;
 }
 
-bool QIOSFileEngineAssetsLibrary::open(QIODevice::OpenMode openMode)
+bool QIOSFileEngineAssetsLibrary::open(QIODevice::OpenMode openMode,
+                                       std::optional<QFile::Permissions> permissions)
 {
+    Q_UNUSED(permissions);
+
     if (openMode & (QIODevice::WriteOnly | QIODevice::Text))
         return false;
     return loadAsset();
@@ -454,11 +457,6 @@ void QIOSFileEngineAssetsLibrary::setFileName(const QString &file)
         m_assetUrl = QLatin1String("assets-library://");
     else
         m_assetUrl = QLatin1String("assets-library:/") + file.mid(index);
-}
-
-QStringList QIOSFileEngineAssetsLibrary::entryList(QDir::Filters filters, const QStringList &filterNames) const
-{
-    return QAbstractFileEngine::entryList(filters, filterNames);
 }
 
 #ifndef QT_NO_FILESYSTEMITERATOR

@@ -34,6 +34,7 @@
 #include <QFile>
 #include <QList>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QTextStream>
 #include <QTest>
 #include <QtXml>
@@ -85,8 +86,10 @@ private slots:
     void invalidQualifiedName();
     void invalidCharData_data();
     void invalidCharData();
+    void nonBMPCharacters();
 
     void roundTripAttributes() const;
+    void roundTripCDATA() const;
     void normalizeEndOfLine() const;
     void normalizeAttributes() const;
     void serializeWeirdEOL() const;
@@ -117,6 +120,8 @@ private slots:
     void cloneDTD_QTBUG8398() const;
     void DTDNotationDecl();
     void DTDEntityDecl();
+    void DTDInternalSubset() const;
+    void DTDInternalSubset_data() const;
     void QTBUG49113_dontCrashWithNegativeIndex() const;
 
     void cleanupTestCase() const;
@@ -1364,6 +1369,10 @@ void tst_QDom::invalidCharData_data()
     QTest::newRow( "f<o&o" )   << QString("f<o&o")     << true  << true  << true  << QString("f<o&o");
     QTest::newRow( "empty" )   << QString()            << true  << true  << true  << QString();
     QTest::newRow("f\\x07o\\x02")<< QString("f\x07o\x02")<< true  << true  << false << QString("fo");
+
+    const QChar pair[2] = { QChar(0xdc00), QChar(0xe000) };
+    QString invalid(pair, 2);
+    QTest::newRow("\\xdc00\\xe000") << invalid << true << true << false << invalid.last(1);
 }
 
 void tst_QDom::invalidCharData()
@@ -1407,6 +1416,22 @@ void tst_QDom::invalidCharData()
     }
 }
 
+void tst_QDom::nonBMPCharacters()
+{
+    const auto invalidDataPolicy = QDomImplementation::invalidDataPolicy();
+    auto resetInvalidDataPolicy = qScopeGuard(
+            [invalidDataPolicy] { QDomImplementation::setInvalidDataPolicy(invalidDataPolicy); });
+    QDomImplementation::setInvalidDataPolicy(QDomImplementation::DropInvalidChars);
+
+    const QString input = u"<text>Supplementary Plane: 𝄞 😂 🀄 🀶 🃪 🃋</text>"_qs;
+
+    QString errorMsg;
+    QDomDocument doc;
+    doc.setContent(input, &errorMsg);
+    QVERIFY(errorMsg.isEmpty());
+    QCOMPARE(doc.toString(-1), input);
+}
+
 void tst_QDom::roundTripAttributes() const
 {
     /* Create an attribute via the QDom API with weird whitespace content. */
@@ -1439,6 +1464,17 @@ void tst_QDom::roundTripAttributes() const
 
     const QByteArray expected("<localName xmlns=\"\" attr=\"   &#xd;&#xa;&#x9;  \"/>\n");
     QCOMPARE(QString::fromLatin1(serialized.constData()), QString::fromLatin1(expected.constData()));
+}
+
+void tst_QDom::roundTripCDATA() const
+{
+    const QString input = u"<?xml version='1.0' encoding='UTF-8'?>\n"
+                          "<content><![CDATA[]]></content>\n"_qs;
+    QString errorMsg;
+    QDomDocument doc;
+    QVERIFY(doc.setContent(input, false, &errorMsg));
+    QVERIFY(errorMsg.isEmpty());
+    QCOMPARE(doc.toString(), input);
 }
 
 void tst_QDom::normalizeEndOfLine() const
@@ -1929,7 +1965,7 @@ void tst_QDom::setContentUnopenedQIODevice() const
 
     QTest::ignoreMessage(QtWarningMsg,
                          "QDomDocument called with unopened QIODevice. "
-                         "This will not be supported in future Qt versions");
+                         "This will not be supported in future Qt versions.");
 
     // Note: the check below is expected to fail in Qt 7.
     // Fix the test and remove the obsolete code from setContent().
@@ -2031,6 +2067,70 @@ void tst_QDom::QTBUG49113_dontCrashWithNegativeIndex() const
     QDomElement elem = doc.appendChild(doc.createElement("root")).toElement();
     QDomNode node = elem.attributes().item(-1);
     QVERIFY(node.isNull());
+}
+
+void tst_QDom::DTDInternalSubset() const
+{
+    QFETCH( QString, doc );
+    QFETCH( QString, internalSubset );
+    QXmlStreamReader reader(doc);
+    QDomDocument document;
+    QVERIFY(document.setContent(&reader, true));
+
+    QCOMPARE(document.doctype().internalSubset(), internalSubset);
+}
+
+void tst_QDom::DTDInternalSubset_data() const
+{
+    QTest::addColumn<QString>("doc");
+    QTest::addColumn<QString>("internalSubset");
+
+    QTest::newRow("data1") << "<?xml version='1.0'?>\n"
+                              "<!DOCTYPE note SYSTEM '/[abcd].dtd'>\n"
+                              "<note/>\n"
+                           << "" ;
+
+    QTest::newRow("data2") << "<?xml version='1.0'?>\n"
+                              "<!DOCTYPE note PUBLIC '-/freedesktop' 'https://[abcd].dtd'>\n"
+                              "<note/>\n"
+                           << "" ;
+
+    const QString internalSubset0(
+                "<!-- open brackets comment [ -->\n"
+                "<!-- colse brackets comment ] -->\n"
+                );
+    QTest::newRow("data3") << "<?xml version='1.0'?>\n"
+                              "<!DOCTYPE note ["
+                              + internalSubset0 +
+                              "]>\n"
+                              "<note/>\n"
+                           << internalSubset0;
+
+    const QString internalSubset1(
+                "<!ENTITY obra '['>\n"
+                "<!ENTITY cbra ']'>\n"
+                );
+    QTest::newRow("data4") << "<?xml version='1.0'?>\n"
+                              "<!DOCTYPE note ["
+                              + internalSubset1 +
+                              "]>\n"
+                              "<note/>\n"
+                           << internalSubset1;
+
+    QTest::newRow("data5") << "<?xml version='1.0'?>\n"
+          "<!DOCTYPE note  PUBLIC '-/freedesktop' 'https://[abcd].dtd' ["
+          + internalSubset0
+          + "]>\n"
+          "<note/>\n"
+       << internalSubset0;
+
+    QTest::newRow("data6") << "<?xml version='1.0'?>\n"
+          "<!DOCTYPE note  PUBLIC '-/freedesktop' "
+            "'2001:db8:130F:0000:0000:09C0:876A:130B://[abcd].dtd' ["
+          + internalSubset0
+          + "]>\n"
+          "<note/>\n"
+       << internalSubset0;
 }
 
 QTEST_MAIN(tst_QDom)

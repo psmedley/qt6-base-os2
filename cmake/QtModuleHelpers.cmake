@@ -12,7 +12,9 @@ macro(qt_internal_get_internal_add_module_keywords option_args single_args multi
         NO_CONFIG_HEADER_FILE
         NO_ADDITIONAL_TARGET_INFO
         NO_GENERATE_METATYPES
+        GENERATE_CPP_EXPORTS # TODO: Rename to NO_GENERATE_CPP_EXPORTS once migration is done
         GENERATE_METATYPES          # TODO: Remove once it is not used anymore
+        GENERATE_PRIVATE_CPP_EXPORTS
     )
     set(${single_args}
         MODULE_INCLUDE_NAME
@@ -20,6 +22,8 @@ macro(qt_internal_get_internal_add_module_keywords option_args single_args multi
         CONFIG_MODULE_NAME
         PRECOMPILED_HEADER
         CONFIGURE_FILE_PATH
+        CPP_EXPORT_HEADER_BASE_NAME
+        EXTERNAL_HEADERS_DIR
         ${__default_target_info_args}
     )
     set(${multi_args}
@@ -27,6 +31,7 @@ macro(qt_internal_get_internal_add_module_keywords option_args single_args multi
         EXTRA_CMAKE_FILES
         EXTRA_CMAKE_INCLUDES
         NO_PCH_SOURCES
+        EXTERNAL_HEADERS
         ${__default_private_args}
         ${__default_public_args}
         ${__default_private_module_args}
@@ -58,17 +63,35 @@ endmacro()
 #        For the SomeInternalModulePrivate target, the MODULE_INTERFACE_NAME will be
 #        SomeInternalModule
 #
+#   HEADER_MODULE
+#     Creates an interface library instead of following the Qt configuration default. Mutually
+#     exclusive with STATIC.
+#
+#   STATIC
+#     Creates a static library instead of following the Qt configuration default. Mutually
+#     exclusive with HEADER_MODULE.
+#
+#   EXTERNAL_HEADERS
+#     A explicit list of non qt headers (like 3rdparty) to be installed.
+#     Note this option overrides install headers used as PUBLIC_HEADER by cmake install(TARGET)
+#     otherwise set by syncqt.
+#
+#   EXTERNAL_HEADERS_DIR
+#     A module directory with non qt headers (like 3rdparty) to be installed.
+#     Note this option overrides install headers used as PUBLIC_HEADER by cmake install(TARGET)
+#     otherwise set by syncqt.
+
 function(qt_internal_add_module target)
     qt_internal_get_internal_add_module_keywords(
-        option_args
-        single_args
-        multi_args
+        module_option_args
+        module_single_args
+        module_multi_args
     )
 
     qt_parse_all_arguments(arg "qt_internal_add_module"
-        "${option_args}"
-        "${single_args}"
-        "${multi_args}"
+        "${module_option_args}"
+        "${module_single_args}"
+        "${module_multi_args}"
         ${ARGN}
     )
 
@@ -192,7 +215,7 @@ function(qt_internal_add_module target)
         endif()
     endif()
 
-    if(FEATURE_ltcg AND GCC AND is_static_lib)
+    if((FEATURE_ltcg OR CMAKE_INTERPROCEDURAL_OPTIMIZATION) AND GCC AND is_static_lib)
         # CMake <= 3.19 appends -fno-fat-lto-objects for all library types if
         # CMAKE_INTERPROCEDURAL_OPTIMIZATION is enabled. Static libraries need
         # the opposite compiler option.
@@ -255,7 +278,9 @@ function(qt_internal_add_module target)
         endif()
 
         if (arg_SKIP_DEPENDS_INCLUDE)
-            set_target_properties(${target} PROPERTIES QT_MODULE_SKIP_DEPENDS_INCLUDE TRUE)
+            set_target_properties(${target} PROPERTIES _qt_module_skip_depends_include TRUE)
+            set_property(TARGET "${target}" APPEND PROPERTY
+                         EXPORT_PROPERTIES _qt_module_skip_depends_include)
         endif()
         if(is_framework)
             set_target_properties(${target} PROPERTIES
@@ -305,6 +330,32 @@ function(qt_internal_add_module target)
 
         ### FIXME: Can we replace headers.pri?
         qt_read_headers_pri("${module_build_interface_include_dir}" "module_headers")
+
+        if(arg_EXTERNAL_HEADERS)
+            set(module_headers_public ${arg_EXTERNAL_HEADERS})
+        endif()
+
+        set_property(TARGET ${target} APPEND PROPERTY
+            _qt_module_timestamp_dependencies "${module_headers_public}")
+
+        # We should not generate export headers if module is defined as pure STATIC.
+        # Static libraries don't need to export their symbols, and corner cases when sources are
+        # also used in shared libraries, should be handled manually.
+        if(arg_GENERATE_CPP_EXPORTS AND NOT arg_STATIC)
+            if(arg_CPP_EXPORT_HEADER_BASE_NAME)
+                set(cpp_export_header_base_name
+                    "CPP_EXPORT_HEADER_BASE_NAME;${arg_CPP_EXPORT_HEADER_BASE_NAME}"
+                )
+            endif()
+            if(arg_GENERATE_PRIVATE_CPP_EXPORTS)
+                set(generate_private_cpp_export "GENERATE_PRIVATE_CPP_EXPORTS")
+            endif()
+            qt_internal_generate_cpp_global_exports(${target} ${module_define_infix}
+                "${cpp_export_header_base_name}"
+                "${generate_private_cpp_export}"
+            )
+        endif()
+
         set(module_depends_header
             "${module_build_interface_include_dir}/${module_include_name}Depends")
         if(is_framework)
@@ -402,16 +453,20 @@ function(qt_internal_add_module target)
         set(fw_install_header_dir "${INSTALL_LIBDIR}/${fw_header_dir}")
         set(fw_output_header_dir "${QT_BUILD_DIR}/${fw_install_header_dir}")
         list(APPEND public_includes
-            # Add the lib/Foo.framework dir as include path to let CMake generate
-            # the -F compiler flag for framework-style includes to work.
-            "$<INSTALL_INTERFACE:${fw_install_dir}>"
-
             # Add the framework Headers subdir, so that non-framework-style includes work. The
             # BUILD_INTERFACE Headers symlink was previously claimed not to exist at the relevant
             # time, and a fully specified Header path was used instead. This doesn't seem to be a
             # problem anymore.
             "$<BUILD_INTERFACE:${fw_output_header_dir}>"
             "$<INSTALL_INTERFACE:${fw_install_header_dir}>"
+
+            # Add the lib/Foo.framework dir as an include path to let CMake generate
+            # the -F compiler flag for framework-style includes to work.
+            # Make sure it is added AFTER the lib/Foo.framework/Headers include path,
+            # to mitigate issues like QTBUG-101718 and QTBUG-101775 where an include like
+            # #include <QtCore> might cause moc to include the QtCore framework shared library
+            # instead of the actual header.
+            "$<INSTALL_INTERFACE:${fw_install_dir}>"
         )
     endif()
 
@@ -438,7 +493,7 @@ function(qt_internal_add_module target)
         set(timestamp_file "${CMAKE_CURRENT_BINARY_DIR}/timestamp")
         add_custom_command(OUTPUT "${timestamp_file}"
             COMMAND ${CMAKE_COMMAND} -E touch "${timestamp_file}"
-            DEPENDS ${module_headers_public}
+            DEPENDS "$<TARGET_PROPERTY:${target},_qt_module_timestamp_dependencies>"
             VERBATIM)
         add_custom_target(${target}_timestamp ALL DEPENDS "${timestamp_file}")
     endif()
@@ -457,6 +512,8 @@ function(qt_internal_add_module target)
             )
         list(APPEND arg_LIBRARIES Qt::PlatformModuleInternal)
     endif()
+
+    qt_internal_add_repo_local_defines("${target}")
 
     qt_internal_extend_target("${target}"
         ${header_module}
@@ -647,14 +704,23 @@ set(QT_LIBINFIX \"${QT_LIBINFIX}\")")
         list(APPEND exported_targets ${target_private})
     endif()
     set(export_name "${INSTALL_CMAKE_NAMESPACE}${target}Targets")
+    if(arg_EXTERNAL_HEADERS_DIR)
+        qt_install(DIRECTORY "${arg_EXTERNAL_HEADERS_DIR}/"
+            DESTINATION "${module_install_interface_include_dir}"
+        )
+        unset(public_header_destination)
+    else()
+        set(public_header_destination PUBLIC_HEADER DESTINATION "${module_install_interface_include_dir}")
+    endif()
+
     qt_install(TARGETS ${exported_targets}
         EXPORT ${export_name}
         RUNTIME DESTINATION ${INSTALL_BINDIR}
         LIBRARY DESTINATION ${INSTALL_LIBDIR}
         ARCHIVE DESTINATION ${INSTALL_LIBDIR}
         FRAMEWORK DESTINATION ${INSTALL_LIBDIR}
-        PUBLIC_HEADER DESTINATION "${module_install_interface_include_dir}"
         PRIVATE_HEADER DESTINATION "${module_install_interface_private_include_dir}"
+        ${public_header_destination}
         )
 
     if(BUILD_SHARED_LIBS)
@@ -912,4 +978,77 @@ function(qt_describe_module target)
     configure_file("${descfile_in}" "${descfile_out}")
 
     qt_install(FILES "${descfile_out}" DESTINATION "${install_dir}")
+endfunction()
+
+function(qt_internal_generate_cpp_global_exports target module_define_infix)
+    cmake_parse_arguments(arg
+        "GENERATE_PRIVATE_CPP_EXPORTS"
+        "CPP_EXPORT_HEADER_BASE_NAME"
+        "" ${ARGN}
+    )
+
+    qt_internal_module_info(module "${target}")
+
+    set(header_base_name "qt${module_lower}exports")
+    if(arg_CPP_EXPORT_HEADER_BASE_NAME)
+        set(header_base_name "${arg_CPP_EXPORT_HEADER_BASE_NAME}")
+    endif()
+    # Is used as a part of the header guard define.
+    string(TOUPPER "${header_base_name}" header_base_name_upper)
+
+    set(generated_header_path
+        "${module_build_interface_include_dir}/${header_base_name}.h"
+    )
+
+    configure_file("${QT_CMAKE_DIR}/modulecppexports.h.in"
+        "${generated_header_path}" @ONLY
+    )
+
+    set(${out_public_header} "${generated_header_path}" PARENT_SCOPE)
+    target_sources(${target} PRIVATE "${generated_header_path}")
+
+    if(arg_GENERATE_PRIVATE_CPP_EXPORTS)
+        set(generated_private_header_path
+            "${module_build_interface_private_include_dir}/${header_base_name}_p.h"
+        )
+
+        configure_file("${QT_CMAKE_DIR}/modulecppexports_p.h.in"
+            "${generated_private_header_path}" @ONLY
+        )
+
+        set(${out_private_header} "${generated_private_header_path}" PARENT_SCOPE)
+        target_sources(${target} PRIVATE "${generated_private_header_path}")
+    endif()
+
+    get_target_property(is_framework ${target} FRAMEWORK)
+
+    get_target_property(target_type ${target} TYPE)
+    set(is_interface_lib 0)
+    if(target_type STREQUAL "INTERFACE_LIBRARY")
+        set(is_interface_lib 1)
+    endif()
+
+    set_property(TARGET ${target} APPEND PROPERTY
+        _qt_module_timestamp_dependencies "${generated_header_path}")
+
+    if(is_framework)
+        if(NOT is_interface_lib)
+            qt_copy_framework_headers(${target} PUBLIC "${generated_header_path}")
+
+            if(arg_GENERATE_PRIVATE_CPP_EXPORTS)
+                qt_copy_framework_headers(${target} PRIVATE "${generated_private_header_path}")
+            endif()
+        endif()
+    else()
+        set_property(TARGET ${target} APPEND PROPERTY PUBLIC_HEADER "${generated_header_path}")
+        qt_install(FILES "${generated_header_path}"
+            DESTINATION "${module_install_interface_include_dir}")
+
+        if(arg_GENERATE_PRIVATE_CPP_EXPORTS)
+            set_property(TARGET ${target} APPEND PROPERTY PRIVATE_HEADER
+                "${generated_private_header_path}")
+            qt_install(FILES "${generated_private_header_path}"
+                DESTINATION "${module_install_interface_private_include_dir}")
+        endif()
+    endif()
 endfunction()

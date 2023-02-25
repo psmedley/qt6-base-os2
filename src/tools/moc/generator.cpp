@@ -118,6 +118,40 @@ static inline int lengthOfEscapeSequence(const QByteArray &s, int i)
     return i - startPos;
 }
 
+static inline uint lengthOfEscapedString(const QByteArray &str)
+{
+    int extra = 0;
+    for (int j = 0; j < str.length(); ++j) {
+        if (str.at(j) == '\\') {
+            int cnt = lengthOfEscapeSequence(str, j) - 1;
+            extra += cnt;
+            j += cnt;
+        }
+    }
+    return str.length() - extra;
+}
+
+// Prints \a s to \a out, breaking it into lines of at most ColumnWidth. The
+// opening and closing quotes are NOT included (it's up to the caller).
+static void printStringWithIndentation(FILE *out, const QByteArray &s)
+{
+    static constexpr int ColumnWidth = 72;
+    int len = s.length();
+    int idx = 0;
+
+    do {
+        int spanLen = qMin(ColumnWidth - 2, len - idx);
+        // don't cut escape sequences at the end of a line
+        int backSlashPos = s.lastIndexOf('\\', idx + spanLen - 1);
+        if (backSlashPos >= idx) {
+            int escapeLen = lengthOfEscapeSequence(s, backSlashPos);
+            spanLen = qBound(spanLen, backSlashPos + escapeLen - idx, len - idx);
+        }
+        fprintf(out, "\n    \"%.*s\"", spanLen, s.constData() + idx);
+        idx += spanLen;
+    } while (idx < len);
+}
+
 void Generator::strreg(const QByteArray &s)
 {
     if (!strings.contains(s))
@@ -243,106 +277,48 @@ void Generator::generateCode()
 //
 // Build stringdata struct
 //
-    const int constCharArraySizeLimit = 65535;
     fprintf(out, "struct qt_meta_stringdata_%s_t {\n", qualifiedClassNameIdentifier.constData());
-    fprintf(out, "    const uint offsetsAndSize[%d];\n", int(strings.size()*2));
-    {
-        int stringDataLength = 0;
-        int stringDataCounter = 0;
-        for (int i = 0; i < strings.size(); ++i) {
-            int thisLength = strings.at(i).length() + 1;
-            stringDataLength += thisLength;
-            if (stringDataLength / constCharArraySizeLimit) {
-                // save previous stringdata and start computing the next one.
-                fprintf(out, "    char stringdata%d[%d];\n", stringDataCounter++, stringDataLength - thisLength);
-                stringDataLength = thisLength;
-            }
-        }
-        fprintf(out, "    char stringdata%d[%d];\n", stringDataCounter, stringDataLength);
-
+    fprintf(out, "    uint offsetsAndSizes[%d];\n", int(strings.size() * 2));
+    for (int i = 0; i < strings.size(); ++i) {
+        int thisLength = lengthOfEscapedString(strings.at(i)) + 1;
+        fprintf(out, "    char stringdata%d[%d];\n", i, thisLength);
     }
     fprintf(out, "};\n");
 
-    // Macro that expands into a QByteArrayData. The offset member is
-    // calculated from 1) the offset of the actual characters in the
-    // stringdata.stringdata member, and 2) the stringdata.data index of the
-    // QByteArrayData being defined. This calculation relies on the
-    // QByteArrayData::data() implementation returning simply "this + offset".
+    // Macro that simplifies the string data listing. The offset is calculated
+    // from the top of the stringdata object (i.e., past the uints).
     fprintf(out, "#define QT_MOC_LITERAL(ofs, len) \\\n"
-            "    uint(offsetof(qt_meta_stringdata_%s_t, stringdata0) + ofs), len \n",
+            "    uint(sizeof(qt_meta_stringdata_%s_t::offsetsAndSizes) + ofs), len \n",
             qualifiedClassNameIdentifier.constData());
 
     fprintf(out, "static const qt_meta_stringdata_%s_t qt_meta_stringdata_%s = {\n",
             qualifiedClassNameIdentifier.constData(), qualifiedClassNameIdentifier.constData());
-    fprintf(out, "    {\n");
+    fprintf(out, "    {");
     {
         int idx = 0;
         for (int i = 0; i < strings.size(); ++i) {
             const QByteArray &str = strings.at(i);
-            fprintf(out, "QT_MOC_LITERAL(%d, %d)", idx, int(str.length()));
-            if (i != strings.size() - 1)
-                fputc(',', out);
             const QByteArray comment = str.length() > 32 ? str.left(29) + "..." : str;
-            fprintf(out, " // \"%s\"\n", comment.size() ? comment.constData() : "");
-            idx += str.length() + 1;
-            for (int j = 0; j < str.length(); ++j) {
-                if (str.at(j) == '\\') {
-                    int cnt = lengthOfEscapeSequence(str, j) - 1;
-                    idx -= cnt;
-                    j += cnt;
-                }
-            }
+            const char *comma = (i != strings.size() - 1 ? "," : " ");
+            int len = lengthOfEscapedString(str);
+            fprintf(out, "\n        QT_MOC_LITERAL(%d, %d)%s  // \"%s\"", idx, len, comma,
+                    comment.constData());
+
+            idx += len + 1;
         }
-        fprintf(out, "\n    },\n");
+        fprintf(out, "\n    }");
     }
 
 //
-// Build stringdata array
+// Build stringdata arrays
 //
-    fprintf(out, "    \"");
-    int col = 0;
-    int len = 0;
-    int stringDataLength = 0;
-    for (int i = 0; i < strings.size(); ++i) {
-        QByteArray s = strings.at(i);
-        len = s.length();
-        stringDataLength += len + 1;
-        if (stringDataLength >= constCharArraySizeLimit) {
-            fprintf(out, "\",\n    \"");
-            stringDataLength = len + 1;
-            col = 0;
-        } else if (i)
-            fputs("\\0", out); // add \0 at the end of each string
-
-        if (col && col + len >= 72) {
-            fprintf(out, "\"\n    \"");
-            col = 0;
-        } else if (len && s.at(0) >= '0' && s.at(0) <= '9') {
-            fprintf(out, "\"\"");
-            len += 2;
-        }
-        int idx = 0;
-        while (idx < s.length()) {
-            if (idx > 0) {
-                col = 0;
-                fprintf(out, "\"\n    \"");
-            }
-            int spanLen = qMin(70, s.length() - idx);
-            // don't cut escape sequences at the end of a line
-            int backSlashPos = s.lastIndexOf('\\', idx + spanLen - 1);
-            if (backSlashPos >= idx) {
-                int escapeLen = lengthOfEscapeSequence(s, backSlashPos);
-                spanLen = qBound(spanLen, backSlashPos + escapeLen - idx, s.length() - idx);
-            }
-            fprintf(out, "%.*s", spanLen, s.constData() + idx);
-            idx += spanLen;
-            col += spanLen;
-        }
-        col += len + 2;
+    for (const QByteArray &s : qAsConst(strings)) {
+        fputc(',', out);
+        printStringWithIndentation(out, s);
     }
 
 // Terminate stringdata struct
-    fprintf(out, "\"\n};\n");
+    fprintf(out, "\n};\n");
     fprintf(out, "#undef QT_MOC_LITERAL\n\n");
 
 //
@@ -548,7 +524,7 @@ void Generator::generateCode()
         fprintf(out, "    QtPrivate::MetaObjectForType<%s>::value(),\n", purestSuperClass.constData());
     else
         fprintf(out, "    nullptr,\n");
-    fprintf(out, "    qt_meta_stringdata_%s.offsetsAndSize,\n"
+    fprintf(out, "    qt_meta_stringdata_%s.offsetsAndSizes,\n"
             "    qt_meta_data_%s,\n", qualifiedClassNameIdentifier.constData(),
             qualifiedClassNameIdentifier.constData());
     if (hasStaticMetaCall)
@@ -1228,7 +1204,7 @@ void Generator::generateStaticMetacall()
                 fprintf(out, ") const;\n");
             else
                 fprintf(out, ");\n");
-            fprintf(out, "            if (*reinterpret_cast<_t *>(_a[1]) == static_cast<_t>(&%s::%s)) {\n",
+            fprintf(out, "            if (_t _q_method = &%s::%s; *reinterpret_cast<_t *>(_a[1]) == _q_method) {\n",
                     cdef->classname.constData(), f.name.constData());
             fprintf(out, "                *result = %d;\n", methodindex);
             fprintf(out, "                return;\n");
@@ -1415,7 +1391,14 @@ void Generator::generateStaticMetacall()
                 const PropertyDef &p = cdef->propertyList.at(propindex);
                 if (p.bind.isEmpty())
                     continue;
-                fprintf(out, "        case %d: *static_cast<QUntypedBindable *>(_a[0]) = _t->%s(); break;\n", propindex, p.bind.constData());
+                QByteArray prefix = "_t->";
+                if (p.inPrivateClass.size()) {
+                    prefix += p.inPrivateClass + "->";
+                }
+                fprintf(out,
+                        "        case %d: *static_cast<QUntypedBindable *>(_a[0]) = %s%s(); "
+                        "break;\n",
+                        propindex, prefix.constData(), p.bind.constData());
             }
             fprintf(out, "        default: break;\n");
             fprintf(out, "        }\n");
@@ -1566,62 +1549,76 @@ void Generator::generatePluginMetaData()
     if (cdef->pluginData.iid.isEmpty())
         return;
 
-    fprintf(out, "\nQT_PLUGIN_METADATA_SECTION\n"
-          "static constexpr unsigned char qt_pluginMetaData_%s[] = {\n"
-          "    'Q', 'T', 'M', 'E', 'T', 'A', 'D', 'A', 'T', 'A', ' ', '!',\n"
-          "    // metadata version, Qt version, architectural requirements\n"
-          "    0, QT_VERSION_MAJOR, QT_VERSION_MINOR, qPluginArchRequirements(),",
-          cdef->classname.constData());
+    auto outputCborData = [this]() {
+        CborDevice dev(out);
+        CborEncoder enc;
+        cbor_encoder_init_writer(&enc, CborDevice::callback, &dev);
 
+        CborEncoder map;
+        cbor_encoder_create_map(&enc, &map, CborIndefiniteLength);
 
-    CborDevice dev(out);
-    CborEncoder enc;
-    cbor_encoder_init_writer(&enc, CborDevice::callback, &dev);
+        dev.nextItem("\"IID\"");
+        cbor_encode_int(&map, int(QtPluginMetaDataKeys::IID));
+        cbor_encode_text_string(&map, cdef->pluginData.iid.constData(), cdef->pluginData.iid.size());
 
-    CborEncoder map;
-    cbor_encoder_create_map(&enc, &map, CborIndefiniteLength);
+        dev.nextItem("\"className\"");
+        cbor_encode_int(&map, int(QtPluginMetaDataKeys::ClassName));
+        cbor_encode_text_string(&map, cdef->classname.constData(), cdef->classname.size());
 
-    dev.nextItem("\"IID\"");
-    cbor_encode_int(&map, int(QtPluginMetaDataKeys::IID));
-    cbor_encode_text_string(&map, cdef->pluginData.iid.constData(), cdef->pluginData.iid.size());
+        QJsonObject o = cdef->pluginData.metaData.object();
+        if (!o.isEmpty()) {
+            dev.nextItem("\"MetaData\"");
+            cbor_encode_int(&map, int(QtPluginMetaDataKeys::MetaData));
+            jsonObjectToCbor(&map, o);
+        }
 
-    dev.nextItem("\"className\"");
-    cbor_encode_int(&map, int(QtPluginMetaDataKeys::ClassName));
-    cbor_encode_text_string(&map, cdef->classname.constData(), cdef->classname.size());
+        if (!cdef->pluginData.uri.isEmpty()) {
+            dev.nextItem("\"URI\"");
+            cbor_encode_int(&map, int(QtPluginMetaDataKeys::URI));
+            cbor_encode_text_string(&map, cdef->pluginData.uri.constData(), cdef->pluginData.uri.size());
+        }
 
-    QJsonObject o = cdef->pluginData.metaData.object();
-    if (!o.isEmpty()) {
-        dev.nextItem("\"MetaData\"");
-        cbor_encode_int(&map, int(QtPluginMetaDataKeys::MetaData));
-        jsonObjectToCbor(&map, o);
-    }
+        // Add -M args from the command line:
+        for (auto it = cdef->pluginData.metaArgs.cbegin(), end = cdef->pluginData.metaArgs.cend(); it != end; ++it) {
+            const QJsonArray &a = it.value();
+            QByteArray key = it.key().toUtf8();
+            dev.nextItem(QByteArray("command-line \"" + key + "\"").constData());
+            cbor_encode_text_string(&map, key.constData(), key.size());
+            jsonArrayToCbor(&map, a);
+        }
 
-    if (!cdef->pluginData.uri.isEmpty()) {
-        dev.nextItem("\"URI\"");
-        cbor_encode_int(&map, int(QtPluginMetaDataKeys::URI));
-        cbor_encode_text_string(&map, cdef->pluginData.uri.constData(), cdef->pluginData.uri.size());
-    }
-
-    // Add -M args from the command line:
-    for (auto it = cdef->pluginData.metaArgs.cbegin(), end = cdef->pluginData.metaArgs.cend(); it != end; ++it) {
-        const QJsonArray &a = it.value();
-        QByteArray key = it.key().toUtf8();
-        dev.nextItem(QByteArray("command-line \"" + key + "\"").constData());
-        cbor_encode_text_string(&map, key.constData(), key.size());
-        jsonArrayToCbor(&map, a);
-    }
-
-    // Close the CBOR map manually
-    dev.nextItem();
-    cbor_encoder_close_container(&enc, &map);
-    fputs("\n};\n", out);
+        // Close the CBOR map manually
+        dev.nextItem();
+        cbor_encoder_close_container(&enc, &map);
+    };
 
     // 'Use' all namespaces.
     int pos = cdef->qualified.indexOf("::");
     for ( ; pos != -1 ; pos = cdef->qualified.indexOf("::", pos + 2) )
         fprintf(out, "using namespace %s;\n", cdef->qualified.left(pos).constData());
-    fprintf(out, "QT_MOC_EXPORT_PLUGIN(%s, %s)\n\n",
+
+    fputs("\n#ifdef QT_MOC_EXPORT_PLUGIN_V2", out);
+
+    // Qt 6.3+ output
+    fprintf(out, "\nstatic constexpr unsigned char qt_pluginMetaDataV2_%s[] = {",
+          cdef->classname.constData());
+    outputCborData();
+    fprintf(out, "\n};\nQT_MOC_EXPORT_PLUGIN_V2(%s, %s, qt_pluginMetaDataV2_%s)\n",
+            cdef->qualified.constData(), cdef->classname.constData(), cdef->classname.constData());
+
+    // compatibility with Qt 6.0-6.2
+    fprintf(out, "#else\nQT_PLUGIN_METADATA_SECTION\n"
+          "static constexpr unsigned char qt_pluginMetaData_%s[] = {\n"
+          "    'Q', 'T', 'M', 'E', 'T', 'A', 'D', 'A', 'T', 'A', ' ', '!',\n"
+          "    // metadata version, Qt version, architectural requirements\n"
+          "    0, QT_VERSION_MAJOR, QT_VERSION_MINOR, qPluginArchRequirements(),",
+          cdef->classname.constData());
+    outputCborData();
+    fprintf(out, "\n};\nQT_MOC_EXPORT_PLUGIN(%s, %s)\n"
+                 "#endif  // QT_MOC_EXPORT_PLUGIN_V2\n",
             cdef->qualified.constData(), cdef->classname.constData());
+
+    fputs("\n", out);
 }
 
 QT_WARNING_DISABLE_GCC("-Wunused-function")

@@ -568,7 +568,7 @@ public:
         PM_TitleBarButtonSize,
 
         PM_LineEditIconSize,
-
+        PM_LineEditIconMargin,
         // do not add any values below/greater than this
         PM_CustomBase = 0xf0000000
     };
@@ -736,6 +736,8 @@ public:
         SH_SpinBox_ButtonsInsideFrame,
         SH_SpinBox_StepModifier,
         SH_TabBar_AllowWheelScrolling,
+        SH_Table_AlwaysDrawLeftTopGridLines,
+        SH_SpinBox_SelectOnStep,
         // Add new style hint values here
 
         SH_CustomBase = 0xf0000000
@@ -824,6 +826,7 @@ public:
         SP_DialogRetryButton,
         SP_DialogIgnoreButton,
         SP_RestoreDefaultsButton,
+        SP_TabCloseButton,
         // do not add any values below/greater than this
         SP_CustomBase = 0xf0000000
     };

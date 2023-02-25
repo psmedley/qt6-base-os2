@@ -62,10 +62,11 @@ class QDebug;
 
 struct QWindowsGeometryHint
 {
-    static QMargins frameOnPrimaryScreen(DWORD style, DWORD exStyle);
-    static QMargins frameOnPrimaryScreen(HWND hwnd);
-    static QMargins frame(DWORD style, DWORD exStyle, qreal dpi);
-    static QMargins frame(HWND hwnd, DWORD style, DWORD exStyle);
+    static QMargins frameOnPrimaryScreen(const QWindow *w, DWORD style, DWORD exStyle);
+    static QMargins frameOnPrimaryScreen(const QWindow *w, HWND hwnd);
+    static QMargins frame(const QWindow *w, DWORD style, DWORD exStyle, qreal dpi);
+    static QMargins frame(const QWindow *w, HWND hwnd, DWORD style, DWORD exStyle);
+    static QMargins frame(const QWindow *w, HWND hwnd);
     static QMargins frame(const QWindow *w, const QRect &geometry,
                           DWORD style, DWORD exStyle);
     static bool handleCalculateSize(const QMargins &customMargins, const MSG &msg, LRESULT *result);
@@ -321,6 +322,7 @@ public:
     void handleCompositionSettingsChanged();
     void handleDpiScaledSize(WPARAM wParam, LPARAM lParam, LRESULT *result);
     void handleDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam);
+    void handleDpiChangedAfterParent(HWND hwnd);
 
     static void displayChanged();
     static void settingsChanged();

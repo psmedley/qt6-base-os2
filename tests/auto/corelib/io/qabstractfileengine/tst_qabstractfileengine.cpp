@@ -76,8 +76,10 @@ public:
     {
     }
 
-    bool open(QIODevice::OpenMode openMode) override
+    bool open(QIODevice::OpenMode openMode, std::optional<QFile::Permissions> permissions) override
     {
+        Q_UNUSED(permissions);
+
         if (openForRead_ || openForWrite_) {
             qWarning("%s: file is already open for %s",
                      Q_FUNC_INFO,
@@ -193,28 +195,6 @@ public:
         return true;
     }
 
-    //  bool link(const QString &newName)
-    //  {
-    //      Q_UNUSED(newName);
-    //      return false;
-    //  }
-
-    //  bool mkdir(const QString &dirName, bool createParentDirectories) const
-    //  {
-    //      Q_UNUSED(dirName);
-    //      Q_UNUSED(createParentDirectories);
-
-    //      return false;
-    //  }
-
-    //  bool rmdir(const QString &dirName, bool recurseParentDirectories) const
-    //  {
-    //      Q_UNUSED(dirName);
-    //      Q_UNUSED(recurseParentDirectories);
-
-    //      return false;
-    //  }
-
     bool setSize(qint64 size) override
     {
         if (size < 0)
@@ -245,13 +225,6 @@ public:
         return FileFlags();
     }
 
-    //  bool setPermissions(uint perms)
-    //  {
-    //      Q_UNUSED(perms);
-
-    //      return false;
-    //  }
-
     QString fileName(FileName file) const override
     {
         switch (file) {
@@ -265,8 +238,8 @@ public:
                 return QLatin1String("AbsoluteName");
             case AbsolutePathName:
                 return QLatin1String("AbsolutePathName");
-            case LinkName:
-                return QLatin1String("LinkName");
+            case AbsoluteLinkTarget:
+                return QLatin1String("AbsoluteLinkTarget");
             case CanonicalName:
                 return QLatin1String("CanonicalName");
             case CanonicalPathName:
@@ -355,13 +328,6 @@ public:
         return QDateTime();
     }
 
-    bool setFileTime(const QDateTime &newDate, FileTime time) override
-    {
-        Q_UNUSED(newDate);
-        Q_UNUSED(time);
-        return false;
-    }
-
     void setFileName(const QString &file) override
     {
         if (openForRead_ || openForWrite_)
@@ -369,20 +335,6 @@ public:
         else
             fileName_ = file;
     }
-
-    //  typedef QAbstractFileEngineIterator Iterator;
-    //  Iterator *beginEntryList(QDir::Filters filters, const QStringList &filterNames)
-    //  {
-    //      Q_UNUSED(filters);
-    //      Q_UNUSED(filterNames);
-
-    //      return 0;
-    //  }
-
-    //  Iterator *endEntryList()
-    //  {
-    //      return 0;
-    //  }
 
     qint64 read(char *data, qint64 maxLen) override
     {

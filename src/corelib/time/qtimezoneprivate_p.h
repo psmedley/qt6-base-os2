@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Copyright (C) 2013 John Layt <jlayt@kde.org>
 ** Contact: https://www.qt.io/licensing/
 **
@@ -69,7 +69,7 @@ Q_FORWARD_DECLARE_OBJC_CLASS(NSTimeZone);
 #include <qt_windows.h>
 #endif // Q_OS_WIN
 
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
 #include <QJniObject>
 #endif
 
@@ -137,10 +137,14 @@ public:
     virtual void serialize(QDataStream &ds) const;
 
     // Static Utility Methods
-    static inline qint64 maxMSecs() { return std::numeric_limits<qint64>::max(); }
-    static inline qint64 minMSecs() { return std::numeric_limits<qint64>::min() + 1; }
-    static inline qint64 invalidMSecs() { return std::numeric_limits<qint64>::min(); }
-    static inline qint64 invalidSeconds() { return std::numeric_limits<int>::min(); }
+    [[nodiscard]] static constexpr qint64 maxMSecs()
+    { return (std::numeric_limits<qint64>::max)(); }
+    [[nodiscard]] static constexpr qint64 minMSecs()
+    { return (std::numeric_limits<qint64>::min)() + 1; }
+    [[nodiscard]] static constexpr qint64 invalidMSecs()
+    { return (std::numeric_limits<qint64>::min)(); }
+    [[nodiscard]] static constexpr qint64 invalidSeconds()
+    { return (std::numeric_limits<int>::min)(); }
     static Data invalidData();
     static QTimeZone::OffsetData invalidOffsetData();
     static QTimeZone::OffsetData toOffsetData(const Data &data);
@@ -274,7 +278,7 @@ private:
 };
 #endif
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN) && (!defined(Q_OS_ANDROID) || defined(Q_OS_ANDROID_EMBEDDED))
+#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN) && !defined(Q_OS_ANDROID)
 struct QTzTransitionTime
 {
     qint64 atMSecsSinceEpoch;
@@ -455,10 +459,11 @@ public:
 
     QList<QByteArray> availableTimeZoneIds() const override;
 
-private:
-    void init(const QByteArray &ianaId);
+    // For use within implementation's TransitionTimePair:
     QTimeZonePrivate::Data ruleToData(const QWinTransitionRule &rule, qint64 atMSecsSinceEpoch,
                                       QTimeZone::TimeType type, bool fakeDst = false) const;
+private:
+    void init(const QByteArray &ianaId);
 
     QByteArray m_windowsId;
     QString m_displayName;
@@ -468,7 +473,7 @@ private:
 };
 #endif // Q_OS_WIN
 
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
 class QAndroidTimeZonePrivate final : public QTimeZonePrivate
 {
 public:

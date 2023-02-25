@@ -60,6 +60,7 @@
 #endif
 #include <private/qheaderview_p.h>
 #include <private/qabstractitemmodel_p.h>
+#include <private/qabstractitemdelegate_p.h>
 
 #ifndef QT_NO_DATASTREAM
 #include <qdatastream.h>
@@ -1777,6 +1778,7 @@ QByteArray QHeaderView::saveState() const
     Q_D(const QHeaderView);
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
+    stream.setVersion(QDataStream::Qt_5_0);
     stream << QHeaderViewPrivate::VersionMarker;
     stream << 0; // current version is 0
     d->write(stream);
@@ -1798,6 +1800,7 @@ bool QHeaderView::restoreState(const QByteArray &state)
         return false;
     QByteArray data = state;
     QDataStream stream(&data, QIODevice::ReadOnly);
+    stream.setVersion(QDataStream::Qt_5_0);
     int marker;
     int ver;
     stream >> marker;
@@ -2936,9 +2939,9 @@ void QHeaderView::initStyleOptionForIndex(QStyleOptionHeader *option, int logica
                                                   Qt::TextAlignmentRole);
     opt.section = logicalIndex;
     opt.state |= state;
-    opt.textAlignment = Qt::Alignment(textAlignment.isValid()
-                                      ? Qt::Alignment(textAlignment.toInt())
-                                      : d->defaultAlignment);
+    opt.textAlignment = textAlignment.isValid()
+                        ? QtPrivate::legacyFlagValueFromModelData<Qt::Alignment>(textAlignment)
+                        : d->defaultAlignment;
 
     opt.iconAlignment = Qt::AlignVCenter;
     opt.text = d->model->headerData(logicalIndex, d->orientation,

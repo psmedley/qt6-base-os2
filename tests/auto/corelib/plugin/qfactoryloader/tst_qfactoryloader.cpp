@@ -47,11 +47,13 @@ class tst_QFactoryLoader : public QObject
     QSharedPointer<QTemporaryDir> directory;
 #endif
 
+    QString binFolder;
 public slots:
     void initTestCase();
 
 private slots:
     void usingTwoFactoriesFromSameDir();
+    void extraSearchPath();
 };
 
 #define BIN_FOLDER "bin"
@@ -59,24 +61,23 @@ static const char *binFolderC = BIN_FOLDER;
 
 void tst_QFactoryLoader::initTestCase()
 {
-#ifdef Q_OS_ANDROID
-    directory = QEXTRACTTESTDATA("android_test_data");
-    QVERIFY(directory);
-    QVERIFY(directory->isValid());
-    QVERIFY2(QDir::setCurrent(directory->path()), qPrintable("Could not chdir to " + directory->path()));
-#endif
-    QString binFolder = QFINDTESTDATA(binFolderC);
+    // On Android the plugins are bundled into APK's libs subdir
+#ifndef Q_OS_ANDROID
+    binFolder = QFINDTESTDATA(binFolderC);
     // Support running the test case from the build dir w/o installing.
     if (binFolder.isEmpty())
         binFolder = QFINDTESTDATA("../" BIN_FOLDER);
     QVERIFY2(!binFolder.isEmpty(), "Unable to locate '" BIN_FOLDER "' folder");
-#if QT_CONFIG(library)
-    QCoreApplication::setLibraryPaths(QStringList(QFileInfo(binFolder).absolutePath()));
 #endif
 }
 
 void tst_QFactoryLoader::usingTwoFactoriesFromSameDir()
 {
+#if QT_CONFIG(library) && !defined(Q_OS_ANDROID)
+    // set the library path to contain the directory where the 'bin' dir is located
+    QCoreApplication::setLibraryPaths( { QFileInfo(binFolder).absolutePath() });
+#endif
+
     const QString suffix = QLatin1Char('/') + QLatin1String(binFolderC);
     QFactoryLoader loader1(PluginInterface1_iid, suffix);
 
@@ -94,6 +95,47 @@ void tst_QFactoryLoader::usingTwoFactoriesFromSameDir()
 
     QCOMPARE(plugin1->pluginName(), QLatin1String("Plugin1 ok"));
     QCOMPARE(plugin2->pluginName(), QLatin1String("Plugin2 ok"));
+}
+
+void tst_QFactoryLoader::extraSearchPath()
+{
+#if defined(Q_OS_ANDROID) && !QT_CONFIG(library)
+    QSKIP("Test not applicable in this configuration.");
+#else
+#ifdef Q_OS_ANDROID
+    // On Android the libs are not stored in binFolder, but bundled into
+    // APK's libs subdir
+    const QStringList androidLibsPaths = QCoreApplication::libraryPaths();
+    QCOMPARE(androidLibsPaths.size(), 1);
+#endif
+    QCoreApplication::setLibraryPaths(QStringList());
+
+#ifndef Q_OS_ANDROID
+    QString pluginsPath = QFileInfo(binFolder).absoluteFilePath();
+    QFactoryLoader loader1(PluginInterface1_iid, "/nonexistent");
+#else
+    QString pluginsPath = androidLibsPaths.first();
+    // On Android we still need to specify a valid suffix, because it's a part
+    // of a file name, not directory structure
+    const QString suffix = QLatin1Char('/') + QLatin1String(binFolderC);
+    QFactoryLoader loader1(PluginInterface1_iid, suffix);
+#endif
+
+    // it shouldn't have scanned anything because we haven't given it a path yet
+    QVERIFY(loader1.metaData().isEmpty());
+
+    loader1.setExtraSearchPath(pluginsPath);
+    PluginInterface1 *plugin1 = qobject_cast<PluginInterface1 *>(loader1.instance(0));
+    QVERIFY2(plugin1,
+             qPrintable(QString::fromLatin1("Cannot load plugin '%1'")
+                        .arg(QLatin1String(PluginInterface1_iid))));
+
+    QCOMPARE(plugin1->pluginName(), QLatin1String("Plugin1 ok"));
+
+    // check that it forgets that plugin
+    loader1.setExtraSearchPath(QString());
+    QVERIFY(loader1.metaData().isEmpty());
+#endif
 }
 
 QTEST_MAIN(tst_QFactoryLoader)

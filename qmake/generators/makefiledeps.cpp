@@ -924,9 +924,26 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
 
     debug_msg(2, "findMocs: %s", file->file.local().toLatin1().constData());
     int line_count = 1;
-    // [0] for Q_OBJECT, [1] for Q_GADGET, [2] for Q_NAMESPACE, [3] for Q_NAMESPACE_EXPORT
-    bool ignore[4] = { false, false, false, false };
+    enum Keywords {
+        Q_OBJECT_Keyword,
+        Q_GADGET_Keyword,
+        Q_GADGET_EXPORT_Keyword,
+        Q_NAMESPACE_Keyword,
+        Q_NAMESPACE_EXPORT_Keyword,
+
+        NumKeywords
+    };
+    static const char keywords[][19] = {
+        "Q_OBJECT",
+        "Q_GADGET",
+        "Q_GADGET_EXPORT",
+        "Q_NAMESPACE",
+        "Q_NAMESPACE_EXPORT",
+    };
+    static_assert(std::size(keywords) == NumKeywords);
+    bool ignore[NumKeywords] = {};
  /* qmake ignore Q_GADGET */
+ /* qmake ignore Q_GADGET_EXPORT */
  /* qmake ignore Q_OBJECT */
  /* qmake ignore Q_NAMESPACE */
  /* qmake ignore Q_NAMESPACE_EXPORT */
@@ -950,30 +967,26 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
                     x = SKIP_BSNL(y + 1);
                     for (; x < buffer_len; x = SKIP_BSNL(x + 1)) {
                         if (buffer[x] == 't' || buffer[x] == 'q') { // ignore
-                            if(buffer_len >= (x + 20) &&
-                               !strncmp(buffer + x + 1, "make ignore Q_OBJECT", 20)) {
-                                debug_msg(2, "Mocgen: %s:%d Found \"qmake ignore Q_OBJECT\"",
-                                          file->file.real().toLatin1().constData(), line_count);
-                                x += 20;
-                                ignore[0] = true;
-                            } else if(buffer_len >= (x + 20) &&
-                                      !strncmp(buffer + x + 1, "make ignore Q_GADGET", 20)) {
-                                debug_msg(2, "Mocgen: %s:%d Found \"qmake ignore Q_GADGET\"",
-                                          file->file.real().toLatin1().constData(), line_count);
-                                x += 20;
-                                ignore[1] = true;
-                            } else if (buffer_len >= (x + 23) &&
-                                      !strncmp(buffer + x + 1, "make ignore Q_NAMESPACE", 23)) {
-                                debug_msg(2, "Mocgen: %s:%d Found \"qmake ignore Q_NAMESPACE\"",
-                                          file->file.real().toLatin1().constData(), line_count);
-                                x += 23;
-                                ignore[2] = true;
-                            } else if (buffer_len >= (x + 30) &&
-                                       !strncmp(buffer + x + 1, "make ignore Q_NAMESPACE_EXPORT", 30)) {
-                                 debug_msg(2, "Mocgen: %s:%d Found \"qmake ignore Q_NAMESPACE_EXPORT\"",
-                                           file->file.real().toLatin1().constData(), line_count);
-                                 x += 30;
-                                 ignore[3] = true;
+                            const char tag[] = "make ignore ";
+                            const auto starts_with = [](const char *haystack, const char *needle) {
+                                return strncmp(haystack, needle, strlen(needle)) == 0;
+                            };
+                            const auto is_ignore = [&](const char *keyword) {
+                                return buffer_len >= int(x + strlen(tag) + strlen(keyword)) &&
+                                        starts_with(buffer + x + 1, tag) &&
+                                        starts_with(buffer + x + 1 + strlen(tag), keyword);
+                            };
+                            int interest = 0;
+                            for (const char *keyword : keywords) {
+                                if (is_ignore(keyword)){
+                                    debug_msg(2, "Mocgen: %s:%d Found \"q%s%s\"",
+                                              file->file.real().toLatin1().constData(), line_count,
+                                              tag, keyword);
+                                    x += static_cast<int>(strlen(tag));
+                                    x += static_cast<int>(strlen(keyword));
+                                    ignore[interest] = true;
+                                }
+                                ++interest;
                             }
                         } else if (buffer[x] == '*') {
                             extralines = 0;
@@ -1001,16 +1014,15 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
             int morelines = 0;
             int y = skipEscapedLineEnds(buffer, buffer_len, x + 1, &morelines);
             if (buffer[y] == 'Q') {
-                static const char interesting[][19] = { "Q_OBJECT", "Q_GADGET", "Q_NAMESPACE", "Q_NAMESPACE_EXPORT" };
-                for (int interest = 0; interest < 4; ++interest) {
+                for (int interest = 0; interest < NumKeywords; ++interest) {
                     if (ignore[interest])
                         continue;
 
                     int matchlen = 0, extralines = 0;
-                    size_t needle_len = strlen(interesting[interest]);
+                    size_t needle_len = strlen(keywords[interest]);
                     Q_ASSERT(needle_len <= INT_MAX);
                     if (matchWhileUnsplitting(buffer, buffer_len, y,
-                                              interesting[interest],
+                                              keywords[interest],
                                               static_cast<int>(needle_len),
                                               &matchlen, &extralines)
                         && y + matchlen < buffer_len

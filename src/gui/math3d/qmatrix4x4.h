@@ -47,6 +47,8 @@
 #include <QtGui/qgenericmatrix.h>
 #include <QtCore/qrect.h>
 
+class tst_QMatrixNxN;
+
 QT_BEGIN_NAMESPACE
 
 
@@ -210,6 +212,8 @@ private:
     Flags flagBits;
 
     QMatrix4x4 orthonormalInverse() const;
+
+    friend class ::tst_QMatrixNxN; // for access to flagBits
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QMatrix4x4::Flags)
@@ -722,7 +726,7 @@ inline QMatrix4x4 operator*(const QMatrix4x4& m1, const QMatrix4x4& m2)
 
 #if QT_DEPRECATED_SINCE(6, 1)
 
-QT_DEPRECATED_VERSION_X_6_1("Extend the QVector3D to a QVector4D before multiplying")
+QT_DEPRECATED_VERSION_X_6_1("Extend the QVector3D to a QVector4D with 1.0 as the w coordinate before multiplying")
 inline QVector3D operator*(const QVector3D& vector, const QMatrix4x4& matrix)
 {
     float x, y, z, w;
@@ -748,7 +752,7 @@ inline QVector3D operator*(const QVector3D& vector, const QMatrix4x4& matrix)
         return QVector3D(x / w, y / w, z / w);
 }
 
-QT_DEPRECATED_VERSION_X_6_1("Use matrix.map(vector) or matrix.mapVector(vector) instead")
+QT_DEPRECATED_VERSION_X_6_1("Use matrix.map(vector) instead")
 inline QVector3D operator*(const QMatrix4x4& matrix, const QVector3D& vector)
 {
     return matrix.map(vector);

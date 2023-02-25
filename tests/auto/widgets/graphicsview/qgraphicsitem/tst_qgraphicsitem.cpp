@@ -63,6 +63,8 @@
 #include <QSignalSpy>
 #include <QTimer>
 
+#include <QtGui/private/qeventpoint_p.h>
+
 using AbstractGraphicsShapeItemPtr = QSharedPointer<QAbstractGraphicsShapeItem>;
 using GraphicsItems = QList<QGraphicsItem *>;
 using GraphicsItemsList = QList<QGraphicsItem *>;
@@ -74,7 +76,7 @@ Q_DECLARE_METATYPE(QSizeF)
 Q_DECLARE_METATYPE(QTransform)
 
 #if defined(Q_OS_WIN)
-#include <windows.h>
+#include <qt_windows.h>
 #define Q_CHECK_PAINTEVENTS \
     if (::SwitchDesktop(::GetThreadDesktop(::GetCurrentThreadId())) == 0) \
         QSKIP("The Graphics View doesn't get the paint events");
@@ -11017,13 +11019,13 @@ static QList<QEventPoint>
                       QEventPoint::State state = QEventPoint::State::Pressed)
 {
     const QPointF screenPos = view.viewport()->mapToGlobal(view.mapFromScene(scenePos));
-    QMutableEventPoint tp(0, state, scenePos, screenPos);
-    tp.setState(state);
-    tp.setScenePosition(scenePos);
-    tp.setGlobalPosition(screenPos);
-    tp.setGlobalPressPosition(screenPos);
-    tp.setGlobalLastPosition(screenPos);
-    tp.setEllipseDiameters(ellipseDiameters);
+    QEventPoint tp(0, state, scenePos, screenPos);
+    QMutableEventPoint::setState(tp, state);
+    QMutableEventPoint::setScenePosition(tp, scenePos);
+    QMutableEventPoint::setGlobalPosition(tp, screenPos);
+    QMutableEventPoint::setGlobalPressPosition(tp, screenPos);
+    QMutableEventPoint::setGlobalLastPosition(tp, screenPos);
+    QMutableEventPoint::setEllipseDiameters(tp, ellipseDiameters);
     return QList<QEventPoint>() << tp;
 }
 

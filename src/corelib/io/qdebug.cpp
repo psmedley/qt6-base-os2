@@ -813,6 +813,15 @@ QDebug &QDebug::resetFormat()
 */
 
 /*!
+    \fn template <class T, qsizetype P> QDebug operator<<(QDebug debug, const QVarLengthArray<T,P> &array)
+    \relates QDebug
+    \since 6.3
+
+    Writes the contents of \a array to \a debug. \c T needs to
+    support streaming into QDebug.
+*/
+
+/*!
     \fn template <typename T, typename Alloc> QDebug operator<<(QDebug debug, const std::list<T, Alloc> &vec)
     \relates QDebug
     \since 5.7
@@ -951,6 +960,10 @@ QDebug &QDebug::resetFormat()
     The settings of the internal QTextStream are also saved and restored,
     so that using << Qt::hex in a QDebug operator doesn't affect other QDebug
     operators.
+
+    QDebugStateSaver is typically used in the implementation of an operator<<() for debugging:
+
+    \snippet tools/customtype/message.cpp custom type streaming operator
 
     \since 5.1
 */

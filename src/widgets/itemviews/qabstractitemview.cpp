@@ -1808,8 +1808,7 @@ void QAbstractItemView::mousePressEvent(QMouseEvent *event)
     // this is the mouse press event that closed the last editor (via focus event)
     d->pressClosedEditor = d->pressClosedEditorWatcher.isActive() && d->lastEditedIndex == index;
 
-    if (!d->selectionModel
-        || (d->state == EditingState && d->hasEditor(index)))
+    if (!d->selectionModel || (d->state == EditingState && d->hasEditor(index)))
         return;
 
     d->pressedAlreadySelected = d->selectionModel->isSelected(index);
@@ -1818,10 +1817,11 @@ void QAbstractItemView::mousePressEvent(QMouseEvent *event)
     QItemSelectionModel::SelectionFlags command = selectionCommand(index, event);
     d->noSelectionOnMousePress = command == QItemSelectionModel::NoUpdate || !index.isValid();
     QPoint offset = d->offset();
+    d->draggedPosition = pos + offset;
 
     // update the pressed position when drag was enable
     if (d->dragEnabled)
-        d->pressedPosition = pos + offset;
+        d->pressedPosition = d->draggedPosition;
 
     if (!(command & QItemSelectionModel::Current)) {
         d->pressedPosition = pos + offset;
@@ -1878,6 +1878,8 @@ void QAbstractItemView::mouseMoveEvent(QMouseEvent *event)
     QPoint topLeft;
     QPoint bottomRight = event->position().toPoint();
 
+    d->draggedPosition = bottomRight + d->offset();
+
     if (state() == ExpandingState || state() == CollapsingState)
         return;
 
@@ -1931,10 +1933,10 @@ void QAbstractItemView::mouseMoveEvent(QMouseEvent *event)
         setSelection(selectionRect, command);
 
         // set at the end because it might scroll the view
-        if (index.isValid()
-            && (index != d->selectionModel->currentIndex())
-            && d->isIndexEnabled(index))
+        if (index.isValid() && (index != d->selectionModel->currentIndex()) && d->isIndexEnabled(index))
             d->selectionModel->setCurrentIndex(index, QItemSelectionModel::NoUpdate);
+        else if (d->shouldAutoScroll(event->pos()) && !d->autoScrollTimer.isActive())
+            startAutoScroll();
     }
 }
 
@@ -2056,6 +2058,7 @@ void QAbstractItemView::dragEnterEvent(QDragEnterEvent *event)
 void QAbstractItemView::dragMoveEvent(QDragMoveEvent *event)
 {
     Q_D(QAbstractItemView);
+    d->draggedPosition = event->position().toPoint() + d->offset();
     if (dragDropMode() == InternalMove
         && (event->source() != this || !(event->possibleActions() & Qt::MoveAction)))
         return;
@@ -4023,17 +4026,17 @@ void QAbstractItemView::doAutoScroll()
         }
     }
 
-    int verticalStep = verticalScroll->pageStep();
-    int horizontalStep = horizontalScroll->pageStep();
+    const int verticalStep = verticalScroll->pageStep();
+    const int horizontalStep = horizontalScroll->pageStep();
     if (d->autoScrollCount < qMax(verticalStep, horizontalStep))
         ++d->autoScrollCount;
 
-    int margin = d->autoScrollMargin;
-    int verticalValue = verticalScroll->value();
-    int horizontalValue = horizontalScroll->value();
+    const int margin = d->autoScrollMargin;
+    const int verticalValue = verticalScroll->value();
+    const int horizontalValue = horizontalScroll->value();
 
-    QPoint pos = d->viewport->mapFromGlobal(QCursor::pos());
-    QRect area = QWidgetPrivate::get(d->viewport)->clipRect();
+    const QPoint pos = d->draggedPosition - d->offset();
+    const QRect area = QWidgetPrivate::get(d->viewport)->clipRect();
 
     // do the scrolling if we are in the scroll margins
     if (pos.y() - area.top() < margin)
@@ -4045,8 +4048,8 @@ void QAbstractItemView::doAutoScroll()
     else if (area.right() - pos.x() < margin)
         horizontalScroll->setValue(horizontalValue + d->autoScrollCount);
     // if nothing changed, stop scrolling
-    bool verticalUnchanged = (verticalValue == verticalScroll->value());
-    bool horizontalUnchanged = (horizontalValue == horizontalScroll->value());
+    const bool verticalUnchanged = (verticalValue == verticalScroll->value());
+    const bool horizontalUnchanged = (horizontalValue == horizontalScroll->value());
     if (verticalUnchanged && horizontalUnchanged) {
         stopAutoScroll();
     } else {
@@ -4054,14 +4057,39 @@ void QAbstractItemView::doAutoScroll()
         d->dropIndicatorRect = QRect();
         d->dropIndicatorPosition = QAbstractItemView::OnViewport;
 #endif
+        switch (state()) {
+        case QAbstractItemView::DragSelectingState: {
+            // mouseMoveEvent updates the drag-selection rectangle, so fake an event. This also
+            // updates draggedPosition taking the now scrolled viewport into account.
+            const QPoint globalPos = d->viewport->mapToGlobal(pos);
+            const QPoint windowPos = window()->mapFromGlobal(globalPos);
+            QMouseEvent mm(QEvent::MouseMove, pos, windowPos, globalPos,
+                           Qt::NoButton, Qt::LeftButton, d->pressedModifiers,
+                           Qt::MouseEventSynthesizedByQt);
+            QApplication::sendEvent(viewport(), &mm);
+            break;
+        }
+        case QAbstractItemView::DraggingState: {
+            // we can't simulate mouse (it would throw off the drag'n'drop state logic) or drag
+            // (we don't have the mime data or the actions) move events during drag'n'drop, so
+            // update our dragged position manually after the scroll. "pos" is the old
+            // draggedPosition - d->offset(), and d->offset() is now updated after scrolling, so
+            // pos + d->offset() gives us the new position.
+            d->draggedPosition = pos + d->offset();
+            break;
+        }
+        default:
+            break;
+        }
         d->viewport->update();
     }
 }
 
 /*!
-    Returns the SelectionFlags to be used when updating a selection with
-    to include the \a index specified. The \a event is a user input event,
-    such as a mouse or keyboard event.
+    Returns the SelectionFlags to be used when updating a selection model
+    for the specified \a index. The result depends on the current
+    selectionMode(), and on the user input event \a event, which can be
+    \nullptr.
 
     Reimplement this function to define your own selection behavior.
 
@@ -4078,12 +4106,24 @@ QItemSelectionModel::SelectionFlags QAbstractItemView::selectionCommand(const QM
         case NoSelection: // Never update selection model
             return QItemSelectionModel::NoUpdate;
         case SingleSelection: // ClearAndSelect on valid index otherwise NoUpdate
-            if (event && event->type() == QEvent::MouseButtonRelease)
-                return QItemSelectionModel::NoUpdate;
-            if ((keyModifiers & Qt::ControlModifier) && d->selectionModel->isSelected(index) && event->type() != QEvent::MouseMove)
-                return QItemSelectionModel::Deselect | d->selectionBehaviorFlags();
-            else
-                return QItemSelectionModel::ClearAndSelect | d->selectionBehaviorFlags();
+            if (event) {
+                switch (event->type()) {
+                case QEvent::MouseButtonPress:
+                    // press with any modifiers on a selected item does nothing
+                    if (d->pressedAlreadySelected)
+                        return QItemSelectionModel::NoUpdate;
+                    break;
+                case QEvent::KeyPress:
+                case QEvent::MouseButtonRelease:
+                    // ctrl-release on selected item deselects
+                    if ((keyModifiers & Qt::ControlModifier) && d->selectionModel->isSelected(index))
+                        return QItemSelectionModel::Deselect | d->selectionBehaviorFlags();
+                    break;
+                default:
+                    break;
+                }
+            }
+            return QItemSelectionModel::ClearAndSelect | d->selectionBehaviorFlags();
         case MultiSelection:
             return d->multiSelectionCommand(index, event);
         case ExtendedSelection:

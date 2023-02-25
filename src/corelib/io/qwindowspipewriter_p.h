@@ -53,7 +53,6 @@
 //
 
 #include <qobject.h>
-#include <qdeadlinetimer.h>
 #include <qmutex.h>
 #include <private/qringbuffer_p.h>
 
@@ -68,26 +67,34 @@ public:
     explicit QWindowsPipeWriter(HANDLE pipeWriteEnd, QObject *parent = nullptr);
     ~QWindowsPipeWriter();
 
-    bool write(const QByteArray &ba);
+    void setHandle(HANDLE hPipeWriteEnd);
+    void write(const QByteArray &ba);
+    void write(const char *data, qint64 size);
     void stop();
-    bool waitForWrite(int msecs);
     bool checkForWrite() { return consumePendingAndEmit(false); }
-    bool isWriteOperationActive() const;
     qint64 bytesToWrite() const;
+    bool isWriteOperationActive() const;
     HANDLE syncEvent() const { return syncHandle; }
 
 Q_SIGNALS:
     void bytesWritten(qint64 bytes);
+    void writeFailed();
 
 protected:
     bool event(QEvent *e) override;
 
 private:
+    enum CompletionState { NoError, ErrorDetected, WriteDisabled };
+
+    template <typename... Args>
+    inline void writeImpl(Args... args);
+
+    void startAsyncWriteHelper(QMutexLocker<QMutex> *locker);
     void startAsyncWriteLocked();
     static void CALLBACK waitCallback(PTP_CALLBACK_INSTANCE instance, PVOID context,
                                       PTP_WAIT wait, TP_WAIT_RESULT waitResult);
     bool writeCompleted(DWORD errorCode, DWORD numberOfBytesWritten);
-    bool waitForNotification(const QDeadlineTimer &deadline);
+    void notifyCompleted(QMutexLocker<QMutex> *locker);
     bool consumePendingAndEmit(bool allowWinActPosting);
 
     HANDLE handle;
@@ -99,6 +106,8 @@ private:
     qint64 pendingBytesWrittenValue;
     mutable QMutex mutex;
     DWORD lastError;
+
+    CompletionState completionState;
     bool stopped;
     bool writeSequenceStarted;
     bool bytesWrittenPending;

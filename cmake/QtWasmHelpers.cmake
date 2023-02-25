@@ -1,34 +1,25 @@
 
 function (qt_internal_setup_wasm_target_properties wasmTarget)
 
-    target_link_options("${wasmTarget}" INTERFACE "SHELL:-s EXIT_RUNTIME=1"
+    target_link_options("${wasmTarget}" INTERFACE
     "SHELL:-s ERROR_ON_UNDEFINED_SYMBOLS=1"
-    "SHELL:-s EXTRA_EXPORTED_RUNTIME_METHODS=[UTF16ToString,stringToUTF16]"
+    "SHELL:-s EXPORTED_RUNTIME_METHODS=[UTF16ToString,stringToUTF16]"
     "SHELL:-s USE_WEBGL2=1"
     "--bind"
     "SHELL:-s FETCH=1")
-    target_compile_options("${wasmTarget}" INTERFACE --bind)
+
+    # Enable MODULARIZE and set EXPORT_NAME, which makes it possible to
+    # create application instances using a global constructor function,
+    # e.g. let app_instance = await createQtAppInstance().
+    # (as opposed to MODULARIZE=0, where Emscripten creates a global app
+    # instance object at Javascript eval time)
+    target_link_options("${wasmTarget}" INTERFACE
+    "SHELL:-s MODULARIZE=1"
+    "SHELL:-s EXPORT_NAME=createQtAppInstance")
 
     #simd
     if (QT_FEATURE_sse2)
         target_compile_options("${wasmTarget}" INTERFACE -O2 -msimd128 -msse -msse2)
-    endif()
-
-    # Hardcode wasm memory size. Emscripten does not currently support memory growth
-    # (ALLOW_MEMORY_GROWTH) in pthreads mode, and requires specifying the memory size
-    # at build time. Further, browsers limit the maximum initial memory size to 1GB.
-    # QT_WASM_INITIAL_MEMORY must be a multiple of 64KB (i.e. 65536)
-    if(NOT DEFINED QT_WASM_INITIAL_MEMORY)
-        if(QT_FEATURE_thread)
-            set(QT_WASM_INITIAL_MEMORY "1GB")
-        else()
-            set(QT_WASM_INITIAL_MEMORY "20MB") # emscripten default is 16MB, we need slightly more sometimes
-        endif()
-    endif()
-
-    if(DEFINED QT_WASM_INITIAL_MEMORY)
-        target_link_options("${wasmTarget}" INTERFACE "SHELL:-s INITIAL_MEMORY=${QT_WASM_INITIAL_MEMORY}")
-        message("Setting INITIAL_MEMORY to ${QT_WASM_INITIAL_MEMORY}")
     endif()
 
     if (QT_FEATURE_opengles3)
@@ -48,16 +39,8 @@ function (qt_internal_setup_wasm_target_properties wasmTarget)
     target_link_options("${wasmTarget}" INTERFACE "SHELL:-s DISABLE_EXCEPTION_CATCHING=${disable_exceptions_catching}")
 
     if (QT_FEATURE_thread)
-        target_compile_options("${wasmTarget}" INTERFACE "SHELL:-s USE_PTHREADS=1")
-        target_link_options("${wasmTarget}" INTERFACE "SHELL:-s USE_PTHREADS=1")
-
-        set(POOL_SIZE 4)
-        if(DEFINED QT_WASM_PTHREAD_POOL_SIZE)
-            set(POOL_SIZE ${QT_WASM_PTHREAD_POOL_SIZE})
-        endif()
-        target_link_options("${wasmTarget}" INTERFACE "SHELL:-s PTHREAD_POOL_SIZE=${POOL_SIZE}")
-        message("Setting PTHREAD_POOL_SIZE to ${POOL_SIZE}")
-
+        target_compile_options("${wasmTarget}" INTERFACE "SHELL:-pthread")
+        target_link_options("${wasmTarget}" INTERFACE "SHELL:-pthread")
     else()
         target_link_options("${wasmTarget}" INTERFACE "SHELL:-s ALLOW_MEMORY_GROWTH=1")
     endif()
@@ -73,7 +56,7 @@ function (qt_internal_setup_wasm_target_properties wasmTarget)
         # Pass --source-map-base on the linker line. This informs the
         # browser where to find the source files when debugging.
         # -g4 to make source maps for debugging
-        target_link_options("${wasmTarget}" INTERFACE  "-g4" "--source-map-base" "${WASM_SOURCE_MAP_BASE}")
+        target_link_options("${wasmTarget}" INTERFACE  "-gsource-map" "--source-map-base" "${WASM_SOURCE_MAP_BASE}")
 
     endif()
 
@@ -98,7 +81,7 @@ function (qt_internal_setup_wasm_target_properties wasmTarget)
         set(QT_CFLAGS_OPTIMIZE_DEBUG "-Os" CACHE STRING INTERNAL FORCE)
         set(QT_FEATURE_optimize_debug ON CACHE BOOL INTERNAL FORCE)
 
-        target_link_options("${wasmTarget}" INTERFACE "SHELL:-s ASYNCIFY" "-Os")
+        target_link_options("${wasmTarget}" INTERFACE "SHELL:-s ASYNCIFY" "-Os" "-s" "ASYNCIFY_IMPORTS=[qt_asyncify_suspend_js, qt_asyncify_resume_js]")
         target_compile_definitions("${wasmTarget}" INTERFACE QT_HAVE_EMSCRIPTEN_ASYNCIFY)
     endif()
 endfunction()

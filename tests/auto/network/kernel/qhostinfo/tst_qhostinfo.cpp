@@ -52,7 +52,7 @@
 
 #include <time.h>
 #if defined(Q_OS_WIN)
-#include <windows.h>
+#include <qt_windows.h>
 #else
 #include <unistd.h>
 #include <signal.h>
@@ -366,7 +366,7 @@ void tst_QHostInfo::lookupConnectToLambda()
     QFETCH(QString, addresses);
 
     lookupDone = false;
-    QHostInfo::lookupHost(hostname, [=](const QHostInfo &hostInfo) {
+    QHostInfo::lookupHost(hostname, [this](const QHostInfo &hostInfo) {
         resultsReady(hostInfo);
     });
 

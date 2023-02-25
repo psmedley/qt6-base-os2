@@ -83,6 +83,8 @@ typedef QList<QObject*> QObjectList;
 
 Q_CORE_EXPORT void qt_qFindChildren_helper(const QObject *parent, const QString &name,
                                            const QMetaObject &mo, QList<void *> *list, Qt::FindChildOptions options);
+Q_CORE_EXPORT void qt_qFindChildren_helper(const QObject *parent, const QMetaObject &mo,
+                                           QList<void *> *list, Qt::FindChildOptions options);
 Q_CORE_EXPORT void qt_qFindChildren_helper(const QObject *parent, const QRegularExpression &re,
                                            const QMetaObject &mo, QList<void *> *list, Qt::FindChildOptions options);
 Q_CORE_EXPORT QObject *qt_qFindChild_helper(const QObject *parent, const QString &name, const QMetaObject &mo, Qt::FindChildOptions options);
@@ -109,6 +111,9 @@ public:
     int postedEvents;
     QDynamicMetaObjectData *metaObject;
     QBindingStorage bindingStorage;
+
+    // ### Qt7: Make this return a const QMetaObject *. You should not mess with
+    //          the metaobjects of existing objects.
     QMetaObject *dynamicMetaObject() const;
 
 #ifdef QT_DEBUG
@@ -167,11 +172,21 @@ public:
     }
 
     template<typename T>
-    inline QList<T> findChildren(const QString &aName = QString(), Qt::FindChildOptions options = Qt::FindChildrenRecursively) const
+    inline QList<T> findChildren(const QString &aName, Qt::FindChildOptions options = Qt::FindChildrenRecursively) const
     {
         typedef typename std::remove_cv<typename std::remove_pointer<T>::type>::type ObjType;
         QList<T> list;
         qt_qFindChildren_helper(this, aName, ObjType::staticMetaObject,
+                                reinterpret_cast<QList<void *> *>(&list), options);
+        return list;
+    }
+
+    template<typename T>
+    QList<T> findChildren(Qt::FindChildOptions options = Qt::FindChildrenRecursively) const
+    {
+        typedef typename std::remove_cv<typename std::remove_pointer<T>::type>::type ObjType;
+        QList<T> list;
+        qt_qFindChildren_helper(this, ObjType::staticMetaObject,
                                 reinterpret_cast<QList<void *> *>(&list), options);
         return list;
     }
@@ -285,7 +300,10 @@ public:
 
     //connect to a functor
     template <typename Func1, typename Func2>
-    static inline typename std::enable_if<QtPrivate::FunctionPointer<Func2>::ArgumentCount == -1, QMetaObject::Connection>::type
+    static inline typename std::enable_if<
+        QtPrivate::FunctionPointer<Func2>::ArgumentCount == -1 &&
+        !std::is_convertible_v<Func2, const char*>, // don't match old-style connect
+    QMetaObject::Connection>::type
             connect(const typename QtPrivate::FunctionPointer<Func1>::Object *sender, Func1 signal, Func2 slot)
     {
         return connect(sender, signal, sender, std::move(slot), Qt::DirectConnection);
@@ -293,7 +311,10 @@ public:
 
     //connect to a functor, with a "context" object defining in which event loop is going to be executed
     template <typename Func1, typename Func2>
-    static inline typename std::enable_if<QtPrivate::FunctionPointer<Func2>::ArgumentCount == -1, QMetaObject::Connection>::type
+    static inline typename std::enable_if<
+        QtPrivate::FunctionPointer<Func2>::ArgumentCount == -1 &&
+        !std::is_convertible_v<Func2, const char*>, // don't match old-style connect
+    QMetaObject::Connection>::type
             connect(const typename QtPrivate::FunctionPointer<Func1>::Object *sender, Func1 signal, const QObject *context, Func2 slot,
                     Qt::ConnectionType type = Qt::AutoConnection)
     {
@@ -463,8 +484,31 @@ inline T qobject_cast(const QObject *object)
 }
 
 
-template <class T> inline const char * qobject_interface_iid()
-{ return nullptr; }
+template <class T> constexpr const char * qobject_interface_iid() = delete;
+template <class T> inline T *
+qobject_iid_cast(QObject *object, const char *IId = qobject_interface_iid<T *>())
+{
+    return reinterpret_cast<T *>((object ? object->qt_metacast(IId) : nullptr));
+}
+template <class T> inline std::enable_if_t<std::is_const<T>::value, T *>
+qobject_iid_cast(const QObject *object)
+{
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+    QObject *o = const_cast<QObject *>(object);
+    return qobject_iid_cast<std::remove_cv_t<T>>(o);
+}
+
+#if defined(Q_CLANG_QDOC)
+#  define Q_DECLARE_INTERFACE(IFace, IId)
+#elif !defined(Q_MOC_RUN)
+#  define Q_DECLARE_INTERFACE(IFace, IId) \
+    template <> constexpr const char *qobject_interface_iid<IFace *>() \
+    { return IId; } \
+    template <> inline IFace *qobject_cast<IFace *>(QObject *object) \
+    { return qobject_iid_cast<IFace>(object); } \
+    template <> inline const IFace *qobject_cast<const IFace *>(const QObject *object) \
+    { return qobject_iid_cast<const IFace>(object); }
+#endif // Q_MOC_RUN
 
 inline const QBindingStorage *qGetBindingStorage(const QObject *o)
 {
@@ -474,18 +518,6 @@ inline QBindingStorage *qGetBindingStorage(QObject *o)
 {
     return o->bindingStorage();
 }
-
-#if defined(Q_CLANG_QDOC)
-#  define Q_DECLARE_INTERFACE(IFace, IId)
-#elif !defined(Q_MOC_RUN)
-#  define Q_DECLARE_INTERFACE(IFace, IId) \
-    template <> inline const char *qobject_interface_iid<IFace *>() \
-    { return IId; } \
-    template <> inline IFace *qobject_cast<IFace *>(QObject *object) \
-    { return reinterpret_cast<IFace *>((object ? object->qt_metacast(IId) : nullptr)); } \
-    template <> inline IFace *qobject_cast<IFace *>(const QObject *object) \
-    { return reinterpret_cast<IFace *>((object ? const_cast<QObject *>(object)->qt_metacast(IId) : nullptr)); }
-#endif // Q_MOC_RUN
 
 #ifndef QT_NO_DEBUG_STREAM
 Q_CORE_EXPORT QDebug operator<<(QDebug, const QObject *);

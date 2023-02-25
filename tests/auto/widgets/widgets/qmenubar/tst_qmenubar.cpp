@@ -40,6 +40,7 @@
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QPlainTextEdit>
+#include <QTranslator>
 #include <qscreen.h>
 
 #include <qobject.h>
@@ -144,6 +145,8 @@ private slots:
 #ifdef Q_OS_MACOS
     void taskQTBUG56275_reinsertMenuInParentlessQMenuBar();
     void QTBUG_57404_existingMenuItemException();
+    void defaultEditMenuItems();
+
 #endif
     void QTBUG_25669_menubarActionDoubleTriggered();
     void taskQTBUG55966_subMenuRemoved();
@@ -1429,7 +1432,7 @@ void tst_QMenuBar::taskQTBUG4965_escapeEaten()
     QMenu menu("menu1");
     QAction *first = menubar.addMenu(&menu);
 #if QT_CONFIG(shortcut)
-    menu.addAction("quit", &menubar, SLOT(close()), QKeySequence("ESC"));
+    menu.addAction("quit", QKeySequence("ESC"), &menubar, SLOT(close()));
 #endif
     centerOnScreen(&menubar);
     menubar.show();
@@ -1817,6 +1820,32 @@ void tst_QMenuBar::QTBUG_57404_existingMenuItemException()
     mw1.activateWindow();
     QTest::qWait(100);
     // No crash, all fine. Ideally, there should be only one warning.
+}
+
+void tst_QMenuBar::defaultEditMenuItems()
+{
+    class TestTranslator : public QTranslator
+    {
+    public:
+        QString translate(const char *context, const char *sourceText,
+                          const char *disambiguation = nullptr, int n = -1) const override
+        {
+            if (QByteArrayView(context) == "QCocoaMenu" && QByteArrayView(sourceText) == "Edit")
+                return QString("Editieren");
+            return QTranslator::translate(context, sourceText, disambiguation, n);
+        }
+    } testTranslator;
+    qApp->installTranslator(&testTranslator);
+
+    QMainWindow mw;
+    mw.show();
+    QVERIFY(QTest::qWaitForWindowActive(&mw));
+
+    mw.menuBar()->addMenu("Editieren")->addAction("Undo");
+
+    mw.hide();
+    mw.show();
+    // this should not crash with infinite recursion
 }
 #endif // Q_OS_MACOS
 

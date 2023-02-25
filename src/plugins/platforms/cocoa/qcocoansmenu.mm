@@ -49,6 +49,7 @@
 
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qcoreevent.h>
+#include <QtCore/qvarlengtharray.h>
 #include <QtGui/private/qapplekeymapper_p.h>
 
 static NSString *qt_mac_removePrivateUnicode(NSString *string)
@@ -84,6 +85,13 @@ static NSString *qt_mac_removePrivateUnicode(NSString *string)
         self.delegate = [QCocoaNSMenuDelegate sharedMenuDelegate];
     }
 
+    return self;
+}
+
+- (instancetype)initWithoutPlatformMenu:(NSString *)title
+{
+    if (self = [super initWithTitle:title])
+        self.delegate = [QCocoaNSMenuDelegate sharedMenuDelegate];
     return self;
 }
 

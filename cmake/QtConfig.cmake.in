@@ -69,7 +69,11 @@ function(__qt_internal_collect_additional_prefix_paths out_var prefixes_var)
     endif()
     if(DEFINED ENV{${prefixes_var}}
         AND NOT "$ENV{${prefixes_var}}" STREQUAL "")
-        list(APPEND additional_packages_prefixes $ENV{${prefixes_var}})
+        set(prefixes_from_env "$ENV{${prefixes_var}}")
+        if(NOT CMAKE_HOST_WIN32)
+            string(REPLACE ":" ";" prefixes_from_env "${prefixes_from_env}")
+        endif()
+        list(APPEND additional_packages_prefixes ${prefixes_from_env})
     endif()
 
     foreach(additional_path IN LISTS additional_packages_prefixes)
@@ -247,6 +251,12 @@ if(@INSTALL_CMAKE_NAMESPACE@_FIND_COMPONENTS AND _Qt_NOTFOUND_MESSAGE)
     set(@INSTALL_CMAKE_NAMESPACE@_NOT_FOUND_MESSAGE "${_Qt_NOTFOUND_MESSAGE}")
     set(@INSTALL_CMAKE_NAMESPACE@_FOUND False)
     unset(_Qt_NOTFOUND_MESSAGE)
+endif()
+
+if(@INSTALL_CMAKE_NAMESPACE@_FOUND
+    AND COMMAND _qt_internal_override_example_install_dir_to_dot
+    AND NOT _qt_internal_example_dir_set_to_dot)
+    _qt_internal_override_example_install_dir_to_dot()
 endif()
 
 __qt_internal_defer_promote_targets_in_dir_scope_to_global()

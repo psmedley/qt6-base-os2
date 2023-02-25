@@ -226,7 +226,8 @@ void QFSFileEngine::setFileName(const QString &file)
 /*!
     \reimp
 */
-bool QFSFileEngine::open(QIODevice::OpenMode openMode)
+bool QFSFileEngine::open(QIODevice::OpenMode openMode,
+                         std::optional<QFile::Permissions> permissions)
 {
     Q_ASSERT_X(openMode & QIODevice::Unbuffered, "QFSFileEngine::open",
                "QFSFileEngine no longer supports buffered mode; upper layer must buffer");
@@ -250,7 +251,7 @@ bool QFSFileEngine::open(QIODevice::OpenMode openMode)
     d->fh = nullptr;
     d->fd = -1;
 
-    return d->nativeOpen(d->openMode);
+    return d->nativeOpen(d->openMode, permissions);
 }
 
 /*!
@@ -1057,9 +1058,11 @@ bool QFSFileEngine::renameOverwrite(const QString &newName)
 /*!
   \reimp
 */
-bool QFSFileEngine::mkdir(const QString &name, bool createParentDirectories) const
+bool QFSFileEngine::mkdir(const QString &name, bool createParentDirectories,
+                          std::optional<QFile::Permissions> permissions) const
 {
-    return QFileSystemEngine::createDirectory(QFileSystemEntry(name), createParentDirectories);
+    return QFileSystemEngine::createDirectory(QFileSystemEntry(name), createParentDirectories,
+                                              permissions);
 }
 
 /*!

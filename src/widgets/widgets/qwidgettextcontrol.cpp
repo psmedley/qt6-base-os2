@@ -446,25 +446,30 @@ void QWidgetTextControlPrivate::setContent(Qt::TextFormat format, const QString 
     if (!doc) {
         if (document) {
             doc = document;
-            clearDocument = false;
         } else {
             palette = QApplication::palette("QWidgetTextControl");
             doc = new QTextDocument(q);
         }
+        clearDocument = false;
         _q_documentLayoutChanged();
         cursor = QTextCursor(doc);
 
 // ####        doc->documentLayout()->setPaintDevice(viewport);
 
-        QObject::connect(doc, SIGNAL(contentsChanged()), q, SLOT(_q_updateCurrentCharFormatAndSelection()));
-        QObject::connect(doc, SIGNAL(cursorPositionChanged(QTextCursor)), q, SLOT(_q_emitCursorPosChanged(QTextCursor)));
-        QObject::connect(doc, SIGNAL(documentLayoutChanged()), q, SLOT(_q_documentLayoutChanged()));
+        QObjectPrivate::connect(doc, &QTextDocument::contentsChanged, this,
+                                &QWidgetTextControlPrivate::_q_updateCurrentCharFormatAndSelection);
+        QObjectPrivate::connect(doc, &QTextDocument::cursorPositionChanged, this,
+                                &QWidgetTextControlPrivate::_q_emitCursorPosChanged);
+        QObjectPrivate::connect(doc, &QTextDocument::documentLayoutChanged, this,
+                                &QWidgetTextControlPrivate::_q_documentLayoutChanged);
 
         // convenience signal forwards
-        QObject::connect(doc, SIGNAL(undoAvailable(bool)), q, SIGNAL(undoAvailable(bool)));
-        QObject::connect(doc, SIGNAL(redoAvailable(bool)), q, SIGNAL(redoAvailable(bool)));
-        QObject::connect(doc, SIGNAL(modificationChanged(bool)), q, SIGNAL(modificationChanged(bool)));
-        QObject::connect(doc, SIGNAL(blockCountChanged(int)), q, SIGNAL(blockCountChanged(int)));
+        QObject::connect(doc, &QTextDocument::undoAvailable, q, &QWidgetTextControl::undoAvailable);
+        QObject::connect(doc, &QTextDocument::redoAvailable, q, &QWidgetTextControl::redoAvailable);
+        QObject::connect(doc, &QTextDocument::modificationChanged, q,
+                         &QWidgetTextControl::modificationChanged);
+        QObject::connect(doc, &QTextDocument::blockCountChanged, q,
+                         &QWidgetTextControl::blockCountChanged);
     }
 
     bool previousUndoRedoState = doc->isUndoRedoEnabled();
@@ -526,7 +531,8 @@ void QWidgetTextControlPrivate::setContent(Qt::TextFormat format, const QString 
     q->ensureCursorVisible();
     emit q->cursorPositionChanged();
 
-    QObject::connect(doc, SIGNAL(contentsChange(int,int,int)), q, SLOT(_q_contentsChanged(int,int,int)), Qt::UniqueConnection);
+    QObjectPrivate::connect(doc, &QTextDocument::contentsChange, this,
+                            &QWidgetTextControlPrivate::_q_contentsChanged, Qt::UniqueConnection);
 }
 
 void QWidgetTextControlPrivate::startDrag()
@@ -706,10 +712,12 @@ void QWidgetTextControlPrivate::_q_documentLayoutChanged()
 {
     Q_Q(QWidgetTextControl);
     QAbstractTextDocumentLayout *layout = doc->documentLayout();
-    QObject::connect(layout, SIGNAL(update(QRectF)), q, SIGNAL(updateRequest(QRectF)));
-    QObject::connect(layout, SIGNAL(updateBlock(QTextBlock)), q, SLOT(_q_updateBlock(QTextBlock)));
-    QObject::connect(layout, SIGNAL(documentSizeChanged(QSizeF)), q, SIGNAL(documentSizeChanged(QSizeF)));
-
+    QObject::connect(layout, &QAbstractTextDocumentLayout::update, q,
+                     &QWidgetTextControl::updateRequest);
+    QObjectPrivate::connect(layout, &QAbstractTextDocumentLayout::updateBlock, this,
+                            &QWidgetTextControlPrivate::_q_updateBlock);
+    QObject::connect(layout, &QAbstractTextDocumentLayout::documentSizeChanged, q,
+                     &QWidgetTextControl::documentSizeChanged);
 }
 
 void QWidgetTextControlPrivate::setCursorVisible(bool visible)
@@ -940,6 +948,8 @@ void QWidgetTextControl::setTextCursor(const QTextCursor &cursor, bool selection
 #ifndef QT_NO_CLIPBOARD
     if (selectionClipboard)
         d->setClipboardSelection();
+#else
+    Q_UNUSED(selectionClipboard);
 #endif
 }
 
@@ -1299,7 +1309,7 @@ void QWidgetTextControlPrivate::keyPressEvent(QKeyEvent *e)
     }
 #ifndef QT_NO_SHORTCUT
       else if (e == QKeySequence::InsertParagraphSeparator) {
-        cursor.insertBlock();
+        insertParagraphSeparator();
         e->accept();
         goto accept;
     } else if (e == QKeySequence::InsertLineSeparator) {
@@ -3197,6 +3207,49 @@ QString QWidgetTextControl::toMarkdown(QTextDocument::MarkdownFeatures features)
     return document()->toMarkdown(features);
 }
 #endif
+
+void QWidgetTextControlPrivate::insertParagraphSeparator()
+{
+    // clear blockFormat properties that the user is unlikely to want duplicated:
+    // - don't insert <hr/> automatically
+    // - the next paragraph after a heading should be a normal paragraph
+    // - remove the bottom margin from the last list item before appending
+    // - the next checklist item after a checked item should be unchecked
+    auto blockFmt = cursor.blockFormat();
+    auto charFmt = cursor.charFormat();
+    blockFmt.clearProperty(QTextFormat::BlockTrailingHorizontalRulerWidth);
+    if (blockFmt.hasProperty(QTextFormat::HeadingLevel)) {
+        blockFmt.clearProperty(QTextFormat::HeadingLevel);
+        charFmt = QTextCharFormat();
+    }
+    if (cursor.currentList()) {
+        auto existingFmt = cursor.blockFormat();
+        existingFmt.clearProperty(QTextBlockFormat::BlockBottomMargin);
+        cursor.setBlockFormat(existingFmt);
+        if (blockFmt.marker() == QTextBlockFormat::MarkerType::Checked)
+            blockFmt.setMarker(QTextBlockFormat::MarkerType::Unchecked);
+    }
+
+    // After a blank line, reset block and char formats. I.e. you can end a list,
+    // block quote, etc. by hitting enter twice, and get back to normal paragraph style.
+    if (cursor.block().text().isEmpty() &&
+            !cursor.blockFormat().hasProperty(QTextFormat::BlockTrailingHorizontalRulerWidth) &&
+            !cursor.blockFormat().hasProperty(QTextFormat::BlockCodeLanguage)) {
+        blockFmt = QTextBlockFormat();
+        const bool blockFmtChanged = (cursor.blockFormat() != blockFmt);
+        charFmt = QTextCharFormat();
+        cursor.setBlockFormat(blockFmt);
+        cursor.setCharFormat(charFmt);
+        // If the user hit enter twice just to get back to default format,
+        // don't actually insert a new block. But if the user then hits enter
+        // yet again, the block format will not change, so we will insert a block.
+        // This is what many word processors do.
+        if (blockFmtChanged)
+            return;
+    }
+
+    cursor.insertBlock(blockFmt, charFmt);
+}
 
 void QWidgetTextControlPrivate::append(const QString &text, Qt::TextFormat format)
 {

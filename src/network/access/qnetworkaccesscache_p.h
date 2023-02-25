@@ -79,6 +79,7 @@ public:
         QByteArray key;
         bool expires;
         bool shareable;
+        qint64 expiryTimeoutSeconds;
     public:
         CacheableObject();
         virtual ~CacheableObject();
@@ -90,14 +91,12 @@ public:
         void setShareable(bool enable);
     };
 
-    QNetworkAccessCache();
     ~QNetworkAccessCache();
 
     void clear();
 
-    void addEntry(const QByteArray &key, CacheableObject *entry);
+    void addEntry(const QByteArray &key, CacheableObject *entry, qint64 connectionCacheExpiryTimeoutSeconds = -1);
     bool hasEntry(const QByteArray &key) const;
-    bool requestEntry(const QByteArray &key, QObject *target, const char *member);
     CacheableObject *requestEntryNow(const QByteArray &key);
     void releaseEntry(const QByteArray &key);
     void removeEntry(const QByteArray &key);
@@ -111,8 +110,8 @@ protected:
 private:
     // idea copied from qcache.h
     NodeHash hash;
-    Node *oldest;
-    Node *newest;
+    Node *firstExpiringNode = nullptr;
+    Node *lastExpiringNode = nullptr;
 
     QBasicTimer timer;
 
@@ -124,6 +123,7 @@ private:
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QNetworkAccessCache::CacheableObject*)
+QT_DECL_METATYPE_EXTERN_TAGGED(QNetworkAccessCache::CacheableObject*,
+                               QNetworkAccessCache__CacheableObject_ptr, /* not exported */)
 
 #endif

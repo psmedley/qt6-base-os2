@@ -39,23 +39,9 @@
 
 QT_BEGIN_NAMESPACE
 
-class QWasmCompositor;
-
 class QWasmWindow : public QPlatformWindow
 {
 public:
-    enum ResizeMode {
-        ResizeNone,
-        ResizeTopLeft,
-        ResizeTop,
-        ResizeTopRight,
-        ResizeRight,
-        ResizeBottomRight,
-        ResizeBottom,
-        ResizeBottomLeft,
-        ResizeLeft
-    };
-
     QWasmWindow(QWindow *w, QWasmCompositor *compositor, QWasmBackingStore *backingStore);
     ~QWasmWindow();
     void destroy();
@@ -64,6 +50,7 @@ public:
 
     void setGeometry(const QRect &) override;
     void setVisible(bool visible) override;
+    bool isVisible();
     QMargins frameMargins() const override;
 
     WId winId() const override;
@@ -92,7 +79,7 @@ public:
     QRegion resizeRegion() const;
     bool isPointOnTitle(QPoint point) const;
     bool isPointOnResizeRegion(QPoint point) const;
-    ResizeMode resizeModeAtPoint(QPoint point) const;
+    QWasmCompositor::ResizeMode resizeModeAtPoint(QPoint point) const;
     QRect maxButtonRect() const;
     QRect minButtonRect() const;
     QRect closeButtonRect() const;
@@ -102,6 +89,7 @@ public:
     QWasmCompositor::SubControls activeSubControl() const;
 
     void setWindowState(Qt::WindowStates state) override;
+    void applyWindowState();
     bool setKeyboardGrabEnabled(bool) override { return false; }
     bool setMouseGrabEnabled(bool) override { return false; }
 
@@ -117,11 +105,13 @@ protected:
     QWasmBackingStore *m_backingStore = nullptr;
     QRect m_normalGeometry {0, 0, 0 ,0};
 
-    Qt::WindowState m_windowState = Qt::WindowNoState;
+    Qt::WindowStates m_windowState = Qt::WindowNoState;
+    Qt::WindowStates m_previousWindowState = Qt::WindowNoState;
     QWasmCompositor::SubControls m_activeControl = QWasmCompositor::SC_None;
     WId m_winid = 0;
     bool m_hasTitle = false;
     bool m_needsCompositor = false;
+    long m_requestAnimationFrameId = -1;
     friend class QWasmCompositor;
     friend class QWasmEventTranslator;
     bool windowIsPopupType(Qt::WindowFlags flags) const;

@@ -61,6 +61,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.system.Os;
 import android.content.ClipboardManager;
 import android.content.ClipData;
 import android.content.ClipDescription;
@@ -127,6 +128,13 @@ public class QtNative
             runPendingCppRunnables();
         }
     };
+
+    public static boolean isStarted()
+    {
+        boolean hasActivity = m_activity != null && m_activityDelegate != null;
+        boolean hasService = m_service != null && m_serviceDelegate != null;
+        return m_started && (hasActivity || hasService);
+    }
 
     private static ClassLoader m_classLoader = null;
     public static ClassLoader classLoader()
@@ -620,7 +628,7 @@ public class QtNative
         });
     }
 
-    public static boolean startApplication(String params, final String environment, String mainLib) throws Exception
+    public static boolean startApplication(String params, String mainLib) throws Exception
     {
         if (params == null)
             params = "-platform\tandroid";
@@ -634,7 +642,7 @@ public class QtNative
             m_qtThread.run(new Runnable() {
                 @Override
                 public void run() {
-                    res[0] = startQtAndroidPlugin(qtParams, environment);
+                    res[0] = startQtAndroidPlugin(qtParams);
                     setDisplayMetrics(
                             m_displayMetricsScreenWidthPixels, m_displayMetricsScreenHeightPixels,
                             m_displayMetricsAvailableLeftPixels, m_displayMetricsAvailableTopPixels,
@@ -693,15 +701,16 @@ public class QtNative
 
 
     // application methods
-    public static native boolean startQtAndroidPlugin(String params, String env);
+    public static native boolean startQtAndroidPlugin(String params);
     public static native void startQtApplication();
     public static native void waitForServiceSetup();
     public static native void quitQtCoreApplication();
     public static native void quitQtAndroidPlugin();
     public static native void terminateQt();
+    public static native boolean updateNativeActivity();
     // application methods
 
-    private static void quitApp()
+    public static void quitApp()
     {
         runAction(new Runnable() {
             @Override
@@ -711,6 +720,8 @@ public class QtNative
                      m_activity.finish();
                  if (m_service != null)
                      m_service.stopSelf();
+
+                 m_started = false;
             }
         });
     }
@@ -962,13 +973,13 @@ public class QtNative
         return m_activityDelegate.isKeyboardVisible() && !m_isKeyboardHiding;
     }
 
-    private static void notifyAccessibilityLocationChange()
+    private static void notifyAccessibilityLocationChange(final int viewId)
     {
         runAction(new Runnable() {
             @Override
             public void run() {
                 if (m_activityDelegate != null) {
-                    m_activityDelegate.notifyAccessibilityLocationChange();
+                    m_activityDelegate.notifyAccessibilityLocationChange(viewId);
                 }
             }
         });
@@ -1044,9 +1055,16 @@ public class QtNative
 
     private static void clearClipData()
     {
-        if (Build.VERSION.SDK_INT >= 28 && m_clipboardManager != null)
-            m_clipboardManager.clearPrimaryClip();
-         m_usePrimaryClip = false;
+        if (m_clipboardManager != null) {
+            if (Build.VERSION.SDK_INT >= 28) {
+                m_clipboardManager.clearPrimaryClip();
+            } else {
+                String[] mimeTypes = { ClipDescription.MIMETYPE_UNKNOWN };
+                ClipData data = new ClipData("", mimeTypes, new ClipData.Item(new Intent()));
+                m_clipboardManager.setPrimaryClip(data);
+            }
+        }
+        m_usePrimaryClip = false;
     }
     private static void setClipboardText(String text)
     {
@@ -1365,6 +1383,40 @@ public class QtNative
             e.printStackTrace();
         }
         return res.toArray(new String[res.size()]);
+    }
+
+    /**
+     *Sets a single environment variable
+     *
+     * returns true if the value was set, false otherwise.
+     * in case it cannot set value will log the exception
+     **/
+    public static void setEnvironmentVariable(String key, String value)
+    {
+        try {
+            android.system.Os.setenv(key, value, true);
+        } catch (Exception e) {
+            Log.e(QtNative.QtTAG, "Could not set environment variable:" + key + "=" + value);
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     *Sets multiple environment variables
+     *
+     * Uses '\t' as divider between variables and '=' between key/value
+     * Ex: key1=val1\tkey2=val2\tkey3=val3
+     * Note: it assumed that the key cannot have '=' but the value can
+     **/
+    public static void setEnvironmentVariables(String environmentVariables)
+    {
+        for (String variable : environmentVariables.split("\t")) {
+            String[] keyvalue = variable.split("=", 2);
+            if (keyvalue.length < 2 || keyvalue[0].isEmpty())
+                continue;
+
+            setEnvironmentVariable(keyvalue[0], keyvalue[1]);
+        }
     }
 
     // screen methods

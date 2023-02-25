@@ -101,7 +101,6 @@ public:
     void setIgnorePunctuation(bool on);
     bool ignorePunctuation() const;
 
-#if QT_STRINGVIEW_LEVEL < 2
     int compare(const QString &s1, const QString &s2) const
     { return compare(QStringView(s1), QStringView(s2)); }
     int compare(const QChar *s1, int len1, const QChar *s2, int len2) const
@@ -109,13 +108,15 @@ public:
 
     bool operator()(const QString &s1, const QString &s2) const
     { return compare(s1, s2) < 0; }
-#endif
     int compare(QStringView s1, QStringView s2) const;
 
     bool operator()(QStringView s1, QStringView s2) const
     { return compare(s1, s2) < 0; }
 
     QCollatorSortKey sortKey(const QString &string) const;
+
+    static int defaultCompare(QStringView s1, QStringView s2);
+    static QCollatorSortKey defaultSortKey(QStringView key);
 
 private:
     QCollatorPrivate *d;

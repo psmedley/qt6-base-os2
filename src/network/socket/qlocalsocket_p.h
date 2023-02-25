@@ -116,9 +116,9 @@ public:
 
 class QLocalSocketPrivate : public QIODevicePrivate
 {
+public:
     Q_DECLARE_PUBLIC(QLocalSocket)
 
-public:
     QLocalSocketPrivate();
     void init();
 
@@ -132,13 +132,12 @@ public:
     void _q_errorOccurred(QAbstractSocket::SocketError newError);
 #elif defined(Q_OS_WIN)
     ~QLocalSocketPrivate();
-    void destroyPipeHandles();
     qint64 pipeWriterBytesToWrite() const;
     void _q_canRead();
     void _q_bytesWritten(qint64 bytes);
-    void writeToSocket();
     void _q_pipeClosed();
     void _q_winError(ulong windowsError, const QString &function);
+    void _q_writeFailed();
     HANDLE handle;
     QWindowsPipeWriter *pipeWriter;
     QWindowsPipeReader *pipeReader;

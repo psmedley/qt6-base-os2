@@ -28,6 +28,8 @@
 
 
 #include <QTest>
+#include <QSignalSpy>
+
 #include <qapplication.h>
 #include <qsplitter.h>
 #include <qstyle.h>
@@ -81,6 +83,8 @@ private slots:
     void replaceWidget();
     void replaceWidgetWithSplitterChild_data();
     void replaceWidgetWithSplitterChild();
+    void replaceWidgetWhileHidden_data();
+    void replaceWidgetWhileHidden();
     void handleMinimumWidth();
 
     // task-specific tests below me:
@@ -89,6 +93,7 @@ private slots:
     void task169702_sizes();
     void taskQTBUG_4101_ensureOneNonCollapsedWidget_data();
     void taskQTBUG_4101_ensureOneNonCollapsedWidget();
+    void taskQTBUG_102249_moveNonPressed();
     void setLayout();
     void autoAdd();
 
@@ -851,6 +856,47 @@ void tst_QSplitter::replaceWidgetWithSplitterChild()
     }
 }
 
+void tst_QSplitter::replaceWidgetWhileHidden_data()
+{
+    QTest::addColumn<bool>("splitterVisible");
+    QTest::addColumn<bool>("widgetVisible");
+
+    QTest::addRow("visibleToVisible") << true << true;
+    QTest::addRow("hiddenToVisible") << true << false;
+    QTest::addRow("visibleToHidden") << false << true;
+    QTest::addRow("hiddenToHidden") << false << false;
+}
+
+void tst_QSplitter::replaceWidgetWhileHidden()
+{
+    QFETCH(bool, splitterVisible);
+    QFETCH(bool, widgetVisible);
+
+    MyFriendlySplitter splitter;
+
+    splitter.addWidget(new QLabel("One"));
+    splitter.addWidget(new QLabel("Two"));
+
+    if (splitterVisible) {
+        splitter.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&splitter));
+    }
+    QWidget *newWidget = new QLabel("Three");
+    if (!widgetVisible)
+        newWidget->hide();
+
+    const bool wasExplicitHide = !widgetVisible && newWidget->testAttribute(Qt::WA_WState_ExplicitShowHide);
+    splitter.replaceWidget(1, newWidget);
+
+    QCOMPARE(!widgetVisible && newWidget->testAttribute(Qt::WA_WState_ExplicitShowHide), wasExplicitHide);
+
+    if (!splitterVisible) {
+        splitter.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&splitter));
+    }
+    QCOMPARE(widgetVisible, newWidget->isVisible());
+}
+
 void tst_QSplitter::handleMinimumWidth()
 {
     MyFriendlySplitter split;
@@ -1024,6 +1070,24 @@ void tst_QSplitter::taskQTBUG_4101_ensureOneNonCollapsedWidget()
     else
         delete l;
     QTRY_VERIFY(s.sizes().at(0) > 0);
+}
+
+void tst_QSplitter::taskQTBUG_102249_moveNonPressed()
+{
+    QSplitter s;
+    s.setOpaqueResize(true);
+    s.addWidget(new QWidget());
+    s.addWidget(new QWidget());
+    s.show();
+
+    QSignalSpy spyMove(&s, &QSplitter::splitterMoved);
+    QPointF posOutOfWidget = QPointF(30, 30);
+    QMouseEvent me(QEvent::MouseMove,
+                   posOutOfWidget, s.mapToGlobal(posOutOfWidget),
+                   Qt::NoButton, Qt::MouseButtons(Qt::LeftButton),
+                   Qt::NoModifier);
+    qApp->sendEvent(s.handle(0), &me);
+    QCOMPARE(spyMove.count(), 0);
 }
 
 void tst_QSplitter::setLayout()

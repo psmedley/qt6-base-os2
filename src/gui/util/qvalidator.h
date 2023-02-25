@@ -140,8 +140,10 @@ public:
     };
     Q_ENUM(Notation)
     QValidator::State validate(QString &, int &) const override;
+    void fixup(QString &input) const override;
 
-    void setRange(double bottom, double top, int decimals = 0);
+    void setRange(double bottom, double top, int decimals);
+    void setRange(double bottom, double top);
     void setBottom(double);
     void setTop(double);
     void setDecimals(int);

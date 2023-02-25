@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2012 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
 ** Contact: https://www.qt.io/licensing/
 **
@@ -421,7 +421,7 @@ QValidator::State QIntValidator::validate(QString & input, int&) const
         return Intermediate;
 
     bool ok;
-    qlonglong entered = QLocaleData::bytearrayToLongLong(buff.constData(), 10, &ok);
+    qlonglong entered = QLocaleData::bytearrayToLongLong(buff, 10, &ok);
     if (!ok)
         return Invalid;
 
@@ -456,7 +456,7 @@ void QIntValidator::fixup(QString &input) const
         return;
     }
     bool ok;
-    qlonglong entered = QLocaleData::bytearrayToLongLong(buff.constData(), 10, &ok);
+    qlonglong entered = QLocaleData::bytearrayToLongLong(buff, 10, &ok);
     if (ok)
         input = locale().toString(entered);
 }
@@ -491,7 +491,7 @@ void QIntValidator::setRange(int bottom, int top)
     \brief the validator's lowest acceptable value
 
     By default, this property's value is derived from the lowest signed
-    integer available (typically -2147483647).
+    integer available (-2147483648).
 
     \sa setRange()
 */
@@ -505,7 +505,7 @@ void QIntValidator::setBottom(int bottom)
     \brief the validator's highest acceptable value
 
     By default, this property's value is derived from the highest signed
-    integer available (typically 2147483647).
+    integer available (2147483647).
 
     \sa setRange()
 */
@@ -543,6 +543,8 @@ public:
     QDoubleValidator::Notation notation;
 
     QValidator::State validateWithLocale(QString & input, QLocaleData::NumberMode numMode, const QLocale &locale) const;
+    void fixupWithLocale(QString &input, QLocaleData::NumberMode numMode,
+                         const QLocale &locale) const;
 };
 
 
@@ -554,8 +556,7 @@ public:
     \inmodule QtGui
 
     QDoubleValidator provides an upper bound, a lower bound, and a
-    limit on the number of digits after the decimal point. It does not
-    provide a fixup() function.
+    limit on the number of digits after the decimal point.
 
     You can set the acceptable range in one call with setRange(), or
     with setBottom() and setTop(). Set the number of decimal places
@@ -590,8 +591,8 @@ public:
     that accepts any double.
 */
 
-QDoubleValidator::QDoubleValidator(QObject * parent)
-    : QDoubleValidator(-HUGE_VAL, HUGE_VAL, 1000, parent)
+QDoubleValidator::QDoubleValidator(QObject *parent)
+    : QDoubleValidator(-HUGE_VAL, HUGE_VAL, -1, parent)
 {
 }
 
@@ -693,7 +694,11 @@ QValidator::State QDoubleValidatorPrivate::validateWithLocale(QString &input, QL
     if (notation == QDoubleValidator::StandardNotation) {
         double max = qMax(qAbs(q->b), qAbs(q->t));
         qlonglong v;
-        if (convertDoubleTo(max, &v)) {
+        // Need a whole number to pass to convertDoubleTo() or it fails. Use
+        // floor, as max is positive so this has the same number of digits
+        // before the decimal point, where qCeil() might take us up to a power
+        // of ten, adding a digit.
+        if (convertDoubleTo(qFloor(max), &v)) {
             qlonglong n = pow10(numDigits(v));
             // In order to get the highest possible number in the intermediate
             // range we need to get 10 to the power of the number of digits
@@ -712,9 +717,97 @@ QValidator::State QDoubleValidatorPrivate::validateWithLocale(QString &input, QL
 }
 
 /*!
+    \since 6.3
+    \overload
+
+    Attempts to fix the \a input string to an \l Acceptable representation of a
+    double.
+
+    The format of the number is determined by \l notation(), \l decimals(),
+    \l locale() and the latter's \l {QLocale::}{numberOptions()}.
+
+    To comply with \l notation(), when \l ScientificNotation is used, the fixed
+    value will be represented in its normalized form, which means that any
+    non-zero value will have one non-zero digit before the decimal point.
+
+    \snippet code/src_gui_util_qvalidator.cpp 7
+
+    To comply with \l decimals(), when it is \c {-1} the number of digits used
+    will be determined by \l QLocale::FloatingPointShortest. Otherwise, the
+    fractional part of the number is truncated (with rounding, as appropriate)
+    if its length exceeds \l decimals(). When \l notation() is
+    \l ScientificNotation this is done after the number has been put into its
+    normalized form.
+
+    \snippet code/src_gui_util_qvalidator.cpp 8
+
+    \note If \l decimals() is set to, and the string provides, more than
+    \c {std::numeric_limits<double>::digits10}, digits beyond that many in the
+    fractional part may be changed. The resulting string shall encode the same
+    floating-point number, when parsed to a \c double.
+*/
+void QDoubleValidator::fixup(QString &input) const
+{
+    Q_D(const QDoubleValidator);
+    const auto numberMode = d->notation == StandardNotation ? QLocaleData::DoubleStandardMode
+                                                            : QLocaleData::DoubleScientificMode;
+
+    d->fixupWithLocale(input, numberMode, locale());
+}
+
+void QDoubleValidatorPrivate::fixupWithLocale(QString &input, QLocaleData::NumberMode numMode,
+                                              const QLocale &locale) const
+{
+    Q_Q(const QDoubleValidator);
+    QByteArray buff;
+    // Passing -1 as the number of decimals, because fixup() exists to improve
+    // an Intermediate value, if it can.
+    if (!locale.d->m_data->validateChars(input, numMode, &buff, -1, locale.numberOptions()))
+        return;
+
+    // buff now contains data in C locale.
+    bool ok = false;
+    const double entered = buff.toDouble(&ok);
+    if (ok) {
+        // Here we need to adjust the output format accordingly
+        char mode;
+        if (numMode == QLocaleData::DoubleStandardMode) {
+            mode = 'f';
+        } else {
+            // scientific mode can be either 'e' or 'E'
+            mode = input.contains(QChar::fromLatin1('E')) ? 'E' : 'e';
+        }
+        int precision;
+        if (q->dec < 0) {
+            precision = QLocale::FloatingPointShortest;
+        } else {
+            if (mode == 'f') {
+                const auto decimalPointIndex = buff.indexOf('.');
+                precision = decimalPointIndex >= 0 ? buff.size() - decimalPointIndex - 1 : 0;
+            } else {
+                auto eIndex = buff.indexOf('e');
+                // No need to check for 'E' because we can get only 'e' after a
+                // call to validateChars()
+                if (eIndex < 0)
+                    eIndex = buff.size();
+                precision = eIndex - (buff.contains('.') ? 1 : 0)
+                        - (buff.startsWith('-') || buff.startsWith('+') ? 1 : 0);
+            }
+            // Use q->dec to limit the number of decimals, because we want the
+            // fixup() result to pass validate().
+            precision = qMin(precision, q->dec);
+        }
+        input = locale.toString(entered, mode, precision);
+    }
+}
+
+/*!
     Sets the validator to accept doubles from \a minimum to \a maximum
     inclusive, with at most \a decimals digits after the decimal
     point.
+
+    \note Setting the number of decimals to -1 effectively sets it to unlimited.
+    This is also the value used by a default-constructed validator.
 */
 
 void QDoubleValidator::setRange(double minimum, double maximum, int decimals)
@@ -739,6 +832,17 @@ void QDoubleValidator::setRange(double minimum, double maximum, int decimals)
     }
     if (rangeChanged)
         emit changed();
+}
+
+/*!
+    \overload
+
+    Sets the validator to accept doubles from \a minimum to \a maximum
+    inclusive without changing the number of digits after the decimal point.
+*/
+void QDoubleValidator::setRange(double minimum, double maximum)
+{
+    setRange(minimum, maximum, decimals());
 }
 
 /*!
@@ -774,7 +878,8 @@ void QDoubleValidator::setTop(double top)
     \property QDoubleValidator::decimals
     \brief the validator's maximum number of digits after the decimal point
 
-    By default, this property contains a value of 1000.
+    By default, this property contains a value of -1, which means any number
+    of digits is accepted.
 
     \sa setRange()
 */
@@ -814,6 +919,7 @@ QDoubleValidator::Notation QDoubleValidator::notation() const
 
 /*!
     \class QRegularExpressionValidator
+    \inmodule QtGui
     \brief The QRegularExpressionValidator class is used to check a string
     against a regular expression.
 
@@ -964,5 +1070,7 @@ void QRegularExpressionValidatorPrivate::setRegularExpression(const QRegularExpr
 #endif // QT_CONFIG(regularexpression)
 
 QT_END_NAMESPACE
+
+#include "moc_qvalidator.cpp"
 
 #endif // QT_NO_VALIDATOR

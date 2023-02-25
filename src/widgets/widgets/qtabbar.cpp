@@ -42,8 +42,6 @@
 #include "qabstractitemdelegate.h"
 #endif
 #include "qapplication.h"
-#include "qbitmap.h"
-#include "qcursor.h"
 #include "qevent.h"
 #include "qpainter.h"
 #include "qstyle.h"
@@ -1020,6 +1018,11 @@ int QTabBar::insertTab(int index, const QIcon& icon, const QString &text)
             ++tab->lastTab;
     }
 
+    if (tabAt(d->mousePosition) == index) {
+        d->hoverIndex = index;
+        d->hoverRect = tabRect(index);
+    }
+
     tabInserted(index);
     d->autoHideTabs();
     return index;
@@ -1083,8 +1086,6 @@ void QTabBar::removeTab(int index)
                     break;
                 case SelectLeftTab:
                     newIndex = qBound(d->firstVisible, index-1, d->lastVisible);
-                    if (newIndex < 0)
-                        newIndex = 0;
                     break;
                 default:
                     break;
@@ -1095,6 +1096,9 @@ void QTabBar::removeTab(int index)
                     int bump = d->tabList.at(newIndex)->lastTab;
                     setCurrentIndex(newIndex);
                     d->tabList.at(newIndex)->lastTab = bump;
+                } else {
+                    // we had a valid current index, but there are no visible tabs left
+                    emit currentChanged(-1);
                 }
             } else {
                 emit currentChanged(-1);
@@ -1104,16 +1108,15 @@ void QTabBar::removeTab(int index)
         }
         d->refresh();
         d->autoHideTabs();
-        if (!d->hoverRect.isEmpty()) {
-            for (int i = 0; i < d->tabList.count(); ++i) {
-                const QRect area = tabRect(i);
-                if (area.contains(mapFromGlobal(QCursor::pos()))) {
-                    d->hoverIndex = i;
-                    d->hoverRect = area;
-                    break;
-                }
-            }
+        if (d->hoverRect.isValid()) {
             update(d->hoverRect);
+            d->hoverIndex = tabAt(d->mousePosition);
+            if (d->validIndex(d->hoverIndex)) {
+                d->hoverRect = tabRect(d->hoverIndex);
+                update(d->hoverRect);
+            } else {
+                d->hoverRect = QRect();
+            }
         }
         tabRemoved(index);
     }
@@ -1696,33 +1699,29 @@ bool QTabBar::event(QEvent *event)
     case QEvent::HoverMove:
     case QEvent::HoverEnter: {
         QHoverEvent *he = static_cast<QHoverEvent *>(event);
-        if (!d->hoverRect.contains(he->position().toPoint())) {
-            QRect oldHoverRect = d->hoverRect;
-            bool cursorOverTabs = false;
-            for (int i = 0; i < d->tabList.count(); ++i) {
-                QRect area = tabRect(i);
-                if (area.contains(he->position().toPoint())) {
-                    d->hoverIndex = i;
-                    d->hoverRect = area;
-                    cursorOverTabs = true;
-                    break;
-                }
-            }
-            if (!cursorOverTabs) {
-                d->hoverIndex = -1;
+        d->mousePosition = he->position().toPoint();
+        if (!d->hoverRect.contains(d->mousePosition)) {
+            if (d->hoverRect.isValid())
+                update(d->hoverRect);
+            d->hoverIndex = tabAt(d->mousePosition);
+            if (d->validIndex(d->hoverIndex)) {
+                d->hoverRect = tabRect(d->hoverIndex);
+                update(d->hoverRect);
+            } else {
                 d->hoverRect = QRect();
             }
-            if (he->oldPos() != QPoint(-1, -1))
-                update(oldHoverRect);
-            update(d->hoverRect);
         }
         return true;
     }
     case QEvent::HoverLeave: {
-        QRect oldHoverRect = d->hoverRect;
+        d->mousePosition = {-1, -1};
+        if (d->hoverRect.isValid())
+            update(d->hoverRect);
         d->hoverIndex = -1;
         d->hoverRect = QRect();
-        update(oldHoverRect);
+#if QT_CONFIG(wheelevent)
+        d->accumulatedAngleDelta = QPoint();
+#endif
         return true;
     }
 #if QT_CONFIG(tooltip)
@@ -1796,6 +1795,7 @@ bool QTabBar::event(QEvent *event)
     case QEvent::MouseButtonPress:
     case QEvent::MouseButtonRelease:
     case QEvent::MouseMove:
+        d->mousePosition = static_cast<QMouseEvent *>(event)->position().toPoint();
         d->mouseButtons = static_cast<QMouseEvent *>(event)->buttons();
         break;
     default:
@@ -1956,8 +1956,6 @@ void QTabBarPrivate::calculateFirstLastVisible(int index, bool visible, bool rem
                     break;
                 }
             }
-            if (firstVisible < 0)
-                firstVisible = 0;
         }
         if (remove || (index == lastVisible)) {
             lastVisible = -1;
@@ -2392,10 +2390,57 @@ void QTabBar::wheelEvent(QWheelEvent *event)
 {
     Q_D(QTabBar);
     if (style()->styleHint(QStyle::SH_TabBar_AllowWheelScrolling)) {
-        int delta = (qAbs(event->angleDelta().x()) > qAbs(event->angleDelta().y()) ?
-                         event->angleDelta().x() : event->angleDelta().y());
-        int offset = delta > 0 ? -1 : 1;
-        d->setCurrentNextEnabledIndex(offset);
+        const bool wheelVertical = qAbs(event->angleDelta().y()) > qAbs(event->angleDelta().x());
+        const bool tabsVertical = verticalTabs(d->shape);
+        if (event->device()->capabilities().testFlag(QInputDevice::Capability::PixelScroll)) {
+            // For wheels/touch pads with pixel precision, scroll the tab bar if
+            // it has the right orientation.
+            int delta = 0;
+            if (tabsVertical == wheelVertical)
+                delta = wheelVertical ? event->pixelDelta().y() : event->pixelDelta().x();
+            if (layoutDirection() == Qt::RightToLeft)
+                delta = -delta;
+            if (delta && d->validIndex(d->lastVisible)) {
+                const int oldScrollOffset = d->scrollOffset;
+                const QRect lastTabRect = d->tabList.at(d->lastVisible)->rect;
+                const QRect scrollRect = d->normalizedScrollRect(d->lastVisible);
+                int scrollRectExtent = scrollRect.right();
+                if (!d->leftB->isVisible())
+                    scrollRectExtent += tabsVertical ? d->leftB->height() : d->leftB->width();
+                if (!d->rightB->isVisible())
+                    scrollRectExtent += tabsVertical ? d->rightB->height() : d->rightB->width();
+
+                const int maxScrollOffset = qMax((tabsVertical ?
+                                                  lastTabRect.bottom() :
+                                                  lastTabRect.right()) - scrollRectExtent, 0);
+                d->scrollOffset = qBound(0, d->scrollOffset - delta, maxScrollOffset);
+                d->leftB->setEnabled(d->scrollOffset > -scrollRect.left());
+                d->rightB->setEnabled(maxScrollOffset > d->scrollOffset);
+                if (oldScrollOffset != d->scrollOffset) {
+                    event->accept();
+                    update();
+                    return;
+                }
+            }
+        } else {
+            d->accumulatedAngleDelta += event->angleDelta();
+            const int xSteps = d->accumulatedAngleDelta.x() / QWheelEvent::DefaultDeltasPerStep;
+            const int ySteps = d->accumulatedAngleDelta.y() / QWheelEvent::DefaultDeltasPerStep;
+            int offset = 0;
+            if (xSteps > 0 || ySteps > 0) {
+                offset = -1;
+                d->accumulatedAngleDelta = QPoint();
+            } else if (xSteps < 0 || ySteps < 0) {
+                offset = 1;
+                d->accumulatedAngleDelta = QPoint();
+            }
+            const int oldCurrentIndex = d->currentIndex;
+            d->setCurrentNextEnabledIndex(offset);
+            if (oldCurrentIndex != d->currentIndex) {
+                event->accept();
+                return;
+            }
+        }
         QWidget::wheelEvent(event);
     }
 }

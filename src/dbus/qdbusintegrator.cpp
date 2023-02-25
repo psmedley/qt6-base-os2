@@ -82,7 +82,7 @@ QT_BEGIN_NAMESPACE
 static dbus_int32_t server_slot = -1;
 
 static QBasicAtomicInt isDebugging = Q_BASIC_ATOMIC_INITIALIZER(-1);
-#define qDBusDebug              if (::isDebugging == 0); else qDebug
+#define qDBusDebug              if (::isDebugging.loadRelaxed() == 0); else qDebug
 
 static inline QDebug operator<<(QDebug dbg, const QThread *th)
 {
@@ -385,7 +385,7 @@ static bool findObject(const QDBusConnectionPrivate::ObjectTreeNode *root,
         start = 1;
 
     // walk the object tree
-    QDBusConnectionPrivate::ObjectTreeNode::DataList::ConstIterator node = root;
+    const QDBusConnectionPrivate::ObjectTreeNode *node = root;
     while (start < length && node) {
         if (node->flags & QDBusConnection::ExportChildObjects)
             break;
@@ -399,7 +399,7 @@ static bool findObject(const QDBusConnectionPrivate::ObjectTreeNode *root,
             std::lower_bound(node->children.constBegin(), node->children.constEnd(), pathComponent);
         if (it != node->children.constEnd() && it->name == pathComponent)
             // match
-            node = it;
+            node = &(*it);
         else
             node = nullptr;
 
@@ -624,7 +624,7 @@ static void huntAndUnregister(const QList<QStringView> &pathComponents, int i,
         if (it == end || it->name != pathComponents.at(i))
             return;              // node not found
 
-        huntAndUnregister(pathComponents, i + 1, mode, it);
+        huntAndUnregister(pathComponents, i + 1, mode, &(*it));
         if (!it->isActive())
             node->children.erase(it);
     }
@@ -1036,12 +1036,12 @@ QDBusConnectionPrivate::QDBusConnectionPrivate(QObject *p)
       isAuthenticated(false)
 {
     static const bool threads = q_dbus_threads_init_default();
-    if (::isDebugging == -1)
-       ::isDebugging = qEnvironmentVariableIntValue("QDBUS_DEBUG");
     Q_UNUSED(threads);
+    if (::isDebugging.loadRelaxed() == -1)
+       ::isDebugging.storeRelaxed(qEnvironmentVariableIntValue("QDBUS_DEBUG"));
 
 #ifdef QDBUS_THREAD_DEBUG
-    if (::isDebugging > 1)
+    if (::isDebugging.loadRelaxed() > 1)
         qdbusThreadDebug = qdbusDefaultThreadDebug;
 #endif
 
@@ -1134,7 +1134,13 @@ void QDBusConnectionPrivate::closeConnection()
         }
     }
 
-    qDeleteAll(pendingCalls);
+    for (auto it = pendingCalls.begin(); it != pendingCalls.end(); ++it) {
+        auto call = *it;
+        if (!call->ref.deref()) {
+            delete call;
+        }
+    }
+    pendingCalls.clear();
 
     // Disconnect all signals from signal hooks and from the object tree to
     // avoid QObject::destroyed being sent to dbus daemon thread which has
@@ -2582,6 +2588,12 @@ QDBusConnectionPrivate::findMetaObject(const QString &service, const QString &pa
         QDBusMetaObject *mo = cachedMetaObjects.value(interface, nullptr);
         if (mo)
             return mo;
+    }
+    if (path.isEmpty()) {
+        error = QDBusError(QDBusError::InvalidObjectPath,
+                           QLatin1String("Object path cannot be empty"));
+        lastError = error;
+        return nullptr;
     }
 
     // introspect the target object

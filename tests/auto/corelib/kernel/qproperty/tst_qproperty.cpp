@@ -35,7 +35,7 @@
 #if __has_include(<source_location>) && __cplusplus >= 202002L && !defined(Q_CLANG_QDOC)
 #include <source_location>
 #define QT_SOURCE_LOCATION_NAMESPACE std
-#elif __has_include(<experimental/source_location>) && __cplusplus >= 201703L && !defined(Q_CLANG_QDOC)
+#elif __has_include(<experimental/source_location>) && !defined(Q_CLANG_QDOC)
 #include <experimental/source_location>
 #define QT_SOURCE_LOCATION_NAMESPACE std::experimental
 #endif
@@ -117,6 +117,9 @@ private slots:
     void selfBindingShouldNotCrash();
 
     void qpropertyAlias();
+    void scheduleNotify();
+
+    void notifyAfterAllDepsGone();
 };
 
 void tst_QProperty::functorBinding()
@@ -744,7 +747,7 @@ void tst_QProperty::genericPropertyBinding()
 
     {
         QUntypedPropertyBinding doubleBinding(QMetaType::fromType<double>(),
-                                              [](const QMetaType &, void *) -> bool {
+                                              [](QMetaType , void *) -> bool {
             Q_ASSERT(false);
             return true;
         }, QPropertyBindingSourceLocation());
@@ -752,7 +755,7 @@ void tst_QProperty::genericPropertyBinding()
     }
 
     QUntypedPropertyBinding intBinding(QMetaType::fromType<int>(),
-                                    [](const QMetaType &metaType, void *dataPtr) -> bool {
+                                    [](QMetaType metaType, void *dataPtr) -> bool {
         Q_ASSERT(metaType.id() == qMetaTypeId<int>());
 
         int *intPtr = reinterpret_cast<int*>(dataPtr);
@@ -772,7 +775,7 @@ void tst_QProperty::genericPropertyBindingBool()
     QVERIFY(!property.value());
 
     QUntypedPropertyBinding boolBinding(QMetaType::fromType<bool>(),
-            [](const QMetaType &, void *dataPtr) -> bool {
+            [](QMetaType, void *dataPtr) -> bool {
         auto boolPtr = reinterpret_cast<bool *>(dataPtr);
         *boolPtr = true;
         return true;
@@ -1494,6 +1497,7 @@ class CompatPropertyTester : public QObject
     Q_PROPERTY(int prop1 READ prop1 WRITE setProp1 BINDABLE bindableProp1)
     Q_PROPERTY(int prop2 READ prop2 WRITE setProp2 NOTIFY prop2Changed BINDABLE bindableProp2)
     Q_PROPERTY(int prop3 READ prop3 WRITE setProp3 NOTIFY prop3Changed BINDABLE bindableProp3)
+    Q_PROPERTY(int prop4 READ prop4 WRITE setProp4 NOTIFY prop4Changed BINDABLE bindableProp4)
 public:
     CompatPropertyTester(QObject *parent = nullptr) : QObject(parent) { }
 
@@ -1521,9 +1525,25 @@ public:
     }
     QBindable<int> bindableProp3() { return QBindable<int>(&prop3Data); }
 
+    int prop4() const
+    {
+        auto val = prop4Data.value();
+        return val == 0 ? 42 : val;
+    }
+
+    void setProp4(int i)
+    {
+        if (i == prop4Data)
+            return;
+        prop4Data.setValue(i);
+        prop4Data.notify();
+    }
+    QBindable<int> bindableProp4() { return QBindable<int>(&prop4Data); }
+
 signals:
     void prop2Changed(int value);
     void prop3Changed();
+    void prop4Changed(int value);
 
 private:
     Q_OBJECT_COMPAT_PROPERTY(CompatPropertyTester, int, prop1Data, &CompatPropertyTester::setProp1)
@@ -1532,6 +1552,10 @@ private:
     Q_OBJECT_COMPAT_PROPERTY_WITH_ARGS(CompatPropertyTester, int, prop3Data,
                                        &CompatPropertyTester::setProp3,
                                        &CompatPropertyTester::prop3Changed, 1)
+    Q_OBJECT_COMPAT_PROPERTY_WITH_ARGS(CompatPropertyTester, int, prop4Data,
+                                       &CompatPropertyTester::setProp4,
+                                       &CompatPropertyTester::prop4Changed,
+                                       &CompatPropertyTester::prop4, 0)
 };
 
 void tst_QProperty::compatPropertyNoDobuleNotification()
@@ -1559,7 +1583,7 @@ void tst_QProperty::compatPropertySignals()
 
     QCOMPARE(prop2Observer.value(), 10);
     QCOMPARE(prop2Spy.count(), 1);
-    const QList<QVariant> arguments = prop2Spy.takeFirst();
+    QList<QVariant> arguments = prop2Spy.takeFirst();
     QCOMPARE(arguments.size(), 1);
     QCOMPARE(arguments.at(0).metaType().id(), QMetaType::Int);
     QCOMPARE(arguments.at(0).toInt(), 10);
@@ -1575,6 +1599,40 @@ void tst_QProperty::compatPropertySignals()
 
     QCOMPARE(prop3Observer.value(), 5);
     QCOMPARE(prop3Spy.count(), 1);
+
+    // Compat property with signal, default value, and custom setter. Signal has parameter.
+    QProperty<int> prop4Observer;
+    prop4Observer.setBinding(tester.bindableProp4().makeBinding());
+    QCOMPARE(prop4Observer.value(), 42);
+
+    QSignalSpy prop4Spy(&tester, &CompatPropertyTester::prop4Changed);
+
+    tester.setProp4(10);
+
+    QCOMPARE(prop4Observer.value(), 10);
+    QCOMPARE(prop4Spy.count(), 1);
+    arguments = prop4Spy.takeFirst();
+    QCOMPARE(arguments.size(), 1);
+    QCOMPARE(arguments.at(0).metaType().id(), QMetaType::Int);
+    QCOMPARE(arguments.at(0).toInt(), 10);
+
+    tester.setProp4(42);
+
+    QCOMPARE(prop4Observer.value(), 42);
+    QCOMPARE(prop4Spy.count(), 1);
+    arguments = prop4Spy.takeFirst();
+    QCOMPARE(arguments.size(), 1);
+    QCOMPARE(arguments.at(0).metaType().id(), QMetaType::Int);
+    QCOMPARE(arguments.at(0).toInt(), 42);
+
+    tester.setProp4(0);
+
+    QCOMPARE(prop4Observer.value(), 42);
+    QCOMPARE(prop4Spy.count(), 1);
+    arguments = prop4Spy.takeFirst();
+    QCOMPARE(arguments.size(), 1);
+    QCOMPARE(arguments.at(0).metaType().id(), QMetaType::Int);
+    QCOMPARE(arguments.at(0).toInt(), 42);
 }
 
 class FakeDependencyCreator : public QObject
@@ -1872,6 +1930,43 @@ void tst_QProperty::qpropertyAlias()
     QCOMPARE(alias.value(), 42);
     i.reset();
     QVERIFY(!alias.isValid());
+}
+
+void tst_QProperty::scheduleNotify()
+{
+    int notifications = 0;
+    QProperty<int> p;
+    QCOMPARE(p.value(), 0);
+    const auto handler = p.addNotifier([&](){ ++notifications; });
+    QCOMPARE(notifications, 0);
+    QPropertyBinding<int> b([]() { return 0; }, QPropertyBindingSourceLocation());
+    QPropertyBindingPrivate::get(b)->scheduleNotify();
+    QCOMPARE(notifications, 0);
+    p.setBinding(b);
+    QCOMPARE(notifications, 1);
+    QCOMPARE(p.value(), 0);
+}
+
+void tst_QProperty::notifyAfterAllDepsGone()
+{
+    bool b = true;
+    QProperty<int> iprop;
+    QProperty<int> jprop(42);
+    iprop.setBinding([&](){
+        if (b)
+            return jprop.value();
+        return 13;
+    });
+    int changeCounter = 0;
+    auto keepAlive = iprop.onValueChanged([&](){ changeCounter++; });
+    QCOMPARE(iprop.value(), 42);
+    jprop = 44;
+    QCOMPARE(iprop.value(), 44);
+    QCOMPARE(changeCounter, 1);
+    b = false;
+    jprop = 43;
+    QCOMPARE(iprop.value(), 13);
+    QCOMPARE(changeCounter, 2);
 }
 
 QTEST_MAIN(tst_QProperty);

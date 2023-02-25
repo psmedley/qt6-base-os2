@@ -63,6 +63,8 @@
 #include "private/qbytedata_p.h"
 #include <QSharedPointer>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 class QAbstractNetworkCache;
@@ -153,7 +155,7 @@ public:
 
     QNetworkAccessBackend *backend;
     QIODevice *outgoingData;
-    QSharedPointer<QRingBuffer> outgoingDataBuffer;
+    std::shared_ptr<QRingBuffer> outgoingDataBuffer;
     QIODevice *copyDevice;
     QAbstractNetworkCache *networkCache() const;
 
@@ -191,6 +193,7 @@ Q_DECLARE_TYPEINFO(QNetworkReplyImplPrivate::InternalNotifications, Q_PRIMITIVE_
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QSharedPointer<char>)
+// ### move to qsharedpointer_impl.h
+QT_DECL_METATYPE_EXTERN_TAGGED(QSharedPointer<char>, QSharedPointer_char, Q_NETWORK_EXPORT)
 
 #endif

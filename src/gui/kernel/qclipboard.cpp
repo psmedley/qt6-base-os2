@@ -137,6 +137,10 @@ QT_BEGIN_NAMESPACE
 
     \endlist
 
+    \section1 Notes for Android Users
+
+    On Android only these mime types are supported: text/plain, text/html, and text/uri-list.
+
     \sa QGuiApplication
 */
 
@@ -582,12 +586,13 @@ void QClipboard::emitChanged(Mode mode)
         case FindBuffer:
             emit findBufferChanged();
         break;
-        default:
-        break;
     }
+
     emit changed(mode);
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qclipboard.cpp"
 
 #endif // QT_NO_CLIPBOARD

@@ -13,35 +13,22 @@ function(qt_to_qmake_path_list out_var)
     set("${out_var}" "${result}" PARENT_SCOPE)
 endfunction()
 
-macro(qt_add_string_to_qconfig_cpp str)
-    string(LENGTH "${str}" length)
-    string(APPEND QT_CONFIG_STRS "    \"${str}\\0\"\n")
-    string(APPEND QT_CONFIG_STR_OFFSETS "    ${QT_CONFIG_STR_OFFSET},\n")
-    math(EXPR QT_CONFIG_STR_OFFSET "${QT_CONFIG_STR_OFFSET}+${length}+1")
-endmacro()
 
 function(qt_generate_qconfig_cpp in_file out_file)
-    set(QT_CONFIG_STR_OFFSET "0")
-    set(QT_CONFIG_STR_OFFSETS "")
     set(QT_CONFIG_STRS "")
 
-    # Start first part.
-    qt_add_string_to_qconfig_cpp("${INSTALL_DOCDIR}")
-    qt_add_string_to_qconfig_cpp("${INSTALL_INCLUDEDIR}")
-    qt_add_string_to_qconfig_cpp("${INSTALL_LIBDIR}")
-    qt_add_string_to_qconfig_cpp("${INSTALL_LIBEXECDIR}")
-    qt_add_string_to_qconfig_cpp("${INSTALL_BINDIR}")
-    qt_add_string_to_qconfig_cpp("${INSTALL_PLUGINSDIR}")
-    qt_add_string_to_qconfig_cpp("${INSTALL_QMLDIR}")
-    qt_add_string_to_qconfig_cpp("${INSTALL_ARCHDATADIR}")
-    qt_add_string_to_qconfig_cpp("${INSTALL_DATADIR}")
-    qt_add_string_to_qconfig_cpp("${INSTALL_TRANSLATIONSDIR}")
-    qt_add_string_to_qconfig_cpp("${INSTALL_EXAMPLESDIR}")
-    qt_add_string_to_qconfig_cpp("${INSTALL_TESTSDIR}")
-
-    # Save first part.
-    set(QT_CONFIG_STR_OFFSETS_FIRST "${QT_CONFIG_STR_OFFSETS}")
-    set(QT_CONFIG_STRS_FIRST "${QT_CONFIG_STRS}")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_DOCDIR})qconfig\",\n")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_INCLUDEDIR})qconfig\",\n")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_LIBDIR})qconfig\",\n")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_LIBEXECDIR})qconfig\",\n")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_BINDIR})qconfig\",\n")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_PLUGINSDIR})qconfig\",\n")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_QMLDIR})qconfig\",\n")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_ARCHDATADIR})qconfig\",\n")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_DATADIR})qconfig\",\n")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_TRANSLATIONSDIR})qconfig\",\n")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_EXAMPLESDIR})qconfig\",\n")
+    string(APPEND QT_CONFIG_STRS "    R\"qconfig(${INSTALL_TESTSDIR})qconfig\"")
 
     # Settings path / sysconf dir.
     set(QT_SYS_CONF_DIR "${INSTALL_SYSCONFDIR}")
@@ -143,25 +130,40 @@ HostSpec=${QT_QMAKE_HOST_MKSPEC}
     qt_install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${qt_conf_path}"
         DESTINATION "${INSTALL_BINDIR}")
 
+    if(QT_GENERATE_WRAPPER_SCRIPTS_FOR_ALL_HOSTS)
+        set(hosts "unix" "non-unix")
+    elseif(CMAKE_HOST_UNIX)
+        set(hosts "unix")
+    else()
+        set(hosts "non-unix")
+    endif()
+
     set(wrapper_prefix)
-    set(wrapper_extension)
     if(QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
         # Avoid collisions with the cross-compiled qmake/qtpaths binaries.
         set(wrapper_prefix "host-")
     endif()
-    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
-        set(wrapper_extension ".bat")
-    endif()
 
-    set(wrapper_in_file
-        "${CMAKE_CURRENT_SOURCE_DIR}/bin/qmake-and-qtpaths-wrapper${wrapper_extension}.in")
     set(host_qt_bindir "${host_prefix}/${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_BINDIR}")
 
-    foreach(tool_name qmake qtpaths)
-        set(wrapper "preliminary/${wrapper_prefix}${tool_name}${wrapper_extension}")
-        configure_file("${wrapper_in_file}" "${wrapper}" @ONLY)
-        qt_copy_or_install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/${wrapper}"
-            DESTINATION "${INSTALL_BINDIR}")
+    foreach(host_type ${hosts})
+        foreach(tool_name qmake qtpaths)
+            set(wrapper_extension)
+            set(newline_style LF)
+
+            if(host_type STREQUAL "non-unix")
+                set(wrapper_extension ".bat")
+                set(newline_style CRLF)
+            endif()
+
+            set(wrapper_in_file
+                "${CMAKE_CURRENT_SOURCE_DIR}/bin/qmake-and-qtpaths-wrapper${wrapper_extension}.in")
+
+            set(wrapper "preliminary/${wrapper_prefix}${tool_name}${wrapper_extension}")
+            configure_file("${wrapper_in_file}" "${wrapper}" @ONLY NEWLINE_STYLE ${newline_style})
+            qt_copy_or_install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/${wrapper}"
+                DESTINATION "${INSTALL_BINDIR}")
+        endforeach()
     endforeach()
 endfunction()
 

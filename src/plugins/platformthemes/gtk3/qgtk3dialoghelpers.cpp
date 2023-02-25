@@ -45,6 +45,7 @@
 #include <qcolor.h>
 #include <qdebug.h>
 #include <qfont.h>
+#include <qfileinfo.h>
 
 #include <private/qguiapplication_p.h>
 #include <qpa/qplatformfontdatabase.h>
@@ -52,8 +53,19 @@
 #undef signals
 #include <gtk/gtk.h>
 #include <gdk/gdk.h>
-#include <gdk/gdkx.h>
 #include <pango/pango.h>
+
+#if QT_CONFIG(xlib) && defined(GDK_WINDOWING_X11)
+#include <gdk/gdkx.h>
+#endif
+
+// The size of the preview we display for selected image files. We set height
+// larger than width because generally there is more free space vertically
+// than horiztonally (setting the preview image will alway expand the width of
+// the dialog, but usually not the height). The image's aspect ratio will always
+// be preserved.
+#define PREVIEW_WIDTH 256
+#define PREVIEW_HEIGHT 512
 
 QT_BEGIN_NAMESPACE
 
@@ -130,12 +142,14 @@ bool QGtk3Dialog::show(Qt::WindowFlags flags, Qt::WindowModality modality, QWind
 
     GdkWindow *gdkWindow = gtk_widget_get_window(gtkWidget);
     if (parent) {
+#if QT_CONFIG(xlib) && defined(GDK_WINDOWING_X11)
         if (GDK_IS_X11_WINDOW(gdkWindow)) {
             GdkDisplay *gdkDisplay = gdk_window_get_display(gdkWindow);
             XSetTransientForHint(gdk_x11_display_get_xdisplay(gdkDisplay),
                                  gdk_x11_window_get_xid(gdkWindow),
                                  parent->winId());
         }
+#endif
     }
 
     if (modality != Qt::NonModal) {
@@ -250,6 +264,10 @@ QGtk3FileDialogHelper::QGtk3FileDialogHelper()
     g_signal_connect(GTK_FILE_CHOOSER(d->gtkDialog()), "selection-changed", G_CALLBACK(onSelectionChanged), this);
     g_signal_connect_swapped(GTK_FILE_CHOOSER(d->gtkDialog()), "current-folder-changed", G_CALLBACK(onCurrentFolderChanged), this);
     g_signal_connect_swapped(GTK_FILE_CHOOSER(d->gtkDialog()), "notify::filter", G_CALLBACK(onFilterChanged), this);
+
+    previewWidget = gtk_image_new();
+    g_signal_connect(G_OBJECT(d->gtkDialog()), "update-preview", G_CALLBACK(onUpdatePreview), this);
+    gtk_file_chooser_set_preview_widget(GTK_FILE_CHOOSER(d->gtkDialog()), previewWidget);
 }
 
 QGtk3FileDialogHelper::~QGtk3FileDialogHelper()
@@ -388,6 +406,33 @@ void QGtk3FileDialogHelper::onCurrentFolderChanged(QGtk3FileDialogHelper *dialog
 void QGtk3FileDialogHelper::onFilterChanged(QGtk3FileDialogHelper *dialog)
 {
     emit dialog->filterSelected(dialog->selectedNameFilter());
+}
+
+void QGtk3FileDialogHelper::onUpdatePreview(GtkDialog *gtkDialog, QGtk3FileDialogHelper *helper)
+{
+    gchar *filename = gtk_file_chooser_get_preview_filename(GTK_FILE_CHOOSER(gtkDialog));
+    if (!filename) {
+        gtk_file_chooser_set_preview_widget_active(GTK_FILE_CHOOSER(gtkDialog), false);
+        return;
+    }
+
+    // Don't attempt to open anything which isn't a regular file. If a named pipe,
+    // this may hang.
+    QFileInfo fileinfo(filename);
+    if (!fileinfo.exists() || !fileinfo.isFile()) {
+        g_free(filename);
+        gtk_file_chooser_set_preview_widget_active(GTK_FILE_CHOOSER(gtkDialog), false);
+        return;
+    }
+
+    // This will preserve the image's aspect ratio.
+    GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_size(filename, PREVIEW_WIDTH, PREVIEW_HEIGHT, 0);
+    g_free(filename);
+    if (pixbuf) {
+        gtk_image_set_from_pixbuf(GTK_IMAGE(helper->previewWidget), pixbuf);
+        g_object_unref(pixbuf);
+    }
+    gtk_file_chooser_set_preview_widget_active(GTK_FILE_CHOOSER(gtkDialog), pixbuf ? true : false);
 }
 
 static GtkFileChooserAction gtkFileChooserAction(const QSharedPointer<QFileDialogOptions> &options)
@@ -623,5 +668,7 @@ void QGtk3FontDialogHelper::applyOptions()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qgtk3dialoghelpers.cpp"
 
 #include "qgtk3dialoghelpers.moc"

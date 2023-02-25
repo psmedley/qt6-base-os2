@@ -48,27 +48,12 @@ QHttpNetworkHeaderPrivate::QHttpNetworkHeaderPrivate(const QUrl &newUrl)
 {
 }
 
-QHttpNetworkHeaderPrivate::QHttpNetworkHeaderPrivate(const QHttpNetworkHeaderPrivate &other)
-    :QSharedData(other)
-{
-    url = other.url;
-    fields = other.fields;
-}
-
 qint64 QHttpNetworkHeaderPrivate::contentLength() const
 {
     bool ok = false;
     // We are not using the headerField() method here because servers might send us multiple content-length
     // headers which is crap (see QTBUG-15311). Therefore just take the first content-length header field.
-    QByteArray value;
-    QList<QPair<QByteArray, QByteArray> >::ConstIterator it = fields.constBegin(),
-                                                        end = fields.constEnd();
-    for ( ; it != end; ++it)
-        if (it->first.compare("content-length", Qt::CaseInsensitive) == 0) {
-            value = it->second;
-            break;
-        }
-
+    QByteArray value = parser.firstHeaderField("content-length");
     qint64 length = value.toULongLong(&ok);
     if (ok)
         return length;
@@ -91,33 +76,27 @@ QByteArray QHttpNetworkHeaderPrivate::headerField(const QByteArray &name, const 
 
 QList<QByteArray> QHttpNetworkHeaderPrivate::headerFieldValues(const QByteArray &name) const
 {
-    QList<QByteArray> result;
-    QList<QPair<QByteArray, QByteArray> >::ConstIterator it = fields.constBegin(),
-                                                        end = fields.constEnd();
-    for ( ; it != end; ++it)
-        if (name.compare(it->first, Qt::CaseInsensitive) == 0)
-            result += it->second;
-
-    return result;
+    return parser.headerFieldValues(name);
 }
 
 void QHttpNetworkHeaderPrivate::setHeaderField(const QByteArray &name, const QByteArray &data)
 {
-    auto firstEqualsName = [&name](const QPair<QByteArray, QByteArray> &header) {
-        return name.compare(header.first, Qt::CaseInsensitive) == 0;
-    };
-    fields.removeIf(firstEqualsName);
-    fields.append(qMakePair(name, data));
+    parser.setHeaderField(name, data);
 }
 
 void QHttpNetworkHeaderPrivate::prependHeaderField(const QByteArray &name, const QByteArray &data)
 {
-    fields.prepend(qMakePair(name, data));
+    parser.prependHeaderField(name, data);
+}
+
+QList<QPair<QByteArray, QByteArray> > QHttpNetworkHeaderPrivate::headers() const
+{
+    return parser.headers();
 }
 
 void QHttpNetworkHeaderPrivate::clearHeaders()
 {
-    fields.clear();
+    parser.clearHeaders();
 }
 
 bool QHttpNetworkHeaderPrivate::operator==(const QHttpNetworkHeaderPrivate &other) const

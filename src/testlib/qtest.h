@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2019 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2020 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -380,7 +380,7 @@ inline char *toString(const std::pair<T1, T2> &pair)
 {
     const QScopedArrayPointer<char> first(toString(pair.first));
     const QScopedArrayPointer<char> second(toString(pair.second));
-    return toString(QString::asprintf("std::pair(%s,%s)", first.data(), second.data()));
+    return formatString("std::pair(", ")", 2, first.data(), second.data());
 }
 
 template <typename Tuple, int... I>
@@ -503,14 +503,16 @@ template <typename T>
 inline bool qCompare(QFlags<T> const &t1, T const &t2, const char *actual, const char *expected,
                     const char *file, int line)
 {
-    return qCompare(int(t1), int(t2), actual, expected, file, line);
+    using Int = typename QFlags<T>::Int;
+    return qCompare(Int(t1), Int(t2), actual, expected, file, line);
 }
 
 template <typename T>
 inline bool qCompare(QFlags<T> const &t1, int const &t2, const char *actual, const char *expected,
                     const char *file, int line)
 {
-    return qCompare(int(t1), t2, actual, expected, file, line);
+    using Int = typename QFlags<T>::Int;
+    return qCompare(Int(t1), Int(t2), actual, expected, file, line);
 }
 
 template<>
@@ -612,14 +614,22 @@ struct QtCoverageScanner
 #define TESTLIB_SELFCOVERAGE_START(name)
 #endif
 
-#define QTEST_APPLESS_MAIN(TestObject) \
+// Internal (but used by some testlib selftests to hack argc and argv).
+// Tests should normally implement initMain() if they have set-up to do before
+// instantiating the test class.
+#define QTEST_MAIN_WRAPPER(TestObject, ...) \
 int main(int argc, char *argv[]) \
 { \
-    TESTLIB_SELFCOVERAGE_START(TestObject) \
+    TESTLIB_SELFCOVERAGE_START(#TestObject) \
+    QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
+    __VA_ARGS__ \
     TestObject tc; \
     QTEST_SET_MAIN_SOURCE_PATH \
     return QTest::qExec(&tc, argc, argv); \
 }
+
+// For when you don't even want a QApplication:
+#define QTEST_APPLESS_MAIN(TestObject) QTEST_MAIN_WRAPPER(TestObject)
 
 #include <QtTest/qtestsystem.h>
 
@@ -627,68 +637,34 @@ int main(int argc, char *argv[]) \
 #  include <QtTest/qtest_network.h>
 #endif
 
+// Internal
+#define QTEST_QAPP_SETUP(klaz) \
+    klaz app(argc, argv); \
+    app.setAttribute(Qt::AA_Use96Dpi, true);
+ 
 #if defined(QT_WIDGETS_LIB)
-
-#include <QtTest/qtest_widgets.h>
-
-#ifdef QT_KEYPAD_NAVIGATION
-#  define QTEST_DISABLE_KEYPAD_NAVIGATION QApplication::setNavigationMode(Qt::NavigationModeNone);
-#else
-#  define QTEST_DISABLE_KEYPAD_NAVIGATION
-#endif
-
-#define QTEST_MAIN_IMPL(TestObject) \
-    TESTLIB_SELFCOVERAGE_START(#TestObject) \
-    QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
-    QApplication::setAttribute(Qt::AA_Use96Dpi, true); \
-    QApplication app(argc, argv); \
-    QTEST_DISABLE_KEYPAD_NAVIGATION \
-    TestObject tc; \
-    QTEST_SET_MAIN_SOURCE_PATH \
-    return QTest::qExec(&tc, argc, argv);
-
+#  include <QtTest/qtest_widgets.h>
+#  ifdef QT_KEYPAD_NAVIGATION
+#    define QTEST_DISABLE_KEYPAD_NAVIGATION QApplication::setNavigationMode(Qt::NavigationModeNone);
+#  else
+#    define QTEST_DISABLE_KEYPAD_NAVIGATION
+#  endif
+// Internal
+#  define QTEST_MAIN_SETUP() QTEST_QAPP_SETUP(QApplication) QTEST_DISABLE_KEYPAD_NAVIGATION
 #elif defined(QT_GUI_LIB)
-
-#include <QtTest/qtest_gui.h>
-
-#define QTEST_MAIN_IMPL(TestObject) \
-    TESTLIB_SELFCOVERAGE_START(#TestObject) \
-    QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
-    QGuiApplication::setAttribute(Qt::AA_Use96Dpi, true); \
-    QGuiApplication app(argc, argv); \
-    TestObject tc; \
-    QTEST_SET_MAIN_SOURCE_PATH \
-    return QTest::qExec(&tc, argc, argv);
-
+#  include <QtTest/qtest_gui.h>
+// Internal
+#  define QTEST_MAIN_SETUP() QTEST_QAPP_SETUP(QGuiApplication)
 #else
-
-#define QTEST_MAIN_IMPL(TestObject) \
-    TESTLIB_SELFCOVERAGE_START(#TestObject) \
-    QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
-    QCoreApplication::setAttribute(Qt::AA_Use96Dpi, true); \
-    QCoreApplication app(argc, argv); \
-    TestObject tc; \
-    QTEST_SET_MAIN_SOURCE_PATH \
-    return QTest::qExec(&tc, argc, argv);
-
+// Internal
+#  define QTEST_MAIN_SETUP() QTEST_QAPP_SETUP(QCoreApplication)
 #endif // QT_GUI_LIB
 
-#define QTEST_MAIN(TestObject) \
-int main(int argc, char *argv[]) \
-{ \
-    QTEST_MAIN_IMPL(TestObject) \
-}
-
+// For most tests:
+#define QTEST_MAIN(TestObject) QTEST_MAIN_WRAPPER(TestObject, QTEST_MAIN_SETUP())
+ 
+// For command-line tests
 #define QTEST_GUILESS_MAIN(TestObject) \
-int main(int argc, char *argv[]) \
-{ \
-    TESTLIB_SELFCOVERAGE_START(#TestObject) \
-    QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
-    QCoreApplication::setAttribute(Qt::AA_Use96Dpi, true); \
-    QCoreApplication app(argc, argv); \
-    TestObject tc; \
-    QTEST_SET_MAIN_SOURCE_PATH \
-    return QTest::qExec(&tc, argc, argv); \
-}
+    QTEST_MAIN_WRAPPER(TestObject, QTEST_QAPP_SETUP(QCoreApplication))
 
 #endif

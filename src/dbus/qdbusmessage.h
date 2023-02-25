@@ -71,7 +71,7 @@ public:
     QDBusMessage &operator=(const QDBusMessage &other);
     ~QDBusMessage();
 
-    void swap(QDBusMessage &other) noexcept { qSwap(d_ptr, other.d_ptr); }
+    void swap(QDBusMessage &other) noexcept { qt_ptr_swap(d_ptr, other.d_ptr); }
 
     static QDBusMessage createSignal(const QString &path, const QString &interface,
                                      const QString &name);
@@ -86,8 +86,7 @@ public:
     { return createError(QDBusError::errorString(type), msg); }
 
     QDBusMessage createReply(const QList<QVariant> &arguments = QList<QVariant>()) const;
-    inline QDBusMessage createReply(const QVariant &argument) const
-    { return createReply(QList<QVariant>() << argument); }
+    QDBusMessage createReply(const QVariant &argument) const;
 
     QDBusMessage createErrorReply(const QString &name, const QString &msg) const;
     inline QDBusMessage createErrorReply(const QDBusError &err) const
@@ -132,7 +131,7 @@ Q_DBUS_EXPORT QDebug operator<<(QDebug, const QDBusMessage &);
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QDBusMessage)
+QT_DECL_METATYPE_EXTERN(QDBusMessage, Q_DBUS_EXPORT)
 
 #else
 class Q_DBUS_EXPORT QDBusMessage {}; // dummy class for moc

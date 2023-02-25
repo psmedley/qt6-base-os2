@@ -62,6 +62,7 @@
 #include "private/qmetaobject_moc_p.h"
 
 #include <ctype.h>
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 
@@ -390,6 +391,7 @@ QString QMetaObject::tr(const char *s, const char *c, int n) const
 {
     return QCoreApplication::translate(objectClassName(this), s, c, n);
 }
+#endif // QT_NO_TRANSLATION
 
 /*!
     \since 6.2
@@ -417,7 +419,6 @@ QMetaType QMetaObject::metaType() const
             return QMetaType::fromName(className()); // try lookup by name in that case
     }
 }
-#endif // QT_NO_TRANSLATION
 
 /*!
     Returns the method offset for this class; i.e. the index position
@@ -2399,7 +2400,7 @@ bool QMetaMethod::invoke(QObject *object,
             return false;
         }
 
-        QScopedPointer<QMetaCallEvent> event(new QMetaCallEvent(idx_offset, idx_relative, callFunction, nullptr, -1, paramCount));
+        auto event = std::make_unique<QMetaCallEvent>(idx_offset, idx_relative, callFunction, nullptr, -1, paramCount);
         QMetaType *types = event->types();
         void **args = event->args();
 
@@ -2423,7 +2424,7 @@ bool QMetaMethod::invoke(QObject *object,
             }
         }
 
-        QCoreApplication::postEvent(object, event.take());
+        QCoreApplication::postEvent(object, event.release());
     } else { // blocking queued connection
 #if QT_CONFIG(thread)
         if (receiverInSameThread) {
@@ -2830,6 +2831,19 @@ const char *QMetaEnum::valueToKey(int value) const
     return nullptr;
 }
 
+static auto parse_scope(QLatin1String qualifiedKey) noexcept
+{
+    struct R {
+        std::optional<QLatin1String> scope;
+        QLatin1String key;
+    };
+    const auto scopePos = qualifiedKey.lastIndexOf(QLatin1String("::"));
+    if (scopePos < 0)
+        return R{std::nullopt, qualifiedKey};
+    else
+        return R{qualifiedKey.first(scopePos), qualifiedKey.sliced(scopePos + 2)};
+}
+
 /*!
     Returns the value derived from combining together the values of
     the \a keys using the OR operator, or -1 if \a keys is not
@@ -2846,34 +2860,25 @@ int QMetaEnum::keysToValue(const char *keys, bool *ok) const
         *ok = false;
     if (!mobj || !keys)
         return -1;
-    const QString keysString = QString::fromLatin1(keys);
-    const auto splitKeys = QStringView{keysString}.split(QLatin1Char('|'));
-    // ### TODO write proper code: do not allocate memory, so we can go nothrow
+
+    auto lookup = [&] (QLatin1String key) -> std::optional<int> {
+        for (int i = data.keyCount() - 1; i >= 0; --i) {
+            if (key == stringDataView(mobj, mobj->d.data[data.data() + 2*i]))
+                return mobj->d.data[data.data() + 2*i + 1];
+        }
+        return std::nullopt;
+    };
+    auto className = [&] { return stringDataView(mobj, priv(mobj->d.data)->className); };
+
     int value = 0;
-    for (QStringView untrimmed : splitKeys) {
-        const QStringView trimmed = untrimmed.trimmed();
-        QByteArray qualified_key = trimmed.toLatin1();
-        const char *key = qualified_key.constData();
-        uint scope = 0;
-        const char *s = key + qstrlen(key);
-        while (s > key && *s != ':')
-            --s;
-        if (s > key && *(s - 1) == ':') {
-            scope = s - key - 1;
-            key += scope + 2;
-        }
-        int i;
-        for (i = data.keyCount() - 1; i >= 0; --i) {
-            const QByteArray className = stringData(mobj, priv(mobj->d.data)->className);
-            if ((!scope || (className.size() == int(scope) && strncmp(qualified_key.constData(), className.constData(), scope) == 0))
-                 && strcmp(key, rawStringData(mobj, mobj->d.data[data.data() + 2*i])) == 0) {
-                value |= mobj->d.data[data.data() + 2*i + 1];
-                break;
-            }
-        }
-        if (i < 0) {
-            return -1;
-        }
+    for (const QLatin1String &untrimmed : qTokenize(QLatin1String{keys}, QLatin1Char{'|'})) {
+        const auto parsed = parse_scope(untrimmed.trimmed());
+        if (parsed.scope && *parsed.scope != className())
+            return -1; // wrong type name in qualified name
+        if (auto thisValue = lookup(parsed.key))
+            value |= *thisValue;
+        else
+            return -1; // no such enumerator
     }
     if (ok != nullptr)
         *ok = true;

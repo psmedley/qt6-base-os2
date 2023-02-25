@@ -785,7 +785,7 @@ QFontEngine *loadSingleEngine(int script,
         if (style->key.stretch != 0 && request.stretch != 0
             && (request.styleName.isEmpty() || request.styleName != style->styleName)) {
             def.stretch = (request.stretch * 100 + style->key.stretch / 2) / style->key.stretch;
-        } else {
+        } else if (request.stretch == QFont::AnyStretch) {
             def.stretch = 100;
         }
 
@@ -1074,13 +1074,15 @@ static int match(int script,
     qCDebug(lcFontMatch, "QFontDatabase::match\n"
              "  request:\n"
              "    family: %s [%s], script: %d\n"
+             "    styleName: %s\n"
              "    weight: %d, style: %d\n"
              "    stretch: %d\n"
              "    pixelSize: %g\n"
              "    pitch: %c",
              family_name.isEmpty() ? "-- first in script --" : family_name.toLatin1().constData(),
-             foundry_name.isEmpty() ? "-- any --" : foundry_name.toLatin1().constData(),
-             script, request.weight, request.style, request.stretch, request.pixelSize, pitch);
+             foundry_name.isEmpty() ? "-- any --" : foundry_name.toLatin1().constData(), script,
+             request.styleName.isEmpty() ? "-- any --" : request.styleName.toLatin1().constData(),
+             request.weight, request.style, request.stretch, request.pixelSize, pitch);
 
     desc->family = nullptr;
     desc->foundry = nullptr;
@@ -2139,9 +2141,6 @@ void QFontDatabasePrivate::parseFontName(const QString &name, QString &foundry, 
     QT_PREPEND_NAMESPACE(parseFontName)(name, foundry, family);
 }
 
-void QFontDatabasePrivate::createDatabase()
-{ initializeDb(); }
-
 // used from qfontengine_ft.cpp
 Q_GUI_EXPORT QByteArray qt_fontdata_from_index(int index)
 {
@@ -2618,4 +2617,6 @@ Q_GUI_EXPORT QStringList qt_sort_families_by_writing_system(QChar::Script script
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qfontdatabase.cpp"
 

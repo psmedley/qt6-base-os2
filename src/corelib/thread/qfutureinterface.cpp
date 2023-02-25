@@ -43,11 +43,17 @@
 
 #include <QtCore/qatomic.h>
 #include <QtCore/qthread.h>
+#include <QtCore/private/qsimd_p.h> // for qYieldCpu()
 #include <private/qthreadpool_p.h>
 
 #ifdef interface
 #  undef interface
 #endif
+
+// GCC 12 gets confused about QFutureInterfaceBase::state, for some non-obvious
+// reason
+//  warning: ‘unsigned int __atomic_or_fetch_4(volatile void*, unsigned int, int)’ writing 4 bytes into a region of size 0 overflows the destination [-Wstringop-overflow=]
+QT_WARNING_DISABLE_GCC("-Wstringop-overflow")
 
 QT_BEGIN_NAMESPACE
 
@@ -71,6 +77,8 @@ const auto suspendingOrSuspended =
 
 } // unnamed namespace
 
+QFutureCallOutInterface::~QFutureCallOutInterface()
+    = default;
 
 QFutureInterfaceBase::QFutureInterfaceBase(State initialState)
     : d(new QFutureInterfaceBasePrivate(initialState))
@@ -100,24 +108,45 @@ static inline int switch_off(QAtomicInt &a, int which)
 
 static inline int switch_from_to(QAtomicInt &a, int from, int to)
 {
-    int newValue;
-    int expected = a.loadRelaxed();
-    do {
-        newValue = (expected & ~from) | to;
-    } while (!a.testAndSetRelaxed(expected, newValue, expected));
-    return newValue;
+    const auto adjusted = [&](int old) { return (old & ~from) | to; };
+    int value = a.loadRelaxed();
+    while (!a.testAndSetRelaxed(value, adjusted(value), value))
+        qYieldCpu();
+    return value;
 }
 
 void QFutureInterfaceBase::cancel()
 {
-    QMutexLocker locker(&d->m_mutex);
-    if (d->state.loadRelaxed() & Canceled)
-        return;
+    cancel(CancelMode::CancelOnly);
+}
 
-    switch_from_to(d->state, suspendingOrSuspended, Canceled);
+void QFutureInterfaceBase::cancel(QFutureInterfaceBase::CancelMode mode)
+{
+    QMutexLocker locker(&d->m_mutex);
+
+    const auto oldState = d->state.loadRelaxed();
+
+    switch (mode) {
+    case CancelMode::CancelAndFinish:
+        if ((oldState & Finished) && (oldState & Canceled))
+            return;
+        switch_from_to(d->state, suspendingOrSuspended | Running, Canceled | Finished);
+        break;
+    case CancelMode::CancelOnly:
+        if (oldState & Canceled)
+            return;
+        switch_from_to(d->state, suspendingOrSuspended, Canceled);
+        break;
+    }
+
     d->waitCondition.wakeAll();
     d->pausedWaitCondition.wakeAll();
-    d->sendCallOut(QFutureCallOutEvent(QFutureCallOutEvent::Canceled));
+
+    if (!(oldState & Canceled))
+        d->sendCallOut(QFutureCallOutEvent(QFutureCallOutEvent::Canceled));
+    if (mode == CancelMode::CancelAndFinish && !(oldState & Finished))
+        d->sendCallOut(QFutureCallOutEvent(QFutureCallOutEvent::Finished));
+
     d->isValid = false;
 }
 
@@ -299,13 +328,13 @@ int QFutureInterfaceBase::progressValue() const
 int QFutureInterfaceBase::progressMinimum() const
 {
     const QMutexLocker lock(&d->m_mutex);
-    return d->m_progressMinimum;
+    return d->m_progress ? d->m_progress->minimum : 0;
 }
 
 int QFutureInterfaceBase::progressMaximum() const
 {
     const QMutexLocker lock(&d->m_mutex);
-    return d->m_progressMaximum;
+    return d->m_progress ? d->m_progress->maximum : 0;
 }
 
 int QFutureInterfaceBase::resultCount() const
@@ -317,7 +346,7 @@ int QFutureInterfaceBase::resultCount() const
 QString QFutureInterfaceBase::progressText() const
 {
     QMutexLocker locker(&d->m_mutex);
-    return d->m_progressText;
+    return d->m_progress ? d->m_progress->text : QString();
 }
 
 bool QFutureInterfaceBase::isProgressUpdateNeeded() const
@@ -361,7 +390,8 @@ void QFutureInterfaceBase::reportException(const std::exception_ptr &exception)
     if (d->state.loadRelaxed() & (Canceled|Finished))
         return;
 
-    d->m_exceptionStore.setException(exception);
+    d->hasException = true;
+    d->data.setException(exception);
     switch_on(d->state, Canceled);
     d->waitCondition.wakeAll();
     d->pausedWaitCondition.wakeAll();
@@ -381,7 +411,7 @@ void QFutureInterfaceBase::reportFinished()
 
 void QFutureInterfaceBase::setExpectedResultCount(int resultCount)
 {
-    if (d->manualProgress == false)
+    if (d->m_progress)
         setProgressRange(0, resultCount);
     d->m_expectedResultCount = resultCount;
 }
@@ -406,7 +436,8 @@ int QFutureInterfaceBase::loadState() const
 
 void QFutureInterfaceBase::waitForResult(int resultIndex)
 {
-    d->m_exceptionStore.throwPossibleException();
+    if (d->hasException)
+        d->data.m_exceptionStore.rethrowException();
 
     QMutexLocker lock(&d->m_mutex);
     if (!isRunningOrPending())
@@ -423,7 +454,8 @@ void QFutureInterfaceBase::waitForResult(int resultIndex)
     while (isRunningOrPending() && !d->internal_isResultReadyAt(waitIndex))
         d->waitCondition.wait(&d->m_mutex);
 
-    d->m_exceptionStore.throwPossibleException();
+    if (d->hasException)
+        d->data.m_exceptionStore.rethrowException();
 }
 
 void QFutureInterfaceBase::waitForFinished()
@@ -441,7 +473,8 @@ void QFutureInterfaceBase::waitForFinished()
             d->waitCondition.wait(&d->m_mutex);
     }
 
-    d->m_exceptionStore.throwPossibleException();
+    if (d->hasException)
+        d->data.m_exceptionStore.rethrowException();
 }
 
 void QFutureInterfaceBase::reportResultsReady(int beginIndex, int endIndex)
@@ -451,8 +484,8 @@ void QFutureInterfaceBase::reportResultsReady(int beginIndex, int endIndex)
 
     d->waitCondition.wakeAll();
 
-    if (d->manualProgress == false) {
-        if (d->internal_updateProgress(d->m_progressValue + endIndex - beginIndex) == false) {
+    if (!d->m_progress) {
+        if (d->internal_updateProgressValue(d->m_progressValue + endIndex - beginIndex) == false) {
             d->sendCallOut(QFutureCallOutEvent(QFutureCallOutEvent::ResultsReady,
                                                beginIndex,
                                                endIndex));
@@ -461,7 +494,7 @@ void QFutureInterfaceBase::reportResultsReady(int beginIndex, int endIndex)
 
         d->sendCallOuts(QFutureCallOutEvent(QFutureCallOutEvent::Progress,
                                             d->m_progressValue,
-                                            d->m_progressText),
+                                            QString()),
                         QFutureCallOutEvent(QFutureCallOutEvent::ResultsReady,
                                             beginIndex,
                                             endIndex));
@@ -488,7 +521,8 @@ QThreadPool *QFutureInterfaceBase::threadPool() const
 void QFutureInterfaceBase::setFilterMode(bool enable)
 {
     QMutexLocker locker(&d->m_mutex);
-    resultStoreBase().setFilterMode(enable);
+    if (!hasException())
+        resultStoreBase().setFilterMode(enable);
 }
 
 /*!
@@ -510,8 +544,10 @@ void QFutureInterfaceBase::setFilterMode(bool enable)
 void QFutureInterfaceBase::setProgressRange(int minimum, int maximum)
 {
     QMutexLocker locker(&d->m_mutex);
-    d->m_progressMinimum = minimum;
-    d->m_progressMaximum = qMax(minimum, maximum);
+    if (!d->m_progress)
+        d->m_progress.reset(new QFutureInterfaceBasePrivate::ProgressData());
+    d->m_progress->minimum = minimum;
+    d->m_progress->maximum = qMax(minimum, maximum);
     d->sendCallOut(QFutureCallOutEvent(QFutureCallOutEvent::ProgressRange, minimum, maximum));
     d->m_progressValue = minimum;
 }
@@ -531,12 +567,12 @@ void QFutureInterfaceBase::setProgressValueAndText(int progressValue,
                                                    const QString &progressText)
 {
     QMutexLocker locker(&d->m_mutex);
-    if (d->manualProgress == false)
-        d->manualProgress = true;
+    if (!d->m_progress)
+        d->m_progress.reset(new QFutureInterfaceBasePrivate::ProgressData());
 
-    const bool useProgressRange = (d->m_progressMaximum != 0) || (d->m_progressMinimum != 0);
+    const bool useProgressRange = (d->m_progress->maximum != 0) || (d->m_progress->minimum != 0);
     if (useProgressRange
-        && ((progressValue < d->m_progressMinimum) || (progressValue > d->m_progressMaximum))) {
+        && ((progressValue < d->m_progress->minimum) || (progressValue > d->m_progress->maximum))) {
         return;
     }
 
@@ -549,7 +585,7 @@ void QFutureInterfaceBase::setProgressValueAndText(int progressValue,
     if (d->internal_updateProgress(progressValue, progressText)) {
         d->sendCallOut(QFutureCallOutEvent(QFutureCallOutEvent::Progress,
                                            d->m_progressValue,
-                                           d->m_progressText));
+                                           d->m_progress->text));
     }
 }
 
@@ -558,19 +594,27 @@ QMutex &QFutureInterfaceBase::mutex() const
     return d->m_mutex;
 }
 
+bool QFutureInterfaceBase::hasException() const
+{
+    return d->hasException;
+}
+
 QtPrivate::ExceptionStore &QFutureInterfaceBase::exceptionStore()
 {
-    return d->m_exceptionStore;
+    Q_ASSERT(d->hasException);
+    return d->data.m_exceptionStore;
 }
 
 QtPrivate::ResultStoreBase &QFutureInterfaceBase::resultStoreBase()
 {
-    return d->m_results;
+    Q_ASSERT(!d->hasException);
+    return d->data.m_results;
 }
 
 const QtPrivate::ResultStoreBase &QFutureInterfaceBase::resultStoreBase() const
 {
-    return d->m_results;
+    Q_ASSERT(!d->hasException);
+    return d->data.m_results;
 }
 
 QFutureInterfaceBase &QFutureInterfaceBase::operator=(const QFutureInterfaceBase &other)
@@ -600,8 +644,7 @@ bool QFutureInterfaceBase::derefT() const noexcept
 void QFutureInterfaceBase::reset()
 {
     d->m_progressValue = 0;
-    d->m_progressMinimum = 0;
-    d->m_progressMaximum = 0;
+    d->m_progress.reset();
     d->setState(QFutureInterfaceBase::NoState);
     d->progressTime.invalidate();
     d->isValid = false;
@@ -609,7 +652,8 @@ void QFutureInterfaceBase::reset()
 
 void QFutureInterfaceBase::rethrowPossibleException()
 {
-    exceptionStore().throwPossibleException();
+    if (hasException())
+        exceptionStore().rethrowException();
 }
 
 QFutureInterfaceBasePrivate::QFutureInterfaceBasePrivate(QFutureInterfaceBase::State initialState)
@@ -618,25 +662,54 @@ QFutureInterfaceBasePrivate::QFutureInterfaceBasePrivate(QFutureInterfaceBase::S
     progressTime.invalidate();
 }
 
+QFutureInterfaceBasePrivate::~QFutureInterfaceBasePrivate()
+{
+    if (hasException)
+        data.m_exceptionStore.~ExceptionStore();
+    else
+        data.m_results.~ResultStoreBase();
+}
+
 int QFutureInterfaceBasePrivate::internal_resultCount() const
 {
-    return m_results.count(); // ### subtract canceled results.
+    return hasException ? 0 : data.m_results.count(); // ### subtract canceled results.
 }
 
 bool QFutureInterfaceBasePrivate::internal_isResultReadyAt(int index) const
 {
-    return (m_results.contains(index));
+    return hasException ? false : (data.m_results.contains(index));
 }
 
 bool QFutureInterfaceBasePrivate::internal_waitForNextResult()
 {
-    if (m_results.hasNextResult())
+    if (hasException)
+        return false;
+
+    if (data.m_results.hasNextResult())
         return true;
 
-    while ((state.loadRelaxed() & QFutureInterfaceBase::Running) && m_results.hasNextResult() == false)
+    while ((state.loadRelaxed() & QFutureInterfaceBase::Running)
+           && data.m_results.hasNextResult() == false)
         waitCondition.wait(&m_mutex);
 
-    return !(state.loadRelaxed() & QFutureInterfaceBase::Canceled) && m_results.hasNextResult();
+    return !(state.loadRelaxed() & QFutureInterfaceBase::Canceled)
+            && data.m_results.hasNextResult();
+}
+
+bool QFutureInterfaceBasePrivate::internal_updateProgressValue(int progress)
+{
+    if (m_progressValue >= progress)
+        return false;
+
+    m_progressValue = progress;
+
+    if (progressTime.isValid() && m_progressValue != 0) // make sure the first and last steps are emitted.
+        if (progressTime.elapsed() < (1000 / MaxProgressEmitsPerSecond))
+            return false;
+
+    progressTime.start();
+    return true;
+
 }
 
 bool QFutureInterfaceBasePrivate::internal_updateProgress(int progress,
@@ -645,10 +718,12 @@ bool QFutureInterfaceBasePrivate::internal_updateProgress(int progress,
     if (m_progressValue >= progress)
         return false;
 
-    m_progressValue = progress;
-    m_progressText = progressText;
+    Q_ASSERT(m_progress);
 
-    if (progressTime.isValid() && m_progressValue != m_progressMaximum) // make sure the first and last steps are emitted.
+    m_progressValue = progress;
+    m_progress->text = progressText;
+
+    if (progressTime.isValid() && m_progressValue != m_progress->maximum) // make sure the first and last steps are emitted.
         if (progressTime.elapsed() < (1000 / MaxProgressEmitsPerSecond))
             return false;
 
@@ -706,22 +781,33 @@ void QFutureInterfaceBasePrivate::connectOutputInterface(QFutureCallOutInterface
     const auto currentState = state.loadRelaxed();
     if (currentState & QFutureInterfaceBase::Started) {
         interface->postCallOutEvent(QFutureCallOutEvent(QFutureCallOutEvent::Started));
-        interface->postCallOutEvent(QFutureCallOutEvent(QFutureCallOutEvent::ProgressRange,
-                                                        m_progressMinimum,
-                                                        m_progressMaximum));
-        interface->postCallOutEvent(QFutureCallOutEvent(QFutureCallOutEvent::Progress,
-                                                        m_progressValue,
-                                                        m_progressText));
+        if (m_progress) {
+            interface->postCallOutEvent(QFutureCallOutEvent(QFutureCallOutEvent::ProgressRange,
+                                                            m_progress->minimum,
+                                                            m_progress->maximum));
+            interface->postCallOutEvent(QFutureCallOutEvent(QFutureCallOutEvent::Progress,
+                                                            m_progressValue,
+                                                            m_progress->text));
+        } else {
+            interface->postCallOutEvent(QFutureCallOutEvent(QFutureCallOutEvent::ProgressRange,
+                                                            0,
+                                                            0));
+            interface->postCallOutEvent(QFutureCallOutEvent(QFutureCallOutEvent::Progress,
+                                                            m_progressValue,
+                                                            QString()));
+        }
     }
 
-    QtPrivate::ResultIteratorBase it = m_results.begin();
-    while (it != m_results.end()) {
-        const int begin = it.resultIndex();
-        const int end = begin + it.batchSize();
-        interface->postCallOutEvent(QFutureCallOutEvent(QFutureCallOutEvent::ResultsReady,
-                                                        begin,
-                                                        end));
-        it.batchedAdvance();
+    if (!hasException) {
+        QtPrivate::ResultIteratorBase it = data.m_results.begin();
+        while (it != data.m_results.end()) {
+            const int begin = it.resultIndex();
+            const int end = begin + it.batchSize();
+            interface->postCallOutEvent(QFutureCallOutEvent(QFutureCallOutEvent::ResultsReady,
+                                                            begin,
+                                                            end));
+            it.batchedAdvance();
+        }
     }
 
     if (currentState & QFutureInterfaceBase::Suspended)
@@ -810,7 +896,7 @@ bool QFutureInterfaceBase::isChainCanceled() const
         // continue checking the chain of parents for cancellation, otherwise if the exception
         // is handeled inside the chain, it won't be interrupted even though cancellation has
         // been requested.
-        if ((parent->state.loadRelaxed() & Canceled) && !parent->m_exceptionStore.hasException())
+        if ((parent->state.loadRelaxed() & Canceled) && !parent->hasException)
             return true;
         parent = parent->parentData;
     }

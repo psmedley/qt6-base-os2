@@ -98,8 +98,12 @@ public:
     bool hasXSync() const { return m_hasXSync; }
     bool hasBigRequest() const;
 
+    bool isAtLeastXRandR12() const { return m_hasXRandr && m_xrandr1Minor >= 2; }
+    bool isAtLeastXRandR15() const { return m_hasXRandr && m_xrandr1Minor >= 5; }
+
     bool isAtLeastXI21() const { return m_xi2Enabled && m_xi2Minor >= 1; }
     bool isAtLeastXI22() const { return m_xi2Enabled && m_xi2Minor >= 2; }
+    bool isAtLeastXI24() const { return m_xi2Enabled && m_xi2Minor >= 4; }
     bool isXIEvent(xcb_generic_event_t *event) const;
     bool isXIType(xcb_generic_event_t *event, uint16_t type) const;
 
@@ -143,6 +147,8 @@ private:
     int m_xi2Minor = -1;
     int m_xiOpCode = -1;
     uint32_t m_xinputFirstEvent = 0;
+
+    int m_xrandr1Minor = -1;
 
     uint32_t m_xfixesFirstEvent = 0;
     uint32_t m_xrandrFirstEvent = 0;

@@ -545,6 +545,8 @@
     \fn template<class T, qsizetype Prealloc> void QVarLengthArray<T, Prealloc>::prepend(T &&value)
 
     \since 4.8
+    \deprecated [6.3] This is slow. If you must, use \c{insert(cbegin(), ~~~)} instead.
+
     Inserts \a value at the beginning of the array.
 
 
@@ -567,16 +569,6 @@
     i < size()).
 
     \sa operator[](), remove()
-*/
-
-/*! \fn template<class T, qsizetype Prealloc> void QVarLengthArray<T, Prealloc>::remove(qsizetype i)
-
-    \overload
-    \since 4.8
-
-    Removes the element at index position \a i.
-
-    \sa insert(), replace()
 */
 
 /*! \fn template<class T, qsizetype Prealloc> void QVarLengthArray<T, Prealloc>::remove(qsizetype i, qsizetype count)
@@ -756,6 +748,27 @@
 
     Inserts \a value in front of the item pointed to by the iterator
     \a before. Returns an iterator pointing at the inserted item.
+*/
+
+/*!
+    \fn template <class T, qsizetype Prealloc> template <typename...Args> QVarLengthArray<T, Prealloc>::iterator QVarLengthArray<T, Prealloc>::emplace(const_iterator pos, Args &&...args)
+
+    \since 6.3
+
+    Inserts an item in front of the item pointed to by the iterator
+    \a pos, passing \a args to its constructor.
+
+    Returns an iterator pointing at the emplaced item.
+*/
+
+/*!
+    \fn template <class T, qsizetype Prealloc> template <typename...Args> T &QVarLengthArray<T, Prealloc>::emplace_back(Args &&...args)
+    \since 6.3
+
+    Inserts an item at the back of this QVarLengthArray, passing
+    \a args to its constructor.
+
+    Returns a reference to the emplaced item.
 */
 
 /*! \fn template<class T, qsizetype Prealloc> QVarLengthArray<T, Prealloc>::iterator QVarLengthArray<T, Prealloc>::insert(const_iterator before, qsizetype count, const T &value)

@@ -1,6 +1,6 @@
 #############################################################################
 ##
-## Copyright (C) 2018 The Qt Company Ltd.
+## Copyright (C) 2021 The Qt Company Ltd.
 ## Contact: https://www.qt.io/licensing/
 ##
 ## This file is part of the plugins of the Qt Toolkit.
@@ -98,7 +98,7 @@ _qt_library_map = [
     LibraryMapping(
         "application-lib", "Qt6", "Qt::AppManApplication", extra=["COMPONENTS", "AppManApplication"]
     ),
-    LibraryMapping("axbase", "Qt6", "Qt::AxBase", extra=["COMPONENTS", "AxBase"]),
+    LibraryMapping("axbase", "Qt6", "Qt::AxBasePrivate", extra=["COMPONENTS", "AxBasePrivate"]),
     LibraryMapping("axcontainer", "Qt6", "Qt::AxContainer", extra=["COMPONENTS", "AxContainer"]),
     LibraryMapping("axserver", "Qt6", "Qt::AxServer", extra=["COMPONENTS", "AxServer"]),
     LibraryMapping("bluetooth", "Qt6", "Qt::Bluetooth", extra=["COMPONENTS", "Bluetooth"]),
@@ -123,8 +123,8 @@ _qt_library_map = [
     LibraryMapping(
         "designercomponents",
         "Qt6",
-        "Qt::DesignerComponents",
-        extra=["COMPONENTS", "DesignerComponents"],
+        "Qt::DesignerComponentsPrivate",
+        extra=["COMPONENTS", "DesignerComponentsPrivate"],
     ),
     LibraryMapping(
         "devicediscovery",
@@ -199,8 +199,8 @@ _qt_library_map = [
     LibraryMapping(
         "hunspellinputmethod",
         "Qt6",
-        "Qt::HunspellInputMethod",
-        extra=["COMPONENTS", "HunspellInputMethod"],
+        "Qt::HunspellInputMethodPrivate",
+        extra=["COMPONENTS", "HunspellInputMethodPrivate"],
     ),
     LibraryMapping(
         "input", "Qt6", "Qt::InputSupportPrivate", extra=["COMPONENTS", "InputSupportPrivate"]
@@ -267,10 +267,16 @@ _qt_library_map = [
         "package-lib", "Qt6", "Qt::AppManPackage", extra=["COMPONENTS", "AppManPackage"]
     ),
     LibraryMapping(
-        "packetprotocol", "Qt6", "Qt::PacketProtocol", extra=["COMPONENTS", "PacketProtocol"]
+        "packetprotocol",
+        "Qt6",
+        "Qt::PacketProtocolPrivate",
+        extra=["COMPONENTS", "PacketProtocolPrivate"],
     ),
     LibraryMapping(
-        "particles", "Qt6", "Qt::QuickParticles", extra=["COMPONENTS", "QuickParticles"]
+        "particles",
+        "Qt6",
+        "Qt::QuickParticlesPrivate",
+        extra=["COMPONENTS", "QuickParticlesPrivate"],
     ),
     LibraryMapping(
         "plugin-interfaces",
@@ -284,11 +290,17 @@ _qt_library_map = [
     ),
     LibraryMapping("printsupport", "Qt6", "Qt::PrintSupport", extra=["COMPONENTS", "PrintSupport"]),
     LibraryMapping("purchasing", "Qt6", "Qt::Purchasing", extra=["COMPONENTS", "Purchasing"]),
-    LibraryMapping("qmldebug", "Qt6", "Qt::QmlDebug", extra=["COMPONENTS", "QmlDebug"]),
-    LibraryMapping("qmldevtools", "Qt6", "Qt::QmlDevTools", extra=["COMPONENTS", "QmlDevTools"]),
-    LibraryMapping("qmlcompiler", "Qt6", "Qt::QmlCompiler", extra=["COMPONENTS", "QmlCompiler"]),
+    LibraryMapping(
+        "qmldebug", "Qt6", "Qt::QmlDebugPrivate", extra=["COMPONENTS", "QmlDebugPrivate"]
+    ),
+    LibraryMapping(
+        "qmldevtools", "Qt6", "Qt::QmlDevToolsPrivate", extra=["COMPONENTS", "QmlDevToolsPrivate"]
+    ),
+    LibraryMapping(
+        "qmlcompiler", "Qt6", "Qt::QmlCompilerPrivate", extra=["COMPONENTS", "QmlCompilerPrivate"]
+    ),
     LibraryMapping("qml", "Qt6", "Qt::Qml", extra=["COMPONENTS", "Qml"]),
-    LibraryMapping("qmldom", "Qt6", "Qt::QmlDom", extra=["COMPONENTS", "QmlDom"]),
+    LibraryMapping("qmldom", "Qt6", "Qt::QmlDomPrivate", extra=["COMPONENTS", "QmlDomPrivate"]),
     LibraryMapping("qmlmodels", "Qt6", "Qt::QmlModels", extra=["COMPONENTS", "QmlModels"]),
     LibraryMapping("qmltest", "Qt6", "Qt::QuickTest", extra=["COMPONENTS", "QuickTest"]),
     LibraryMapping(
@@ -325,7 +337,9 @@ _qt_library_map = [
         extra=["COMPONENTS", "QuickControls2Impl"],
     ),
     LibraryMapping("quick", "Qt6", "Qt::Quick", extra=["COMPONENTS", "Quick"]),
-    LibraryMapping("quickshapes", "Qt6", "Qt::QuickShapes", extra=["COMPONENTS", "QuickShapes"]),
+    LibraryMapping(
+        "quickshapes", "Qt6", "Qt::QuickShapesPrivate", extra=["COMPONENTS", "QuickShapesPrivate"]
+    ),
     LibraryMapping(
         "quicktemplates2", "Qt6", "Qt::QuickTemplates2", extra=["COMPONENTS", "QuickTemplates2"]
     ),
@@ -392,7 +406,10 @@ _qt_library_map = [
         "qmlworkerscript", "Qt6", "Qt::QmlWorkerScript", extra=["COMPONENTS", "QmlWorkerScript"]
     ),
     LibraryMapping(
-        "quickparticles", "Qt6", "Qt::QuickParticles", extra=["COMPONENTS", "QuickParticles"]
+        "quickparticles",
+        "Qt6",
+        "Qt::QuickParticlesPrivate",
+        extra=["COMPONENTS", "QuickParticlesPrivate"],
     ),
     LibraryMapping(
         "linuxofono_support",
@@ -431,7 +448,8 @@ _library_map = [
     LibraryMapping("db2", "DB2", "DB2::DB2"),
     LibraryMapping("dbus", "WrapDBus1", "dbus-1", resultVariable="DBus1", extra=["1.2"]),
     LibraryMapping(
-        "doubleconversion", "WrapDoubleConversion", "WrapDoubleConversion::WrapDoubleConversion"
+        "doubleconversion", "WrapSystemDoubleConversion",
+        "WrapSystemDoubleConversion::WrapSystemDoubleConversion"
     ),
     LibraryMapping("dlt", "DLT", "DLT::DLT"),
     LibraryMapping("drm", "Libdrm", "Libdrm::Libdrm"),
@@ -625,7 +643,7 @@ _library_map = [
     LibraryMapping("xlib", "X11", "X11::X11"),
     LibraryMapping("xrender", "XRender", "PkgConfig::XRender", extra=["0.6"]),
     LibraryMapping("zlib", "WrapZLIB", "WrapZLIB::WrapZLIB", extra=["1.0.8"]),
-    LibraryMapping("zstd", "ZSTD", "ZSTD::ZSTD", extra=["1.3"]),
+    LibraryMapping("zstd", "WrapZSTD", "WrapZSTD::WrapZSTD", extra=["1.3"]),
     LibraryMapping("tiff", "TIFF", "TIFF::TIFF"),
     LibraryMapping("webp", "WrapWebP", "WrapWebP::WrapWebP"),
     LibraryMapping("jasper", "WrapJasper", "WrapJasper::WrapJasper"),
@@ -744,7 +762,6 @@ platform_mapping = {
     "hpux": "HPUX",
     "nacl": "NACL",
     "android": "ANDROID",
-    "android-embedded": "ANDROID_EMBEDDED",
     "uikit": "UIKIT",
     "tvos": "TVOS",
     "watchos": "WATCHOS",

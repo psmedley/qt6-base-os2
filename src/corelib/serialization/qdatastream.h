@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -51,7 +51,9 @@
 
 QT_BEGIN_NAMESPACE
 
+#if QT_CORE_REMOVED_SINCE(6, 3)
 class qfloat16;
+#endif
 class QByteArray;
 class QIODevice;
 
@@ -99,8 +101,9 @@ public:
         Qt_6_0 = 20,
         Qt_6_1 = Qt_6_0,
         Qt_6_2 = Qt_6_0,
-        Qt_DefaultCompiledVersion = Qt_6_2
-#if QT_VERSION >= 0x060300
+        Qt_6_3 = Qt_6_0,
+        Qt_DefaultCompiledVersion = Qt_6_3
+#if QT_VERSION >= QT_VERSION_CHECK(6, 4, 0)
 #error Add the datastream version for this Qt version and update Qt_DefaultCompiledVersion
 #endif
     };
@@ -158,7 +161,9 @@ public:
     QDataStream &operator>>(std::nullptr_t &ptr) { ptr = nullptr; return *this; }
 
     QDataStream &operator>>(bool &i);
+#if QT_CORE_REMOVED_SINCE(6, 3)
     QDataStream &operator>>(qfloat16 &f);
+#endif
     QDataStream &operator>>(float &f);
     QDataStream &operator>>(double &f);
     QDataStream &operator>>(char *&str);
@@ -176,7 +181,9 @@ public:
     QDataStream &operator<<(quint64 i);
     QDataStream &operator<<(std::nullptr_t) { return *this; }
     QDataStream &operator<<(bool i);
+#if QT_CORE_REMOVED_SINCE(6, 3)
     QDataStream &operator<<(qfloat16 f);
+#endif
     QDataStream &operator<<(float f);
     QDataStream &operator<<(double f);
     QDataStream &operator<<(const char *str);
@@ -506,7 +513,6 @@ inline QDataStreamIfHasOStreamOperatorsContainer<QMultiMap<Key, T>, Key, T> oper
     return QtPrivate::writeAssociativeMultiContainer(s, map);
 }
 
-#ifndef QT_NO_DATASTREAM
 template <class T1, class T2>
 inline QDataStreamIfHasIStreamOperators<T1, T2> operator>>(QDataStream& s, std::pair<T1, T2> &p)
 {
@@ -520,7 +526,6 @@ inline QDataStreamIfHasOStreamOperators<T1, T2> operator<<(QDataStream& s, const
     s << p.first << p.second;
     return s;
 }
-#endif
 
 #else
 

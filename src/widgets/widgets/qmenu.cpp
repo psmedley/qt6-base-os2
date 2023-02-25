@@ -48,7 +48,7 @@
 #include "qevent.h"
 #include "qtimer.h"
 #include "qlayout.h"
-#include "qpainter.h"
+#include "qstylepainter.h"
 #include <qpa/qplatformtheme.h>
 #include "qapplication.h"
 #ifndef QT_NO_ACCESSIBILITY
@@ -251,13 +251,21 @@ void QMenuPrivate::syncPlatformMenu()
     platformMenu->setEnabled(q->isEnabled());
 }
 
+static QWidget *getParentWidget(const QAction *action)
+{
+    auto result = action->parent();
+    while (result && !qobject_cast<QWidget *>(result))
+        result = result->parent();
+    return static_cast<QWidget *>(result);
+}
+
 void QMenuPrivate::copyActionToPlatformItem(const QAction *action, QPlatformMenuItem *item)
 {
     item->setText(action->text());
     item->setIsSeparator(action->isSeparator());
     if (action->isIconVisibleInMenu()) {
         item->setIcon(action->icon());
-        if (QWidget *w = action->parentWidget()) {
+        if (QWidget *w = getParentWidget(action)) {
             QStyleOption opt;
             opt.initFrom(w);
             item->setIconSize(w->style()->pixelMetric(QStyle::PM_SmallIconSize, &opt, w));
@@ -1076,6 +1084,16 @@ QAction *QMenu::menuAction() const
 }
 
 /*!
+    \fn static QMenu *QMenu::menuInAction(const QAction *action)
+
+    Returns the menu contained by \a action, or \nullptr if \a action does not
+    contain a menu.
+
+    In widget applications, actions that contain menus can be used to create menu
+    items with submenus, or inserted into toolbars to create buttons with popup menus.
+*/
+
+/*!
   \property QMenu::title
   \brief The title of the menu
 
@@ -1716,8 +1734,7 @@ void QMenu::initStyleOption(QStyleOptionMenuItem *option, const QAction *action)
     \b{Important inherited functions:} addAction(), removeAction(), clear(),
     addSeparator(), and addMenu().
 
-    \sa QMenuBar, {fowler}{GUI Design Handbook: Menu, Drop-Down and Pop-Up},
-        {Qt Widgets - Application Example}, {Menus Example}
+    \sa QMenuBar, {Qt Widgets - Application Example}, {Menus Example}
 */
 
 
@@ -1782,162 +1799,75 @@ QMenu::~QMenu()
     hideTearOffMenu();
 }
 
+#if QT_DEPRECATED_SINCE(6, 4)
 /*!
-    This convenience function creates a new action with \a text.
-    The function adds the newly created action to the menu's
-    list of actions, and returns it.
+    \fn QAction *QMenu::addAction(const QString &text, const QObject *receiver, const char* member, const QKeySequence &shortcut)
+    \obsolete
 
-    QMenu takes ownership of the returned QAction.
-
-    \sa QWidget::addAction()
+    Use \c{QWidget::addAction(text, shortcut, receiver, member)} instead.
 */
-QAction *QMenu::addAction(const QString &text)
-{
-    QAction *ret = new QAction(text, this);
-    addAction(ret);
-    return ret;
-}
-
-/*!
-    \overload
-
-    This convenience function creates a new action with an \a icon
-    and some \a text. The function adds the newly created action to
-    the menu's list of actions, and returns it.
-
-    QMenu takes ownership of the returned QAction.
-
-    \sa QWidget::addAction()
-*/
-QAction *QMenu::addAction(const QIcon &icon, const QString &text)
-{
-    QAction *ret = new QAction(icon, text, this);
-    addAction(ret);
-    return ret;
-}
-
-/*!
-    \overload
-
-    This convenience function creates a new action with the text \a
-    text and an optional shortcut \a shortcut. The action's
-    \l{QAction::triggered()}{triggered()} signal is connected to the
-    \a receiver's \a member slot. The function adds the newly created
-    action to the menu's list of actions and returns it.
-
-    QMenu takes ownership of the returned QAction.
-
-    \sa QWidget::addAction()
-*/
-QAction *QMenu::addAction(const QString &text, const QObject *receiver, const char* member
 #if QT_CONFIG(shortcut)
-                          , const QKeySequence &shortcut
-#endif
-                          )
+QAction *QMenu::addAction(const QString &text, const QObject *receiver, const char* member, const QKeySequence &shortcut)
 {
-    QAction *action = new QAction(text, this);
-#if QT_CONFIG(shortcut)
-    action->setShortcut(shortcut);
-#endif
-    QObject::connect(action, SIGNAL(triggered(bool)), receiver, member);
-    addAction(action);
-    return action;
+    return QWidget::addAction(text, shortcut, receiver, member);
 }
+#endif
 
-/*!\fn template<typename Functor> QAction *QMenu::addAction(const QString &text, Functor functor, const QKeySequence &shortcut = 0)
-
-    \since 5.6
-
-    \overload
-
-    This convenience function creates a new action with the text \a
-    text and an optional shortcut \a shortcut. The action's
-    \l{QAction::triggered()}{triggered()} signal is connected to the
-    \a functor. The function adds the newly created
-    action to the menu's list of actions and returns it.
-
-    QMenu takes ownership of the returned QAction.
-*/
-
-/*!\fn template<typename Functor> QAction *QMenu::addAction(const QString &text, const QObject *context, Functor functor, const QKeySequence &shortcut)
+/*!
+    \fn template<typename Functor> QAction *QMenu::addAction(const QString &text, Functor functor, const QKeySequence &shortcut)
 
     \since 5.6
+    \obsolete
 
-    \overload
-
-    This convenience function creates a new action with the text \a
-    text and an optional shortcut \a shortcut. The action's
-    \l{QAction::triggered()}{triggered()} signal is connected to the
-    \a functor. The functor can be a pointer to a member function of
-    the \a context object. The newly created action is added to the
-    menu's list of actions and a pointer to it is returned.
-
-    If the \a context object is destroyed, the functor will not be called.
-
-    QMenu takes ownership of the returned QAction.
-*/
-
-/*!\fn template<typename Functor> QAction *QMenu::addAction(const QIcon &icon, const QString &text, Functor functor, const QKeySequence &shortcut = 0)
-
-    \since 5.6
-
-    \overload
-
-    This convenience function creates a new action with an \a icon
-    and some \a text and an optional shortcut \a shortcut. The action's
-    \l{QAction::triggered()}{triggered()} signal is connected to the
-    \a functor. The function adds the newly created
-    action to the menu's list of actions and returns it.
-
-    QMenu takes ownership of the returned QAction.
-*/
-
-/*!\fn template<typename Functor> QAction *QMenu::addAction(const QIcon &icon, const QString &text, const QObject *context, Functor functor, const QKeySequence &shortcut)
-
-    \since 5.6
-
-    \overload
-
-    This convenience function creates a new action with an \a icon
-    and some \a text and an optional shortcut \a shortcut. The action's
-    \l{QAction::triggered()}{triggered()} signal is connected to the
-    \a functor. The \a functor can be a pointer to a member function
-    of the \a context object. The newly created action is added to the
-    menu's list of actions and a pointer to it is returned.
-
-    If \a context is destroyed, the functor will not be called.
-
-    QMenu takes ownership of the returned QAction.
+    Use QWidget::addAction(text, shortcut, functor) instead.
 */
 
 /*!
-    \overload
+    \fn template<typename Functor> QAction *QMenu::addAction(const QString &text, const QObject *context, Functor functor, const QKeySequence &shortcut)
 
-    This convenience function creates a new action with an \a icon and
-    some \a text and an optional shortcut \a shortcut. The action's
-    \l{QAction::triggered()}{triggered()} signal is connected to the
-    \a member slot of the \a receiver object. The function adds the
-    newly created action to the menu's list of actions, and returns it.
+    \since 5.6
+    \obsolete
 
-    QMenu takes ownership of the returned QAction.
-
-    \sa QWidget::addAction()
+    Use QWidget::addAction(text, shortcut, context, functor) instead.
 */
+
+/*!
+    \fn template<typename Functor> QAction *QMenu::addAction(const QIcon &icon, const QString &text, Functor functor, const QKeySequence &shortcut)
+
+    \since 5.6
+    \obsolete
+
+    Use QWidget::addAction(icon, text, shortcut, functor) instead.
+*/
+
+/*!
+    \fn template<typename Functor> QAction *QMenu::addAction(const QIcon &icon, const QString &text, const QObject *context, Functor functor, const QKeySequence &shortcut)
+
+    \since 5.6
+    \obsolete
+
+    Use QWidget::addAction(icon, text, shortcut, context, functor) instead.
+*/
+
+/*!
+    \fn QAction *QMenu::addAction(const QIcon &icon, const QString &text, const QObject *receiver, const char* member, const QKeySequence &shortcut)
+
+    \obsolete
+
+    Use QWidget::addAction(icon, text, shortcut, receiver, member) instead.
+*/
+#if QT_CONFIG(shortcut)
 QAction *QMenu::addAction(const QIcon &icon, const QString &text, const QObject *receiver,
-                          const char* member
-#if QT_CONFIG(shortcut)
-                          , const QKeySequence &shortcut
-#endif
-                          )
+                          const char* member, const QKeySequence &shortcut)
 {
     QAction *action = new QAction(icon, text, this);
-#if QT_CONFIG(shortcut)
     action->setShortcut(shortcut);
-#endif
     QObject::connect(action, SIGNAL(triggered(bool)), receiver, member);
     addAction(action);
     return action;
 }
+#endif
+#endif // QT_DEPRECATED_SINCE(6, 4)
 
 /*!
     This convenience function adds \a menu as a submenu to this menu.
@@ -2429,6 +2359,15 @@ void QMenuPrivate::popup(const QPoint &p, QAction *atAction, PositionFunction po
         lastContextMenu = contextMenu;
     }
 
+    // Until QWidget::metric accepts the screen set on a widget (without having a window handle)
+    // we need to make sure we get a window handle. This must be done near here because
+    // we want the screen to be correctly set and items to be marked dirty.
+    // (and screen set could 'fail' on oldscreen == newScreen if created before causing the
+    // itemsDirty not to be set though needed to get the correct size on first show).
+    if (!windowHandle()) {
+        createWinId();
+    }
+
 #if QT_CONFIG(menubar)
     // if this menu is part of a chain attached to a QMenuBar, set the
     // _NET_WM_WINDOW_TYPE_DROPDOWN_MENU X11 window type
@@ -2800,7 +2739,7 @@ void QMenu::paintEvent(QPaintEvent *e)
 {
     Q_D(QMenu);
     d->updateActionRects();
-    QPainter p(this);
+    QStylePainter p(this);
     QRegion emptyArea = QRegion(rect());
 
     QStyleOptionMenuItem menuOpt;
@@ -2809,7 +2748,7 @@ void QMenu::paintEvent(QPaintEvent *e)
     menuOpt.checkType = QStyleOptionMenuItem::NotCheckable;
     menuOpt.maxIconWidth = 0;
     menuOpt.reservedShortcutWidth = 0;
-    style()->drawPrimitive(QStyle::PE_PanelMenu, &menuOpt, &p, this);
+    p.drawPrimitive(QStyle::PE_PanelMenu, menuOpt);
 
     //calculate the scroll up / down rect
     const int fw = style()->pixelMetric(QStyle::PM_MenuPanelWidth, nullptr, this);
@@ -2877,7 +2816,7 @@ void QMenu::paintEvent(QPaintEvent *e)
         QStyleOptionMenuItem opt;
         initStyleOption(&opt, action);
         opt.rect = actionRect;
-        style()->drawControl(QStyle::CE_MenuItem, &opt, &p, this);
+        p.drawControl(QStyle::CE_MenuItem, opt);
     }
 
     emptyArea -= QRegion(scrollUpTearOffRect);
@@ -2911,7 +2850,7 @@ void QMenu::paintEvent(QPaintEvent *e)
         frame.state = QStyle::State_None;
         frame.lineWidth = style()->pixelMetric(QStyle::PM_MenuPanelWidth, &frame);
         frame.midLineWidth = 0;
-        style()->drawPrimitive(QStyle::PE_FrameMenu, &frame, &p, this);
+        p.drawPrimitive(QStyle::PE_FrameMenu, frame);
     }
 
     //finally the rest of the spaces
@@ -2921,7 +2860,7 @@ void QMenu::paintEvent(QPaintEvent *e)
     menuOpt.checkType = QStyleOptionMenuItem::NotCheckable;
     menuOpt.rect = rect();
     menuOpt.menuRect = rect();
-    style()->drawControl(QStyle::CE_MenuEmptyArea, &menuOpt, &p, this);
+    p.drawControl(QStyle::CE_MenuEmptyArea, menuOpt);
 }
 
 #if QT_CONFIG(wheelevent)

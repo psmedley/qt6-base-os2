@@ -54,6 +54,7 @@
 #include <QtCore/qnumeric.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qmutex.h>
+#include <QtCore/private/qoffsetstringarray_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -985,7 +986,7 @@ bool QBrush::operator==(const QBrush &b) const
 */
 QDebug operator<<(QDebug dbg, const QBrush &b)
 {
-    static const char BRUSH_STYLES[][24] = {
+    static constexpr auto BRUSH_STYLES = qOffsetStringArray(
      "NoBrush",
      "SolidPattern",
      "Dense1Pattern",
@@ -1006,7 +1007,7 @@ QDebug operator<<(QDebug dbg, const QBrush &b)
      "ConicalGradientPattern",
      "", "", "", "", "", "",
      "TexturePattern" // 24
-    };
+    );
 
     QDebugStateSaver saver(dbg);
     dbg.nospace() << "QBrush(" << b.color() << ',' << BRUSH_STYLES[b.style()] << ')';
@@ -1664,9 +1665,10 @@ void QGradient::setStops(const QGradientStops &stops)
 QGradientStops QGradient::stops() const
 {
     if (m_stops.isEmpty()) {
-        QGradientStops tmp;
-        tmp << QGradientStop(0, Qt::black) << QGradientStop(1, Qt::white);
-        return tmp;
+        static constexpr QGradientStop blackAndWhite[] = {
+            {0, QColorConstants::Black}, {1, QColorConstants::White},
+        };
+        return QGradientStops::fromReadOnlyData(blackAndWhite);
     }
     return m_stops;
 }
@@ -2544,3 +2546,5 @@ void QConicalGradient::setAngle(qreal angle)
 */
 
 QT_END_NAMESPACE
+
+#include "moc_qbrush.cpp"

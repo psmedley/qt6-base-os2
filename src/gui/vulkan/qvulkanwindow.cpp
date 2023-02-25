@@ -1353,6 +1353,7 @@ bool QVulkanWindowPrivate::createTransientImage(VkFormat format,
     VkMemoryRequirements memReq;
     VkResult err;
 
+    Q_ASSERT(count > 0);
     for (int i = 0; i < count; ++i) {
         VkImageCreateInfo imgInfo;
         memset(&imgInfo, 0, sizeof(imgInfo));
@@ -2752,3 +2753,5 @@ QMatrix4x4 QVulkanWindow::clipCorrectionMatrix()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qvulkanwindow.cpp"

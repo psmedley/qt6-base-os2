@@ -1,6 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
+** Copyright (C) 2022 Intel Corporation.
 ** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: https://www.qt.io/licensing/
 **
@@ -62,7 +63,10 @@ private slots:
     void formatLogMessage();
 
 private:
-    QStringList m_baseEnvironment;
+    QString backtraceHelperPath();
+#if QT_CONFIG(process)
+    QProcessEnvironment m_baseEnvironment;
+#endif
 };
 
 static QtMsgType s_type;
@@ -89,14 +93,9 @@ tst_qmessagehandler::tst_qmessagehandler()
 void tst_qmessagehandler::initTestCase()
 {
 #if QT_CONFIG(process)
-    m_baseEnvironment = QProcess::systemEnvironment();
-    for (int i = 0; i < m_baseEnvironment.count(); ++i) {
-        if (m_baseEnvironment.at(i).startsWith("QT_MESSAGE_PATTERN=")) {
-            m_baseEnvironment.removeAt(i);
-            break;
-        }
-    }
-    m_baseEnvironment.prepend("QT_FORCE_STDERR_LOGGING=1");
+    m_baseEnvironment = QProcessEnvironment::systemEnvironment();
+    m_baseEnvironment.remove("QT_MESSAGE_PATTERN");
+    m_baseEnvironment.insert("QT_FORCE_STDERR_LOGGING", "1");
 #endif // QT_CONFIG(process)
 }
 
@@ -778,18 +777,14 @@ void tst_qmessagehandler::qMessagePattern()
     QFETCH(QList<QByteArray>, expected);
 
     QProcess process;
-#ifndef Q_OS_ANDROID
-    const QString appExe(QLatin1String(HELPER_BINARY));
-#else
-    const QString appExe(QCoreApplication::applicationDirPath() + QLatin1String("/lib" BACKTRACE_HELPER_NAME ".so"));
-#endif
+    const QString appExe(backtraceHelperPath());
 
     //
     // test QT_MESSAGE_PATTERN
     //
-    QStringList environment = m_baseEnvironment;
-    environment.prepend("QT_MESSAGE_PATTERN=\"" + pattern + QLatin1Char('"'));
-    process.setEnvironment(environment);
+    QProcessEnvironment environment = m_baseEnvironment;
+    environment.insert("QT_MESSAGE_PATTERN", pattern);
+    process.setProcessEnvironment(environment);
 
     process.start(appExe);
     QVERIFY2(process.waitForStarted(), qPrintable(
@@ -804,13 +799,14 @@ void tst_qmessagehandler::qMessagePattern()
 
     for (const QByteArray &e : qAsConst(expected)) {
         if (!output.contains(e)) {
-            qDebug() << output;
-            qDebug() << "expected: " << e;
-            QVERIFY(output.contains(e));
+            // use QDebug so we get proper string escaping for the newlines
+            QString buf;
+            QDebug(&buf) << "Got:" << output << ";  Expected:" << e;
+            QVERIFY2(output.contains(e), qPrintable(buf));
         }
     }
     if (pattern.startsWith("%{pid}"))
-        QVERIFY2(output.startsWith('"' + pid), "PID: " + pid + "\noutput:\n" + output);
+        QVERIFY2(output.startsWith(pid), "PID: " + pid + "\noutput:\n" + output);
 #endif
 }
 
@@ -828,22 +824,10 @@ void tst_qmessagehandler::setMessagePattern()
     //
 
     QProcess process;
-#ifndef Q_OS_ANDROID
-    const QString appExe(QLatin1String(HELPER_BINARY));
-#else
-    const QString appExe(QCoreApplication::applicationDirPath() + QLatin1String("/libhelper.so"));
-#endif
+    const QString appExe(backtraceHelperPath());
 
     // make sure there is no QT_MESSAGE_PATTERN in the environment
-    QStringList environment;
-    environment.reserve(m_baseEnvironment.size());
-    const auto doesNotStartWith = [](QLatin1String s) {
-        return [s](const QString &str) { return !str.startsWith(s); };
-    };
-    std::copy_if(m_baseEnvironment.cbegin(), m_baseEnvironment.cend(),
-                 std::back_inserter(environment),
-                 doesNotStartWith(QLatin1String("QT_MESSAGE_PATTERN")));
-    process.setEnvironment(environment);
+    process.setProcessEnvironment(m_baseEnvironment);
 
     process.start(appExe);
     QVERIFY2(process.waitForStarted(), qPrintable(
@@ -929,6 +913,19 @@ void tst_qmessagehandler::formatLogMessage()
     QCOMPARE(r, result);
 }
 
+QString tst_qmessagehandler::backtraceHelperPath()
+{
+#ifdef Q_OS_ANDROID
+    QString appExe(QCoreApplication::applicationDirPath()
+                   + QLatin1String("/lib" BACKTRACE_HELPER_NAME ".so"));
+#elif defined(Q_OS_WEBOS)
+    QString appExe(QCoreApplication::applicationDirPath()
+                   + QLatin1String("/" BACKTRACE_HELPER_NAME));
+#else
+    QString appExe(QLatin1String(HELPER_BINARY));
+#endif
+    return appExe;
+}
 
 QTEST_MAIN(tst_qmessagehandler)
 #include "tst_qlogging.moc"

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2019 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -40,8 +40,10 @@ class tst_QResourceEngine: public QObject
 
 public:
     tst_QResourceEngine()
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
-        : m_runtimeResourceRcc(QFileInfo(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/runtime_resource.rcc")).absoluteFilePath())
+#ifdef Q_OS_ANDROID
+        : m_runtimeResourceRcc(
+            QFileInfo(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                      + QStringLiteral("/runtime_resource.rcc")).absoluteFilePath())
 #else
         : m_runtimeResourceRcc(QFINDTESTDATA("runtime_resource.rcc"))
 #endif
@@ -71,17 +73,16 @@ private:
 
 void tst_QResourceEngine::initTestCase()
 {
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     QString sourcePath(QStringLiteral(":/android_testdata/"));
     QString dataPath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
 
     QDirIterator it(sourcePath, QDirIterator::Subdirectories);
     while (it.hasNext()) {
-        it.next();
-
-        QFileInfo fileInfo = it.fileInfo();
+        QFileInfo fileInfo = it.nextFileInfo();
         if (!fileInfo.isDir()) {
-            QString destination(dataPath + QLatin1Char('/') + fileInfo.filePath().mid(sourcePath.length()));
+            QString destination(dataPath + QLatin1Char('/')
+                                + fileInfo.filePath().mid(sourcePath.length()));
             QFileInfo destinationFileInfo(destination);
             if (!destinationFileInfo.exists()) {
                 QVERIFY(QDir().mkpath(destinationFileInfo.path()));
@@ -188,7 +189,7 @@ void tst_QResourceEngine::checkStructure_data()
 
     QStringList rootContents;
     rootContents << QLatin1String("aliasdir")
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
                  << QLatin1String("android_testdata")
 #endif
                  << QLatin1String("otherdir")
@@ -490,7 +491,7 @@ void tst_QResourceEngine::checkStructure()
 
 void tst_QResourceEngine::searchPath_data()
 {
-    auto searchPath = QFileInfo(QT_TESTCASE_SOURCEDIR "/testqrc").canonicalFilePath();
+    auto searchPath = QFileInfo(QFINDTESTDATA("testqrc/test.qrc")).canonicalPath();
 
     QTest::addColumn<QString>("searchPathPrefix");
     QTest::addColumn<QString>("searchPath");

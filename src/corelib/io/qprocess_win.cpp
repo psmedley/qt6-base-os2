@@ -53,7 +53,6 @@
 #include <qrandom.h>
 #include <qwineventnotifier.h>
 #include <qscopedvaluerollback.h>
-#include <qtimer.h>
 #include <private/qsystemlibrary_p.h>
 #include <private/qthread_p.h>
 
@@ -359,22 +358,15 @@ void QProcessPrivate::destroyPipe(Q_PIPE pipe[2])
     }
 }
 
-template <class T>
-void deleteWorker(T *&worker)
-{
-    if (!worker)
-        return;
-    worker->stop();
-    worker->deleteLater();
-    worker = nullptr;
-}
-
 void QProcessPrivate::closeChannel(Channel *channel)
 {
-    if (channel == &stdinChannel)
-        deleteWorker(channel->writer);
-    else
-        deleteWorker(channel->reader);
+    if (channel == &stdinChannel) {
+        delete channel->writer;
+        channel->writer = nullptr;
+    } else {
+        delete channel->reader;
+        channel->reader = nullptr;
+    }
     destroyPipe(channel->pipe);
 }
 
@@ -383,8 +375,6 @@ void QProcessPrivate::cleanup()
     q_func()->setProcessState(QProcess::NotRunning);
 
     closeChannels();
-    delete stdinWriteTrigger;
-    stdinWriteTrigger = nullptr;
     delete processFinishedNotifier;
     processFinishedNotifier = nullptr;
     if (pid) {
@@ -448,60 +438,59 @@ static QString qt_create_commandline(const QString &program, const QStringList &
 static QByteArray qt_create_environment(const QProcessEnvironmentPrivate::Map &environment)
 {
     QByteArray envlist;
-    if (!environment.isEmpty()) {
-        QProcessEnvironmentPrivate::Map copy = environment;
+    QProcessEnvironmentPrivate::Map copy = environment;
 
-        // add PATH if necessary (for DLL loading)
-        QProcessEnvironmentPrivate::Key pathKey(QLatin1String("PATH"));
-        if (!copy.contains(pathKey)) {
-            QByteArray path = qgetenv("PATH");
-            if (!path.isEmpty())
-                copy.insert(pathKey, QString::fromLocal8Bit(path));
-        }
-
-        // add systemroot if needed
-        QProcessEnvironmentPrivate::Key rootKey(QLatin1String("SystemRoot"));
-        if (!copy.contains(rootKey)) {
-            QByteArray systemRoot = qgetenv("SystemRoot");
-            if (!systemRoot.isEmpty())
-                copy.insert(rootKey, QString::fromLocal8Bit(systemRoot));
-        }
-
-        qsizetype pos = 0;
-        auto it = copy.constBegin();
-        const auto end = copy.constEnd();
-
-        static const wchar_t equal = L'=';
-        static const wchar_t nul = L'\0';
-
-        for ( ; it != end; ++it) {
-            qsizetype tmpSize = sizeof(wchar_t) * (it.key().length() + it.value().length() + 2);
-            // ignore empty strings
-            if (tmpSize == sizeof(wchar_t) * 2)
-                continue;
-            envlist.resize(envlist.size() + tmpSize);
-
-            tmpSize = it.key().length() * sizeof(wchar_t);
-            memcpy(envlist.data()+pos, it.key().utf16(), tmpSize);
-            pos += tmpSize;
-
-            memcpy(envlist.data()+pos, &equal, sizeof(wchar_t));
-            pos += sizeof(wchar_t);
-
-            tmpSize = it.value().length() * sizeof(wchar_t);
-            memcpy(envlist.data()+pos, it.value().utf16(), tmpSize);
-            pos += tmpSize;
-
-            memcpy(envlist.data()+pos, &nul, sizeof(wchar_t));
-            pos += sizeof(wchar_t);
-        }
-        // add the 2 terminating 0 (actually 4, just to be on the safe side)
-        envlist.resize( envlist.size()+4 );
-        envlist[pos++] = 0;
-        envlist[pos++] = 0;
-        envlist[pos++] = 0;
-        envlist[pos++] = 0;
+    // add PATH if necessary (for DLL loading)
+    QProcessEnvironmentPrivate::Key pathKey(QLatin1String("PATH"));
+    if (!copy.contains(pathKey)) {
+        QByteArray path = qgetenv("PATH");
+        if (!path.isEmpty())
+            copy.insert(pathKey, QString::fromLocal8Bit(path));
     }
+
+    // add systemroot if needed
+    QProcessEnvironmentPrivate::Key rootKey(QLatin1String("SystemRoot"));
+    if (!copy.contains(rootKey)) {
+        QByteArray systemRoot = qgetenv("SystemRoot");
+        if (!systemRoot.isEmpty())
+            copy.insert(rootKey, QString::fromLocal8Bit(systemRoot));
+    }
+
+    qsizetype pos = 0;
+    auto it = copy.constBegin();
+    const auto end = copy.constEnd();
+
+    static const wchar_t equal = L'=';
+    static const wchar_t nul = L'\0';
+
+    for (; it != end; ++it) {
+        qsizetype tmpSize = sizeof(wchar_t) * (it.key().length() + it.value().length() + 2);
+        // ignore empty strings
+        if (tmpSize == sizeof(wchar_t) * 2)
+            continue;
+        envlist.resize(envlist.size() + tmpSize);
+
+        tmpSize = it.key().length() * sizeof(wchar_t);
+        memcpy(envlist.data() + pos, it.key().utf16(), tmpSize);
+        pos += tmpSize;
+
+        memcpy(envlist.data() + pos, &equal, sizeof(wchar_t));
+        pos += sizeof(wchar_t);
+
+        tmpSize = it.value().length() * sizeof(wchar_t);
+        memcpy(envlist.data() + pos, it.value().utf16(), tmpSize);
+        pos += tmpSize;
+
+        memcpy(envlist.data() + pos, &nul, sizeof(wchar_t));
+        pos += sizeof(wchar_t);
+    }
+    // add the 2 terminating 0 (actually 4, just to be on the safe side)
+    envlist.resize(envlist.size() + 4);
+    envlist[pos++] = 0;
+    envlist[pos++] = 0;
+    envlist[pos++] = 0;
+    envlist[pos++] = 0;
+
     return envlist;
 }
 
@@ -560,14 +549,6 @@ void QProcessPrivate::startProcess()
 {
     Q_Q(QProcess);
 
-    bool success = false;
-
-    if (pid) {
-        CloseHandle(pid->hThread);
-        CloseHandle(pid->hProcess);
-        delete pid;
-        pid = 0;
-    }
     pid = new PROCESS_INFORMATION;
     memset(pid, 0, sizeof(PROCESS_INFORMATION));
 
@@ -577,13 +558,12 @@ void QProcessPrivate::startProcess()
         QString errorString = QProcess::tr("Process failed to start: %1").arg(qt_error_string());
         cleanup();
         setErrorAndEmit(QProcess::FailedToStart, errorString);
-        q->setProcessState(QProcess::NotRunning);
         return;
     }
 
     const QString args = qt_create_commandline(program, arguments, nativeArguments);
     QByteArray envlist;
-    if (environment.d.constData())
+    if (!environment.inheritsFromParent())
         envlist = qt_create_environment(environment.d.constData()->vars);
 
 #if defined QPROCESS_DEBUG
@@ -605,25 +585,25 @@ void QProcessPrivate::startProcess()
     QProcess::CreateProcessArguments cpargs = {
         nullptr, reinterpret_cast<wchar_t *>(const_cast<ushort *>(args.utf16())),
         nullptr, nullptr, true, dwCreationFlags,
-        environment.isEmpty() ? nullptr : envlist.data(),
+        environment.inheritsFromParent() ? nullptr : envlist.data(),
         nativeWorkingDirectory.isEmpty()
             ? nullptr : reinterpret_cast<const wchar_t *>(nativeWorkingDirectory.utf16()),
         &startupInfo, pid
     };
-    success = callCreateProcess(&cpargs);
 
-    QString errorString;
-    if (!success) {
+    if (!callCreateProcess(&cpargs)) {
         // Capture the error string before we do CloseHandle below
-        errorString = QProcess::tr("Process failed to start: %1").arg(qt_error_string());
-    }
-
-    if (!success) {
+        QString errorString = QProcess::tr("Process failed to start: %1").arg(qt_error_string());
         cleanup();
         setErrorAndEmit(QProcess::FailedToStart, errorString);
-        q->setProcessState(QProcess::NotRunning);
         return;
     }
+
+    // The pipe writer may have already been created before we had
+    // the pipe handle, specifically if the user wrote data from the
+    // stateChanged() slot.
+    if (stdinChannel.writer)
+        stdinChannel.writer->setHandle(stdinChannel.pipe[1]);
 
     q->setProcessState(QProcess::Running);
     // User can call kill()/terminate() from the stateChanged() slot
@@ -720,9 +700,6 @@ bool QProcessPrivate::drainOutputPipes()
 bool QProcessPrivate::waitForReadyRead(const QDeadlineTimer &deadline)
 {
     forever {
-        if (!writeBuffer.isEmpty() && !_q_canWrite())
-            return false;
-
         QProcessPoller poller(*this);
         int ret = poller.poll(deadline);
         if (ret < 0)
@@ -755,10 +732,11 @@ bool QProcessPrivate::waitForReadyRead(const QDeadlineTimer &deadline)
 bool QProcessPrivate::waitForBytesWritten(const QDeadlineTimer &deadline)
 {
     forever {
-        // If no write is pending, try to start one. However, at entry into
-        // the loop the write buffer can be empty to start with, in which
-        // case _q_caWrite() fails immediately.
-        if (pipeWriterBytesToWrite() == 0 && !_q_canWrite())
+        // At entry into the loop the pipe writer's buffer can be empty to
+        // start with, in which case we fail immediately. Also, if the input
+        // pipe goes down somewhere in the code below, we avoid waiting for
+        // a full timeout.
+        if (!stdinChannel.writer || !stdinChannel.writer->isWriteOperationActive())
             return false;
 
         QProcessPoller poller(*this);
@@ -768,7 +746,6 @@ bool QProcessPrivate::waitForBytesWritten(const QDeadlineTimer &deadline)
         if (ret == 0)
             break;
 
-        Q_ASSERT(stdinChannel.writer);
         if (stdinChannel.writer->checkForWrite())
             return true;
 
@@ -804,9 +781,6 @@ bool QProcessPrivate::waitForFinished(const QDeadlineTimer &deadline)
 #endif
 
     forever {
-        if (!writeBuffer.isEmpty() && !_q_canWrite())
-            return false;
-
         QProcessPoller poller(*this);
         int ret = poller.poll(deadline);
         if (ret < 0)
@@ -862,16 +836,18 @@ qint64 QProcess::writeData(const char *data, qint64 len)
         return 0;
     }
 
-    if (!d->stdinWriteTrigger) {
-        d->stdinWriteTrigger = new QTimer;
-        d->stdinWriteTrigger->setSingleShot(true);
-        QObjectPrivate::connect(d->stdinWriteTrigger, &QTimer::timeout,
-                                d, &QProcessPrivate::_q_canWrite);
+    if (!d->stdinChannel.writer) {
+        d->stdinChannel.writer = new QWindowsPipeWriter(d->stdinChannel.pipe[1], this);
+        QObjectPrivate::connect(d->stdinChannel.writer, &QWindowsPipeWriter::bytesWritten,
+                                d, &QProcessPrivate::_q_bytesWritten);
+        QObjectPrivate::connect(d->stdinChannel.writer, &QWindowsPipeWriter::writeFailed,
+                                d, &QProcessPrivate::_q_writeFailed);
     }
 
-    d->write(data, len);
-    if (!d->stdinWriteTrigger->isActive())
-        d->stdinWriteTrigger->start();
+    if (d->isWriteChunkCached(data, len))
+        d->stdinChannel.writer->write(*(d->currentWriteChunk));
+    else
+        d->stdinChannel.writer->write(data, len);
 
 #if defined QPROCESS_DEBUG
     qDebug("QProcess::writeData(%p \"%s\", %lld) == %lld (written to buffer)",
@@ -893,38 +869,14 @@ void QProcessPrivate::_q_bytesWritten(qint64 bytes)
         QScopedValueRollback<bool> guard(emittedBytesWritten, true);
         emit q->bytesWritten(bytes);
     }
-    _q_canWrite();
+    if (stdinChannel.closed && pipeWriterBytesToWrite() == 0)
+        closeWriteChannel();
 }
 
-bool QProcessPrivate::_q_canWrite()
+void QProcessPrivate::_q_writeFailed()
 {
-    if (writeBuffer.isEmpty()) {
-        if (stdinChannel.closed && pipeWriterBytesToWrite() == 0)
-            closeWriteChannel();
-#if defined QPROCESS_DEBUG
-        qDebug("QProcessPrivate::canWrite(), not writing anything (empty write buffer).");
-#endif
-        return false;
-    }
-
-    return writeToStdin();
-}
-
-bool QProcessPrivate::writeToStdin()
-{
-    Q_Q(QProcess);
-
-    if (!stdinChannel.writer) {
-        stdinChannel.writer = new QWindowsPipeWriter(stdinChannel.pipe[1], q);
-        QObjectPrivate::connect(stdinChannel.writer, &QWindowsPipeWriter::bytesWritten,
-                                this, &QProcessPrivate::_q_bytesWritten);
-    } else {
-        if (stdinChannel.writer->isWriteOperationActive())
-            return true;
-    }
-
-    stdinChannel.writer->write(writeBuffer.read());
-    return true;
+    closeWriteChannel();
+    setErrorAndEmit(QProcess::WriteError);
 }
 
 // Use ShellExecuteEx() to trigger an UAC prompt when CreateProcess()fails
@@ -973,7 +925,7 @@ bool QProcessPrivate::startDetached(qint64 *pid)
 
     void *envPtr = nullptr;
     QByteArray envlist;
-    if (environment.d.constData()) {
+    if (!environment.inheritsFromParent()) {
         envlist = qt_create_environment(environment.d.constData()->vars);
         envPtr = envlist.data();
     }

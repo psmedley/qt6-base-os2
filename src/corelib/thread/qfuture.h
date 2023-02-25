@@ -43,6 +43,7 @@
 #include <QtCore/qglobal.h>
 
 #include <QtCore/qfutureinterface.h>
+#include <QtCore/qmetatype.h>
 #include <QtCore/qstring.h>
 
 #include <QtCore/qfuture_impl.h>
@@ -300,6 +301,8 @@ private:
     template<class U>
     friend class QFuture;
 
+    friend class QFutureInterfaceBase;
+
     template<class Function, class ResultType, class ParentResultType>
     friend class QtPrivate::Continuation;
 
@@ -310,6 +313,9 @@ private:
     template<class Function, class ResultType>
     friend class QtPrivate::FailureHandler;
 #endif
+
+    template<typename ResultType>
+    friend struct QtPrivate::WhenAnyContext;
 
     using QFuturePrivate =
             std::conditional_t<std::is_same_v<T, void>, QFutureInterfaceBase, QFutureInterface<T>>;
@@ -430,8 +436,114 @@ inline QFuture<void> QFutureInterface<void>::future()
     return QFuture<void>(this);
 }
 
+template<typename T>
+QFutureInterfaceBase QFutureInterfaceBase::get(const QFuture<T> &future)
+{
+    return future.d;
+}
+
+namespace QtPrivate
+{
+
+template<typename T>
+struct MetaTypeQFutureHelper<QFuture<T>>
+{
+    static bool registerConverter() {
+        if constexpr (std::is_same_v<T, void>)
+            return false;
+
+        return QMetaType::registerConverter<QFuture<T>, QFuture<void>>(
+                [](const QFuture<T> &future) { return QFuture<void>(future); });
+    }
+};
+
+}  // namespace QtPrivate
+
+namespace QtFuture {
+
+#ifndef Q_CLANG_QDOC
+
+template<typename OutputSequence, typename InputIt,
+         typename ValueType = typename std::iterator_traits<InputIt>::value_type,
+         std::enable_if_t<std::conjunction_v<QtPrivate::IsForwardIterable<InputIt>,
+                                             QtPrivate::IsRandomAccessible<OutputSequence>,
+                                             QtPrivate::isQFuture<ValueType>>,
+                          int> = 0>
+QFuture<OutputSequence> whenAll(InputIt first, InputIt last)
+{
+    return QtPrivate::whenAllImpl<OutputSequence, InputIt, ValueType>(first, last);
+}
+
+template<typename InputIt, typename ValueType = typename std::iterator_traits<InputIt>::value_type,
+         std::enable_if_t<std::conjunction_v<QtPrivate::IsForwardIterable<InputIt>,
+                                             QtPrivate::isQFuture<ValueType>>,
+                          int> = 0>
+QFuture<QList<ValueType>> whenAll(InputIt first, InputIt last)
+{
+    return QtPrivate::whenAllImpl<QList<ValueType>, InputIt, ValueType>(first, last);
+}
+
+template<typename OutputSequence, typename... Futures,
+         std::enable_if_t<std::conjunction_v<QtPrivate::IsRandomAccessible<OutputSequence>,
+                                             QtPrivate::NotEmpty<Futures...>,
+                                             QtPrivate::isQFuture<std::decay_t<Futures>>...>,
+                          int> = 0>
+QFuture<OutputSequence> whenAll(Futures &&... futures)
+{
+    return QtPrivate::whenAllImpl<OutputSequence, Futures...>(std::forward<Futures>(futures)...);
+}
+
+template<typename... Futures,
+         std::enable_if_t<std::conjunction_v<QtPrivate::NotEmpty<Futures...>,
+                                             QtPrivate::isQFuture<std::decay_t<Futures>>...>,
+                          int> = 0>
+QFuture<QList<std::variant<std::decay_t<Futures>...>>> whenAll(Futures &&... futures)
+{
+    return QtPrivate::whenAllImpl<QList<std::variant<std::decay_t<Futures>...>>, Futures...>(
+            std::forward<Futures>(futures)...);
+}
+
+template<typename InputIt, typename ValueType = typename std::iterator_traits<InputIt>::value_type,
+         std::enable_if_t<std::conjunction_v<QtPrivate::IsForwardIterable<InputIt>,
+                                             QtPrivate::isQFuture<ValueType>>,
+                          int> = 0>
+QFuture<WhenAnyResult<typename QtPrivate::Future<ValueType>::type>> whenAny(InputIt first,
+                                                                            InputIt last)
+{
+    return QtPrivate::whenAnyImpl<InputIt, ValueType>(first, last);
+}
+
+template<typename... Futures,
+         std::enable_if_t<std::conjunction_v<QtPrivate::NotEmpty<Futures...>,
+                                             QtPrivate::isQFuture<std::decay_t<Futures>>...>,
+                          int> = 0>
+QFuture<std::variant<std::decay_t<Futures>...>> whenAny(Futures &&... futures)
+{
+    return QtPrivate::whenAnyImpl(std::forward<Futures>(futures)...);
+}
+
+#else
+
+template<typename OutputSequence, typename InputIt>
+QFuture<OutputSequence> whenAll(InputIt first, InputIt last);
+
+template<typename OutputSequence, typename... Futures>
+QFuture<OutputSequence> whenAll(Futures &&... futures);
+
+template<typename T, typename InputIt>
+QFuture<QtFuture::WhenAnyResult<T>> whenAny(InputIt first, InputIt last);
+
+template<typename... Futures>
+QFuture<std::variant<std::decay_t<Futures>...>> whenAny(Futures &&... futures);
+
+#endif // Q_CLANG_QDOC
+
+} // namespace QtFuture
+
 Q_DECLARE_SEQUENTIAL_ITERATOR(Future)
 
 QT_END_NAMESPACE
+
+Q_DECLARE_METATYPE_TEMPLATE_1ARG(QFuture)
 
 #endif // QFUTURE_H

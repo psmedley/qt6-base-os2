@@ -289,31 +289,86 @@ void tst_QMenu::addActionsAndClear()
     QCOMPARE(menus[0]->actions().count(), 0);
 }
 
-static void testFunction() { }
+static void testFunction0() {}
+static void testFunction1(bool) {}
+
+template <typename T>
+struct ImplicitlyConvertibleTo {
+    T t;
+    operator const T() const { return t; }
+    operator T() { return t; }
+};
 
 void tst_QMenu::addActionsConnect()
 {
+    // almost exhaustive check of addAction() overloads:
+    // (text), (icon, text), (icon, text, shortcut), (text, shortcut)
+    // each with a good sample of ways to QObject::connect() to
+    // QAction::triggered(bool)
     QMenu menu;
-    const QString text = QLatin1String("bla");
-    const QIcon icon;
-    menu.addAction(text, &menu, SLOT(deleteLater()));
-    menu.addAction(text, &menu, &QMenu::deleteLater);
-    menu.addAction(text, testFunction);
-    menu.addAction(text, &menu, testFunction);
-    menu.addAction(icon, text, &menu, SLOT(deleteLater()));
-    menu.addAction(icon, text, &menu, &QMenu::deleteLater);
-    menu.addAction(icon, text, testFunction);
-    menu.addAction(icon, text, &menu, testFunction);
+
+    // don't just pass QString etc - that'd be too easy (think QStringBuilder)
+    ImplicitlyConvertibleTo<QString> text = {QLatin1String("bla")};
+    ImplicitlyConvertibleTo<QIcon> icon;
+
+    const auto check = [&](auto &...args) { // don't need to perfectly-forward, only lvalues passed
+        menu.addAction(args...);
+
+        menu.addAction(args..., &menu, SLOT(deleteLater()));
+        menu.addAction(args..., &menu, &QMenu::deleteLater);
+        menu.addAction(args..., testFunction0);
+        menu.addAction(args..., &menu, testFunction0);
+        menu.addAction(args..., testFunction1);
+        menu.addAction(args..., &menu, testFunction1);
+        menu.addAction(args..., [&](bool b) { menu.setEnabled(b); });
+        menu.addAction(args..., &menu, [&](bool b) { menu.setEnabled(b); });
+
+        menu.addAction(args..., &menu, SLOT(deleteLater()), Qt::QueuedConnection);
+        menu.addAction(args..., &menu, &QMenu::deleteLater, Qt::QueuedConnection);
+        // doesn't exist: menu.addAction(args..., testFunction0, Qt::QueuedConnection);
+        menu.addAction(args..., &menu, testFunction0, Qt::QueuedConnection);
+        // doesn't exist: menu.addAction(args..., testFunction1, Qt::QueuedConnection);
+        menu.addAction(args..., &menu, testFunction1, Qt::QueuedConnection);
+        // doesn't exist: menu.addAction(args..., [&](bool b) { menu.setEnabled(b); }, Qt::QueuedConnection);
+        menu.addAction(args..., &menu, [&](bool b) { menu.setEnabled(b); }, Qt::QueuedConnection);
+    };
+    const auto check1 = [&](auto &arg, auto &...args) {
+        check(arg, args...);
+        check(std::as_const(arg), args...);
+    };
+    const auto check2 = [&](auto &arg1, auto &arg2, auto &...args) {
+        check1(arg1, arg2, args...);
+        check1(arg1, std::as_const(arg2), args...);
+    };
+    [[maybe_unused]]
+    const auto check3 = [&](auto &arg1, auto &arg2, auto &arg3) {
+        check2(arg1, arg2, arg3);
+        check2(arg1, arg2, std::as_const(arg3));
+    };
+
+    check1(text);
+    check2(icon, text);
 #ifndef QT_NO_SHORTCUT
-    const QKeySequence keySequence(Qt::CTRL | Qt::Key_C);
+    ImplicitlyConvertibleTo<QKeySequence> keySequence = {Qt::CTRL | Qt::Key_C};
+    check2(text, keySequence);
+    check3(icon, text, keySequence);
+#if QT_DEPRECATED_SINCE(6, 4)
+    QT_WARNING_PUSH
+    QT_WARNING_DISABLE_DEPRECATED
     menu.addAction(text, &menu, SLOT(deleteLater()), keySequence);
     menu.addAction(text, &menu, &QMenu::deleteLater, keySequence);
-    menu.addAction(text, testFunction, keySequence);
-    menu.addAction(text, &menu, testFunction, keySequence);
+    menu.addAction(text, testFunction0, keySequence);
+    menu.addAction(text, &menu, testFunction0, keySequence);
+    menu.addAction(text, testFunction1, keySequence);
+    menu.addAction(text, &menu, testFunction1, keySequence);
     menu.addAction(icon, text, &menu, SLOT(deleteLater()), keySequence);
     menu.addAction(icon, text, &menu, &QMenu::deleteLater, keySequence);
-    menu.addAction(icon, text, testFunction, keySequence);
-    menu.addAction(icon, text, &menu, testFunction, keySequence);
+    menu.addAction(icon, text, testFunction0, keySequence);
+    menu.addAction(icon, text, &menu, testFunction0, keySequence);
+    menu.addAction(icon, text, testFunction1, keySequence);
+    menu.addAction(icon, text, &menu, testFunction1, keySequence);
+    QT_WARNING_POP
+#endif
 #endif // !QT_NO_SHORTCUT
 }
 
@@ -863,13 +918,20 @@ private:
 
 void tst_QMenu::activeSubMenuPositionExec()
 {
-
+#ifdef Q_OS_ANDROID
+    // QTBUG-87424
+    QSKIP("Android: This hangs. Figure out why.");
+#endif
     SubMenuPositionExecMenu menu;
     menu.exec(QGuiApplication::primaryScreen()->availableGeometry().center());
 }
 
 void tst_QMenu::task242454_sizeHint()
 {
+#ifdef Q_OS_ANDROID
+    // QTBUG-87424
+    QSKIP("Android: This hangs. Figure out why.");
+#endif
     QMenu menu;
     QString s = QLatin1String("foo\nfoo\nfoo\nfoo");
     menu.addAction(s);
@@ -998,12 +1060,16 @@ public:
 // Mouse move related signals for Windows Mobile unavailable
 void tst_QMenu::task258920_mouseBorder()
 {
+    const QRect screenGeometry = QGuiApplication::primaryScreen()->availableGeometry();
     Menu258920 menu;
+    QCursor::setPos(screenGeometry.topLeft());
+    if (!QTest::qWaitFor([screenGeometry]{ return QCursor::pos() == screenGeometry.topLeft(); }))
+        QSKIP("Can't move cursor out of the way");
     // For styles which inherit from QWindowsStyle, styleHint(QStyle::SH_Menu_MouseTracking) is true.
     menu.setMouseTracking(true);
     QAction *action = menu.addAction("test");
 
-    const QPoint center = QGuiApplication::primaryScreen()->availableGeometry().center();
+    const QPoint center = screenGeometry.center();
     menu.popup(center);
     QVERIFY(QTest::qWaitForWindowExposed(&menu));
     QRect actionRect = menu.actionGeometry(action);

@@ -43,10 +43,6 @@ target_compile_definitions(QtLibraryInfo PUBLIC
     QT_HOST_DATADIR="${hostdatadir}"
 )
 
-# qmake is out of any module, so we manually evaluate the required features.
-include("${CMAKE_CURRENT_SOURCE_DIR}/configure.cmake")
-qt_feature_evaluate_features("${CMAKE_CURRENT_SOURCE_DIR}/configure.cmake")
-
 if(NOT QT_FEATURE_qmake)
     return()
 endif()
@@ -97,6 +93,7 @@ qt_internal_add_tool(${target_name}
         Qt::CorePrivate
         QtLibraryInfo
 )
+qt_internal_return_unless_building_tools()
 
 # Add QMAKE_VERSION_STR only if qmake is part of the build.
 target_compile_definitions(QtLibraryInfo PUBLIC

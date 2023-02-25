@@ -62,11 +62,6 @@
 using namespace emscripten;
 QT_BEGIN_NAMESPACE
 
-static void browserBeforeUnload(emscripten::val)
-{
-    QWasmIntegration::QWasmBrowserExit();
-}
-
 static void addCanvasElement(emscripten::val canvas)
 {
     QWasmIntegration::get()->addScreen(canvas);
@@ -95,7 +90,6 @@ static void resizeAllScreens(emscripten::val event)
 
 EMSCRIPTEN_BINDINGS(qtQWasmIntegraton)
 {
-    function("qtBrowserBeforeUnload", &browserBeforeUnload);
     function("qtAddCanvasElement", &addCanvasElement);
     function("qtRemoveCanvasElement", &removeCanvasElement);
     function("qtResizeCanvasElement", &resizeCanvasElement);
@@ -127,8 +121,6 @@ QWasmIntegration::QWasmIntegration()
         addScreen(canvas);
     }
 
-    emscripten::val::global("window").set("onbeforeunload", val::module_property("qtBrowserBeforeUnload"));
-
     // install browser window resize handler
     auto onWindowResize = [](int eventType, const EmscriptenUiEvent *e, void *userData) -> int {
         Q_UNUSED(eventType);
@@ -142,7 +134,7 @@ QWasmIntegration::QWasmIntegration()
             integration->resizeAllScreens();
         return 0;
     };
-    emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, 1, onWindowResize);
+    emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, EM_TRUE, onWindowResize);
 
     // install visualViewport resize handler which picks up size and scale change on mobile.
     emscripten::val visualViewport = emscripten::val::global("window")["visualViewport"];
@@ -154,6 +146,14 @@ QWasmIntegration::QWasmIntegration()
 
 QWasmIntegration::~QWasmIntegration()
 {
+    // Remove event listener
+    emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, EM_TRUE, nullptr);
+    emscripten::val visualViewport = emscripten::val::global("window")["visualViewport"];
+    if (!visualViewport.isUndefined()) {
+        visualViewport.call<void>("removeEventListener", val("resize"),
+                          val::module_property("qtResizeAllScreens"));
+    }
+
     delete m_fontDb;
     delete m_desktopServices;
 
@@ -162,12 +162,6 @@ QWasmIntegration::~QWasmIntegration()
     m_screens.clear();
 
     s_instance = nullptr;
-}
-
-void QWasmIntegration::QWasmBrowserExit()
-{
-    QCoreApplication *app = QCoreApplication::instance();
-    app->quit();
 }
 
 bool QWasmIntegration::hasCapability(QPlatformIntegration::Capability cap) const
@@ -332,6 +326,11 @@ void QWasmIntegration::resizeAllScreens()
 {
     for (const auto &canvasAndScreen : m_screens)
         canvasAndScreen.second->updateQScreenAndCanvasRenderSize();
+}
+
+quint64 QWasmIntegration::getTimestamp()
+{
+    return emscripten_performance_now();
 }
 
 QT_END_NAMESPACE

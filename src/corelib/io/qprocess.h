@@ -65,7 +65,10 @@ class QProcessEnvironmentPrivate;
 class Q_CORE_EXPORT QProcessEnvironment
 {
 public:
+    enum Initialization { InheritFromParent };
+
     QProcessEnvironment();
+    QProcessEnvironment(Initialization) noexcept;
     QProcessEnvironment(const QProcessEnvironment &other);
     ~QProcessEnvironment();
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QProcessEnvironment)
@@ -78,6 +81,7 @@ public:
     { return !(*this == other); }
 
     bool isEmpty() const;
+    [[nodiscard]] bool inheritsFromParent() const;
     void clear();
 
     bool contains(const QString &name) const;
@@ -286,7 +290,9 @@ private:
 
     Q_PRIVATE_SLOT(d_func(), bool _q_canReadStandardOutput())
     Q_PRIVATE_SLOT(d_func(), bool _q_canReadStandardError())
+#ifdef Q_OS_UNIX
     Q_PRIVATE_SLOT(d_func(), bool _q_canWrite())
+#endif
     Q_PRIVATE_SLOT(d_func(), bool _q_startupNotification())
     Q_PRIVATE_SLOT(d_func(), void _q_processDied())
 #if defined(Q_OS_OS2)

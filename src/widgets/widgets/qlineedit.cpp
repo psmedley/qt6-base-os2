@@ -208,7 +208,7 @@ void QLineEdit::initStyleOption(QStyleOptionFrame *option) const
     Any other key sequence that represents a valid character, will
     cause the character to be inserted into the line edit.
 
-    \sa QTextEdit, QLabel, QComboBox, {fowler}{GUI Design Handbook: Field, Entry}, {Line Edits Example}
+    \sa QTextEdit, QLabel, QComboBox, {Line Edits Example}
 */
 
 
@@ -1805,10 +1805,6 @@ QRect QLineEdit::cursorRect() const
 void QLineEdit::inputMethodEvent(QInputMethodEvent *e)
 {
     Q_D(QLineEdit);
-    if (!d->shouldEnableInputMethod()) {
-        e->ignore();
-        return;
-    }
 
     if (echoMode() == PasswordEchoOnEdit && !d->control->passwordEchoEditing()) {
         // Clear the edit and reset to normal echo mode while entering input
@@ -1849,6 +1845,8 @@ QVariant QLineEdit::inputMethodQuery(Qt::InputMethodQuery property, QVariant arg
 {
     Q_D(const QLineEdit);
     switch(property) {
+    case Qt::ImEnabled:
+        return isEnabled();
     case Qt::ImCursorRectangle:
         return d->cursorRect();
     case Qt::ImAnchorRectangle:

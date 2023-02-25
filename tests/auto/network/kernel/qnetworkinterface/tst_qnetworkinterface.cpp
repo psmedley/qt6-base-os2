@@ -59,6 +59,8 @@ private slots:
     void interfaceFromXXX_data();
     void interfaceFromXXX();
     void copyInvalidInterface();
+private:
+    bool hasNetworkServer = false;
 };
 
 tst_QNetworkInterface::tst_QNetworkInterface()
@@ -72,9 +74,14 @@ tst_QNetworkInterface::~tst_QNetworkInterface()
 bool tst_QNetworkInterface::isIPv6Working()
 {
 #ifndef QT_NO_IPV6
-    QUdpSocket socket;
-    socket.connectToHost(QHostAddress::LocalHostIPv6, 1234);
-    return socket.state() == QAbstractSocket::ConnectedState || socket.waitForConnected(100);
+ // Version without following cannot get IPV6 information
+ #if !defined(QT_NO_GETIFADDRS) && !defined(QT_NO_IPV6IFNAME)
+     QUdpSocket socket;
+     socket.connectToHost(QHostAddress::LocalHostIPv6, 1234);
+     return socket.state() == QAbstractSocket::ConnectedState || socket.waitForConnected(100);
+ #else
+     return false;
+ #endif
 #else
     return false;
 #endif
@@ -82,8 +89,11 @@ bool tst_QNetworkInterface::isIPv6Working()
 
 void tst_QNetworkInterface::initTestCase()
 {
-    if (!QtNetworkSettings::verifyTestNetworkSettings())
-        QSKIP("No network test server available");
+#ifdef QT_TEST_SERVER
+    hasNetworkServer = QtNetworkSettings::verifyConnection(QtNetworkSettings::httpServerName(), 80);
+#else
+    hasNetworkServer = QtNetworkSettings::verifyTestNetworkSettings();
+#endif
 }
 
 void tst_QNetworkInterface::dump()
@@ -193,7 +203,8 @@ void tst_QNetworkInterface::localAddress_data()
     if (ipv6)
         QTest::newRow("localhost-ipv6") << QHostAddress(QHostAddress::LocalHostIPv6);
 
-    QTest::newRow("test-server") << QtNetworkSettings::serverIP();
+    if (hasNetworkServer)
+        QTest::newRow("test-server") << QtNetworkSettings::httpServerIp();
 
     QSet<QHostAddress> added;
     const QList<QNetworkInterface> ifaces = QNetworkInterface::allInterfaces();

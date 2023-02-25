@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2019 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -278,6 +278,7 @@ private slots:
     void focusItemChangedSignal();
     void minimumRenderSize();
     void focusOnTouch();
+    void clearSelection();
 
     // task specific tests below me
     void task139710_bspTreeCrash();
@@ -293,6 +294,8 @@ private slots:
     void taskQTBUG_16401_focusItem();
     void taskQTBUG_42915_focusNextPrevChild();
     void taskQTBUG_85088_previewTextfailWhenLostFocus();
+
+    void deleteItemsOnChange();
 
 private:
     QRect m_availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
@@ -2697,7 +2700,7 @@ void tst_QGraphicsScene::render()
 
 void tst_QGraphicsScene::renderItemsWithNegativeWidthOrHeight()
 {
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     QSKIP("Test only works on platforms with resizable windows");
 #endif
     QGraphicsScene scene(0, 0, m_testSize.width(), m_testSize.height());
@@ -2777,7 +2780,7 @@ protected:
 
 void tst_QGraphicsScene::contextMenuEvent_ItemIgnoresTransformations()
 {
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     QSKIP("Test fails on some Android devices (QTBUG-44430)");
 #endif
 
@@ -4058,12 +4061,11 @@ void tst_QGraphicsScene::polishItems2()
 
 void tst_QGraphicsScene::isActive()
 {
-    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
-        QSKIP("Window activation is not supported");
-
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     QSKIP("Fails on Android (QTBUG-44430)");
 #endif
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("Window activation is not supported");
 
     QGraphicsScene scene1;
     QVERIFY(!scene1.isActive());
@@ -4858,6 +4860,53 @@ void tst_QGraphicsScene::focusOnTouch()
     QVERIFY(rect->hasFocus());
 }
 
+void tst_QGraphicsScene::clearSelection()
+{
+    class AlwaysSelectedItem : public QGraphicsRectItem
+    {
+    public:
+        using QGraphicsRectItem::QGraphicsRectItem;
+    protected:
+        QVariant itemChange(GraphicsItemChange change, const QVariant& value) override
+        {
+            if (change == ItemSelectedChange)
+                return true;
+            return QGraphicsRectItem::itemChange(change, value);
+        }
+    };
+    QGraphicsScene scene;
+    QSignalSpy spy(&scene, &QGraphicsScene::selectionChanged);
+
+    QGraphicsRectItem *regularRect = new QGraphicsRectItem;
+    regularRect->setFlag(QGraphicsItem::ItemIsSelectable);
+    regularRect->setRect(0, 0, 50, 50);
+    regularRect->setSelected(true);
+    AlwaysSelectedItem *selectedRect = new AlwaysSelectedItem;
+    selectedRect->setFlag(QGraphicsItem::ItemIsSelectable);
+    selectedRect->setRect(50, 50, 50, 50);
+    selectedRect->setSelected(true);
+    scene.addItem(regularRect);
+    scene.addItem(selectedRect);
+
+    QCOMPARE(spy.count(), 2);
+
+    QCOMPARE(scene.selectedItems().count(), 2);
+    scene.clearSelection();
+    QVERIFY(!regularRect->isSelected());
+    QVERIFY(selectedRect->isSelected());
+    QCOMPARE(scene.selectedItems().count(), 1);
+    QCOMPARE(spy.count(), 3);
+
+    delete regularRect;
+    QCOMPARE(spy.count(), 3);
+
+    scene.clearSelection();
+    QCOMPARE(spy.count(), 3);
+
+    delete selectedRect;
+    QCOMPARE(spy.count(), 4);
+}
+
 void tst_QGraphicsScene::taskQTBUG_15977_renderWithDeviceCoordinateCache()
 {
     QGraphicsScene scene;
@@ -4968,6 +5017,73 @@ void tst_QGraphicsScene::taskQTBUG_85088_previewTextfailWhenLostFocus()
     inputEvent.setCommitString(str);
     QApplication::sendEvent(&scene, &inputEvent);
     QCOMPARE(simpleTextItem->toPlainText(), str + str);
+}
+
+void tst_QGraphicsScene::deleteItemsOnChange()
+{
+    QGraphicsScene scene;
+
+    class SelectionItem : public QGraphicsRectItem {
+    public:
+        QRectF boundingRect() const override { return QRectF(); }
+    };
+
+    class ChangeItem : public QGraphicsItem
+    {
+    public:
+        ChangeItem()
+        {
+            setFlag(QGraphicsItem::ItemIsSelectable, true);
+            setFlag(QGraphicsItem::ItemIsMovable, true);
+        }
+        QRectF boundingRect() const override
+        {
+            return QRectF(0,0,100,100);
+        }
+
+    protected:
+        void paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *) override
+        {
+            painter->fillRect(boundingRect().toRect(), isSelected() ? Qt::yellow : Qt::cyan);
+        }
+
+        QVariant itemChange(GraphicsItemChange change, const QVariant &value) override
+        {
+            if (change != QGraphicsItem::ItemSelectedHasChanged)
+                return QGraphicsItem::itemChange(change, value);
+            if (value.toBool()) {
+                selectionRect = new SelectionItem;
+                scene()->addItem(selectionRect);
+            } else {
+                // this recreates the selectedItems QSet inside of QGraphicsScene,
+                // invalidating iterators. See QTBUG-101651.
+                scene()->selectedItems();
+                delete selectionRect;
+                selectionRect = nullptr;
+            }
+            return QGraphicsItem::itemChange(change, value);
+        }
+    private:
+        SelectionItem *selectionRect = nullptr;
+    };
+
+    ChangeItem item1;
+    item1.setPos(0, 0);
+    ChangeItem item2;
+    item1.setPos(50, 50);
+
+    scene.addItem(&item1);
+    scene.addItem(&item2);
+
+    QGraphicsView view;
+    view.setScene(&scene);
+    view.show();
+
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // this should not crash - see QTBUG-101651
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, {}, QPoint(120, 120));
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, {}, QPoint(25, 25));
 }
 
 QTEST_MAIN(tst_QGraphicsScene)

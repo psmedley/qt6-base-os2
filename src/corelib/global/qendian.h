@@ -313,9 +313,9 @@ public:
     }
 
     static constexpr QSpecialInteger max()
-    { return QSpecialInteger(std::numeric_limits<T>::max()); }
+    { return QSpecialInteger((std::numeric_limits<T>::max)()); }
     static constexpr QSpecialInteger min()
-    { return QSpecialInteger(std::numeric_limits<T>::min()); }
+    { return QSpecialInteger((std::numeric_limits<T>::min)()); }
 };
 
 template<typename T>
@@ -355,8 +355,8 @@ public:
     QLEInteger &operator ^=(T i);
     QLEInteger &operator ++();
     QLEInteger &operator --();
-    QLEInteger &operator ++(int);
-    QLEInteger &operator --(int);
+    QLEInteger operator ++(int);
+    QLEInteger operator --(int);
 
     static constexpr QLEInteger max();
     static constexpr QLEInteger min();
@@ -382,8 +382,8 @@ public:
     QBEInteger &operator ^=(T i);
     QBEInteger &operator ++();
     QBEInteger &operator --();
-    QBEInteger &operator ++(int);
-    QBEInteger &operator --(int);
+    QBEInteger operator ++(int);
+    QBEInteger operator --(int);
 
     static constexpr QBEInteger max();
     static constexpr QBEInteger min();

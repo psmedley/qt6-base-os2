@@ -44,6 +44,7 @@
 
 QT_BEGIN_NAMESPACE
 
+QT_IMPL_METATYPE_EXTERN_TAGGED(QSurface*, QSurface_ptr)
 
 /*!
     \class QSurface
@@ -161,4 +162,6 @@ QSurface::SurfaceClass QSurface::surfaceClass() const
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qsurface.cpp"
 

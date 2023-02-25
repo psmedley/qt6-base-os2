@@ -30,6 +30,7 @@
 #include <qrasterwindow.h>
 #include <qscreen.h>
 #include <qpa/qwindowsysteminterface.h>
+#include <private/qhighdpiscaling_p.h>
 
 #include <QTest>
 #include <QSignalSpy>
@@ -279,20 +280,30 @@ void tst_QScreen::grabWindow()
     QCOMPARE(screen->name().toUtf8(), screenName);
     const double screenDpr = screen->devicePixelRatio();
 
+    if (QHighDpiScaling::isActive()) {
+        const float rawFactor = QHighDpiScaling::factor(screen);
+        const float roundedFactor = qRound(rawFactor);
+        if (!qFuzzyCompare(roundedFactor, rawFactor))
+            QSKIP("HighDPI enabled with non-integer factor. Skip due to possible rounding errors.");
+    }
+
     Window window(screen);
     window.setGeometry(windowRect);
+#ifndef Q_OS_ANDROID
     window.show();
+#else
+    window.showNormal();
+#endif
 
     if (!QTest::qWaitForWindowExposed(&window))
         QSKIP("Failed to expose window - aborting");
 
-    if (QGuiApplication::platformName().startsWith(QLatin1String("xcb"), Qt::CaseInsensitive))
-        QTest::qWait(1500); // this is ridiculously necessary because of effects combined with slowness of VMs
-#ifdef Q_OS_MACOS // wait for desktop on screen to scroll into place
-    QTest::qWait(1000);
-#endif
+    // this is necessary because of scrolling effects combined with potential slowness of VMs
+    QTest::qWait(1500);
 
-    QSize expectedGrabSize = grabRect.isValid() ? grabRect.size() : (grabWindow ?  windowRect.size() : screen->size());
+    QSize expectedGrabSize = grabRect.isValid()
+                           ? grabRect.size()
+                           : (grabWindow ?  windowRect.size() : screen->size());
     // we ask for pixel coordinates, but will get a pixmap with device-specific DPR
     expectedGrabSize *= screen->devicePixelRatio();
 
@@ -300,7 +311,9 @@ void tst_QScreen::grabWindow()
     QImage paintedImage = window.image;
     QCOMPARE(paintedImage.devicePixelRatio(), screenDpr);
 
-    const QPixmap pixmap = screen->grabWindow(grabWindow ? window.winId() : 0, grabRect.x(), grabRect.y(), grabRect.width(), grabRect.height());
+    const QPixmap pixmap = screen->grabWindow(grabWindow
+                         ? window.winId()
+                         : 0, grabRect.x(), grabRect.y(), grabRect.width(), grabRect.height());
 
     QImage grabbedImage = pixmap.toImage();
     const QSize grabbedSize = grabbedImage.size();

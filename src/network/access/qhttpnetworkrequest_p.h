@@ -153,9 +153,6 @@ public:
     QString peerVerifyName() const;
     void setPeerVerifyName(const QString &peerName);
 
-    qint64 minimumArchiveBombSize() const;
-    void setMinimumArchiveBombSize(qint64 threshold);
-
 private:
     QSharedDataPointer<QHttpNetworkRequestPrivate> d;
     friend class QHttpNetworkRequestPrivate;
@@ -181,11 +178,11 @@ public:
     QByteArray customVerb;
     QHttpNetworkRequest::Priority priority;
     mutable QNonContiguousByteDevice* uploadByteDevice;
-    qint64 minimumArchiveBombSize = 0;
     bool autoDecompress;
     bool pipeliningAllowed;
     bool http2Allowed;
     bool http2Direct;
+    bool h2cAllowed = false;
     bool withCredentials;
     bool ssl;
     bool preConnect;
@@ -198,6 +195,6 @@ public:
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QHttpNetworkRequest)
+QT_DECL_METATYPE_EXTERN(QHttpNetworkRequest, Q_AUTOTEST_EXPORT)
 
 #endif // QHTTPNETWORKREQUEST_H

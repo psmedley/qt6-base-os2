@@ -42,6 +42,8 @@
 
 QT_BEGIN_NAMESPACE
 
+QT_IMPL_METATYPE_EXTERN(QHttpNetworkRequest)
+
 QHttpNetworkRequestPrivate::QHttpNetworkRequestPrivate(QHttpNetworkRequest::Operation op,
         QHttpNetworkRequest::Priority pri, const QUrl &newUrl)
     : QHttpNetworkHeaderPrivate(newUrl), operation(op), priority(pri), uploadByteDevice(nullptr),
@@ -57,11 +59,11 @@ QHttpNetworkRequestPrivate::QHttpNetworkRequestPrivate(const QHttpNetworkRequest
       customVerb(other.customVerb),
       priority(other.priority),
       uploadByteDevice(other.uploadByteDevice),
-      minimumArchiveBombSize(other.minimumArchiveBombSize),
       autoDecompress(other.autoDecompress),
       pipeliningAllowed(other.pipeliningAllowed),
       http2Allowed(other.http2Allowed),
       http2Direct(other.http2Direct),
+      h2cAllowed(other.h2cAllowed),
       withCredentials(other.withCredentials),
       ssl(other.ssl),
       preConnect(other.preConnect),
@@ -86,6 +88,7 @@ bool QHttpNetworkRequestPrivate::operator==(const QHttpNetworkRequestPrivate &ot
         && (pipeliningAllowed == other.pipeliningAllowed)
         && (http2Allowed == other.http2Allowed)
         && (http2Direct == other.http2Direct)
+        && (h2cAllowed == other.h2cAllowed)
         // we do not clear the customVerb in setOperation
         && (operation != QHttpNetworkRequest::Custom || (customVerb == other.customVerb))
         && (withCredentials == other.withCredentials)
@@ -94,7 +97,7 @@ bool QHttpNetworkRequestPrivate::operator==(const QHttpNetworkRequestPrivate &ot
         && (redirectPolicy == other.redirectPolicy)
         && (peerVerifyName == other.peerVerifyName)
         && (needResendWithCredentials == other.needResendWithCredentials)
-        && (minimumArchiveBombSize == other.minimumArchiveBombSize);
+        ;
 }
 
 QByteArray QHttpNetworkRequest::methodName() const
@@ -272,7 +275,7 @@ void QHttpNetworkRequest::setContentLength(qint64 length)
 
 QList<QPair<QByteArray, QByteArray> > QHttpNetworkRequest::header() const
 {
-    return d->fields;
+    return d->parser.headers();
 }
 
 QByteArray QHttpNetworkRequest::headerField(const QByteArray &name, const QByteArray &defaultValue) const
@@ -368,12 +371,12 @@ void QHttpNetworkRequest::setHTTP2Direct(bool b)
 
 bool QHttpNetworkRequest::isH2cAllowed() const
 {
-    return qEnvironmentVariableIsSet("QT_NETWORK_H2C_ALLOWED");
+    return d->h2cAllowed;
 }
 
 void QHttpNetworkRequest::setH2cAllowed(bool b)
 {
-    Q_UNUSED(b);
+    d->h2cAllowed = b;
 }
 
 bool QHttpNetworkRequest::withCredentials() const
@@ -414,16 +417,6 @@ QString QHttpNetworkRequest::peerVerifyName() const
 void QHttpNetworkRequest::setPeerVerifyName(const QString &peerName)
 {
     d->peerVerifyName = peerName;
-}
-
-qint64 QHttpNetworkRequest::minimumArchiveBombSize() const
-{
-    return d->minimumArchiveBombSize;
-}
-
-void QHttpNetworkRequest::setMinimumArchiveBombSize(qint64 threshold)
-{
-    d->minimumArchiveBombSize = threshold;
 }
 
 QT_END_NAMESPACE

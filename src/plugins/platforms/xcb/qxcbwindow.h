@@ -74,13 +74,12 @@ public:
 
     Q_DECLARE_FLAGS(NetWmStates, NetWmState)
 
-    enum Task {
-        Map,
-        Unmap,
-        SetGeometry,
-        SetWindowFlags,
-        SetWindowState
+    enum RecreationReason {
+        RecreationNotNeeded = 0,
+        WindowStaysOnTopHintChanged = 0x1,
+        WindowStaysOnBottomHintChanged = 0x2
     };
+    Q_DECLARE_FLAGS(RecreationReasons, RecreationReason)
 
     QXcbWindow(QWindow *window);
     ~QXcbWindow();
@@ -151,9 +150,6 @@ public:
 
     QXcbWindow *toWindow() override;
 
-    bool shouldDeferTask(Task task);
-    void handleDeferredTasks();
-
     void handleMouseEvent(xcb_timestamp_t time, const QPoint &local, const QPoint &global,
                           Qt::KeyboardModifiers modifiers, QEvent::Type type, Qt::MouseEventSource source);
 
@@ -174,6 +170,9 @@ public:
     void clearSyncWindowRequest() { m_pendingSyncRequest = nullptr; }
 
     QXcbScreen *xcbScreen() const;
+
+    QPoint lastPointerPosition() const { return m_lastPointerPosition; }
+    QPoint lastPointerGlobalPosition() const { return m_lastPointerGlobalPosition; }
 
     bool startSystemMoveResize(const QPoint &pos, int edges);
     void doStartSystemMoveResize(const QPoint &globalPos, int edges);
@@ -271,6 +270,7 @@ protected:
     QRegion m_exposeRegion;
     QSize m_oldWindowSize;
     QPoint m_lastPointerPosition;
+    QPoint m_lastPointerGlobalPosition;
 
     xcb_visualid_t m_visualId = 0;
     // Last sent state. Initialized to an invalid state, on purpose.
@@ -288,10 +288,7 @@ protected:
 
     qreal m_sizeHintsScaleFactor = 1.0;
 
-    bool m_wmStateValid = true;
-    QVector<Task> m_deferredTasks;
-    bool m_isWmManagedWindow = true;
-    QRect m_deferredGeometry;
+    RecreationReasons m_recreationReasons = RecreationNotNeeded;
 };
 
 class QXcbForeignWindow : public QXcbWindow

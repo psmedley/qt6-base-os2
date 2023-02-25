@@ -66,6 +66,7 @@
 #include <qmetaobject.h>
 #include <qtextlayout.h>
 #include <private/qabstractitemdelegate_p.h>
+#include <private/qabstractitemmodel_p.h>
 #include <private/qtextengine_p.h>
 #include <private/qlayoutengine_p.h>
 #include <qdebug.h>
@@ -150,7 +151,7 @@ public:
     \row    \li \l Qt::AccessibleDescriptionRole \li QString
     \row    \li \l Qt::AccessibleTextRole \li QString
     \endomit
-    \row    \li \l Qt::BackgroundRole \li QBrush (\since 4.2)
+    \row    \li \l Qt::BackgroundRole \li QBrush \since 4.2
     \row    \li \l Qt::CheckStateRole \li Qt::CheckState
     \row    \li \l Qt::DecorationRole \li QIcon, QPixmap, QImage and QColor
     \row    \li \l Qt::DisplayRole \li QString and types with a string representation
@@ -161,7 +162,7 @@ public:
     \row    \li \l Qt::StatusTipRole \li
     \endomit
     \row    \li \l Qt::TextAlignmentRole \li Qt::Alignment
-    \row    \li \l Qt::ForegroundRole \li QBrush (\since 4.2)
+    \row    \li \l Qt::ForegroundRole \li QBrush \since 4.2
     \omit
     \row    \li \l Qt::ToolTipRole
     \row    \li \l Qt::WhatsThisRole
@@ -302,7 +303,7 @@ void QStyledItemDelegate::initStyleOption(QStyleOptionViewItem *option,
 
     value = modelRoleDataSpan.dataForRole(Qt::TextAlignmentRole);
     if (value->isValid() && !value->isNull())
-        option->displayAlignment = Qt::Alignment(value->toInt());
+        option->displayAlignment = QtPrivate::legacyFlagValueFromModelData<Qt::Alignment>(*value);
 
     value = modelRoleDataSpan.dataForRole(Qt::ForegroundRole);
     if (value->canConvert<QBrush>())
@@ -311,7 +312,7 @@ void QStyledItemDelegate::initStyleOption(QStyleOptionViewItem *option,
     value = modelRoleDataSpan.dataForRole(Qt::CheckStateRole);
     if (value->isValid() && !value->isNull()) {
         option->features |= QStyleOptionViewItem::HasCheckIndicator;
-        option->checkState = static_cast<Qt::CheckState>(value->toInt());
+        option->checkState = QtPrivate::legacyEnumValueFromModelData<Qt::CheckState>(*value);
     }
 
     value = modelRoleDataSpan.dataForRole(Qt::DecorationRole);
@@ -343,13 +344,13 @@ void QStyledItemDelegate::initStyleOption(QStyleOptionViewItem *option,
         case QMetaType::QImage: {
             QImage image = qvariant_cast<QImage>(*value);
             option->icon = QIcon(QPixmap::fromImage(image));
-            option->decorationSize = image.size() / image.devicePixelRatio();
+            option->decorationSize = image.deviceIndependentSize().toSize();
             break;
         }
         case QMetaType::QPixmap: {
             QPixmap pixmap = qvariant_cast<QPixmap>(*value);
             option->icon = QIcon(pixmap);
-            option->decorationSize = pixmap.size() / pixmap.devicePixelRatio();
+            option->decorationSize = pixmap.deviceIndependentSize().toSize();
             break;
         }
         default:
@@ -575,8 +576,9 @@ void QStyledItemDelegate::setItemEditorFactory(QItemEditorFactory *factory)
         \li \uicontrol Esc
     \endlist
 
-    If the \a editor's type is QTextEdit or QPlainTextEdit then \uicontrol Enter and
-    \uicontrol Return keys are \e not handled.
+    If the \a editor's type is QTextEdit or QPlainTextEdit then \uicontrol Tab,
+    \uicontrol Backtab, \uicontrol Enter and \uicontrol Return keys are \e not
+    handled.
 
     In the case of \uicontrol Tab, \uicontrol Backtab, \uicontrol Enter and \uicontrol Return
     key press events, the \a editor's data is committed to the model
@@ -644,7 +646,7 @@ bool QStyledItemDelegate::editorEvent(QEvent *event,
         return false;
     }
 
-    Qt::CheckState state = static_cast<Qt::CheckState>(value.toInt());
+    Qt::CheckState state = QtPrivate::legacyEnumValueFromModelData<Qt::CheckState>(value);
     if (flags & Qt::ItemIsUserTristate)
         state = ((Qt::CheckState)((state + 1) % 3));
     else

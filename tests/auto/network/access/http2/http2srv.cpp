@@ -130,6 +130,12 @@ void Http2Server::setAuthenticationHeader(const QByteArray &authentication)
     authenticationHeader = authentication;
 }
 
+void Http2Server::setRedirect(const QByteArray &url, int count)
+{
+    redirectUrl = url;
+    redirectCount = count;
+}
+
 void Http2Server::emulateGOAWAY(int timeout)
 {
     Q_ASSERT(timeout >= 0);
@@ -382,7 +388,7 @@ bool Http2Server::verifyProtocolUpgradeRequest()
     QHttpNetworkReplyPrivate *firstRequestReader = protocolUpgradeHandler->d_func();
 
     // That's how we append them, that's what I expect to find:
-    for (const auto &header : firstRequestReader->fields) {
+    for (const auto &header : firstRequestReader->headers()) {
         if (header.first == "Connection")
             connectionOk = header.second.contains("Upgrade, HTTP2-Settings");
         else if (header.first == "Upgrade")
@@ -860,7 +866,10 @@ void Http2Server::sendResponse(quint32 streamID, bool emptyBody)
         const QString url("%1://localhost:%2/");
         header.push_back({"location", url.arg(isClearText() ? QStringLiteral("http") : QStringLiteral("https"),
                                               QString::number(targetPort)).toLatin1()});
-
+    } else if (redirectCount > 0) { // Not redirecting while reading, unlike above
+        --redirectCount;
+        header.push_back({":status", "308"});
+        header.push_back({"location", redirectUrl});
     } else if (!authenticationHeader.isEmpty() && !hasAuth) {
         header.push_back({ ":status", "401" });
         header.push_back(HPack::HeaderField("www-authenticate", authenticationHeader));

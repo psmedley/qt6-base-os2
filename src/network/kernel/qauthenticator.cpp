@@ -195,7 +195,7 @@ QAuthenticator &QAuthenticator::operator=(const QAuthenticator &other)
     if (d == other.d)
         return *this;
 
-    // Do not share the d since challange reponse/based changes
+    // Do not share the d since challenge response/based changes
     // could corrupt the internal store and different network requests
     // can utilize different types of proxies.
     detach();
@@ -751,9 +751,9 @@ static QByteArray digestMd5ResponseHelper(
 {
     QCryptographicHash hash(QCryptographicHash::Md5);
     hash.addData(userName);
-    hash.addData(":", 1);
+    hash.addData(":");
     hash.addData(realm);
-    hash.addData(":", 1);
+    hash.addData(":");
     hash.addData(password);
     QByteArray ha1 = hash.result();
     if (alg.compare("md5-sess", Qt::CaseInsensitive) == 0) {
@@ -763,9 +763,9 @@ static QByteArray digestMd5ResponseHelper(
         // but according to the errata page at http://www.rfc-editor.org/errata_list.php, ID 1649, it
         // must be the following line:
         hash.addData(ha1.toHex());
-        hash.addData(":", 1);
+        hash.addData(":");
         hash.addData(nonce);
-        hash.addData(":", 1);
+        hash.addData(":");
         hash.addData(cNonce);
         ha1 = hash.result();
     };
@@ -774,10 +774,10 @@ static QByteArray digestMd5ResponseHelper(
     // calculate H(A2)
     hash.reset();
     hash.addData(method);
-    hash.addData(":", 1);
+    hash.addData(":");
     hash.addData(digestUri);
     if (qop.compare("auth-int", Qt::CaseInsensitive) == 0) {
-        hash.addData(":", 1);
+        hash.addData(":");
         hash.addData(hEntity);
     }
     QByteArray ha2hex = hash.result().toHex();
@@ -785,16 +785,16 @@ static QByteArray digestMd5ResponseHelper(
     // calculate response
     hash.reset();
     hash.addData(ha1);
-    hash.addData(":", 1);
+    hash.addData(":");
     hash.addData(nonce);
-    hash.addData(":", 1);
+    hash.addData(":");
     if (!qop.isNull()) {
         hash.addData(nonceCount);
-        hash.addData(":", 1);
+        hash.addData(":");
         hash.addData(cNonce);
-        hash.addData(":", 1);
+        hash.addData(":");
         hash.addData(qop);
-        hash.addData(":", 1);
+        hash.addData(":");
     }
     hash.addData(ha2hex);
     return hash.result().toHex();
@@ -1258,7 +1258,6 @@ QByteArray qEncodeHmacMd5(QByteArray &key, const QByteArray &message)
     Q_ASSERT_X(!(key.isEmpty()),"qEncodeHmacMd5", "Empty key check");
 
     QCryptographicHash hash(QCryptographicHash::Md5);
-    QByteArray hMsg;
 
     QByteArray iKeyPad(blockSize, 0x36);
     QByteArray oKeyPad(blockSize, 0x5c);
@@ -1291,7 +1290,7 @@ QByteArray qEncodeHmacMd5(QByteArray &key, const QByteArray &message)
 
     hash.reset();
     hash.addData(iKeyPad);
-    hMsg = hash.result();
+    QByteArrayView hMsg = hash.resultView();
                     //Digest gen after pass-1: H((K0 xor ipad)||text)
 
     QByteArray hmacDigest;
@@ -1321,7 +1320,7 @@ static QByteArray qCreatev2Hash(const QAuthenticatorPrivate *ctx,
     if (phase3->v2Hash.size() == 0) {
         QCryptographicHash md4(QCryptographicHash::Md4);
         QByteArray passUnicode = qStringAsUcs2Le(ctx->password);
-        md4.addData(passUnicode.data(), passUnicode.size());
+        md4.addData(passUnicode);
 
         QByteArray hashKey = md4.result();
         Q_ASSERT(hashKey.size() == 16);

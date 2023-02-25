@@ -13,6 +13,7 @@ qt_internal_add_test(tst_qiodevice
     PUBLIC_LIBRARIES
         Qt::Network
     TESTDATA ${test_data}
+    QT_TEST_SERVER_LIST "apache2" "cyrus"
 )
 
 #### Keys ignored in scope 1:.:.:qiodevice.pro:<TRUE>:
@@ -21,7 +22,7 @@ qt_internal_add_test(tst_qiodevice
 ## Scopes:
 #####################################################################
 
-if(ANDROID AND NOT ANDROID_EMBEDDED)
+if(ANDROID)
     # Resources:
     set(android_testdata_resource_files
         "tst_qiodevice.cpp"

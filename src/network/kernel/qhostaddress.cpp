@@ -1374,3 +1374,5 @@ QDataStream &operator>>(QDataStream &in, QHostAddress &address)
 #endif //QT_NO_DATASTREAM
 
 QT_END_NAMESPACE
+
+#include "moc_qhostaddress.cpp"

@@ -134,7 +134,7 @@ void tst_QGlobal::for_each()
     QCOMPARE(counter, list.count());
 
     // Should also work with an existing variable
-    int local;
+    int local = 0;
     counter = 0;
     foreach (local, list) {
         QCOMPARE(local, counter++);
@@ -535,8 +535,6 @@ void tst_QGlobal::testqOverload()
     QVERIFY(QConstOverload<QByteArray>::of(&Overloaded::mixedFoo) ==
              static_cast<void (Overloaded::*)(QByteArray) const>(&Overloaded::mixedFoo));
 
-#if defined(__cpp_variable_templates) && __cpp_variable_templates >= 201304 // C++14
-
     // void returning free overloaded functions
     QVERIFY(qOverload<>(&freeOverloaded) ==
              static_cast<void (*)()>(&freeOverloaded));
@@ -580,7 +578,6 @@ void tst_QGlobal::testqOverload()
 
     QVERIFY(qConstOverload<QByteArray>(&Overloaded::mixedFoo) ==
              static_cast<void (Overloaded::*)(QByteArray) const>(&Overloaded::mixedFoo));
-#endif
 
 #endif
 }

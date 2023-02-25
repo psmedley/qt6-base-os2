@@ -424,23 +424,17 @@ static int parsePosixTime(const char *begin, const char *end)
     // Format "hh[:mm[:ss]]"
     int hour, min = 0, sec = 0;
 
-    // Note that the calls to qstrtoll do *not* check against the end pointer,
-    // which means they proceed until they find a non-digit. We check that we're
-    // still in range at the end, but we may have read past end. It's the
-    // caller's responsibility to ensure that begin is part of a null-terminated
-    // string.
-
     const int maxHour = 137; // POSIX's extended range.
     bool ok = false;
     const char *cut = begin;
-    hour = qstrtoll(begin, &cut, 10, &ok);
+    hour = qstrntoll(begin, end - begin, &cut, 10, &ok);
     if (!ok || hour < -maxHour || hour > maxHour || cut > begin + 2)
         return INT_MIN;
     begin = cut;
     if (begin < end && *begin == ':') {
         // minutes
         ++begin;
-        min = qstrtoll(begin, &cut, 10, &ok);
+        min = qstrntoll(begin, end - begin, &cut, 10, &ok);
         if (!ok || min < 0 || min > 59 || cut > begin + 2)
             return INT_MIN;
 
@@ -448,7 +442,7 @@ static int parsePosixTime(const char *begin, const char *end)
         if (begin < end && *begin == ':') {
             // seconds
             ++begin;
-            sec = qstrtoll(begin, &cut, 10, &ok);
+            sec = qstrntoll(begin, end - begin, &cut, 10, &ok);
             if (!ok || sec < 0 || sec > 59 || cut > begin + 2)
                 return INT_MIN;
             begin = cut;
@@ -1251,7 +1245,7 @@ QList<QByteArray> QTzTimeZonePrivate::availableTimeZoneIds(QLocale::Territory te
 // Getting the system zone's ID:
 
 namespace {
-class ZoneNameReader : public QObject
+class ZoneNameReader
 {
 public:
     QByteArray name()
@@ -1304,7 +1298,7 @@ private:
     {
         static constexpr unsigned long bad = ~0ul;
         unsigned long m_dev, m_ino;
-        StatIdent() : m_dev(bad), m_ino(bad) {}
+        constexpr StatIdent() : m_dev(bad), m_ino(bad) {}
         StatIdent(const QT_STATBUF &data) : m_dev(data.st_dev), m_ino(data.st_ino) {}
         bool isValid() { return m_dev != bad || m_ino != bad; }
         bool operator==(const StatIdent &other)

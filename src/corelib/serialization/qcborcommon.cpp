@@ -46,11 +46,13 @@
 
 QT_BEGIN_NAMESPACE
 
+QT_IMPL_METATYPE_EXTERN(QCborTag)
+
 #include <cborerrorstrings.c>
 
 /*!
    \headerfile <QtCborCommon>
-
+   \inmodule QtCore
    \brief The <QtCborCommon> header contains definitions common to both the
    streaming classes (QCborStreamReader and QCborStreamWriter) and to
    QCborValue.

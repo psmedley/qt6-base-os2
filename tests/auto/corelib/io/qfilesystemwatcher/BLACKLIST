@@ -5,6 +5,12 @@ windows
 osx
 windows
 os2
+# QTBUG-102095
+[watchDirectory]
+macos arm ci
+# QTBUG-102096
+[signalsEmittedAfterFileMoved]
+macos arm ci
 [watchFileAndItsDirectory:native backend-specialchars]
 osx
 windows

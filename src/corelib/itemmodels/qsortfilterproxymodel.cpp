@@ -1623,8 +1623,7 @@ void QSortFilterProxyModelPrivate::_q_sourceReset()
     _q_clearMapping();
     // All internal structures are deleted in clear()
     q->endResetModel();
-    update_source_sort_column();
-    if (dynamic_sortfilter && update_source_sort_column())
+    if (update_source_sort_column() && dynamic_sortfilter)
         sort();
 }
 
@@ -2594,9 +2593,12 @@ void QSortFilterProxyModel::sort(int column, Qt::SortOrder order)
 
 /*!
     \since 4.5
-    \brief the column currently used for sorting
+    \return the column currently used for sorting
 
-    This returns the most recently used sort column.
+    This returns the most recently used sort column. The default value is -1,
+    which means that this proxy model does not sort.
+
+    \sa sort()
 */
 int QSortFilterProxyModel::sortColumn() const
 {
@@ -2606,9 +2608,12 @@ int QSortFilterProxyModel::sortColumn() const
 
 /*!
     \since 4.5
-    \brief the order currently used for sorting
+    \return the order currently used for sorting
 
-    This returns the most recently used sort order.
+    This returns the most recently used sort order. The default value is
+    Qt::AscendingOrder.
+
+    \sa sort()
 */
 Qt::SortOrder QSortFilterProxyModel::sortOrder() const
 {
@@ -2938,6 +2943,8 @@ void QSortFilterProxyModel::setFilterFixedString(const QString &pattern)
     QComboBox.
 
     The default value is true.
+
+    \sa sortColumn()
 */
 bool QSortFilterProxyModel::dynamicSortFilter() const
 {

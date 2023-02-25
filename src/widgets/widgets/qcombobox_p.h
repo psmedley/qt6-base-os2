@@ -423,13 +423,14 @@ public:
     int minimumContentsLength = 0;
     int indexBeforeChange = -1;
     int maxVisibleItems = 10;
-    int maxCount = std::numeric_limits<int>::max();
+    int maxCount = (std::numeric_limits<int>::max)();
     int modelColumn = 0;
     int placeholderIndex = -1;
     bool shownOnce : 1;
     bool duplicatesEnabled : 1;
     bool frame : 1;
     bool inserting : 1;
+    bool hidingPopup : 1;
 };
 
 QT_END_NAMESPACE

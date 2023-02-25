@@ -46,6 +46,8 @@
 #include <qpainter.h>
 #include <private/qguiapplication_p.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -133,6 +135,12 @@ QBitmap::QBitmap(const QSize &size)
 }
 
 /*!
+    \internal
+    This dtor must stay empty until Qt 7 (was inline until 6.2).
+*/
+QBitmap::~QBitmap() = default;
+
+/*!
     \fn QBitmap::clear()
 
     Clears the bitmap, setting all its bits to Qt::color0.
@@ -183,10 +191,10 @@ static QBitmap makeBitmap(QImage &&image, Qt::ImageConversionFlags flags)
         image.setColor(1, c0);
     }
 
-    QScopedPointer<QPlatformPixmap> data(QGuiApplicationPrivate::platformIntegration()->createPlatformPixmap(QPlatformPixmap::BitmapType));
+    std::unique_ptr<QPlatformPixmap> data(QGuiApplicationPrivate::platformIntegration()->createPlatformPixmap(QPlatformPixmap::BitmapType));
 
     data->fromImageInPlace(image, flags | Qt::MonoOnly);
-    return QBitmap::fromPixmap(QPixmap(data.take()));
+    return QBitmap::fromPixmap(QPixmap(data.release()));
 }
 
 /*!
@@ -253,6 +261,8 @@ QBitmap QBitmap::fromData(const QSize &size, const uchar *bits, QImage::Format m
 
     If the pixmap has a depth greater than 1, the resulting bitmap
     will be dithered automatically.
+
+    \since 6.0
 
     \sa QPixmap::depth()
 */

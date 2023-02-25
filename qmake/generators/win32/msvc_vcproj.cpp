@@ -301,23 +301,7 @@ QString VcprojGenerator::retrievePlatformToolSet() const
     if (!envVar.isEmpty())
         return envVar;
 
-    switch (vcProject.Configuration.CompilerVersion)
-    {
-    case NET2012:
-        return QStringLiteral("v110");
-    case NET2013:
-        return QStringLiteral("v120");
-    case NET2015:
-        return QStringLiteral("v140");
-    case NET2017:
-        return QStringLiteral("v141");
-    case NET2019:
-        return QStringLiteral("v142");
-    case NET2022:
-        return QStringLiteral("v143");
-    default:
-        return QString();
-    }
+    return u"v"_qs + project->first("MSVC_TOOLSET_VER");
 }
 
 bool VcprojGenerator::isStandardSuffix(const QString &suffix) const
@@ -881,7 +865,7 @@ void VcprojGenerator::init()
     for (auto it = extraCompilerSources.cbegin(), end = extraCompilerSources.cend(); it != end; ++it)
         qDebug("Extracompilers for %s are (%s)", it.key().toLatin1().constData(), it.value().join(", ").toLatin1().constData());
     for (auto it = extraCompilerOutputs.cbegin(), end = extraCompilerOutputs.cend(); it != end; ++it)
-        qDebug("Object mapping for %s is (%s)", it.key().toLatin1().constData(), it.value().join(", ").toLatin1().constData());
+        qDebug("Object mapping for %s is (%s)", qPrintable(it.key()), qPrintable(it.value()));
     qDebug("");
 #endif
 }

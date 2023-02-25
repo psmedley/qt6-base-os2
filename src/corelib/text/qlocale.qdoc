@@ -247,6 +247,7 @@
     \value JolaFonyi
     \value Kabuverdianu
     \value Kabyle
+    \value Kaingang Since 6.3
     \value Kako
     \value Kalaallisut Since Qt 6.0
     \value Kalenjin
@@ -327,6 +328,7 @@
     \value Nepali
     \value Newari Since Qt 5.7
     \value Ngiemboon
+    \value Nheengatu Since 6.3
     \value NigerianPidgin Since Qt 6.0
     \value Ngomba
     \value Nko Since Qt 5.5
@@ -1031,6 +1033,25 @@
     \since 4.4
 */
 
+/*!
+    \enum QLocale::LanguageCodeType
+
+    This enum defines language code types that can be used to restrict set
+    of language codes considered by \c codeToLanguage and \c languageToCode.
+
+    \value ISO639Part1 ISO 639 Part 1 Alpha 2 code.
+    \value ISO639Part2B ISO 639 Part 2 bibliographic Alpha 3 code.
+    \value ISO639Part2T ISO 639 Part 2 terminological Alpha 3 code.
+    \value ISO639Part3 ISO 639 Part 3 Alpha 3 code.
+    \value LegacyLanguageCode Codes that are not part of the above set, but that
+            were supported by Qt in the past. This value can only be used by
+            codeToLanguage(). It is ignored when passed to languageToCode().
+    \value ISO639Part2 Any ISO 639 Part 2 code.
+    \value ISO639Alpha2 Any ISO-639 2-letter code.
+    \value ISO639Alpha3 Any ISO-639 3-letter code.
+    \value ISO639 Any ISO 639 code.
+    \value AnyLanguageCode Specifies that any code can be used.
+*/
 
 /*!
     \fn bool QLocale::operator==(const QLocale &lhs, const QLocale &rhs)

@@ -522,8 +522,8 @@ qint64 QNetworkDiskCache::expire()
     QMultiMap<QDateTime, QString> cacheItems;
     qint64 totalSize = 0;
     while (it.hasNext()) {
-        QString path = it.next();
-        QFileInfo info = it.fileInfo();
+        QFileInfo info = it.nextFileInfo();
+        QString path = info.filePath();
         QString fileName = info.fileName();
         if (fileName.endsWith(CACHE_POSTFIX)) {
             const QDateTime birthTime = info.fileTime(QFile::FileBirthTime);
@@ -533,7 +533,7 @@ qint64 QNetworkDiskCache::expire()
         }
     }
 
-    int removedFiles = 0;
+    [[maybe_unused]] int removedFiles = 0; // used under QNETWORKDISKCACHE_DEBUG
     qint64 goal = (maximumCacheSize() * 9) / 10;
     QMultiMap<QDateTime, QString>::const_iterator i = cacheItems.constBegin();
     while (i != cacheItems.constEnd()) {
@@ -592,10 +592,9 @@ QString QNetworkDiskCachePrivate::uniqueFileName(const QUrl &url)
     cleanUrl.setPassword(QString());
     cleanUrl.setFragment(QString());
 
-    QCryptographicHash hash(QCryptographicHash::Sha1);
-    hash.addData(cleanUrl.toEncoded());
+    const QByteArray hash = QCryptographicHash::hash(cleanUrl.toEncoded(), QCryptographicHash::Sha1);
     // convert sha1 to base36 form and return first 8 bytes for use as string
-    const QByteArray id = QByteArray::number(*(qlonglong*)hash.result().constData(), 36).left(8);
+    const QByteArray id = QByteArray::number(*(qlonglong*)hash.data(), 36).left(8);
     // generates <one-char subdir>/<8-char filname.d>
     uint code = (uint)id.at(id.length()-1) % 16;
     QString pathFragment = QString::number(code, 16) + QLatin1Char('/')

@@ -296,6 +296,8 @@ struct QMetalRenderTargetData
         bool hasStencil = false;
         bool depthNeedsStore = false;
     } fb;
+
+    QRhiRenderTargetAttachmentTracker::ResIdList currentResIdList;
 };
 
 struct QMetalGraphicsPipelineData
@@ -613,6 +615,8 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::RenderTo3DTextureSlice:
         return true;
+    case QRhi::TextureArrays:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;
@@ -646,6 +650,8 @@ int QRhiMetal::resourceLimit(QRhi::ResourceLimit limit) const
 #else
         return 512;
 #endif
+    case QRhi::TextureArraySizeMax:
+        return 2048;
     case QRhi::MaxUniformBufferRange:
         return 65536;
     default:
@@ -706,10 +712,10 @@ QRhiRenderBuffer *QRhiMetal::createRenderBuffer(QRhiRenderBuffer::Type type, con
 }
 
 QRhiTexture *QRhiMetal::createTexture(QRhiTexture::Format format,
-                                      const QSize &pixelSize, int depth,
+                                      const QSize &pixelSize, int depth, int arraySize,
                                       int sampleCount, QRhiTexture::Flags flags)
 {
-    return new QMetalTexture(this, format, pixelSize, depth, sampleCount, flags);
+    return new QMetalTexture(this, format, pixelSize, depth, arraySize, sampleCount, flags);
 }
 
 QRhiSampler *QRhiMetal::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
@@ -1481,10 +1487,25 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrame
 
     const bool needsPresent = !flags.testFlag(QRhi::SkipPresent);
     if (needsPresent) {
-        auto drawable = swapChainD->d->curDrawable;
-        [swapChainD->cbWrapper.d->cb addScheduledHandler:^(id<MTLCommandBuffer>) {
-            [drawable present];
-        }];
+        // beginFrame-endFrame without a render pass inbetween means there is no
+        // drawable, handle this gracefully because presentDrawable does not like
+        // null arguments.
+        if (id<CAMetalDrawable> drawable = swapChainD->d->curDrawable) {
+            // QTBUG-103415: while the docs suggest the following two approaches are
+            // equivalent, there is a difference in case a frame is recorded earlier than
+            // (i.e. not in response to) the next CVDisplayLink callback. Therefore, stick
+            // with presentDrawable, which gives results identical to OpenGL, and all other
+            // platforms, i.e. throttles to vsync as expected, meaning constant 15-17 ms with
+            // a 60 Hz screen, no jumps with smaller intervals, regardless of when the frame
+            // is submitted by the app)
+#if 1
+            [swapChainD->cbWrapper.d->cb presentDrawable: drawable];
+#else
+            [swapChainD->cbWrapper.d->cb addScheduledHandler:^(id<MTLCommandBuffer>) {
+                [drawable present];
+            }];
+#endif
+        }
     }
 
     // Must not hold on to the drawable, regardless of needsPresent
@@ -2026,6 +2047,8 @@ void QRhiMetal::beginPass(QRhiCommandBuffer *cb,
     {
         QMetalTextureRenderTarget *rtTex = QRHI_RES(QMetalTextureRenderTarget, rt);
         rtD = rtTex->d;
+        if (!QRhiRenderTargetAttachmentTracker::isUpToDate<QMetalTexture, QMetalRenderBuffer>(rtTex->description(), rtD->currentResIdList))
+            rtTex->create();
         cbD->d->currentPassRpDesc = d->createDefaultRenderPass(rtD->dsAttCount, colorClearValue, depthStencilClearValue, rtD->colorAttCount);
         if (rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents)) {
             for (uint i = 0; i < uint(rtD->colorAttCount); ++i)
@@ -2625,8 +2648,8 @@ QRhiTexture::Format QMetalRenderBuffer::backingFormat() const
 }
 
 QMetalTexture::QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, int depth,
-                             int sampleCount, Flags flags)
-    : QRhiTexture(rhi, format, pixelSize, depth, sampleCount, flags),
+                             int arraySize, int sampleCount, Flags flags)
+    : QRhiTexture(rhi, format, pixelSize, depth, arraySize, sampleCount, flags),
       d(new QMetalTextureData(this))
 {
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
@@ -2681,6 +2704,7 @@ bool QMetalTexture::prepareCreate(QSize *adjustedSize)
     const QSize size = m_pixelSize.isEmpty() ? QSize(1, 1) : m_pixelSize;
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool is3D = m_flags.testFlag(ThreeDimensional);
+    const bool isArray = m_flags.testFlag(TextureArray);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
     QRHI_RES_RHI(QRhiMetal);
@@ -2705,9 +2729,22 @@ bool QMetalTexture::prepareCreate(QSize *adjustedSize)
         qWarning("Texture cannot be both cube and 3D");
         return false;
     }
+    if (isArray && is3D) {
+        qWarning("Texture cannot be both array and 3D");
+        return false;
+    }
     m_depth = qMax(1, m_depth);
     if (m_depth > 1 && !is3D) {
         qWarning("Texture cannot have a depth of %d when it is not 3D", m_depth);
+        return false;
+    }
+    m_arraySize = qMax(0, m_arraySize);
+    if (m_arraySize > 0 && !isArray) {
+        qWarning("Texture cannot have an array size of %d when it is not an array", m_arraySize);
+        return false;
+    }
+    if (m_arraySize < 1 && isArray) {
+        qWarning("Texture is an array but array size is %d", m_arraySize);
         return false;
     }
 
@@ -2727,12 +2764,24 @@ bool QMetalTexture::create()
 
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool is3D = m_flags.testFlag(ThreeDimensional);
-    if (isCube)
+    const bool isArray = m_flags.testFlag(TextureArray);
+    if (isCube) {
         desc.textureType = MTLTextureTypeCube;
-    else if (is3D)
+    } else if (is3D) {
         desc.textureType = MTLTextureType3D;
-    else
+    } else if (isArray) {
+#ifdef Q_OS_IOS
+        if (samples > 1) {
+            // would be available on iOS 14.0+ but cannot test for that with a 13 SDK
+            qWarning("Multisample 2D texture array is not supported on iOS");
+        }
+        desc.textureType = MTLTextureType2DArray;
+#else
+        desc.textureType = samples > 1 ? MTLTextureType2DMultisampleArray : MTLTextureType2DArray;
+#endif
+    } else {
         desc.textureType = samples > 1 ? MTLTextureType2DMultisample : MTLTextureType2D;
+    }
     desc.pixelFormat = d->format;
     desc.width = NSUInteger(size.width());
     desc.height = NSUInteger(size.height());
@@ -2740,6 +2789,8 @@ bool QMetalTexture::create()
     desc.mipmapLevelCount = NSUInteger(mipLevelCount);
     if (samples > 1)
         desc.sampleCount = NSUInteger(samples);
+    if (isArray)
+        desc.arrayLength = NSUInteger(m_arraySize);
     desc.resourceOptions = MTLResourceStorageModePrivate;
     desc.storageMode = MTLStorageModePrivate;
     desc.usage = MTLTextureUsageShaderRead;
@@ -2758,7 +2809,7 @@ bool QMetalTexture::create()
     d->owns = true;
 
     QRHI_PROF;
-    QRHI_PROF_F(newTexture(this, true, mipLevelCount, isCube ? 6 : 1, samples));
+    QRHI_PROF_F(newTexture(this, true, mipLevelCount, isCube ? 6 : (isArray ? m_arraySize : 1), samples));
 
     lastActiveFrameSlot = -1;
     generation += 1;
@@ -2802,8 +2853,9 @@ id<MTLTexture> QMetalTextureData::viewForLevel(int level)
 
     const MTLTextureType type = [tex textureType];
     const bool isCube = q->m_flags.testFlag(QRhiTexture::CubeMap);
+    const bool isArray = q->m_flags.testFlag(QRhiTexture::TextureArray);
     id<MTLTexture> view = [tex newTextureViewWithPixelFormat: format textureType: type
-            levels: NSMakeRange(NSUInteger(level), 1) slices: NSMakeRange(0, isCube ? 6 : 1)];
+            levels: NSMakeRange(NSUInteger(level), 1) slices: NSMakeRange(0, isCube ? 6 : (isArray ? q->m_arraySize : 1))];
 
     perLevelViews[level] = view;
     return view;
@@ -3148,11 +3200,16 @@ bool QMetalTextureRenderTarget::create()
         d->dsAttCount = 0;
     }
 
+    QRhiRenderTargetAttachmentTracker::updateResIdList<QMetalTexture, QMetalRenderBuffer>(m_desc, &d->currentResIdList);
+
     return true;
 }
 
 QSize QMetalTextureRenderTarget::pixelSize() const
 {
+    if (!QRhiRenderTargetAttachmentTracker::isUpToDate<QMetalTexture, QMetalRenderBuffer>(m_desc, d->currentResIdList))
+        const_cast<QMetalTextureRenderTarget *>(this)->create();
+
     return d->pixelSize;
 }
 

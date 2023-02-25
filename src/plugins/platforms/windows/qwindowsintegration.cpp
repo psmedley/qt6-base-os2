@@ -92,6 +92,8 @@
 
 #include "qwindowsopengltester.h"
 
+#include <memory>
+
 static inline void initOpenGlBlacklistResources()
 {
     Q_INIT_RESOURCE(openglblacklists);
@@ -122,14 +124,6 @@ QT_BEGIN_NAMESPACE
         MinGW-w64 provides more complete headers (compared to stock MinGW from mingw.org),
         including a considerable part of the Windows SDK.
     \endlist
-
-    When using a function from the WinAPI, the minimum supported Windows version
-    and Windows Embedded support should be checked. If the function is not supported
-    on Windows XP or is not present in the MinGW-headers, it should be dynamically
-    resolved. For this purpose, QWindowsContext has static structs like
-    QWindowsUser32DLL and QWindowsShell32DLL. All function pointers should go to
-    these structs to avoid lookups in several places.
-
 */
 
 struct QWindowsIntegrationPrivate
@@ -245,10 +239,8 @@ void QWindowsIntegrationPrivate::parseOptions(QWindowsIntegration *q, const QStr
     initOpenGlBlacklistResources();
 
     static bool dpiAwarenessSet = false;
-    static bool hasDpiAwarenessContext = QWindowsContext::user32dll.setProcessDpiAwarenessContext != nullptr;
     // Default to per-monitor-v2 awareness (if available)
-    QtWindows::ProcessDpiAwareness dpiAwareness = hasDpiAwarenessContext ?
-        QtWindows::ProcessPerMonitorV2DpiAware : QtWindows::ProcessPerMonitorDpiAware;
+    QtWindows::ProcessDpiAwareness dpiAwareness = QtWindows::ProcessPerMonitorV2DpiAware;
 
     int tabletAbsoluteRange = -1;
     DarkModeHandling darkModeHandling;
@@ -265,16 +257,20 @@ void QWindowsIntegrationPrivate::parseOptions(QWindowsIntegration *q, const QStr
 
     if (!dpiAwarenessSet) { // Set only once in case of repeated instantiations of QGuiApplication.
         if (!QCoreApplication::testAttribute(Qt::AA_PluginApplication)) {
+            if (dpiAwareness == QtWindows::ProcessPerMonitorV2DpiAware) {
+                // DpiAwareV2 requires using new API
+                if (m_context.setProcessDpiV2Awareness()) {
+                    qCDebug(lcQpaWindows, "DpiAwareness: DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2");
+                    dpiAwarenessSet = true;
+                } else {
+                    // fallback to old API
+                    dpiAwareness = QtWindows::ProcessPerMonitorDpiAware;
+                }
+            }
 
-            // DpiAwareV2 requires using new API
-            if (dpiAwareness == QtWindows::ProcessPerMonitorV2DpiAware && hasDpiAwarenessContext) {
-                m_context.setProcessDpiV2Awareness();
-                qCDebug(lcQpaWindows)
-                    << __FUNCTION__ << "DpiAwareness: DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2";
-            } else {
+            if (!dpiAwarenessSet) {
                 m_context.setProcessDpiAwareness(dpiAwareness);
-                qCDebug(lcQpaWindows)
-                    << __FUNCTION__ << "DpiAwareness=" << dpiAwareness
+                qCDebug(lcQpaWindows) << "DpiAwareness=" << dpiAwareness
                     << "effective process DPI awareness=" << QWindowsContext::processDpiAwareness();
             }
         }
@@ -302,7 +298,7 @@ QWindowsIntegration::QWindowsIntegration(const QStringList &paramList) :
 #if QT_CONFIG(clipboard)
     d->m_clipboard.registerViewer();
 #endif
-    d->m_context.screenManager().handleScreenChanges();
+    d->m_context.screenManager().initialize();
     d->m_context.setDetectAltGrModifier((d->m_options & DetectAltGrModifier) != 0);
 }
 
@@ -476,9 +472,9 @@ QPlatformOpenGLContext *QWindowsIntegration::createPlatformOpenGLContext(QOpenGL
 {
     qCDebug(lcQpaGl) << __FUNCTION__ << context->format();
     if (QWindowsStaticOpenGLContext *staticOpenGLContext = QWindowsIntegration::staticOpenGLContext()) {
-        QScopedPointer<QWindowsOpenGLContext> result(staticOpenGLContext->createContext(context));
+        std::unique_ptr<QWindowsOpenGLContext> result(staticOpenGLContext->createContext(context));
         if (result->isValid())
-            return result.take();
+            return result.release();
     }
     return nullptr;
 }
@@ -508,12 +504,12 @@ QOpenGLContext *QWindowsIntegration::createOpenGLContext(HGLRC ctx, HWND window,
         return nullptr;
 
     if (QWindowsStaticOpenGLContext *staticOpenGLContext = QWindowsIntegration::staticOpenGLContext()) {
-        QScopedPointer<QWindowsOpenGLContext> result(staticOpenGLContext->createContext(ctx, window));
+        std::unique_ptr<QWindowsOpenGLContext> result(staticOpenGLContext->createContext(ctx, window));
         if (result->isValid()) {
             auto *context = new QOpenGLContext;
             context->setShareContext(shareContext);
             auto *contextPrivate = QOpenGLContextPrivate::get(context);
-            contextPrivate->adopt(result.take());
+            contextPrivate->adopt(result.release());
             return context;
         }
     }

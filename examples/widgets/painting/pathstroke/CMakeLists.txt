@@ -1,55 +1,44 @@
-# Generated from pathstroke.pro.
-
 cmake_minimum_required(VERSION 3.16)
 project(pathstroke LANGUAGES CXX)
 
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
-
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-  set(INSTALL_EXAMPLESDIR "examples")
+    set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/widgets/painting/pathstroke")
 
-find_package(Qt6 COMPONENTS Core)
-find_package(Qt6 COMPONENTS Gui)
-find_package(Qt6 COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 
 qt_add_executable(pathstroke
-    # special case begin
     # remove files from ../shared
     #../shared/arthurstyle.cpp ../shared/arthurstyle.h
     #../shared/arthurwidgets.cpp ../shared/arthurwidgets.h
     #../shared/hoverpoints.cpp ../shared/hoverpoints.h
-    # special case end
     main.cpp
     pathstroke.cpp pathstroke.h
 )
+
 set_target_properties(pathstroke PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
+
 target_include_directories(pathstroke PUBLIC
     ../shared
 )
 
-# special case begin
 if(NOT TARGET painting_shared::painting_shared)
     include(../shared/use_lib.cmake)
 endif()
-# special case end
 
 target_link_libraries(pathstroke PUBLIC
     Qt::Core
     Qt::Gui
     Qt::Widgets
-    painting_shared::painting_shared # special case
+    painting_shared::painting_shared
 )
-
 
 # Resources:
 set(shared_resource_files
@@ -90,7 +79,7 @@ set(shared_resource_files
     "../shared/images/title_stretch.png"
 )
 
-qt6_add_resources(pathstroke "shared"
+qt_add_resources(pathstroke "shared"
     PREFIX
         "/res"
     BASE
@@ -98,19 +87,19 @@ qt6_add_resources(pathstroke "shared"
     FILES
         ${shared_resource_files}
 )
+
 set(pathstroke_resource_files
     "pathstroke.cpp"
     "pathstroke.html"
 )
 
-qt6_add_resources(pathstroke "pathstroke"
+qt_add_resources(pathstroke "pathstroke"
     PREFIX
         "/res/pathstroke"
     FILES
         ${pathstroke_resource_files}
 )
 
-# special case begin
 # remove files from ../shared
 #if(QT_FEATURE_opengl)
     #target_sources(affine PUBLIC
@@ -121,7 +110,6 @@ qt6_add_resources(pathstroke "pathstroke"
         #Qt::OpenGL
     #)
 #endif()
-# special case end
 
 install(TARGETS pathstroke
     RUNTIME DESTINATION "${INSTALL_EXAMPLEDIR}"

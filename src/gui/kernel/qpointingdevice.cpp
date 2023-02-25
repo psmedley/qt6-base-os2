@@ -40,6 +40,8 @@
 #include "qpointingdevice.h"
 #include "qpointingdevice_p.h"
 #include "qwindowsysteminterface_p.h"
+#include "qeventpoint_p.h"
+
 #include <QList>
 #include <QLoggingCategory>
 #include <QMutex>
@@ -177,6 +179,7 @@ QPointingDevice::QPointingDevice(QPointingDevicePrivate &d, QObject *parent)
 {
 }
 
+#if QT_DEPRECATED_SINCE(6, 0)
 /*!
     \internal
     \deprecated [6.0] Please use the constructor rather than setters.
@@ -227,6 +230,7 @@ void QPointingDevice::setMaximumTouchPoints(int c)
     Q_D(QPointingDevice);
     d->maximumTouchPoints = c;
 }
+#endif // QT_DEPRECATED_SINCE(6, 0)
 
 /*!
     Returns the pointer type.
@@ -284,7 +288,7 @@ const QPointingDevice *QPointingDevice::primaryPointingDevice(const QString& sea
     const QPointingDevice *mouse = nullptr;
     const QPointingDevice *touchpad = nullptr;
     for (const QInputDevice *dev : v) {
-        if (dev->seatName() != seatName)
+        if (!seatName.isNull() && dev->seatName() != seatName)
             continue;
         if (dev->type() == QInputDevice::DeviceType::Mouse) {
             if (!mouse)
@@ -425,13 +429,12 @@ QPointingDevicePrivate::EventPointData *QPointingDevicePrivate::queryPointById(i
 */
 QPointingDevicePrivate::EventPointData *QPointingDevicePrivate::pointById(int id) const
 {
-    auto it = activePoints.find(id);
-    if (it == activePoints.end()) {
+    const auto [it, inserted] = activePoints.try_emplace(id);
+    if (inserted) {
         Q_Q(const QPointingDevice);
-        QPointingDevicePrivate::EventPointData epd;
-        QMutableEventPoint::from(epd.eventPoint).setId(id);
-        QMutableEventPoint::from(epd.eventPoint).setDevice(q);
-        return &activePoints.insert(id, epd).first.value();
+        auto &epd = it.value();
+        QMutableEventPoint::setId(epd.eventPoint, id);
+        QMutableEventPoint::setDevice(epd.eventPoint, q);
     }
     return &it.value();
 }
@@ -454,7 +457,7 @@ void QPointingDevicePrivate::removePointById(int id)
 QObject *QPointingDevicePrivate::firstActiveTarget() const
 {
     for (auto &pt : activePoints.values()) {
-        if (auto target = QMutableEventPoint::constFrom(pt.eventPoint).target())
+        if (auto target = QMutableEventPoint::target(pt.eventPoint))
             return target;
     }
     return nullptr;
@@ -469,7 +472,7 @@ QObject *QPointingDevicePrivate::firstActiveTarget() const
 QWindow *QPointingDevicePrivate::firstActiveWindow() const
 {
     for (auto &pt : activePoints.values()) {
-        if (auto window = QMutableEventPoint::constFrom(pt.eventPoint).window())
+        if (auto window = QMutableEventPoint::window(pt.eventPoint))
             return window;
     }
     return nullptr;
@@ -508,7 +511,7 @@ void QPointingDevicePrivate::setExclusiveGrabber(const QPointerEvent *event, con
                                << "@" << point.scenePosition()
                                << ": grab" << oldGrabber << "->" << exclusiveGrabber;
     }
-    QMutableEventPoint::from(persistentPoint->eventPoint).setGlobalGrabPosition(point.globalPosition());
+    QMutableEventPoint::setGlobalGrabPosition(persistentPoint->eventPoint, point.globalPosition());
     if (exclusiveGrabber)
         emit q->grabChanged(exclusiveGrabber, QPointingDevice::GrabExclusive, event, point);
     else
@@ -807,3 +810,5 @@ size_t qHash(QPointingDeviceUniqueId key, size_t seed) noexcept
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qpointingdevice.cpp"

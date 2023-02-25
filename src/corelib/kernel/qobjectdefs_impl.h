@@ -50,6 +50,7 @@
 
 QT_BEGIN_NAMESPACE
 class QObject;
+class QObjectPrivate;
 
 namespace QtPrivate {
     template <typename T> struct RemoveRef { typedef T Type; };
@@ -139,6 +140,22 @@ namespace QtPrivate {
 
     template<typename Func> struct FunctionPointer { enum {ArgumentCount = -1, IsPointerToMemberFunction = false}; };
 
+    template<typename ObjPrivate> inline void assertObjectType(QObjectPrivate *d);
+    template<typename Obj> inline void assertObjectType(QObject *o)
+    {
+        // ensure all three compile
+        [[maybe_unused]] auto staticcast = [](QObject *obj) { return static_cast<Obj *>(obj); };
+        [[maybe_unused]] auto qobjcast = [](QObject *obj) { return Obj::staticMetaObject.cast(obj); };
+#ifdef __cpp_rtti
+        [[maybe_unused]] auto dyncast = [](QObject *obj) { return dynamic_cast<Obj *>(obj); };
+        auto cast = dyncast;
+#else
+        auto cast = qobjcast;
+#endif
+        Q_ASSERT_X(cast(o), Obj::staticMetaObject.className(),
+                   "Called object is not of the correct type (class destructor may have already run)");
+    }
+
     template <typename, typename, typename, typename> struct FunctorCall;
     template <int... II, typename... SignalArgs, typename R, typename Function>
     struct FunctorCall<IndexesList<II...>, List<SignalArgs...>, R, Function> {
@@ -148,30 +165,36 @@ namespace QtPrivate {
     };
     template <int... II, typename... SignalArgs, typename R, typename... SlotArgs, typename SlotRet, class Obj>
     struct FunctorCall<IndexesList<II...>, List<SignalArgs...>, R, SlotRet (Obj::*)(SlotArgs...)> {
-        static void call(SlotRet (Obj::*f)(SlotArgs...), Obj *o, void **arg) {
+        static void call(SlotRet (Obj::*f)(SlotArgs...), Obj *o, void **arg)
+        {
+            assertObjectType<Obj>(o);
             (o->*f)((*reinterpret_cast<typename RemoveRef<SignalArgs>::Type *>(arg[II+1]))...), ApplyReturnValue<R>(arg[0]);
         }
     };
     template <int... II, typename... SignalArgs, typename R, typename... SlotArgs, typename SlotRet, class Obj>
     struct FunctorCall<IndexesList<II...>, List<SignalArgs...>, R, SlotRet (Obj::*)(SlotArgs...) const> {
-        static void call(SlotRet (Obj::*f)(SlotArgs...) const, Obj *o, void **arg) {
+        static void call(SlotRet (Obj::*f)(SlotArgs...) const, Obj *o, void **arg)
+        {
+            assertObjectType<Obj>(o);
             (o->*f)((*reinterpret_cast<typename RemoveRef<SignalArgs>::Type *>(arg[II+1]))...), ApplyReturnValue<R>(arg[0]);
         }
     };
-#if defined(__cpp_noexcept_function_type) && __cpp_noexcept_function_type >= 201510
     template <int... II, typename... SignalArgs, typename R, typename... SlotArgs, typename SlotRet, class Obj>
     struct FunctorCall<IndexesList<II...>, List<SignalArgs...>, R, SlotRet (Obj::*)(SlotArgs...) noexcept> {
-        static void call(SlotRet (Obj::*f)(SlotArgs...) noexcept, Obj *o, void **arg) {
+        static void call(SlotRet (Obj::*f)(SlotArgs...) noexcept, Obj *o, void **arg)
+        {
+            assertObjectType<Obj>(o);
             (o->*f)((*reinterpret_cast<typename RemoveRef<SignalArgs>::Type *>(arg[II+1]))...), ApplyReturnValue<R>(arg[0]);
         }
     };
     template <int... II, typename... SignalArgs, typename R, typename... SlotArgs, typename SlotRet, class Obj>
     struct FunctorCall<IndexesList<II...>, List<SignalArgs...>, R, SlotRet (Obj::*)(SlotArgs...) const noexcept> {
-        static void call(SlotRet (Obj::*f)(SlotArgs...) const noexcept, Obj *o, void **arg) {
+        static void call(SlotRet (Obj::*f)(SlotArgs...) const noexcept, Obj *o, void **arg)
+        {
+            assertObjectType<Obj>(o);
             (o->*f)((*reinterpret_cast<typename RemoveRef<SignalArgs>::Type *>(arg[II+1]))...), ApplyReturnValue<R>(arg[0]);
         }
     };
-#endif
 
     template<class Obj, typename Ret, typename... Args> struct FunctionPointer<Ret (Obj::*) (Args...)>
     {
@@ -210,7 +233,6 @@ namespace QtPrivate {
         }
     };
 
-#if defined(__cpp_noexcept_function_type) && __cpp_noexcept_function_type >= 201510
     template<class Obj, typename Ret, typename... Args> struct FunctionPointer<Ret (Obj::*) (Args...) noexcept>
     {
         typedef Obj Object;
@@ -247,7 +269,6 @@ namespace QtPrivate {
             FunctorCall<typename Indexes<ArgumentCount>::Value, SignalArgs, R, Function>::call(f, arg);
         }
     };
-#endif
 
     template<typename Function, int N> struct Functor
     {
@@ -353,10 +374,13 @@ namespace QtPrivate {
         QAtomicInt m_ref;
         // don't use virtual functions here; we don't want the
         // compiler to create tons of per-polymorphic-class stuff that
-        // we'll never need. We just use one function pointer.
+        // we'll never need. We just use one function pointer, and the
+        // Operations enum below to distinguish requests
         typedef void (*ImplFn)(int which, QSlotObjectBase* this_, QObject *receiver, void **args, bool *ret);
         const ImplFn m_impl;
     protected:
+        // The operations that can be requested by calls to m_impl,
+        // see the member functions that call m_impl below for details
         enum Operation {
             Destroy,
             Call,

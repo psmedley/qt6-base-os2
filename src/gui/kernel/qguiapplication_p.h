@@ -56,7 +56,6 @@
 #include <QtGui/qicon.h>
 
 #include <QtCore/QPointF>
-#include <QtCore/QSharedPointer>
 #include <QtCore/private/qcoreapplication_p.h>
 
 #include <QtCore/qnativeinterface.h>
@@ -69,6 +68,8 @@
 #if QT_CONFIG(shortcut)
 #  include "private/qshortcutmap_p.h"
 #endif
+
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 
@@ -106,10 +107,12 @@ public:
 #if QT_CONFIG(commandlineparser)
     void addQtOptions(QList<QCommandLineOption> *options) override;
 #endif
-    virtual bool shouldQuit() override;
+    bool canQuitAutomatically() override;
     void quit() override;
 
-    bool shouldQuitInternal(const QWindowList &processedWindows);
+    void maybeLastWindowClosed();
+    bool lastWindowClosed() const;
+    static bool quitOnLastWindowClosed;
 
     static void captureGlobalModifierState(QEvent *e);
     static Qt::KeyboardModifiers modifier_buttons;
@@ -205,8 +208,6 @@ public:
         return alignment;
     }
 
-    static void emitLastWindowClosed();
-
     QPixmap getPixmapCursor(Qt::CursorShape cshape);
 
     void _q_updateFocusObject(QObject *object);
@@ -224,6 +225,7 @@ public:
     static void updateBlockedStatus(QWindow *window);
     virtual bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = nullptr) const;
     virtual bool popupActive() { return false; }
+    virtual bool closeAllPopups() { return false; }
 
     static Qt::MouseButton mousePressButton;
     static struct QLastCursorPosition {
@@ -345,8 +347,10 @@ private:
 
     static QGuiApplicationPrivate *self;
     static int m_fakeMouseSourcePointId;
-    QSharedPointer<QColorTrcLut> m_a8ColorProfile;
-    QSharedPointer<QColorTrcLut> m_a32ColorProfile;
+#ifdef Q_OS_WIN
+    std::shared_ptr<QColorTrcLut> m_a8ColorProfile;
+#endif
+    std::shared_ptr<QColorTrcLut> m_a32ColorProfile;
 
     bool ownGlobalShareContext;
 

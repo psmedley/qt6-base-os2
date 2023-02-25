@@ -67,6 +67,7 @@ public:
     NSMenu *nsMenu() const override { return m_nativeMenu; }
 
     static void updateMenuBarImmediately();
+    static void insertWindowMenu();
 
     QList<QCocoaMenuItem*> merged() const;
     NSMenuItem *itemForRole(QPlatformMenuItem::MenuRole role);
@@ -80,12 +81,14 @@ private:
 
     bool needsImmediateUpdate();
     bool shouldDisable(QCocoaWindow *active) const;
+    void insertDefaultEditItems(QCocoaMenu *menu);
 
     NSMenuItem *nativeItemForMenu(QCocoaMenu *menu) const;
 
     QList<QPointer<QCocoaMenu> > m_menus;
     NSMenu *m_nativeMenu;
     QPointer<QCocoaWindow> m_window;
+    QList<QPointer<QCocoaMenuItem>> m_defaultEditMenuItems;
 };
 
 QT_END_NAMESPACE

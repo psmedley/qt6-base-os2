@@ -560,7 +560,6 @@ bool QTextStreamPrivate::scan(const QChar **ptr, int *length, int maxlen, TokenD
     int startOffset = device ? readBufferOffset : stringOffset;
     QChar lastChar;
 
-    bool canStillReadFromDevice = true;
     do {
         int endOffset;
         const QChar *chPtr;
@@ -602,7 +601,7 @@ bool QTextStreamPrivate::scan(const QChar **ptr, int *length, int maxlen, TokenD
         }
     } while (!foundToken
              && (!maxlen || totalSize < maxlen)
-             && (device && (canStillReadFromDevice = fillReadBuffer())));
+             && device && fillReadBuffer());
 
     if (totalSize == 0) {
 #if defined (QTEXTSTREAM_DEBUG)
@@ -2285,6 +2284,15 @@ QTextStream &QTextStream::operator<<(char c)
     d->putChar(QChar::fromLatin1(c));
     return *this;
 }
+
+/*!
+    \fn QTextStream &QTextStream::operator<<(char16_t c)
+    \overload
+    \since 6.3.1
+
+    Writes the Unicode character \a c to the stream, then returns a
+    reference to the QTextStream.
+*/
 
 /*!
     Writes the integer number \a i to the stream, then returns a

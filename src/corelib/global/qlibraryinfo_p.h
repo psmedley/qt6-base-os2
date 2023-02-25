@@ -67,10 +67,17 @@ public:
 #if QT_CONFIG(settings)
     static QSettings *configuration();
     static void reload();
-    static QString qtconfManualPath;
+    static const QString *qtconfManualPath;
 #endif
-    static void keyAndDefault(QLibraryInfo::LibraryPath loc, QString *key,
-                                                  QString *value);
+
+    struct LocationInfo
+    {
+        QString key;
+        QString defaultValue;
+        QString fallbackKey;
+    };
+
+    static LocationInfo locationInfo(QLibraryInfo::LibraryPath loc);
 };
 
 QT_END_NAMESPACE

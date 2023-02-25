@@ -97,6 +97,8 @@ public:
         Http2DirectAttribute,
         ResourceTypeAttribute, // internal
         AutoDeleteReplyOnFinishAttribute,
+        ConnectionCacheExpiryTimeoutSecondsAttribute,
+        Http2CleartextAllowedAttribute,
 
         User = 1000,
         UserMax = 32767
@@ -136,7 +138,7 @@ public:
     QNetworkRequest &operator=(QNetworkRequest &&other) noexcept { swap(other); return *this; }
     QNetworkRequest &operator=(const QNetworkRequest &other);
 
-    void swap(QNetworkRequest &other) noexcept { qSwap(d, other.d); }
+    void swap(QNetworkRequest &other) noexcept { d.swap(other.d); }
 
     bool operator==(const QNetworkRequest &other) const;
     inline bool operator!=(const QNetworkRequest &other) const

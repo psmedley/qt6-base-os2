@@ -73,8 +73,9 @@ class QAbstractScrollArea;
 
 class QWidgetTextControlPrivate : public QObjectPrivate
 {
-    Q_DECLARE_PUBLIC(QWidgetTextControl)
 public:
+    Q_DECLARE_PUBLIC(QWidgetTextControl)
+
     QWidgetTextControlPrivate();
 
     bool cursorMoveKeyEvent(QKeyEvent *e);
@@ -178,6 +179,7 @@ public:
     bool isPreediting() const;
     void commitPreedit();
 
+    void insertParagraphSeparator();
     void append(const QString &text, Qt::TextFormat format = Qt::AutoText);
 
     QTextDocument *doc;

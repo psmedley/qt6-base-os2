@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -217,10 +217,13 @@ void tst_Counting::testFailFail()
 
 void tst_Counting::init()
 {
-    if (strcmp(QTest::currentTestFunction(), "testFailInInit") == 0 && strcmp(QTest::currentDataTag(), "fail") == 0)
+    if (strcmp(QTest::currentTestFunction(), "testFailInInit") == 0
+        && strcmp(QTest::currentDataTag(), "fail") == 0) {
         QFAIL("Fail in init()");
-    else if (strcmp(QTest::currentTestFunction(), "testSkipInInit") == 0 && strcmp(QTest::currentDataTag(), "skip") == 0)
+    } else if (strcmp(QTest::currentTestFunction(), "testSkipInInit") == 0
+               && strcmp(QTest::currentDataTag(), "skip") == 0) {
         QSKIP("Skip in init()");
+    }
 }
 
 void tst_Counting::cleanup()
@@ -287,15 +290,18 @@ void tst_Counting::testSkipInCleanup()
         qDebug() << "This test function should execute and then QSKIP in cleanup()";
 }
 
-int main(int argc, char *argv[])
-{
 #ifdef TESTLIB_VERBOSITY_ARG
-    std::vector<const char*> args(argv, argv + argc);
-    args.push_back(QT_STRINGIFY(TESTLIB_VERBOSITY_ARG));
-    argc = int(args.size());
+#define SETUP() \
+    std::vector<const char*> args(argv, argv + argc); \
+    args.push_back(QT_STRINGIFY(TESTLIB_VERBOSITY_ARG)); \
+    argc = int(args.size()); \
     argv = const_cast<char**>(&args[0]);
+#else
+#define SETUP()
 #endif
 
-    QTEST_MAIN_IMPL(tst_Counting)
-}
+QTEST_MAIN_WRAPPER(tst_Counting,
+    SETUP()
+    QTEST_MAIN_SETUP())
+
 #include "tst_counting.moc"

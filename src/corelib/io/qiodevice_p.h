@@ -53,9 +53,9 @@
 
 #include "QtCore/qbytearray.h"
 #include "QtCore/qiodevice.h"
-#include "QtCore/qlist.h"
 #include "QtCore/qobjectdefs.h"
 #include "QtCore/qstring.h"
+#include "QtCore/qvarlengtharray.h"
 #include "private/qringbuffer_p.h"
 #ifndef QT_NO_QOBJECT
 #include "private/qobject_p.h"
@@ -134,8 +134,8 @@ public:
     int readBufferChunkSize = QIODEVICE_BUFFERSIZE;
     int writeBufferChunkSize = 0;
 
-    QList<QRingBuffer> readBuffers;
-    QList<QRingBuffer> writeBuffers;
+    QVarLengthArray<QRingBuffer, 2> readBuffers;
+    QVarLengthArray<QRingBuffer, 1> writeBuffers;
     QString errorString;
     QIODevice::OpenMode openMode = QIODevice::NotOpen;
 
@@ -180,10 +180,18 @@ public:
     void setWriteChannelCount(int count);
 
     qint64 read(char *data, qint64 maxSize, bool peeking = false);
+    qint64 readLine(char *data, qint64 maxSize);
     virtual qint64 peek(char *data, qint64 maxSize);
     virtual QByteArray peek(qint64 maxSize);
     qint64 skipByReading(qint64 maxSize);
     void write(const char *data, qint64 size);
+
+    inline bool isWriteChunkCached(const char *data, qint64 size) const
+    {
+        return currentWriteChunk != nullptr
+               && currentWriteChunk->constData() == data
+               && currentWriteChunk->size() == size;
+    }
 
 #ifdef QT_NO_QOBJECT
     QIODevice *q_ptr = nullptr;

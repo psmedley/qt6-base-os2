@@ -547,6 +547,11 @@ Qt::ScreenOrientation QScreen::orientation() const
 /*!
   \property QScreen::refreshRate
   \brief the approximate vertical refresh rate of the screen in Hz
+
+  \warning Avoid using the screen's refresh rate to drive animations
+  via a timer such as QTimer. Instead use QWindow::requestUpdate().
+
+  \sa QWindow::requestUpdate()
 */
 qreal QScreen::refreshRate() const
 {
@@ -847,3 +852,5 @@ Q_GUI_EXPORT QDebug operator<<(QDebug debug, const QScreen *screen)
 #endif // !QT_NO_DEBUG_STREAM
 
 QT_END_NAMESPACE
+
+#include "moc_qscreen.cpp"

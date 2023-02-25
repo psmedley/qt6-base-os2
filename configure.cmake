@@ -4,8 +4,7 @@
 
 #### Libraries
 
-qt_find_package(WrapZLIB 1.0.8 PROVIDED_TARGETS WrapZLIB::WrapZLIB MODULE_NAME global QMAKE_LIB zlib)
-# special case begin
+qt_find_package(WrapSystemZLIB 1.0.8 PROVIDED_TARGETS WrapSystemZLIB::WrapSystemZLIB MODULE_NAME global QMAKE_LIB zlib)
 # Work around global target promotion failure when WrapZLIB is used on APPLE platforms.
 # What ends up happening is that the ZLIB::ZLIB target is not promoted to global by qt_find_package,
 # then qt_find_package(WrapSystemPNG) tries to find its dependency ZLIB::ZLIB, sees it's not global
@@ -17,7 +16,7 @@ if(TARGET ZLIB::ZLIB)
 endif()
 
 # special case end
-qt_find_package(ZSTD 1.3 PROVIDED_TARGETS ZSTD::ZSTD MODULE_NAME global QMAKE_LIB zstd)
+qt_find_package(WrapZSTD 1.3 PROVIDED_TARGETS WrapZSTD::WrapZSTD MODULE_NAME global QMAKE_LIB zstd)
 qt_find_package(WrapDBus1 1.2 PROVIDED_TARGETS dbus-1 MODULE_NAME global QMAKE_LIB dbus)
 qt_find_package(Libudev PROVIDED_TARGETS PkgConfig::Libudev MODULE_NAME global QMAKE_LIB libudev)
 
@@ -467,9 +466,14 @@ qt_feature("pkg-config" PUBLIC
 )
 qt_feature_config("pkg-config" QMAKE_PUBLIC_QT_CONFIG
     NEGATE)
-qt_feature("developer-build"
+qt_feature("developer-build" PRIVATE
     LABEL "Developer build"
     AUTODETECT OFF
+)
+qt_feature("no-prefix" PRIVATE
+    LABEL "No prefix build"
+    AUTODETECT NOT QT_WILL_INSTALL
+    CONDITION NOT QT_WILL_INSTALL
 )
 qt_feature("private_tests" PRIVATE
     LABEL "Developer build: private_tests"
@@ -622,6 +626,11 @@ qt_feature("c++2a" PUBLIC
     CONDITION QT_FEATURE_cxx20
 )
 qt_feature_config("c++2a" QMAKE_PUBLIC_QT_CONFIG)
+qt_feature("c++2b" PUBLIC
+    LABEL "C++2b"
+    AUTODETECT OFF
+)
+qt_feature_config("c++2b" QMAKE_PUBLIC_QT_CONFIG)
 qt_feature("c89"
     LABEL "C89"
 )
@@ -877,11 +886,16 @@ qt_feature("stack-protector-strong" PRIVATE
 )
 qt_feature("system-zlib" PRIVATE
     LABEL "Using system zlib"
-    CONDITION WrapZLIB_FOUND
+    CONDITION WrapSystemZLIB_FOUND
 )
-qt_feature("zstd" PRIVATE
+qt_feature("zstd" PUBLIC
     LABEL "Zstandard support"
-    CONDITION ZSTD_FOUND
+    CONDITION WrapZSTD_FOUND
+)
+qt_feature("stdlib-libcpp" PRIVATE
+    LABEL "Using stdlib=libc++"
+    AUTODETECT OFF
+    CONDITION LINUX AND NOT ANDROID
 )
 # special case begin
 # Check whether CMake was built with zstd support.

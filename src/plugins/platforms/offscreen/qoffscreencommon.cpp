@@ -55,7 +55,11 @@ QPlatformWindow *QOffscreenScreen::windowContainingCursor = nullptr;
 
 QList<QPlatformScreen *> QOffscreenScreen::virtualSiblings() const
 {
-    return m_integration->screens();
+    QList<QPlatformScreen *> platformScreens;
+    for (auto screen : m_integration->screens()) {
+        platformScreens.append(screen);
+    }
+    return platformScreens;
 }
 
 class QOffscreenCursor : public QPlatformCursor
@@ -189,8 +193,8 @@ bool QOffscreenBackingStore::scroll(const QRegion &area, int dx, int dy)
     if (m_image.isNull())
         return false;
 
-    for (const QRect &rect : area)
-        qt_scrollRectInImage(m_image, rect, QPoint(dx, dy));
+    const QRect rect = area.boundingRect();
+    qt_scrollRectInImage(m_image, rect, QPoint(dx, dy));
 
     return true;
 }
@@ -232,6 +236,38 @@ void QOffscreenBackingStore::clearHash()
 
 QHash<WId, QOffscreenBackingStore *> QOffscreenBackingStore::m_backingStoreForWinIdHash;
 
+QOffscreenPlatformNativeInterface::QOffscreenPlatformNativeInterface(QOffscreenIntegration *integration)
+    : m_integration(integration)
+{
+
+}
+
 QOffscreenPlatformNativeInterface::~QOffscreenPlatformNativeInterface() = default;
+
+/*
+    Set platform configuration, e.g. screen configuration
+*/
+void QOffscreenPlatformNativeInterface::setConfiguration(const QJsonObject &configuration, QOffscreenPlatformNativeInterface *iface)
+{
+    iface->m_integration->setConfiguration(configuration);
+}
+
+/*
+    Get the current platform configuration
+*/
+QJsonObject QOffscreenPlatformNativeInterface::configuration(QOffscreenPlatformNativeInterface *iface)
+{
+    return iface->m_integration->configuration();
+}
+
+void *QOffscreenPlatformNativeInterface::nativeResourceForIntegration(const QByteArray &resource)
+{
+    if (resource == "setConfiguration")
+        return reinterpret_cast<void*>(&QOffscreenPlatformNativeInterface::setConfiguration);
+    else if (resource == "configuration")
+        return reinterpret_cast<void*>(&QOffscreenPlatformNativeInterface::configuration);
+    else
+        return nullptr;
+}
 
 QT_END_NAMESPACE

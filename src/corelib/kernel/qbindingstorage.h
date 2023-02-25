@@ -45,7 +45,7 @@
 
 QT_BEGIN_NAMESPACE
 
-template <typename Class, typename T, auto Offset, auto Setter, auto Signal>
+template <typename Class, typename T, auto Offset, auto Setter, auto Signal, auto Getter>
 class QObjectCompatProperty;
 struct QPropertyDelayedNotifications;
 class QUntypedPropertyData;
@@ -72,7 +72,7 @@ class Q_CORE_EXPORT QBindingStorage
     mutable QBindingStorageData *d = nullptr;
     QBindingStatus *bindingStatus = nullptr;
 
-    template<typename Class, typename T, auto Offset, auto Setter, auto Signal>
+    template<typename Class, typename T, auto Offset, auto Setter, auto Signal, auto Getter>
     friend class QObjectCompatProperty;
     friend class QObjectPrivate;
     friend class QtPrivate::QPropertyBindingData;
@@ -94,8 +94,10 @@ public:
             return nullptr;
         return bindingData_helper(data);
     }
-    // ### Qt 7: remove unused BIC shim
+
+#if QT_CORE_REMOVED_SINCE(6, 2)
     void maybeUpdateBindingAndRegister(const QUntypedPropertyData *data) const { registerDependency(data); }
+#endif
 
     QtPrivate::QPropertyBindingData *bindingData(QUntypedPropertyData *data, bool create)
     {
@@ -106,8 +108,10 @@ public:
 private:
     void clear();
     void registerDependency_helper(const QUntypedPropertyData *data) const;
+#if QT_CORE_REMOVED_SINCE(6, 2)
     // ### Unused, but keep for BC
     void maybeUpdateBindingAndRegister_helper(const QUntypedPropertyData *data) const;
+#endif
     QtPrivate::QPropertyBindingData *bindingData_helper(const QUntypedPropertyData *data) const;
     QtPrivate::QPropertyBindingData *bindingData_helper(QUntypedPropertyData *data, bool create);
 };

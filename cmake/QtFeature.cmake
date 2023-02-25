@@ -880,6 +880,18 @@ function(qt_config_compile_test name)
             endif()
         endif()
 
+        # Pass override values for CMAKE_SYSTEM_{PREFIX|FRAMEWORK}_PATH.
+        if(DEFINED QT_CMAKE_SYSTEM_PREFIX_PATH_BACKUP)
+            set(path_list ${CMAKE_SYSTEM_PREFIX_PATH})
+            string(REPLACE ";" "\\;" path_list "${path_list}")
+            list(APPEND flags "-DQT_CONFIG_COMPILE_TEST_CMAKE_SYSTEM_PREFIX_PATH=${path_list}")
+        endif()
+        if(DEFINED QT_CMAKE_SYSTEM_FRAMEWORK_PATH_BACKUP)
+            set(path_list ${CMAKE_SYSTEM_FRAMEWORK_PATH})
+            string(REPLACE ";" "\\;" path_list "${path_list}")
+            list(APPEND flags "-DQT_CONFIG_COMPILE_TEST_CMAKE_SYSTEM_FRAMEWORK_PATH=${path_list}")
+        endif()
+
         if(NOT arg_CMAKE_FLAGS)
             set(arg_CMAKE_FLAGS "")
         endif()
@@ -931,6 +943,11 @@ function(qt_config_compile_test name)
 
             set(CMAKE_REQUIRED_FLAGS ${arg_COMPILE_OPTIONS})
 
+            # Pass -stdlib=libc++ on if necessary
+            if (INPUT_stdlib_libcpp OR QT_FEATURE_stdlib_libcpp)
+                list(APPEND CMAKE_REQUIRED_FLAGS "-stdlib=libc++")
+            endif()
+
             # For MSVC we need to explicitly pass -Zc:__cplusplus to get correct __cplusplus
             # define values. According to common/msvc-version.conf the flag is supported starting
             # with 1913.
@@ -969,6 +986,14 @@ function(qt_get_platform_try_compile_vars out_var)
     set(flags "${CMAKE_TRY_COMPILE_PLATFORM_VARIABLES}")
 
     # Pass custom flags.
+    list(APPEND flags "CMAKE_C_FLAGS")
+    list(APPEND flags "CMAKE_C_FLAGS_DEBUG")
+    list(APPEND flags "CMAKE_C_FLAGS_RELEASE")
+    list(APPEND flags "CMAKE_C_FLAGS_RELWITHDEBINFO")
+    list(APPEND flags "CMAKE_CXX_FLAGS")
+    list(APPEND flags "CMAKE_CXX_FLAGS_DEBUG")
+    list(APPEND flags "CMAKE_CXX_FLAGS_RELEASE")
+    list(APPEND flags "CMAKE_CXX_FLAGS_RELWITHDEBINFO")
     list(APPEND flags "CMAKE_OBJCOPY")
 
     # Pass toolchain files.
@@ -982,6 +1007,15 @@ function(qt_get_platform_try_compile_vars out_var)
     # Pass language standard flags.
     list(APPEND flags "CMAKE_C_STANDARD")
     list(APPEND flags "CMAKE_CXX_STANDARD")
+
+    # Pass -stdlib=libc++ on if necessary
+    if (INPUT_stdlib_libcpp OR QT_FEATURE_stdlib_libcpp)
+        if(CMAKE_CXX_FLAGS)
+            string(APPEND CMAKE_CXX_FLAGS " -stdlib=libc++")
+        else()
+            set(CMAKE_CXX_FLAGS "-stdlib=libc++")
+        endif()
+    endif()
 
     # Assemble the list with regular options.
     set(flags_cmd_line "")
@@ -1012,6 +1046,9 @@ function(qt_get_platform_try_compile_vars out_var)
         if(QT_UIKIT_SDK)
             list(APPEND flags_cmd_line "-DCMAKE_OSX_SYSROOT:STRING=${QT_UIKIT_SDK}")
         endif()
+    endif()
+    if(QT_NO_USE_FIND_PACKAGE_SYSTEM_ENVIRONMENT_PATH)
+        list(APPEND flags_cmd_line "-DCMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH:BOOL=OFF")
     endif()
 
     set("${out_var}" "${flags_cmd_line}" PARENT_SCOPE)
@@ -1209,7 +1246,15 @@ function(qt_make_features_available target)
             endif()
             foreach(feature IN ITEMS ${features})
                 if (DEFINED "QT_FEATURE_${feature}" AND NOT "${QT_FEATURE_${feature}}" STREQUAL "${value}")
-                    message(FATAL_ERROR "Feature ${feature} is already defined to be \"${QT_FEATURE_${feature}}\" and should now be set to \"${value}\" when importing features from ${target}.")
+                    message(WARNING
+                        "This project was initially configured with the Qt feature \"${feature}\" "
+                        "set to \"${QT_FEATURE_${feature}}\". While loading the "
+                        "\"${target}\" package, the value of the feature "
+                        "has changed to \"${value}\". That might cause a project rebuild due to "
+                        "updated C++ headers. \n"
+                        "In case of build issues, consider removing the CMakeCache.txt file and "
+                        "reconfiguring the project."
+                    )
                 endif()
                 set(QT_FEATURE_${feature} "${value}" CACHE INTERNAL "Qt feature: ${feature} (from target ${target})")
             endforeach()

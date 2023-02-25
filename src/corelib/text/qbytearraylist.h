@@ -58,7 +58,10 @@ typedef QMutableListIterator<QByteArray> QMutableByteArrayListIterator;
 #ifndef Q_CLANG_QDOC
 
 namespace QtPrivate {
+#if QT_CORE_REMOVED_SINCE(6, 3) && QT_POINTER_SIZE != 4
     QByteArray Q_CORE_EXPORT QByteArrayList_join(const QByteArrayList *that, const char *separator, int separatorLength);
+#endif
+    QByteArray Q_CORE_EXPORT QByteArrayList_join(const QByteArrayList *that, const char *sep, qsizetype len);
 }
 #endif
 
@@ -77,15 +80,15 @@ public:
     using QListSpecialMethodsBase<QByteArray>::lastIndexOf;
     using QListSpecialMethodsBase<QByteArray>::contains;
 
-    inline QByteArray join() const
-    { return QtPrivate::QByteArrayList_join(self(), nullptr, 0); }
-    inline QByteArray join(const QByteArray &sep) const
+    QByteArray join(QByteArrayView sep = {}) const
     {
-        Q_ASSERT(sep.size() <= (std::numeric_limits<int>::max)());
         return QtPrivate::QByteArrayList_join(self(), sep.data(), sep.size());
     }
+    Q_WEAK_OVERLOAD
+    inline QByteArray join(const QByteArray &sep) const
+    { return join(qToByteArrayViewIgnoringNull(sep)); }
     inline QByteArray join(char sep) const
-    { return QtPrivate::QByteArrayList_join(self(), &sep, 1); }
+    { return join({&sep, 1}); }
 };
 
 QT_END_NAMESPACE

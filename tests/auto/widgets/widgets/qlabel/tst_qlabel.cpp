@@ -38,6 +38,7 @@
 #include <qmovie.h>
 #include <qpicture.h>
 #include <qmessagebox.h>
+#include <qsizepolicy.h>
 #include <qfontmetrics.h>
 #include <qmath.h>
 #include <private/qlabel_p.h>
@@ -75,6 +76,7 @@ private Q_SLOTS:
 #endif
     void setNum();
     void clear();
+    void wordWrap_data();
     void wordWrap();
     void eventPropagation_data();
     void eventPropagation();
@@ -115,16 +117,12 @@ private:
 void tst_QLabel::getSetCheck()
 {
     QLabel obj1;
-    // bool QLabel::wordWrap()
-    // void QLabel::setWordWrap(bool)
     obj1.setWordWrap(false);
-    QCOMPARE(false, obj1.wordWrap());
+    QVERIFY(!obj1.wordWrap());
     obj1.setWordWrap(true);
-    QCOMPARE(true, obj1.wordWrap());
+    QVERIFY(obj1.wordWrap());
 
 #if QT_CONFIG(shortcut)
-    // QWidget * QLabel::buddy()
-    // void QLabel::setBuddy(QWidget *)
     QWidget *var2 = new QWidget();
     obj1.setBuddy(var2);
     QCOMPARE(var2, obj1.buddy());
@@ -133,8 +131,6 @@ void tst_QLabel::getSetCheck()
     delete var2;
 #endif // QT_CONFIG(shortcut)
 
-    // QMovie * QLabel::movie()
-    // void QLabel::setMovie(QMovie *)
     QMovie *var3 = new QMovie;
     obj1.setMovie(var3);
     QCOMPARE(var3, obj1.movie());
@@ -274,21 +270,36 @@ void tst_QLabel::clear()
     QVERIFY(testWidget->text().isEmpty());
 }
 
+void tst_QLabel::wordWrap_data()
+{
+    QTest::addColumn<QString>("text");
+
+    QTest::newRow("Plain text") << "Plain text1";
+    QTest::newRow("Rich text") << "<b>Rich text</b>";
+    QTest::newRow("Long text")
+                  << "This is a very long text to check that QLabel "
+                     "does not wrap, even if the text would require wrapping to be fully displayed";
+}
+
 void tst_QLabel::wordWrap()
 {
+    QFETCH(QString, text);
+
     QLabel label;
-
+    label.setText(text);
     QVERIFY(!label.wordWrap());
+    QVERIFY(!label.sizePolicy().hasHeightForWidth());
 
-    label.setText("Plain Text");
-    QVERIFY(!label.wordWrap());
+    const QSize unWrappedSizeHint = label.sizeHint();
 
-    label.setText("<b>rich text</b>");
-    QVERIFY(!label.wordWrap());
+    label.setWordWrap(true);
+    QVERIFY(label.sizePolicy().hasHeightForWidth());
 
-    label.setWordWrap(false);
-    label.setText("<b>rich text</b>");
-    QVERIFY(!label.wordWrap());
+    if (text.size() > 1 && text.contains(" ")) {
+        const int wrappedHeight = label.heightForWidth(unWrappedSizeHint.width() / 2);
+        QVERIFY(wrappedHeight > unWrappedSizeHint.height());
+    }
+
 }
 
 void tst_QLabel::eventPropagation_data()
@@ -439,7 +450,6 @@ void tst_QLabel::emptyPixmap()
 void tst_QLabel::unicodeText_data()
 {
     QTest::addColumn<QString>("text");
-    QTest::addColumn<QString>("languageName");
 
     /*
     The "glass" phrase in Thai was the initial report for bug QTBUG-4848, was
@@ -456,25 +466,21 @@ void tst_QLabel::unicodeText_data()
     speech, also translated using http://translate.google.com.
     */
 
-    QTest::newRow("english") << QString::fromUtf8("I can eat glass and it doesn't hurt me.") << QString("english");
-    QTest::newRow("thai") << QString::fromUtf8("ฉันจะกินแก้วและไม่เจ็บฉัน") << QString("thai");
-    QTest::newRow("chinese") << QString::fromUtf8("我可以吃玻璃，并没有伤害我。") << QString("chinese");
-    QTest::newRow("arabic") << QString::fromUtf8("أستطيع أكل الزجاج ، وأنه لا يؤذيني.") << QString("arabic");
-    QTest::newRow("russian") << QString::fromUtf8("Я могу есть стекло, и не больно.") << QString("russian");
-    QTest::newRow("korean") << QString::fromUtf8("유리를 먹을 수있는, 그리고 그게 날 다치게하지 않습니다.") << QString("korean");
-    QTest::newRow("greek") << QString::fromUtf8("Μπορώ να φάτε γυαλί και δεν μου κάνει κακό.") << QString("greek");
-    QTest::newRow("german") << QString::fromUtf8("Ich kann Glas essen und es macht mich nicht heiß.") << QString("german");
-
+    QTest::newRow("english") << QString::fromUtf8("I can eat glass and it doesn't hurt me.");
+    QTest::newRow("thai") << QString::fromUtf8("ฉันจะกินแก้วและไม่เจ็บฉัน");
+    QTest::newRow("chinese") << QString::fromUtf8("我可以吃玻璃，并没有伤害我。");
+    QTest::newRow("arabic") << QString::fromUtf8("أستطيع أكل الزجاج ، وأنه لا يؤذيني.");
+    QTest::newRow("russian") << QString::fromUtf8("Я могу есть стекло, и не больно.");
+    QTest::newRow("korean") << QString::fromUtf8("유리를 먹을 수있는, 그리고 그게 날 다치게하지 않습니다.");
+    QTest::newRow("greek") << QString::fromUtf8("Μπορώ να φάτε γυαλί και δεν μου κάνει κακό.");
+    QTest::newRow("german") << QString::fromUtf8("Ich kann Glas essen und es macht mich nicht heiß.");
     QTest::newRow("thai_long") << QString::fromUtf8("เราจะต่อสู้ในทะเลและมหาสมุทร. เราจะต่อสู้ด้วยความมั่นใจเติบโตและความเจริญเติบโตในอากาศเราจะปกป้องเกาะของเราค่าใช้จ่ายใดๆอาจ."
-                                                    "เราจะต่อสู้บนชายหาดเราจะต่อสู้ในบริเวณเชื่อมโยงไปถึงเราจะต่อสู้ในช่องและในถนนที่เราจะต่อสู้ในภูเขานั้นเราจะไม่ยอม.")
-            << QString("thai_long");
+                                                    "เราจะต่อสู้บนชายหาดเราจะต่อสู้ในบริเวณเชื่อมโยงไปถึงเราจะต่อสู้ในช่องและในถนนที่เราจะต่อสู้ในภูเขานั้นเราจะไม่ยอม.");
 }
 
 void tst_QLabel::unicodeText()
 {
-    const QString testDataPath("testdata/unicodeText");
     QFETCH(QString, text);
-    QFETCH(QString, languageName);
     QFrame frame;
     QVBoxLayout *layout = new QVBoxLayout();
     QLabel *label = new QLabel(text, &frame);
@@ -584,7 +590,7 @@ void tst_QLabel::taskQTBUG_48157_dprPixmap()
     pixmap.load(QFINDTESTDATA(QStringLiteral("red@2x.png")));
     QCOMPARE(pixmap.devicePixelRatio(), 2.0);
     label.setPixmap(pixmap);
-    QCOMPARE(label.sizeHint(), pixmap.rect().size() / pixmap.devicePixelRatio());
+    QCOMPARE(label.sizeHint(), pixmap.deviceIndependentSize().toSize());
 }
 
 void tst_QLabel::taskQTBUG_48157_dprMovie()
@@ -595,7 +601,7 @@ void tst_QLabel::taskQTBUG_48157_dprMovie()
     movie.start();
     QCOMPARE(movie.currentPixmap().devicePixelRatio(), 2.0);
     label.setMovie(&movie);
-    QCOMPARE(label.sizeHint(), movie.currentPixmap().size() / movie.currentPixmap().devicePixelRatio());
+    QCOMPARE(label.sizeHint(), movie.currentPixmap().deviceIndependentSize().toSize());
 }
 
 void tst_QLabel::resourceProvider()

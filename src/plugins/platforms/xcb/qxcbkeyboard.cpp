@@ -257,7 +257,7 @@ struct xkb_keymap *QXcbKeyboard::keymapFromCore(const KeysymModifierMap &keysymM
             const int maxGroup1 = 4; // We only support 4 shift states anyway
             const int maxGroup2 = 2; // Only 3rd and 4th keysym are group 2
             xcb_keysym_t symbolsGroup1[maxGroup1];
-            xcb_keysym_t symbolsGroup2[maxGroup2];
+            xcb_keysym_t symbolsGroup2[maxGroup2] = { XKB_KEY_NoSymbol, XKB_KEY_NoSymbol };
             for (int i = 0; i < maxGroup1 + maxGroup2; i++) {
                 xcb_keysym_t sym = i < keysymsPerKeycode ? codeMap[i] : XKB_KEY_NoSymbol;
                 if (mapGroup2ToLevel3) {
@@ -365,23 +365,14 @@ void QXcbKeyboard::updateKeymap(xcb_mapping_notify_event_t *event)
     updateKeymap();
 }
 
-void QXcbKeyboard::updateKeymap(xcb_xkb_new_keyboard_notify_event_t *event)
-{
-    if (!event)
-        return;
-
-    if (event->deviceID != event->oldDeviceID)
-        m_config = false;
-
-    updateKeymap();
-}
-
 void QXcbKeyboard::updateKeymap()
 {
     KeysymModifierMap keysymMods;
     if (!connection()->hasXKB())
         keysymMods = keysymsToModifiers();
     updateModifiers(keysymMods);
+
+    m_config = true;
 
     if (!m_xkbContext) {
         m_xkbContext.reset(xkb_context_new(XKB_CONTEXT_NO_DEFAULT_INCLUDES));
@@ -398,13 +389,8 @@ void QXcbKeyboard::updateKeymap()
     if (connection()->hasXKB()) {
         m_xkbKeymap.reset(xkb_x11_keymap_new_from_device(m_xkbContext.get(), xcb_connection(),
                                                          core_device_id, XKB_KEYMAP_COMPILE_NO_FLAGS));
-        if (m_xkbKeymap) {
-            if (m_config)
-                m_xkbState.reset(xkb_state_new(m_xkbKeymap.get()));
-            else
-                m_xkbState.reset(xkb_x11_state_new_from_device(m_xkbKeymap.get(), xcb_connection(), core_device_id));
-
-        }
+        if (m_xkbKeymap)
+            m_xkbState.reset(xkb_x11_state_new_from_device(m_xkbKeymap.get(), xcb_connection(), core_device_id));
     } else {
         m_xkbKeymap.reset(keymapFromCore(keysymMods));
         if (m_xkbKeymap)
@@ -425,8 +411,6 @@ void QXcbKeyboard::updateKeymap()
     updateXKBMods();
 
     QXkbCommon::verifyHasLatinLayout(m_xkbKeymap.get());
-
-    m_config = true;
 }
 
 QList<int> QXcbKeyboard::possibleKeys(const QKeyEvent *event) const
@@ -457,7 +441,7 @@ static xkb_layout_index_t lockedGroup(quint16 state)
 
 void QXcbKeyboard::updateXKBStateFromCore(quint16 state)
 {
-    if (m_config && !connection()->hasXKB()) {
+    if (m_config) {
         struct xkb_state *xkbState = m_xkbState.get();
         xkb_mod_mask_t modsDepressed = xkb_state_serialize_mods(xkbState, XKB_STATE_MODS_DEPRESSED);
         xkb_mod_mask_t modsLatched = xkb_state_serialize_mods(xkbState, XKB_STATE_MODS_LATCHED);
@@ -479,7 +463,7 @@ void QXcbKeyboard::updateXKBStateFromCore(quint16 state)
 
 void QXcbKeyboard::updateXKBStateFromXI(void *modInfo, void *groupInfo)
 {
-    if (m_config && !connection()->hasXKB()) {
+    if (m_config) {
         auto *mods = static_cast<xcb_input_modifier_info_t *>(modInfo);
         auto *group = static_cast<xcb_input_group_info_t *>(groupInfo);
         const xkb_state_component changedComponents

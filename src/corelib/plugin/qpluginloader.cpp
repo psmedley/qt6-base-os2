@@ -38,15 +38,18 @@
 **
 ****************************************************************************/
 
-#include "qplatformdefs.h"
-
-#include "qplugin.h"
-#include "qcoreapplication.h"
 #include "qpluginloader.h"
-#include <qfileinfo.h>
-#include "qfactoryloader_p.h"
+
+#include "qcoreapplication.h"
 #include "qdebug.h"
 #include "qdir.h"
+#include "qfactoryloader_p.h"
+#include "qfileinfo.h"
+#include "qjsondocument.h"
+
+#if QT_CONFIG(library)
+#  include "qlibrary_p.h"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -188,7 +191,7 @@ QJsonObject QPluginLoader::metaData() const
 {
     if (!d)
         return QJsonObject();
-    return d->metaData;
+    return d->metaData.toJson();
 }
 
 /*!
@@ -270,8 +273,6 @@ static QString locatePlugin(const QString& fileName)
     const auto baseName = QStringView{fileName}.mid(slash + 1);
     const auto basePath = isAbsolute ? QStringView() : QStringView{fileName}.left(slash + 1); // keep the '/'
 
-    const bool debug = qt_debug_component();
-
     QStringList paths;
     if (isAbsolute) {
         paths.append(fileName.left(slash)); // don't include the '/'
@@ -286,22 +287,19 @@ static QString locatePlugin(const QString& fileName)
                 {
                     QString pluginPath = basePath + prefix + baseName + suffix;
                     const QString fn = path + QLatin1String("/lib") + pluginPath.replace(QLatin1Char('/'), QLatin1Char('_'));
-                    if (debug)
-                        qDebug() << "Trying..." << fn;
+                    qCDebug(qt_lcDebugPlugins) << "Trying..." << fn;
                     if (QFileInfo(fn).isFile())
                         return fn;
                 }
 #endif
                 const QString fn = path + QLatin1Char('/') + basePath + prefix + baseName + suffix;
-                if (debug)
-                    qDebug() << "Trying..." << fn;
+                qCDebug(qt_lcDebugPlugins) << "Trying..." << fn;
                 if (QFileInfo(fn).isFile())
                     return fn;
             }
         }
     }
-    if (debug)
-        qDebug() << fileName << "not found";
+    qCDebug(qt_lcDebugPlugins) << fileName << "not found";
     return QString();
 }
 #endif
@@ -346,11 +344,8 @@ void QPluginLoader::setFileName(const QString &fileName)
         d->updatePluginState();
 
 #else
-    if (qt_debug_component()) {
-        qWarning("Cannot load %s into a statically linked Qt library.",
-                 (const char *)QFile::encodeName(fileName));
-    }
-    Q_UNUSED(fileName);
+    qCWarning(qt_lcDebugPlugins, "Cannot load '%ls' into a statically linked Qt library.",
+              qUtf16Printable(fileName));
 #endif
 }
 
@@ -485,13 +480,10 @@ QList<QStaticPlugin> QPluginLoader::staticPlugins()
 */
 QJsonObject QStaticPlugin::metaData() const
 {
-    auto ptr = static_cast<const char *>(rawMetaData);
-
-    QString errMsg;
-    QJsonDocument doc = qJsonFromRawLibraryMetaData(ptr, rawMetaDataSize, &errMsg);
-    Q_ASSERT(doc.isObject());
-    Q_ASSERT(errMsg.isEmpty());
-    return doc.object();
+    QByteArrayView data(static_cast<const char *>(rawMetaData), rawMetaDataSize);
+    QPluginParsedMetaData parsed(data);
+    Q_ASSERT(!parsed.isError());
+    return parsed.toJson();
 }
 
 QT_END_NAMESPACE

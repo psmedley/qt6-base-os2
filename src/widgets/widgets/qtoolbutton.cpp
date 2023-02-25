@@ -169,8 +169,7 @@ bool QToolButtonPrivate::hasMenu() const
          with actions used in other parts of the main window.
     \endtable
 
-    \sa QPushButton, QToolBar, QMainWindow, QAction,
-        {fowler}{GUI Design Handbook: Push Button}
+    \sa QPushButton, QToolBar, QMainWindow, QAction
 */
 
 /*!
@@ -725,7 +724,7 @@ static QPoint positionMenu(const QToolButton *q, bool horizontal,
 {
     QPoint p;
     const QRect rect = q->rect(); // Find screen via point in case of QGraphicsProxyWidget.
-    const QRect screen = QWidgetPrivate::availableScreenGeometry(q);
+    const QRect screen = QWidgetPrivate::availableScreenGeometry(q, q->mapToGlobal(rect.center()));
     if (horizontal) {
         if (q->isRightToLeft()) {
             if (q->mapToGlobal(QPoint(0, rect.bottom())).y() + sh.height() <= screen.bottom()) {

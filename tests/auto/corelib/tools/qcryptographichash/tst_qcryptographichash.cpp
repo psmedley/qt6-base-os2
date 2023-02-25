@@ -78,15 +78,17 @@ void tst_QCryptographicHash::repeated_result()
     hash.addData(first);
 
     QFETCH(QByteArray, hash_first);
-    QByteArray result = hash.result();
+    QByteArrayView result = hash.resultView();
     QCOMPARE(result, hash_first);
+    QCOMPARE(result, hash.resultView());
     QCOMPARE(result, hash.result());
 
     hash.reset();
     hash.addData(first);
-    result = hash.result();
+    result = hash.resultView();
     QCOMPARE(result, hash_first);
     QCOMPARE(result, hash.result());
+    QCOMPARE(result, hash.resultView());
 }
 
 void tst_QCryptographicHash::intermediary_result_data()
@@ -179,16 +181,14 @@ void tst_QCryptographicHash::intermediary_result()
     hash.addData(first);
 
     QFETCH(QByteArray, hash_first);
-    QByteArray result = hash.result();
-    QCOMPARE(result, hash_first);
+    QCOMPARE(hash.resultView(), hash_first);
 
     // don't reset
     QFETCH(QByteArray, second);
     QFETCH(QByteArray, hash_firstsecond);
     hash.addData(second);
 
-    result = hash.result();
-    QCOMPARE(result, hash_firstsecond);
+    QCOMPARE(hash.resultView(), hash_firstsecond);
 
     hash.reset();
 }
@@ -209,10 +209,7 @@ void tst_QCryptographicHash::sha1()
 
 //  SHA1(A million repetitions of "a") =
 //      34AA973C D4C4DAA4 F61EEB2B DBAD2731 6534016F
-    QByteArray as;
-    for (int i = 0; i < 1000000; ++i)
-        as += 'a';
-    QCOMPARE(QCryptographicHash::hash(as, QCryptographicHash::Sha1).toHex().toUpper(),
+    QCOMPARE(QCryptographicHash::hash(QByteArray(1'000'000, 'a'), QCryptographicHash::Sha1).toHex().toUpper(),
              QByteArray("34AA973CD4C4DAA4F61EEB2BDBAD27316534016F"));
 }
 
@@ -425,7 +422,7 @@ void tst_QCryptographicHash::hashLength()
 {
     QFETCH(const QCryptographicHash::Algorithm, algorithm);
 
-    QByteArray output = QCryptographicHash::hash(QByteArrayLiteral("test"), algorithm);
+    QByteArray output = QCryptographicHash::hash("test", algorithm);
     QCOMPARE(QCryptographicHash::hashLength(algorithm), output.length());
 }
 
@@ -483,22 +480,22 @@ void tst_QCryptographicHash::moreThan4GiBOfData()
         qDebug() << algorithm << "test finished in" << timer.restart() << "ms";
     });
 
-    const auto begin = large.data();
-    const auto mid = begin + large.size() / 2;
-    const auto end = begin + large.size();
+    const auto view = QByteArrayView{large};
+    const auto first = view.first(view.size() / 2);
+    const auto last = view.sliced(view.size() / 2);
 
     QByteArray single;
     QByteArray chunked;
 
     auto t = MaybeThread{[&] {
         QCryptographicHash h(algorithm);
-        h.addData(begin, end - begin);
+        h.addData(view);
         single = h.result();
     }};
     {
         QCryptographicHash h(algorithm);
-        h.addData(begin, mid - begin);
-        h.addData(mid, end - mid);
+        h.addData(first);
+        h.addData(last);
         chunked = h.result();
     }
     t.join();

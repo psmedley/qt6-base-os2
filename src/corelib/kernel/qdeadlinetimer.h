@@ -66,7 +66,7 @@ public:
     constexpr QDeadlineTimer(Qt::TimerType type_ = Qt::CoarseTimer) noexcept
         : t1(0), t2(0), type(type_) {}
     constexpr QDeadlineTimer(ForeverConstant, Qt::TimerType type_ = Qt::CoarseTimer) noexcept
-        : t1(std::numeric_limits<qint64>::max()), t2(0), type(type_) {}
+        : t1((std::numeric_limits<qint64>::max)()), t2(0), type(type_) {}
     explicit QDeadlineTimer(qint64 msecs, Qt::TimerType type = Qt::CoarseTimer) noexcept;
 
     void swap(QDeadlineTimer &other) noexcept
@@ -224,6 +224,6 @@ Q_DECLARE_SHARED(QDeadlineTimer)
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QDeadlineTimer)
+QT_DECL_METATYPE_EXTERN(QDeadlineTimer, Q_CORE_EXPORT)
 
 #endif // QDEADLINETIMER_H

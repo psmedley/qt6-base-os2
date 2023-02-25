@@ -62,7 +62,7 @@ QXcbVirtualDesktop::QXcbVirtualDesktop(QXcbConnection *connection, xcb_screen_t 
 {
     const QByteArray cmAtomName =  "_NET_WM_CM_S" + QByteArray::number(m_number);
     m_net_wm_cm_atom = connection->internAtom(cmAtomName.constData());
-    m_compositingActive = connection->getSelectionOwner(m_net_wm_cm_atom);
+    m_compositingActive = connection->selectionOwner(m_net_wm_cm_atom);
 
     m_workArea = getWorkArea();
 
@@ -177,7 +177,7 @@ bool QXcbVirtualDesktop::compositingActive() const
     if (connection()->hasXFixes())
         return m_compositingActive;
     else
-        return connection()->getSelectionOwner(m_net_wm_cm_atom);
+        return connection()->selectionOwner(m_net_wm_cm_atom);
 }
 
 void QXcbVirtualDesktop::handleXFixesSelectionNotify(xcb_xfixes_selection_notify_event_t *notify_event)
@@ -192,7 +192,7 @@ void QXcbVirtualDesktop::subscribeToXFixesSelectionNotify()
         const uint32_t mask = XCB_XFIXES_SELECTION_EVENT_MASK_SET_SELECTION_OWNER |
                               XCB_XFIXES_SELECTION_EVENT_MASK_SELECTION_WINDOW_DESTROY |
                               XCB_XFIXES_SELECTION_EVENT_MASK_SELECTION_CLIENT_CLOSE;
-        xcb_xfixes_select_selection_input_checked(xcb_connection(), connection()->getQtSelectionOwner(), m_net_wm_cm_atom, mask);
+        xcb_xfixes_select_selection_input_checked(xcb_connection(), connection()->qtSelectionOwner(), m_net_wm_cm_atom, mask);
     }
 }
 
@@ -530,12 +530,14 @@ QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDe
                        xcb_randr_output_t outputId, xcb_randr_get_output_info_reply_t *output)
     : QXcbObject(connection)
     , m_virtualDesktop(virtualDesktop)
+    , m_monitor(nullptr)
     , m_output(outputId)
     , m_crtc(output ? output->crtc : XCB_NONE)
     , m_outputName(getOutputName(output))
     , m_outputSizeMillimeters(output ? QSize(output->mm_width, output->mm_height) : QSize())
+    , m_cursor(std::make_unique<QXcbCursor>(connection, this))
 {
-    if (connection->hasXRandr()) {
+    if (connection->isAtLeastXRandR12()) {
         xcb_randr_select_input(xcb_connection(), screen()->root, true);
         auto crtc = Q_XCB_REPLY_UNCHECKED(xcb_randr_get_crtc_info, xcb_connection(),
                                           m_crtc, output ? output->timestamp : 0);
@@ -554,20 +556,23 @@ QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDe
     if (m_sizeMillimeters.isEmpty())
         m_sizeMillimeters = virtualDesktop->physicalSize();
 
-    m_cursor = new QXcbCursor(connection, this);
+    updateColorSpaceAndEdid();
+}
 
+void QXcbScreen::updateColorSpaceAndEdid()
+{
     {
         // Read colord ICC data (from GNOME settings)
         auto reply = Q_XCB_REPLY_UNCHECKED(xcb_get_property, xcb_connection(),
                                            false, screen()->root,
-                                           connection->atom(QXcbAtom::_ICC_PROFILE),
+                                           connection()->atom(QXcbAtom::_ICC_PROFILE),
                                            XCB_ATOM_CARDINAL, 0, 8192);
         if (reply->format == 8 && reply->type == XCB_ATOM_CARDINAL) {
             QByteArray data(reinterpret_cast<const char *>(xcb_get_property_value(reply.get())), reply->value_len);
             m_colorSpace = QColorSpace::fromIccProfile(data);
         }
     }
-    if (connection->hasXRandr()) { // Parse EDID
+    if (connection()->isAtLeastXRandR12()) { // Parse EDID
         QByteArray edid = getEdid();
         if (m_edid.parse(edid)) {
             qCDebug(lcQpaScreen, "EDID data for output \"%s\": identifier '%s', manufacturer '%s',"
@@ -610,9 +615,140 @@ QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDe
         m_colorSpace = QColorSpace::SRgb;
 }
 
+QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDesktop,
+                       xcb_randr_monitor_info_t *monitorInfo, xcb_timestamp_t timestamp)
+    : QXcbObject(connection)
+    , m_virtualDesktop(virtualDesktop)
+    , m_monitor(monitorInfo)
+    , m_cursor(std::make_unique<QXcbCursor>(connection, this))
+{
+    setMonitor(monitorInfo, timestamp);
+}
+
+void QXcbScreen::setMonitor(xcb_randr_monitor_info_t *monitorInfo, xcb_timestamp_t timestamp)
+{
+    if (!connection()->isAtLeastXRandR15())
+        return;
+
+    m_outputs.clear();
+    m_crtcs.clear();
+    m_output = XCB_NONE;
+    m_crtc = XCB_NONE;
+    m_singlescreen = false;
+
+    if (!monitorInfo) {
+        m_monitor = nullptr;
+        m_mode = XCB_NONE;
+        m_outputName = defaultName();
+        // TODO: Send an event to the QScreen instance that the screen changed its name
+        return;
+    }
+
+    xcb_randr_select_input(xcb_connection(), screen()->root, true);
+
+    m_monitor = monitorInfo;
+    qCDebug(lcQpaScreen) << "xcb_randr_monitor_info_t: primary=" << m_monitor->primary << ", x=" << m_monitor->x << ", y=" << m_monitor->y
+        << ", width=" << m_monitor->width << ", height=" << m_monitor->height
+        << ", width_in_millimeters=" << m_monitor->width_in_millimeters << ", height_in_millimeters=" << m_monitor->height_in_millimeters;
+    QRect monitorGeometry = QRect(m_monitor->x, m_monitor->y,
+                                  m_monitor->width, m_monitor->height);
+    m_sizeMillimeters = QSize(m_monitor->width_in_millimeters, m_monitor->height_in_millimeters);
+
+    int outputCount = xcb_randr_monitor_info_outputs_length(m_monitor);
+    xcb_randr_output_t *outputs = nullptr;
+    if (outputCount) {
+        outputs = xcb_randr_monitor_info_outputs(m_monitor);
+        for (int i = 0; i < outputCount; i++) {
+            auto output = Q_XCB_REPLY_UNCHECKED(xcb_randr_get_output_info,
+                                                xcb_connection(), outputs[i], timestamp);
+            // Invalid, disconnected or disabled output
+            if (!output)
+                continue;
+
+            if (output->connection != XCB_RANDR_CONNECTION_CONNECTED) {
+                qCDebug(lcQpaScreen, "Output %s is not connected", qPrintable(
+                            QString::fromUtf8((const char*)xcb_randr_get_output_info_name(output.get()),
+                                              xcb_randr_get_output_info_name_length(output.get()))));
+                continue;
+            }
+
+            if (output->crtc == XCB_NONE) {
+                qCDebug(lcQpaScreen, "Output %s is not enabled", qPrintable(
+                            QString::fromUtf8((const char*)xcb_randr_get_output_info_name(output.get()),
+                                              xcb_randr_get_output_info_name_length(output.get()))));
+                continue;
+            }
+
+            m_outputs << outputs[i];
+            if (m_output == XCB_NONE) {
+                m_output = outputs[i];
+                m_outputSizeMillimeters = QSize(output->mm_width, output->mm_height);
+            }
+            m_crtcs << output->crtc;
+            if (m_crtc == XCB_NONE)
+                m_crtc = output->crtc;
+        }
+    }
+
+    if (m_crtcs.size() == 1) {
+        auto crtc = Q_XCB_REPLY(xcb_randr_get_crtc_info,
+                                xcb_connection(), m_crtcs[0], timestamp);
+        m_singlescreen = (monitorGeometry == (QRect(crtc->x, crtc->y, crtc->width, crtc->height)));
+        if (m_singlescreen) {
+            if (crtc->mode) {
+                updateGeometry(QRect(crtc->x, crtc->y, crtc->width, crtc->height), crtc->rotation);
+                if (mode() != crtc->mode)
+                    updateRefreshRate(crtc->mode);
+            }
+        }
+    }
+
+    if (!m_singlescreen)
+        m_geometry = monitorGeometry;
+    m_availableGeometry = m_virtualDesktop->availableGeometry(m_geometry);
+    if (m_geometry.isEmpty())
+        m_geometry = QRect(QPoint(), virtualDesktop()->size());
+    if (m_availableGeometry.isEmpty())
+        m_availableGeometry = m_virtualDesktop->availableGeometry(m_geometry);
+
+    if (m_sizeMillimeters.isEmpty())
+        m_sizeMillimeters = virtualDesktop()->physicalSize();
+
+    m_outputName = getName(monitorInfo);
+    m_primary = false;
+    if (connection()->primaryScreenNumber() == virtualDesktop()->number()) {
+        if (monitorInfo->primary || isPrimaryInXScreen())
+            m_primary = true;
+    }
+
+    updateColorSpaceAndEdid();
+}
+
+QString QXcbScreen::defaultName()
+{
+    QString name;
+    QByteArray displayName = connection()->displayName();
+    int dotPos = displayName.lastIndexOf('.');
+    if (dotPos != -1)
+        displayName.truncate(dotPos);
+    name = QString::fromLocal8Bit(displayName) + QLatin1Char('.')
+            + QString::number(m_virtualDesktop->number());
+    return name;
+}
+
+bool QXcbScreen::isPrimaryInXScreen()
+{
+    auto primary = Q_XCB_REPLY(xcb_randr_get_output_primary, connection()->xcb_connection(), root());
+    if (!primary)
+        qWarning("failed to get the primary output of the screen");
+
+    const bool isPrimary = primary ? (m_monitor ? m_outputs.contains(primary->output) : m_output == primary->output) : false;
+
+    return isPrimary;
+}
+
 QXcbScreen::~QXcbScreen()
 {
-    delete m_cursor;
 }
 
 QString QXcbScreen::getOutputName(xcb_randr_get_output_info_reply_t *outputInfo)
@@ -621,6 +757,18 @@ QString QXcbScreen::getOutputName(xcb_randr_get_output_info_reply_t *outputInfo)
     if (outputInfo) {
         name = QString::fromUtf8((const char*)xcb_randr_get_output_info_name(outputInfo),
                                  xcb_randr_get_output_info_name_length(outputInfo));
+    } else {
+        name = defaultName();
+    }
+    return name;
+}
+
+QString QXcbScreen::getName(xcb_randr_monitor_info_t *monitorInfo)
+{
+    QString name;
+    QByteArray ba = connection()->atomName(monitorInfo->name);
+    if (!ba.isEmpty()) {
+        name = QString::fromLatin1(ba.constData());
     } else {
         QByteArray displayName = connection()->displayName();
         int dotPos = displayName.lastIndexOf('.');
@@ -758,7 +906,7 @@ QDpi QXcbScreen::logicalDpi() const
         return QDpi(forcedDpi, forcedDpi);
 
     // Fall back to 96 DPI in case no logical DPI is set. We don't want to
-    // return physical DPI here, since that is a differnt type of DPI: Logical
+    // return physical DPI here, since that is a different type of DPI: Logical
     // DPI typically accounts for user preference and viewing distance, and is
     // quantized into DPI classes (96, 144, 192, etc); pysical DPI is an exact
     // physical measure.
@@ -767,12 +915,13 @@ QDpi QXcbScreen::logicalDpi() const
 
 QPlatformCursor *QXcbScreen::cursor() const
 {
-    return m_cursor;
+    return m_cursor.get();
 }
 
 void QXcbScreen::setOutput(xcb_randr_output_t outputId,
                            xcb_randr_get_output_info_reply_t *outputInfo)
 {
+    m_monitor = nullptr;
     m_output = outputId;
     m_crtc = outputInfo ? outputInfo->crtc : XCB_NONE;
     m_mode = XCB_NONE;
@@ -782,7 +931,7 @@ void QXcbScreen::setOutput(xcb_randr_output_t outputId,
 
 void QXcbScreen::updateGeometry(xcb_timestamp_t timestamp)
 {
-    if (!connection()->hasXRandr())
+    if (!connection()->isAtLeastXRandR12())
         return;
 
     auto crtc = Q_XCB_REPLY_UNCHECKED(xcb_randr_get_crtc_info, xcb_connection(),
@@ -798,19 +947,23 @@ void QXcbScreen::updateGeometry(const QRect &geometry, uint8_t rotation)
     switch (rotation) {
     case XCB_RANDR_ROTATION_ROTATE_0: // xrandr --rotate normal
         m_orientation = Qt::LandscapeOrientation;
-        m_sizeMillimeters = m_outputSizeMillimeters;
+        if (!m_monitor)
+            m_sizeMillimeters = m_outputSizeMillimeters;
         break;
     case XCB_RANDR_ROTATION_ROTATE_90: // xrandr --rotate left
         m_orientation = Qt::PortraitOrientation;
-        m_sizeMillimeters = m_outputSizeMillimeters.transposed();
+        if (!m_monitor)
+            m_sizeMillimeters = m_outputSizeMillimeters.transposed();
         break;
     case XCB_RANDR_ROTATION_ROTATE_180: // xrandr --rotate inverted
         m_orientation = Qt::InvertedLandscapeOrientation;
-        m_sizeMillimeters = m_outputSizeMillimeters;
+        if (!m_monitor)
+            m_sizeMillimeters = m_outputSizeMillimeters;
         break;
     case XCB_RANDR_ROTATION_ROTATE_270: // xrandr --rotate right
         m_orientation = Qt::InvertedPortraitOrientation;
-        m_sizeMillimeters = m_outputSizeMillimeters.transposed();
+        if (!m_monitor)
+            m_sizeMillimeters = m_outputSizeMillimeters.transposed();
         break;
     }
 
@@ -838,7 +991,7 @@ void QXcbScreen::updateAvailableGeometry()
 
 void QXcbScreen::updateRefreshRate(xcb_randr_mode_t mode)
 {
-    if (!connection()->hasXRandr())
+    if (!connection()->isAtLeastXRandR12())
         return;
 
     if (m_mode == mode)
@@ -974,7 +1127,7 @@ QByteArray QXcbScreen::getOutputProperty(xcb_atom_t atom) const
 QByteArray QXcbScreen::getEdid() const
 {
     QByteArray result;
-    if (!connection()->hasXRandr())
+    if (!connection()->isAtLeastXRandR12())
         return result;
 
     // Try a bunch of atoms

@@ -44,6 +44,7 @@
 #include "private/qpointingdevice_p.h"
 #include "qpa/qplatformintegration.h"
 #include "private/qevent_p.h"
+#include "private/qeventpoint_p.h"
 #include "qfile.h"
 #include "qhashfunctions.h"
 #include "qmetaobject.h"
@@ -257,10 +258,12 @@ QInputEvent::~QInputEvent()
 */
 
 /*!
-    \fn QEventPoint &QPointerEvent::point(qsizetype i)
-
     Returns a QEventPoint reference for the point at index \a i.
 */
+QEventPoint &QPointerEvent::point(qsizetype i)
+{
+    return m_points[i];
+}
 
 /*!
     \fn const QList<QEventPoint> &QPointerEvent::points() const
@@ -309,12 +312,13 @@ QEventPoint *QPointerEvent::pointById(int id)
 }
 
 /*!
-    Returns \c true if every point in points() has an exclusiveGrabber().
+    Returns \c true if every point in points() has either an exclusiveGrabber()
+    or one or more passiveGrabbers().
 */
 bool QPointerEvent::allPointsGrabbed() const
 {
     for (const auto &p : points()) {
-        if (exclusiveGrabber(p) && passiveGrabbers(p).isEmpty())
+        if (!exclusiveGrabber(p) && passiveGrabbers(p).isEmpty())
             return false;
     }
     return true;
@@ -360,7 +364,7 @@ void QPointerEvent::setTimestamp(quint64 timestamp)
 {
     QInputEvent::setTimestamp(timestamp);
     for (auto &p : m_points)
-        QMutableEventPoint::from(p).setTimestamp(timestamp);
+        QMutableEventPoint::setTimestamp(p, timestamp);
 }
 
 /*!
@@ -548,30 +552,30 @@ QSinglePointEvent::QSinglePointEvent(QEvent::Type type, const QPointingDevice *d
     bool isWheel = (type == QEvent::Type::Wheel);
     auto devPriv = QPointingDevicePrivate::get(const_cast<QPointingDevice *>(pointingDevice()));
     auto epd = devPriv->pointById(0);
-    QMutableEventPoint &mut = QMutableEventPoint::from(epd->eventPoint);
-    Q_ASSERT(mut.device() == dev);
-    // mut is now a reference to a non-detached instance that lives in QPointingDevicePrivate::activePoints.
+    QEventPoint &p = epd->eventPoint;
+    Q_ASSERT(p.device() == dev);
+    // p is a reference to a non-detached instance that lives in QPointingDevicePrivate::activePoints.
     // Update persistent info in that instance.
     if (isPress || isWheel)
-        mut.setGlobalLastPosition(globalPos);
+        QMutableEventPoint::setGlobalLastPosition(p, globalPos);
     else
-        mut.setGlobalLastPosition(mut.globalPosition());
-    mut.setGlobalPosition(globalPos);
-    if (isWheel && mut.state() != QEventPoint::State::Updated)
-        mut.setGlobalPressPosition(globalPos);
+        QMutableEventPoint::setGlobalLastPosition(p, p.globalPosition());
+    QMutableEventPoint::setGlobalPosition(p, globalPos);
+    if (isWheel && p.state() != QEventPoint::State::Updated)
+        QMutableEventPoint::setGlobalPressPosition(p, globalPos);
     if (type == MouseButtonDblClick)
-        mut.setState(QEventPoint::State::Stationary);
+        QMutableEventPoint::setState(p, QEventPoint::State::Stationary);
     else if (button == Qt::NoButton || isWheel)
-        mut.setState(QEventPoint::State::Updated);
+        QMutableEventPoint::setState(p, QEventPoint::State::Updated);
     else if (isPress)
-        mut.setState(QEventPoint::State::Pressed);
+        QMutableEventPoint::setState(p, QEventPoint::State::Pressed);
     else
-        mut.setState(QEventPoint::State::Released);
-    mut.setScenePosition(scenePos);
+        QMutableEventPoint::setState(p, QEventPoint::State::Released);
+    QMutableEventPoint::setScenePosition(p, scenePos);
     // Now detach, and update the detached instance with ephemeral state.
-    mut.detach();
-    mut.setPosition(localPos);
-    m_points.append(mut);
+    QMutableEventPoint::detach(p);
+    QMutableEventPoint::setPosition(p, localPos);
+    m_points.append(p);
 }
 
 /*! \internal
@@ -786,6 +790,7 @@ QMouseEvent::~QMouseEvent()
 }
 
 /*!
+    \fn Qt::MouseEventSource QMouseEvent::source() const
     \since 5.3
     \deprecated [6.0] Use pointingDevice() instead.
 
@@ -814,12 +819,13 @@ QMouseEvent::~QMouseEvent()
     decide how to react to this event. But it's even better to react to the
     original event rather than handling only mouse events.
 */
-#if QT_DEPRECATED_SINCE(6, 0)
+// Note: the docs mention 6.0 as a deprecation version. That is correct and
+// intended, because we want our users to stop using it! Internally we will
+// deprecate it when we port our code away from using it.
 Qt::MouseEventSource QMouseEvent::source() const
 {
     return Qt::MouseEventSource(m_source);
 }
-#endif
 
 /*!
     \since 5.3
@@ -894,6 +900,7 @@ Qt::MouseEventFlags QMouseEvent::flags() const
 
 /*!
     \fn QPoint QMouseEvent::pos() const
+    \deprecated [6.0] Use position() instead.
 
     Returns the position of the mouse cursor, relative to the widget
     that received the event.
@@ -1066,6 +1073,27 @@ Qt::MouseEventFlags QMouseEvent::flags() const
     QEvent::HoverLeave, or QEvent::HoverMove.
 
     The \a pos is the current mouse cursor's position relative to the
+    receiving widget, \a oldPos is its previous such position, and
+    \a globalPos is the mouse position in absolute coordinates.
+    \a modifiers hold the state of all keyboard modifiers at the time
+    of the event.
+*/
+QHoverEvent::QHoverEvent(Type type, const QPointF &pos, const QPointF &globalPos, const QPointF &oldPos,
+                         Qt::KeyboardModifiers modifiers, const QPointingDevice *device)
+    : QSinglePointEvent(type, device, pos, pos, globalPos, Qt::NoButton, Qt::NoButton, modifiers), m_oldPos(oldPos)
+{
+}
+
+#if QT_DEPRECATED_SINCE(6, 3)
+/*!
+    \deprecated [6.3] Use the other constructor instead (global position is required).
+
+    Constructs a hover event object originating from \a device.
+
+    The \a type parameter must be QEvent::HoverEnter,
+    QEvent::HoverLeave, or QEvent::HoverMove.
+
+    The \a pos is the current mouse cursor's position relative to the
     receiving widget, while \a oldPos is its previous such position.
     \a modifiers hold the state of all keyboard modifiers at the time
     of the event.
@@ -1075,6 +1103,7 @@ QHoverEvent::QHoverEvent(Type type, const QPointF &pos, const QPointF &oldPos,
     : QSinglePointEvent(type, device, pos, pos, pos, Qt::NoButton, Qt::NoButton, modifiers), m_oldPos(oldPos)
 {
 }
+#endif
 
 /*!
     \internal
@@ -2561,9 +2590,9 @@ QTabletEvent::QTabletEvent(Type type, const QPointingDevice *dev, const QPointF 
       m_yTilt(yTilt),
       m_z(z)
 {
-    QMutableEventPoint &mut = QMutableEventPoint::from(point(0));
-    mut.setPressure(pressure);
-    mut.setRotation(rotation);
+    QEventPoint &p = point(0);
+    QMutableEventPoint::setPressure(p, pressure);
+    QMutableEventPoint::setRotation(p, rotation);
 }
 
 /*!
@@ -3163,15 +3192,36 @@ void QDropEvent::setDropAction(Qt::DropAction action)
 */
 
 /*!
+    \fn QPointF QDropEvent::position() const
+    \since 6.0
+
+    Returns the position where the drop was made.
+*/
+
+/*!
     \fn Qt::MouseButtons QDropEvent::mouseButtons() const
     \deprecated [6.0] Use buttons() instead.
 
-    Returns the mouse buttons that are pressed..
+    Returns the mouse buttons that are pressed.
+*/
+
+/*!
+    \fn Qt::MouseButtons QDropEvent::buttons() const
+    \since 6.0
+
+    Returns the mouse buttons that are pressed.
 */
 
 /*!
     \fn Qt::KeyboardModifiers QDropEvent::keyboardModifiers() const
     \deprecated [6.0] Use modifiers() instead.
+
+    Returns the modifier keys that are pressed.
+*/
+
+/*!
+    \fn Qt::KeyboardModifiers QDropEvent::modifiers() const
+    \since 6.0
 
     Returns the modifier keys that are pressed.
 */
@@ -4105,10 +4155,7 @@ QDebug operator<<(QDebug dbg, const QEvent *e)
     bool isMouse = false;
     switch (type) {
     case QEvent::Expose:
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
-        dbg << "QExposeEvent(" << static_cast<const QExposeEvent *>(e)->region() << ')';
-QT_WARNING_POP
+        dbg << "QExposeEvent()";
         break;
     case QEvent::Paint:
         dbg << "QPaintEvent(" << static_cast<const QPaintEvent *>(e)->region() << ')';
@@ -4546,10 +4593,11 @@ QTouchEvent::QTouchEvent(QEvent::Type eventType,
 {
     for (QEventPoint &point : m_points) {
         m_touchPointStates |= point.state();
-        QMutableEventPoint::from(point).setDevice(device);
+        QMutableEventPoint::setDevice(point, device);
     }
 }
 
+#if QT_DEPRECATED_SINCE(6, 0)
 /*!
     \deprecated [6.0] Use another constructor.
 
@@ -4567,8 +4615,9 @@ QTouchEvent::QTouchEvent(QEvent::Type eventType,
       m_touchPointStates(touchPointStates)
 {
     for (QEventPoint &point : m_points)
-        QMutableEventPoint::from(point).setDevice(device);
+        QMutableEventPoint::setDevice(point, device);
 }
+#endif // QT_DEPRECATED_SINCE(6, 0)
 
 /*!
     Destroys the QTouchEvent.
@@ -4838,7 +4887,7 @@ void QMutableTouchEvent::addPoint(const QEventPoint &point)
     m_points.append(point);
     auto &added = m_points.last();
     if (!added.device())
-        QMutableEventPoint::from(added).setDevice(pointingDevice());
+        QMutableEventPoint::setDevice(added, pointingDevice());
     m_touchPointStates |= point.state();
 }
 
@@ -4847,3 +4896,5 @@ QMutableSinglePointEvent::~QMutableSinglePointEvent()
     = default;
 
 QT_END_NAMESPACE
+
+#include "moc_qevent.cpp"

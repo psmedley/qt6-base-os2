@@ -74,6 +74,8 @@ protected:
 #if defined(Q_OS_WIN)
     void retrieveVolumeInfo();
     void retrieveDiskFreeSpace();
+    bool queryStorageProperty();
+    void queryFileFsSectorSizeInformation();
 #elif defined(Q_OS_MAC)
     void retrievePosixInfo();
     void retrieveUrlProperties(bool initRootPath = false);

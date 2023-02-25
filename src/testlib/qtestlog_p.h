@@ -105,9 +105,14 @@ public:
 #ifndef QT_NO_REGULAREXPRESSION
     static void ignoreMessage(QtMsgType type, const QRegularExpression &expression);
 #endif
+    static void failOnWarning(const char *msg);
+#ifndef QT_NO_REGULAREXPRESSION
+    static void failOnWarning(const QRegularExpression &expression);
+#endif
     static int unhandledIgnoreMessages();
     static void printUnhandledIgnoreMessages();
     static void clearIgnoreMessages();
+    static void clearFailOnWarnings();
 
     static void warn(const char *msg, const char *file, int line);
     static void info(const char *msg, const char *file, int line);
@@ -118,7 +123,7 @@ public:
     static void addLogger(LogMode mode, const char *filename);
     static void addLogger(QAbstractTestLogger *logger);
 
-    static int loggerCount();
+    static bool hasLoggers();
     static bool loggerUsingStdout();
 
     static void setVerboseLevel(int level);

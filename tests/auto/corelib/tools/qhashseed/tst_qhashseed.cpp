@@ -66,7 +66,7 @@ void tst_QHashSeed::initTestCase()
 
 void tst_QHashSeed::environmentVariable_data()
 {
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     QSKIP("This test needs a helper binary, so is excluded from this platform.");
 #endif
 
@@ -134,8 +134,13 @@ void tst_QHashSeed::reseeding()
 
 void tst_QHashSeed::quality()
 {
-    constexpr int Iterations = 16;
+    // this "bad seed" is used internally in qhash.cpp and should never leak!
+    constexpr size_t BadSeed = size_t(Q_UINT64_C(0x5555'5555'5555'5555));
+
+    constexpr int Iterations = 24;  // nicely divisible by 3
     int oneThird = 0;
+    int badSeeds = 0;
+    int seedsToMinus1 = 0;
     size_t ored = 0;
 
     for (int i = 0; i < Iterations; ++i) {
@@ -146,21 +151,35 @@ void tst_QHashSeed::quality()
 
         if (bits >= std::numeric_limits<size_t>::digits / 3)
             ++oneThird;
+        if (seed == BadSeed)
+            ++badSeeds;
+        if (ored != size_t(-1))
+            ++seedsToMinus1;
+
+        QHashSeed::resetRandomGlobalSeed();
     }
 
     // report out
+    qInfo() << "Number of seeds until all bits became set:" << seedsToMinus1 << '/' << Iterations;
     qInfo() << "Number of seeds with at least one third of the bits set:"
             << oneThird << '/' << Iterations;
-    qInfo() << "Number of bits in OR'ed value:" << qPopulationCount(quintptr(ored))
-            << '/' << std::numeric_limits<size_t>::digits;
-    if (std::numeric_limits<size_t>::digits > 32) {
-        quint32 upper = quint64(ored) >> 32;
-        qInfo() << "Number of bits in the upper half:" << qPopulationCount(upper) << "/ 32";
-        QVERIFY(qPopulationCount(upper) > (32/3));
-    }
+
+    // we must have set all bits after all the iterations
+    QCOMPARE(ored, size_t(-1));
 
     // at least one third of the seeds must have one third of all the bits set
-    QVERIFY(oneThird > (16/3));
+    QVERIFY(oneThird > (Iterations/3));
+
+    // at most one seed can be the bad seed, if 32-bit, none on 64-bit
+    if (std::numeric_limits<size_t>::digits > 32)
+        QCOMPARE(badSeeds, 0);
+    else
+        QVERIFY2(badSeeds <= 1, "badSeeds = " + QByteArray::number(badSeeds));
+
+    // we must have taken at most two thirds of the iterations to have set each
+    // bit at least once
+    QVERIFY2(seedsToMinus1 < 2*Iterations/3,
+             "seedsToMinus1 = " + QByteArray::number(seedsToMinus1));
 }
 
 #if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)

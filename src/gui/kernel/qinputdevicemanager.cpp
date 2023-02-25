@@ -42,6 +42,8 @@
 
 QT_BEGIN_NAMESPACE
 
+QT_IMPL_METATYPE_EXTERN_TAGGED(QInputDeviceManager::DeviceType, QInputDeviceManager__DeviceType)
+
 /*!
   \class QInputDeviceManager
   \internal
@@ -66,6 +68,8 @@ QInputDeviceManager::QInputDeviceManager(QObject *parent)
 {
     qRegisterMetaType<DeviceType>();
 }
+
+QInputDeviceManager::~QInputDeviceManager() = default;
 
 int QInputDeviceManager::deviceCount(DeviceType type) const
 {
@@ -116,3 +120,5 @@ void QInputDeviceManager::setKeyboardModifiers(Qt::KeyboardModifiers mods)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qinputdevicemanager_p.cpp"

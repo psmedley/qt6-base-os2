@@ -42,14 +42,20 @@
 
 QT_BEGIN_NAMESPACE
 
-QOperatingSystemVersion QOperatingSystemVersion::current()
+QOperatingSystemVersionBase QOperatingSystemVersionBase::current_impl()
 {
     NSOperatingSystemVersion osv = NSProcessInfo.processInfo.operatingSystemVersion;
-    QOperatingSystemVersion v;
+    QOperatingSystemVersionBase v;
     v.m_os = currentType();
     v.m_major = osv.majorVersion;
     v.m_minor = osv.minorVersion;
     v.m_micro = osv.patchVersion;
+    return v;
+}
+
+QOperatingSystemVersionBase QOperatingSystemVersionBase::current()
+{
+    static const QOperatingSystemVersionBase v = current_impl();
     return v;
 }
 

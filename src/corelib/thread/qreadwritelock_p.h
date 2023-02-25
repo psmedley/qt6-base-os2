@@ -53,8 +53,8 @@
 //
 
 #include <QtCore/private/qglobal_p.h>
-#include <QtCore/qhash.h>
-#include <QtCore/qwaitcondition.h>
+#include <QtCore/private/qwaitcondition_p.h>
+#include <QtCore/qvarlengtharray.h>
 
 QT_REQUIRE_CONFIG(thread);
 
@@ -66,9 +66,9 @@ public:
     explicit QReadWriteLockPrivate(bool isRecursive = false)
         : recursive(isRecursive) {}
 
-    QMutex mutex;
-    QWaitCondition writerCond;
-    QWaitCondition readerCond;
+    QtPrivate::mutex mutex;
+    QtPrivate::condition_variable writerCond;
+    QtPrivate::condition_variable readerCond;
     int readerCount = 0;
     int writerCount = 0;
     int waitingReaders = 0;
@@ -76,8 +76,8 @@ public:
     const bool recursive;
 
     //Called with the mutex locked
-    bool lockForWrite(int timeout);
-    bool lockForRead(int timeout);
+    bool lockForWrite(std::unique_lock<QtPrivate::mutex> &lock, int timeout);
+    bool lockForRead(std::unique_lock<QtPrivate::mutex> &lock, int timeout);
     void unlock();
 
     //memory management
@@ -87,13 +87,20 @@ public:
 
     // Recusive mutex handling
     Qt::HANDLE currentWriter = {};
-    QHash<Qt::HANDLE, int> currentReaders;
+
+    struct Reader {
+        Qt::HANDLE handle;
+        int recursionLevel;
+    };
+
+    QVarLengthArray<Reader, 16> currentReaders;
 
     // called with the mutex unlocked
     bool recursiveLockForWrite(int timeout);
     bool recursiveLockForRead(int timeout);
     void recursiveUnlock();
 };
+Q_DECLARE_TYPEINFO(QReadWriteLockPrivate::Reader, Q_PRIMITIVE_TYPE);
 
 QT_END_NAMESPACE
 

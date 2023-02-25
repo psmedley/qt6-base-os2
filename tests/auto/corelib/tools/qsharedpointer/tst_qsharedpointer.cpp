@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2019 The Qt Company Ltd.
-** Copyright (C) 2020 Intel Corporation.
-** Copyright (C) 2019 Klarälvdalens Datakonsult AB.
+** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2022 Intel Corporation.
+** Copyright (C) 2021 Klarälvdalens Datakonsult AB.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -37,6 +37,7 @@
 #include <QtCore/QList>
 #include <QtCore/QMap>
 #include <QtCore/QThread>
+#include <QtCore/private/qvolatile_p.h>
 
 #include "forwarddeclared.h"
 #include "nontracked.h"
@@ -759,12 +760,12 @@ public:
     DerivedData() : moreData(0) { }
     ~DerivedData() { ++derivedDestructorCounter; }
 
-    virtual void virtualDelete()
+    void virtualDelete() override
     {
         delete this;
     }
 
-    virtual int classLevel() { return 2; }
+    int classLevel() override { return 2; }
 };
 int DerivedData::derivedDestructorCounter = 0;
 
@@ -779,7 +780,7 @@ public:
 class DiffPtrDerivedData: public Stuffing, public Data
 {
 public:
-    virtual int classLevel() { return 3; }
+    int classLevel() override { return 3; }
 };
 
 class VirtualDerived: virtual public Data
@@ -788,15 +789,20 @@ public:
     int moreData;
 
     VirtualDerived() : moreData(0xc0ffee) { }
-    virtual int classLevel() { return 4; }
+    int classLevel() override { return 4; }
 };
 
 void tst_QSharedPointer::downCast()
 {
     {
+        // copy construction
         QSharedPointer<DerivedData> ptr = QSharedPointer<DerivedData>(new DerivedData);
+        QSharedPointer<DerivedData> copy = ptr;
         QSharedPointer<Data> baseptr = qSharedPointerCast<Data>(ptr);
         QSharedPointer<Data> other;
+        QWeakPointer<DerivedData> weak = ptr;
+        QWeakPointer<Data> baseweak = qSharedPointerCast<Data>(ptr);
+        QWeakPointer<Data> baseweak2 = qSharedPointerCast<Data>(weak);
 
         QVERIFY(ptr == baseptr);
         QVERIFY(baseptr == ptr);
@@ -807,11 +813,55 @@ void tst_QSharedPointer::downCast()
         QVERIFY(other != ptr);
         QVERIFY(! (ptr == other));
         QVERIFY(! (other == ptr));
+
+        // copy assignments
+        baseptr = qSharedPointerCast<Data>(ptr);
+        baseweak = qSharedPointerCast<Data>(ptr);
+        baseweak2 = baseweak;
+
+        // move assignments (these don't actually move)
+        baseptr = qSharedPointerCast<Data>(std::move(ptr));
+        ptr = copy;
+        baseweak = qSharedPointerCast<Data>(std::move(ptr));
+        ptr = copy;
+        baseweak2 = qSharedPointerCast<Data>(std::move(baseweak));
+
+        // move construction (these don't actually move)
+        ptr = copy;
+        QSharedPointer<Data> ptr3(qSharedPointerCast<Data>(std::move(ptr)));
+        ptr = copy;
+        QWeakPointer<Data> baseweak3(qSharedPointerCast<Data>(std::move(ptr)));
+        ptr = copy;
+        QWeakPointer<Data> baseweak4(qSharedPointerCast<Data>(std::move(weak)));
     }
 
     {
+        // copy construction
         QSharedPointer<DerivedData> ptr = QSharedPointer<DerivedData>(new DerivedData);
+        QSharedPointer<DerivedData> copy = ptr;
         QSharedPointer<Data> baseptr = ptr;
+        QWeakPointer<DerivedData> weak = ptr;
+        QWeakPointer<Data> baseweak = ptr;
+        QWeakPointer<Data> baseweak2 = weak;
+
+        // copy assignments
+        baseptr = ptr;
+        baseweak = ptr;
+        baseweak2 = weak;
+
+        // move assignments (only the QSharedPointer-QSharedPointer actually moves)
+        baseweak = std::move(ptr);
+        baseweak2 = std::move(weak);
+        ptr = copy;
+        baseptr = std::move(ptr);
+
+        // move construction (only the QSharedPointer-QSharedPointer actually moves)
+        ptr = copy;
+        QWeakPointer<Data> baseweak3(std::move(ptr));
+        ptr = copy;
+        QWeakPointer<Data> baseweak4(std::move(weak));
+        ptr = copy;
+        QSharedPointer<Data> baseptr2(std::move(ptr));
     }
 
     int destructorCount;
@@ -1944,7 +1994,7 @@ class ThreadData
     QAtomicInt * volatile ptr;
 public:
     ThreadData(QAtomicInt *p) : ptr(p) { }
-    ~ThreadData() { ++ptr; }
+    ~ThreadData() { QtPrivate::volatilePreIncrement(ptr); }
     void ref()
     {
         // if we're called after the destructor, we'll crash
@@ -1955,7 +2005,7 @@ public:
 class StrongThread: public QThread
 {
 protected:
-    void run()
+    void run() override
     {
         usleep(QRandomGenerator::global()->bounded(2000));
         ptr->ref();
@@ -1968,7 +2018,7 @@ public:
 class WeakThread: public QThread
 {
 protected:
-    void run()
+    void run() override
     {
         usleep(QRandomGenerator::global()->bounded(2000));
         QSharedPointer<ThreadData> ptr = weak;
@@ -2687,7 +2737,7 @@ void tst_QSharedPointer::constructorThrow()
     int childDestructorCounter = ThrowData::childDestructorCounter;
 
     QSharedPointer<ThrowData> ptr;
-    QVERIFY_EXCEPTION_THROWN(ptr = QSharedPointer<ThrowData>::create(), QString);
+    QVERIFY_THROWS_EXCEPTION(QString, ptr = QSharedPointer<ThrowData>::create());
     QVERIFY(ptr.isNull());
     QCOMPARE(ThrowData::childGenerationCounter, childGeneration + 1);
     // destructor should never be called, if a constructor throws
@@ -2729,7 +2779,7 @@ namespace ReentrancyWhileDestructing {
     {
         QSharedPointer<IB> b;
 
-        virtual QSharedPointer<IB> getB()
+        virtual QSharedPointer<IB> getB() override
         {
             return b;
         }

@@ -48,6 +48,7 @@
 #include "qfileinfo.h"
 #include "qmutex.h"
 #include "private/qlocking_p.h"
+#include "private/qtools_p.h"
 #include "qlibraryinfo.h"
 #include "qtemporaryfile.h"
 #include "qstandardpaths.h"
@@ -83,8 +84,9 @@
 #define Q_XDG_PLATFORM
 #endif
 
-#if !defined(QT_NO_STANDARDPATHS) && (defined(Q_XDG_PLATFORM) || defined(QT_PLATFORM_UIKIT))
-#define QSETTINGS_USE_QSTANDARDPATHS
+#if !defined(QT_NO_STANDARDPATHS)                                                                  \
+        && (defined(Q_XDG_PLATFORM) || defined(QT_PLATFORM_UIKIT) || defined(Q_OS_ANDROID))
+#    define QSETTINGS_USE_QSTANDARDPATHS
 #endif
 
 // ************************************************************************
@@ -231,7 +233,7 @@ QSettingsPrivate::~QSettingsPrivate()
 
 QString QSettingsPrivate::actualKey(const QString &key) const
 {
-    QString n = normalizedKey(key);
+    auto n = normalizedKey(key);
     Q_ASSERT_X(!n.isEmpty(), "QSettings", "empty key");
     return groupPrefix + n;
 }
@@ -515,8 +517,6 @@ QVariant QSettingsPrivate::stringToVariant(const QString &s)
     return QVariant(s);
 }
 
-static const char hexDigits[] = "0123456789ABCDEF";
-
 void QSettingsPrivate::iniEscapedKey(const QString &key, QByteArray &result)
 {
     result.reserve(result.length() + key.length() * 3 / 2);
@@ -530,13 +530,13 @@ void QSettingsPrivate::iniEscapedKey(const QString &key, QByteArray &result)
             result += (char)ch;
         } else if (ch <= 0xFF) {
             result += '%';
-            result += hexDigits[ch / 16];
-            result += hexDigits[ch % 16];
+            result += QtMiscUtils::toHexUpper(ch / 16);
+            result += QtMiscUtils::toHexUpper(ch % 16);
         } else {
             result += "%U";
             QByteArray hexCode;
             for (int i = 0; i < 4; ++i) {
-                hexCode.prepend(hexDigits[ch % 16]);
+                hexCode.prepend(QtMiscUtils::toHexUpper(ch % 16));
                 ch >>= 4;
             }
             result += hexCode;
@@ -605,7 +605,8 @@ void QSettingsPrivate::iniEscapedString(const QString &str, QByteArray &result)
     bool needsQuotes = false;
     bool escapeNextIfDigit = false;
     bool useCodec = !str.startsWith(QLatin1String("@ByteArray("))
-                    && !str.startsWith(QLatin1String("@Variant("));
+                    && !str.startsWith(QLatin1String("@Variant("))
+                    && !str.startsWith(QLatin1String("@DateTime("));
 
     int i;
     int startPos = result.size();
@@ -834,7 +835,7 @@ StHexEscape:
         ch -= 'a' - 'A';
     if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F')) {
         escapeVal <<= 4;
-        escapeVal += strchr(hexDigits, ch) - hexDigits;
+        escapeVal += QtMiscUtils::fromHex(ch);
         ++i;
         goto StHexEscape;
     } else {
@@ -1202,7 +1203,7 @@ void QConfFileSettingsPrivate::set(const QString &key, const QVariant &value)
     confFile->addedKeys.insert(theKey, value);
 }
 
-bool QConfFileSettingsPrivate::get(const QString &key, QVariant *value) const
+std::optional<QVariant> QConfFileSettingsPrivate::get(const QString &key) const
 {
     QSettingsKey theKey(key, caseSensitivity);
     ParsedSettingsMap::const_iterator j;
@@ -1222,15 +1223,12 @@ bool QConfFileSettingsPrivate::get(const QString &key, QVariant *value) const
                      && !confFile->removedKeys.contains(theKey));
         }
 
-        if (found && value)
-            *value = *j;
-
         if (found)
-            return true;
+            return *j;
         if (!fallbacks)
             break;
     }
-    return false;
+    return std::nullopt;
 }
 
 QStringList QConfFileSettingsPrivate::children(const QString &prefix, ChildSpec spec) const
@@ -1343,6 +1341,15 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
     }
 
 #ifndef QT_BOOTSTRAPPED
+    QString lockFileName = confFile->name + QLatin1String(".lock");
+
+#    if defined(Q_OS_ANDROID) && defined(QSETTINGS_USE_QSTANDARDPATHS)
+    // On android and if it is a content URL put the lock file in a
+    // writable location to prevent permissions issues and invalid paths.
+    if (confFile->name.startsWith(QLatin1String("content:")))
+        lockFileName = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                + QFileInfo(lockFileName).fileName();
+#    endif
     /*
         Use a lockfile in order to protect us against other QSettings instances
         trying to write the same settings at the same time.
@@ -1350,7 +1357,7 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
         We only need to lock if we are actually writing as only concurrent writes are a problem.
         Concurrent read and write are not a problem because the writing operation is atomic.
     */
-    QLockFile lockFile(confFile->name + QLatin1String(".lock"));
+    QLockFile lockFile(lockFileName);
     if (!readOnly && !lockFile.lock() && atomicSyncOnly) {
         setStatus(QSettings::AccessError);
         return;
@@ -1428,6 +1435,11 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
 #if !defined(QT_BOOTSTRAPPED) && QT_CONFIG(temporaryfile)
         QSaveFile sf(confFile->name);
         sf.setDirectWriteFallback(!atomicSyncOnly);
+#    ifdef Q_OS_ANDROID
+        // QSaveFile requires direct write when using content scheme URL in Android
+        if (confFile->name.startsWith(QLatin1String("content:")))
+            sf.setDirectWriteFallback(true);
+#    endif
 #else
         QFile sf(confFile->name);
 #endif
@@ -2087,8 +2099,10 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
 
     \snippet settings/settings.cpp 15
 
-    Note that type information is not preserved when reading settings from INI
-    files; all values will be returned as QString.
+    Note that INI files lose the distinction between numeric data and the
+    strings used to encode them, so values written as numbers shall be read back
+    as QString. The numeric value can be recovered using \l QString::toInt(), \l
+    QString::toDouble() and related functions.
 
     The \l{tools/settingseditor}{Settings Editor} example lets you
     experiment with different settings location and with fallbacks
@@ -2371,9 +2385,10 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
                             On 32-bit Windows or from a 64-bit application on 64-bit Windows,
                             this works the same as specifying NativeFormat.
                             This enum value was added in Qt 5.7.
-    \value IniFormat        Store the settings in INI files. Note that type information
-                            is not preserved when reading settings from INI files;
-                            all values will be returned as QString.
+    \value IniFormat        Store the settings in INI files. Note that INI files
+                            lose the distinction between numeric data and the
+                            strings used to encode them, so values written as
+                            numbers shall be read back as QString.
 
     \value InvalidFormat    Special value returned by registerFormat().
     \omitvalue CustomFormat1
@@ -2440,7 +2455,7 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
     \section2 Compatibility with older Qt versions
 
     Please note that this behavior is different to how QSettings behaved
-    in versions of Qt prior to Qt 6. INI files written with Qt 5 or earlier aree
+    in versions of Qt prior to Qt 6. INI files written with Qt 5 or earlier are
     however fully readable by a Qt 6 based application (unless a ini codec
     different from utf8 had been set). But INI files written with Qt 6
     will only be readable by older Qt versions if you set the "iniCodec" to
@@ -2689,10 +2704,11 @@ QSettings::~QSettings()
 {
     Q_D(QSettings);
     if (d->pendingChanges) {
+        // Don't cause a failing flush() to std::terminate() the whole
+        // application - dtors are implicitly noexcept!
         QT_TRY {
             d->flush();
         } QT_CATCH(...) {
-            ; // ok. then don't flush but at least don't throw in the destructor
         }
     }
 }
@@ -3148,8 +3164,7 @@ void QSettings::setValue(const QString &key, const QVariant &value)
         qWarning("QSettings::setValue: Empty key passed");
         return;
     }
-    QString k = d->actualKey(key);
-    d->set(k, value);
+    d->set(d->actualKey(key), value);
     d->requestUpdate();
 }
 
@@ -3214,8 +3229,7 @@ void QSettings::remove(const QString &key)
 bool QSettings::contains(const QString &key) const
 {
     Q_D(const QSettings);
-    QString k = d->actualKey(key);
-    return d->get(k, nullptr);
+    return d->get(d->actualKey(key)) != std::nullopt;
 }
 
 /*!
@@ -3260,6 +3274,9 @@ bool QSettings::event(QEvent *event)
 #endif
 
 /*!
+    \fn QSettings::value(const QString &key) const
+    \fn QSettings::value(const QString &key, const QVariant &defaultValue) const
+
     Returns the value for setting \a key. If the setting doesn't
     exist, returns \a defaultValue.
 
@@ -3277,17 +3294,29 @@ bool QSettings::event(QEvent *event)
 
     \sa setValue(), contains(), remove()
 */
+QVariant QSettings::value(const QString &key) const
+{
+    Q_D(const QSettings);
+    return d->value(key, nullptr);
+}
+
 QVariant QSettings::value(const QString &key, const QVariant &defaultValue) const
 {
     Q_D(const QSettings);
+    return d->value(key, &defaultValue);
+}
+
+QVariant QSettingsPrivate::value(const QString &key, const QVariant *defaultValue) const
+{
     if (key.isEmpty()) {
         qWarning("QSettings::value: Empty key passed");
         return QVariant();
     }
-    QVariant result = defaultValue;
-    QString k = d->actualKey(key);
-    d->get(k, &result);
-    return result;
+    if (std::optional r = get(actualKey(key)))
+        return std::move(*r);
+    if (defaultValue)
+        return *defaultValue;
+    return QVariant();
 }
 
 /*!

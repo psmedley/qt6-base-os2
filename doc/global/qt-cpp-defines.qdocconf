@@ -1,14 +1,12 @@
 versionsym              = QT_VERSION_STR
 
-defines                 += Q_QDOC \
+defines                += Q_QDOC \
                           Q_CLANG_QDOC \
                           QT_.*_SUPPORT \
                           QT_.*_LIB \
                           QT_COMPAT \
                           QT_KEYPAD_NAVIGATION \
                           QT_NO_EGL \
-                          QT3_SUPPORT \
-                          Q_DEAD_CODE_FROM_QT4_.* \
                           Q_BYTE_ORDER \
                           QT_DEPRECATED \
                           QT_DEPRECATED_* \
@@ -21,7 +19,6 @@ defines                 += Q_QDOC \
 clangdefines            += Q_QDOC \
                            Q_CLANG_QDOC \
                            QT_COMPAT \
-                           QT3_SUPPORT \
                            QT_BUILD_CORE_LIB \
                            QT_BUILD_EGL_DEVICE_LIB \
                            QT_BUILD_LOCATION_LIB \
@@ -56,10 +53,7 @@ clangdefines            += Q_QDOC \
                            Q_COMPILER_VARIADIC_TEMPLATES \
                            Q_ATOMIC_INT16_IS_SUPPORTED \
                            Q_ATOMIC_INT64_IS_SUPPORTED \
-                           Q_ATOMIC_INT8_IS_SUPPORTED \
-                           Q_DEAD_CODE_FROM_QT4_MAC \
-                           Q_DEAD_CODE_FROM_QT4_WIN \
-                           Q_DEAD_CODE_FROM_QT4_X11
+                           Q_ATOMIC_INT8_IS_SUPPORTED
 
 # Q_COMPILER_REF_QUALIFIERS is not yet supported by all compilers
 
@@ -92,6 +86,7 @@ Cpp.ignoretokens        += \
                           Q_EXPORT_PLUGIN \
                           Q_EXPORT_PLUGIN2 \
                           Q_GADGET \
+                          Q_GADGET_EXPORT \
                           Q_GFX_INLINE \
                           Q_GUI_EXPORT \
                           Q_GUI_EXPORT_INLINE \
@@ -128,7 +123,6 @@ Cpp.ignoretokens        += \
                           Q_SVG_EXPORT \
                           Q_TESTLIB_EXPORT \
                           Q_TYPENAME \
-                          Q_WEAK_OVERLOAD \
                           Q_WIDGETS_EXPORT \
                           Q_WINEXTRAS_EXPORT \
                           Q_XML_EXPORT \
@@ -182,12 +176,13 @@ Cpp.ignoredirectives    += \
                           Q_CLASSINFO \
                           Q_DECLARE_INTERFACE \
                           Q_DECLARE_METATYPE \
+                          QT_DECL_METATYPE_EXTERN \
+                          QT_IMPL_METATYPE_EXTERN \
                           Q_DECLARE_OPERATORS_FOR_FLAGS \
                           Q_DECLARE_PRIVATE \
                           Q_DECLARE_PRIVATE_D \
                           Q_DECLARE_PUBLIC \
                           Q_DECLARE_SHARED \
-                          Q_DECLARE_SHARED_NOT_MOVABLE_UNTIL_QT6 \
                           Q_DECLARE_TR_FUNCTIONS \
                           Q_DECLARE_TYPEINFO \
                           Q_DECL_NOEXCEPT_EXPR \
@@ -212,7 +207,9 @@ Cpp.ignoredirectives    += \
                           QT_WARNING_DISABLE_INTEL \
                           QT_WARNING_DISABLE_MSVC \
                           Q_ATTRIBUTE_FORMAT_PRINTF \
-                          Q_MV_IOS
+                          Q_MV_IOS                  \
+                          QT6_ONLY                  \
+                          QT7_ONLY
 
 # Qt 6: Remove
 falsehoods              += \

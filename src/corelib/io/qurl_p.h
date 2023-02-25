@@ -65,9 +65,8 @@ extern Q_AUTOTEST_EXPORT qsizetype qt_urlRecode(QString &appendTo, QStringView u
 // in qurlidna.cpp
 enum AceLeadingDot { AllowLeadingDot, ForbidLeadingDot };
 enum AceOperation { ToAceOnly, NormalizeAce };
-extern QString qt_ACE_do(QStringView domain, AceOperation op, AceLeadingDot dot);
-extern Q_AUTOTEST_EXPORT bool qt_nameprep(QString *source, int from);
-extern Q_AUTOTEST_EXPORT bool qt_check_std3rules(QStringView in);
+extern QString qt_ACE_do(const QString &domain, AceOperation op, AceLeadingDot dot,
+                         QUrl::AceProcessingOptions options);
 extern Q_AUTOTEST_EXPORT void qt_punycodeEncoder(QStringView in, QString *output);
 extern Q_AUTOTEST_EXPORT QString qt_punycodeDecoder(const QString &pc);
 

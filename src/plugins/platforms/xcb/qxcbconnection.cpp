@@ -86,6 +86,7 @@ Q_LOGGING_CATEGORY(lcQpaXDnd, "qt.qpa.xdnd")
 
 QXcbConnection::QXcbConnection(QXcbNativeInterface *nativeInterface, bool canGrabServer, xcb_visualid_t defaultVisualId, const char *displayName)
     : QXcbBasicConnection(displayName)
+    , m_duringSystemMoveResize(false)
     , m_canGrabServer(canGrabServer)
     , m_defaultVisualId(defaultVisualId)
     , m_nativeInterface(nativeInterface)
@@ -95,12 +96,10 @@ QXcbConnection::QXcbConnection(QXcbNativeInterface *nativeInterface, bool canGra
 
     m_eventQueue = new QXcbEventQueue(this);
 
-    m_xdgCurrentDesktop = qgetenv("XDG_CURRENT_DESKTOP").toLower();
-
     if (hasXRandr())
         xrandrSelectEvents();
 
-    initializeScreens();
+    initializeScreens(false);
 
     if (hasXInput2()) {
         xi2SetupDevices();
@@ -594,6 +593,8 @@ void QXcbConnection::handleXcbEvent(xcb_generic_event_t *event)
     case XCB_BUTTON_RELEASE: {
         auto ev = reinterpret_cast<xcb_button_release_event_t *>(event);
         setTime(ev->time);
+        if (m_duringSystemMoveResize && ev->root != XCB_NONE)
+            abortSystemMoveResize(ev->root);
         m_keyboard->updateXKBStateFromCore(ev->state);
         m_buttonState = (m_buttonState & ~0x7) | translateMouseButtons(ev->state);
         setButtonState(translateMouseButton(ev->detail), false);
@@ -612,8 +613,14 @@ void QXcbConnection::handleXcbEvent(xcb_generic_event_t *event)
                     ev->event_x, ev->event_y, ev->detail, static_cast<unsigned int>(m_buttonState));
         HANDLE_PLATFORM_WINDOW_EVENT(xcb_motion_notify_event_t, event, handleMotionNotifyEvent);
     }
-    case XCB_CONFIGURE_NOTIFY:
+    case XCB_CONFIGURE_NOTIFY: {
+        if (isAtLeastXRandR15()) {
+            auto ev = reinterpret_cast<xcb_configure_notify_event_t *>(event);
+            if (ev->event == rootWindow())
+                initializeScreens(true);
+        }
         HANDLE_PLATFORM_WINDOW_EVENT(xcb_configure_notify_event_t, event, handleConfigureNotifyEvent);
+    }
     case XCB_MAP_NOTIFY:
         HANDLE_PLATFORM_WINDOW_EVENT(xcb_map_notify_event_t, event, handleMapNotifyEvent);
     case XCB_UNMAP_NOTIFY:
@@ -743,17 +750,20 @@ void QXcbConnection::handleXcbEvent(xcb_generic_event_t *event)
         for (QXcbVirtualDesktop *virtualDesktop : qAsConst(m_virtualDesktops))
             virtualDesktop->handleXFixesSelectionNotify(notify_event);
     } else if (isXRandrType(response_type, XCB_RANDR_NOTIFY)) {
-        updateScreens(reinterpret_cast<xcb_randr_notify_event_t *>(event));
+        if (!isAtLeastXRandR15())
+            updateScreens(reinterpret_cast<xcb_randr_notify_event_t *>(event));
     } else if (isXRandrType(response_type, XCB_RANDR_SCREEN_CHANGE_NOTIFY)) {
-        auto change_event = reinterpret_cast<xcb_randr_screen_change_notify_event_t *>(event);
-        if (auto virtualDesktop = virtualDesktopForRootWindow(change_event->root))
-            virtualDesktop->handleScreenChange(change_event);
+        if (!isAtLeastXRandR15()) {
+            auto change_event = reinterpret_cast<xcb_randr_screen_change_notify_event_t *>(event);
+            if (auto virtualDesktop = virtualDesktopForRootWindow(change_event->root))
+                virtualDesktop->handleScreenChange(change_event);
+        }
     } else if (isXkbType(response_type)) {
         auto xkb_event = reinterpret_cast<_xkb_event *>(event);
         if (xkb_event->any.deviceID == m_keyboard->coreDeviceId()) {
             switch (xkb_event->any.xkbType) {
                 // XkbNewKkdNotify and XkbMapNotify together capture all sorts of keymap
-                // updates (e.g. xmodmap, xkbcomp, setxkbmap), with minimal redundent recompilations.
+                // updates (e.g. xmodmap, xkbcomp, setxkbmap), with minimal redundant recompilations.
                 case XCB_XKB_STATE_NOTIFY:
                     m_keyboard->updateXKBState(&xkb_event->state_notify);
                     break;
@@ -763,7 +773,7 @@ void QXcbConnection::handleXcbEvent(xcb_generic_event_t *event)
                 case XCB_XKB_NEW_KEYBOARD_NOTIFY: {
                     xcb_xkb_new_keyboard_notify_event_t *ev = &xkb_event->new_keyboard_notify;
                     if (ev->changed & XCB_XKB_NKN_DETAIL_KEYCODES)
-                        m_keyboard->updateKeymap(ev);
+                        m_keyboard->updateKeymap();
                     break;
                 }
                 default:
@@ -805,6 +815,15 @@ void QXcbConnection::ungrabServer()
 {
     if (m_canGrabServer)
         xcb_ungrab_server(xcb_connection());
+}
+
+QString QXcbConnection::windowManagerName() const
+{
+    QXcbVirtualDesktop *pvd = primaryVirtualDesktop();
+    if (pvd)
+        return pvd->windowManagerName().toLower();
+
+    return QString();
 }
 
 xcb_timestamp_t QXcbConnection::getTimestamp()
@@ -849,7 +868,7 @@ xcb_timestamp_t QXcbConnection::getTimestamp()
     return timestamp;
 }
 
-xcb_window_t QXcbConnection::getSelectionOwner(xcb_atom_t atom) const
+xcb_window_t QXcbConnection::selectionOwner(xcb_atom_t atom) const
 {
     auto reply = Q_XCB_REPLY(xcb_get_selection_owner, xcb_connection(), atom);
     if (!reply) {
@@ -860,7 +879,7 @@ xcb_window_t QXcbConnection::getSelectionOwner(xcb_atom_t atom) const
     return reply->owner;
 }
 
-xcb_window_t QXcbConnection::getQtSelectionOwner()
+xcb_window_t QXcbConnection::qtSelectionOwner()
 {
     if (!m_qtSelectionOwner) {
         xcb_screen_t *xcbScreen = primaryVirtualDesktop()->screen();
@@ -1212,3 +1231,5 @@ void QXcbConnectionGrabber::release()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qxcbconnection.cpp"

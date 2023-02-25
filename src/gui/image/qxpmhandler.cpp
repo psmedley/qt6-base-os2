@@ -50,6 +50,7 @@
 #include <qvariant.h>
 
 #include <private/qcolor_p.h>
+#include <private/qduplicatetracker_p.h> // for easier std::pmr detection
 
 #include <algorithm>
 #include <array>
@@ -1116,18 +1117,25 @@ static bool write_xpm_image(const QImage &sourceImage, QIODevice *device, const 
     else
         image = sourceImage;
 
-    QMap<QRgb, int> colorMap;
+#ifdef __cpp_lib_memory_resource
+    char buffer[1024];
+    std::pmr::monotonic_buffer_resource res{&buffer, sizeof buffer};
+    std::pmr::map<QRgb, int> colorMap(&res);
+#else
+    std::map<QRgb, int> colorMap;
+#endif
 
-    int w = image.width(), h = image.height(), ncolors = 0;
-    int x, y;
+    const int w = image.width();
+    const int h = image.height();
+    int ncolors = 0;
 
     // build color table
-    for(y=0; y<h; y++) {
+    for (int y = 0; y < h; ++y) {
         const QRgb *yp = reinterpret_cast<const QRgb *>(image.constScanLine(y));
-        for(x=0; x<w; x++) {
-            QRgb color = *(yp + x);
-            if (!colorMap.contains(color))
-                colorMap.insert(color, ncolors++);
+        for (int x = 0; x < w; ++x) {
+            const auto [it, inserted] = colorMap.try_emplace(yp[x], ncolors);
+            if (inserted)
+                ++ncolors;
         }
     }
 
@@ -1151,27 +1159,21 @@ static bool write_xpm_image(const QImage &sourceImage, QIODevice *device, const 
       << '\"' << w << ' ' << h << ' ' << ncolors << ' ' << cpp << '\"';
 
     // write palette
-    QMap<QRgb, int>::Iterator c = colorMap.begin();
-    while (c != colorMap.end()) {
-        QRgb color = c.key();
+    for (const auto &[color, index] : colorMap) {
         const QString line = image.format() != QImage::Format_RGB32 && !qAlpha(color)
-            ? QString::asprintf("\"%s c None\"", xpm_color_name(cpp, *c))
-            : QString::asprintf("\"%s c #%02x%02x%02x\"", xpm_color_name(cpp, *c),
+            ? QString::asprintf("\"%s c None\"", xpm_color_name(cpp, index))
+            : QString::asprintf("\"%s c #%02x%02x%02x\"", xpm_color_name(cpp, index),
                                 qRed(color), qGreen(color), qBlue(color));
-        ++c;
         s << ',' << Qt::endl << line;
     }
 
     // write pixels, limit to 4 characters per pixel
-    QByteArray line;
-    for(y=0; y<h; y++) {
-        line.clear();
+    for (int y = 0; y < h; ++y) {
+        s << ',' << Qt::endl << '\"';
         const QRgb *yp = reinterpret_cast<const QRgb *>(image.constScanLine(y));
-        for(x=0; x<w; x++) {
-            int color = (int)(*(yp + x));
-            line.append(xpm_color_name(cpp, colorMap[color]));
-        }
-        s << ',' << Qt::endl << '\"' << line << '\"';
+        for (int x = 0; x < w; ++x)
+            s << xpm_color_name(cpp, colorMap[yp[x]]);
+        s << '\"';
     }
     s << "};" << Qt::endl;
     return (s.status() == QTextStream::Ok);

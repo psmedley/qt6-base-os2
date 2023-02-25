@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -52,12 +52,14 @@
 // We mean it.
 //
 
-#include <QtCore/private/qglobal_p.h>
 #include "QtCore/qlibrary.h"
+
+#include "QtCore/private/qfactoryloader_p.h"
+#include "QtCore/qloggingcategory.h"
 #include "QtCore/qmutex.h"
+#include "QtCore/qplugin.h"
 #include "QtCore/qpointer.h"
 #include "QtCore/qstringlist.h"
-#include "QtCore/qplugin.h"
 #ifdef Q_OS_WIN
 #  include "QtCore/qt_windows.h"
 #endif
@@ -66,7 +68,13 @@ QT_REQUIRE_CONFIG(library);
 
 QT_BEGIN_NAMESPACE
 
-bool qt_debug_component();
+Q_DECLARE_LOGGING_CATEGORY(qt_lcDebugPlugins)
+
+struct QLibraryScanResult
+{
+    qsizetype pos;
+    qsizetype length;
+};
 
 class QLibraryStore;
 class QLibraryPrivate
@@ -104,7 +112,7 @@ public:
     // the mutex protects the fields below
     QMutex mutex;
     QPointer<QObject> inst;         // used by QFactoryLoader
-    QJsonObject metaData;
+    QPluginParsedMetaData metaData;
     QString errorString;
     QString qualifiedFileName;
 

@@ -70,8 +70,7 @@ public:
     QColorSpace colorSpace() const override { return m_colorSpace; }
     qreal devicePixelRatio() const override { return m_devicePixelRatio; }
     QSizeF physicalSize() const override { return m_physicalSize; }
-    QDpi logicalDpi() const override { return m_logicalDpi; }
-    QDpi logicalBaseDpi() const override { return m_logicalDpi; }
+    QDpi logicalBaseDpi() const override { return QDpi(72, 72); }
     qreal refreshRate() const override { return m_refreshRate; }
     QString name() const override { return m_name; }
     QPlatformCursor *cursor() const override { return m_cursor; }
@@ -119,7 +118,6 @@ private:
 
     QRect m_geometry;
     QRect m_availableGeometry;
-    QDpi m_logicalDpi;
     qreal m_refreshRate = 0;
     int m_depth = 0;
     QString m_name;
@@ -145,6 +143,10 @@ QDebug operator<<(QDebug debug, const QCocoaScreen *screen);
 QT_END_NAMESPACE
 
 #if defined(__OBJC__)
+
+// @compatibility_alias doesn't work with categories or their methods
+#define qt_displayId QT_MANGLE_NAMESPACE(qt_displayId)
+
 @interface NSScreen (QtExtras)
 @property(readonly) CGDirectDisplayID qt_displayId;
 @end

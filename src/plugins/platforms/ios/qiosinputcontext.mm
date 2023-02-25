@@ -675,16 +675,23 @@ void QIOSInputContext::update(Qt::InputMethodQueries updatedProperties)
     }
 
     // Mask for properties that we are interested in and see if any of them changed
-    updatedProperties &= (Qt::ImEnabled | Qt::ImHints | Qt::ImQueryInput | Qt::ImEnterKeyType | Qt::ImPlatformData);
+    updatedProperties &= (Qt::ImEnabled | Qt::ImHints | Qt::ImQueryInput | Qt::ImEnterKeyType | Qt::ImPlatformData | Qt::ImReadOnly);
 
     // Perform update first, so we can trust the value of inputMethodAccepted()
     Qt::InputMethodQueries changedProperties = m_imeState.update(updatedProperties);
 
-    if (inputMethodAccepted()) {
+    const bool inputIsReadOnly = m_imeState.currentState.value(Qt::ImReadOnly).toBool();
+
+    if (inputMethodAccepted() || inputIsReadOnly) {
         if (!m_textResponder || [m_textResponder needsKeyboardReconfigure:changedProperties]) {
-            qImDebug("creating new text responder");
             [m_textResponder autorelease];
-            m_textResponder = [[QIOSTextInputResponder alloc] initWithInputContext:this];
+            if (inputIsReadOnly) {
+                qImDebug("creating new read-only text responder");
+                m_textResponder = [[QIOSTextResponder alloc] initWithInputContext:this];
+            } else {
+                qImDebug("creating new read/write text responder");
+                m_textResponder = [[QIOSTextInputResponder alloc] initWithInputContext:this];
+            }
         } else {
             qImDebug("no need to reconfigure keyboard, just notifying input delegate");
             [m_textResponder notifyInputDelegate:changedProperties];
@@ -728,12 +735,33 @@ bool QIOSInputContext::inputMethodAccepted() const
 */
 void QIOSInputContext::reset()
 {
-    qImDebug("updating Qt::ImQueryAll and unmarking text");
+    qImDebug("releasing text responder");
+
+    // UIKit will sometimes, for unknown reasons, unset the input delegate on the
+    // current text responder. This seems to happen as a result of us calling
+    // [self.inputDelegate textDidChange:self] from [m_textResponder reset].
+    // But it won't be set to nil directly, only after a character is typed on
+    // the input panel after the reset. This strange behavior seems to be related
+    // to us overriding [QUIView setInteraction] to ignore UITextInteraction. If we
+    // didn't do that, the delegate would be kept. But not overriding that function
+    // has its own share of issues, so it seems better to keep that way for now.
+    // Instead, we choose to recreate the text responder as a brute-force solution
+    // until we have better knowledge of what is going on (or implement the new
+    // UITextInteraction protocol).
+    const auto oldResponder = m_textResponder;
+    [m_textResponder reset];
+    [m_textResponder autorelease];
+    m_textResponder = nullptr;
 
     update(Qt::ImQueryAll);
 
-    [m_textResponder setMarkedText:@"" selectedRange:NSMakeRange(0, 0)];
-    [m_textResponder notifyInputDelegate:Qt::ImQueryInput];
+    // If update() didn't end up creating a new text responder, oldResponder will still be
+    // the first responder. In that case we need to resign it, so that the input panel hides.
+    // (the input panel will apparently not hide if the first responder is only released).
+    if ([oldResponder isFirstResponder]) {
+        qImDebug("IM not enabled, resigning autoreleased text responder as first responder");
+        [oldResponder resignFirstResponder];
+    }
 }
 
 /*!
@@ -747,9 +775,7 @@ void QIOSInputContext::reset()
 void QIOSInputContext::commit()
 {
     qImDebug("unmarking text");
-
-    [m_textResponder unmarkText];
-    [m_textResponder notifyInputDelegate:Qt::ImSurroundingText];
+    [m_textResponder commit];
 }
 
 QLocale QIOSInputContext::locale() const

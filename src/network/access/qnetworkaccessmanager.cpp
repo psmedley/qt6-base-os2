@@ -80,6 +80,7 @@
 
 #include <QHostInfo>
 
+#include "QtCore/qapplicationstatic.h"
 #include <QtCore/private/qfactoryloader_p.h>
 
 #if defined(Q_OS_MACOS)
@@ -99,15 +100,15 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_GLOBAL_STATIC(QNetworkAccessFileBackendFactory, fileBackend)
+Q_APPLICATION_STATIC(QNetworkAccessFileBackendFactory, fileBackend)
 
 #ifdef QT_BUILD_INTERNAL
 Q_GLOBAL_STATIC(QNetworkAccessDebugPipeBackendFactory, debugpipeBackend)
 #endif
 
-Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
-                          (QNetworkAccessBackendFactory_iid,
-                           QLatin1String("/networkaccess")))
+Q_APPLICATION_STATIC(QFactoryLoader, loader, QNetworkAccessBackendFactory_iid,
+                     QLatin1String("/networkaccess"))
+
 #if defined(Q_OS_MACOS)
 bool getProxyAuth(const QString& proxyHostname, const QString &scheme, QString& username, QString& password)
 {
@@ -1221,12 +1222,16 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
 #endif
 
 #if QT_CONFIG(http)
-    // Since Qt 5 we use the new QNetworkReplyHttpImpl
-    if (scheme == QLatin1String("http") || scheme == QLatin1String("preconnect-http")
+    constexpr char16_t httpSchemes[][17] = {
+        u"http",
+        u"preconnect-http",
 #ifndef QT_NO_SSL
-        || scheme == QLatin1String("https") || scheme == QLatin1String("preconnect-https")
+        u"https",
+        u"preconnect-https",
 #endif
-        ) {
+    };
+    // Since Qt 5 we use the new QNetworkReplyHttpImpl
+    if (std::find(std::begin(httpSchemes), std::end(httpSchemes), scheme) != std::end(httpSchemes)) {
 #ifndef QT_NO_SSL
         if (isStrictTransportSecurityEnabled() && d->stsCache.isKnownHost(request.url())) {
             QUrl stsUrl(request.url());

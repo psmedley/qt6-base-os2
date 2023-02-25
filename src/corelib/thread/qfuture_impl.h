@@ -66,7 +66,19 @@ template<class T>
 class QPromise;
 
 namespace QtFuture {
+
 enum class Launch { Sync, Async, Inherit };
+
+template<class T>
+struct WhenAnyResult
+{
+    qsizetype index = -1;
+    QFuture<T> future;
+};
+
+// Deduction guide
+template<class T>
+WhenAnyResult(qsizetype, const QFuture<T> &) -> WhenAnyResult<T>;
 }
 
 namespace QtPrivate {
@@ -267,6 +279,40 @@ template<class Class, class Callable>
 using EnableIfInvocable = std::enable_if_t<
         QtPrivate::ArgResolver<Callable>::template CanInvokeWithArgs<Class, Callable>>;
 
+template<class T>
+inline constexpr bool isQFutureV = false;
+
+template<class T>
+inline constexpr bool isQFutureV<QFuture<T>> = true;
+
+template<class T>
+using isQFuture = std::bool_constant<isQFutureV<T>>;
+
+template<class T>
+struct Future
+{
+};
+
+template<class T>
+struct Future<QFuture<T>>
+{
+    using type = T;
+};
+
+template<class... Args>
+using NotEmpty = std::bool_constant<(sizeof...(Args) > 0)>;
+
+template<class Sequence>
+using IsRandomAccessible =
+        std::is_convertible<typename std::iterator_traits<std::decay_t<decltype(
+                                    std::begin(std::declval<Sequence>()))>>::iterator_category,
+                            std::random_access_iterator_tag>;
+
+template<class Iterator>
+using IsForwardIterable =
+        std::is_convertible<typename std::iterator_traits<Iterator>::iterator_category,
+                            std::forward_iterator_tag>;
+
 template<typename Function, typename ResultType, typename ParentResultType>
 class Continuation
 {
@@ -449,7 +495,7 @@ bool Continuation<Function, ResultType, ParentResultType>::execute()
 
     if (parentFuture.d.isChainCanceled()) {
 #ifndef QT_NO_EXCEPTIONS
-        if (parentFuture.d.exceptionStore().hasException()) {
+        if (parentFuture.d.hasException()) {
             // If the continuation doesn't take a QFuture argument, propagate the exception
             // to the caller, by reporting it. If the continuation takes a QFuture argument,
             // the user may want to catch the exception inside the continuation, to not
@@ -702,7 +748,7 @@ void FailureHandler<Function, ResultType>::run()
 
     promise.start();
 
-    if (parentFuture.d.exceptionStore().hasException()) {
+    if (parentFuture.d.hasException()) {
         using ArgType = typename QtPrivate::ArgResolver<Function>::First;
         if constexpr (std::is_void_v<ArgType>) {
             handleAllExceptions();
@@ -720,7 +766,8 @@ template<class ArgType>
 void FailureHandler<Function, ResultType>::handleException()
 {
     try {
-        parentFuture.d.exceptionStore().throwPossibleException();
+        Q_ASSERT(parentFuture.d.hasException());
+        parentFuture.d.exceptionStore().rethrowException();
     } catch (const ArgType &e) {
         try {
             // Handle exceptions matching with the handler's argument type
@@ -742,7 +789,8 @@ template<class Function, class ResultType>
 void FailureHandler<Function, ResultType>::handleAllExceptions()
 {
     try {
-        parentFuture.d.exceptionStore().throwPossibleException();
+        Q_ASSERT(parentFuture.d.hasException());
+        parentFuture.d.exceptionStore().rethrowException();
     } catch (...) {
         try {
             QtPrivate::fulfillPromise(promise, std::forward<Function>(handler));
@@ -798,7 +846,7 @@ public:
 
         if (parentFuture.isCanceled()) {
 #ifndef QT_NO_EXCEPTIONS
-            if (parentFuture.d.exceptionStore().hasException()) {
+            if (parentFuture.d.hasException()) {
                 // Propagate the exception to the result future
                 promise.setException(parentFuture.d.exceptionStore().exception());
             } else {
@@ -832,6 +880,11 @@ static QFuture<ArgsType<Signal>> connect(Sender *sender, Signal signal)
     using ArgsType = ArgsType<Signal>;
     QFutureInterface<ArgsType> promise;
     promise.reportStarted();
+    if (!sender) {
+        promise.reportCanceled();
+        promise.reportFinished();
+        return promise.future();
+    }
 
     using Connections = std::pair<QMetaObject::Connection, QMetaObject::Connection>;
     auto connections = std::make_shared<Connections>();
@@ -860,6 +913,12 @@ static QFuture<ArgsType<Signal>> connect(Sender *sender, Signal signal)
                                                   promise.reportResult(value);
                                                   promise.reportFinished();
                                               });
+    }
+
+    if (!connections->first) {
+        promise.reportCanceled();
+        promise.reportFinished();
+        return promise.future();
     }
 
     connections->second =
@@ -936,5 +995,148 @@ static QFuture<T> makeExceptionalFuture(const QException &exception)
 #endif // QT_NO_EXCEPTIONS
 
 } // namespace QtFuture
+
+namespace QtPrivate {
+
+template<typename ResultFutures>
+struct WhenAllContext
+{
+    using ValueType = typename ResultFutures::value_type;
+
+    WhenAllContext(qsizetype size) : count(size) {}
+
+    template<typename T = ValueType>
+    void checkForCompletion(qsizetype index, T &&future)
+    {
+        futures[index] = std::forward<T>(future);
+        Q_ASSERT(count > 0);
+        if (--count <= 0) {
+            promise.addResult(futures);
+            promise.finish();
+        }
+    }
+
+    QAtomicInteger<qsizetype> count;
+    QPromise<ResultFutures> promise;
+    ResultFutures futures;
+};
+
+template<typename ResultType>
+struct WhenAnyContext
+{
+    using ValueType = ResultType;
+
+    template<typename T = ResultType, typename = EnableForNonVoid<T>>
+    void checkForCompletion(qsizetype, T &&result)
+    {
+        if (!ready.fetchAndStoreRelaxed(true)) {
+            promise.addResult(std::forward<T>(result));
+            promise.finish();
+        }
+    }
+
+    QAtomicInt ready = false;
+    QPromise<ResultType> promise;
+};
+
+template<qsizetype Index, typename ContextType, typename... Ts>
+void addCompletionHandlersImpl(const QSharedPointer<ContextType> &context,
+                               const std::tuple<Ts...> &t)
+{
+    auto future = std::get<Index>(t);
+    using ResultType = typename ContextType::ValueType;
+    future.then([context](const std::tuple_element_t<Index, std::tuple<Ts...>> &f) {
+        context->checkForCompletion(Index, ResultType { std::in_place_index<Index>, f });
+    }).onCanceled([context, future]() {
+        context->checkForCompletion(Index, ResultType { std::in_place_index<Index>, future });
+    });
+
+    if constexpr (Index != 0)
+        addCompletionHandlersImpl<Index - 1, ContextType, Ts...>(context, t);
+}
+
+template<typename ContextType, typename... Ts>
+void addCompletionHandlers(const QSharedPointer<ContextType> &context, const std::tuple<Ts...> &t)
+{
+    constexpr qsizetype size = std::tuple_size<std::tuple<Ts...>>::value;
+    addCompletionHandlersImpl<size - 1, ContextType, Ts...>(context, t);
+}
+
+template<typename OutputSequence, typename InputIt, typename ValueType>
+QFuture<OutputSequence> whenAllImpl(InputIt first, InputIt last)
+{
+    const qsizetype size = std::distance(first, last);
+    if (size == 0)
+        return QtFuture::makeReadyFuture(OutputSequence());
+
+    auto context = QSharedPointer<QtPrivate::WhenAllContext<OutputSequence>>::create(size);
+    context->futures.resize(size);
+    context->promise.start();
+
+    qsizetype idx = 0;
+    for (auto it = first; it != last; ++it, ++idx) {
+        it->then([context, idx](const ValueType &f) {
+            context->checkForCompletion(idx, f);
+        }).onCanceled([context, idx, f = *it] {
+            context->checkForCompletion(idx, f);
+        });
+    }
+    return context->promise.future();
+}
+
+template<typename OutputSequence, typename... Futures>
+QFuture<OutputSequence> whenAllImpl(Futures &&... futures)
+{
+    constexpr qsizetype size = sizeof...(Futures);
+    auto context = QSharedPointer<QtPrivate::WhenAllContext<OutputSequence>>::create(size);
+    context->futures.resize(size);
+    context->promise.start();
+
+    QtPrivate::addCompletionHandlers(context, std::make_tuple(std::forward<Futures>(futures)...));
+
+    return context->promise.future();
+}
+
+template<typename InputIt, typename ValueType>
+QFuture<QtFuture::WhenAnyResult<typename Future<ValueType>::type>> whenAnyImpl(InputIt first,
+                                                                               InputIt last)
+{
+    using PackagedType = typename Future<ValueType>::type;
+    using ResultType = QtFuture::WhenAnyResult<PackagedType>;
+
+    const qsizetype size = std::distance(first, last);
+    if (size == 0) {
+        return QtFuture::makeReadyFuture(
+                QtFuture::WhenAnyResult { qsizetype(-1), QFuture<PackagedType>() });
+    }
+
+    auto context = QSharedPointer<QtPrivate::WhenAnyContext<ResultType>>::create();
+    context->promise.start();
+
+    qsizetype idx = 0;
+    for (auto it = first; it != last; ++it, ++idx) {
+        it->then([context, idx](const ValueType &f) {
+            context->checkForCompletion(idx, QtFuture::WhenAnyResult { idx, f });
+        }).onCanceled([context, idx, f = *it] {
+            context->checkForCompletion(idx, QtFuture::WhenAnyResult { idx, f });
+        });
+    }
+    return context->promise.future();
+}
+
+template<typename... Futures>
+QFuture<std::variant<std::decay_t<Futures>...>> whenAnyImpl(Futures &&... futures)
+{
+    using ResultType = std::variant<std::decay_t<Futures>...>;
+
+    auto context = QSharedPointer<QtPrivate::WhenAnyContext<ResultType>>::create();
+    context->promise.start();
+
+    QtPrivate::addCompletionHandlers(context, std::make_tuple(std::forward<Futures>(futures)...));
+
+    return context->promise.future();
+}
+
+} // namespace QtPrivate
 
 QT_END_NAMESPACE
