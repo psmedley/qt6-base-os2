@@ -406,7 +406,7 @@ QList<QSslCertificate> systemCaCertificates()
         const QList<QByteArray> directories = QSslSocketPrivate::unixRootCertDirectories();
         QSet<QString> certFiles = {
 #ifdef Q_OS_OS2
-            QStringLiteral(/@unixroot/etc/pki/tls/certs/ca-bundle.crt"), // OS/2
+            QStringLiteral("/@unixroot/etc/pki/tls/certs/ca-bundle.crt"), // OS/2
 #else
             QStringLiteral("/etc/pki/tls/certs/ca-bundle.crt"), // Fedora, Mandriva
             QStringLiteral("/usr/local/share/certs/ca-root-nss.crt") // FreeBSD's ca_root_nss

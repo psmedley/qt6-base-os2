@@ -330,7 +330,7 @@ void tst_QPluginLoader::errorString()
 #endif
 
     static constexpr std::initializer_list<const char *> validplugins = {
-        THE_PLUGIN,
+        THEPLUGIN,
 #if defined(Q_OF_ELF) && QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
         "theoldplugin"
 #endif
@@ -947,7 +947,7 @@ void tst_QPluginLoader::relativePath()
     const QString binDir = QFINDTESTDATA("bin");
     QVERIFY(!binDir.isEmpty());
     QCoreApplication::addLibraryPath(binDir);
-    QPluginLoader loader(THEPLUGIN SUFFIX);
+    const QString pluginName(THEPLUGIN SUFFIX);
 #endif
     QPluginLoader loader(pluginName);
     loader.load(); // not recommended, instance() should do the job.

@@ -253,7 +253,7 @@ protected:
 
     QAbstractFileEngine::FileFlags getPermissions(QAbstractFileEngine::FileFlags type) const;
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
     bool nativeOpenImpl(QIODevice::OpenMode openMode, mode_t mode);
 #endif
 };

@@ -112,7 +112,7 @@ inline bool QFileDevicePrivate::ensureFlushed() const
     return true;
 }
 
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 namespace QtPrivate {
 
 constexpr mode_t toMode_t(QFileDevice::Permissions permissions)

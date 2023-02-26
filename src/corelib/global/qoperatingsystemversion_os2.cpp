@@ -45,10 +45,10 @@
 
 QT_BEGIN_NAMESPACE
 
-QOperatingSystemVersion QOperatingSystemVersion::current()
+QOperatingSystemVersionBase QOperatingSystemVersionBase::current()
 {
     // TODO: use v.m_micro to differentiate between WSeB/eCS/ArcaOS releases?
-    return QOperatingSystemVersion(currentType(), _osmajor, _osminor);
+    return QOperatingSystemVersionBase(currentType(), _osmajor, _osminor);
 }
 
 QT_END_NAMESPACE

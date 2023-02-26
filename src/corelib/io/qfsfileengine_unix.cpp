@@ -706,7 +706,7 @@ bool QFSFileEnginePrivate::unmap(uchar *ptr)
         return false;
     }
 
-#ifdef Q_OS_OS2x
+#ifdef Q_OS_OS2
     uchar *start = ptr - maps.value(ptr).first;
     size_t len = maps.value(ptr).second;
 #else
@@ -717,7 +717,7 @@ bool QFSFileEnginePrivate::unmap(uchar *ptr)
         q->setError(QFile::UnspecifiedError, qt_error_string(errno));
         return false;
     }
-#ifdef Q_OS_OS2x
+#ifdef Q_OS_OS2
     maps.take(ptr);
 #else
     maps.erase(it);

@@ -70,6 +70,7 @@ static const struct {
 __declspec(allocate(".qtmetadata"))
 #  elif defined(__APPLE__)
 __attribute__ ((section ("__TEXT,qtmetadata"), used))
+#  elif defined(__OS2__)
 #  else
 __attribute__ ((section(".qtmetadata"), used))
 #  endif

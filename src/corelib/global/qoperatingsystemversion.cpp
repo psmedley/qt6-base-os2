@@ -39,7 +39,7 @@
 
 #include "qoperatingsystemversion.h"
 
-#if !defined(Q_OS_DARWIN) && !defined(Q_OS_WIN)
+#if !defined(Q_OS_DARWIN) && !defined(Q_OS_WIN) && !defined(Q_OS_OS2)
 #include "qoperatingsystemversion_p.h"
 #endif
 

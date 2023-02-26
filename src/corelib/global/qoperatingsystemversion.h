@@ -265,7 +265,7 @@ public:
 
     constexpr int segmentCount() const
     { return QOperatingSystemVersionBase::segmentCount(); }
- 
+
     constexpr OSType type() const { return OSType(QOperatingSystemVersionBase::type()); }
 
     bool isAnyOfType(std::initializer_list<OSType> types) const;
@@ -273,12 +273,13 @@ public:
 
 private:
     QOperatingSystemVersion() = default;
+
 #if QT_CORE_REMOVED_SINCE(6, 3)
     // ### Qt 7: Remove. It's only here for backwards compat with previous inline calls.
     [[maybe_unused]] static int compare(const QOperatingSystemVersion &v1,
                                         const QOperatingSystemVersion &v2);
 #endif
-;
+};
 Q_DECLARE_TYPEINFO(QOperatingSystemVersion, Q_PRIMITIVE_TYPE);
 
 #ifndef QT_NO_DEBUG_STREAM

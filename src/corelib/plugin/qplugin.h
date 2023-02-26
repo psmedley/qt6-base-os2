@@ -262,9 +262,8 @@ public:
 #  define QT_MOC_EXPORT_PLUGIN(PLUGINCLASS, PLUGINCLASSNAME) \
     static QPluginMetaData qt_plugin_query_metadata_##PLUGINCLASSNAME() \
         { return { qt_pluginMetaData_##PLUGINCLASSNAME, sizeof qt_pluginMetaData_##PLUGINCLASSNAME }; } \
-
     QT_MOC_EXPORT_PLUGIN_COMMON(PLUGINCLASS, PLUGINCLASSNAME)
- 
+
 #  define QT_MOC_EXPORT_PLUGIN_V2(PLUGINCLASS, MANGLEDNAME, MD)                                 \
     static QT_PREPEND_NAMESPACE(QPluginMetaData) qt_plugin_query_metadata_##MANGLEDNAME()       \
     { static constexpr QPluginMetaDataV2<MD> md{}; return md; }                                 \
@@ -287,12 +286,11 @@ public:
             QPluginMetaData Q_STANDARD_CALL qt_plugin_query_metadata() \
             { return { qt_pluginMetaData_##PLUGINCLASSNAME, sizeof qt_pluginMetaData_##PLUGINCLASSNAME }; } \
             QT_MOC_EXPORT_PLUGIN_COMMON(PLUGINCLASS, PLUGINCLASSNAME)
- 
+
 #  define QT_MOC_EXPORT_PLUGIN_V2(PLUGINCLASS, MANGLEDNAME, MD)                                 \
-    extern "C" Q_DECL_EXPORT QT_PREPEND_NAMESPACE(QPluginMetaData) qt_plugin_query_metadata_v2()\
+    extern "C" Q_DECL_EXPORT QT_PREPEND_NAMESPACE(QPluginMetaData) Q_STANDARD_CALL qt_plugin_query_metadata_v2()\
     { static constexpr QT_PLUGIN_METADATAV2_SECTION QPluginMetaDataV2<MD> md{}; return md; }    \
     QT_MOC_EXPORT_PLUGIN_COMMON(PLUGINCLASS, MANGLEDNAME)
-
 #endif
 
 #define Q_EXPORT_PLUGIN(PLUGIN) \

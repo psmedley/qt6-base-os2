@@ -350,7 +350,6 @@ public:
 #else
     std::function<void(void)> childProcessModifier;
 #endif
-    QProcessEnvironment environment;
     QProcessEnvironment environment = QProcessEnvironment::InheritFromParent;
 
 #ifdef Q_OS_OS2
