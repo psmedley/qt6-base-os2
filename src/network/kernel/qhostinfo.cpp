@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 //#define QHOSTINFO_DEBUG
 
@@ -74,7 +38,11 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 //#define QHOSTINFO_DEBUG
+
+QT_IMPL_METATYPE_EXTERN(QHostInfo)
 
 namespace {
 struct ToBeLookedUpEquals {
@@ -544,7 +512,7 @@ QHostInfo QHostInfoAgent::lookup(const QString &hostName)
         QString tmp;
         QList<QHostAddress> addresses = results.addresses();
         for (int i = 0; i < addresses.count(); ++i) {
-            if (i != 0) tmp += QLatin1String(", ");
+            if (i != 0) tmp += ", "_L1;
             tmp += addresses.at(i).toString();
         }
         qDebug("QHostInfoAgent::fromName(): found %i entries for \"%s\": {%s}",
@@ -976,7 +944,7 @@ void QHostInfoLookupManager::rescheduleWithMutexHeld()
 
     if (!finishedLookups.isEmpty()) {
         // remove ID from aborted if it is in there
-        for (int i = 0; i < finishedLookups.length(); i++) {
+        for (int i = 0; i < finishedLookups.size(); i++) {
            abortedLookups.removeAll(finishedLookups.at(i)->id);
         }
 
@@ -1044,7 +1012,7 @@ void QHostInfoLookupManager::abortLookup(int id)
 
 #if QT_CONFIG(thread)
     // is postponed? delete and return
-    for (int i = 0; i < postponedLookups.length(); i++) {
+    for (int i = 0; i < postponedLookups.size(); i++) {
         if (postponedLookups.at(i)->id == id) {
             delete postponedLookups.takeAt(i);
             return;
@@ -1053,7 +1021,7 @@ void QHostInfoLookupManager::abortLookup(int id)
 #endif
 
     // is scheduled? delete and return
-    for (int i = 0; i < scheduledLookups.length(); i++) {
+    for (int i = 0; i < scheduledLookups.size(); i++) {
         if (scheduledLookups.at(i)->id == id) {
             delete scheduledLookups.takeAt(i);
             return;
@@ -1188,3 +1156,5 @@ void QHostInfoCache::clear()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qhostinfo_p.cpp"

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <private/qapplication_p.h>
 #include <private/qdatetimeedit_p.h>
@@ -51,6 +15,7 @@
 #include <qlayout.h>
 #include <qset.h>
 #include <qstyle.h>
+#include <qstylepainter.h>
 #if QT_CONFIG(timezone)
 #include <QTimeZone>
 #endif
@@ -67,6 +32,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // --- QDateTimeEdit ---
 
@@ -1064,9 +1031,9 @@ QSize QDateTimeEdit::sizeHint() const
         int h = d->edit->sizeHint().height();
         int w = 0;
         QString s;
-        s = d->textFromValue(d->minimum) + QLatin1Char(' ');
+        s = d->textFromValue(d->minimum) + u' ';
         w = qMax<int>(w, fm.horizontalAdvance(s));
-        s = d->textFromValue(d->maximum) + QLatin1Char(' ');
+        s = d->textFromValue(d->maximum) + u' ';
         w = qMax<int>(w, fm.horizontalAdvance(s));
         if (d->specialValueText.size()) {
             s = d->specialValueText;
@@ -1630,7 +1597,7 @@ QTimeEdit::QTimeEdit(QWidget *parent)
 */
 
 QTimeEdit::QTimeEdit(QTime time, QWidget *parent)
-    : QDateTimeEdit(time, QMetaType::QTime, parent)
+    : QDateTimeEdit(time.isValid() ? time : QDATETIMEEDIT_TIME_MIN, QMetaType::QTime, parent)
 {
     connect(this, &QTimeEdit::timeChanged, this, &QTimeEdit::userTimeChanged);
 }
@@ -1700,7 +1667,7 @@ QDateEdit::QDateEdit(QWidget *parent)
 */
 
 QDateEdit::QDateEdit(QDate date, QWidget *parent)
-    : QDateTimeEdit(date, QMetaType::QDate, parent)
+    : QDateTimeEdit(date.isValid() ? date : QDATETIMEEDIT_DATE_INITIAL, QMetaType::QDate, parent)
 {
     connect(this, &QDateEdit::dateChanged, this, &QDateEdit::userDateChanged);
 }
@@ -1863,7 +1830,7 @@ int QDateTimeEditPrivate::sectionAt(int pos) const
     const int textSize = text.size();
     if (textSize - pos < separators.last().size() + 1) {
         if (separators.last().size() == 0) {
-            return sectionNodes.count() - 1;
+            return sectionNodes.size() - 1;
         }
         return (pos == textSize ? LastSectionIndex : NoSectionIndex);
     }
@@ -1949,7 +1916,7 @@ int QDateTimeEditPrivate::nextPrevSection(int current, bool forward) const
 
 void QDateTimeEditPrivate::clearSection(int index)
 {
-    const QLatin1Char space(' ');
+    const auto space = u' ';
     int cursorPos = edit->cursorPosition();
     const QSignalBlocker blocker(edit);
     QString t = edit->text();
@@ -2441,8 +2408,8 @@ void QDateTimeEdit::paintEvent(QPaintEvent *event)
         optCombo.state &= ~QStyle::State_Enabled;
     }
 
-    QPainter p(this);
-    style()->drawComplexControl(QStyle::CC_ComboBox, &optCombo, &p, this);
+    QStylePainter p(this);
+    p.drawComplexControl(QStyle::CC_ComboBox, optCombo);
 }
 
 int QDateTimeEditPrivate::absoluteIndex(QDateTimeEdit::Section s, int index) const
@@ -2513,25 +2480,25 @@ void QDateTimeEditPrivate::init(const QVariant &var)
     Q_Q(QDateTimeEdit);
     switch (var.userType()) {
     case QMetaType::QDate:
-        value = var.toDate().startOfDay();
+        value = var.toDate().startOfDay(spec);
         updateTimeSpec();
         q->setDisplayFormat(defaultDateFormat);
         if (sectionNodes.isEmpty()) // ### safeguard for broken locale
-            q->setDisplayFormat(QLatin1String("dd/MM/yyyy"));
+            q->setDisplayFormat("dd/MM/yyyy"_L1);
         break;
     case QMetaType::QDateTime:
         value = var;
         updateTimeSpec();
         q->setDisplayFormat(defaultDateTimeFormat);
         if (sectionNodes.isEmpty()) // ### safeguard for broken locale
-            q->setDisplayFormat(QLatin1String("dd/MM/yyyy hh:mm:ss"));
+            q->setDisplayFormat("dd/MM/yyyy hh:mm:ss"_L1);
         break;
     case QMetaType::QTime:
-        value = QDateTime(QDATETIMEEDIT_DATE_INITIAL, var.toTime());
+        value = QDateTime(QDATETIMEEDIT_DATE_INITIAL, var.toTime(), spec);
         updateTimeSpec();
         q->setDisplayFormat(defaultTimeFormat);
         if (sectionNodes.isEmpty()) // ### safeguard for broken locale
-            q->setDisplayFormat(QLatin1String("hh:mm:ss"));
+            q->setDisplayFormat("hh:mm:ss"_L1);
         break;
     default:
         Q_ASSERT_X(0, "QDateTimeEditPrivate::init", "Internal error");
@@ -2635,7 +2602,7 @@ void QDateTimeEditPrivate::initCalendarPopup(QCalendarWidget *cw)
     Q_Q(QDateTimeEdit);
     if (!monthCalendar) {
         monthCalendar = new QCalendarPopup(q, cw, calendar);
-        monthCalendar->setObjectName(QLatin1String("qt_datetimedit_calendar"));
+        monthCalendar->setObjectName("qt_datetimedit_calendar"_L1);
         QObject::connect(monthCalendar, SIGNAL(newDateSelected(QDate)), q, SLOT(setDate(QDate)));
         QObject::connect(monthCalendar, SIGNAL(hidingCalendar(QDate)), q, SLOT(setDate(QDate)));
         QObject::connect(monthCalendar, SIGNAL(activated(QDate)), q, SLOT(setDate(QDate)));

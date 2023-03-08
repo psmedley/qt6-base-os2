@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QBYTEARRAY_H
 #define QBYTEARRAY_H
@@ -128,6 +92,7 @@ public:
 
     bool isEmpty() const noexcept { return size() == 0; }
     void resize(qsizetype size);
+    void resize(qsizetype size, char c);
 
     QByteArray &fill(char c, qsizetype size = -1);
 
@@ -373,6 +338,7 @@ public:
     QByteArray toPercentEncoding(const QByteArray &exclude = QByteArray(),
                                  const QByteArray &include = QByteArray(),
                                  char percent = '%') const;
+    [[nodiscard]] QByteArray percentDecoded(char percent = '%') const;
 
     inline QByteArray &setNum(short, int base = 10);
     inline QByteArray &setNum(ushort, int base = 10);
@@ -464,25 +430,28 @@ public:
     void shrink_to_fit() { squeeze(); }
     iterator erase(const_iterator first, const_iterator last);
 
-    static inline QByteArray fromStdString(const std::string &s);
-    inline std::string toStdString() const;
+    static QByteArray fromStdString(const std::string &s);
+    std::string toStdString() const;
 
     inline qsizetype size() const noexcept { return d->size; }
+#if QT_DEPRECATED_SINCE(6, 4)
+    QT_DEPRECATED_VERSION_X_6_4("Use size() or length() instead.")
     inline qsizetype count() const noexcept { return size(); }
+#endif
     inline qsizetype length() const noexcept { return size(); }
+    QT_CORE_INLINE_SINCE(6, 4)
     bool isNull() const noexcept;
 
     inline DataPointer &data_ptr() { return d; }
-    explicit inline QByteArray(const DataPointer &dd)
-        : d(dd)
-    {
-    }
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
+    explicit inline QByteArray(const DataPointer &dd) : d(dd) {}
+#endif
+    explicit inline QByteArray(DataPointer &&dd) : d(std::move(dd)) {}
 
 private:
     void reallocData(qsizetype alloc, QArrayData::AllocationOption option);
     void reallocGrowData(qsizetype n);
     void expand(qsizetype i);
-    QByteArray nulTerminated() const;
 
     static QByteArray toLower_helper(const QByteArray &a);
     static QByteArray toLower_helper(QByteArray &a);
@@ -599,11 +568,12 @@ inline QByteArray &QByteArray::setNum(ulong n, int base)
 inline QByteArray &QByteArray::setNum(float n, char format, int precision)
 { return setNum(double(n), format, precision); }
 
-inline std::string QByteArray::toStdString() const
-{ return std::string(constData(), length()); }
-
-inline QByteArray QByteArray::fromStdString(const std::string &s)
-{ return QByteArray(s.data(), qsizetype(s.size())); }
+#if QT_CORE_INLINE_IMPL_SINCE(6, 4)
+bool QByteArray::isNull() const noexcept
+{
+    return d->isNull();
+}
+#endif
 
 #if !defined(QT_NO_DATASTREAM) || defined(QT_BOOTSTRAPPED)
 Q_CORE_EXPORT QDataStream &operator<<(QDataStream &, const QByteArray &);
@@ -686,11 +656,29 @@ QByteArray QByteArrayView::toByteArray() const
     return QByteArray(data(), size());
 }
 
-inline namespace QtLiterals {
-inline QByteArray operator"" _qba(const char *str, size_t size) noexcept
+namespace Qt {
+inline namespace Literals {
+inline namespace StringLiterals {
+
+inline QByteArray operator"" _ba(const char *str, size_t size) noexcept
 {
     return QByteArray(QByteArrayData(nullptr, const_cast<char *>(str), qsizetype(size)));
 }
+
+} // StringLiterals
+} // Literals
+} // Qt
+
+inline namespace QtLiterals {
+#if QT_DEPRECATED_SINCE(6, 8)
+
+QT_DEPRECATED_VERSION_X_6_8("Use _ba from Qt::StringLiterals namespace instead.")
+inline QByteArray operator"" _qba(const char *str, size_t size) noexcept
+{
+    return Qt::StringLiterals::operator""_ba(str, size);
+}
+
+#endif // QT_DEPRECATED_SINCE(6, 8)
 } // QtLiterals
 
 QT_END_NAMESPACE

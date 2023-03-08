@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qoperatingsystemversion.h"
 
@@ -155,6 +119,12 @@ QOperatingSystemVersion QOperatingSystemVersion::current()
     return QOperatingSystemVersionBase::current();
 }
 
+QOperatingSystemVersionBase QOperatingSystemVersionBase::current()
+{
+    static const QOperatingSystemVersionBase v = current_impl();
+    return v;
+}
+
 #if !defined(Q_OS_DARWIN) && !defined(Q_OS_WIN) && !defined(Q_OS_OS2)
 QOperatingSystemVersionBase QOperatingSystemVersionBase::current_impl()
 {
@@ -227,12 +197,6 @@ QOperatingSystemVersionBase QOperatingSystemVersionBase::current_impl()
     version.m_micro = -1;
 #endif
     return version;
-}
-
-QOperatingSystemVersionBase QOperatingSystemVersionBase::current()
-{
-    static const QOperatingSystemVersionBase v = current_impl();
-    return v;
 }
 #endif
 
@@ -420,7 +384,7 @@ const QOperatingSystemVersion QOperatingSystemVersion::Windows8_1 =
 
 /*!
     \variable QOperatingSystemVersion::Windows10
-    \brief a version corresponding to Windows 10 (version 10.0).
+    \brief a version corresponding to general Windows 10 (version 10.0).
     \since 5.9
  */
 const QOperatingSystemVersion QOperatingSystemVersion::Windows10 =
@@ -428,50 +392,77 @@ const QOperatingSystemVersion QOperatingSystemVersion::Windows10 =
 
 /*!
     \variable QOperatingSystemVersion::Windows10_1809
-    \brief a version corresponding to Windows 10 1809 (version 10.0.17763).
+    \brief a version corresponding to Windows 10 October 2018 Update
+           Version 1809 (version 10.0.17763).
     \since 6.3
  */
 
 /*!
     \variable QOperatingSystemVersion::Windows10_1903
-    \brief a version corresponding to Windows 10 1903 (version 10.0.18362).
+    \brief a version corresponding to Windows 10 May 2019 Update
+           Version 1903 (version 10.0.18362).
     \since 6.3
  */
 
 /*!
     \variable QOperatingSystemVersion::Windows10_1909
-    \brief a version corresponding to Windows 10 1909 (version 10.0.18363).
+    \brief a version corresponding to Windows 10 November 2019 Update
+           Version 1909 (version 10.0.18363).
     \since 6.3
  */
 
 /*!
     \variable QOperatingSystemVersion::Windows10_2004
-    \brief a version corresponding to Windows 10 2004 (version 10.0.19041).
+    \brief a version corresponding to Windows 10 May 2020 Update
+           Version 2004 (version 10.0.19041).
     \since 6.3
  */
 
 /*!
     \variable QOperatingSystemVersion::Windows10_20H2
-    \brief a version corresponding to Windows 10 20H2 (version 10.0.19042).
+    \brief a version corresponding to Windows 10 October 2020 Update
+           Version 20H2 (version 10.0.19042).
     \since 6.3
  */
 
 /*!
     \variable QOperatingSystemVersion::Windows10_21H1
-    \brief a version corresponding to Windows 10 21H1 (version 10.0.19043).
+    \brief a version corresponding to Windows 10 May 2021 Update
+           Version 21H1 (version 10.0.19043).
     \since 6.3
  */
 
 /*!
     \variable QOperatingSystemVersion::Windows10_21H2
-    \brief a version corresponding to Windows 10 21H2 (version 10.0.19044).
+    \brief a version corresponding to Windows 10 November 2021 Update
+           Version 21H2 (version 10.0.19044).
     \since 6.3
  */
 
 /*!
+    \variable QOperatingSystemVersion::Windows10_22H2
+    \brief a version corresponding to Windows 10 October 2022 Update
+           Version 22H2 (version 10.0.19045).
+    \since 6.5
+ */
+
+/*!
     \variable QOperatingSystemVersion::Windows11
-    \brief a version corresponding to Windows 11 (version 10.0.22000).
+    \brief a version corresponding to the initial release of Windows 11
+           (version 10.0.22000).
     \since 6.3
+ */
+
+/*!
+    \variable QOperatingSystemVersion::Windows11_21H2
+    \brief a version corresponding to Windows 11 Version 21H2 (version 10.0.22000).
+    \since 6.4
+ */
+
+/*!
+    \variable QOperatingSystemVersion::Windows11_22H2
+    \brief a version corresponding to Windows 11 Version 22H2 (version 10.0.22621).
+    \since 6.4
  */
 
 /*!
@@ -558,6 +549,12 @@ const QOperatingSystemVersion QOperatingSystemVersion::MacOSBigSur = [] {
  */
 const QOperatingSystemVersion QOperatingSystemVersion::MacOSMonterey =
     QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 12, 0);
+
+/*!
+    \variable QOperatingSystemVersion::MacOSVentura
+    \brief a version corresponding to macOS Ventura (version 13).
+    \since 6.4
+*/
 
 /*!
     \variable QOperatingSystemVersion::AndroidJellyBean

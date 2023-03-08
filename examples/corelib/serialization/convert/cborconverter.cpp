@@ -1,52 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the examples of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:BSD$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** BSD License Usage
-** Alternatively, you may use this file under the terms of the BSD license
-** as follows:
-**
-** "Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions are
-** met:
-**   * Redistributions of source code must retain the above copyright
-**     notice, this list of conditions and the following disclaimer.
-**   * Redistributions in binary form must reproduce the above copyright
-**     notice, this list of conditions and the following disclaimer in
-**     the documentation and/or other materials provided with the
-**     distribution.
-**   * Neither the name of The Qt Company Ltd nor the names of its
-**     contributors may be used to endorse or promote products derived
-**     from this software without specific prior written permission.
-**
-**
-** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 #include "cborconverter.h"
 
@@ -104,6 +57,7 @@ QT_END_NAMESPACE
 
 static QVariant convertCborValue(const QCborValue &value);
 
+//! [0]
 static QVariant convertCborMap(const QCborMap &map)
 {
     VariantOrderedMap result;
@@ -130,8 +84,9 @@ static QVariant convertCborValue(const QCborValue &value)
         return convertCborMap(value.toMap());
     return value.toVariant();
 }
-
+//! [0]
 enum TrimFloatingPoint { Double, Float, Float16 };
+//! [1]
 static QCborValue convertFromVariant(const QVariant &v, TrimFloatingPoint fpTrimming)
 {
     if (v.userType() == QMetaType::QVariantList) {
@@ -161,6 +116,7 @@ static QCborValue convertFromVariant(const QVariant &v, TrimFloatingPoint fpTrim
 
     return QCborValue::fromVariant(v);
 }
+//! [1]
 
 QString CborDiagnosticDumper::name()
 {
@@ -263,6 +219,7 @@ bool CborConverter::probeFile(QIODevice *f)
     return f->isReadable() && f->peek(3) == QByteArray("\xd9\xd9\xf7", 3);
 }
 
+//! [2]
 QVariant CborConverter::loadFile(QIODevice *f, Converter *&outputConverter)
 {
     const char *ptr = nullptr;
@@ -297,9 +254,11 @@ QVariant CborConverter::loadFile(QIODevice *f, Converter *&outputConverter)
         return contents.toVariant();
     return convertCborValue(contents);
 }
-
+//! [2]
+//! [3]
 void CborConverter::saveFile(QIODevice *f, const QVariant &contents, const QStringList &options)
 {
+    //! [3]
     bool useSignature = true;
     bool useIntegers = true;
     enum { Yes, No, Always } useFloat16 = Yes, useFloat = Yes;
@@ -358,7 +317,7 @@ void CborConverter::saveFile(QIODevice *f, const QVariant &contents, const QStri
                 qPrintable(s), optionHelp);
         exit(EXIT_FAILURE);
     }
-
+    //! [4]
     QCborValue v = convertFromVariant(contents,
                                       useFloat16 == Always ? Float16 : useFloat == Always ? Float : Double);
     QCborStreamWriter writer(f);
@@ -374,4 +333,4 @@ void CborConverter::saveFile(QIODevice *f, const QVariant &contents, const QStri
         opts |= QCborValue::UseFloat16;
     v.toCbor(writer, opts);
 }
-
+//! [4]

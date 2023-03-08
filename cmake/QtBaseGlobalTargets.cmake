@@ -322,11 +322,14 @@ set(__public_cmake_helpers
     cmake/QtCopyFileIfDifferent.cmake
     cmake/QtFeature.cmake
     cmake/QtFeatureCommon.cmake
+    cmake/QtPublicAppleHelpers.cmake
     cmake/QtPublicCMakeHelpers.cmake
     cmake/QtPublicCMakeVersionHelpers.cmake
     cmake/QtPublicFinalizerHelpers.cmake
     cmake/QtPublicPluginHelpers.cmake
     cmake/QtPublicTargetHelpers.cmake
+    cmake/QtPublicTestHelpers.cmake
+    cmake/QtPublicToolHelpers.cmake
     cmake/QtPublicWalkLibsHelpers.cmake
     cmake/QtPublicFindPackageHelpers.cmake
     cmake/QtPublicDependencyHelpers.cmake
@@ -382,10 +385,16 @@ if(MACOS)
     )
 elseif(IOS)
     qt_copy_or_install(FILES
-        cmake/ios/MacOSXBundleInfo.plist.in
+        cmake/ios/Info.plist.app.in
         cmake/ios/LaunchScreen.storyboard
         DESTINATION "${__GlobalConfig_install_dir}/ios"
     )
+elseif(WASM)
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/util/wasm/wasmtestrunner/qt-wasmtestrunner.py"
+        "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/qt-wasmtestrunner.py" @ONLY)
+
+    qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/qt-wasmtestrunner.py"
+        DESTINATION "${INSTALL_LIBEXECDIR}")
 endif()
 
 # Install CI support files to libexec.

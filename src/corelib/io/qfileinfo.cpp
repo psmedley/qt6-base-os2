@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qplatformdefs.h"
 #include "qfileinfo.h"
@@ -45,6 +9,8 @@
 #include "qdebug.h"
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QT_IMPL_METATYPE_EXTERN(QFileInfo)
 
@@ -97,7 +63,7 @@ QString QFileInfoPrivate::getFileName(QAbstractFileEngine::FileName name) const
         ret = fileEngine->fileName(name);
     }
     if (ret.isNull())
-        ret = QLatin1String("");
+        ret = ""_L1;
     if (cache_enabled)
         fileNames[(int)name] = ret;
     return ret;
@@ -121,7 +87,7 @@ QString QFileInfoPrivate::getFileOwner(QAbstractFileEngine::FileOwner own) const
         ret = fileEngine->owner(own);
     }
     if (ret.isNull())
-        ret = QLatin1String("");
+        ret = ""_L1;
     if (cache_enabled)
         fileOwners[(int)own] = ret;
     return ret;
@@ -557,7 +523,7 @@ QString QFileInfo::absoluteFilePath() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::AbsoluteName);
 }
 
@@ -574,7 +540,7 @@ QString QFileInfo::canonicalFilePath() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::CanonicalName);
 }
 
@@ -600,9 +566,8 @@ QString QFileInfo::absolutePath() const
 {
     Q_D(const QFileInfo);
 
-    if (d->isDefaultConstructed) {
-        return QLatin1String("");
-    }
+    if (d->isDefaultConstructed)
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::AbsolutePathName);
 }
 
@@ -618,7 +583,7 @@ QString QFileInfo::canonicalPath() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::CanonicalPathName);
 }
 
@@ -635,7 +600,7 @@ QString QFileInfo::path() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->fileEntry.path();
 }
 
@@ -754,7 +719,7 @@ QString QFileInfo::filePath() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->fileEntry.filePath();
 }
 
@@ -773,7 +738,7 @@ QString QFileInfo::fileName() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->fileEntry.fileName();
 }
 
@@ -793,7 +758,7 @@ QString QFileInfo::bundleName() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::BundleName);
 }
 
@@ -817,7 +782,7 @@ QString QFileInfo::baseName() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->fileEntry.baseName();
 }
 
@@ -836,7 +801,7 @@ QString QFileInfo::completeBaseName() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->fileEntry.completeBaseName();
 }
 
@@ -855,7 +820,7 @@ QString QFileInfo::completeSuffix() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->fileEntry.completeSuffix();
 }
 
@@ -878,7 +843,7 @@ QString QFileInfo::suffix() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->fileEntry.suffix();
 }
 
@@ -1118,8 +1083,8 @@ bool QFileInfo::isSymLink() const
     opens the \l{symLinkTarget()}{link's target}.
 
     In contrast to isSymLink(), false will be returned for shortcuts
-    (\c *.lnk files) on Windows and aliases on \macos.
-    Use QFileInfo::isShortcut() on Windows instead.
+    (\c *.lnk files) on Windows and aliases on \macos. Use QFileInfo::isShortcut()
+    and QFileInfo::isAlias() instead.
 
     \note If the symlink points to a non existing file, exists() returns
     false.
@@ -1162,6 +1127,29 @@ bool QFileInfo::isShortcut() const
             [d]() { return d->getFileFlags(QAbstractFileEngine::LinkType); });
 }
 
+/*!
+    Returns \c true if this object points to an alias;
+    otherwise returns \c false.
+
+    \since 6.4
+
+    Aliases only exist on \macos. They are treated as regular files, so
+    opening an alias will open the file itself. In order to open the file
+    or directory an alias references use symLinkTarget().
+
+    \note Even if an alias points to a non existing file,
+    isAlias() returns true.
+
+    \sa isFile(), isDir(), isSymLink(), symLinkTarget()
+*/
+bool QFileInfo::isAlias() const
+{
+    Q_D(const QFileInfo);
+    return d->checkAttribute<bool>(
+            QFileSystemMetaData::LegacyLinkType,
+            [d]() { return d->metaData.isAlias(); },
+            [d]() { return d->getFileFlags(QAbstractFileEngine::LinkType); });
+}
 
 /*!
     \since 5.15
@@ -1227,7 +1215,7 @@ QString QFileInfo::symLinkTarget() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::AbsoluteLinkTarget);
 }
 
@@ -1249,7 +1237,7 @@ QString QFileInfo::junctionTarget() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::JunctionName);
 }
 
@@ -1271,7 +1259,7 @@ QString QFileInfo::owner() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileOwner(QAbstractFileEngine::OwnerUser);
 }
 
@@ -1312,7 +1300,7 @@ QString QFileInfo::group() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileOwner(QAbstractFileEngine::OwnerGroup);
 }
 

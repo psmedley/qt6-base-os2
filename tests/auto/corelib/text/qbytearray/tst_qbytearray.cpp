@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 
@@ -36,9 +11,6 @@
 #include <private/qtools_p.h>
 
 #include "../shared/test_number_shared.h"
-
-#include <stdexcept>
-#include <string_view>
 
 class tst_QByteArray : public QObject
 {
@@ -51,13 +23,6 @@ private slots:
     void swap();
     void qChecksum_data();
     void qChecksum();
-    void qCompress_data();
-#ifndef QT_NO_COMPRESS
-    void qCompress();
-    void qUncompressCorruptedData_data();
-    void qUncompressCorruptedData();
-    void qCompressionZeroTermination();
-#endif
     void constByteArray();
     void leftJustified();
     void rightJustified();
@@ -68,7 +33,6 @@ private slots:
     void split();
     void base64_data();
     void base64();
-    void base64_2GiB();
     void fromBase64_data();
     void fromBase64();
     void qvsnprintf();
@@ -129,6 +93,7 @@ private slots:
     void reserve();
     void reserveExtended_data();
     void reserveExtended();
+    void resize();
     void movablity_data();
     void movablity();
     void literals();
@@ -259,79 +224,6 @@ void tst_QByteArray::qChecksum()
     QCOMPARE(::qChecksum(QByteArrayView(data.constData(), len), standard), static_cast<quint16>(checksum));
 }
 
-void tst_QByteArray::qCompress_data()
-{
-    QTest::addColumn<QByteArray>("ba");
-
-    const int size1 = 1024*1024;
-    QByteArray ba1( size1, 0 );
-
-    QTest::newRow( "00" ) << QByteArray();
-
-    int i;
-    for ( i=0; i<size1; i++ )
-        ba1[i] = (char)( i / 1024 );
-    QTest::newRow( "01" ) << ba1;
-
-    for ( i=0; i<size1; i++ )
-        ba1[i] = (char)( i % 256 );
-    QTest::newRow( "02" ) << ba1;
-
-    ba1.fill( 'A' );
-    QTest::newRow( "03" ) << ba1;
-
-    QFile file( QFINDTESTDATA("rfc3252.txt") );
-    QVERIFY( file.open(QIODevice::ReadOnly) );
-    QTest::newRow( "04" ) << file.readAll();
-}
-
-#ifndef QT_NO_COMPRESS
-void tst_QByteArray::qCompress()
-{
-    QFETCH( QByteArray, ba );
-    QByteArray compressed = ::qCompress( ba );
-    QTEST( ::qUncompress( compressed ), "ba" );
-}
-
-void tst_QByteArray::qUncompressCorruptedData_data()
-{
-    QTest::addColumn<QByteArray>("in");
-
-    QTest::newRow("0x00000000") << QByteArray("\x00\x00\x00\x00", 4);
-    QTest::newRow("0x000000ff") << QByteArray("\x00\x00\x00\xff", 4);
-    QTest::newRow("0x3f000000") << QByteArray("\x3f\x00\x00\x00", 4);
-    QTest::newRow("0x3fffffff") << QByteArray("\x3f\xff\xff\xff", 4);
-    QTest::newRow("0x7fffff00") << QByteArray("\x7f\xff\xff\x00", 4);
-    QTest::newRow("0x7fffffff") << QByteArray("\x7f\xff\xff\xff", 4);
-    QTest::newRow("0x80000000") << QByteArray("\x80\x00\x00\x00", 4);
-    QTest::newRow("0x800000ff") << QByteArray("\x80\x00\x00\xff", 4);
-    QTest::newRow("0xcf000000") << QByteArray("\xcf\x00\x00\x00", 4);
-    QTest::newRow("0xcfffffff") << QByteArray("\xcf\xff\xff\xff", 4);
-    QTest::newRow("0xffffff00") << QByteArray("\xff\xff\xff\x00", 4);
-    QTest::newRow("0xffffffff") << QByteArray("\xff\xff\xff\xff", 4);
-}
-
-// This test is expected to produce some warning messages in the test output.
-void tst_QByteArray::qUncompressCorruptedData()
-{
-    QFETCH(QByteArray, in);
-
-    QByteArray res;
-    res = ::qUncompress(in);
-    QCOMPARE(res, QByteArray());
-
-    res = ::qUncompress(in + "blah");
-    QCOMPARE(res, QByteArray());
-}
-
-void tst_QByteArray::qCompressionZeroTermination()
-{
-    QByteArray s = "Hello, I'm a string.";
-    QByteArray ba = ::qUncompress(::qCompress(s));
-    QCOMPARE(ba.data()[ba.size()], '\0');
-    QCOMPARE(ba, s);
-}
-#endif
 
 void tst_QByteArray::constByteArray()
 {
@@ -601,46 +493,6 @@ void tst_QByteArray::base64()
     base64urlnoequals.replace('=', "");
     arr64 = rawdata.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     QCOMPARE(arr64, base64urlnoequals);
-}
-
-void tst_QByteArray::base64_2GiB()
-{
-    if constexpr (sizeof(qsizetype) > sizeof(int)) {
-        try {
-            constexpr qint64 GiB = 1024 * 1024 * 1024;
-            static_assert((2 * GiB + 1) % 3 == 0);
-            const char inputChar = '\0';    // all-NULs encode as
-            const char outputChar = 'A';    // all-'A's
-            const qint64 inputSize = 2 * GiB + 1;
-            const qint64 outputSize = inputSize / 3 * 4;
-            const auto sv = [](const QByteArray &ba) {
-                    return std::string_view{ba.data(), size_t(ba.size())};
-                };
-            QByteArray output;
-            {
-                const QByteArray input(inputSize, inputChar);
-                output = input.toBase64();
-                QCOMPARE(output.size(), outputSize);
-#ifndef Q_OS_OS2 // ../tests/auto/corelib/text/qbytearray/tst_qbytearray.cpp:624:28: error: invalid use of 'void'
-                QCOMPARE(sv(output).find_first_not_of(outputChar),
-                         std::string_view::npos);
-#endif
-            }
-            {
-                auto r = QByteArray::fromBase64Encoding(output);
-                QCOMPARE(r.decodingStatus, QByteArray::Base64DecodingStatus::Ok);
-                QCOMPARE(r.decoded.size(), inputSize);
-#ifndef Q_OS_OS2 // ../tests/auto/corelib/text/qbytearray/tst_qbytearray.cpp:624:28: error: invalid use of 'void'
-                QCOMPARE(sv(r.decoded).find_first_not_of(inputChar),
-                         std::string_view::npos);
-#endif
-            }
-        } catch (const std::bad_alloc &) {
-            QSKIP("Could not allocate enough RAM.");
-        }
-    } else {
-        QSKIP("This is a 64-bit only test");
-    }
 }
 
 //different from the previous test as the input are invalid
@@ -1696,15 +1548,15 @@ void tst_QByteArray::toFromPercentEncoding()
 
     QByteArray data = arr.toPercentEncoding();
     QCOMPARE(data, QByteArray("Qt%20is%20great%21"));
-    QCOMPARE(QByteArray::fromPercentEncoding(data), arr);
+    QCOMPARE(data.percentDecoded(), arr);
 
     data = arr.toPercentEncoding("! ", "Qt");
     QCOMPARE(data, QByteArray("%51%74 is grea%74!"));
-    QCOMPARE(QByteArray::fromPercentEncoding(data), arr);
+    QCOMPARE(data.percentDecoded(), arr);
 
     data = arr.toPercentEncoding(QByteArray(), "abcdefghijklmnopqrstuvwxyz", 'Q');
     QCOMPARE(data, QByteArray("Q51Q74Q20Q69Q73Q20Q67Q72Q65Q61Q74Q21"));
-    QCOMPARE(QByteArray::fromPercentEncoding(data, 'Q'), arr);
+    QCOMPARE(data.percentDecoded('Q'), arr);
 
     // verify that to/from percent encoding preserves nullity
     arr = "";
@@ -1720,8 +1572,16 @@ void tst_QByteArray::toFromPercentEncoding()
     QVERIFY(arr.isNull());
     QVERIFY(arr.toPercentEncoding().isEmpty());
     QVERIFY(arr.toPercentEncoding().isNull());
-    QVERIFY(QByteArray::fromPercentEncoding(QByteArray()).isEmpty());
-    QVERIFY(QByteArray::fromPercentEncoding(QByteArray()).isNull());
+    QVERIFY(QByteArray().percentDecoded().isEmpty());
+    QVERIFY(QByteArray().percentDecoded().isNull());
+
+    // Verify that literal % in the string to be encoded does round-trip:
+    arr = "Qt%20is%20great%21";
+    data = arr.toPercentEncoding();
+    QCOMPARE(data.percentDecoded(), arr);
+    arr = "87% of all statistics are made up!";
+    data = arr.toPercentEncoding();
+    QCOMPARE(data.percentDecoded(), arr);
 }
 
 void tst_QByteArray::fromPercentEncoding_data()
@@ -1743,7 +1603,7 @@ void tst_QByteArray::fromPercentEncoding()
     QFETCH(QByteArray, encodedString);
     QFETCH(QByteArray, decodedString);
 
-    QCOMPARE(QByteArray::fromPercentEncoding(encodedString), decodedString);
+    QCOMPARE(encodedString.percentDecoded(), decodedString);
 }
 
 void tst_QByteArray::toPercentEncoding_data()
@@ -1804,7 +1664,7 @@ void tst_QByteArray::pecentEncodingRoundTrip()
 
     QByteArray encodedData = original.toPercentEncoding(excludeInEncoding, includeInEncoding);
     QCOMPARE(encodedData, encoded);
-    QCOMPARE(QByteArray::fromPercentEncoding(encodedData), original);
+    QCOMPARE(encodedData.percentDecoded(), original);
 }
 
 struct StringComparisonData
@@ -2127,6 +1987,23 @@ void tst_QByteArray::reserveExtended()
     QCOMPARE(array.capacity(), array.size());
 }
 
+void tst_QByteArray::resize()
+{
+    QByteArray ba;
+    ba.resize(15);
+    QCOMPARE(ba.size(), qsizetype(15));
+    ba.resize(10);
+    QCOMPARE(ba.size(), 10);
+    ba.resize(0);
+    QCOMPARE(ba.size(), 0);
+    ba.resize(5, 'a');
+    QCOMPARE(ba.size(), 5);
+    QCOMPARE(ba, "aaaaa");
+    ba.resize(10, 'b');
+    QCOMPARE(ba.size(), 10);
+    QCOMPARE(ba, "aaaaabbbbb");
+}
+
 void tst_QByteArray::movablity_data()
 {
     QTest::addColumn<QByteArray>("array");
@@ -2233,25 +2110,52 @@ void tst_QByteArray::literals()
 
 void tst_QByteArray::userDefinedLiterals()
 {
-    QByteArray str = "abcd"_qba;
+    {
+        using namespace Qt::StringLiterals;
+        QByteArray str = "abcd"_ba;
 
-    QVERIFY(str.length() == 4);
-    QCOMPARE(str.capacity(), 0);
-    QVERIFY(str == "abcd");
-    QVERIFY(!str.data_ptr()->isMutable());
+        QVERIFY(str.length() == 4);
+        QCOMPARE(str.capacity(), 0);
+        QVERIFY(str == "abcd");
+        QVERIFY(!str.data_ptr()->isMutable());
 
-    const char *s = str.constData();
-    QByteArray str2 = str;
-    QVERIFY(str2.constData() == s);
-    QCOMPARE(str2.capacity(), 0);
+        const char *s = str.constData();
+        QByteArray str2 = str;
+        QVERIFY(str2.constData() == s);
+        QCOMPARE(str2.capacity(), 0);
 
-    // detach on non const access
-    QVERIFY(str.data() != s);
-    QVERIFY(str.capacity() >= str.length());
+        // detach on non const access
+        QVERIFY(str.data() != s);
+        QVERIFY(str.capacity() >= str.length());
 
-    QVERIFY(str2.constData() == s);
-    QVERIFY(str2.data() != s);
-    QVERIFY(str2.capacity() >= str2.length());
+        QVERIFY(str2.constData() == s);
+        QVERIFY(str2.data() != s);
+        QVERIFY(str2.capacity() >= str2.length());
+    }
+
+#if QT_DEPRECATED_SINCE(6, 8)
+    {
+        QT_IGNORE_DEPRECATIONS(QByteArray str = "abcd"_qba;)
+
+        QVERIFY(str.length() == 4);
+        QCOMPARE(str.capacity(), 0);
+        QVERIFY(str == "abcd");
+        QVERIFY(!str.data_ptr()->isMutable());
+
+        const char *s = str.constData();
+        QByteArray str2 = str;
+        QVERIFY(str2.constData() == s);
+        QCOMPARE(str2.capacity(), 0);
+
+        // detach on non const access
+        QVERIFY(str.data() != s);
+        QVERIFY(str.capacity() >= str.length());
+
+        QVERIFY(str2.constData() == s);
+        QVERIFY(str2.data() != s);
+        QVERIFY(str2.capacity() >= str2.length());
+    }
+#endif // QT_DEPRECATED_SINCE(6, 8)
 }
 
 void tst_QByteArray::toUpperLower_data()
@@ -2559,7 +2463,12 @@ void tst_QByteArray::length()
 
     QCOMPARE(src.length(), res);
     QCOMPARE(src.size(), res);
+#if QT_DEPRECATED_SINCE(6, 4)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
     QCOMPARE(src.count(), res);
+QT_WARNING_POP
+#endif
 }
 
 void tst_QByteArray::length_data()

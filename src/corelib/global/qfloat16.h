@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 by Southwest Research Institute (R)
-** Contact: http://www.qt-project.org/legal
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2016 by Southwest Research Institute (R)
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QFLOAT16_H
 #define QFLOAT16_H
@@ -49,12 +13,13 @@
 #include <limits>
 
 #if defined(QT_COMPILER_SUPPORTS_F16C) && defined(__AVX2__) && !defined(__F16C__)
-// All processors that support AVX2 do support F16C too. That doesn't mean
-// we're allowed to use the intrinsics directly, so we'll do it only for
-// the Intel and Microsoft's compilers.
-#  if defined(Q_CC_INTEL) || defined(Q_CC_MSVC)
+// All processors that support AVX2 do support F16C too, so we could enable the
+// feature unconditionally if __AVX2__ is defined. However, all currently
+// supported compilers except Microsoft's are able to define __F16C__ on their
+// own when the user enables the feature, so we'll trust them.
+#  if defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
 #    define __F16C__        1
-# endif
+#  endif
 #endif
 
 #if defined(QT_COMPILER_SUPPORTS_F16C) && defined(__F16C__)
@@ -285,8 +250,12 @@ inline qfloat16::qfloat16(float f) noexcept
         if (mantissa) // keep nan from truncating to inf
             mantissa = qMax(1U << shift, mantissa);
     } else {
-        // round half to even
+        // Round half to even. First round up by adding one in the most
+        // significant bit we'll be discarding:
         mantissa += round;
+        // If the last bit we'll be keeping is now set, but all later bits are
+        // clear, we were at half and shouldn't have rounded up; decrement will
+        // clear this last kept bit. Any later set bit hides the decrement.
         if (mantissa & (1 << shift))
             --mantissa;
     }

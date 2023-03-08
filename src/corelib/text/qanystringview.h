@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-** Contact: http://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #ifndef QANYSTRINGVIEW_H
 #define QANYSTRINGVIEW_H
 
@@ -46,6 +10,8 @@
 #include <compare>
 #endif
 #include <limits>
+
+class tst_QAnyStringView;
 
 QT_BEGIN_NAMESPACE
 
@@ -81,20 +47,51 @@ private:
     static_assert(QtPrivate::IsContainerCompatibleWithQStringView<QAnyStringView>::value == false);
     static_assert(QtPrivate::IsContainerCompatibleWithQUtf8StringView<QAnyStringView>::value == false);
 
-    template <typename Char>
-    static constexpr std::size_t encodeType(qsizetype sz) noexcept
+    template<typename Char>
+    static constexpr bool isAsciiOnlyCharsAtCompileTime(Char *str, qsizetype sz) noexcept
     {
-        // only deals with Utf8 and Utf16 - there's only one way to create
-        // a Latin1 string, and that ctor deals with the tag itself
+        // do not perform check if not at compile time
+#if !(defined(__cpp_lib_is_constant_evaluated) || defined(Q_CC_GNU))
+        Q_UNUSED(str);
+        Q_UNUSED(sz);
+        return false;
+#else
+#  if defined(__cpp_lib_is_constant_evaluated)
+        if (!std::is_constant_evaluated())
+            return false;
+#  elif defined(Q_CC_GNU) && !defined(Q_CC_CLANG)
+        if (!str || !__builtin_constant_p(*str))
+            return false;
+#  endif
+        if constexpr (sizeof(Char) != sizeof(char)) {
+            Q_UNUSED(str);
+            Q_UNUSED(sz);
+            return false;
+        } else {
+            for (qsizetype i = 0; i < sz; ++i) {
+                if (uchar(str[i]) > 0x7f)
+                    return false;
+            }
+        }
+        return true;
+#endif
+    }
+
+    template<typename Char>
+    static constexpr std::size_t encodeType(const Char *str, qsizetype sz) noexcept
+    {
+        // Utf16 if 16 bit, Latin1 if ASCII, else Utf8
         Q_ASSERT(sz >= 0);
         Q_ASSERT(sz <= qsizetype(SizeMask));
-        return std::size_t(sz) | uint(sizeof(Char) == sizeof(char16_t)) * Tag::Utf16;
+        Q_ASSERT(str || !sz);
+        return std::size_t(sz) | uint(sizeof(Char) == sizeof(char16_t)) * Tag::Utf16
+                | uint(isAsciiOnlyCharsAtCompileTime(str, sz)) * Tag::Latin1;
     }
 
     template <typename Char>
     static qsizetype lengthHelperPointer(const Char *str) noexcept
     {
-#if defined(Q_CC_GNU) && !defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
+#if defined(Q_CC_GNU) && !defined(Q_CC_CLANG)
         if (__builtin_constant_p(*str)) {
             qsizetype result = 0;
             while (*str++ != u'\0')
@@ -136,8 +133,9 @@ public:
 
     template <typename Char, if_compatible_char<Char> = true>
     constexpr QAnyStringView(const Char *str, qsizetype len)
-        : m_data{str},
-          m_size{encodeType<Char>((Q_ASSERT(len >= 0), Q_ASSERT(str || !len), len))} {}
+        : m_data{str}, m_size{encodeType<Char>(str, len)}
+    {
+    }
 
     template <typename Char, if_compatible_char<Char> = true>
     constexpr QAnyStringView(const Char *f, const Char *l)
@@ -159,7 +157,7 @@ public:
     // defined in qstring.h
     inline QAnyStringView(const QByteArray &str) noexcept; // TODO: Should we have this at all? Remove?
     inline QAnyStringView(const QString &str) noexcept;
-    inline constexpr QAnyStringView(QLatin1String str) noexcept;
+    inline constexpr QAnyStringView(QLatin1StringView str) noexcept;
 
     // defined in qstringbuilder.h
     template <typename A, typename B>
@@ -204,6 +202,13 @@ public:
     [[nodiscard]] Q_CORE_EXPORT static int compare(QAnyStringView lhs, QAnyStringView rhs, Qt::CaseSensitivity cs = Qt::CaseSensitive) noexcept;
     [[nodiscard]] Q_CORE_EXPORT static bool equal(QAnyStringView lhs, QAnyStringView rhs) noexcept;
 
+    static constexpr inline bool detects_US_ASCII_at_compile_time =
+#ifdef __cpp_lib_is_constant_evaluated
+            true
+#else
+            false
+#endif
+            ;
     //
     // STL compatibility API:
     //
@@ -271,7 +276,7 @@ private:
     { return Q_ASSERT(isUtf16()), QStringView{m_data_utf16, size()}; }
     [[nodiscard]] constexpr q_no_char8_t::QUtf8StringView asUtf8StringView() const
     { return Q_ASSERT(isUtf8()), q_no_char8_t::QUtf8StringView{m_data_utf8, size()}; }
-    [[nodiscard]] inline constexpr QLatin1String asLatin1StringView() const;
+    [[nodiscard]] inline constexpr QLatin1StringView asLatin1StringView() const;
     [[nodiscard]] constexpr size_t charSize() const noexcept { return isUtf16() ? 2 : 1; }
     Q_ALWAYS_INLINE constexpr void verify(qsizetype pos, qsizetype n = 0) const
     {
@@ -286,6 +291,7 @@ private:
         const char16_t *m_data_utf16;
     };
     size_t m_size;
+    friend class ::tst_QAnyStringView;
 };
 Q_DECLARE_TYPEINFO(QAnyStringView, Q_PRIMITIVE_TYPE);
 

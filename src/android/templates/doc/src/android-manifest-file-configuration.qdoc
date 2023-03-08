@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
 \page android-manifest-file-configuration.html
@@ -169,7 +145,7 @@ The following is a list of such meta-data defined by Qt:
 
 \table
 \header
-    \li meta-data name
+    \li Meta-data Name
     \li Description
 \row
     \target android.app.lib_name
@@ -223,11 +199,23 @@ The following is a list of such meta-data defined by Qt:
         by the app.
         For more information, see
         \l {QNativeInterface::}{QAndroidApplication::hideSplashScreen()}.
+\endtable
+
+\section2 Application Specific Meta-data
+
+Some meta-data attributes are application-wide, and should be placed under
+the \c <application> section:
+
+\table
+\header
+    \li Meta-data Name
+    \li Description
 \row
     \target android.app.system_libs_prefix
     \li android.app.system_libs_prefix
     \li Specifies a custom system library path to use for library loading lookup.
-        This is necessary when running as a system app.
+        This is necessary when using Qt libraries installed outside an app's
+        default native (JNI) library directory.
         The default value is \c {/system/lib/}.
 \endtable
 
@@ -240,7 +228,6 @@ The main ones are:
     \li \l {android.app.lib_name}
     \li \l {android.app.background_running}
     \li \l {android.app.arguments}
-    \li \l {android.app.system_libs_prefix}
 \endlist
 
 \section2 Qt Permissions and Features

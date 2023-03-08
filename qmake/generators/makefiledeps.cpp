@@ -1,34 +1,10 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the qmake application of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "makefiledeps.h"
 #include "option.h"
+#include <qfile.h>
 #include <qdir.h>
 #include <qdatetime.h>
 #include <qfileinfo.h>
@@ -40,16 +16,8 @@
 # include <io.h>
 #endif
 #include <qdebug.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <time.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <limits.h>
-#if defined(_MSC_VER) && _MSC_VER >= 1400
-#include <share.h>
-#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -196,7 +164,7 @@ void QMakeSourceFileInfo::setDependencyPaths(const QList<QMakeLocalFileName> &l)
 {
     // Ensure that depdirs does not contain the same paths several times, to minimize the stats
     QList<QMakeLocalFileName> ll;
-    for (int i = 0; i < l.count(); ++i) {
+    for (int i = 0; i < l.size(); ++i) {
         if (!ll.contains(l.at(i)))
             ll.append(l.at(i));
     }
@@ -515,28 +483,17 @@ bool QMakeSourceFileInfo::findDeps(SourceFile *file)
 
     const QMakeLocalFileName sourceFile = fixPathForFile(file->file, true);
 
-    struct stat fst;
     char *buffer = nullptr;
     int buffer_len = 0;
     {
-        int fd;
-#if defined(_MSC_VER) && _MSC_VER >= 1400
-        if (_sopen_s(&fd, sourceFile.local().toLatin1().constData(),
-            _O_RDONLY, _SH_DENYNO, _S_IREAD) != 0)
-            fd = -1;
-#else
-        fd = open(sourceFile.local().toLatin1().constData(), O_RDONLY);
-#endif
-        if (fd == -1 || fstat(fd, &fst) || S_ISDIR(fst.st_mode)) {
-            if (fd != -1)
-                QT_CLOSE(fd);
+        QFile f(sourceFile.local());
+        if (!f.open(QIODevice::ReadOnly))
             return false;
-        }
-        buffer = getBuffer(fst.st_size);
+        const qint64 fs = f.size();
+        buffer = getBuffer(fs);
         for(int have_read = 0;
-            (have_read = QT_READ(fd, buffer + buffer_len, fst.st_size - buffer_len));
+            (have_read = f.read(buffer + buffer_len, fs - buffer_len));
             buffer_len += have_read) ;
-        QT_CLOSE(fd);
     }
     if(!buffer)
         return false;
@@ -831,7 +788,7 @@ bool QMakeSourceFileInfo::findDeps(SourceFile *file)
                         }
                     }
                     if(!exists) { //path lookup
-                        for (const QMakeLocalFileName &depdir : qAsConst(depdirs)) {
+                        for (const QMakeLocalFileName &depdir : std::as_const(depdirs)) {
                             QMakeLocalFileName f(depdir.real() + Option::dir_sep + lfn.real());
                             QFileInfo fi(findFileInfo(f));
                             if(fi.exists() && !fi.isDir()) {
@@ -901,25 +858,13 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
     int buffer_len = 0;
     char *buffer = nullptr;
     {
-        struct stat fst;
-        int fd;
-#if defined(_MSC_VER) && _MSC_VER >= 1400
-        if (_sopen_s(&fd, fixPathForFile(file->file, true).local().toLocal8Bit().constData(),
-            _O_RDONLY, _SH_DENYNO, _S_IREAD) != 0)
-            fd = -1;
-#else
-        fd = open(fixPathForFile(file->file, true).local().toLocal8Bit().constData(), O_RDONLY);
-#endif
-        if (fd == -1 || fstat(fd, &fst) || S_ISDIR(fst.st_mode)) {
-            if (fd != -1)
-                QT_CLOSE(fd);
+        QFile f(fixPathForFile(file->file, true).local());
+        if (!f.open(QIODevice::ReadOnly))
             return false; //shouldn't happen
-        }
-        buffer = getBuffer(fst.st_size);
-        while (int have_read = QT_READ(fd, buffer + buffer_len, fst.st_size - buffer_len))
+        const qint64 fs = f.size();
+        buffer = getBuffer(fs);
+        while (int have_read = f.read(buffer + buffer_len, fs - buffer_len))
             buffer_len += have_read;
-
-        QT_CLOSE(fd);
     }
 
     debug_msg(2, "findMocs: %s", file->file.local().toLatin1().constData());

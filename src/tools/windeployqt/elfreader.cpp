@@ -1,36 +1,13 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "elfreader.h"
 
 #include <QDir>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 /* This is a copy of the ELF reader contained in Qt Creator (src/libs/utils),
  * extended by the dependencies() function to read out the dependencies of a dynamic executable. */
@@ -185,7 +162,7 @@ ElfReader::Result ElfReader::readIt()
     //     || (sizeof(void*) == 8 && bits != 64)) {
     //     if (errorString)
     //         *errorString = QLibrary::QStringLiteral("'%1' is an invalid ELF object (%2)")
-    //         .arg(m_binary).arg(QLatin1String("wrong cpu architecture"));
+    //         .arg(m_binary).arg("wrong cpu architecture"_L1);
     //     return Corrupt;
     // }
 
@@ -245,7 +222,7 @@ ElfReader::Result ElfReader::readIt()
 //    if ((soff + e_shentsize) > fdlen || soff % 4 || soff == 0) {
 //        m_errorString = QLibrary::QStringLiteral("'%1' is an invalid ELF object (%2)")
 //           .arg(m_binary)
-//           .arg(QLatin1String("shstrtab section header seems to be at %1"))
+//           .arg("shstrtab section header seems to be at %1"_L1)
 //           .arg(QString::number(soff, 16));
 //        return Corrupt;
 //    }

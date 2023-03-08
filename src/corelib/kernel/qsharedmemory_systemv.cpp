@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qplatformdefs.h"
 
@@ -63,6 +27,8 @@
 #ifndef QT_NO_SHAREDMEMORY
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 /*!
     \internal
 
@@ -76,21 +42,21 @@ key_t QSharedMemoryPrivate::handle()
 
     // don't allow making handles on empty keys
     if (nativeKey.isEmpty()) {
-        errorString = QSharedMemory::tr("%1: key is empty").arg(QLatin1String("QSharedMemory::handle:"));
+        errorString = QSharedMemory::tr("%1: key is empty").arg("QSharedMemory::handle:"_L1);
         error = QSharedMemory::KeyError;
         return 0;
     }
 
     // ftok requires that an actual file exists somewhere
     if (!QFile::exists(nativeKey)) {
-        errorString = QSharedMemory::tr("%1: UNIX key file doesn't exist").arg(QLatin1String("QSharedMemory::handle:"));
+        errorString = QSharedMemory::tr("%1: UNIX key file doesn't exist").arg("QSharedMemory::handle:"_L1);
         error = QSharedMemory::NotFound;
         return 0;
     }
 
     unix_key = ftok(QFile::encodeName(nativeKey).constData(), 'Q');
     if (-1 == unix_key) {
-        errorString = QSharedMemory::tr("%1: ftok failed").arg(QLatin1String("QSharedMemory::handle:"));
+        errorString = QSharedMemory::tr("%1: ftok failed").arg("QSharedMemory::handle:"_L1);
         error = QSharedMemory::KeyError;
         unix_key = 0;
     }
@@ -138,7 +104,7 @@ bool QSharedMemoryPrivate::create(qsizetype size)
     bool createdFile = false;
     int built = createUnixKeyFile(nativeKey);
     if (built == -1) {
-        errorString = QSharedMemory::tr("%1: unable to make key").arg(QLatin1String("QSharedMemory::handle:"));
+        errorString = QSharedMemory::tr("%1: unable to make key").arg("QSharedMemory::handle:"_L1);
         error = QSharedMemory::KeyError;
         return false;
     }
@@ -155,10 +121,10 @@ bool QSharedMemoryPrivate::create(qsizetype size)
 
     // create
     if (-1 == shmget(unix_key, size_t(size), 0600 | IPC_CREAT | IPC_EXCL)) {
-        const QLatin1String function("QSharedMemory::create");
+        const auto function = "QSharedMemory::create"_L1;
         switch (errno) {
         case EINVAL:
-            errorString = QSharedMemory::tr("%1: system-imposed size restrictions").arg(QLatin1String("QSharedMemory::handle"));
+            errorString = QSharedMemory::tr("%1: system-imposed size restrictions").arg("QSharedMemory::handle"_L1);
             error = QSharedMemory::InvalidSize;
             break;
         default:
@@ -177,7 +143,7 @@ bool QSharedMemoryPrivate::attach(QSharedMemory::AccessMode mode)
     // grab the shared memory segment id
     int id = shmget(unix_key, 0, (mode == QSharedMemory::ReadOnly ? 0400 : 0600));
     if (-1 == id) {
-        setErrorString(QLatin1String("QSharedMemory::attach (shmget)"));
+        setErrorString("QSharedMemory::attach (shmget)"_L1);
         return false;
     }
 
@@ -185,7 +151,7 @@ bool QSharedMemoryPrivate::attach(QSharedMemory::AccessMode mode)
     memory = shmat(id, nullptr, (mode == QSharedMemory::ReadOnly ? SHM_RDONLY : 0));
     if ((void *)-1 == memory) {
         memory = nullptr;
-        setErrorString(QLatin1String("QSharedMemory::attach (shmat)"));
+        setErrorString("QSharedMemory::attach (shmat)"_L1);
         return false;
     }
 
@@ -194,7 +160,7 @@ bool QSharedMemoryPrivate::attach(QSharedMemory::AccessMode mode)
     if (!shmctl(id, IPC_STAT, &shmid_ds)) {
         size = (qsizetype)shmid_ds.shm_segsz;
     } else {
-        setErrorString(QLatin1String("QSharedMemory::attach (shmctl)"));
+        setErrorString("QSharedMemory::attach (shmctl)"_L1);
         return false;
     }
 
@@ -205,7 +171,7 @@ bool QSharedMemoryPrivate::detach()
 {
     // detach from the memory segment
     if (-1 == shmdt(memory)) {
-        const QLatin1String function("QSharedMemory::detach");
+        const auto function = "QSharedMemory::detach"_L1;
         switch (errno) {
         case EINVAL:
             errorString = QSharedMemory::tr("%1: not attached").arg(function);
@@ -236,7 +202,7 @@ bool QSharedMemoryPrivate::detach()
     if (shmid_ds.shm_nattch == 0) {
         // mark for removal
         if (-1 == shmctl(id, IPC_RMID, &shmid_ds)) {
-            setErrorString(QLatin1String("QSharedMemory::remove"));
+            setErrorString("QSharedMemory::remove"_L1);
             switch (errno) {
             case EINVAL:
                 return true;

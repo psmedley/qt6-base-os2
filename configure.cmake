@@ -54,7 +54,7 @@ qt_feature("use_bfd_linker"
     PRIVATE
     LABEL "bfd"
     AUTODETECT false
-    CONDITION NOT WIN32 AND NOT INTEGRITY AND NOT WASM AND TEST_use_bfd_linker
+    CONDITION NOT MSVC AND NOT INTEGRITY AND NOT WASM AND TEST_use_bfd_linker
     ENABLE INPUT_linker STREQUAL 'bfd'
     DISABLE INPUT_linker STREQUAL 'gold' OR INPUT_linker STREQUAL 'lld'
             OR INPUT_linker STREQUAL 'mold'
@@ -80,7 +80,7 @@ qt_feature("use_lld_linker"
     PRIVATE
     LABEL "lld"
     AUTODETECT false
-    CONDITION NOT WIN32 AND NOT INTEGRITY AND NOT WASM AND TEST_use_lld_linker
+    CONDITION NOT MSVC AND NOT INTEGRITY AND NOT WASM AND TEST_use_lld_linker
     ENABLE INPUT_linker STREQUAL 'lld'
     DISABLE INPUT_linker STREQUAL 'bfd' OR INPUT_linker STREQUAL 'gold'
             OR INPUT_linker STREQUAL 'mold'
@@ -186,6 +186,11 @@ qt_config_compile_test(precompile_header
 qt_config_compiler_supports_flag_test(optimize_debug
     LABEL "-Og support"
     FLAG "-Og"
+)
+
+qt_config_compile_test(no_direct_extern_access
+    LABEL "-mno-direct-extern-access / -fno-direct-access-external-data support"
+    PROJECT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/config.tests/no_direct_extern_access"
 )
 
 qt_config_linker_supports_flag_test(enable_new_dtags
@@ -302,6 +307,12 @@ qt_config_compile_test_x86simd(avx512ifma "AVX512 IFMA instructions")
 
 # avx512vbmi
 qt_config_compile_test_x86simd(avx512vbmi "AVX512 VBMI instructions")
+
+# x86: avx512vbmi2
+qt_config_compile_test_x86simd(avx512vbmi2 "AVX512VBMI2")
+
+# x86: vaes
+qt_config_compile_test_x86simd(vaes "VAES")
 
 # posix_fallocate
 qt_config_compile_test(posix_fallocate
@@ -690,7 +701,14 @@ qt_feature("reduce_exports" PRIVATE
 )
 qt_feature_definition("reduce_exports" "QT_VISIBILITY_AVAILABLE")
 qt_feature_config("reduce_exports" QMAKE_PUBLIC_QT_CONFIG)
-qt_feature("reduce_relocations" PRIVATE
+qt_feature("no_direct_extern_access" PRIVATE
+    LABEL "Use protected visibility and -mno-direct-extern-access"
+    CONDITION NOT WIN32 AND TEST_no_direct_extern_access
+    AUTODETECT OFF
+)
+qt_feature_definition("no_direct_extern_access" "QT_USE_PROTECTED_VISIBILITY")
+qt_feature_config("no_direct_extern_access" QMAKE_PUBLIC_QT_CONFIG)
+qt_feature("reduce_relocations" PUBLIC
     LABEL "Reduce amount of relocations"
     CONDITION NOT WIN32 AND TEST_reduce_relocations
 )
@@ -804,12 +822,24 @@ qt_feature("avx512vbmi" PRIVATE
 )
 qt_feature_definition("avx512vbmi" "QT_COMPILER_SUPPORTS_AVX512VBMI" VALUE "1")
 qt_feature_config("avx512vbmi" QMAKE_PRIVATE_CONFIG)
+qt_feature("avx512vbmi2" PRIVATE
+    LABEL "AVX512VBMI2"
+    CONDITION QT_FEATURE_avx512f AND TEST_subarch_avx512vbmi2
+)
+qt_feature_definition("avx512vbmi2" "QT_COMPILER_SUPPORTS_AVX512VBMI2" VALUE "1")
+qt_feature_config("avx512vbmi2" QMAKE_PRIVATE_CONFIG)
 qt_feature("aesni" PRIVATE
     LABEL "AES"
     CONDITION QT_FEATURE_sse2 AND TEST_subarch_aesni
 )
 qt_feature_definition("aesni" "QT_COMPILER_SUPPORTS_AES" VALUE "1")
 qt_feature_config("aesni" QMAKE_PRIVATE_CONFIG)
+qt_feature("vaes" PRIVATE
+    LABEL "VAES"
+    CONDITION QT_FEATURE_avx2 AND TEST_subarch_vaes
+)
+qt_feature_definition("vaes" "QT_COMPILER_SUPPORTS_VAES" VALUE "1")
+qt_feature_config("vaes" QMAKE_PRIVATE_CONFIG)
 qt_feature("rdrnd" PRIVATE
     LABEL "RDRAND"
     CONDITION TEST_subarch_rdrnd
@@ -828,12 +858,6 @@ qt_feature("shani" PRIVATE
 )
 qt_feature_definition("shani" "QT_COMPILER_SUPPORTS_SHA" VALUE "1")
 qt_feature_config("shani" QMAKE_PRIVATE_CONFIG)
-qt_feature("simdAlways"
-    LABEL "Intrinsics without compiler architecture option"
-    CONDITION ( ( ( TEST_architecture_arch STREQUAL i386 ) OR ( TEST_architecture_arch STREQUAL x86_64 ) ) AND ON ) OR ( TEST_architecture_arch STREQUAL arm64 )
-)
-qt_feature_definition("simdAlways" "QT_COMPILER_SUPPORTS_SIMD_ALWAYS" VALUE "1")
-qt_feature_config("simdAlways" QMAKE_PRIVATE_CONFIG)
 qt_feature("mips_dsp" PRIVATE
     LABEL "DSP"
     CONDITION ( TEST_architecture_arch STREQUAL mips ) AND TEST_arch_${TEST_architecture_arch}_subarch_dsp
@@ -966,7 +990,6 @@ qt_feature("printsupport" PRIVATE
 )
 qt_feature("sql" PRIVATE
     LABEL "Qt Sql"
-    CONDITION QT_FEATURE_thread AND NOT WASM
 )
 qt_feature("testlib" PRIVATE
     LABEL "Qt Testlib"
@@ -1012,7 +1035,7 @@ qt_feature("relocatable" PRIVATE
 )
 qt_feature("intelcet" PRIVATE
     LABEL "Using Intel CET"
-    CONDITION TEST_intelcet
+    CONDITION ( INPUT_intelcet STREQUAL yes ) OR TEST_intelcet
 )
 qt_configure_add_summary_build_type_and_config()
 qt_configure_add_summary_section(NAME "Build options")
@@ -1063,6 +1086,7 @@ qt_configure_add_summary_entry(
 qt_configure_add_summary_entry(ARGS "relocatable")
 qt_configure_add_summary_entry(ARGS "precompile_header")
 qt_configure_add_summary_entry(ARGS "ltcg")
+qt_configure_add_summary_entry(ARGS "intelcet")
 qt_configure_add_summary_section(NAME "Target compiler supports")
 qt_configure_add_summary_entry(
     TYPE "featureList"
@@ -1072,13 +1096,13 @@ qt_configure_add_summary_entry(
 )
 qt_configure_add_summary_entry(
     TYPE "featureList"
-    ARGS "avx avx2"
+    ARGS "avx avx2 vaes"
     MESSAGE "AVX"
     CONDITION ( ( TEST_architecture_arch STREQUAL i386 ) OR ( TEST_architecture_arch STREQUAL x86_64 ) )
 )
 qt_configure_add_summary_entry(
     TYPE "featureList"
-    ARGS "avx512f avx512er avx512cd avx512pf avx512dq avx512bw avx512vl avx512ifma avx512vbmi"
+    ARGS "avx512f avx512er avx512cd avx512pf avx512dq avx512bw avx512vl avx512ifma avx512vbmi avx512vbmi2"
     MESSAGE "AVX512"
     CONDITION ( ( TEST_architecture_arch STREQUAL i386 ) OR ( TEST_architecture_arch STREQUAL x86_64 ) )
 )
@@ -1087,10 +1111,6 @@ qt_configure_add_summary_entry(
     ARGS "aesni f16c rdrnd shani"
     MESSAGE "Other x86"
     CONDITION ( ( TEST_architecture_arch STREQUAL i386 ) OR ( TEST_architecture_arch STREQUAL x86_64 ) )
-)
-qt_configure_add_summary_entry(
-    ARGS "simdAlways"
-    CONDITION ( ( TEST_architecture_arch STREQUAL i386 ) OR ( TEST_architecture_arch STREQUAL x86_64 ) OR ( TEST_architecture_arch STREQUAL arm64 ) ) AND NOT MSVC
 )
 qt_configure_add_summary_entry(
     TYPE "featureList"
@@ -1147,7 +1167,7 @@ qt_configure_add_report_entry(
 # special case begin
 # qt_configure_add_report_entry(
 #     TYPE ERROR
-#     MESSAGE "Debug build wihtout Release build is not currently supported on ios see QTBUG-71990. Use -debug-and-release."
+#     MESSAGE "Debug build without Release build is not currently supported on ios see QTBUG-71990. Use -debug-and-release."
 #     CONDITION IOS AND QT_FEATURE_debug AND NOT QT_FEATURE_debug_and_release
 # )
 # special case end

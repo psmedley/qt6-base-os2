@@ -1,30 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+
 
 #include <QTest>
 #include <QtCore/QBuffer>
@@ -101,7 +77,7 @@ void tst_QHttpNetworkReply::parseHeader()
 
     QHttpNetworkReply reply;
     reply.parseHeader(headers);
-    for (int i = 0; i < fields.count(); ++i) {
+    for (int i = 0; i < fields.size(); ++i) {
         //qDebug() << "field" << fields.at(i) << "value" << reply.headerField(fields.at(i)) << "expected" << values.at(i);
         QString field = reply.headerField(fields.at(i).toLatin1());
         QCOMPARE(field, values.at(i));
@@ -164,9 +140,7 @@ void tst_QHttpNetworkReply::parseHeaderVerification_data()
         const qsizetype size = result.size();
         result += name;
         result += ": ";
-        const qsizetype fieldValueStart = result.size();
-        result.resize(size + HeaderConstants::MAX_HEADER_FIELD_SIZE);
-        std::fill(result.begin() + fieldValueStart, result.end(), 'a');
+        result.resize(size + HeaderConstants::MAX_HEADER_FIELD_SIZE, 'a');
     };
     QByteArray longHeader;
     constexpr qsizetype TrailerLength = sizeof("\r\n\r\n") - 1; // we ignore the trailing newlines
@@ -175,9 +149,7 @@ void tst_QHttpNetworkReply::parseHeaderVerification_data()
     longHeader += "\r\n";
     appendLongHeaderElement(longHeader, "WWW-Authenticate");
     longHeader += "\r\nProxy-Authenticate: ";
-    const qsizetype fieldValueStart = longHeader.size();
-    longHeader.resize(HeaderConstants::MAX_TOTAL_HEADER_SIZE);
-    std::fill(longHeader.begin() + fieldValueStart, longHeader.end(), 'a');
+    longHeader.resize(HeaderConstants::MAX_TOTAL_HEADER_SIZE, 'a');
     longHeader += "\r\n\r\n";
 
     // Test with headers which are just large enough to fit our MAX_TOTAL_HEADER_SIZE limit:

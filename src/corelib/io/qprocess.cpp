@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2022 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2022 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 //#define QPROCESS_DEBUG
 
@@ -98,7 +62,7 @@ QStringList QProcessEnvironmentPrivate::toList() const
     QStringList result;
     result.reserve(vars.size());
     for (auto it = vars.cbegin(), end = vars.cend(); it != end; ++it)
-        result << nameToString(it.key()) + QLatin1Char('=') + valueToString(it.value());
+        result << nameToString(it.key()) + u'=' + valueToString(it.value());
     return result;
 }
 
@@ -108,7 +72,7 @@ QProcessEnvironment QProcessEnvironmentPrivate::fromList(const QStringList &list
     QStringList::ConstIterator it = list.constBegin(),
                               end = list.constEnd();
     for ( ; it != end; ++it) {
-        int pos = it->indexOf(QLatin1Char('='), 1);
+        int pos = it->indexOf(u'=', 1);
         if (pos < 1)
             continue;
 
@@ -2305,7 +2269,7 @@ QStringList QProcess::splitCommand(QStringView command)
     // "hello world". three consecutive double quotes represent
     // the quote character itself.
     for (int i = 0; i < command.size(); ++i) {
-        if (command.at(i) == QLatin1Char('"')) {
+        if (command.at(i) == u'"') {
             ++quoteCount;
             if (quoteCount == 3) {
                 // third consecutive quote
@@ -2530,7 +2494,7 @@ QT_BEGIN_INCLUDE_NAMESPACE
 # include <crt_externs.h>
 # define environ (*_NSGetEnviron())
 #elif defined(QT_PLATFORM_UIKIT)
-  static char *qt_empty_environ[] = { 0 };
+  Q_CONSTINIT static char *qt_empty_environ[] = { 0 };
 #define environ qt_empty_environ
 #elif !defined(Q_OS_WIN)
   extern char **environ;

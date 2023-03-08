@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2013 Klaralvdalens Datakonsult AB (KDAB).
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2013 Klaralvdalens Datakonsult AB (KDAB).
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qopengltexture.h"
 #include "qopengltexture_p.h"
@@ -3289,7 +3253,7 @@ bool QOpenGLTexture::isFixedSamplePositions() const
     create the mutable storage. You can use the other
     allocateStorage() overload to specify exactly the pixel format
     and the pixel type to use when allocating mutable storage;
-    this is particulary useful under certain OpenGL ES implementations
+    this is particularly useful under certain OpenGL ES implementations
     (notably, OpenGL ES 2), where the pixel format and the pixel type
     used at allocation time must perfectly match the format
     and the type passed to any subsequent setData() call.
@@ -3354,7 +3318,7 @@ bool QOpenGLTexture::isStorageAllocated() const
     Attempts to create a texture view onto this texture. A texture
     view is somewhat analogous to a view in SQL in that it presents
     a restricted or reinterpreted view of the original data. Texture
-    views do not allocate any more server-side storage, insted relying
+    views do not allocate any more server-side storage, instead relying
     on the storage buffer of the source texture.
 
     Texture views are only available when using immutable storage. For
@@ -4457,7 +4421,7 @@ float QOpenGLTexture::maximumAnisotropy() const
 }
 
 /*!
-    Sets the wrap (or repeat mode) for all texture dimentions to \a mode.
+    Sets the wrap (or repeat mode) for all texture dimensions to \a mode.
 
     \sa wrapMode()
 */

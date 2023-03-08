@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtCore/QtCore>
 #include <QTest>
@@ -299,7 +274,7 @@ void tst_QMutex::contendedNative()
     NativeMutexInitialize(&mutex2);
 
     QList<NativeMutexThread *> threads(threadCount);
-    for (int i = 0; i < threads.count(); ++i) {
+    for (int i = 0; i < threads.size(); ++i) {
         threads[i] = new NativeMutexThread(&mutex1, &mutex2, iterations, msleepDuration, use2mutexes);
         threads[i]->start();
     }
@@ -311,11 +286,11 @@ void tst_QMutex::contendedNative()
         semaphore4.release(threadCount);
     }
 
-    for (int i = 0; i < threads.count(); ++i)
+    for (int i = 0; i < threads.size(); ++i)
         threads[i]->done = true;
     semaphore1.acquire(threadCount);
     semaphore2.release(threadCount);
-    for (int i = 0; i < threads.count(); ++i)
+    for (int i = 0; i < threads.size(); ++i)
         threads[i]->wait();
     qDeleteAll(threads);
 
@@ -367,7 +342,7 @@ void tst_QMutex::contendedQMutex()
     QMutex mutex1, mutex2;
 
     QList<QMutexThread *> threads(threadCount);
-    for (int i = 0; i < threads.count(); ++i) {
+    for (int i = 0; i < threads.size(); ++i) {
         threads[i] = new QMutexThread(&mutex1, &mutex2, iterations, msleepDuration, use2mutexes);
         threads[i]->start();
     }
@@ -379,11 +354,11 @@ void tst_QMutex::contendedQMutex()
         semaphore4.release(threadCount);
     }
 
-    for (int i = 0; i < threads.count(); ++i)
+    for (int i = 0; i < threads.size(); ++i)
         threads[i]->done = true;
     semaphore1.acquire(threadCount);
     semaphore2.release(threadCount);
-    for (int i = 0; i < threads.count(); ++i)
+    for (int i = 0; i < threads.size(); ++i)
         threads[i]->wait();
     qDeleteAll(threads);
 }
@@ -430,7 +405,7 @@ void tst_QMutex::contendedQMutexLocker()
     QMutex mutex1, mutex2;
 
     QList<QMutexLockerThread *> threads(threadCount);
-    for (int i = 0; i < threads.count(); ++i) {
+    for (int i = 0; i < threads.size(); ++i) {
         threads[i] = new QMutexLockerThread(&mutex1, &mutex2, iterations, msleepDuration, use2mutexes);
         threads[i]->start();
     }
@@ -442,11 +417,11 @@ void tst_QMutex::contendedQMutexLocker()
         semaphore4.release(threadCount);
     }
 
-    for (int i = 0; i < threads.count(); ++i)
+    for (int i = 0; i < threads.size(); ++i)
         threads[i]->done = true;
     semaphore1.acquire(threadCount);
     semaphore2.release(threadCount);
-    for (int i = 0; i < threads.count(); ++i)
+    for (int i = 0; i < threads.size(); ++i)
         threads[i]->wait();
     qDeleteAll(threads);
 }

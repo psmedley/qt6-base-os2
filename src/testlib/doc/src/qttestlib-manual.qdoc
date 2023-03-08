@@ -1,30 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
     \page qtest-overview.html
@@ -246,26 +222,28 @@
 
     \list
     \li \c -o \e{filename,format} \br
-    Writes output to the specified file, in the specified format (one of
-    \c txt, \c xml, \c lightxml, \c junitxml or \c tap).  The special filename \c -
-    may be used to log to standard output.
+    Writes output to the specified file, in the specified format (one
+    of \c txt, \c csv, \c junitxml, \c xml, \c lightxml, \c teamcity
+    or \c tap).  The special filename \c - may be used to log to
+    standard output.
     \li \c -o \e filename \br
     Writes output to the specified file.
     \li \c -txt \br
     Outputs results in plain text.
+    \li \c -csv \br
+    Outputs results as comma-separated values (CSV) suitable for
+    import into spreadsheets. This mode is only suitable for
+    benchmarks, since it suppresses normal pass/fail messages.
+    \li \c -junitxml \br
+    Outputs results as a \l{JUnit XML} document.
     \li \c -xml \br
     Outputs results as an XML document.
     \li \c -lightxml \br
     Outputs results as a stream of XML tags.
-    \li \c -junitxml \br
-    Outputs results as an JUnit XML document.
-    \li \c -csv \br
-    Outputs results as comma-separated values (CSV). This mode is only suitable for
-    benchmarks, since it suppresses normal pass/fail messages.
     \li \c -teamcity \br
-    Outputs results in TeamCity format.
+    Outputs results in \l{TeamCity} format.
     \li \c -tap \br
-    Outputs results in Test Anything Protocol (TAP) format.
+    Outputs results in \l{Test Anything Protocol} (TAP) format.
     \endlist
 
     The first version of the \c -o option may be repeated in order to log
@@ -693,7 +671,7 @@
         \li result
     \row
         \li 0
-        \li all lower
+        \li all-lower
         \li "hello"
         \li HELLO
     \row
@@ -703,7 +681,7 @@
         \li HELLO
     \row
         \li 2
-        \li all upper
+        \li all-upper
         \li "HELLO"
         \li HELLO
     \endtable
@@ -960,19 +938,9 @@
 
     \snippet tutorial5/benchmarking.cpp 2
 
-    The "if (useLocaleCompare)" switch is placed outside the QBENCHMARK
+    The \c{if (useLocaleCompare)} switch is placed outside the QBENCHMARK
     macro to avoid measuring its overhead. Each benchmark test function
     can have one active QBENCHMARK macro.
-
-    \section1 External Tools
-
-    Tools for handling and visualizing test data are available as part of
-    the \l {qtestlib-tools} project.
-    These include a tool for comparing performance data obtained from test
-    runs and a utility to generate Web-based graphs of performance data.
-
-    See the \l{qtestlib-tools Announcement}{qtestlib-tools announcement}
-    for more information on these tools and a simple graphing example.
 
     \section1 Building the Executable
 
@@ -999,7 +967,7 @@
     the execution of the test without adding a failure to the test log.
     It can be used to skip tests that are certain to fail. The text in
     the QSKIP \a description parameter is appended to the test log,
-    and explains why the test was not carried out.
+    and should explain why the test was not carried out.
 
     QSKIP can be used to skip testing when the implementation is not yet
     complete or not supported on a certain platform. When there are known

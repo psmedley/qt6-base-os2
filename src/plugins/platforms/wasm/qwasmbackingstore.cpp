@@ -1,31 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 or (at your option) any later version
-** approved by the KDE Free Qt Foundation. The licenses are as published by
-** the Free Software Foundation and appearing in the file LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "qwasmbackingstore.h"
 #include "qwasmwindow.h"
@@ -152,28 +126,34 @@ void QWasmBackingStore::beginPaint(const QRegion &region)
 {
     m_dirty |= region;
     // Keep backing store device pixel ratio in sync with window
-    if (m_image.devicePixelRatio() != window()->devicePixelRatio())
+    if (m_image.devicePixelRatio() != window()->handle()->devicePixelRatio())
         resize(backingStore()->size(), backingStore()->staticContents());
 
     QPainter painter(&m_image);
-    painter.setCompositionMode(QPainter::CompositionMode_Source);
-    const QColor blank = Qt::transparent;
-    for (const QRect &rect : region)
-        painter.fillRect(rect, blank);
+
+    if (m_image.hasAlphaChannel()) {
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        const QColor blank = Qt::transparent;
+        for (const QRect &rect : region)
+            painter.fillRect(rect, blank);
+    }
 }
 
 void QWasmBackingStore::resize(const QSize &size, const QRegion &staticContents)
 {
     Q_UNUSED(staticContents);
 
-    m_image = QImage(size * window()->devicePixelRatio(), QImage::Format_RGB32);
-    m_image.setDevicePixelRatio(window()->devicePixelRatio());
+    QImage::Format format = window()->format().hasAlpha() ?
+        QImage::Format_ARGB32_Premultiplied : QImage::Format_RGB32;
+    const auto platformScreenDPR = window()->handle()->devicePixelRatio();
+    m_image = QImage(size * platformScreenDPR, format);
+    m_image.setDevicePixelRatio(platformScreenDPR);
     m_recreateTexture = true;
 }
 
 QImage QWasmBackingStore::toImage() const
 {
-    // used by QPlatformBackingStore::composeAndFlush
+    // used by QPlatformBackingStore::rhiFlush
     return m_image;
 }
 

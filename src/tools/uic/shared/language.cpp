@@ -1,36 +1,13 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "language.h"
 
 #include <QtCore/qtextstream.h>
 
 namespace language {
+
+using namespace Qt::StringLiterals;
 
 static Encoding encoding = Encoding::Utf8;
 static Language _language = Language::Cpp;
@@ -42,29 +19,29 @@ void setLanguage(Language l)
     _language = l;
     switch (_language) {
     case Language::Cpp:
-        derefPointer = QLatin1String("->");
+        derefPointer = u"->"_s;
         listStart = '{';
         listEnd = '}';
-        nullPtr = QLatin1String("nullptr");
-        operatorNew = QLatin1String("new ");
-        qtQualifier = QLatin1String("Qt::");
-        qualifier = QLatin1String("::");
-        self = QLatin1String("");  // for testing: change to "this->";
-        eol = QLatin1String(";\n");
-        emptyString = QLatin1String("QString()");
+        nullPtr = u"nullptr"_s;
+        operatorNew = u"new "_s;
+        qtQualifier = u"Qt::"_s;
+        qualifier = u"::"_s;
+        self = u""_s;  // for testing: change to "this->";
+        eol = u";\n"_s;
+        emptyString = u"QString()"_s;
         encoding = Encoding::Utf8;
         break;
     case Language::Python:
-        derefPointer = QLatin1String(".");
+        derefPointer = u"."_s;
         listStart = '[';
         listEnd = ']';
-        nullPtr = QLatin1String("None");
-        operatorNew = QLatin1String("");
-        qtQualifier = QLatin1String("Qt.");
-        qualifier = QLatin1String(".");
-        self = QLatin1String("self.");
-        eol = QLatin1String("\n");
-        emptyString = QLatin1String("\"\"");
+        nullPtr = u"None"_s;
+        operatorNew = u""_s;
+        qtQualifier = u"Qt."_s;
+        qualifier = u"."_s;
+        self = u"self."_s;
+        eol = u"\n"_s;
+        emptyString = u"\"\""_s;
         encoding = Encoding::Unicode;
         break;
     }
@@ -81,9 +58,9 @@ QString self;
 QString eol;
 QString emptyString;
 
-QString cppQualifier = QLatin1String("::");
-QString cppTrue = QLatin1String("true");
-QString cppFalse = QLatin1String("false");
+QString cppQualifier = "::"_L1;
+QString cppTrue = "true"_L1;
+QString cppFalse = "false"_L1;
 
 QTextStream &operator<<(QTextStream &str, const qtConfig &c)
 {
@@ -125,7 +102,7 @@ const char *lookupEnum(const EnumLookup(&array)[N], int value, int defaultIndex 
 QString fixClassName(QString className)
 {
     if (language() == Language::Python)
-        className.replace(cppQualifier, QLatin1String("_"));
+        className.replace(cppQualifier, "_"_L1);
     return className;
 }
 
@@ -217,7 +194,7 @@ static int formatEscapedNumber(QTextStream &str, ushort value, int base, int wid
     const auto oldFieldWidth = str.fieldWidth();
     const auto oldFieldAlignment = str.fieldAlignment();
     const auto oldIntegerBase = str.integerBase();
-    str.setPadChar(QLatin1Char('0'));
+    str.setPadChar(u'0');
     str.setFieldWidth(width);
     str.setFieldAlignment(QTextStream::AlignRight);
     str.setIntegerBase(base);
@@ -405,7 +382,7 @@ enum OverloadUse {
 static void formatMemberFnPtr(QTextStream &str, const SignalSlot &s,
                               OverloadUse useQOverload = DontUseOverload)
 {
-    const int parenPos = s.signature.indexOf(QLatin1Char('('));
+    const qsizetype parenPos = s.signature.indexOf(u'(');
     Q_ASSERT(parenPos >= 0);
     const auto functionName = QStringView{s.signature}.left(parenPos);
 
@@ -469,7 +446,7 @@ void formatConnection(QTextStream &str, const SignalSlot &sender, const SignalSl
                 str << "[\"" << parameters << "\"]";
         }
         str << ".connect(" << receiver.name << '.'
-            << QStringView{receiver.signature}.left(receiver.signature.indexOf(QLatin1Char('(')))
+            << QStringView{receiver.signature}.left(receiver.signature.indexOf(u'('))
             << ')';
     }
         break;

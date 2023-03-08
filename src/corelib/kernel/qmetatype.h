@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2018 Intel Corporation.
-** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2018 Intel Corporation.
+// Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QMETATYPE_H
 #define QMETATYPE_H
@@ -46,14 +10,13 @@
 #include <QtCore/qatomic.h>
 #include <QtCore/qbytearray.h>
 #include <QtCore/qcompare.h>
-#include <QtCore/qvarlengtharray.h>
-#include <QtCore/qrefcount.h>
 #include <QtCore/qscopeguard.h>
 #include <QtCore/qdatastream.h>
 #include <QtCore/qiterable.h>
 #ifndef QT_NO_QOBJECT
 #include <QtCore/qobjectdefs.h>
 #endif
+#include <QtCore/qhashfunctions.h>
 
 #include <array>
 #include <new>
@@ -824,6 +787,24 @@ QT_FOR_EACH_AUTOMATIC_TEMPLATE_SMART_POINTER(QT_FORWARD_DECLARE_SHARED_POINTER_T
 
 namespace QtPrivate
 {
+    namespace detail {
+    template<typename T, typename ODR_VIOLATION_PREVENTER>
+    struct is_complete_helper
+    {
+        template<typename U>
+        static auto check(U *) -> std::integral_constant<bool, sizeof(U) != 0>;
+        static auto check(...) -> std::false_type;
+        using type = decltype(check(static_cast<T *>(nullptr)));
+    };
+    } // namespace detail
+
+    template <typename T, typename ODR_VIOLATION_PREVENTER>
+    struct is_complete : detail::is_complete_helper<std::remove_reference_t<T>, ODR_VIOLATION_PREVENTER>::type {};
+
+    template <typename T> struct MetatypeDecay              { using type = T; };
+    template <typename T> struct MetatypeDecay<const T>     { using type = T; };
+    template <typename T> struct MetatypeDecay<const T &>   { using type = T; };
+
     template<typename T>
     struct IsPointerToTypeDerivedFromQObject
     {
@@ -1146,7 +1127,12 @@ template <typename T>
 struct QMetaTypeId2<const T&> : QMetaTypeId2<T> {};
 
 template <typename T>
-struct QMetaTypeId2<T&> { enum {Defined = false }; };
+struct QMetaTypeId2<T&>
+{
+    using NameAsArrayType = void;
+    enum { Defined = false, IsBuiltIn = false };
+    static inline constexpr int qt_metatype_id() { return 0; }
+};
 
 namespace QtPrivate {
     template <typename T, bool Defined = QMetaTypeId2<T>::Defined>
@@ -1321,7 +1307,7 @@ struct QMetaTypeIdQObject<T*, QMetaType::PointerToQObject>
 
     static int qt_metatype_id()
     {
-        static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0);
+        Q_CONSTINIT static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0);
         if (const int id = metatype_id.loadAcquire())
             return id;
         const char *const cName = T::staticMetaObject.className();
@@ -1343,7 +1329,7 @@ struct QMetaTypeIdQObject<T, QMetaType::IsGadget>
 
     static int qt_metatype_id()
     {
-        static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0);
+        Q_CONSTINIT static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0);
         if (const int id = metatype_id.loadAcquire())
             return id;
         const char *const cName = T::staticMetaObject.className();
@@ -1362,7 +1348,7 @@ struct QMetaTypeIdQObject<T*, QMetaType::PointerToGadget>
 
     static int qt_metatype_id()
     {
-        static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0);
+        Q_CONSTINIT static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0);
         if (const int id = metatype_id.loadAcquire())
             return id;
         const char *const cName = T::staticMetaObject.className();
@@ -1384,7 +1370,7 @@ struct QMetaTypeIdQObject<T, QMetaType::IsEnumeration>
 
     static int qt_metatype_id()
     {
-        static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0);
+        Q_CONSTINIT static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0);
         if (const int id = metatype_id.loadAcquire())
             return id;
         const char *eName = qt_getEnumName(T());
@@ -1419,7 +1405,7 @@ struct QMetaTypeIdQObject<T, QMetaType::IsEnumeration>
         enum { Defined = 1 };                                           \
         static int qt_metatype_id()                                     \
             {                                                           \
-                static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0); \
+                Q_CONSTINIT static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0); \
                 if (const int id = metatype_id.loadAcquire())           \
                     return id;                                          \
                 constexpr auto arr = QtPrivate::typenameHelper<TYPE>(); \
@@ -1467,7 +1453,7 @@ struct QMetaTypeId< SINGLE_ARG_TEMPLATE<T> > \
     }; \
     static int qt_metatype_id() \
     { \
-        static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0); \
+        Q_CONSTINIT static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0); \
         if (const int id = metatype_id.loadRelaxed()) \
             return id; \
         const char *tName = QMetaType::fromType<T>().name(); \
@@ -1495,7 +1481,7 @@ struct QMetaTypeId< DOUBLE_ARG_TEMPLATE<T, U> > \
     }; \
     static int qt_metatype_id() \
     { \
-        static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0); \
+        Q_CONSTINIT static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0); \
         if (const int id = metatype_id.loadAcquire()) \
             return id; \
         const char *tName = QMetaType::fromType<T>().name(); \
@@ -1543,7 +1529,7 @@ struct SharedPointerMetaTypeIdHelper<SMART_POINTER<T>, true> \
     }; \
     static int qt_metatype_id() \
     { \
-        static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0); \
+        Q_CONSTINIT static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0); \
         if (const int id = metatype_id.loadAcquire()) \
             return id; \
         const char * const cName = T::staticMetaObject.className(); \
@@ -1762,7 +1748,7 @@ private:
 #ifdef Q_CC_MSVC
         /// On MSVC, keywords like class or struct are not separated with spaces in constexpr
         /// context
-        if (msvcKw)
+        if (msvcKw && !is_ident_char(*b))
             return true;
 #endif
         Q_UNUSED(msvcKw);
@@ -2287,6 +2273,20 @@ struct QDataStreamOperatorForType <T, false>
     static constexpr QMetaTypeInterface::DataStreamInFn dataStreamIn = nullptr;
 };
 
+// Performance optimization:
+//
+// Don't add all these symbols to the dynamic symbol tables on ELF systems and
+// on Darwin. Each library is going to have a copy anyway and QMetaType already
+// copes with some of these being "hidden" (see QMetaType::idHelper()). We may
+// as well let the linker know it can always use the local copy.
+//
+// This is currently not enabled for GCC due to
+// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=106023
+
+#if !defined(Q_OS_WIN) && defined(Q_CC_CLANG)
+#  pragma GCC visibility push(hidden)
+#endif
+
 template<typename S>
 class QMetaTypeForType
 {
@@ -2377,6 +2377,9 @@ struct QMetaTypeInterfaceWrapper
     };
 };
 
+#if !defined(Q_OS_WIN) && defined(Q_CC_CLANG)
+#  pragma GCC visibility pop
+#endif
 
 template<>
 class QMetaTypeInterfaceWrapper<void>
@@ -2403,16 +2406,28 @@ public:
         /*.legacyRegisterOp=*/ nullptr
     };
 };
-#undef QT_METATYPE_CONSTEXPRLAMDA
 
 /*
  MSVC instantiates extern templates
 (https://developercommunity.visualstudio.com/t/c11-extern-templates-doesnt-work-for-class-templat/157868)
- */
-#if !defined(QT_BOOTSTRAPPED) && !defined(Q_CC_MSVC)
 
-#define QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER(TypeName, Id, Name)            \
+ The INTEGRITY compiler apparently does too.
+
+ On Windows (with other compilers or whenever MSVC is fixed), we can't declare
+ QMetaTypeInterfaceWrapper with __declspec(dllimport) because taking its
+ address is not a core constant expression.
+ */
+#if !defined(QT_BOOTSTRAPPED) && !defined(Q_CC_MSVC) && !defined(Q_OS_INTEGRITY)
+
+#ifdef QT_NO_DATA_RELOCATION
+#  define QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER(TypeName, Id, Name)          \
     extern template class Q_CORE_EXPORT QMetaTypeForType<Name>;
+#else
+#  define QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER(TypeName, Id, Name)          \
+    extern template class Q_CORE_EXPORT QMetaTypeForType<Name>;                 \
+    extern template struct Q_CORE_EXPORT QMetaTypeInterfaceWrapper<Name>;
+#endif
+
 QT_FOR_EACH_STATIC_PRIMITIVE_NON_VOID_TYPE(QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_PRIMITIVE_POINTER(QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_CLASS(QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER)
@@ -2420,27 +2435,6 @@ QT_FOR_EACH_STATIC_CORE_POINTER(QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_TEMPLATE(QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER)
 #undef QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER
 #endif
-
-template<typename T>
-constexpr const QMetaTypeInterface *qMetaTypeInterfaceForType()
-{
-    using Ty = std::remove_cv_t<std::remove_reference_t<T>>;
-    return &QMetaTypeInterfaceWrapper<Ty>::metaType;
-}
-
-namespace detail {
-template<typename T, typename ODR_VIOLATION_PREVENTER>
-struct is_complete_helper
-{
-    template<typename U>
-    static auto check(U *) -> std::integral_constant<bool, sizeof(U) != 0>;
-    static auto check(...) -> std::false_type;
-    using type = decltype(check(static_cast<T *>(nullptr)));
-};
-} // namespace detail
-
-template <typename T, typename ODR_VIOLATION_PREVENTER>
-struct is_complete : detail::is_complete_helper<T, ODR_VIOLATION_PREVENTER>::type {};
 
 template<typename T>
 struct qRemovePointerLike
@@ -2467,14 +2461,26 @@ struct TypeAndForceComplete
     using ForceComplete = ForceComplete_;
 };
 
+template<typename T>
+constexpr const QMetaTypeInterface *qMetaTypeInterfaceForType()
+{
+    using Ty = typename MetatypeDecay<T>::type;
+    return &QMetaTypeInterfaceWrapper<Ty>::metaType;
+}
+
 template<typename Unique, typename TypeCompletePair>
 constexpr const QMetaTypeInterface *qTryMetaTypeInterfaceForType()
 {
     using T = typename TypeCompletePair::type;
     using ForceComplete = typename TypeCompletePair::ForceComplete;
-    using Ty = std::remove_cv_t<std::remove_reference_t<T>>;
+    using Ty = typename MetatypeDecay<T>::type;
     using Tz = qRemovePointerLike_t<Ty>;
-    if constexpr (!is_complete<Tz, Unique>::value && !ForceComplete::value) {
+
+    if constexpr (ForceComplete::value) {
+        return &QMetaTypeInterfaceWrapper<Ty>::metaType;
+    } else if constexpr (std::is_reference_v<Tz>) {
+        return nullptr;
+    } else if constexpr (!is_complete<Tz, Unique>::value) {
         return nullptr;
     } else {
         return &QMetaTypeInterfaceWrapper<Ty>::metaType;
@@ -2511,7 +2517,14 @@ constexpr const QMetaObject *QMetaType::metaObject() const
 
 template<typename... T>
 constexpr const QtPrivate::QMetaTypeInterface *const qt_metaTypeArray[] = {
-    QtPrivate::qMetaTypeInterfaceForType<T>()...
+    /*
+       Unique in qTryMetaTypeInterfaceForType does not have to be unique here
+       as we require _all_ types here to be actually complete.
+       We just want to have the additional type processing that exist in
+       QtPrivate::qTryMetaTypeInterfaceForType as opposed to the normal
+       QtPrivate::qMetaTypeInterfaceForType used in QMetaType::fromType
+    */
+    QtPrivate::qTryMetaTypeInterfaceForType<void, QtPrivate::TypeAndForceComplete<T, std::true_type>>()...
 };
 
 constexpr const char *QMetaType::name() const
@@ -2523,6 +2536,13 @@ template<typename Unique,typename... T>
 constexpr const QtPrivate::QMetaTypeInterface *const qt_incomplete_metaTypeArray[] = {
     QtPrivate::qTryMetaTypeInterfaceForType<Unique, T>()...
 };
+
+inline size_t qHash(QMetaType type, size_t seed = 0)
+{
+    // We cannot use d_ptr here since the same type in different DLLs
+    // might result in different pointers!
+    return qHash(type.id(), seed);
+}
 
 QT_END_NAMESPACE
 

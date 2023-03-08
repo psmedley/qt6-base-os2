@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -235,7 +210,7 @@ struct FieldDef {
         rt.replace(QRegularExpression("\\s"), QString("_"));
         int i = rt.indexOf(QLatin1Char('('));
         if (i == -1)
-            i = rt.length();
+            i = rt.size();
         if (i > 20)
             i = 20;
         return "t_" + rt.left(i);
@@ -1929,13 +1904,13 @@ void tst_QSqlDatabase::odbc_testqGetString()
     QVERIFY_SQL(q, exec("SELECT id, vcvalue FROM " + testqGetString + " ORDER BY id"));
     QVERIFY_SQL(q, next());
     QCOMPARE(q.value(0).toInt(), 1);
-    QCOMPARE(q.value(1).toString().length(), 65536);
+    QCOMPARE(q.value(1).toString().size(), 65536);
     QVERIFY_SQL(q, next());
     QCOMPARE(q.value(0).toInt(), 2);
-    QCOMPARE(q.value(1).toString().length(), 65537);
+    QCOMPARE(q.value(1).toString().size(), 65537);
     QVERIFY_SQL(q, next());
     QCOMPARE(q.value(0).toInt(), 3);
-    QCOMPARE(q.value(1).toString().length(), 65538);
+    QCOMPARE(q.value(1).toString().size(), 65538);
 }
 
 
@@ -2214,7 +2189,7 @@ void tst_QSqlDatabase::eventNotificationIBase()
     // Interbase needs some time to post the notification and call the driver callback.
     // This happends from another thread, and we have to process events in order for the
     // event handler in the driver to be executed and emit the notification signal.
-    QTRY_COMPARE(spy.count(), 1);
+    QTRY_COMPARE(spy.size(), 1);
     QList<QVariant> arguments = spy.takeFirst();
     QCOMPARE(arguments.at(0).toString(), procedureName);
     QVERIFY_SQL(*driver, unsubscribeFromNotification(procedureName));
@@ -2236,7 +2211,7 @@ void tst_QSqlDatabase::eventNotificationPSQL()
     QVERIFY_SQL(*driver, subscribeToNotification(procedureName));
     QSignalSpy spy(driver, QOverload<const QString &, QSqlDriver::NotificationSource, const QVariant &>::of(&QSqlDriver::notification));
     query.exec(QString("NOTIFY \"%1\", '%2'").arg(procedureName).arg(payload));
-    QTRY_COMPARE(spy.count(), 1);
+    QTRY_COMPARE(spy.size(), 1);
     QList<QVariant> arguments = spy.takeFirst();
     QCOMPARE(arguments.at(0).toString(), procedureName);
     QCOMPARE(qvariant_cast<QSqlDriver::NotificationSource>(arguments.at(1)), QSqlDriver::SelfSource);
@@ -2262,12 +2237,12 @@ void tst_QSqlDatabase::eventNotificationSQLite()
     QVERIFY_SQL(q, exec("CREATE TABLE " + tableName + " (id INTEGER, realVal REAL)"));
     driver->subscribeToNotification(noEscapeTableName);
     QVERIFY_SQL(q, exec("INSERT INTO " + tableName + " (id, realVal) VALUES (1, 2.3)"));
-    QTRY_COMPARE(spy.count(), 1);
+    QTRY_COMPARE(spy.size(), 1);
     QList<QVariant> arguments = spy.takeFirst();
     QCOMPARE(arguments.at(0).toString(), noEscapeTableName);
     driver->unsubscribeFromNotification(noEscapeTableName);
     QVERIFY_SQL(q, exec("INSERT INTO " + tableName + " (id, realVal) VALUES (1, 2.3)"));
-    QTRY_COMPARE(spy.count(), 0);
+    QTRY_COMPARE(spy.size(), 0);
 }
 
 void tst_QSqlDatabase::sqlite_bindAndFetchUInt()

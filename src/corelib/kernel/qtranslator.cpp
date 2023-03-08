@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qplatformdefs.h"
 
@@ -485,8 +449,8 @@ bool QTranslator::load(const QString & filename, const QString & directory,
     QString prefix;
     if (QFileInfo(filename).isRelative()) {
         prefix = directory;
-        if (prefix.length() && !prefix.endsWith(QLatin1Char('/')))
-            prefix += QLatin1Char('/');
+        if (prefix.size() && !prefix.endsWith(u'/'))
+            prefix += u'/';
     }
 
     const QString suffixOrDotQM = suffix.isNull() ? dotQmLiteral() : suffix;
@@ -508,7 +472,7 @@ bool QTranslator::load(const QString & filename, const QString & directory,
             break;
 
         int rightmost = 0;
-        for (int i = 0; i < (int)delims.length(); i++) {
+        for (int i = 0; i < (int)delims.size(); i++) {
             int k = fname.lastIndexOf(delims[i]);
             if (k > rightmost)
                 rightmost = k;
@@ -530,7 +494,7 @@ bool QTranslatorPrivate::do_load(const QString &realname, const QString &directo
     QTranslatorPrivate *d = this;
     bool ok = false;
 
-    if (realname.startsWith(QLatin1Char(':'))) {
+    if (realname.startsWith(u':')) {
         // If the translation is in a non-compressed resource file, the data is already in
         // memory, so no need to use QFile to copy it again.
         Q_ASSERT(!d->resource);
@@ -645,8 +609,8 @@ static QString find_translation(const QLocale & locale,
     QString path;
     if (QFileInfo(filename).isRelative()) {
         path = directory;
-        if (!path.isEmpty() && !path.endsWith(QLatin1Char('/')))
-            path += QLatin1Char('/');
+        if (!path.isEmpty() && !path.endsWith(u'/'))
+            path += u'/';
     }
     const QString suffixOrDotQM = suffix.isNull() ? dotQmLiteral() : suffix;
 
@@ -671,8 +635,8 @@ static QString find_translation(const QLocale & locale,
             languages.insert(i + 1, lowerLang);
     }
 
-    for (QString localeName : qAsConst(languages)) {
-        localeName.replace(QLatin1Char('-'), QLatin1Char('_'));
+    for (QString localeName : std::as_const(languages)) {
+        localeName.replace(u'-', u'_');
 
         // try the complete locale name first and progressively truncate from
         // the end until a matching language tag is found (with or without suffix)
@@ -687,7 +651,7 @@ static QString find_translation(const QLocale & locale,
 
             realname.truncate(realNameBaseSize);
 
-            int rightmost = localeName.lastIndexOf(QLatin1Char('_'));
+            int rightmost = localeName.lastIndexOf(u'_');
             if (rightmost <= 0)
                 break; // no truncations anymore, break
             localeName.truncate(rightmost);
@@ -950,7 +914,7 @@ end:
     if (!tn)
         return QString();
     QString str(tn_length / 2, Qt::Uninitialized);
-    qFromBigEndian<ushort>(tn, str.length(), str.data());
+    qFromBigEndian<ushort>(tn, str.size(), str.data());
     return str;
 }
 

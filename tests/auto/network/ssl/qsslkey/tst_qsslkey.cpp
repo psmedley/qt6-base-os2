@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <qsslkey.h>
@@ -181,6 +156,7 @@ bool tst_QSslKey::fileContainsUnsupportedEllipticCurve(const QString &fileName) 
 
 bool tst_QSslKey::algorithmsSupported(const QString &fileName) const
 {
+#if QT_CONFIG(ssl)
     if (isSchannel && fileName.contains("RC2-64")) // Schannel treats RC2 as 128 bit
         return false;
 
@@ -189,10 +165,9 @@ bool tst_QSslKey::algorithmsSupported(const QString &fileName) const
         return !(fileName.contains(QRegularExpression("-aes\\d\\d\\d-")) || fileName.contains("pkcs8-pkcs12"));
     }
 
-#if OPENSSL_VERSION_MAJOR < 3
-    // If it's not built with OpenSSL or it's OpenSSL v < 3.
-    return true;
-#else
+    if (!isOpenSsl || QSslSocket::sslLibraryVersionNumber() >> 28 < 3)
+        return true;
+
     // OpenSSL v3 first introduced the notion of 'providers'. Many algorithms
     // were moved into the 'legacy' provider. While they are still supported in theory,
     // the 'legacy' provider is NOT loaded by default and we are not loading it either.
@@ -203,7 +178,10 @@ bool tst_QSslKey::algorithmsSupported(const QString &fileName) const
         return false;
 
     return !name.contains("-rc2-") && !name.contains("-rc4-");
-#endif
+#else
+    Q_UNUSED(fileName);
+    return false;
+#endif // QT_CONFIG(ssl)
 }
 
 
@@ -337,7 +315,7 @@ void tst_QSslKey::constructorHandle()
         passphrase = "1234";
 
     BIO* bio = q_BIO_new(q_BIO_s_mem());
-    q_BIO_write(bio, pem.constData(), pem.length());
+    q_BIO_write(bio, pem.constData(), pem.size());
     EVP_PKEY *origin = func(bio, nullptr, nullptr, static_cast<void *>(passphrase.data()));
     Q_ASSERT(origin);
     q_EVP_PKEY_up_ref(origin);
@@ -570,12 +548,12 @@ void tst_QSslKey::passphraseChecks_data()
     const QByteArray pass("123");
     const QByteArray aesPass("1234");
 
-#if OPENSSL_VERSION_MAJOR < 3
-    // DES and RC2 are not provided by default in OpenSSL v3.
-    // This part is for either non-OpenSSL build, or OpenSSL v < 3.x.
-    QTest::newRow("DES") << QString(testDataDir + "rsa-with-passphrase-des.pem") << pass;
-    QTest::newRow("RC2") << QString(testDataDir + "rsa-with-passphrase-rc2.pem") << pass;
-#endif // OPENSSL_VERSION_MAJOR
+    if (!isOpenSsl || QSslSocket::sslLibraryVersionNumber() >> 28 < 3) {
+        // DES and RC2 are not provided by default in OpenSSL v3.
+        // This part is for either non-OpenSSL build, or OpenSSL v < 3.x.
+        QTest::newRow("DES") << QString(testDataDir + "rsa-with-passphrase-des.pem") << pass;
+        QTest::newRow("RC2") << QString(testDataDir + "rsa-with-passphrase-rc2.pem") << pass;
+    }
 
     QTest::newRow("3DES") << QString(testDataDir + "rsa-with-passphrase-3des.pem") << pass;
 

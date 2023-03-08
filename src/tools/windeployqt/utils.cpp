@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "utils.h"
 #include "elfreader.h"
@@ -55,12 +30,14 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 int optVerboseLevel = 1;
 
 bool isBuildDirectory(Platform platform, const QString &dirName)
 {
     return (platform.testFlag(Msvc) || platform.testFlag(ClangMsvc))
-        && (dirName == QLatin1String("debug") || dirName == QLatin1String("release"));
+        && (dirName == "debug"_L1 || dirName == "release"_L1);
 }
 
 // Create a symbolic link by changing to the source directory to make sure the
@@ -112,9 +89,9 @@ QStringList findSharedLibraries(const QDir &directory, Platform platform,
 {
     QString nameFilter = prefix;
     if (nameFilter.isEmpty())
-        nameFilter += QLatin1Char('*');
+        nameFilter += u'*';
     if (debugMatchMode == MatchDebug && platformHasDebugSuffix(platform))
-        nameFilter += QLatin1Char('d');
+        nameFilter += u'd';
     nameFilter += sharedLibrarySuffix(platform);
     QStringList result;
     QString errorMessage;
@@ -172,10 +149,10 @@ QString normalizeFileName(const QString &name)
 // Find a tool binary in the Windows SDK 8
 QString findSdkTool(const QString &tool)
 {
-    QStringList paths = QString::fromLocal8Bit(qgetenv("PATH")).split(QLatin1Char(';'));
+    QStringList paths = QString::fromLocal8Bit(qgetenv("PATH")).split(u';');
     const QByteArray sdkDir = qgetenv("WindowsSdkDir");
     if (!sdkDir.isEmpty())
-        paths.prepend(QDir::cleanPath(QString::fromLocal8Bit(sdkDir)) + QLatin1String("/Tools/x64"));
+        paths.prepend(QDir::cleanPath(QString::fromLocal8Bit(sdkDir)) + "/Tools/x64"_L1);
     return QStandardPaths::findExecutable(tool, paths);
 }
 
@@ -212,14 +189,14 @@ static inline void readTemporaryProcessFile(HANDLE handle, QByteArray *result)
 
 static inline void appendToCommandLine(const QString &argument, QString *commandLine)
 {
-    const bool needsQuote = argument.contains(QLatin1Char(' '));
+    const bool needsQuote = argument.contains(u' ');
     if (!commandLine->isEmpty())
-        commandLine->append(QLatin1Char(' '));
+        commandLine->append(u' ');
     if (needsQuote)
-        commandLine->append(QLatin1Char('"'));
+        commandLine->append(u'"');
     commandLine->append(argument);
     if (needsQuote)
-        commandLine->append(QLatin1Char('"'));
+        commandLine->append(u'"');
 }
 
 // runProcess: Run a command line process (replacement for QProcess which
@@ -244,7 +221,7 @@ bool runProcess(const QString &binary, const QStringList &args,
 
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(PROCESS_INFORMATION));
-    const QChar backSlash = QLatin1Char('\\');
+    const QChar backSlash = u'\\';
     QString nativeWorkingDir = QDir::toNativeSeparators(workingDirectory.isEmpty() ?  QDir::currentPath() : workingDirectory);
     if (!nativeWorkingDir.endsWith(backSlash))
         nativeWorkingDir += backSlash;
@@ -317,8 +294,8 @@ static inline char *encodeFileName(const QString &f)
 static inline char *tempFilePattern()
 {
     QString path = QDir::tempPath();
-    if (!path.endsWith(QLatin1Char('/')))
-        path += QLatin1Char('/');
+    if (!path.endsWith(u'/'))
+        path += u'/';
     path += QStringLiteral("tmpXXXXXX");
     return encodeFileName(path);
 }
@@ -396,7 +373,7 @@ bool runProcess(const QString &binary, const QStringList &args,
         char **argv  = new char *[args.size() + 2]; // Create argv.
         char **ap = argv;
         *ap++ = encodeFileName(binary);
-        for (const QString &a : qAsConst(args))
+        for (const QString &a : std::as_const(args))
             *ap++ = encodeFileName(a);
         *ap = 0;
 
@@ -468,14 +445,14 @@ QMap<QString, QString> queryQtPaths(const QString &qtpathsBinary, QString *error
             + QStringLiteral(": ") + QString::fromLocal8Bit(stdErr);
         return QMap<QString, QString>();
     }
-    const QString output = QString::fromLocal8Bit(stdOut).trimmed().remove(QLatin1Char('\r'));
+    const QString output = QString::fromLocal8Bit(stdOut).trimmed().remove(u'\r');
     QMap<QString, QString> result;
-    const int size = output.size();
-    for (int pos = 0; pos < size; ) {
-        const int colonPos = output.indexOf(QLatin1Char(':'), pos);
+    const qsizetype size = output.size();
+    for (qsizetype pos = 0; pos < size; ) {
+        const qsizetype colonPos = output.indexOf(u':', pos);
         if (colonPos < 0)
             break;
-        int endPos = output.indexOf(QLatin1Char('\n'), colonPos + 1);
+        qsizetype endPos = output.indexOf(u'\n', colonPos + 1);
         if (endPos < 0)
             endPos = size;
         const QString key = output.mid(pos, colonPos - pos);
@@ -494,7 +471,7 @@ QMap<QString, QString> queryQtPaths(const QString &qtpathsBinary, QString *error
                 if (pos >= 0) {
                     const QString infix = QString::fromUtf8(line.right(line.size() - pos - 1).trimmed());
                     if (!infix.isEmpty())
-                        result.insert(QLatin1String(qmakeInfixKey), infix);
+                        result.insert(QLatin1StringView(qmakeInfixKey), infix);
                 }
                 break;
             }
@@ -511,7 +488,7 @@ bool updateFile(const QString &sourceFileName, const QStringList &nameFilters,
                 const QString &targetDirectory, unsigned flags, JsonOutput *json, QString *errorMessage)
 {
     const QFileInfo sourceFileInfo(sourceFileName);
-    const QString targetFileName = targetDirectory + QLatin1Char('/') + sourceFileInfo.fileName();
+    const QString targetFileName = targetDirectory + u'/' + sourceFileInfo.fileName();
     if (optVerboseLevel > 1)
         std::wcout << "Checking " << sourceFileName << ", " << targetFileName<< '\n';
 
@@ -736,21 +713,19 @@ enum MsvcDebugRuntimeResult { MsvcDebugRuntime, MsvcReleaseRuntime, NoMsvcRuntim
 static inline MsvcDebugRuntimeResult checkMsvcDebugRuntime(const QStringList &dependentLibraries)
 {
     for (const QString &lib : dependentLibraries) {
-        int pos = 0;
-        if (lib.startsWith(QLatin1String("MSVCR"), Qt::CaseInsensitive)
-            || lib.startsWith(QLatin1String("MSVCP"), Qt::CaseInsensitive)
-            || lib.startsWith(QLatin1String("VCRUNTIME"), Qt::CaseInsensitive)) {
-            int lastDotPos = lib.lastIndexOf(QLatin1Char('.'));
+        qsizetype pos = 0;
+        if (lib.startsWith("MSVCR"_L1, Qt::CaseInsensitive)
+            || lib.startsWith("MSVCP"_L1, Qt::CaseInsensitive)
+            || lib.startsWith("VCRUNTIME"_L1, Qt::CaseInsensitive)) {
+            qsizetype lastDotPos = lib.lastIndexOf(u'.');
             pos = -1 == lastDotPos ? 0 : lastDotPos - 1;
         }
 
-        if (pos > 0 && lib.contains(QLatin1String("_app"), Qt::CaseInsensitive))
+        if (pos > 0 && lib.contains("_app"_L1, Qt::CaseInsensitive))
             pos -= 4;
 
-        if (pos) {
-            return lib.at(pos).toLower() == QLatin1Char('d')
-                ? MsvcDebugRuntime : MsvcReleaseRuntime;
-        }
+        if (pos)
+            return lib.at(pos).toLower() == u'd' ? MsvcDebugRuntime : MsvcReleaseRuntime;
     }
     return NoMsvcRuntime;
 }
@@ -846,7 +821,7 @@ bool readPeExecutable(const QString &peExecutableFileName, QString *errorMessage
             if (dependentLibrariesIn) {
                 std::wcout << ", dependent libraries: ";
                 if (optVerboseLevel > 2)
-                    std::wcout << dependentLibrariesIn->join(QLatin1Char(' '));
+                    std::wcout << dependentLibrariesIn->join(u' ');
                 else
                     std::wcout << dependentLibrariesIn->size();
             }
@@ -871,7 +846,7 @@ bool readPeExecutable(const QString &peExecutableFileName, QString *errorMessage
 QString findD3dCompiler(Platform platform, const QString &qtBinDir, unsigned wordSize)
 {
     const QString prefix = QStringLiteral("D3Dcompiler_");
-    const QString suffix = QLatin1String(windowsSharedLibrarySuffix);
+    const QString suffix = QLatin1StringView(windowsSharedLibrarySuffix);
     // Get the DLL from Kit 8.0 onwards
     const QString kitDir = QString::fromLocal8Bit(qgetenv("WindowsSdkDir"));
     if (!kitDir.isEmpty()) {
@@ -883,7 +858,7 @@ QString findD3dCompiler(Platform platform, const QString &qtBinDir, unsigned wor
         }
         QDir redistDir(redistDirPath);
         if (redistDir.exists()) {
-            const QFileInfoList files = redistDir.entryInfoList(QStringList(prefix + QLatin1Char('*') + suffix), QDir::Files);
+            const QFileInfoList files = redistDir.entryInfoList(QStringList(prefix + u'*' + suffix), QDir::Files);
             if (!files.isEmpty())
                 return files.front().absoluteFilePath();
         }
@@ -893,8 +868,8 @@ QString findD3dCompiler(Platform platform, const QString &qtBinDir, unsigned wor
         candidateVersions.append(prefix + QString::number(i) + suffix);
     // Check the bin directory of the Qt SDK (in case it is shadowed by the
     // Windows system directory in PATH).
-    for (const QString &candidate : qAsConst(candidateVersions)) {
-        const QFileInfo fi(qtBinDir + QLatin1Char('/') + candidate);
+    for (const QString &candidate : std::as_const(candidateVersions)) {
+        const QFileInfo fi(qtBinDir + u'/' + candidate);
         if (fi.isFile())
             return fi.absoluteFilePath();
     }
@@ -902,7 +877,7 @@ QString findD3dCompiler(Platform platform, const QString &qtBinDir, unsigned wor
     if (platform.testFlag(IntelBased)) {
         QString errorMessage;
         unsigned detectedWordSize;
-        for (const QString &candidate : qAsConst(candidateVersions)) {
+        for (const QString &candidate : std::as_const(candidateVersions)) {
             const QString dll = findInPath(candidate);
             if (!dll.isEmpty()
                 && readPeExecutable(dll, &errorMessage, 0, &detectedWordSize, 0)

@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2022 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 BogDan Vatra <bogdan@kde.org>
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QCoreApplication>
 #include <QDir>
@@ -39,6 +14,8 @@
 #include <functional>
 #include <thread>
 
+#include <shellquote_shared.h>
+
 #ifdef Q_CC_MSVC
 #define popen _popen
 #define QT_POPEN_READ "rb"
@@ -46,6 +23,8 @@
 #else
 #define QT_POPEN_READ "r"
 #endif
+
+using namespace Qt::StringLiterals;
 
 static bool checkJunit(const QByteArray &data) {
     QXmlStreamReader reader{data};
@@ -70,13 +49,13 @@ static bool checkJunit(const QByteArray &data) {
 }
 
 static bool checkTxt(const QByteArray &data) {
-    if (data.indexOf(QLatin1String("\nFAIL!  : ")) >= 0)
+    if (data.indexOf("\nFAIL!  : "_L1) >= 0)
         return false;
-    if (data.indexOf(QLatin1String("\nXPASS  : ")) >= 0)
+    if (data.indexOf("\nXPASS  : "_L1) >= 0)
         return false;
     // Look for "********* Finished testing of tst_QTestName *********"
-    static const QRegularExpression testTail(QLatin1String("\\*+ +Finished testing of .+ +\\*+"));
-    return testTail.match(QLatin1String(data)).hasMatch();
+    static const QRegularExpression testTail("\\*+ +Finished testing of .+ +\\*+"_L1);
+    return testTail.match(QLatin1StringView(data)).hasMatch();
 }
 
 static bool checkCsv(const QByteArray &data) {
@@ -118,7 +97,7 @@ static bool checkTeamcity(const QByteArray &data) {
     const QList<QByteArray> lines = data.trimmed().split('\n');
     if (lines.isEmpty())
         return false;
-    return lines.last().startsWith(QLatin1String("##teamcity[testSuiteFinished "));
+    return lines.last().startsWith("##teamcity[testSuiteFinished "_L1);
 }
 
 static bool checkTap(const QByteArray &data) {
@@ -127,8 +106,8 @@ static bool checkTap(const QByteArray &data) {
     if (data.indexOf("\nnot ok ") >= 0)
         return false;
 
-    static const QRegularExpression testTail(QLatin1String("ok [0-9]* - cleanupTestCase\\(\\)"));
-    return testTail.match(QLatin1String(data)).hasMatch();
+    static const QRegularExpression testTail("ok [0-9]* - cleanupTestCase\\(\\)"_L1);
+    return testTail.match(QLatin1StringView(data)).hasMatch();
 }
 
 struct Options
@@ -185,77 +164,6 @@ static bool execCommand(const QString &command, QByteArray *output = nullptr, bo
     fflush(stderr);
 
     return pclose(process) == 0;
-}
-
-// Copy-pasted from qmake/library/ioutil.cpp
-inline static bool hasSpecialChars(const QString &arg, const uchar (&iqm)[16])
-{
-    for (int x = arg.length() - 1; x >= 0; --x) {
-        ushort c = arg.unicode()[x].unicode();
-        if ((c < sizeof(iqm) * 8) && (iqm[c / 8] & (1 << (c & 7))))
-            return true;
-    }
-    return false;
-}
-
-static QString shellQuoteUnix(const QString &arg)
-{
-    // Chars that should be quoted (TM). This includes:
-    static const uchar iqm[] = {
-        0xff, 0xff, 0xff, 0xff, 0xdf, 0x07, 0x00, 0xd8,
-        0x00, 0x00, 0x00, 0x38, 0x01, 0x00, 0x00, 0x78
-    }; // 0-32 \'"$`<>|;&(){}*?#!~[]
-
-    if (!arg.length())
-        return QStringLiteral("\"\"");
-
-    QString ret(arg);
-    if (hasSpecialChars(ret, iqm)) {
-        ret.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
-        ret.prepend(QLatin1Char('\''));
-        ret.append(QLatin1Char('\''));
-    }
-    return ret;
-}
-
-static QString shellQuoteWin(const QString &arg)
-{
-    // Chars that should be quoted (TM). This includes:
-    // - control chars & space
-    // - the shell meta chars "&()<>^|
-    // - the potential separators ,;=
-    static const uchar iqm[] = {
-        0xff, 0xff, 0xff, 0xff, 0x45, 0x13, 0x00, 0x78,
-        0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x10
-    };
-
-    if (!arg.length())
-        return QStringLiteral("\"\"");
-
-    QString ret(arg);
-    if (hasSpecialChars(ret, iqm)) {
-        // Quotes are escaped and their preceding backslashes are doubled.
-        // It's impossible to escape anything inside a quoted string on cmd
-        // level, so the outer quoting must be "suspended".
-        ret.replace(QRegularExpression(QStringLiteral("(\\\\*)\"")), QStringLiteral("\"\\1\\1\\^\"\""));
-        // The argument must not end with a \ since this would be interpreted
-        // as escaping the quote -- rather put the \ behind the quote: e.g.
-        // rather use "foo"\ than "foo\"
-        int i = ret.length();
-        while (i > 0 && ret.at(i - 1) == QLatin1Char('\\'))
-            --i;
-        ret.insert(i, QLatin1Char('"'));
-        ret.prepend(QLatin1Char('"'));
-    }
-    return ret;
-}
-
-static QString shellQuote(const QString &arg)
-{
-    if (QDir::separator() == QLatin1Char('\\'))
-        return shellQuoteWin(arg);
-    else
-        return shellQuoteUnix(arg);
 }
 
 static bool parseOptions()
@@ -322,7 +230,7 @@ static bool parseOptions()
 }
 
 static void printHelp()
-{//                 "012345678901234567890123456789012345678901234567890123456789012345678901"
+{
     fprintf(stderr, "Syntax: %s <options> -- [TESTARGS] \n"
                     "\n"
                     "  Creates an Android package in a temp directory <destination> and\n"
@@ -454,7 +362,7 @@ static bool isRunning() {
 
         return false;
     }
-    return output.indexOf(QLatin1String(" " + g_options.package.toUtf8())) > -1;
+    return output.indexOf(QLatin1StringView(" " + g_options.package.toUtf8())) > -1;
 }
 
 static bool waitToFinish()

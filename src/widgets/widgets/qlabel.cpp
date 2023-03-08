@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qpainter.h"
 #include "qevent.h"
@@ -54,22 +18,24 @@
 #include "private/qstylesheetstyle_p.h"
 #include <qmath.h>
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 #include <qaccessible.h>
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QLabelPrivate::QLabelPrivate()
     : QFramePrivate(),
       sh(),
       msh(),
       text(),
-      pixmap(nullptr),
-      scaledpixmap(nullptr),
-      cachedimage(nullptr),
+      pixmap(),
+      scaledpixmap(),
+      cachedimage(),
 #ifndef QT_NO_PICTURE
-      picture(nullptr),
+      picture(),
 #endif
 #if QT_CONFIG(movie)
       movie(),
@@ -338,7 +304,7 @@ void QLabel::setText(const QString &text)
 
     d->updateLabel();
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     if (accessibleName().isEmpty()) {
         QAccessibleEvent event(this, QAccessible::NameChanged);
         QAccessible::updateAccessibility(&event);
@@ -375,7 +341,7 @@ void QLabel::setPixmap(const QPixmap &pixmap)
     Q_D(QLabel);
     if (!d->pixmap || d->pixmap->cacheKey() != pixmap.cacheKey()) {
         d->clearContents();
-        d->pixmap = new QPixmap(pixmap);
+        d->pixmap = pixmap;
     }
 
     d->updateLabel();
@@ -420,7 +386,7 @@ void QLabel::setPicture(const QPicture &picture)
 {
     Q_D(QLabel);
     d->clearContents();
-    d->picture = new QPicture(picture);
+    d->picture = picture;
 
     d->updateLabel();
 }
@@ -616,7 +582,7 @@ QSize QLabelPrivate::sizeForWidth(int w) const
         int m = indent;
 
         if (m < 0 && q->frameWidth()) // no indent, but we do have a frame
-            m = fm.horizontalAdvance(QLatin1Char('x')) - margin*2;
+            m = fm.horizontalAdvance(u'x') - margin*2;
         if (m > 0) {
             if ((align & Qt::AlignLeft) || (align & Qt::AlignRight))
                 hextra += m;
@@ -1131,12 +1097,12 @@ void QLabel::paintEvent(QPaintEvent *)
                                : (d->pixmap->size() * (dpr / d->pixmap->devicePixelRatio()));
             if (!d->scaledpixmap || d->scaledpixmap->size() != scaledSize) {
                 if (!d->cachedimage)
-                    d->cachedimage = new QImage(d->pixmap->toImage());
-                delete d->scaledpixmap;
+                    d->cachedimage = d->pixmap->toImage();
+                d->scaledpixmap.reset();
                 QImage scaledImage =
                     d->cachedimage->scaled(scaledSize,
                                            Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-                d->scaledpixmap = new QPixmap(QPixmap::fromImage(std::move(scaledImage)));
+                d->scaledpixmap = QPixmap::fromImage(std::move(scaledImage));
                 d->scaledpixmap->setDevicePixelRatio(dpr);
             }
             pix = *d->scaledpixmap;
@@ -1246,7 +1212,7 @@ void QLabelPrivate::updateShortcut()
     // But then we do want to hide the ampersands, so we can't use shortcutId.
     hasShortcut = false;
 
-    if (!text.contains(QLatin1Char('&')))
+    if (!text.contains(u'&'))
         return;
     hasShortcut = true;
     shortcutId = q->grabShortcut(QKeySequence::mnemonic(text));
@@ -1337,15 +1303,11 @@ void QLabelPrivate::clearContents()
     hasShortcut = false;
 
 #ifndef QT_NO_PICTURE
-    delete picture;
-    picture = nullptr;
+    picture.reset();
 #endif
-    delete scaledpixmap;
-    scaledpixmap = nullptr;
-    delete cachedimage;
-    cachedimage = nullptr;
-    delete pixmap;
-    pixmap = nullptr;
+    scaledpixmap.reset();
+    cachedimage.reset();
+    pixmap.reset();
 
     text.clear();
     Q_Q(QLabel);
@@ -1491,10 +1453,8 @@ void QLabel::setScaledContents(bool enable)
         return;
     d->scaledcontents = enable;
     if (!enable) {
-        delete d->scaledpixmap;
-        d->scaledpixmap = nullptr;
-        delete d->cachedimage;
-        d->cachedimage = nullptr;
+        d->scaledpixmap.reset();
+        d->cachedimage.reset();
     }
     update(contentsRect());
 }
@@ -1521,7 +1481,7 @@ QRect QLabelPrivate::documentRect() const
                                                           : q->layoutDirection(), QFlag(this->align));
     int m = indent;
     if (m < 0 && q->frameWidth()) // no indent, but we do have a frame
-        m = q->fontMetrics().horizontalAdvance(QLatin1Char('x')) / 2 - margin;
+        m = q->fontMetrics().horizontalAdvance(u'x') / 2 - margin;
     if (m > 0) {
         if (align & Qt::AlignLeft)
             cr.setLeft(cr.left() + m);
@@ -1563,11 +1523,11 @@ void QLabelPrivate::ensureTextPopulated() const
                 int from = 0;
                 bool found = false;
                 QTextCursor cursor;
-                while (!(cursor = control->document()->find((QLatin1String("&")), from)).isNull()) {
+                while (!(cursor = control->document()->find(("&"_L1), from)).isNull()) {
                     cursor.deleteChar(); // remove the ampersand
                     cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
                     from = cursor.position();
-                    if (!found && cursor.selectedText() != QLatin1String("&")) { //not a second &
+                    if (!found && cursor.selectedText() != "&"_L1) { //not a second &
                         found = true;
                         shortcutCursor = cursor;
                     }

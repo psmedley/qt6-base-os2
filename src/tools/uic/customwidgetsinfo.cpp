@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "customwidgetsinfo.h"
 #include "driver.h"
@@ -34,6 +9,8 @@
 #include <utility>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 CustomWidgetsInfo::CustomWidgetsInfo() = default;
 
@@ -109,8 +86,8 @@ bool CustomWidgetsInfo::isAmbiguousSignal(const QString &className,
     if (signalSignature.startsWith(u"triggered") && extends(className, "QAction"))
         return true;
     if (signalSignature.startsWith(u"clicked(")
-        && extendsOneOf(className, {u"QCommandLinkButton"_qs, u"QCheckBox"_qs,
-                                    u"QPushButton"_qs, u"QRadioButton"_qs, u"QToolButton"_qs})) {
+        && extendsOneOf(className, {u"QCommandLinkButton"_s, u"QCheckBox"_s,
+                                    u"QPushButton"_s, u"QRadioButton"_s, u"QToolButton"_s})) {
         return true;
     }
     return false;
@@ -118,8 +95,8 @@ bool CustomWidgetsInfo::isAmbiguousSignal(const QString &className,
 
 QString CustomWidgetsInfo::realClassName(const QString &className) const
 {
-    if (className == QLatin1String("Line"))
-        return QLatin1String("QFrame");
+    if (className == "Line"_L1)
+        return "QFrame"_L1;
 
     return className;
 }
@@ -137,12 +114,12 @@ QString CustomWidgetsInfo::simpleContainerAddPageMethod(const QString &name) con
     using AddPageMethod = std::pair<QString, QString>;
 
     static const AddPageMethod addPageMethods[] = {
-        {u"QStackedWidget"_qs, u"addWidget"_qs},
-        {u"QToolBar"_qs, u"addWidget"_qs},
-        {u"QDockWidget"_qs, u"setWidget"_qs},
-        {u"QScrollArea"_qs, u"setWidget"_qs},
-        {u"QSplitter"_qs, u"addWidget"_qs},
-        {u"QMdiArea"_qs, u"addSubWindow"_qs}
+        {u"QStackedWidget"_s, u"addWidget"_s},
+        {u"QToolBar"_s, u"addWidget"_s},
+        {u"QDockWidget"_s, u"setWidget"_s},
+        {u"QScrollArea"_s, u"setWidget"_s},
+        {u"QSplitter"_s, u"addWidget"_s},
+        {u"QMdiArea"_s, u"addSubWindow"_s}
     };
     for (const auto &m : addPageMethods) {
         if (extends(name, m.first))

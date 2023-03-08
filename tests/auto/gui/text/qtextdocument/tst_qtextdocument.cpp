@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -205,6 +180,8 @@ private slots:
     void insertHtmlWithComments_data();
     void insertHtmlWithComments();
 
+    void delayedLayout();
+
 private:
     void backgroundImage_checkExpectedHtml(const QTextDocument &doc);
     void buildRegExpData();
@@ -297,6 +274,8 @@ void tst_QTextDocument::init()
             "<html><head><meta name=\"qrichtext\" content=\"1\" /><meta charset=\"utf-8\" /><style type=\"text/css\">\n"
             "p, li { white-space: pre-wrap; }\n"
             "hr { height: 1px; border-width: 0; }\n"
+            "li.unchecked::marker { content: \"\\2610\"; }\n"
+            "li.checked::marker { content: \"\\2612\"; }\n"
             "</style></head>"
             "<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:%4;\">\n");
     htmlHead = htmlHead.arg(defaultFont.family())
@@ -486,17 +465,17 @@ void tst_QTextDocument::basicIsModifiedChecks()
     QVERIFY(!doc->isModified());
     cursor.insertText("Hello World");
     QVERIFY(doc->isModified());
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QVERIFY(spy.takeFirst().at(0).toBool());
 
     doc->undo();
     QVERIFY(!doc->isModified());
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QVERIFY(!spy.takeFirst().at(0).toBool());
 
     doc->redo();
     QVERIFY(doc->isModified());
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QVERIFY(spy.takeFirst().at(0).toBool());
 }
 
@@ -587,16 +566,16 @@ void tst_QTextDocument::noundo_basicIsModifiedChecks()
     QVERIFY(!doc->isModified());
     cursor.insertText("Hello World");
     QVERIFY(doc->isModified());
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QVERIFY(spy.takeFirst().at(0).toBool());
 
     doc->undo();
     QVERIFY(doc->isModified());
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
 
     doc->redo();
     QVERIFY(doc->isModified());
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
 }
 
 void tst_QTextDocument::task240325()
@@ -1394,7 +1373,7 @@ void tst_QTextDocument::toHtml_data()
         QTest::newRow("lists") << QTextDocumentFragment(&doc)
                           <<
                              QString("EMPTYBLOCK") +
-                             QString("<ul style=\"margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 1;\"><li DEFAULTBLOCKSTYLE>Blubb</li>\n<li DEFAULTBLOCKSTYLE>Blah</li></ul>");
+                             QString("<ul style=\"margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 1;\">\n<li DEFAULTBLOCKSTYLE>Blubb</li>\n<li DEFAULTBLOCKSTYLE>Blah</li></ul>");
     }
 
     {
@@ -1417,7 +1396,7 @@ void tst_QTextDocument::toHtml_data()
         QTest::newRow("charfmt-for-list-item") << QTextDocumentFragment(&doc)
                           <<
                              QString("EMPTYBLOCK") +
-                             QString("<ul style=\"margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 1;\"><li DEFAULTBLOCKSTYLE>Blubb</li>\n<li style=\" color:#0000ff;\" DEFAULTBLOCKSTYLE><span style=\" color:#ff0000;\">Blah</span></li></ul>");
+                             QString("<ul style=\"margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 1;\">\n<li DEFAULTBLOCKSTYLE>Blubb</li>\n<li style=\" color:#0000ff;\" DEFAULTBLOCKSTYLE><span style=\" color:#ff0000;\">Blah</span></li></ul>");
     }
 
     {
@@ -1447,7 +1426,7 @@ void tst_QTextDocument::toHtml_data()
         QTest::newRow("list-indent") << QTextDocumentFragment(&doc)
                                   <<
                                     QString("EMPTYBLOCK") +
-                                    QString("<ul style=\"margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 4;\"><li DEFAULTBLOCKSTYLE>Blah</li></ul>");
+                                    QString("<ul style=\"margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 4;\">\n<li DEFAULTBLOCKSTYLE>Blah</li></ul>");
     }
 
     {
@@ -1735,7 +1714,7 @@ void tst_QTextDocument::toHtml_data()
 
         QTest::newRow("list-ul-margin") << QTextDocumentFragment(&doc)
                                         << QString("EMPTYBLOCK") +
-                                           QString("<ul style=\"margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 1;\"><li DEFAULTBLOCKSTYLE>Blah</li></ul>");
+                                           QString("<ul style=\"margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 1;\">\n<li DEFAULTBLOCKSTYLE>Blah</li></ul>");
     }
     {
         CREATE_DOC_AND_CURSOR();
@@ -1745,12 +1724,12 @@ void tst_QTextDocument::toHtml_data()
         cursor.insertHtml(listHtml);
 
         QTest::newRow("nested-lists-one") << QTextDocumentFragment(&doc)
-            << QString("<ul DEFAULTULSTYLE 1;\"><li style=\" margin-top:12px; margin-bottom:0px; "
+            << QString("<ul DEFAULTULSTYLE 1;\">\n<li style=\" margin-top:12px; margin-bottom:0px; "
                        "margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">"
-                       "item-1</li>\n<li DEFAULTBLOCKSTYLE>item-2\n<ul DEFAULTULSTYLE 2;\"><li "
+                       "item-1</li>\n<li DEFAULTBLOCKSTYLE>item-2\n<ul DEFAULTULSTYLE 2;\">\n<li "
                        "DEFAULTBLOCKSTYLE>item-2.1</li>\n<li DEFAULTBLOCKSTYLE>item-2.2\n<ul "
-                       "DEFAULTULSTYLE 3;\"><li DEFAULTBLOCKSTYLE>item-2.2.1</li></ul></li>\n"
-                       "<li DEFAULTBLOCKSTYLE>item-2.3\n<ul DEFAULTULSTYLE 3;\"><li DEFAULTBLOCKSTYLE>"
+                       "DEFAULTULSTYLE 3;\">\n<li DEFAULTBLOCKSTYLE>item-2.2.1</li></ul></li>\n"
+                       "<li DEFAULTBLOCKSTYLE>item-2.3\n<ul DEFAULTULSTYLE 3;\">\n<li DEFAULTBLOCKSTYLE>"
                        "item-2.3.1</li></ul></li></ul></li>\n<li DEFAULTLASTLISTYLE>item-3</li></ul>");
     }
     {
@@ -1759,9 +1738,9 @@ void tst_QTextDocument::toHtml_data()
         cursor.insertHtml(listHtml);
 
         QTest::newRow("nested-lists-two") << QTextDocumentFragment(&doc)
-            << QString("<ul DEFAULTULSTYLE 1;\"><li style=\" margin-top:12px; margin-bottom:0px; "
+            << QString("<ul DEFAULTULSTYLE 1;\">\n<li style=\" margin-top:12px; margin-bottom:0px; "
                        "margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">"
-                       "item-1</li>\n<li DEFAULTLASTLISTYLE>item-2\n<ul DEFAULTULSTYLE 2;\"><li "
+                       "item-1</li>\n<li DEFAULTLASTLISTYLE>item-2\n<ul DEFAULTULSTYLE 2;\">\n<li "
                        "DEFAULTBLOCKSTYLE>item-2.1</li></ul></li></ul>");
     }
     {
@@ -1771,9 +1750,9 @@ void tst_QTextDocument::toHtml_data()
         cursor.insertHtml(listHtml);
 
         QTest::newRow("nested-lists-three") << QTextDocumentFragment(&doc)
-            << QString("<ul DEFAULTULSTYLE 1;\"><li style=\" margin-top:12px; margin-bottom:0px; "
+            << QString("<ul DEFAULTULSTYLE 1;\">\n<li style=\" margin-top:12px; margin-bottom:0px; "
                        "margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">"
-                       "item-1</li>\n<li DEFAULTLASTLISTYLE>item-2\n<ul DEFAULTULSTYLE 2;\"><li "
+                       "item-1</li>\n<li DEFAULTLASTLISTYLE>item-2\n<ul DEFAULTULSTYLE 2;\">\n<li "
                        "DEFAULTBLOCKSTYLE>item-2.1</li>\n<li DEFAULTBLOCKSTYLE>item-2.2</li></ul>"
                        "</li></ul>");
     }
@@ -1784,11 +1763,22 @@ void tst_QTextDocument::toHtml_data()
         cursor.insertHtml(listHtml);
 
         QTest::newRow("not-nested-list") << QTextDocumentFragment(&doc)
-            << QString("<ul DEFAULTULSTYLE 1;\"><li style=\" margin-top:12px; margin-bottom:0px; "
+            << QString("<ul DEFAULTULSTYLE 1;\">\n<li style=\" margin-top:12px; margin-bottom:0px; "
                        "margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">"
-                       "item-1.1</li>\n<li DEFAULTBLOCKSTYLE>item-1.2</li></ul>\n<ul DEFAULTULSTYLE 1;\">"
+                       "item-1.1</li>\n<li DEFAULTBLOCKSTYLE>item-1.2</li></ul>\n<ul DEFAULTULSTYLE 1;\">\n"
                        "<li style=\" margin-top:12px; margin-bottom:12px; margin-left:0px; "
                        "margin-right:0px; -qt-block-indent:0; text-indent:0px;\">item-2.1</li></ul>");
+    }
+    {
+        CREATE_DOC_AND_CURSOR();
+        const QString listHtml = "<ul><li>bullet</li><li class=\"unchecked\">unchecked item</li><li class=\"checked\">checked item</li></ul>";
+        cursor.insertHtml(listHtml);
+
+        QTest::newRow("list with and without checkboxes") << QTextDocumentFragment(&doc)
+            << QString("<ul style=\"margin-top: 0px; margin-bottom: 0px; margin-left: 0px; margin-right: 0px; -qt-list-indent: 1;\">\n"
+                       "<li style=\" margin-top:12px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">bullet</li>\n"
+                       "<li class=\"unchecked\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">unchecked item</li>\n"
+                       "<li class=\"checked\" style=\" margin-top:0px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">checked item</li></ul>");
     }
 }
 
@@ -1955,7 +1945,7 @@ void tst_QTextDocument::toHtmlBodyBgColor()
     doc.rootFrame()->setFrameFormat(fmt);
 
     QString expectedHtml = htmlHead;
-    expectedHtml.insert(htmlHead.length() - 2, " bgcolor=\"#0000ff\"");
+    expectedHtml.insert(htmlHead.size() - 2, " bgcolor=\"#0000ff\"");
     expectedHtml += "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
              + htmlTail;
 
@@ -1975,7 +1965,7 @@ void tst_QTextDocument::toHtmlBodyBgColorRgba()
     doc.rootFrame()->setFrameFormat(fmt);
 
     QString expectedHtml = htmlHead;
-    expectedHtml.insert(htmlHead.length() - 2, " bgcolor=\"rgba(255,0,0,0.2)\"");
+    expectedHtml.insert(htmlHead.size() - 2, " bgcolor=\"rgba(255,0,0,0.2)\"");
     expectedHtml += "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
              + htmlTail;
 
@@ -1995,7 +1985,7 @@ void tst_QTextDocument::toHtmlBodyBgColorTransparent()
     doc.rootFrame()->setFrameFormat(fmt);
 
     QString expectedHtml = htmlHead;
-    expectedHtml.insert(htmlHead.length() - 2, " bgcolor=\"transparent\"");
+    expectedHtml.insert(htmlHead.size() - 2, " bgcolor=\"transparent\"");
     expectedHtml += "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
              + htmlTail;
 
@@ -2061,7 +2051,7 @@ void tst_QTextDocument::toHtmlDefaultFontSpacingProperties()
     doc.setDefaultFont(fnt);
 
     QString expectedOutput = htmlHead;
-    expectedOutput.insert(htmlHead.length() - 3, " letter-spacing:13px; word-spacing:15px;");
+    expectedOutput.insert(htmlHead.size() - 3, " letter-spacing:13px; word-spacing:15px;");
     expectedOutput +=
             "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
             + htmlTail;
@@ -2081,7 +2071,7 @@ void tst_QTextDocument::toHtmlTextDecorationUnderline()
     doc.setDefaultFont(fnt);
 
     QString expectedOutput = htmlHead;
-    expectedOutput.insert(htmlHead.length() - 3, " text-decoration: underline;");
+    expectedOutput.insert(htmlHead.size() - 3, " text-decoration: underline;");
     expectedOutput +=
             "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Some text</p>"
             + htmlTail;
@@ -2096,7 +2086,7 @@ void tst_QTextDocument::toHtmlTextDecorationUnderline()
     cursor.mergeCharFormat(format);
 
     expectedOutput = htmlHead;
-    expectedOutput.insert(htmlHead.length() - 3, " text-decoration: underline;");
+    expectedOutput.insert(htmlHead.size() - 3, " text-decoration: underline;");
     expectedOutput +=
             "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; "
             "margin-right:0px; -qt-block-indent:0; text-indent:0px;\">"
@@ -2750,11 +2740,11 @@ void tst_QTextDocument::defaultTableStyle()
                 brushes << sideProperty.value<QBrush>();
             }
             auto errorDetails = qScopeGuard([&]{
-                if (brushes.count() != borderBrushes.count()) {
-                    qWarning("Different count: %lld vs %lld", brushes.count(), borderBrushes.count());
+                if (brushes.size() != borderBrushes.size()) {
+                    qWarning("Different count: %lld vs %lld", brushes.size(), borderBrushes.size());
                     return;
                 }
-                for (int i = 0; i < brushes.count(); ++i) {
+                for (int i = 0; i < brushes.size(); ++i) {
                     QString side;
                     QDebug(&side) << QTextFormat::Property(QTextFormat::TableCellTopBorderBrush + i);
                     QString actual;
@@ -2878,13 +2868,13 @@ void tst_QTextDocument::blockCountChanged()
     doc->setPlainText("Foo");
 
     QCOMPARE(doc->blockCount(), 1);
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
 
     spy.clear();
 
     doc->setPlainText("Foo\nBar");
     QCOMPARE(doc->blockCount(), 2);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QCOMPARE(spy.at(0).value(0).toInt(), 2);
 
     spy.clear();
@@ -2892,16 +2882,16 @@ void tst_QTextDocument::blockCountChanged()
     cursor.movePosition(QTextCursor::End);
     cursor.insertText("Blahblah");
 
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
 
     cursor.insertBlock();
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QCOMPARE(spy.at(0).value(0).toInt(), 3);
 
     spy.clear();
     doc->undo();
 
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QCOMPARE(spy.at(0).value(0).toInt(), 2);
 }
 
@@ -3080,12 +3070,12 @@ void tst_QTextDocument::characterAt()
     QString text("12345\n67890");
     cursor.insertText(text);
     int length = doc.characterCount();
-    QCOMPARE(length, text.length() + 1);
+    QCOMPARE(length, text.size() + 1);
     QCOMPARE(doc.characterAt(length-1), QChar(QChar::ParagraphSeparator));
     QCOMPARE(doc.characterAt(-1), QChar());
     QCOMPARE(doc.characterAt(length), QChar());
     QCOMPARE(doc.characterAt(length + 1), QChar());
-    for (int i = 0; i < text.length(); ++i) {
+    for (int i = 0; i < text.size(); ++i) {
         QChar c = text.at(i);
         if (c == QLatin1Char('\n'))
             c = QChar(QChar::ParagraphSeparator);
@@ -3165,11 +3155,11 @@ void tst_QTextDocument::testUndoCommandAdded()
     QVERIFY(spy.isEmpty());
 
     cursor.insertText("a");
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     cursor.insertText("b"); // should be merged
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     cursor.insertText("c"); // should be merged
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QCOMPARE(doc->toPlainText(), QString("abc"));
     doc->undo();
     QCOMPARE(doc->toPlainText(), QString(""));
@@ -3177,11 +3167,11 @@ void tst_QTextDocument::testUndoCommandAdded()
     doc->clear();
     spy.clear();
     cursor.insertText("aaa");
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     spy.clear();
     cursor.insertText("aaaa\nbcd");
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     spy.clear();
     cursor.beginEditBlock();
@@ -3191,11 +3181,11 @@ void tst_QTextDocument::testUndoCommandAdded()
     cursor.insertText("\nccc");
     QVERIFY(spy.isEmpty());
     cursor.endEditBlock();
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     spy.clear();
     cursor.insertBlock();
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     spy.clear();
     cursor.setPosition(5);
@@ -3207,18 +3197,18 @@ void tst_QTextDocument::testUndoCommandAdded()
     QTextCharFormat cf;
     cf.setFontItalic(true);
     cursor.mergeCharFormat(cf);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     spy.clear();
     doc->undo();
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
     doc->undo();
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
     spy.clear();
     doc->redo();
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
     doc->redo();
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
 }
 
 void tst_QTextDocument::testUndoBlocks()
@@ -3798,7 +3788,7 @@ void tst_QTextDocument::mergeFontFamilies()
 
     QTextCursor cursor = QTextCursor(&td);
     cursor.setPosition(0);
-    cursor.setPosition(QByteArray("Hello World").length(), QTextCursor::KeepAnchor);
+    cursor.setPosition(QByteArray("Hello World").size(), QTextCursor::KeepAnchor);
     cursor.mergeCharFormat(newFormat);
 
     QVERIFY(td.toHtml().contains(QLatin1String("font-family:'Jokerman';")));
@@ -3944,7 +3934,7 @@ void tst_QTextDocument::insertHtmlWithComments()
     QTextDocument doc;
     doc.setHtml(html);
 
-    QCOMPARE(doc.blockCount(), expectedBlocks.count());
+    QCOMPARE(doc.blockCount(), expectedBlocks.size());
 
     QStringList blockContent;
     auto currentBlock = doc.begin();
@@ -3954,6 +3944,25 @@ void tst_QTextDocument::insertHtmlWithComments()
     }
 
     QCOMPARE(blockContent, expectedBlocks);
+}
+
+void tst_QTextDocument::delayedLayout()
+{
+    QTextDocument doc;
+    doc.setHtml("<html>Foobar</html>");
+    QCOMPARE(doc.blockCount(), 1);
+
+    doc.setLayoutEnabled(false);
+
+    // Force creation of a layout
+    QVERIFY(doc.documentLayout());
+
+    QTextBlock block = doc.begin();
+    QTextLayout *layout = block.layout();
+    QCOMPARE(layout->lineCount(), 0); // layout didn't happen yet
+
+    doc.setLayoutEnabled(true);
+    QCOMPARE(layout->lineCount(), 1); // layout happened
 }
 
 QTEST_MAIN(tst_QTextDocument)

@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "tst_qmetatype.h"
 
@@ -417,9 +392,6 @@ protected:
             const QByteArray name = "Bar" + QByteArray::number(i) + postFix;
             const char *nm = name.constData();
             int tp = qRegisterMetaType<Bar>(nm);
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
-            pthread_yield();
-#endif
             QMetaType info(tp);
             if (!info.isValid()) {
                 ++failureCount;
@@ -553,14 +525,14 @@ void tst_QMetaType::properties()
     QCOMPARE(v.typeName(), "QVariantList");
 
     QList<QVariant> values = v.toList();
-    QCOMPARE(values.count(), 2);
+    QCOMPARE(values.size(), 2);
     QCOMPARE(values.at(0).toInt(), 42);
 
     values << 43 << "world";
 
     QVERIFY(setProperty("prop", values));
     v = property("prop");
-    QCOMPARE(v.toList().count(), 4);
+    QCOMPARE(v.toList().size(), 4);
 }
 
 void tst_QMetaType::normalizedTypes()
@@ -587,6 +559,21 @@ void tst_QMetaType::normalizedTypes()
 
 #define TYPENAME_DATA(MetaTypeName, MetaTypeId, RealType)\
     QTest::newRow(#RealType) << int(QMetaType::MetaTypeName) << #RealType;
+
+namespace enumerations {
+    enum Test { a = 0 };
+}
+
+static void ignoreInvalidMetaTypeWarning(int typeId)
+{
+    if (typeId < 0 || typeId > QMetaType::User + 500 ||
+            (typeId > QMetaType::LastCoreType && typeId < QMetaType::FirstGuiType) ||
+            (typeId > QMetaType::LastGuiType && typeId < QMetaType::FirstWidgetsType) ||
+            (typeId > QMetaType::LastWidgetsType && typeId < QMetaType::User)) {
+        QTest::ignoreMessage(QtWarningMsg, "Trying to construct an instance of an invalid type, type id: "
+                             + QByteArray::number(typeId));
+    }
+}
 
 void tst_QMetaType::typeName_data()
 {
@@ -624,6 +611,8 @@ void tst_QMetaType::typeName_data()
     // template instance class derived from Q_GADGET enabled class
     QTest::newRow("GadgetDerivedAndTyped<int>") << ::qMetaTypeId<GadgetDerivedAndTyped<int>>() << QString::fromLatin1("GadgetDerivedAndTyped<int>");
     QTest::newRow("GadgetDerivedAndTyped<int>*") << ::qMetaTypeId<GadgetDerivedAndTyped<int>*>() << QString::fromLatin1("GadgetDerivedAndTyped<int>*");
+
+    QTest::newRow("msvcKeywordPartOfName") << ::qMetaTypeId<enumerations::Test>() << QString::fromLatin1("enumerations::Test");
 }
 
 void tst_QMetaType::typeName()
@@ -634,6 +623,7 @@ void tst_QMetaType::typeName()
     if (aType >= QMetaType::FirstWidgetsType)
         QSKIP("The test doesn't link against QtWidgets.");
 
+    ignoreInvalidMetaTypeWarning(aType);
     const char *rawname = QMetaType::typeName(aType);
     QString name = QString::fromLatin1(rawname);
 
@@ -641,6 +631,7 @@ void tst_QMetaType::typeName()
     QCOMPARE(name.toLatin1(), QMetaObject::normalizedType(name.toLatin1().constData()));
     QCOMPARE(rawname == nullptr, aTypeName.isNull());
 
+    ignoreInvalidMetaTypeWarning(aType);
     QMetaType mt(aType);
     if (mt.isValid()) { // Gui type are not valid
         QCOMPARE(QString::fromLatin1(QMetaType(aType).name()), aTypeName);
@@ -727,6 +718,7 @@ static_assert((!QMetaTypeId2<QMetaType::Type>::IsBuiltIn));
 void tst_QMetaType::create_data()
 {
     QTest::addColumn<int>("type");
+    QTest::newRow("unknown-type") << int(QMetaType::UnknownType);
 #define ADD_METATYPE_TEST_ROW(MetaTypeName, MetaTypeId, RealType) \
     QTest::newRow(QMetaType::typeName(QMetaType::MetaTypeName)) << int(QMetaType::MetaTypeName);
 FOR_EACH_CORE_METATYPE(ADD_METATYPE_TEST_ROW)
@@ -740,12 +732,11 @@ static void testCreateHelper()
     QMetaType info(ID);
     void *actual1 = QMetaType::create(ID);
     void *actual2 = info.create();
-    if (DefaultValueTraits<ID>::IsInitialized) {
-        Type *expected = DefaultValueFactory<ID>::create();
-        QCOMPARE(*static_cast<Type *>(actual1), *expected);
-        QCOMPARE(*static_cast<Type *>(actual2), *expected);
-        delete expected;
-    }
+    Type *expected = DefaultValueFactory<ID>::create();
+    QCOMPARE(*static_cast<Type *>(actual1), *expected);
+    QCOMPARE(*static_cast<Type *>(actual2), *expected);
+    delete expected;
+
     QMetaType::destroy(ID, actual1);
     info.destroy(actual2);
 }
@@ -754,9 +745,6 @@ template<>
 void testCreateHelper<QMetaType::Void>()
 {
     void *actual = QMetaType::create(QMetaType::Void);
-    if (DefaultValueTraits<QMetaType::Void>::IsInitialized) {
-        QVERIFY(DefaultValueFactory<QMetaType::Void>::create());
-    }
     QMetaType::destroy(QMetaType::Void, actual);
 }
 
@@ -770,6 +758,10 @@ void tst_QMetaType::create()
         static TypeTestFunction get(int type)
         {
             switch (type) {
+            case QMetaType::UnknownType:
+                return []() {
+                    QCOMPARE(QMetaType().create(), nullptr);
+                };
 #define RETURN_CREATE_FUNCTION(MetaTypeName, MetaTypeId, RealType) \
             case QMetaType::MetaTypeName: \
             return testCreateHelper<QMetaType::MetaTypeName>;
@@ -821,6 +813,11 @@ void tst_QMetaType::createCopy()
         static TypeTestFunction get(int type)
         {
             switch (type) {
+            case QMetaType::UnknownType:
+                return []() {
+                    char buf[1] = {};
+                    QCOMPARE(QMetaType().create(&buf), nullptr);
+                };
 #define RETURN_CREATE_COPY_FUNCTION(MetaTypeName, MetaTypeId, RealType) \
             case QMetaType::MetaTypeName: \
             return testCreateCopyHelper<QMetaType::MetaTypeName>;
@@ -864,6 +861,7 @@ void tst_QMetaType::sizeOf()
 {
     QFETCH(int, type);
     QFETCH(size_t, size);
+    ignoreInvalidMetaTypeWarning(type);
     QCOMPARE(size_t(QMetaType::sizeOf(type)), size);
 }
 
@@ -876,6 +874,7 @@ void tst_QMetaType::sizeOfStaticLess()
 {
     QFETCH(int, type);
     QFETCH(size_t, size);
+    ignoreInvalidMetaTypeWarning(type);
     QCOMPARE(size_t(QMetaType(type).sizeOf()), size);
 }
 
@@ -912,6 +911,7 @@ void tst_QMetaType::alignOf()
 {
     QFETCH(int, type);
     QFETCH(size_t, size);
+    ignoreInvalidMetaTypeWarning(type);
     QCOMPARE(size_t(QMetaType(type).alignOf()), size);
 }
 
@@ -1034,6 +1034,7 @@ void tst_QMetaType::flags()
     QFETCH(bool, isEnum);
     QFETCH(bool, isQmlList);
 
+    ignoreInvalidMetaTypeWarning(type);
     QMetaType meta(type);
 
     QCOMPARE(bool(meta.flags() & QMetaType::NeedsConstruction), isComplex);
@@ -1120,12 +1121,10 @@ static void testConstructHelper()
     void *actual2 = info.construct(storage2, /*copy=*/0);
     QCOMPARE(actual1, storage1);
     QCOMPARE(actual2, storage2);
-    if (DefaultValueTraits<ID>::IsInitialized) {
-        Type *expected = DefaultValueFactory<ID>::create();
-        QCOMPARE(*static_cast<Type *>(actual1), *expected);
-        QCOMPARE(*static_cast<Type *>(actual2), *expected);
-        delete expected;
-    }
+    Type *expected = DefaultValueFactory<ID>::create();
+    QCOMPARE(*static_cast<Type *>(actual1), *expected);
+    QCOMPARE(*static_cast<Type *>(actual2), *expected);
+    delete expected;
     QMetaType::destruct(ID, actual1);
     qFreeAligned(storage1);
     info.destruct(actual2);
@@ -1145,9 +1144,6 @@ void testConstructHelper<QMetaType::Void>()
     void *storage = 0;
     void *actual = QMetaType::construct(QMetaType::Void, storage, /*copy=*/0);
     QCOMPARE(actual, storage);
-    if (DefaultValueTraits<QMetaType::Void>::IsInitialized) {
-        QVERIFY(DefaultValueFactory<QMetaType::Void>::create());
-    }
     QMetaType::destruct(QMetaType::Void, actual);
     qFreeAligned(storage);
 
@@ -1162,6 +1158,11 @@ void tst_QMetaType::construct()
         static TypeTestFunction get(int type)
         {
             switch (type) {
+            case QMetaType::UnknownType:
+                return []() {
+                    char buf[1];
+                    QCOMPARE(QMetaType().construct(&buf), nullptr);
+                };
 #define RETURN_CONSTRUCT_FUNCTION(MetaTypeName, MetaTypeId, RealType) \
             case QMetaType::MetaTypeName: \
             return testConstructHelper<QMetaType::MetaTypeName>;
@@ -1325,6 +1326,11 @@ void tst_QMetaType::constructCopy()
         static TypeTestFunction get(int type)
         {
             switch (type) {
+            case QMetaType::UnknownType:
+                return []() {
+                    char buf[1], buf2[1] = {};
+                    QCOMPARE(QMetaType().construct(&buf, &buf2), nullptr);
+                };
 #define RETURN_CONSTRUCT_COPY_FUNCTION(MetaTypeName, MetaTypeId, RealType) \
             case QMetaType::MetaTypeName: \
             return testConstructCopyHelper<QMetaType::MetaTypeName>;
@@ -1474,7 +1480,7 @@ void tst_QMetaType::isRegistered_data()
     // unknown types
     QTest::newRow("-1") << -1 << false;
     QTest::newRow("-42") << -42 << false;
-    QTest::newRow("IsRegisteredDummyType + 1") << (dummyTypeId + 1) << false;
+    QTest::newRow("IsRegisteredDummyType + 1000") << (dummyTypeId + 1000) << false;
     QTest::newRow("QMetaType::UnknownType") << int(QMetaType::UnknownType) << false;
 }
 
@@ -1527,7 +1533,14 @@ void tst_QMetaType::isRegisteredStaticLess()
 {
     QFETCH(int, typeId);
     QFETCH(bool, registered);
+    ignoreInvalidMetaTypeWarning(typeId);
     QCOMPARE(QMetaType(typeId).isRegistered(), registered);
+}
+
+struct NotARegisteredType {};
+void tst_QMetaType::isNotRegistered()
+{
+    QVERIFY(!QMetaType::fromType<NotARegisteredType>().isRegistered());
 }
 
 typedef QHash<int, uint> IntUIntHash;
@@ -1873,6 +1886,8 @@ void tst_QMetaType::saveAndLoadBuiltin_data()
     QTest::addColumn<int>("type");
     QTest::addColumn<bool>("isStreamable");
 
+    QTest::newRow("unknown-type") << int(QMetaType::UnknownType) << false;
+
 #define ADD_METATYPE_TEST_ROW(MetaTypeName, MetaTypeId, RealType) \
     QTest::newRow(#RealType) << MetaTypeId << bool(StreamingTraits<RealType>::isStreamable);
     QT_FOR_EACH_STATIC_TYPE(ADD_METATYPE_TEST_ROW)
@@ -1997,6 +2012,7 @@ void tst_QMetaType::metaObject_data()
     QTest::addColumn<bool>("isGadgetPtr");
     QTest::addColumn<bool>("isQObjectPtr");
 
+    QTest::newRow("unknown-type") << int(QMetaType::UnknownType) << static_cast<const QMetaObject *>(0) << false << false << false;
     QTest::newRow("QObject") << int(QMetaType::QObjectStar) << &QObject::staticMetaObject << false << false << true;
     QTest::newRow("QFile*") << ::qMetaTypeId<QFile*>() << &QFile::staticMetaObject << false << false << true;
     QTest::newRow("MyObject*") << ::qMetaTypeId<MyObject*>() << &MyObject::staticMetaObject << false << false << true;

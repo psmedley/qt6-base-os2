@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qfontcombobox.h"
 
@@ -49,6 +13,8 @@
 #include <qdebug.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 static QFontDatabase::WritingSystem writingSystemFromScript(QLocale::Script script)
 {
@@ -166,13 +132,13 @@ static QFontDatabase::WritingSystem writingSystemForFont(const QFont &font, bool
         return system;
     }
 
-    if (writingSystems.count() == 1 && system > QFontDatabase::Cyrillic)
+    if (writingSystems.size() == 1 && system > QFontDatabase::Cyrillic)
         return system;
 
-    if (writingSystems.count() <= 2 && system > QFontDatabase::Armenian && system < QFontDatabase::Vietnamese)
+    if (writingSystems.size() <= 2 && system > QFontDatabase::Armenian && system < QFontDatabase::Vietnamese)
         return system;
 
-    if (writingSystems.count() <= 5 && system >= QFontDatabase::SimplifiedChinese && system <= QFontDatabase::Korean)
+    if (writingSystems.size() <= 5 && system >= QFontDatabase::SimplifiedChinese && system <= QFontDatabase::Korean)
         return system;
 
     return QFontDatabase::Any;
@@ -287,7 +253,7 @@ void QFontFamilyDelegate::paint(QPainter *painter,
 
     const QString sampleText = comboPrivate->sampleTextForFontFamily.value(text, comboPrivate->sampleTextForWritingSystem.value(system));
     if (system != QFontDatabase::Any || !sampleText.isEmpty()) {
-        int w = painter->fontMetrics().horizontalAdvance(text + QLatin1String("  "));
+        int w = painter->fontMetrics().horizontalAdvance(text + "  "_L1);
         painter->setFont(font2);
         const QString sample = !sampleText.isEmpty() ? sampleText : QFontDatabase::writingSystemSample(system);
         if (option.direction == Qt::RightToLeft)
@@ -350,8 +316,8 @@ void QFontComboBoxPrivate::_q_updateModel()
                 continue;
         }
         result += list.at(i);
-        if (list.at(i) == fi.family() || list.at(i).startsWith(fi.family() + QLatin1String(" [")))
-            offset = result.count() - 1;
+        if (list.at(i) == fi.family() || list.at(i).startsWith(fi.family() + " ["_L1))
+            offset = result.size() - 1;
     }
     list = result;
 
@@ -567,7 +533,7 @@ QSize QFontComboBox::sizeHint() const
 {
     QSize sz = QComboBox::sizeHint();
     QFontMetrics fm(font());
-    sz.setWidth(fm.horizontalAdvance(QLatin1Char('m'))*14);
+    sz.setWidth(fm.horizontalAdvance(u'm') * 14);
     return sz;
 }
 

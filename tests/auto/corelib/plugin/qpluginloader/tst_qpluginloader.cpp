@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2021 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2021 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QSignalSpy>
@@ -410,14 +385,14 @@ void tst_QPluginLoader::deleteinstanceOnUnload()
         QVERIFY(spy2.isValid());
         if (pass == 0) {
             QCOMPARE(loader2.unload(), false);  // refcount not reached 0, not really unloaded
-            QCOMPARE(spy1.count(), 0);
-            QCOMPARE(spy2.count(), 0);
+            QCOMPARE(spy1.size(), 0);
+            QCOMPARE(spy2.size(), 0);
         }
         QCOMPARE(instance1->pluginName(), QLatin1String("Plugin ok"));
         QCOMPARE(instance2->pluginName(), QLatin1String("Plugin ok"));
         QVERIFY(loader1.unload());   // refcount reached 0, did really unload
-        QCOMPARE(spy1.count(), 1);
-        QCOMPARE(spy2.count(), 1);
+        QCOMPARE(spy1.size(), 1);
+        QCOMPARE(spy2.size(), 1);
     }
 }
 
@@ -1003,7 +978,7 @@ void tst_QPluginLoader::reloadPlugin()
     QSignalSpy spy(loader.instance(), &QObject::destroyed);
     QVERIFY(spy.isValid());
     QVERIFY(loader.unload());   // refcount reached 0, did really unload
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     // reload plugin
     QVERIFY(loader.load());
@@ -1018,6 +993,10 @@ void tst_QPluginLoader::reloadPlugin()
 
 void tst_QPluginLoader::loadSectionTableStrippedElf()
 {
+#ifdef Q_OS_ANDROID
+    if (QNativeInterface::QAndroidApplication::sdkVersion() >= 24)
+        QSKIP("Android 7+ (API 24+) linker doesn't allow missing or bad section header");
+#endif
 #if !defined(QT_SHARED)
     QSKIP("This test requires a shared build of Qt, as QPluginLoader::setFileName is a no-op in static builds");
 #elif !defined(Q_OF_ELF)

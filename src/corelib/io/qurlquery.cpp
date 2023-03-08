@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qurlquery.h"
 #include "qurl_p.h"
@@ -551,7 +515,7 @@ QString QUrlQuery::query(QUrl::ComponentFormattingOptions encoding) const
     {
         int size = 0;
         for ( ; it != end; ++it)
-            size += it->first.length() + 1 + it->second.length() + 1;
+            size += it->first.size() + 1 + it->second.size() + 1;
         result.reserve(size + size / 4);
     }
 
@@ -666,7 +630,7 @@ QList<QPair<QString, QString> > QUrlQuery::queryItems(QUrl::ComponentFormattingO
     QList<QPair<QString, QString> > result;
     Map::const_iterator it = d->itemList.constBegin();
     Map::const_iterator end = d->itemList.constEnd();
-    result.reserve(d->itemList.count());
+    result.reserve(d->itemList.size());
     for ( ; it != end; ++it)
         result << qMakePair(d->recodeToUser(it->first, encoding),
                             d->recodeToUser(it->second, encoding));

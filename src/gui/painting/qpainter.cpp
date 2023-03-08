@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 // QtCore
 #include <memory>
@@ -75,8 +39,11 @@
 #include <private/qhexstring_p.h>
 #include <private/qguiapplication_p.h>
 #include <private/qrawfont_p.h>
+#include <private/qfont_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // We changed the type from QScopedPointer to unique_ptr, make sure it's binary compatible:
 static_assert(sizeof(QScopedPointer<QPainterPrivate>) == sizeof(std::unique_ptr<QPainterPrivate>));
@@ -414,7 +381,7 @@ void QPainterPrivate::draw_helper(const QPainterPath &originalPath, DrawOperatio
 
     if (q->hasClipping()) {
         bool hasPerspectiveTransform = false;
-        for (const QPainterClipInfo &info : qAsConst(state->clipInfo)) {
+        for (const QPainterClipInfo &info : std::as_const(state->clipInfo)) {
             if (info.matrix.type() == QTransform::TxProject) {
                 hasPerspectiveTransform = true;
                 break;
@@ -1446,6 +1413,12 @@ void QPainterPrivate::updateState(QPainterState *newState)
     JPEG compression.
     This value was added in Qt 5.13.
 
+    \value NonCosmeticBrushPatterns When painting with a brush with one of the predefined pattern
+    styles, transform the pattern too, along with the object being painted. The default is to treat
+    the pattern as cosmetic, so that the pattern pixels will map directly to device pixels,
+    independently of any active transformations.
+    This value was added in Qt 6.4.
+
     \sa renderHints(), setRenderHint(), {QPainter#Rendering
     Quality}{Rendering Quality}, {Concentric Circles Example}
 
@@ -1643,7 +1616,7 @@ void QPainter::restore()
         tmp->clipPath = QPainterPath();
         d->engine->updateState(*tmp);
         // replay the list of clip states,
-        for (const QPainterClipInfo &info : qAsConst(d->state->clipInfo)) {
+        for (const QPainterClipInfo &info : std::as_const(d->state->clipInfo)) {
             tmp->matrix = info.matrix;
             tmp->matrix *= d->state->redirectionMatrix;
             tmp->clipOperation = info.operation;
@@ -2505,7 +2478,7 @@ QRegion QPainter::clipRegion() const
         const_cast<QPainter *>(this)->d_ptr->updateInvMatrix();
 
     // ### Falcon: Use QPainterPath
-    for (const QPainterClipInfo &info : qAsConst(d->state->clipInfo)) {
+    for (const QPainterClipInfo &info : std::as_const(d->state->clipInfo)) {
         switch (info.clipType) {
 
         case QPainterClipInfo::RegionClip: {
@@ -2672,7 +2645,7 @@ QRectF QPainter::clipBoundingRect() const
     // fast.
     QRectF bounds;
     bool first = true;
-    for (const QPainterClipInfo &info : qAsConst(d->state->clipInfo)) {
+    for (const QPainterClipInfo &info : std::as_const(d->state->clipInfo)) {
          QRectF r;
 
          if (info.clipType == QPainterClipInfo::RectClip)
@@ -5476,8 +5449,12 @@ void QPainter::drawStaticText(const QPointF &topLeftPosition, const QStaticText 
     QStaticTextPrivate *staticText_d =
             const_cast<QStaticTextPrivate *>(QStaticTextPrivate::get(&staticText));
 
-    if (font() != staticText_d->font) {
+    QFontPrivate *fp = QFontPrivate::get(font());
+    QFontPrivate *stfp = QFontPrivate::get(staticText_d->font);
+    if (font() != staticText_d->font || fp == nullptr || stfp == nullptr || fp->dpi != stfp->dpi) {
         staticText_d->font = font();
+        staticText_d->needsRelayout = true;
+    } else if (stfp->engineData == nullptr || stfp->engineData->fontCacheId != QFontCache::instance()->id()) {
         staticText_d->needsRelayout = true;
     }
 
@@ -5616,7 +5593,7 @@ void QPainter::drawText(const QPointF &p, const QString &str, int tf, int justif
     }
     engine.itemize();
     QScriptLine line;
-    line.length = str.length();
+    line.length = str.size();
     engine.shapeLine(line);
 
     int nItems = engine.layoutData->items.size();
@@ -5671,7 +5648,7 @@ void QPainter::drawText(const QRect &r, int flags, const QString &str, QRect *br
 
     Q_D(QPainter);
 
-    if (!d->engine || str.length() == 0 || pen().style() == Qt::NoPen)
+    if (!d->engine || str.size() == 0 || pen().style() == Qt::NoPen)
         return;
 
     if (!d->extended)
@@ -5758,7 +5735,7 @@ void QPainter::drawText(const QRectF &r, int flags, const QString &str, QRectF *
 
     Q_D(QPainter);
 
-    if (!d->engine || str.length() == 0 || pen().style() == Qt::NoPen)
+    if (!d->engine || str.size() == 0 || pen().style() == Qt::NoPen)
         return;
 
     if (!d->extended)
@@ -5877,7 +5854,7 @@ void QPainter::drawText(const QRectF &r, const QString &text, const QTextOption 
 
     Q_D(QPainter);
 
-    if (!d->engine || text.length() == 0 || pen().style() == Qt::NoPen)
+    if (!d->engine || text.size() == 0 || pen().style() == Qt::NoPen)
         return;
 
     if (!d->extended)
@@ -5925,7 +5902,7 @@ static QPixmap generateWavyPixmap(qreal maxRadius, const QPen &pen)
 {
     const qreal radiusBase = qMax(qreal(1), maxRadius);
 
-    QString key = QLatin1String("WaveUnderline-")
+    QString key = "WaveUnderline-"_L1
                   % pen.color().name()
                   % HexString<qreal>(radiusBase)
                   % HexString<qreal>(pen.widthF());
@@ -6368,7 +6345,7 @@ QRectF QPainter::boundingRect(const QRectF &r, const QString &text, const QTextO
 {
     Q_D(QPainter);
 
-    if (!d->engine || text.length() == 0)
+    if (!d->engine || text.size() == 0)
         return QRectF(r.x(),r.y(), 0,0);
 
     QRectF br;
@@ -7158,19 +7135,19 @@ start_lengthVariant:
     // compatible behaviour to the old implementation. Replace
     // tabs by spaces
     int old_offset = offset;
-    for (; offset < text.length(); offset++) {
+    for (; offset < text.size(); offset++) {
         QChar chr = text.at(offset);
-        if (chr == QLatin1Char('\r') || (singleline && chr == QLatin1Char('\n'))) {
-            text[offset] = QLatin1Char(' ');
-        } else if (chr == QLatin1Char('\n')) {
+        if (chr == u'\r' || (singleline && chr == u'\n')) {
+            text[offset] = u' ';
+        } else if (chr == u'\n') {
             text[offset] = QChar::LineSeparator;
-        } else if (chr == QLatin1Char('&')) {
+        } else if (chr == u'&') {
             ++maxUnderlines;
-        } else if (chr == QLatin1Char('\t')) {
+        } else if (chr == u'\t') {
             if (!expandtabs) {
-                text[offset] = QLatin1Char(' ');
+                text[offset] = u' ';
             } else if (!tabarraylen && !tabstops) {
-                tabstops = qRound(fm.horizontalAdvance(QLatin1Char('x'))*8);
+                tabstops = qRound(fm.horizontalAdvance(u'x')*8);
             }
         } else if (chr == u'\x9c') {
             // string with multiple length variants
@@ -7187,13 +7164,13 @@ start_lengthVariant:
         QChar *cin = cout;
         int l = length;
         while (l) {
-            if (*cin == QLatin1Char('&')) {
+            if (*cin == u'&') {
                 ++cin;
                 --length;
                 --l;
                 if (!l)
                     break;
-                if (*cin != QLatin1Char('&') && !hidemnmemonic && !(tf & Qt::TextDontPrint)) {
+                if (*cin != u'&' && !hidemnmemonic && !(tf & Qt::TextDontPrint)) {
                     QTextLayout::FormatRange range;
                     range.start = cout - cout0;
                     range.length = 1;
@@ -7201,9 +7178,9 @@ start_lengthVariant:
                     underlineFormats.append(range);
                 }
 #ifdef Q_OS_MAC
-            } else if (hidemnmemonic && *cin == QLatin1Char('(') && l >= 4 &&
-                       cin[1] == QLatin1Char('&') && cin[2] != QLatin1Char('&') &&
-                       cin[3] == QLatin1Char(')')) {
+            } else if (hidemnmemonic && *cin == u'(' && l >= 4 &&
+                       cin[1] == u'&' && cin[2] != u'&' &&
+                       cin[3] == u')') {
                 int n = 0;
                 while ((cout - n) > cout0 && (cout - n - 1)->isSpace())
                     ++n;

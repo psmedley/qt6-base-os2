@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qplatformdefs.h"
 #include "qabstracteventdispatcher.h"
@@ -84,6 +48,9 @@
 #if QT_CONFIG(whatsthis)
 #include <QtWidgets/QWhatsThis>
 #endif
+#if QT_CONFIG(accessibility)
+#include <QtGui/qaccessible_base.h>
+#endif
 
 #include "private/qkeymapper_p.h"
 #include "private/qaccessiblewidgetfactory_p.h"
@@ -116,8 +83,6 @@
 #include <algorithm>
 #include <iterator>
 
-//#define ALIEN_DEBUG
-
 static void initResources()
 {
     Q_INIT_RESOURCE(qstyle);
@@ -128,6 +93,8 @@ static void initResources()
 }
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // Helper macro for static functions to check on the existence of the application class.
 #define CHECK_QAPP_INSTANCE(...) \
@@ -144,8 +111,8 @@ QApplicationPrivate *QApplicationPrivate::self = nullptr;
 
 bool QApplicationPrivate::autoSipEnabled = true;
 
-QApplicationPrivate::QApplicationPrivate(int &argc, char **argv, int flags)
-    : QApplicationPrivateBase(argc, argv, flags)
+QApplicationPrivate::QApplicationPrivate(int &argc, char **argv)
+    : QApplicationPrivateBase(argc, argv)
 {
     application_type = QApplicationPrivate::Gui;
 
@@ -408,10 +375,10 @@ void QApplicationPrivate::process_cmdline()
             // obsolete argument
 #ifndef QT_NO_STYLE_STYLESHEET
         } else if (strcmp(arg, "-stylesheet") == 0 && i < argc -1) {
-            styleSheet = QLatin1String("file:///");
+            styleSheet = "file:///"_L1;
             styleSheet.append(QString::fromLocal8Bit(argv[++i]));
         } else if (strncmp(arg, "-stylesheet=", 12) == 0) {
-            styleSheet = QLatin1String("file:///");
+            styleSheet = "file:///"_L1;
             styleSheet.append(QString::fromLocal8Bit(arg + 12));
 #endif
         } else if (qstrcmp(arg, "-widgetcount") == 0) {
@@ -475,9 +442,9 @@ void QApplicationPrivate::process_cmdline()
 #ifdef Q_QDOC
 QApplication::QApplication(int &argc, char **argv)
 #else
-QApplication::QApplication(int &argc, char **argv, int _internal)
+QApplication::QApplication(int &argc, char **argv, int)
 #endif
-    : QGuiApplication(*new QApplicationPrivate(argc, argv, _internal))
+    : QGuiApplication(*new QApplicationPrivate(argc, argv))
 {
     Q_D(QApplication);
     d->init();
@@ -508,7 +475,7 @@ void QApplicationPrivate::init()
     initialize();
     eventDispatcher->startingUp();
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     // factory for accessible interfaces for widgets shipped with Qt
     QAccessible::installFactory(&qAccessibleFactory);
 #endif
@@ -548,7 +515,7 @@ void QApplicationPrivate::initialize()
             } else {
                 qWarning("QApplication: invalid style override '%s' passed, ignoring it.\n"
                     "\tAvailable styles: %s", qPrintable(styleOverride),
-                    qPrintable(QStyleFactory::keys().join(QLatin1String(", "))));
+                    qPrintable(QStyleFactory::keys().join(", "_L1)));
             }
         }
 
@@ -1214,7 +1181,7 @@ void QApplicationPrivate::handlePaletteChanged(const char *className)
     }
 
 #if QT_CONFIG(graphicsview)
-    for (auto scene : qAsConst(scene_list))
+    for (auto scene : std::as_const(scene_list))
         QCoreApplication::sendEvent(scene, &event);
 #endif
 
@@ -1664,7 +1631,8 @@ void QApplication::aboutQt()
 bool QApplication::event(QEvent *e)
 {
     Q_D(QApplication);
-    if (e->type() == QEvent::Quit) {
+    switch (e->type()) {
+    case QEvent::Quit:
         // FIXME: This logic first tries to close all windows, and then
         // checks whether it was successful, but the conditions used in
         // closeAllWindows() differ from the verification logic below.
@@ -1684,7 +1652,7 @@ bool QApplication::event(QEvent *e)
         // closeAllWindows(). FIXME: Unify all this close magic through closeAllWindows.
         return QCoreApplication::event(e);
 #ifndef Q_OS_WIN
-    } else if (e->type() == QEvent::LocaleChange) {
+    case QEvent::LocaleChange: {
         // on Windows the event propagation is taken care by the
         // WM_SETTINGCHANGE event handler.
         const QWidgetList list = topLevelWidgets();
@@ -1694,8 +1662,10 @@ bool QApplication::event(QEvent *e)
                     w->d_func()->setLocale_helper(QLocale(), true);
             }
         }
+        break;
+    }
 #endif
-    } else if (e->type() == QEvent::Timer) {
+    case QEvent::Timer: {
         QTimerEvent *te = static_cast<QTimerEvent*>(e);
         Q_ASSERT(te != nullptr);
         if (te->timerId() == d->toolTipWakeUp.timerId()) {
@@ -1724,15 +1694,16 @@ bool QApplication::event(QEvent *e)
         } else if (te->timerId() == d->toolTipFallAsleep.timerId()) {
             d->toolTipFallAsleep.stop();
         }
+        break;
+    }
 #if QT_CONFIG(whatsthis)
-    } else if (e->type() == QEvent::EnterWhatsThisMode) {
+    case QEvent::EnterWhatsThisMode:
         QWhatsThis::enterWhatsThisMode();
         return true;
 #endif
-    }
-
-    if (e->type() == QEvent::LanguageChange || e->type() == QEvent::ApplicationFontChange ||
-        e->type() == QEvent::ApplicationPaletteChange) {
+    case QEvent::LanguageChange:
+    case QEvent::ApplicationFontChange:
+    case QEvent::ApplicationPaletteChange: {
         // QGuiApplication::event does not account for the cases where
         // there is a top level widget without a window handle. So they
         // need to have the event posted here
@@ -1741,6 +1712,10 @@ bool QApplication::event(QEvent *e)
             if (!w->windowHandle() && (w->windowType() != Qt::Desktop))
                 postEvent(w, new QEvent(e->type()));
         }
+        break;
+    }
+    default:
+        break;
     }
 
     return QGuiApplication::event(e);
@@ -2028,9 +2003,7 @@ void QApplicationPrivate::dispatchEnterLeave(QWidget* enter, QWidget* leave, con
 
     if ((!enter && !leave) || (enter == leave))
         return;
-#ifdef ALIEN_DEBUG
-    qDebug() << "QApplicationPrivate::dispatchEnterLeave, ENTER:" << enter << "LEAVE:" << leave;
-#endif
+
     QWidgetList leaveList;
     QWidgetList enterList;
 
@@ -2097,7 +2070,7 @@ void QApplicationPrivate::dispatchEnterLeave(QWidget* enter, QWidget* leave, con
         const QPointF globalPos = qIsInf(globalPosF.x())
             ? QPointF(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
             : globalPosF;
-        const QPointF windowPos = qAsConst(enterList).back()->window()->mapFromGlobal(globalPos);
+        const QPointF windowPos = std::as_const(enterList).back()->window()->mapFromGlobal(globalPos);
         for (auto it = enterList.crbegin(), end = enterList.crend(); it != end; ++it) {
             auto *w = *it;
             if (!QApplication::activeModalWidget() || QApplicationPrivate::tryModalHelper(w, nullptr)) {
@@ -2106,8 +2079,9 @@ void QApplicationPrivate::dispatchEnterLeave(QWidget* enter, QWidget* leave, con
                 QCoreApplication::sendEvent(w, &enterEvent);
                 if (w->testAttribute(Qt::WA_Hover) &&
                         (!QApplication::activePopupWidget() || QApplication::activePopupWidget() == w->window())) {
-                    QHoverEvent he(QEvent::HoverEnter, localPos, QPointF(-1, -1), globalPos,
+                    QHoverEvent he(QEvent::HoverEnter, windowPos, QPointF(-1, -1), globalPos,
                                    QGuiApplication::keyboardModifiers());
+                    QMutableEventPoint::setPosition(he.point(0), localPos);
                     qApp->d_func()->notify_helper(w, &he);
                 }
             }
@@ -2205,7 +2179,7 @@ bool QApplicationPrivate::isWindowBlocked(QWindow *window, QWindow **blockingWin
         return false;
     }
 
-    for (int i = 0; i < modalWindowList.count(); ++i) {
+    for (int i = 0; i < modalWindowList.size(); ++i) {
         QWindow *modalWindow = modalWindowList.at(i);
 
         // A window is not blocked by another modal window if the two are
@@ -2337,9 +2311,6 @@ QWidget *QApplicationPrivate::pickMouseReceiver(QWidget *candidate, const QPoint
     if (mouseGrabber && mouseGrabber != candidate) {
         receiver = mouseGrabber;
         *pos = receiver->mapFromGlobal(candidate->mapToGlobal(windowPos));
-#ifdef ALIEN_DEBUG
-        qDebug() << "  ** receiver adjusted to:" << receiver << "pos:" << pos;
-#endif
     }
 
     return receiver;
@@ -2402,13 +2373,6 @@ bool QApplicationPrivate::sendMouseEvent(QWidget *receiver, QMouseEvent *event,
 
         }
     }
-
-#ifdef ALIEN_DEBUG
-    qDebug() << "QApplicationPrivate::sendMouseEvent: receiver:" << receiver
-             << "pos:" << event->position() << "alien" << alienWidget << "button down"
-             << *buttonDown << "last" << lastMouseReceiver << "leave after release"
-             << leaveAfterRelease;
-#endif
 
     // We need this quard in case someone opens a modal dialog / popup. If that's the case
     // leaveAfterRelease is set to null, but we shall not update lastMouseReceiver.
@@ -2860,7 +2824,8 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                 while (w) {
                     if (w->testAttribute(Qt::WA_Hover) &&
                         (!QApplication::activePopupWidget() || QApplication::activePopupWidget() == w->window())) {
-                        QHoverEvent he(QEvent::HoverMove, relpos, mouse->globalPosition(), relpos - diff, mouse->modifiers());
+                        QHoverEvent he(QEvent::HoverMove, mouse->scenePosition(), mouse->globalPosition(), relpos - diff, mouse->modifiers());
+                        QMutableEventPoint::setPosition(he.point(0), relpos);
                         d->notify_helper(w, &he);
                     }
                     if (w->isWindow() || w->testAttribute(Qt::WA_NoMousePropagation))
@@ -3265,7 +3230,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                     break;
                 w = w->parentWidget();
             }
-            for (QGesture *g : qAsConst(allGestures))
+            for (QGesture *g : std::as_const(allGestures))
                 gestureEvent->setAccepted(g, false);
             gestureEvent->m_accept = false; // to make sure we check individual gestures
             break;
@@ -3416,7 +3381,7 @@ void QApplicationPrivate::closePopup(QWidget *popup)
          qt_popup_down = nullptr;
      }
 
-    if (QApplicationPrivate::popupWidgets->count() == 0) { // this was the last popup
+    if (QApplicationPrivate::popupWidgets->size() == 0) { // this was the last popup
         delete QApplicationPrivate::popupWidgets;
         QApplicationPrivate::popupWidgets = nullptr;
         qt_popup_down_closed = false;
@@ -3461,7 +3426,7 @@ void QApplicationPrivate::closePopup(QWidget *popup)
 
         // can become nullptr due to setFocus() above
         if (QApplicationPrivate::popupWidgets &&
-            QApplicationPrivate::popupWidgets->count() == 1) // grab mouse/keyboard
+            QApplicationPrivate::popupWidgets->size() == 1) // grab mouse/keyboard
             grabForPopup(aw);
     }
 
@@ -3476,7 +3441,7 @@ void QApplicationPrivate::openPopup(QWidget *popup)
         popupWidgets = new QWidgetList;
     popupWidgets->append(popup); // add to end of list
 
-    if (QApplicationPrivate::popupWidgets->count() == 1) // grab mouse/keyboard
+    if (QApplicationPrivate::popupWidgets->size() == 1) // grab mouse/keyboard
         grabForPopup(popup);
 
     // popups are not focus-handled by the window system (the first
@@ -3484,7 +3449,7 @@ void QApplicationPrivate::openPopup(QWidget *popup)
     // new popup gets the focus
     if (popup->focusWidget()) {
         popup->focusWidget()->setFocus(Qt::PopupFocusReason);
-    } else if (popupWidgets->count() == 1) { // this was the first popup
+    } else if (popupWidgets->size() == 1) { // this was the first popup
         if (QWidget *fw = QApplication::focusWidget()) {
             QFocusEvent e(QEvent::FocusOut, Qt::PopupFocusReason);
             QCoreApplication::sendEvent(fw, &e);
@@ -4042,9 +4007,9 @@ void QApplicationPrivate::translateTouchCancel(const QPointingDevice *device, ul
     }
 }
 
-void QApplicationPrivate::notifyThemeChanged()
+void QApplicationPrivate::handleThemeChanged()
 {
-    QGuiApplicationPrivate::notifyThemeChanged();
+    QGuiApplicationPrivate::handleThemeChanged();
 
     qt_init_tooltip_palette();
 }

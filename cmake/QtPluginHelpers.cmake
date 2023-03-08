@@ -117,8 +117,14 @@ function(qt_internal_add_plugin target)
         endif()
     endif()
 
-    qt_set_common_target_properties(${target})
-    qt_set_target_info_properties(${target} ${ARGN} TARGET_VERSION "${arg_VERSION}")
+    qt_set_target_info_properties(${target} ${ARGN})
+
+    set_target_properties(${target} PROPERTIES
+        _qt_package_version "${PROJECT_VERSION}"
+    )
+    set_property(TARGET ${target}
+                 APPEND PROPERTY
+                 EXPORT_PROPERTIES "_qt_package_version")
 
     # Override the OUTPUT_NAME that qt6_add_plugin() set, we need to account for
     # QT_LIBINFIX, which is specific to building Qt.
@@ -139,6 +145,7 @@ function(qt_internal_add_plugin target)
         endif()
     endif()
 
+    qt_set_common_target_properties("${target}")
     qt_internal_add_target_aliases("${target}")
     qt_skip_warnings_are_errors_when_repo_unclean("${target}")
     _qt_internal_apply_strict_cpp("${target}")
@@ -422,6 +429,7 @@ function(qt_internal_add_plugin target)
         )
         if(BUILD_SHARED_LIBS)
             qt_apply_rpaths(TARGET "${target}" INSTALL_PATH "${install_directory}" RELATIVE_RPATH)
+            qt_internal_apply_staging_prefix_build_rpath_workaround()
         endif()
     endif()
 

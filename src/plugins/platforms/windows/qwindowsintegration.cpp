@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwindowsintegration.h"
 #include "qwindowswindow.h"
@@ -101,6 +65,8 @@ static inline void initOpenGlBlacklistResources()
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 /*!
     \class QWindowsIntegration
     \brief QPlatformIntegration implementation for Windows.
@@ -155,7 +121,7 @@ struct QWindowsIntegrationPrivate
 };
 
 template <typename IntType>
-bool parseIntOption(const QString &parameter,const QLatin1String &option,
+bool parseIntOption(const QString &parameter,const QLatin1StringView &option,
                     IntType minimumValue, IntType maximumValue, IntType *target)
 {
     const int valueLength = parameter.size() - option.size() - 1;
@@ -211,9 +177,9 @@ static inline unsigned parseOptions(const QStringList &paramList,
             options |= QWindowsIntegration::DontUseColorFonts;
         } else if (param == u"nomousefromtouch") {
             options |= QWindowsIntegration::DontPassOsMouseEventsSynthesizedFromTouch;
-        } else if (parseIntOption(param, QLatin1String("verbose"), 0, INT_MAX, &QWindowsContext::verbose)
-            || parseIntOption(param, QLatin1String("tabletabsoluterange"), 0, INT_MAX, tabletAbsoluteRange)
-            || parseIntOption(param, QLatin1String("dpiawareness"), QtWindows::ProcessDpiUnaware, QtWindows::ProcessPerMonitorV2DpiAware, dpiAwareness)) {
+        } else if (parseIntOption(param, "verbose"_L1, 0, INT_MAX, &QWindowsContext::verbose)
+            || parseIntOption(param, "tabletabsoluterange"_L1, 0, INT_MAX, tabletAbsoluteRange)
+            || parseIntOption(param, "dpiawareness"_L1, QtWindows::ProcessDpiUnaware, QtWindows::ProcessPerMonitorV2DpiAware, dpiAwareness)) {
         } else if (param == u"menus=native") {
             options |= QWindowsIntegration::AlwaysUseNativeMenus;
         } else if (param == u"menus=none") {
@@ -222,8 +188,11 @@ static inline unsigned parseOptions(const QStringList &paramList,
             options |= QWindowsIntegration::DontUseWMPointer;
         } else if (param == u"reverse") {
             options |= QWindowsIntegration::RtlEnabled;
+        } else if (param == u"darkmode=0") {
+            *darkModeHandling = {};
         } else if (param == u"darkmode=1") {
             darkModeHandling->setFlag(DarkModeHandlingFlag::DarkModeWindowFrames);
+            darkModeHandling->setFlag(DarkModeHandlingFlag::DarkModeStyle, false);
         } else if (param == u"darkmode=2") {
             darkModeHandling->setFlag(DarkModeHandlingFlag::DarkModeWindowFrames);
             darkModeHandling->setFlag(DarkModeHandlingFlag::DarkModeStyle);
@@ -243,7 +212,7 @@ void QWindowsIntegrationPrivate::parseOptions(QWindowsIntegration *q, const QStr
     QtWindows::ProcessDpiAwareness dpiAwareness = QtWindows::ProcessPerMonitorV2DpiAware;
 
     int tabletAbsoluteRange = -1;
-    DarkModeHandling darkModeHandling;
+    DarkModeHandling darkModeHandling = DarkModeHandlingFlag::DarkModeWindowFrames;
     m_options = ::parseOptions(paramList, &tabletAbsoluteRange, &dpiAwareness, &darkModeHandling);
     q->setDarkModeHandling(darkModeHandling);
     QWindowsFontDatabase::setFontOptions(m_options);
@@ -254,6 +223,7 @@ void QWindowsIntegrationPrivate::parseOptions(QWindowsIntegration *q, const QStr
         QCoreApplication::setAttribute(Qt::AA_CompressHighFrequencyEvents);
     else
         m_context.initTablet();
+    QWindowSystemInterfacePrivate::TabletEvent::setPlatformSynthesizesMouse(false);
 
     if (!dpiAwarenessSet) { // Set only once in case of repeated instantiations of QGuiApplication.
         if (!QCoreApplication::testAttribute(Qt::AA_PluginApplication)) {
@@ -645,12 +615,12 @@ QAbstractEventDispatcher * QWindowsIntegration::createEventDispatcher() const
 
 QStringList QWindowsIntegration::themeNames() const
 {
-    return QStringList(QLatin1String(QWindowsTheme::name));
+    return QStringList(QLatin1StringView(QWindowsTheme::name));
 }
 
 QPlatformTheme *QWindowsIntegration::createPlatformTheme(const QString &name) const
 {
-    if (name == QLatin1String(QWindowsTheme::name))
+    if (name == QLatin1StringView(QWindowsTheme::name))
         return new QWindowsTheme;
     return QPlatformIntegration::createPlatformTheme(name);
 }

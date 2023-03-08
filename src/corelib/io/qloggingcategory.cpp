@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qloggingcategory.h"
 #include "qloggingregistry_p.h"
@@ -43,21 +7,7 @@
 QT_BEGIN_NAMESPACE
 
 const char qtDefaultCategoryName[] = "default";
-
-Q_GLOBAL_STATIC_WITH_ARGS(QLoggingCategory, qtDefaultCategory,
-                          (qtDefaultCategoryName))
-
-#ifndef Q_ATOMIC_INT8_IS_SUPPORTED
-static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
-{
-    const int bit = 1 << shift;
-
-    if (enable)
-        atomic->fetchAndOrRelaxed(bit);
-    else
-        atomic->fetchAndAndRelaxed(~bit);
-}
-#endif
+Q_GLOBAL_STATIC(QLoggingCategory, qtDefaultCategory, qtDefaultCategoryName)
 
 /*!
     \class QLoggingCategory
@@ -326,17 +276,10 @@ bool QLoggingCategory::isEnabled(QtMsgType msgtype) const
 void QLoggingCategory::setEnabled(QtMsgType type, bool enable)
 {
     switch (type) {
-#ifdef Q_ATOMIC_INT8_IS_SUPPORTED
     case QtDebugMsg: bools.enabledDebug.storeRelaxed(enable); break;
     case QtInfoMsg: bools.enabledInfo.storeRelaxed(enable); break;
     case QtWarningMsg: bools.enabledWarning.storeRelaxed(enable); break;
     case QtCriticalMsg: bools.enabledCritical.storeRelaxed(enable); break;
-#else
-    case QtDebugMsg: setBoolLane(&enabled, enable, DebugShift); break;
-    case QtInfoMsg: setBoolLane(&enabled, enable, InfoShift); break;
-    case QtWarningMsg: setBoolLane(&enabled, enable, WarningShift); break;
-    case QtCriticalMsg: setBoolLane(&enabled, enable, CriticalShift); break;
-#endif
     case QtFatalMsg: break;
     }
 }
@@ -652,8 +595,7 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     with a specific name. The implicitly-defined QLoggingCategory object is
     created on first use, in a thread-safe manner.
 
-    This macro must be used outside of a class or method. It is only defined
-    if variadic macros are supported.
+    This macro must be used outside of a class or method.
 */
 
 QT_END_NAMESPACE

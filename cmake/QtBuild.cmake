@@ -159,7 +159,7 @@ function(qt_internal_set_up_global_paths)
     #
     # These values should be prepended to file paths in commands or properties,
     # in order to correctly place generated Config files, generated Targets files,
-    # excutables / libraries, when copying / installing files, etc.
+    # executables / libraries, when copying / installing files, etc.
     #
     # The build dir variables will always be absolute paths.
     # The QT_INSTALL_DIR variable will have a relative path in a prefix build,
@@ -263,27 +263,10 @@ function(qt_setup_tool_path_command)
     list(APPEND command COMMAND)
     list(APPEND command set PATH=${bindir}$<SEMICOLON>%PATH%)
     set(QT_TOOL_PATH_SETUP_COMMAND "${command}" CACHE INTERNAL "internal command prefix for tool invocations" FORCE)
-    # QT_TOOL_PATH_SETUP_COMMAND is deprecated. Please use _qt_internal_wrap_tool_command
+    # QT_TOOL_PATH_SETUP_COMMAND is deprecated. Please use _qt_internal_get_wrap_tool_script_path
     # instead.
 endfunction()
 qt_setup_tool_path_command()
-
-function(qt_internal_generate_tool_command_wrapper)
-    get_property(is_called GLOBAL PROPERTY _qt_internal_generate_tool_command_wrapper_called)
-    if(NOT CMAKE_HOST_WIN32 OR is_called)
-        return()
-    endif()
-    set(bindir "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_BINDIR}")
-    file(TO_NATIVE_PATH "${bindir}" bindir)
-    set(tool_command_wrapper_path "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/qt_setup_tool_path.bat")
-    file(WRITE "${tool_command_wrapper_path}" "@echo off
-set PATH=${bindir};%PATH%
-%*")
-    set(QT_TOOL_COMMAND_WRAPPER_PATH "${tool_command_wrapper_path}"
-        CACHE INTERNAL "Path to the wrapper of the tool commands")
-    set_property(GLOBAL PROPERTY _qt_internal_generate_tool_command_wrapper_called TRUE)
-endfunction()
-qt_internal_generate_tool_command_wrapper()
 
 # Platform define path, etc.
 if(WIN32)
@@ -367,6 +350,8 @@ elseif(SOLARIS)
              set(QT_DEFAULT_MKSPEC solaris-cc)
         endif()
     endif()
+elseif(HURD)
+    set(QT_DEFAULT_MKSPEC hurd-g++)
 endif()
 
 if(NOT QT_QMAKE_TARGET_MKSPEC)
@@ -484,7 +469,6 @@ set(__default_target_info_args
 # and qt_internal_add_test_helper.
 set(__qt_internal_add_executable_optional_args
     GUI
-    BOOTSTRAP
     NO_INSTALL
     EXCEPTIONS
     DELAY_RC
@@ -492,6 +476,7 @@ set(__qt_internal_add_executable_optional_args
     QT_APP
 )
 set(__qt_internal_add_executable_single_args
+    CORE_LIBRARY
     OUTPUT_DIRECTORY
     INSTALL_DIRECTORY
     VERSION
@@ -543,13 +528,29 @@ if(ANDROID)
     include(QtAndroidHelpers)
 endif()
 
+if(WASM)
+    include(QtWasmHelpers)
+endif()
+
 # Helpers that are available in public projects and while building Qt itself.
+include(QtPublicAppleHelpers)
 include(QtPublicCMakeHelpers)
 include(QtPublicPluginHelpers)
 include(QtPublicTargetHelpers)
 include(QtPublicWalkLibsHelpers)
 include(QtPublicFindPackageHelpers)
 include(QtPublicDependencyHelpers)
+include(QtPublicTestHelpers)
+include(QtPublicToolHelpers)
+
+if(CMAKE_CROSSCOMPILING)
+    if(NOT IS_DIRECTORY "${QT_HOST_PATH}")
+        message(FATAL_ERROR "You need to set QT_HOST_PATH to cross compile Qt.")
+    endif()
+endif()
+
+_qt_internal_determine_if_host_info_package_needed(__qt_build_requires_host_info_package)
+_qt_internal_find_host_info_package("${__qt_build_requires_host_info_package}")
 
 # TODO: This block provides support for old variables. It should be removed once
 #       we remove all references to these variables in other Qt module repos.
@@ -587,6 +588,11 @@ if(COMMAND _qt_internal_get_add_plugin_keywords)
     unset(__qt_internal_add_plugin_single_args)
     unset(__qt_internal_add_plugin_multi_args)
 endif()
+
+# Create tool script wrapper if necessary.
+# TODO: Remove once all direct usages of QT_TOOL_COMMAND_WRAPPER_PATH are replaced with function
+# calls.
+_qt_internal_generate_tool_command_wrapper()
 
 # This sets up the poor man's scope finalizer mechanism.
 # For newer CMake versions, we use cmake_language(DEFER CALL) instead.

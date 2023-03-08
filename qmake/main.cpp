@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the qmake application of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "project.h"
 #include "property.h"
@@ -151,7 +126,7 @@ static int doSed(int argc, char **argv)
     }
     if (inFiles.isEmpty())
         inFiles << "-";
-    for (const char *inFile : qAsConst(inFiles)) {
+    for (const char *inFile : std::as_const(inFiles)) {
         FILE *f;
         if (!strcmp(inFile, "-")) {
             f = stdin;
@@ -504,7 +479,7 @@ int runQMake(int argc, char **argv)
 
         Option::output_dir = dir.path();
         QString absoluteFilePath = QDir::cleanPath(fi.absoluteFilePath());
-        Option::output.setFileName(absoluteFilePath.mid(Option::output_dir.length() + 1));
+        Option::output.setFileName(absoluteFilePath.mid(Option::output_dir.size() + 1));
     }
 
     QMakeProperty prop;
@@ -556,7 +531,7 @@ int runQMake(int argc, char **argv)
                 if(!qmake_setpwd(fn.left(di)))
                     fprintf(stderr, "Cannot find directory: %s\n",
                             QDir::toNativeSeparators(fn.left(di)).toLatin1().constData());
-                fn = fn.right(fn.length() - di - 1);
+                fn = fn.right(fn.size() - di - 1);
             }
 
             Option::prepareProject(fn);

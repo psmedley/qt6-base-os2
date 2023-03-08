@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qnetworkproxy.h"
 
@@ -47,6 +11,8 @@
 #include <qurl.h>
 #include <qnetworkinterface.h>
 #include <qdebug.h>
+#include <qvarlengtharray.h>
+#include <qhash.h>
 
 #include <string.h>
 #include <qt_windows.h>
@@ -54,6 +20,8 @@
 #include <winhttp.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 static bool currentProcessIsService()
 {
@@ -80,11 +48,11 @@ static bool currentProcessIsService()
 static QStringList splitSpaceSemicolon(const QString &source)
 {
     QStringList list;
-    int start = 0;
-    int end;
+    qsizetype start = 0;
+    qsizetype end;
     while (true) {
-        int space = source.indexOf(QLatin1Char(' '), start);
-        int semicolon = source.indexOf(QLatin1Char(';'), start);
+        qsizetype space = source.indexOf(u' ', start);
+        qsizetype semicolon = source.indexOf(u';', start);
         end = space;
         if (semicolon != -1 && (end == -1 || semicolon < end))
             end = semicolon;
@@ -106,7 +74,7 @@ static bool isBypassed(const QString &host, const QStringList &bypassList)
     if (host.isEmpty())
         return false;
 
-    bool isSimple = !host.contains(QLatin1Char('.')) && !host.contains(QLatin1Char(':'));
+    bool isSimple = !host.contains(u'.') && !host.contains(u':');
 
     QHostAddress ipAddress;
     bool isIpAddress = ipAddress.setAddress(host);
@@ -117,7 +85,7 @@ static bool isBypassed(const QString &host, const QStringList &bypassList)
 
     // does it match the list of exclusions?
     for (const QString &entry : bypassList) {
-        if (entry == QLatin1String("<local>")) {
+        if (entry == "<local>"_L1) {
             if (isSimple)
                 return true;
             if (isIpAddress) {
@@ -217,32 +185,32 @@ static QList<QNetworkProxy> parseServerList(const QNetworkProxyQuery &query, con
             && query.queryType() != QNetworkProxyQuery::TcpServer
             && query.queryType() != QNetworkProxyQuery::SctpServer;
     for (const QString &entry : proxyList) {
-        int server = 0;
+        qsizetype server = 0;
 
         QNetworkProxy::ProxyType proxyType = QNetworkProxy::HttpProxy;
         quint16 port = 8080;
 
-        int pos = entry.indexOf(QLatin1Char('='));
+        qsizetype pos = entry.indexOf(u'=');
         QStringView scheme;
         QStringView protocolTag;
         if (pos != -1) {
             scheme = protocolTag = QStringView{entry}.left(pos);
             server = pos + 1;
         }
-        pos = entry.indexOf(QLatin1String("://"), server);
+        pos = entry.indexOf("://"_L1, server);
         if (pos != -1) {
             scheme = QStringView{entry}.mid(server, pos - server);
             server = pos + 3;
         }
 
         if (!scheme.isEmpty()) {
-            if (scheme == QLatin1String("http") || scheme == QLatin1String("https")) {
+            if (scheme == "http"_L1 || scheme == "https"_L1) {
                 // no-op
                 // defaults are above
-            } else if (scheme == QLatin1String("socks") || scheme == QLatin1String("socks5")) {
+            } else if (scheme == "socks"_L1 || scheme == "socks5"_L1) {
                 proxyType = QNetworkProxy::Socks5Proxy;
                 port = 1080;
-            } else if (scheme == QLatin1String("ftp")) {
+            } else if (scheme == "ftp"_L1) {
                 proxyType = QNetworkProxy::FtpCachingProxy;
                 port = 2121;
             } else {
@@ -251,7 +219,7 @@ static QList<QNetworkProxy> parseServerList(const QNetworkProxyQuery &query, con
             }
         }
 
-        pos = entry.indexOf(QLatin1Char(':'), server);
+        pos = entry.indexOf(u':', server);
         if (pos != -1) {
             bool ok;
             uint value = QStringView{entry}.mid(pos + 1).toUInt(&ok);
@@ -277,10 +245,10 @@ static QList<QNetworkProxy> parseServerList(const QNetworkProxyQuery &query, con
             result.prepend(taggedProxies.value(requiredTag));
         }
     }
-    if (!checkTags || requiredTag != QLatin1String("http")) {
+    if (!checkTags || requiredTag != "http"_L1) {
         // if there are different http proxies for http and https, prefer the https one (more likely to be capable of CONNECT)
-        QNetworkProxy httpProxy = taggedProxies.value(QLatin1String("http"));
-        QNetworkProxy httpsProxy = taggedProxies.value(QLatin1String("http"));
+        QNetworkProxy httpProxy = taggedProxies.value("http"_L1);
+        QNetworkProxy httpsProxy = taggedProxies.value("http"_L1);
         if (httpProxy != httpsProxy && httpProxy.type() == QNetworkProxy::HttpProxy && httpsProxy.type() == QNetworkProxy::HttpProxy) {
             for (int i = 0; i < result.count(); i++) {
                 if (httpProxy == result.at(i))
@@ -327,9 +295,9 @@ public:
     }
 
     void clear() {
-        for (HANDLE event : qAsConst(m_watchEvents))
+        for (HANDLE event : std::as_const(m_watchEvents))
             CloseHandle(event);
-        for (HKEY key : qAsConst(m_registryHandles))
+        for (HKEY key : std::as_const(m_registryHandles))
             RegCloseKey(key);
 
         m_watchEvents.clear();
@@ -502,11 +470,11 @@ QList<QNetworkProxy> QNetworkProxyFactory::systemProxyForQuery(const QNetworkPro
         // url could be empty, e.g. from QNetworkProxy::applicationProxy(), that's fine,
         // we'll still ask for the proxy.
         // But for a file url, we know we don't need one.
-        if (url.scheme() == QLatin1String("file") || url.scheme() == QLatin1String("qrc"))
+        if (url.scheme() == "file"_L1 || url.scheme() == "qrc"_L1)
             return sp->defaultResult;
         if (query.queryType() != QNetworkProxyQuery::UrlRequest) {
             // change the scheme to https, maybe it'll work
-            url.setScheme(QLatin1String("https"));
+            url.setScheme("https"_L1);
         }
 
         QString urlQueryString = url.toString();

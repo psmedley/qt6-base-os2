@@ -1,48 +1,14 @@
-/****************************************************************************
-**
-** Copyright (C) 2022 The Qt Company Ltd.
-** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Android port of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 package org.qtproject.qt.android;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Rect;
 import android.os.Build;
+import android.util.Log;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.view.Display;
@@ -50,6 +16,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.graphics.Insets;
+import android.view.WindowMetrics;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 
 public class QtLayout extends ViewGroup
 {
@@ -93,15 +63,95 @@ public class QtLayout extends ViewGroup
     @Override
     protected void onSizeChanged (int w, int h, int oldw, int oldh)
     {
-        WindowInsets insets = getRootWindowInsets();
+        Activity activity = (Activity)getContext();
+        if (activity == null)
+            return;
 
-        DisplayMetrics realMetrics = new DisplayMetrics();
-        Display display = (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
-                ? ((Activity)getContext()).getWindowManager().getDefaultDisplay()
-                : ((Activity)getContext()).getDisplay();
-        display.getRealMetrics(realMetrics);
+        final WindowManager windowManager = activity.getWindowManager();
+        Display display;
 
-        if ((realMetrics.widthPixels > realMetrics.heightPixels) != (w > h)) {
+        int appWidth = 0;
+        int appHeight = 0;
+
+        int insetLeft = 0;
+        int insetTop = 0;
+
+        int maxWidth = 0;
+        int maxHeight = 0;
+
+        double xdpi = 0;
+        double ydpi = 0;
+        double scaledDensity = 0;
+        double density = 0;
+
+        if (android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+             display = windowManager.getDefaultDisplay();
+
+             final DisplayMetrics appMetrics = new DisplayMetrics();
+             display.getMetrics(appMetrics);
+
+             final WindowInsets rootInsets = getRootWindowInsets();
+
+             insetLeft = rootInsets.getStableInsetLeft();
+             insetTop = rootInsets.getStableInsetTop();
+
+             appWidth = appMetrics.widthPixels - rootInsets.getStableInsetRight() + rootInsets.getStableInsetLeft();
+
+             if (android.os.Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+                appHeight = appMetrics.heightPixels - rootInsets.getStableInsetTop();
+             } else {
+                appHeight = appMetrics.heightPixels - rootInsets.getStableInsetTop() + rootInsets.getStableInsetBottom();
+             }
+
+             final DisplayMetrics maxMetrics = new DisplayMetrics();
+             display.getRealMetrics(maxMetrics);
+
+             maxWidth = maxMetrics.widthPixels;
+             maxHeight = maxMetrics.heightPixels;
+
+             density = appMetrics.density;
+             xdpi = appMetrics.xdpi;
+             ydpi = appMetrics.ydpi;
+             scaledDensity = appMetrics.scaledDensity;
+
+        } else {
+            // after API 30 use getCurrentWindowMetrics for application metrics
+            // getMaximumWindowMetrics for the screen metrics
+            // resource configuration for density as best practice
+            // and the resource display metrics for the rest
+            display = activity.getDisplay();
+
+            final WindowMetrics appMetrics = windowManager.getCurrentWindowMetrics();
+            final WindowMetrics maxMetrics = windowManager.getMaximumWindowMetrics();
+
+            final WindowInsets windowInsets = appMetrics.getWindowInsets();
+            Insets statusBarInsets = windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars());
+            Insets cutoutInsets = windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.displayCutout());
+            Insets imeInsets = windowInsets.getInsets(WindowInsets.Type.ime());
+
+            insetLeft = cutoutInsets.left;
+            insetTop = statusBarInsets.top;
+
+            appWidth = w;
+            appHeight = h - imeInsets.bottom;
+
+            maxWidth = maxMetrics.getBounds().width();
+            maxHeight = maxMetrics.getBounds().height();
+
+            final Resources resources = activity.getResources();
+            final Configuration configuration = resources.getConfiguration();
+            density = configuration.densityDpi / (float) DisplayMetrics.DENSITY_DEFAULT;
+
+            final DisplayMetrics displayMetrics = resources.getDisplayMetrics();
+            xdpi = displayMetrics.xdpi;
+            ydpi = displayMetrics.ydpi;
+            density = displayMetrics.density;
+            scaledDensity = displayMetrics.scaledDensity;
+        }
+
+        float refreshRate = display.getRefreshRate();
+
+        if ((appWidth > appHeight) != (w > h)) {
             // This is an intermediate state during display rotation.
             // The new size is still reported for old orientation, while
             // realMetrics contain sizes for new orientation. Setting
@@ -112,34 +162,20 @@ public class QtLayout extends ViewGroup
             return;
         }
 
-        boolean isFullScreenView = h == realMetrics.heightPixels;
-        // The code uses insets for fullscreen mode only. However in practice
-        // the insets can be reported incorrectly. Both on Android 6 and Android 11
-        // a non-zero bottom inset is reported even when the
-        // WindowManager.LayoutParams.FLAG_FULLSCREEN flag is set.
-        // To avoid that, add an extra check for the fullscreen mode.
-        // The insets-related logic is not removed for the case when
-        // isFullScreenView == true, but hasFlagFullscreen == false, although
-        // I can't get such case in my tests.
-        final int windowFlags = ((Activity)getContext()).getWindow().getAttributes().flags;
-        final boolean hasFlagFullscreen =
-                (windowFlags & WindowManager.LayoutParams.FLAG_FULLSCREEN) != 0;
-        int insetLeft =
-                (isFullScreenView && !hasFlagFullscreen) ? insets.getSystemWindowInsetLeft() : 0;
-        int insetTop =
-                (isFullScreenView && !hasFlagFullscreen) ? insets.getSystemWindowInsetTop() : 0;
-        int insetRight =
-                (isFullScreenView && !hasFlagFullscreen) ? insets.getSystemWindowInsetRight() : 0;
-        int insetBottom =
-                (isFullScreenView && !hasFlagFullscreen) ? insets.getSystemWindowInsetBottom() : 0;
+        final int flag =
+            activity.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_FULLSCREEN;
 
-        int usableAreaWidth = w - insetLeft - insetRight;
-        int usableAreaHeight = h - insetTop - insetBottom;
+        if (flag == WindowManager.LayoutParams.FLAG_FULLSCREEN || h == maxHeight) {
+            // immersive mode uses the whole screen
+            appWidth = maxWidth;
+            appHeight = maxHeight;
+            insetLeft = insetTop = 0;
+        }
 
-        QtNative.setApplicationDisplayMetrics(
-                realMetrics.widthPixels, realMetrics.heightPixels, insetLeft, insetTop,
-                usableAreaWidth, usableAreaHeight, realMetrics.xdpi, realMetrics.ydpi,
-                realMetrics.scaledDensity, realMetrics.density, display.getRefreshRate());
+        QtNative.setApplicationDisplayMetrics(maxWidth, maxHeight, insetLeft,
+                                              insetTop, appWidth, appHeight,
+                                              xdpi,ydpi,scaledDensity, density,
+                                              refreshRate);
 
         int newRotation = display.getRotation();
         if (m_ownDisplayRotation != m_activityDisplayRotation

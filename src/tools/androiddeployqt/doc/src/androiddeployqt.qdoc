@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
     \page android-deploy-qt-tool.html
@@ -96,6 +72,32 @@
             \li \c{--deployment <mechanism>}
             \li Specify this to pick a different deployment mechanism than the
                 default.
+                \list
+                    \li \c Bundled: includes all the app's dependencies inside
+                        the APK.
+                    \li \c Unbundled: excludes native libraries from the APK.
+                        The libraries are expected to be present on the target
+                        device. The location can be provided either by setting
+                        the property
+                        \l{cmake-target-property-QT_ANDROID_SYSTEM_LIBS_PREFIX}{QT_ANDROID_SYSTEM_LIBS_PREFIX}
+                        in your CMake project file, or by defining the path as
+                        meta-data in
+                        \l {Qt Android Manifest File Configuration}{AndroidManifest.xml}:
+                        \badcode
+                        <application>
+                            <meta-data
+                                android:name="system_libs_prefix"
+                                android:value="path/to/libraries/"/>
+                        </application>
+                        \endcode
+                        If no path is provided, \c /system/lib/ is used as the
+                        default path.
+                        \note \c Unbundled deployment does not support
+                            incremental builds.
+                        \note \c Unbundled deployment not supported when
+                            deploying as AAB.
+                \endlist
+                Default is \c Bundled deployment.
         \row
             \li \c{--install}
             \li Specify this to install the finished package on the target device

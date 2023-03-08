@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2020 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2020 Olivier Goffart <ogoffart@woboq.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QSignalSpy>
@@ -81,10 +56,21 @@
 #include "fwdclass2.h"
 #include "fwdclass3.h"
 
+#include "qmlmacro.h"
+
 #ifdef Q_MOC_RUN
 // check that moc can parse these constructs, they are being used in Windows winsock2.h header
 #define STRING_HASH_HASH(x) ("foo" ## x ## "bar")
 const char *string_hash_hash = STRING_HASH_HASH("baz");
+#endif
+
+#if defined(Q_MOC_RUN) || __cplusplus > 202002L
+/* Check that nested inline namespaces are at least not causing moc to break.
+   Check it even outside of C++20 mode as moc gets passed the  wrong __cplusplus version
+   and also to increase coverage, given how few C++20 configurations exist in the CI at the time
+   of writing this comment.
+*/
+namespace A::inline B {}
 #endif
 
 Q_DECLARE_METATYPE(const QMetaObject*);
@@ -893,8 +879,8 @@ void tst_Moc::warnOnExtraSignalSlotQualifiaction()
     QVERIFY(!mocOut.isEmpty());
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
     QCOMPARE(mocWarning, header +
-                QString(":43:1: warning: Function declaration Test::badFunctionDeclaration contains extra qualification. Ignoring as signal or slot.\n") +
-                header + QString(":46:1: warning: parsemaybe: Function declaration Test::anotherOne contains extra qualification. Ignoring as signal or slot.\n"));
+                QString(":18:1: warning: Function declaration Test::badFunctionDeclaration contains extra qualification. Ignoring as signal or slot.\n") +
+                header + QString(":21:1: warning: parsemaybe: Function declaration Test::anotherOne contains extra qualification. Ignoring as signal or slot.\n"));
 #else
     QSKIP("Only tested on unix/gcc");
 #endif
@@ -1198,7 +1184,7 @@ void tst_Moc::warnOnMultipleInheritance()
     QVERIFY(!mocOut.isEmpty());
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
     QCOMPARE(mocWarning, header +
-                QString(":43:1: warning: Class Bar inherits from two QObject subclasses QWindow and Foo. This is not supported!\n"));
+                QString(":18:1: warning: Class Bar inherits from two QObject subclasses QWindow and Foo. This is not supported!\n"));
 #else
     QSKIP("Only tested on linux/gcc");
 #endif
@@ -1262,7 +1248,7 @@ void tst_Moc::forgottenQInterface()
     QVERIFY(!mocOut.isEmpty());
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
     QCOMPARE(mocWarning, header +
-                QString(":45:1: warning: Class Test implements the interface MyInterface but does not list it in Q_INTERFACES. qobject_cast to MyInterface will not work!\n"));
+                QString(":20:1: warning: Class Test implements the interface MyInterface but does not list it in Q_INTERFACES. qobject_cast to MyInterface will not work!\n"));
 #else
     QSKIP("Only tested on linux/gcc");
 #endif
@@ -1291,9 +1277,9 @@ void tst_Moc::winNewline()
     QVERIFY(f.open(QIODevice::ReadOnly)); // no QIODevice::Text!
     QByteArray data = f.readAll();
     f.close();
-    for (int i = 0; i < data.count(); ++i) {
+    for (int i = 0; i < data.size(); ++i) {
         if (data.at(i) == QLatin1Char('\r')) {
-            QVERIFY(i < data.count() - 1);
+            QVERIFY(i < data.size() - 1);
             ++i;
             QCOMPARE(data.at(i), '\n');
         } else {
@@ -1498,9 +1484,9 @@ void tst_Moc::environmentIncludePaths()
 
 // tst_Moc::specifyMetaTagsFromCmdline()
 // plugin_metadata.h contains a plugin which we register here. Since we're not building this
-// application as a plugin, we need top copy some of the initializer code found in qplugin.h:
-extern "C" Q_STANDARD_CALL QObject *qt_plugin_instance();
-extern "C" Q_STANDARD_CALL QPluginMetaData qt_plugin_query_metadata_v2();
+// application as a plugin, we need to copy some of the initializer code found in qplugin.h:
+extern "C" Q_DECL_EXPORT QObject *qt_plugin_instance();
+extern "C" Q_DECL_EXPORT QPluginMetaData qt_plugin_query_metadata_v2();
 class StaticPluginInstance{
 public:
     StaticPluginInstance() {
@@ -1666,7 +1652,7 @@ void tst_Moc::warnOnPropertyWithoutREAD()
     QVERIFY(!mocOut.isEmpty());
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
     QCOMPARE(mocWarning, header +
-                QString(":36:1: warning: Property declaration foo has neither an associated QProperty<> member, nor a READ accessor function nor an associated MEMBER variable. The property will be invalid.\n"));
+                QString(":11:1: warning: Property declaration foo has neither an associated QProperty<> member, nor a READ accessor function nor an associated MEMBER variable. The property will be invalid.\n"));
 #else
     QSKIP("Only tested on unix/gcc");
 #endif
@@ -1776,8 +1762,8 @@ void tst_Moc::warnOnVirtualSignal()
     QByteArray mocOut = proc.readAllStandardOutput();
     QVERIFY(!mocOut.isEmpty());
     QString mocWarning = QString::fromLocal8Bit(proc.readAllStandardError());
-    QCOMPARE(mocWarning, header + QString(":38:1: warning: Signals cannot be declared virtual\n") +
-                         header + QString(":40:1: warning: Signals cannot be declared virtual\n"));
+    QCOMPARE(mocWarning, header + QString(":13:1: warning: Signals cannot be declared virtual\n") +
+                         header + QString(":15:1: warning: Signals cannot be declared virtual\n"));
 #else
     QSKIP("Only tested on unix/gcc");
 #endif

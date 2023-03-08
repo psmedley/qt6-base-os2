@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 // test the container forwards
@@ -709,7 +684,7 @@ QT_WARNING_POP
         list.insert(0, "atzero");
         QCOMPARE(list.at(0), QString("atzero"));
 
-        int listCount = list.count();
+        int listCount = list.size();
         list.insert(listCount, "atcount");
         QCOMPARE(list.at(listCount), QString("atcount"));
     }
@@ -2043,8 +2018,8 @@ void tst_Collections::qstring()
     s = "ascii";
     s += QChar((uchar) 0xb0);
     QVERIFY(s.toUtf8() != s.toLatin1());
-    QCOMPARE(s[s.length()-1].unicode(), (ushort)0xb0);
-    QCOMPARE(s.left(s.length()-1), QLatin1String("ascii"));
+    QCOMPARE(s[s.size()-1].unicode(), (ushort)0xb0);
+    QCOMPARE(s.left(s.size()-1), QLatin1String("ascii"));
 
     QVERIFY(s == QString::fromUtf8(s.toUtf8().constData()));
 
@@ -2096,7 +2071,7 @@ void tst_Collections::qstring()
 
 
     QString str = "Hello";
-    QString cstr = QString::fromRawData(str.unicode(), str.length());
+    QString cstr = QString::fromRawData(str.unicode(), str.size());
     QCOMPARE(str, QLatin1String("Hello"));
     QCOMPARE(cstr, QLatin1String("Hello"));
     cstr.clear();
@@ -2718,7 +2693,7 @@ void tst_Collections::vector_stl()
     QFETCH(QStringList, elements);
 
     QList<QString> vector;
-    for (int i = 0; i < elements.count(); ++i)
+    for (int i = 0; i < elements.size(); ++i)
         vector << elements.at(i);
 
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
@@ -2753,7 +2728,7 @@ void tst_Collections::list_stl()
     QFETCH(QStringList, elements);
 
     QList<QString> list;
-    for (int i = 0; i < elements.count(); ++i)
+    for (int i = 0; i < elements.size(); ++i)
         list << elements.at(i);
 
 #if QT_VERSION < QT_VERSION_CHECK(6,0,0)
@@ -2846,7 +2821,7 @@ void instantiateContainer()
 
     container.clear();
     container.contains(value);
-    container.count();
+    container.size();
     container.empty();
     container.isEmpty();
     container.size();
@@ -3271,7 +3246,7 @@ template<template<class> class C> void QTBUG13079_collectionInsideCollectionImpl
     QCOMPARE(nodeList.first().s, QString::fromLatin1("child"));
 
     nodeList = nodeList.first().children;
-    QCOMPARE(nodeList.count(), 0);
+    QCOMPARE(nodeList.size(), 0);
     nodeList << QTBUG13079_Node<C>();
 }
 
@@ -3296,7 +3271,7 @@ template<template<class, class> class C> void QTBUG13079_collectionInsideCollect
     QCOMPARE(nodeMap[12].s, QString::fromLatin1("child"));
 
     nodeMap = nodeMap[12].children;
-    QCOMPARE(nodeMap.count(), 0);
+    QCOMPARE(nodeMap.size(), 0);
     nodeMap[42] = QTBUG13079_NodeAssoc<C>();
 }
 
@@ -3363,7 +3338,7 @@ void tst_Collections::QTBUG13079_collectionInsideCollection()
         QSet<QTBUG13079_Node<QSet> > nodeSet;
         nodeSet << QTBUG13079_Node<QSet>();
         nodeSet = nodeSet.begin()->children;
-        QCOMPARE(nodeSet.count(), 0);
+        QCOMPARE(nodeSet.size(), 0);
     }
 
     QTBUG13079_collectionInsideCollectionAssocImpl<QMap>();
@@ -3385,7 +3360,7 @@ template<class Container> void foreach_test_arrays(const Container &container)
         set << val;
         i++;
     }
-    QCOMPARE(set.count(), container.count());
+    QCOMPARE(set.size(), container.size());
 
     //modify the container while iterating.
     Container c2 = container;
@@ -3422,9 +3397,9 @@ void tst_Collections::foreach_2()
         varl2 << i;
         varl3 << i;
     }
-    QCOMPARE(varl1.count(), intlist.count());
-    QCOMPARE(varl2.count(), intlist.count());
-    QCOMPARE(varl3.count(), intlist.count());
+    QCOMPARE(varl1.size(), intlist.size());
+    QCOMPARE(varl2.size(), intlist.size());
+    QCOMPARE(varl3.size(), intlist.size());
 
     QVarLengthArray<QString> varl4;
     QVarLengthArray<QString, 3> varl5;
@@ -3434,9 +3409,9 @@ void tst_Collections::foreach_2()
         varl5 << str;
         varl6 << str;
     }
-    QCOMPARE(varl4.count(), strlist.count());
-    QCOMPARE(varl5.count(), strlist.count());
-    QCOMPARE(varl6.count(), strlist.count());
+    QCOMPARE(varl4.size(), strlist.size());
+    QCOMPARE(varl5.size(), strlist.size());
+    QCOMPARE(varl6.size(), strlist.size());
 }
 
 struct IntOrString
@@ -3466,8 +3441,8 @@ template<class Container> void insert_remove_loop_impl()
     t.insert(t.begin() + 2, T(IntOrString(7)));
     t.insert(t.begin() + 5, 3,  T(IntOrString(8)));
     int expect1[] = { 4 , 1 , 7, 5 , 5 , 8, 8, 8, 6, 5, 2 , 3 };
-    QCOMPARE(size_t(t.count()), sizeof(expect1)/sizeof(int));
-    for (int i = 0; i < t.count(); i++) {
+    QCOMPARE(size_t(t.size()), sizeof(expect1)/sizeof(int));
+    for (int i = 0; i < t.size(); i++) {
         QCOMPARE(t[i], T(IntOrString(expect1[i])));
     }
 
@@ -3481,8 +3456,8 @@ template<class Container> void insert_remove_loop_impl()
     t.remove(7);
     t.remove(2, 3);
     int expect2[] = { 4 , 1 , 9, 8, 6, 5, 2 , 3 };
-    QCOMPARE(size_t(t.count()), sizeof(expect2)/sizeof(int));
-    for (int i = 0; i < t.count(); i++) {
+    QCOMPARE(size_t(t.size()), sizeof(expect2)/sizeof(int));
+    for (int i = 0; i < t.size(); i++) {
         QCOMPARE(t[i], T(IntOrString(expect2[i])));
     }
 
@@ -3494,16 +3469,16 @@ template<class Container> void insert_remove_loop_impl()
     }
 
     int expect3[] = { 1 , 9, 5, 3 };
-    QCOMPARE(size_t(t.count()), sizeof(expect3)/sizeof(int));
-    for (int i = 0; i < t.count(); i++) {
+    QCOMPARE(size_t(t.size()), sizeof(expect3)/sizeof(int));
+    for (int i = 0; i < t.size(); i++) {
         QCOMPARE(t[i], T(IntOrString(expect3[i])));
     }
 
     t.erase(t.begin() + 1, t.end() - 1);
 
     int expect4[] = { 1 , 3 };
-    QCOMPARE(size_t(t.count()), sizeof(expect4)/sizeof(int));
-    for (int i = 0; i < t.count(); i++) {
+    QCOMPARE(size_t(t.size()), sizeof(expect4)/sizeof(int));
+    for (int i = 0; i < t.size(); i++) {
         QCOMPARE(t[i], T(IntOrString(expect4[i])));
     }
 
@@ -3520,8 +3495,8 @@ template<class Container> void insert_remove_loop_impl()
 
     int expect5[] = { 1, 1, 2, 3*3, 3, 3*3+1, 10, 11*11, 11, 11*11+1, 12 , 13*13, 13, 13*13+1, 14,
                       15*15, 15, 15*15+1, 16 , 17*17, 17, 17*17+1 ,18 , 19*19, 19, 19*19+1, 20, 21*21, 21, 21*21+1 };
-    QCOMPARE(size_t(t.count()), sizeof(expect5)/sizeof(int));
-    for (int i = 0; i < t.count(); i++) {
+    QCOMPARE(size_t(t.size()), sizeof(expect5)/sizeof(int));
+    for (int i = 0; i < t.size(); i++) {
         QCOMPARE(t[i], T(IntOrString(expect5[i])));
     }
 
@@ -3531,8 +3506,8 @@ template<class Container> void insert_remove_loop_impl()
     t.insert(2, 4, T(IntOrString(7)));
 
     int expect6[] = { 1, 2, 7, 7, 7, 7, 9, 9, 9, 9, 3, 4 };
-    QCOMPARE(size_t(t.count()), sizeof(expect6)/sizeof(int));
-    for (int i = 0; i < t.count(); i++) {
+    QCOMPARE(size_t(t.size()), sizeof(expect6)/sizeof(int));
+    for (int i = 0; i < t.size(); i++) {
         QCOMPARE(t[i], T(IntOrString(expect6[i])));
     }
 

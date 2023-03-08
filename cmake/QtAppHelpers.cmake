@@ -53,7 +53,7 @@ function(qt_internal_add_app target)
     # but don't enable macOS bundles.
     # Bundles are enabled in a separate set_target_properties call if an Info.plist file
     # is provided.
-    # Similary, the Windows GUI flag is disabled in a separate call
+    # Similarly, the Windows GUI flag is disabled in a separate call
     # if CONFIG += console was encountered during conversion.
     set_target_properties("${target}" PROPERTIES WIN32_EXECUTABLE TRUE)
 
@@ -75,7 +75,7 @@ function(qt_internal_get_title_case value out_var)
     endif()
     string(SUBSTRING "${value}" 0 1 first_char)
     string(TOUPPER "${first_char}" first_char_upper)
-    string(SUBSTRING "${target}" 1 -1 rest_of_value)
+    string(SUBSTRING "${value}" 1 -1 rest_of_value)
     set(title_value "${first_char_upper}${rest_of_value}")
     set(${out_var} "${title_value}" PARENT_SCOPE)
 endfunction()
@@ -111,4 +111,5 @@ function(qt_internal_finalize_app target)
     # Rpaths need to be applied in the finalizer, because the MACOSX_BUNDLE property might be
     # set after a qt_internal_add_app call.
     qt_apply_rpaths(TARGET "${target}" INSTALL_PATH "${INSTALL_BINDIR}" RELATIVE_RPATH)
+    qt_internal_apply_staging_prefix_build_rpath_workaround()
 endfunction()

@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2022 Intel Corporation.
-** Copyright (C) 2021 Alex Trotsenko.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2022 Intel Corporation.
+// Copyright (C) 2021 Alex Trotsenko.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 //#define QPROCESS_DEBUG
 #include "qdebug.h"
@@ -69,6 +33,7 @@
 #endif
 
 #include <errno.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -77,6 +42,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 #if !defined(Q_OS_DARWIN)
 
@@ -414,14 +381,14 @@ static QString resolveExecutable(const QString &program)
 #ifdef Q_OS_DARWIN
     // allow invoking of .app bundles on the Mac.
     QFileInfo fileInfo(program);
-    if (program.endsWith(QLatin1String(".app")) && fileInfo.isDir()) {
+    if (program.endsWith(".app"_L1) && fileInfo.isDir()) {
         QCFType<CFURLRef> url = CFURLCreateWithFileSystemPath(0,
                                                           QCFString(fileInfo.absoluteFilePath()),
                                                           kCFURLPOSIXPathStyle, true);
         {
             // CFBundle is not reentrant, since CFBundleCreate might return a reference
             // to a cached bundle object. Protect the bundle calls with a mutex lock.
-            static QBasicMutex cfbundleMutex;
+            Q_CONSTINIT static QBasicMutex cfbundleMutex;
             const auto locker = qt_scoped_lock(cfbundleMutex);
             QCFType<CFBundleRef> bundle = CFBundleCreate(0, url);
             // 'executableURL' can be either relative or absolute ...
@@ -436,7 +403,7 @@ static QString resolveExecutable(const QString &program)
     }
 #endif
 
-    if (!program.contains(QLatin1Char('/'))) {
+    if (!program.contains(u'/')) {
         // findExecutable() returns its argument if it's an absolute path,
         // otherwise it searches $PATH; returns empty if not found (we handle
         // that case much later)
@@ -485,6 +452,15 @@ void QProcessPrivate::startProcess()
         workingDirPtr = encodedWorkingDirectory.constData();
     }
 
+    // Start the child.
+    auto execChild1 = [this, workingDirPtr, &argv, &envp]() {
+        execChild(workingDirPtr, argv.pointers.get(), envp.pointers.get());
+    };
+    auto execChild2 = [](void *lambda) {
+        static_cast<decltype(execChild1) *>(lambda)->operator()();
+        return -1;
+    };
+
     int ffdflags = FFD_CLOEXEC;
 
     // QTBUG-86285
@@ -493,7 +469,7 @@ void QProcessPrivate::startProcess()
 #endif
 
     pid_t childPid;
-    forkfd = ::forkfd(ffdflags , &childPid);
+    forkfd = ::vforkfd(ffdflags , &childPid, execChild2, &execChild1);
     int lastForkErrno = errno;
 
     if (forkfd == -1) {
@@ -506,12 +482,6 @@ void QProcessPrivate::startProcess()
                         QProcess::tr("Resource error (fork failure): %1").arg(qt_error_string(lastForkErrno)));
         cleanup();
         return;
-    }
-
-    // Start the child.
-    if (forkfd == FFD_CHILD_PROCESS) {
-        execChild(workingDirPtr, argv.pointers.get(), envp.pointers.get());
-        ::_exit(-1);
     }
 
     pid = qint64(childPid);
@@ -624,7 +594,7 @@ bool QProcessPrivate::processStarted(QString *errorMessage)
 
     // did we read an error message?
     if (errorMessage)
-        *errorMessage = QLatin1String(buf.function) + QLatin1String(": ") + qt_error_string(buf.code);
+        *errorMessage = QLatin1StringView(buf.function) + ": "_L1 + qt_error_string(buf.code);
 
     return false;
 }
@@ -936,12 +906,16 @@ bool QProcessPrivate::startDetached(qint64 *pid)
 {
     QByteArray encodedWorkingDirectory = QFile::encodeName(workingDirectory);
 
+#ifdef PIPE_BUF
     static_assert(PIPE_BUF >= sizeof(ChildError));
+#else
+    static_assert(_POSIX_PIPE_BUF >= sizeof(ChildError));
+#endif
     ChildError childStatus = { 0, {} };
 
     AutoPipe startedPipe, pidPipe;
     if (!startedPipe || !pidPipe) {
-        setErrorAndEmit(QProcess::FailedToStart, QLatin1String("pipe: ") + qt_error_string(errno));
+        setErrorAndEmit(QProcess::FailedToStart, "pipe: "_L1 + qt_error_string(errno));
         return false;
     }
 
@@ -998,7 +972,7 @@ bool QProcessPrivate::startDetached(qint64 *pid)
     closeChannels();
 
     if (childPid == -1) {
-        setErrorAndEmit(QProcess::FailedToStart, QLatin1String("fork: ") + qt_error_string(savedErrno));
+        setErrorAndEmit(QProcess::FailedToStart, "fork: "_L1 + qt_error_string(savedErrno));
         return false;
     }
 
@@ -1029,7 +1003,7 @@ bool QProcessPrivate::startDetached(qint64 *pid)
             *pid = -1;
         QString msg;
         if (startResult == sizeof(childStatus))
-            msg = QLatin1String(childStatus.function) + qt_error_string(childStatus.code);
+            msg = QLatin1StringView(childStatus.function) + qt_error_string(childStatus.code);
         setErrorAndEmit(QProcess::FailedToStart, msg);
     }
     return success;

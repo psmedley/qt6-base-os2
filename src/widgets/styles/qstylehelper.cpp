@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <qstyleoption.h>
 #include <qpainter.h>
@@ -75,7 +39,7 @@ QString uniqueName(const QString &key, const QStyleOption *option, const QSize &
     if (const QStyleOptionSpinBox *spinBox = qstyleoption_cast<const QStyleOptionSpinBox *>(option)) {
         tmp = tmp % HexString<uint>(spinBox->buttonSymbols)
                   % HexString<uint>(spinBox->stepEnabled)
-                  % QLatin1Char(spinBox->frame ? '1' : '0'); ;
+                  % QChar(spinBox->frame ? u'1' : u'0');
     }
 #endif // QT_CONFIG(spinbox)
 
@@ -125,7 +89,7 @@ Q_WIDGETS_EXPORT qreal dpiScaled(qreal value, const QStyleOption *option)
     return dpiScaled(value, dpi(option));
 }
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 bool isInstanceOf(QObject *obj, QAccessible::Role role)
 {
     bool match = false;
@@ -146,7 +110,7 @@ bool hasAncestor(QObject *obj, QAccessible::Role role)
     }
     return found;
 }
-#endif // QT_NO_ACCESSIBILITY
+#endif // QT_CONFIG(accessibility)
 
 
 #if QT_CONFIG(dial)
@@ -262,7 +226,7 @@ QPolygonF calcLines(const QStyleOptionSlider *dial)
 
 void drawDial(const QStyleOptionSlider *option, QPainter *painter)
 {
-    QPalette pal = option->palette;
+    const QPalette pal = option->palette;
     QColor buttonColor = pal.button().color();
     const int width = option->rect.width();
     const int height = option->rect.height();
@@ -276,7 +240,11 @@ void drawDial(const QStyleOptionSlider *option, QPainter *painter)
 
     // Draw notches
     if (option->subControls & QStyle::SC_DialTickmarks) {
-        painter->setPen(option->palette.dark().color().darker(120));
+        const bool inverted = pal.window().color().lightness() < pal.text().color().lightness()
+                           && pal.light().color().lightness() > pal.dark().color().lightness();
+        const QColor notchColor = inverted ? pal.light().color().lighter(120)
+                                           : pal.dark().color().darker(120);
+        painter->setPen(notchColor);
         painter->drawLines(QStyleHelper::calcLines(option));
     }
 

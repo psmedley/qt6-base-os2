@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qcoffpeparser_p.h"
 
@@ -49,14 +13,15 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 // Whether we include some extra validity checks
 // (checks to ensure we don't read out-of-bounds are always included)
 static constexpr bool IncludeValidityChecks = true;
 
-static constexpr char rawSectionName[] = ".qtmetadata";
-static constexpr QLatin1String metadataSectionName(rawSectionName, sizeof(rawSectionName) - 1);
-static constexpr QLatin1String truncatedSectionName =
-        metadataSectionName.left(sizeof(IMAGE_SECTION_HEADER::Name));
+static constexpr inline auto metadataSectionName() noexcept { return ".qtmetadata"_L1; }
+static constexpr QLatin1StringView truncatedSectionName =
+        metadataSectionName().left(sizeof(IMAGE_SECTION_HEADER::Name));
 
 #ifdef QT_BUILD_INTERNAL
 #  define QCOFFPEPARSER_DEBUG
@@ -75,7 +40,7 @@ static const WORD ExpectedMachine =
 #if 0
         // nothing, just so everything is #elf
 #elif defined(Q_PROCESSOR_ARM_32)
-            IMAGE_FILE_MACHINE_ARM
+            IMAGE_FILE_MACHINE_ARMNT
 #elif defined(Q_PROCESSOR_ARM_64)
             IMAGE_FILE_MACHINE_ARM64
 #elif defined(Q_PROCESSOR_IA64)
@@ -327,7 +292,7 @@ findStringTable(QByteArrayView data, const IMAGE_NT_HEADERS *ntHeader, const Err
     return data.sliced(off, size);
 }
 
-static QLatin1String findSectionName(const IMAGE_SECTION_HEADER *section, QByteArrayView stringTable)
+static QLatin1StringView findSectionName(const IMAGE_SECTION_HEADER *section, QByteArrayView stringTable)
 {
     auto ptr = reinterpret_cast<const char *>(section->Name);
     qsizetype n = qstrnlen(ptr, sizeof(section->Name));
@@ -343,13 +308,13 @@ static QLatin1String findSectionName(const IMAGE_SECTION_HEADER *section, QByteA
         bool ok;
         qsizetype offset = QByteArrayView(ptr + 1, n - 1).toUInt(&ok);
         if (!ok || offset >= stringTable.size())
-            return QLatin1String();
+            return {};
 
         ptr = stringTable.data() + offset;
         n = qstrnlen(ptr, stringTable.size() - offset);
     }
 
-    return QLatin1String(ptr, n);
+    return {ptr, n};
 }
 
 QLibraryScanResult QCoffPeParser::parse(QByteArrayView data, QString *errMsg)
@@ -372,7 +337,7 @@ QLibraryScanResult QCoffPeParser::parse(QByteArrayView data, QString *errMsg)
     // scan the sections now
     const auto sectionTableEnd = section + ntHeaders->FileHeader.NumberOfSections;
     for ( ; section < sectionTableEnd; ++section) {
-        QLatin1String sectionName = findSectionName(section, stringTable);
+        QLatin1StringView sectionName = findSectionName(section, stringTable);
         peDebug << "section" << sectionName << SectionDebug{section};
         if (IncludeValidityChecks && sectionName.isEmpty())
             return error(QLibrary::tr("a section name is empty or extends past the end of the file"));
@@ -389,7 +354,7 @@ QLibraryScanResult QCoffPeParser::parse(QByteArrayView data, QString *errMsg)
             continue;
 
         // if we do have a string table, the name may be complete
-        if (sectionName != truncatedSectionName && sectionName != metadataSectionName)
+        if (sectionName != truncatedSectionName && sectionName != metadataSectionName())
             continue;
         peDebug << "found .qtmetadata section";
 

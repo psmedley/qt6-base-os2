@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "private/qwindow_p.h"
 #include "qwidgetwindow_p.h"
@@ -43,7 +7,7 @@
 
 #include "private/qwidget_p.h"
 #include "private/qapplication_p.h"
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 #include <QtGui/qaccessible.h>
 #endif
 #include <private/qwidgetrepaintmanager_p.h>
@@ -54,6 +18,8 @@
 #include <private/qhighdpiscaling_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 Q_WIDGETS_EXPORT extern bool qt_tab_all_widgets();
 
@@ -108,9 +74,6 @@ public:
     }
 
     QRectF closestAcceptableGeometry(const QRectF &rect) const override;
-#if QT_CONFIG(opengl)
-    QOpenGLContext *shareContext() const override;
-#endif
 
     void processSafeAreaMarginsChanged() override
     {
@@ -152,26 +115,19 @@ QRectF QWidgetWindowPrivate::closestAcceptableGeometry(const QRectF &rect) const
     return result;
 }
 
-#if QT_CONFIG(opengl)
-QOpenGLContext *QWidgetWindowPrivate::shareContext() const
-{
-    Q_Q(const QWidgetWindow);
-    const QWidgetPrivate *widgetPrivate = QWidgetPrivate::get(q->widget());
-    return widgetPrivate->shareContext();
-}
-#endif // opengl
+bool q_evaluateRhiConfig(const QWidget *w, QPlatformBackingStoreRhiConfig *outConfig, QSurface::SurfaceType *outType);
 
 QWidgetWindow::QWidgetWindow(QWidget *widget)
     : QWindow(*new QWidgetWindowPrivate(), nullptr)
     , m_widget(widget)
 {
     updateObjectName();
-    // Enable QOpenGLWidget/QQuickWidget children if the platform plugin supports it,
-    // and the application developer has not explicitly disabled it.
-    if (QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::RasterGLSurface)
-        && !QCoreApplication::testAttribute(Qt::AA_ForceRasterWidgets)) {
-        setSurfaceType(QSurface::RasterGLSurface);
+    if (!QCoreApplication::testAttribute(Qt::AA_ForceRasterWidgets)) {
+        QSurface::SurfaceType type = QSurface::RasterSurface;
+        q_evaluateRhiConfig(m_widget, nullptr, &type);
+        setSurfaceType(type);
     }
+
     connect(widget, &QObject::objectNameChanged, this, &QWidgetWindow::updateObjectName);
     connect(this, SIGNAL(screenChanged(QScreen*)), this, SLOT(handleScreenChange()));
 }
@@ -180,7 +136,7 @@ QWidgetWindow::~QWidgetWindow()
 {
 }
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 QAccessibleInterface *QWidgetWindow::accessibleRoot() const
 {
     if (m_widget)
@@ -255,7 +211,7 @@ bool QWidgetWindow::event(QEvent *event)
         handleFocusInEvent(static_cast<QFocusEvent *>(event));
         Q_FALLTHROUGH();
     case QEvent::FocusOut: {
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
         QAccessible::State state;
         state.active = true;
         QAccessibleStateChangeEvent ev(m_widget, state);
@@ -1171,8 +1127,8 @@ void QWidgetWindow::updateObjectName()
 {
     QString name = m_widget->objectName();
     if (name.isEmpty())
-        name = QString::fromUtf8(m_widget->metaObject()->className()) + QLatin1String("Class");
-    name += QLatin1String("Window");
+        name = QString::fromUtf8(m_widget->metaObject()->className()) + "Class"_L1;
+    name += "Window"_L1;
     setObjectName(name);
 }
 

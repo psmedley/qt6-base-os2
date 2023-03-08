@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2014 Jeremy Lainé <jeremy.laine@m4x.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2014 Jeremy Lainé <jeremy.laine@m4x.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtls_st_p.h"
 #include "qtlsbackend_st_p.h"
@@ -75,6 +39,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // Defined in qsslsocket_qt.cpp.
 QByteArray _q_makePkcs12(const QList<QSslCertificate> &certs, const QSslKey &key,
@@ -117,10 +83,10 @@ EphemeralSecKeychain::EphemeralSecKeychain()
     Q_ASSERT(uuidAsByteArray.size() > 2);
     Q_ASSERT(uuidAsByteArray.startsWith('{'));
     Q_ASSERT(uuidAsByteArray.endsWith('}'));
-    const auto uuidAsString = QLatin1String(uuidAsByteArray.data(), uuidAsByteArray.size()).mid(1, uuidAsByteArray.size() - 2);
+    const auto uuidAsString = QLatin1StringView(uuidAsByteArray.data(), uuidAsByteArray.size()).mid(1, uuidAsByteArray.size() - 2);
 
     const QString keychainName
-            = QDir::tempPath() + QDir::separator() + uuidAsString + QLatin1String(".keychain");
+            = QDir::tempPath() + QDir::separator() + uuidAsString + ".keychain"_L1;
     // SecKeychainCreate, pathName parameter:
     //
     // "A constant character string representing the POSIX path indicating where
@@ -349,42 +315,38 @@ void TlsCryptographSecureTransport::continueHandshake()
     qCDebug(lcSecureTransport) << d->plainTcpSocket() << "connection encrypted";
 #endif
 
-#if QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_10_13_4, __IPHONE_11_0, __TVOS_11_0, __WATCHOS_4_0)
     // Unlike OpenSSL, Secure Transport does not allow to negotiate protocols via
     // a callback during handshake. We can only set our list of preferred protocols
     // (and send it during handshake) and then receive what our peer has sent to us.
     // And here we can finally try to find a match (if any).
     const auto &configuration = q->sslConfiguration();
-    if (__builtin_available(macOS 10.13, iOS 11.0, tvOS 11.0, watchOS 4.0, *)) {
-        const auto &requestedProtocols = configuration.allowedNextProtocols();
-        if (const int requestedCount = requestedProtocols.size()) {
-            QTlsBackend::setAlpnStatus(d, QSslConfiguration::NextProtocolNegotiationNone);
-            QTlsBackend::setNegotiatedProtocol(d, {});
+    const auto &requestedProtocols = configuration.allowedNextProtocols();
+    if (const int requestedCount = requestedProtocols.size()) {
+        QTlsBackend::setAlpnStatus(d, QSslConfiguration::NextProtocolNegotiationNone);
+        QTlsBackend::setNegotiatedProtocol(d, {});
 
-            QCFType<CFArrayRef> cfArray;
-            const OSStatus result = SSLCopyALPNProtocols(context, &cfArray);
-            if (result == errSecSuccess && cfArray && CFArrayGetCount(cfArray)) {
-                const int size = CFArrayGetCount(cfArray);
-                QList<QString> peerProtocols(size);
-                for (int i = 0; i < size; ++i)
-                    peerProtocols[i] = QString::fromCFString((CFStringRef)CFArrayGetValueAtIndex(cfArray, i));
+        QCFType<CFArrayRef> cfArray;
+        const OSStatus result = SSLCopyALPNProtocols(context, &cfArray);
+        if (result == errSecSuccess && cfArray && CFArrayGetCount(cfArray)) {
+            const int size = CFArrayGetCount(cfArray);
+            QList<QString> peerProtocols(size);
+            for (int i = 0; i < size; ++i)
+                peerProtocols[i] = QString::fromCFString((CFStringRef)CFArrayGetValueAtIndex(cfArray, i));
 
-                for (int i = 0; i < requestedCount; ++i) {
-                    const auto requestedName = QString::fromLatin1(requestedProtocols[i]);
-                    for (int j = 0; j < size; ++j) {
-                        if (requestedName == peerProtocols[j]) {
-                            QTlsBackend::setNegotiatedProtocol(d, requestedName.toLatin1());
-                            QTlsBackend::setAlpnStatus(d, QSslConfiguration::NextProtocolNegotiationNegotiated);
-                            break;
-                        }
-                    }
-                    if (configuration.nextProtocolNegotiationStatus() == QSslConfiguration::NextProtocolNegotiationNegotiated)
+            for (int i = 0; i < requestedCount; ++i) {
+                const auto requestedName = QString::fromLatin1(requestedProtocols[i]);
+                for (int j = 0; j < size; ++j) {
+                    if (requestedName == peerProtocols[j]) {
+                        QTlsBackend::setNegotiatedProtocol(d, requestedName.toLatin1());
+                        QTlsBackend::setAlpnStatus(d, QSslConfiguration::NextProtocolNegotiationNegotiated);
                         break;
+                    }
                 }
+                if (configuration.nextProtocolNegotiationStatus() == QSslConfiguration::NextProtocolNegotiationNegotiated)
+                    break;
             }
         }
     }
-#endif // QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE
 
     if (!renegotiating)
         emit q->encrypted();
@@ -575,107 +537,107 @@ void TlsCryptographSecureTransport::transmit()
 
 SSLCipherSuite TlsCryptographSecureTransport::SSLCipherSuite_from_QSslCipher(const QSslCipher &ciph)
 {
-    if (ciph.name() == QLatin1String("AES128-SHA"))
+    if (ciph.name() == "AES128-SHA"_L1)
         return TLS_RSA_WITH_AES_128_CBC_SHA;
-    if (ciph.name() == QLatin1String("DHE-RSA-AES128-SHA"))
+    if (ciph.name() == "DHE-RSA-AES128-SHA"_L1)
         return TLS_DHE_RSA_WITH_AES_128_CBC_SHA;
-    if (ciph.name() == QLatin1String("AES256-SHA"))
+    if (ciph.name() == "AES256-SHA"_L1)
         return TLS_RSA_WITH_AES_256_CBC_SHA;
-    if (ciph.name() == QLatin1String("DHE-RSA-AES256-SHA"))
+    if (ciph.name() == "DHE-RSA-AES256-SHA"_L1)
         return TLS_DHE_RSA_WITH_AES_256_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-NULL-SHA"))
+    if (ciph.name() == "ECDH-ECDSA-NULL-SHA"_L1)
         return TLS_ECDH_ECDSA_WITH_NULL_SHA;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-RC4-SHA"))
+    if (ciph.name() == "ECDH-ECDSA-RC4-SHA"_L1)
         return TLS_ECDH_ECDSA_WITH_RC4_128_SHA;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-DES-CBC3-SHA"))
+    if (ciph.name() == "ECDH-ECDSA-DES-CBC3-SHA"_L1)
         return TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-AES128-SHA"))
+    if (ciph.name() == "ECDH-ECDSA-AES128-SHA"_L1)
         return TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-AES256-SHA"))
+    if (ciph.name() == "ECDH-ECDSA-AES256-SHA"_L1)
         return TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-RC4-SHA"))
+    if (ciph.name() == "ECDH-ECDSA-RC4-SHA"_L1)
         return TLS_ECDHE_ECDSA_WITH_RC4_128_SHA;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-DES-CBC3-SHA"))
+    if (ciph.name() == "ECDH-ECDSA-DES-CBC3-SHA"_L1)
         return TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-AES128-SHA"))
+    if (ciph.name() == "ECDH-ECDSA-AES128-SHA"_L1)
         return TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-AES256-SHA"))
+    if (ciph.name() == "ECDH-ECDSA-AES256-SHA"_L1)
         return TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-RSA-NULL-SHA"))
+    if (ciph.name() == "ECDH-RSA-NULL-SHA"_L1)
         return TLS_ECDH_RSA_WITH_NULL_SHA;
-    if (ciph.name() == QLatin1String("ECDH-RSA-RC4-SHA"))
+    if (ciph.name() == "ECDH-RSA-RC4-SHA"_L1)
         return TLS_ECDH_RSA_WITH_RC4_128_SHA;
-    if (ciph.name() == QLatin1String("ECDH-RSA-DES-CBC3-SHA"))
+    if (ciph.name() == "ECDH-RSA-DES-CBC3-SHA"_L1)
         return TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-RSA-AES128-SHA"))
+    if (ciph.name() == "ECDH-RSA-AES128-SHA"_L1)
         return TLS_ECDH_RSA_WITH_AES_128_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-RSA-AES256-SHA"))
+    if (ciph.name() == "ECDH-RSA-AES256-SHA"_L1)
         return TLS_ECDH_RSA_WITH_AES_256_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-RSA-RC4-SHA"))
+    if (ciph.name() == "ECDH-RSA-RC4-SHA"_L1)
         return TLS_ECDHE_RSA_WITH_RC4_128_SHA;
-    if (ciph.name() == QLatin1String("ECDH-RSA-DES-CBC3-SHA"))
+    if (ciph.name() == "ECDH-RSA-DES-CBC3-SHA"_L1)
         return TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-RSA-AES128-SHA"))
+    if (ciph.name() == "ECDH-RSA-AES128-SHA"_L1)
         return TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA;
-    if (ciph.name() == QLatin1String("ECDH-RSA-AES256-SHA"))
+    if (ciph.name() == "ECDH-RSA-AES256-SHA"_L1)
         return TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA;
-    if (ciph.name() == QLatin1String("DES-CBC3-SHA"))
+    if (ciph.name() == "DES-CBC3-SHA"_L1)
         return TLS_RSA_WITH_3DES_EDE_CBC_SHA;
-    if (ciph.name() == QLatin1String("AES128-SHA256"))
+    if (ciph.name() == "AES128-SHA256"_L1)
         return TLS_RSA_WITH_AES_128_CBC_SHA256;
-    if (ciph.name() == QLatin1String("AES256-SHA256"))
+    if (ciph.name() == "AES256-SHA256"_L1)
         return TLS_RSA_WITH_AES_256_CBC_SHA256;
-    if (ciph.name() == QLatin1String("DHE-RSA-DES-CBC3-SHA"))
+    if (ciph.name() == "DHE-RSA-DES-CBC3-SHA"_L1)
         return TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA;
-    if (ciph.name() == QLatin1String("DHE-RSA-AES128-SHA256"))
+    if (ciph.name() == "DHE-RSA-AES128-SHA256"_L1)
         return TLS_DHE_RSA_WITH_AES_128_CBC_SHA256;
-    if (ciph.name() == QLatin1String("DHE-RSA-AES256-SHA256"))
+    if (ciph.name() == "DHE-RSA-AES256-SHA256"_L1)
         return TLS_DHE_RSA_WITH_AES_256_CBC_SHA256;
-    if (ciph.name() == QLatin1String("AES256-GCM-SHA384"))
+    if (ciph.name() == "AES256-GCM-SHA384"_L1)
         return TLS_RSA_WITH_AES_256_GCM_SHA384;
-    if (ciph.name() == QLatin1String("ECDHE-ECDSA-AES128-SHA256"))
+    if (ciph.name() == "ECDHE-ECDSA-AES128-SHA256"_L1)
         return TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256;
-    if (ciph.name() == QLatin1String("ECDHE-ECDSA-AES256-SHA384"))
+    if (ciph.name() == "ECDHE-ECDSA-AES256-SHA384"_L1)
         return TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-AES128-SHA256"))
+    if (ciph.name() == "ECDH-ECDSA-AES128-SHA256"_L1)
         return TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-AES256-SHA384"))
+    if (ciph.name() == "ECDH-ECDSA-AES256-SHA384"_L1)
         return TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384;
-    if (ciph.name() == QLatin1String("ECDHE-RSA-AES128-SHA256"))
+    if (ciph.name() == "ECDHE-RSA-AES128-SHA256"_L1)
         return TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256;
-    if (ciph.name() == QLatin1String("ECDHE-RSA-AES256-SHA384"))
+    if (ciph.name() == "ECDHE-RSA-AES256-SHA384"_L1)
         return TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384;
-    if (ciph.name() == QLatin1String("ECDHE-RSA-AES256-SHA384"))
+    if (ciph.name() == "ECDHE-RSA-AES256-SHA384"_L1)
         return TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256;
-    if (ciph.name() == QLatin1String("ECDHE-RSA-AES256-GCM-SHA384"))
+    if (ciph.name() == "ECDHE-RSA-AES256-GCM-SHA384"_L1)
         return TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;
-    if (ciph.name() == QLatin1String("AES128-GCM-SHA256"))
+    if (ciph.name() == "AES128-GCM-SHA256"_L1)
         return TLS_AES_128_GCM_SHA256;
-    if (ciph.name() == QLatin1String("AES256-GCM-SHA384"))
+    if (ciph.name() == "AES256-GCM-SHA384"_L1)
         return TLS_AES_256_GCM_SHA384;
-    if (ciph.name() == QLatin1String("CHACHA20-POLY1305-SHA256"))
+    if (ciph.name() == "CHACHA20-POLY1305-SHA256"_L1)
         return TLS_CHACHA20_POLY1305_SHA256;
-    if (ciph.name() == QLatin1String("AES128-CCM-SHA256"))
+    if (ciph.name() == "AES128-CCM-SHA256"_L1)
         return TLS_AES_128_CCM_SHA256;
-    if (ciph.name() == QLatin1String("AES128-CCM8-SHA256"))
+    if (ciph.name() == "AES128-CCM8-SHA256"_L1)
         return TLS_AES_128_CCM_8_SHA256;
-    if (ciph.name() == QLatin1String("ECDHE-ECDSA-AES128-GCM-SHA256"))
+    if (ciph.name() == "ECDHE-ECDSA-AES128-GCM-SHA256"_L1)
         return TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
-    if (ciph.name() == QLatin1String("ECDHE-ECDSA-AES256-GCM-SHA384"))
+    if (ciph.name() == "ECDHE-ECDSA-AES256-GCM-SHA384"_L1)
         return TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-AES128-GCM-SHA256"))
+    if (ciph.name() == "ECDH-ECDSA-AES128-GCM-SHA256"_L1)
         return TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256;
-    if (ciph.name() == QLatin1String("ECDH-ECDSA-AES256-GCM-SHA384"))
+    if (ciph.name() == "ECDH-ECDSA-AES256-GCM-SHA384"_L1)
         return TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384;
-    if (ciph.name() == QLatin1String("ECDHE-RSA-AES128-GCM-SHA256"))
+    if (ciph.name() == "ECDHE-RSA-AES128-GCM-SHA256"_L1)
         return TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
-    if (ciph.name() == QLatin1String("ECDH-RSA-AES128-GCM-SHA256"))
+    if (ciph.name() == "ECDH-RSA-AES128-GCM-SHA256"_L1)
         return TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256;
-    if (ciph.name() == QLatin1String("ECDH-RSA-AES256-GCM-SHA384"))
+    if (ciph.name() == "ECDH-RSA-AES256-GCM-SHA384"_L1)
         return TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384;
-    if (ciph.name() == QLatin1String("ECDHE-RSA-CHACHA20-POLY1305-SHA256"))
+    if (ciph.name() == "ECDHE-RSA-CHACHA20-POLY1305-SHA256"_L1)
         return TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
-    if (ciph.name() == QLatin1String("ECDHE-ECDSA-CHACHA20-POLY1305-SHA256"))
+    if (ciph.name() == "ECDHE-ECDSA-CHACHA20-POLY1305-SHA256"_L1)
         return TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;
 
     return 0;
@@ -728,35 +690,31 @@ bool TlsCryptographSecureTransport::initSslContext()
         return false;
     }
 
-#if QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_10_13_4, __IPHONE_11_0, __TVOS_11_0, __WATCHOS_4_0)
-    if (__builtin_available(macOS 10.13, iOS 11.0, tvOS 11.0, watchOS 4.0, *)) {
-        const auto protocolNames = configuration.allowedNextProtocols();
-        QCFType<CFMutableArrayRef> cfNames(CFArrayCreateMutable(nullptr, 0, &kCFTypeArrayCallBacks));
-        if (cfNames) {
-            for (const QByteArray &name : protocolNames) {
-                if (name.size() > 255) {
-                    qCWarning(lcSecureTransport) << "TLS ALPN extension" << name
-                                                 << "is too long and will be ignored.";
-                    continue;
-                } else if (name.isEmpty()) {
-                    continue;
-                }
-                QCFString cfName(QString::fromLatin1(name).toCFString());
-                CFArrayAppendValue(cfNames, cfName);
+    const auto protocolNames = configuration.allowedNextProtocols();
+    QCFType<CFMutableArrayRef> cfNames(CFArrayCreateMutable(nullptr, 0, &kCFTypeArrayCallBacks));
+    if (cfNames) {
+        for (const QByteArray &name : protocolNames) {
+            if (name.size() > 255) {
+                qCWarning(lcSecureTransport) << "TLS ALPN extension" << name
+                                             << "is too long and will be ignored.";
+                continue;
+            } else if (name.isEmpty()) {
+                continue;
             }
-
-            if (CFArrayGetCount(cfNames)) {
-                // Up to the application layer to check that negotiation
-                // failed, and handle this non-TLS error, we do not handle
-                // the result of this call as an error:
-                if (SSLSetALPNProtocols(context, cfNames) != errSecSuccess)
-                    qCWarning(lcSecureTransport) << "SSLSetALPNProtocols failed - too long protocol names?";
-            }
-        } else {
-            qCWarning(lcSecureTransport) << "failed to allocate ALPN names array";
+            QCFString cfName(QString::fromLatin1(name).toCFString());
+            CFArrayAppendValue(cfNames, cfName);
         }
+
+        if (CFArrayGetCount(cfNames)) {
+            // Up to the application layer to check that negotiation
+            // failed, and handle this non-TLS error, we do not handle
+            // the result of this call as an error:
+            if (SSLSetALPNProtocols(context, cfNames) != errSecSuccess)
+                qCWarning(lcSecureTransport) << "SSLSetALPNProtocols failed - too long protocol names?";
+        }
+    } else {
+        qCWarning(lcSecureTransport) << "failed to allocate ALPN names array";
     }
-#endif // QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE
 
     if (mode == QSslSocket::SslClientMode) {
         // enable Server Name Indication (SNI)
@@ -1117,7 +1075,7 @@ bool TlsCryptographSecureTransport::verifyPeerTrust()
         QTlsBackend::storePeerCertificate(d, peerCertificateChain.at(0));
 
     // Check the whole chain for blacklisting (including root, as we check for subjectInfo and issuer):
-    for (const QSslCertificate &cert : qAsConst(peerCertificateChain)) {
+    for (const QSslCertificate &cert : std::as_const(peerCertificateChain)) {
         if (QSslCertificatePrivate::isBlacklisted(cert) && !canIgnoreVerify) {
             const QSslError error(QSslError::CertificateBlacklisted, cert);
             errors << error;

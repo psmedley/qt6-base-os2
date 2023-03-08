@@ -78,7 +78,7 @@ else() #Win32
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE:mylib2>
             "${CMAKE_CURRENT_BINARY_DIR}/../mylib.dl2"
-    )
+        VERBATIM)
 endif()
 # special case end
 

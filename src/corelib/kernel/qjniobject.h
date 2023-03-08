@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QJNIOBJECT_H
 #define QJNIOBJECT_H
@@ -45,6 +9,7 @@
 #if defined(Q_QDOC) || defined(Q_OS_ANDROID)
 #include <jni.h>
 #include <QtCore/qjnienvironment.h>
+#include <QtCore/qjnitypes.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -56,299 +21,254 @@ public:
     QJniObject();
     explicit QJniObject(const char *className);
     explicit QJniObject(const char *className, const char *signature, ...);
+    template<typename ...Args
+#ifndef Q_QDOC
+        , std::enable_if_t<!std::disjunction_v<QtJniTypes::IsStringType<std::decay_t<Args>>...>>* = nullptr
+#endif
+        >
+    explicit QJniObject(const char *className, Args &&...args)
+        : QJniObject(className, QtJniTypes::constructorSignature<Args...>().data(),
+                     std::forward<Args>(args)...)
+    {}
     explicit QJniObject(jclass clazz);
     explicit QJniObject(jclass clazz, const char *signature, ...);
+    template<typename ...Args
+#ifndef Q_QDOC
+        , std::enable_if_t<!std::disjunction_v<QtJniTypes::IsStringType<std::decay_t<Args>>...>>* = nullptr
+#endif
+        >
+    explicit QJniObject(jclass clazz, Args &&...args)
+        : QJniObject(clazz, QtJniTypes::constructorSignature<Args...>().data(),
+                     std::forward<Args>(args)...)
+    {}
     QJniObject(jobject globalRef);
+    inline QJniObject(QtJniTypes::Object wrapper) noexcept : QJniObject(jobject(wrapper)) {}
     ~QJniObject();
+
+    template<typename Class, typename ...Args>
+    static inline QJniObject construct(Args &&...args)
+    {
+        return QJniObject(QtJniTypes::className<Class>().data(),
+                          QtJniTypes::constructorSignature<Args...>().data(),
+                          std::forward<Args>(args)...);
+    }
 
     jobject object() const;
     template <typename T> T object() const
     {
-        assertJniObjectType<T>();
+        QtJniTypes::assertObjectType<T>();
         return static_cast<T>(javaObject());
     }
 
     jclass objectClass() const;
     QByteArray className() const;
 
-    template <typename T>
-    T callMethod(const char *methodName, const char *signature, ...) const
+    template <typename Ret, typename ...Args>
+    auto callMethod(const char *methodName, const char *signature, Args &&...args) const
     {
-        assertJniPrimitiveType<T>();
-        QJniEnvironment env;
-        T res{};
-        jmethodID id = getCachedMethodID(env.jniEnv(), methodName, signature);
-        if (id) {
-            va_list args;
-            va_start(args, signature);
-            callMethodForType<T>(env.jniEnv(), res, object(), id, args);
-            va_end(args);
-            if (env.checkAndClearExceptions())
-                res = {};
-        }
-        return res;
-    }
-
-    template <>
-    void callMethod<void>(const char *methodName, const char *signature, ...) const
-    {
-        QJniEnvironment env;
-        jmethodID id = getCachedMethodID(env.jniEnv(), methodName, signature);
-        if (id) {
-            va_list args;
-            va_start(args, signature);
-            callVoidMethodV(env.jniEnv(), id, args);
-            va_end(args);
-            env.checkAndClearExceptions();
+        if constexpr (QtJniTypes::isObjectType<Ret>()) {
+            return callObjectMethod(methodName, signature, std::forward<Args>(args)...);
+        } else {
+            QtJniTypes::assertPrimitiveType<Ret>();
+            QJniEnvironment env;
+            jmethodID id = getCachedMethodID(env.jniEnv(), methodName, signature);
+            if (id) {
+                if constexpr (std::is_same<Ret, void>::value) {
+                    callVoidMethodV(env.jniEnv(), id, std::forward<Args>(args)...);
+                    env.checkAndClearExceptions();
+                } else {
+                    Ret res{};
+                    callMethodForType<Ret>(env.jniEnv(), res, object(), id, std::forward<Args>(args)...);
+                    if (env.checkAndClearExceptions())
+                        res = {};
+                    return res;
+                }
+            }
+            if constexpr (!std::is_same<Ret, void>::value)
+                return Ret{};
         }
     }
 
-    template <typename T>
-    T callMethod(const char *methodName) const
+    template <typename Ret, typename ...Args>
+    auto callMethod(const char *methodName, Args &&...args) const
     {
-        assertJniPrimitiveType<T>();
-        constexpr const char *signature = getTypeSignature<T>();
-        return callMethod<T>(methodName, QByteArray(signature).prepend("()").constData());
+        constexpr auto signature = QtJniTypes::methodSignature<Ret, Args...>();
+        if constexpr (std::is_same<Ret, void>::value) {
+            callMethod<void>(methodName, signature.data(), std::forward<Args>(args)...);
+        } else {
+            return callMethod<Ret>(methodName, signature.data(), std::forward<Args>(args)...);
+        }
     }
 
-    template <>
-    void callMethod<void>(const char *methodName) const
+    template <typename Ret, typename ...Args>
+    QJniObject callObjectMethod(const char *methodName, Args &&...args) const
     {
-        callMethod<void>(methodName, "()V");
-    }
-
-    template <typename T>
-    QJniObject callObjectMethod(const char *methodName) const
-    {
-        assertJniObjectType<T>();
-        constexpr const char *signature = getTypeSignature<T>();
-        return callObjectMethod(methodName, QByteArray(signature).prepend("()").constData());
+        QtJniTypes::assertObjectType<Ret>();
+        constexpr auto signature = QtJniTypes::methodSignature<Ret, Args...>();
+        return callObjectMethod(methodName, signature.data(), std::forward<Args>(args)...);
     }
 
     QJniObject callObjectMethod(const char *methodName, const char *signature, ...) const;
 
-    template <typename T>
-    static T callStaticMethod(const char *className, const char *methodName,
-                              const char *signature, ...)
-    {
-        assertJniPrimitiveType<T>();
-        QJniEnvironment env;
-        T res{};
-        jclass clazz = QJniObject::loadClass(className, env.jniEnv());
-        if (clazz) {
-            jmethodID id = getCachedMethodID(env.jniEnv(), clazz,
-                                             QJniObject::toBinaryEncClassName(className),
-                                             methodName, signature, true);
-            if (id) {
-                va_list args;
-                va_start(args, signature);
-                callStaticMethodForType<T>(env.jniEnv(), res, clazz, id, args);
-                va_end(args);
-                if (env.checkAndClearExceptions())
-                    res = {};
-            }
-        }
-        return res;
-    }
-
-    template <>
-    void callStaticMethod<void>(const char *className, const char *methodName,
-                                const char *signature, ...)
+    template <typename Ret, typename ...Args>
+    static auto callStaticMethod(const char *className, const char *methodName, const char *signature, Args &&...args)
     {
         QJniEnvironment env;
         jclass clazz = QJniObject::loadClass(className, env.jniEnv());
-        if (clazz) {
-            jmethodID id = getCachedMethodID(env.jniEnv(), clazz,
-                                             QJniObject::toBinaryEncClassName(className),
-                                             methodName, signature, true);
-            if (id) {
-                va_list args;
-                va_start(args, signature);
-                env->CallStaticVoidMethodV(clazz, id, args);
-                va_end(args);
-                env.checkAndClearExceptions();
+        return callStaticMethod<Ret>(clazz, methodName, signature, std::forward<Args>(args)...);
+    }
+
+    template <typename Ret, typename ...Args>
+    static auto callStaticMethod(jclass clazz, const char *methodName, const char *signature, Args &&...args)
+    {
+        QJniEnvironment env;
+        jmethodID id = getMethodID(env.jniEnv(), clazz, methodName, signature, true);
+        return callStaticMethod<Ret, Args...>(clazz, id, std::forward<Args>(args)...);
+    }
+
+    template <typename Ret, typename ...Args>
+    static auto callStaticMethod(jclass clazz, jmethodID methodId, Args &&...args)
+    {
+        if constexpr (QtJniTypes::isObjectType<Ret>()) {
+            return callStaticObjectMethod(clazz, methodId, std::forward<Args>(args)...);
+        } else {
+            QtJniTypes::assertPrimitiveType<Ret>();
+            QJniEnvironment env;
+            if (clazz && methodId) {
+                if constexpr (std::is_same<Ret, void>::value) {
+                    callStaticMethodForVoid(env.jniEnv(), clazz, methodId, std::forward<Args>(args)...);
+                    env.checkAndClearExceptions();
+                } else {
+                    Ret res{};
+                    callStaticMethodForType<Ret>(env.jniEnv(), res, clazz, methodId, std::forward<Args>(args)...);
+                    if (env.checkAndClearExceptions())
+                        res = {};
+                    return res;
+                }
             }
+            if constexpr (!std::is_same<Ret, void>::value)
+                return Ret{};
         }
     }
 
-    template <typename T>
-    static T callStaticMethod(const char *className, const char *methodName)
-    {
-        assertJniPrimitiveType<T>();
-        constexpr const char *signature = getTypeSignature<T>();
-        return callStaticMethod<T>(className, methodName, QByteArray(signature).prepend("()").constData());
-    }
-
-    template <>
-    void callStaticMethod<void>(const char *className, const char *methodName)
-    {
-        callStaticMethod<void>(className, methodName, "()V");
-    }
-
-    template <typename T>
-    static T callStaticMethod(jclass clazz, const char *methodName, const char *signature, ...)
-    {
-        assertJniPrimitiveType<T>();
-        QJniEnvironment env;
-        T res{};
-        if (clazz) {
-            jmethodID id = getMethodID(env.jniEnv(), clazz, methodName, signature, true);
-            if (id) {
-                va_list args;
-                va_start(args, signature);
-                callStaticMethodForType<T>(env.jniEnv(), res, clazz, id, args);
-                va_end(args);
-                if (env.checkAndClearExceptions())
-                    res = {};
-            }
-        }
-        return res;
-    }
-
-    template <>
-    void callStaticMethod<void>(jclass clazz, const char *methodName,
-                                const char *signature, ...)
+    template <typename Ret, typename ...Args>
+    static auto callStaticMethod(const char *className, const char *methodName, Args &&...args)
     {
         QJniEnvironment env;
-        if (clazz) {
-            jmethodID id = getMethodID(env.jniEnv(), clazz, methodName, signature, true);
-            if (id) {
-                va_list args;
-                va_start(args, signature);
-                env->CallStaticVoidMethodV(clazz, id, args);
-                va_end(args);
-                env.checkAndClearExceptions();
-            }
-        }
+        jclass clazz = QJniObject::loadClass(className, env.jniEnv());
+        return callStaticMethod<Ret, Args...>(clazz, methodName, std::forward<Args>(args)...);
     }
 
-    template <typename T>
-    static T callStaticMethod(jclass clazz, jmethodID methodId, ...)
+    template <typename Ret, typename ...Args>
+    static auto callStaticMethod(jclass clazz, const char *methodName, Args &&...args)
     {
-        assertJniPrimitiveType<T>();
-        QJniEnvironment env;
-        T res{};
-        if (clazz && methodId) {
-            va_list args;
-            va_start(args, methodId);
-            callStaticMethodForType<T>(env.jniEnv(), res, clazz, methodId, args);
-            va_end(args);
-            if (env.checkAndClearExceptions())
-                res = {};
-        }
-        return res;
-    }
-
-    template <>
-    void callStaticMethod<void>(jclass clazz, jmethodID methodId, ...)
-    {
-        QJniEnvironment env;
-        if (clazz && methodId) {
-            va_list args;
-            va_start(args, methodId);
-            env->CallStaticVoidMethodV(clazz, methodId, args);
-            va_end(args);
-            env.checkAndClearExceptions();
-        }
-    }
-
-    template <typename T> static T callStaticMethod(jclass clazz, const char *methodName)
-    {
-        assertJniPrimitiveType<T>();
-        constexpr const char *signature = getTypeSignature<T>();
-        return callStaticMethod<T>(clazz, methodName, QByteArray(signature).prepend("()").constData());
-    }
-
-    template <>
-    void callStaticMethod<void>(jclass clazz, const char *methodName)
-    {
-        callStaticMethod<void>(clazz, methodName, "()V");
-    }
-
-    template <typename T>
-    static QJniObject callStaticObjectMethod(const char *className, const char *methodName)
-    {
-        assertJniObjectType<T>();
-        constexpr const char *signature = getTypeSignature<T>();
-        return callStaticObjectMethod(className, methodName, QByteArray(signature).prepend("()").constData());
+        constexpr auto signature = QtJniTypes::methodSignature<Ret, Args...>();
+        return callStaticMethod<Ret>(clazz, methodName, signature.data(), std::forward<Args>(args)...);
     }
 
     static QJniObject callStaticObjectMethod(const char *className, const char *methodName,
                                              const char *signature, ...);
-
-    template <typename T>
-    static QJniObject callStaticObjectMethod(jclass clazz, const char *methodName)
-    {
-        assertJniObjectType<T>();
-        constexpr const char *signature = getTypeSignature<T>();
-        return callStaticObjectMethod(clazz, methodName, QByteArray(signature).prepend("()").constData());
-    }
 
     static QJniObject callStaticObjectMethod(jclass clazz, const char *methodName,
                                              const char *signature, ...);
 
     static QJniObject callStaticObjectMethod(jclass clazz, jmethodID methodId, ...);
 
-    template <typename T> T getField(const char *fieldName) const
+
+    template <typename Ret, typename ...Args>
+    static QJniObject callStaticObjectMethod(const char *className, const char *methodName, Args &&...args)
     {
-        assertJniPrimitiveType<T>();
-        QJniEnvironment env;
-        T res{};
-        constexpr const char *signature = getTypeSignature<T>();
-        jfieldID id = getCachedFieldID(env.jniEnv(), fieldName, signature);
-        if (id) {
-            getFieldForType<T>(env.jniEnv(), res, object(), id);
-            if (env.checkAndClearExceptions())
-                res = {};
+        QtJniTypes::assertObjectType<Ret>();
+        constexpr auto signature = QtJniTypes::methodSignature<Ret, Args...>();
+        return callStaticObjectMethod(className, methodName, signature.data(), std::forward<Args>(args)...);
+    }
+
+    template <typename Ret, typename ...Args>
+    static QJniObject callStaticObjectMethod(jclass clazz, const char *methodName, Args &&...args)
+    {
+        QtJniTypes::assertObjectType<Ret>();
+        constexpr auto signature = QtJniTypes::methodSignature<Ret, Args...>();
+        return callStaticObjectMethod(clazz, methodName, signature.data(), std::forward<Args>(args)...);
+    }
+
+    template <typename T> auto getField(const char *fieldName) const
+    {
+        if constexpr (QtJniTypes::isObjectType<T>()) {
+            return getObjectField<T>(fieldName);
+        } else {
+            QtJniTypes::assertPrimitiveType<T>();
+            QJniEnvironment env;
+            T res{};
+            constexpr auto signature = QtJniTypes::fieldSignature<T>();
+            jfieldID id = getCachedFieldID(env.jniEnv(), fieldName, signature);
+            if (id) {
+                getFieldForType<T>(env.jniEnv(), res, object(), id);
+                if (env.checkAndClearExceptions())
+                    res = {};
+            }
+            return res;
         }
-        return res;
     }
 
     template <typename T>
-    static T getStaticField(const char *className, const char *fieldName)
+    static auto getStaticField(const char *className, const char *fieldName)
     {
-        assertJniPrimitiveType<T>();
-        QJniEnvironment env;
-        jclass clazz = QJniObject::loadClass(className, env.jniEnv());
-        if (!clazz)
-            return 0;
+        if constexpr (QtJniTypes::isObjectType<T>()) {
+            return getStaticObjectField<T>(className, fieldName);
+        } else {
+            QtJniTypes::assertPrimitiveType<T>();
+            QJniEnvironment env;
+            jclass clazz = QJniObject::loadClass(className, env.jniEnv());
+            T res{};
+            if (!clazz)
+                return res;
 
-        constexpr const char *signature = getTypeSignature<T>();
-        jfieldID id = getCachedFieldID(env.jniEnv(), clazz,
-                                       QJniObject::toBinaryEncClassName(className),
-                                       fieldName,
-                                       signature, true);
-        if (!id)
-            return 0;
+            constexpr auto signature = QtJniTypes::fieldSignature<T>();
+            jfieldID id = getCachedFieldID(env.jniEnv(), clazz,
+                                        QJniObject::toBinaryEncClassName(className),
+                                        fieldName,
+                                        signature, true);
+            if (!id)
+                return res;
 
-        T res{};
-        getStaticFieldForType<T>(env.jniEnv(), res, clazz, id);
-        if (env.checkAndClearExceptions())
-            res = {};
-        return res;
-    }
-
-    template <typename T>
-    static T getStaticField(jclass clazz, const char *fieldName)
-    {
-        assertJniPrimitiveType<T>();
-        QJniEnvironment env;
-        T res{};
-        constexpr const char *signature = getTypeSignature<T>();
-        jfieldID id = getFieldID(env.jniEnv(), clazz, fieldName, signature, true);
-        if (id) {
             getStaticFieldForType<T>(env.jniEnv(), res, clazz, id);
             if (env.checkAndClearExceptions())
                 res = {};
+            return res;
         }
-        return res;
+    }
+
+    template <typename T>
+    static auto getStaticField(jclass clazz, const char *fieldName)
+    {
+        if constexpr (QtJniTypes::isObjectType<T>()) {
+            return getStaticObjectField<T>(clazz, fieldName);
+        } else {
+            QtJniTypes::assertPrimitiveType<T>();
+            QJniEnvironment env;
+            T res{};
+            constexpr auto signature = QtJniTypes::fieldSignature<T>();
+            jfieldID id = getFieldID(env.jniEnv(), clazz, fieldName, signature, true);
+            if (id) {
+                getStaticFieldForType<T>(env.jniEnv(), res, clazz, id);
+                if (env.checkAndClearExceptions())
+                    res = {};
+            }
+            return res;
+        }
+    }
+
+    template <typename Klass, typename T>
+    static auto getStaticField(const char *fieldName)
+    {
+        return getStaticField<T>(QtJniTypes::className<Klass>(), fieldName);
     }
 
     template <typename T>
     QJniObject getObjectField(const char *fieldName) const
     {
-        assertJniObjectType<T>();
-        constexpr const char *signature = getTypeSignature<T>();
+        QtJniTypes::assertObjectType<T>();
+        constexpr auto signature = QtJniTypes::fieldSignature<T>();
         return getObjectField(fieldName, signature);
     }
 
@@ -357,8 +277,8 @@ public:
     template <typename T>
     static QJniObject getStaticObjectField(const char *className, const char *fieldName)
     {
-        assertJniObjectType<T>();
-        constexpr const char *signature = getTypeSignature<T>();
+        QtJniTypes::assertObjectType<T>();
+        constexpr auto signature = QtJniTypes::fieldSignature<T>();
         return getStaticObjectField(className, fieldName, signature);
     }
 
@@ -369,8 +289,8 @@ public:
     template <typename T>
     static QJniObject getStaticObjectField(jclass clazz, const char *fieldName)
     {
-        assertJniObjectType<T>();
-        constexpr const char *signature = getTypeSignature<T>();
+        QtJniTypes::assertObjectType<T>();
+        constexpr auto signature = QtJniTypes::fieldSignature<T>();
         return getStaticObjectField(clazz, fieldName, signature);
     }
 
@@ -379,9 +299,9 @@ public:
 
     template <typename T> void setField(const char *fieldName, T value)
     {
-        assertJniType<T>();
+        QtJniTypes::assertType<T>();
         QJniEnvironment env;
-        constexpr const char *signature = getTypeSignature<T>();
+        constexpr auto signature = QtJniTypes::fieldSignature<T>();
         jfieldID id = getCachedFieldID(env.jniEnv(), fieldName, signature);
         if (id) {
             setFieldForType<T>(env.jniEnv(), object(), id, value);
@@ -392,7 +312,7 @@ public:
     template <typename T>
     void setField(const char *fieldName, const char *signature, T value)
     {
-        assertJniType<T>();
+        QtJniTypes::assertType<T>();
         QJniEnvironment env;
         jfieldID id = getCachedFieldID(env.jniEnv(), fieldName, signature);
         if (id) {
@@ -404,13 +324,13 @@ public:
     template <typename T>
     static void setStaticField(const char *className, const char *fieldName, T value)
     {
-        assertJniType<T>();
+        QtJniTypes::assertType<T>();
         QJniEnvironment env;
         jclass clazz = QJniObject::loadClass(className, env.jniEnv());
         if (!clazz)
             return;
 
-        constexpr const char *signature = getTypeSignature<T>();
+        constexpr auto signature = QtJniTypes::fieldSignature<T>();
         jfieldID id = getCachedFieldID(env.jniEnv(), clazz, className, fieldName,
                                        signature, true);
         if (!id)
@@ -424,7 +344,7 @@ public:
     static void setStaticField(const char *className, const char *fieldName,
                                const char *signature, T value)
     {
-        assertJniType<T>();
+        QtJniTypes::assertType<T>();
         QJniEnvironment env;
         jclass clazz = QJniObject::loadClass(className, env.jniEnv());
 
@@ -443,7 +363,7 @@ public:
     static void setStaticField(jclass clazz, const char *fieldName,
                                const char *signature, T value)
     {
-        assertJniType<T>();
+        QtJniTypes::assertType<T>();
         QJniEnvironment env;
         jfieldID id = getFieldID(env.jniEnv(), clazz, fieldName, signature, true);
 
@@ -456,14 +376,20 @@ public:
     template <typename T>
     static void setStaticField(jclass clazz, const char *fieldName, T value)
     {
-        assertJniType<T>();
+        QtJniTypes::assertType<T>();
         QJniEnvironment env;
-        constexpr const char *signature = getTypeSignature<T>();
+        constexpr auto signature = QtJniTypes::fieldSignature<T>();
         jfieldID id = getFieldID(env.jniEnv(), clazz, fieldName, signature, true);
         if (id) {
             setStaticFieldForType<T>(env.jniEnv(), clazz, id, value);
             env.checkAndClearExceptions();
         }
+    }
+
+    template <typename Klass, typename T>
+    static void setStaticField(const char *fieldName, T value)
+    {
+        setStaticField(QtJniTypes::className<Klass>(), fieldName, value);
     }
 
     static QJniObject fromString(const QString &string);
@@ -477,7 +403,7 @@ public:
 
     template <typename T> QJniObject &operator=(T obj)
     {
-        assertJniType<T>();
+        QtJniTypes::assertType<T>();
         assign(static_cast<T>(obj));
         return *this;
     }
@@ -507,7 +433,7 @@ private:
     static jmethodID getMethodID(JNIEnv *env, jclass clazz, const char *name,
                                  const char *signature, bool isStatic = false);
 
-    void callVoidMethodV(JNIEnv *env, jmethodID id, va_list args) const;
+    void callVoidMethodV(JNIEnv *env, jmethodID id, ...) const;
     QJniObject callObjectMethodV(const char *methodName, const char *signature,
                                  va_list args) const;
 
@@ -525,104 +451,13 @@ private:
     friend bool operator==(const QJniObject &, const QJniObject &);
     friend bool operator!=(const QJniObject&, const QJniObject&);
 
-    template<bool flag = false>
-    static void staticAssertTypeMismatch()
-    {
-        static_assert(flag, "The used type is not supported by this template call. "
-                            "Use a JNI based type instead.");
-    }
-
-    template<typename T>
-    static constexpr bool isJniPrimitiveType()
-    {
-        if constexpr(!std::is_same<T, jboolean>::value
-                && !std::is_same<T, jbyte>::value
-                && !std::is_same<T, jchar>::value
-                && !std::is_same<T, jshort>::value
-                && !std::is_same<T, jint>::value
-                && !std::is_same<T, jlong>::value
-                && !std::is_same<T, jfloat>::value
-                && !std::is_same<T, jdouble>::value) {
-            return false;
-        }
-
-        return true;
-    }
-
-    template<typename T>
-    static constexpr void assertJniPrimitiveType()
-    {
-        if constexpr(!isJniPrimitiveType<T>())
-            staticAssertTypeMismatch();
-    }
-
-    template<typename T>
-    static constexpr void assertJniObjectType()
-    {
-        if constexpr(!std::is_convertible<T, jobject>::value)
-            staticAssertTypeMismatch();
-    }
-
-    template<typename T>
-    static constexpr void assertJniType()
-    {
-        if constexpr(!isJniPrimitiveType<T>() && !std::is_convertible<T, jobject>::value)
-            staticAssertTypeMismatch();
-    }
-
-    template<typename T>
-    static constexpr const char* getTypeSignature()
-    {
-        if constexpr(std::is_same<T, jobject>::value)
-            return "Ljava/lang/Object;";
-        else if constexpr(std::is_same<T, jclass>::value)
-            return "Ljava/lang/Class;";
-        else if constexpr(std::is_same<T, jstring>::value)
-            return "Ljava/lang/String;";
-        else if constexpr(std::is_same<T, jobjectArray>::value)
-            return "[Ljava/lang/Object;";
-        else if constexpr(std::is_same<T, jthrowable>::value)
-            return "Ljava/lang/Throwable;";
-        else if constexpr(std::is_same<T, jbooleanArray>::value)
-            return "[Z";
-        else if constexpr(std::is_same<T, jbyteArray>::value)
-            return "[B";
-        else if constexpr(std::is_same<T, jshortArray>::value)
-            return "[S";
-        else if constexpr(std::is_same<T, jintArray>::value)
-            return "[I";
-        else if constexpr(std::is_same<T, jlongArray>::value)
-            return "[J";
-        else if constexpr(std::is_same<T, jfloatArray>::value)
-            return "[F";
-        else if constexpr(std::is_same<T, jdoubleArray>::value)
-            return "[D";
-        else if constexpr(std::is_same<T, jcharArray>::value)
-            return "[C";
-        else if constexpr(std::is_same<T, jboolean>::value)
-            return "Z";
-        else if constexpr(std::is_same<T, jbyte>::value)
-            return "B";
-        else if constexpr(std::is_same<T, jchar>::value)
-            return "C";
-        else if constexpr(std::is_same<T, jshort>::value)
-            return "S";
-        else if constexpr(std::is_same<T, jint>::value)
-            return "I";
-        else if constexpr(std::is_same<T, jlong>::value)
-            return "J";
-        else if constexpr(std::is_same<T, jfloat>::value)
-            return "F";
-        else if constexpr(std::is_same<T, jdouble>::value)
-            return "D";
-        else
-            staticAssertTypeMismatch();
-    }
-
     template<typename T>
     static constexpr void callMethodForType(JNIEnv *env, T &res, jobject obj,
-                                            jmethodID id, va_list args)
+                                            jmethodID id, ...)
     {
+        va_list args = {};
+        va_start(args, id);
+
         if constexpr(std::is_same<T, jboolean>::value)
             res = env->CallBooleanMethodV(obj, id, args);
         else if constexpr(std::is_same<T, jbyte>::value)
@@ -640,13 +475,16 @@ private:
         else if constexpr(std::is_same<T, jdouble>::value)
             res = env->CallDoubleMethodV(obj, id, args);
         else
-            staticAssertTypeMismatch();
+            QtJniTypes::staticAssertTypeMismatch();
+        va_end(args);
     }
 
     template<typename T>
     static constexpr void callStaticMethodForType(JNIEnv *env, T &res, jclass clazz,
-                                                  jmethodID id, va_list args)
+                                                  jmethodID id, ...)
     {
+        va_list args = {};
+        va_start(args, id);
         if constexpr(std::is_same<T, jboolean>::value)
             res = env->CallStaticBooleanMethodV(clazz, id, args);
         else if constexpr(std::is_same<T, jbyte>::value)
@@ -664,8 +502,18 @@ private:
         else if constexpr(std::is_same<T, jdouble>::value)
             res = env->CallStaticDoubleMethodV(clazz, id, args);
         else
-            staticAssertTypeMismatch();
+            QtJniTypes::staticAssertTypeMismatch();
+        va_end(args);
     }
+
+    static void callStaticMethodForVoid(JNIEnv *env, jclass clazz, jmethodID id, ...)
+    {
+        va_list args;
+        va_start(args, id);
+        env->CallStaticVoidMethodV(clazz, id, args);
+        va_end(args);
+    }
+
 
     template<typename T>
     static constexpr void getFieldForType(JNIEnv *env, T &res, jobject obj,
@@ -688,7 +536,7 @@ private:
         else if constexpr(std::is_same<T, jdouble>::value)
             res = env->GetDoubleField(obj, id);
         else
-            staticAssertTypeMismatch();
+            QtJniTypes::staticAssertTypeMismatch();
     }
 
     template<typename T>
@@ -712,7 +560,7 @@ private:
         else if constexpr(std::is_same<T, jdouble>::value)
             res = env->GetStaticDoubleField(clazz, id);
         else
-            staticAssertTypeMismatch();
+            QtJniTypes::staticAssertTypeMismatch();
     }
 
     template<typename T>
@@ -738,7 +586,7 @@ private:
         else if constexpr(std::is_convertible<T, jobject>::value)
             env->SetObjectField(obj, id, value);
         else
-            staticAssertTypeMismatch();
+            QtJniTypes::staticAssertTypeMismatch();
     }
 
     template<typename T>
@@ -764,7 +612,7 @@ private:
         else if constexpr(std::is_convertible<T, jobject>::value)
             env->SetStaticObjectField(clazz, id, value);
         else
-            staticAssertTypeMismatch();
+            QtJniTypes::staticAssertTypeMismatch();
     }
 
     friend QJniObjectPrivate;

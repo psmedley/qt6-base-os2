@@ -35,8 +35,7 @@ if (MACOS)
             "${CMAKE_CURRENT_BINARY_DIR}/../"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_BINARY_DIR}/*dylib"
-            "${CMAKE_CURRENT_BINARY_DIR}/../"
-            )
+            "${CMAKE_CURRENT_BINARY_DIR}/../")
 elseif (UNIX)
     if (NOT ANDROID)
         add_custom_command(TARGET mylib POST_BUILD
@@ -65,7 +64,7 @@ else() #Win32
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE:mylib>
             "${CMAKE_CURRENT_BINARY_DIR}/../mylib.dll"
-            )
+            VERBATIM)
 endif()
 # special case end
 

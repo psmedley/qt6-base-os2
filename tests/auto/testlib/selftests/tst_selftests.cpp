@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtCore/QCoreApplication>
 
@@ -49,6 +24,8 @@ QT_REQUIRE_CONFIG(process);
 #include <private/cycle_p.h>
 
 #include <QtTest/private/qemulationdetector_p.h>
+
+using namespace Qt::StringLiterals;
 
 struct BenchmarkResult
 {
@@ -313,8 +290,7 @@ bool compareLine(const QString &logger, const QString &subdir,
         return compareBenchmarkResult(actualResult, expectedResult, errorMessage);
     }
 
-    if (actualLine.startsWith(QLatin1String("    <Duration msecs="))
-        || actualLine.startsWith(QLatin1String("<Duration msecs="))) {
+    if (actualLine.contains(QLatin1String("<Duration msecs="))) {
         static QRegularExpression durationRegExp("<Duration msecs=\"[\\d\\.]+\"/>");
         QRegularExpressionMatch match = durationRegExp.match(actualLine);
         if (match.hasMatch())
@@ -456,8 +432,8 @@ BenchmarkResult BenchmarkResult::parse(QString const& line, QString* error)
         // format:
         //  "function","[globaltag:]tag","metric",value_per_iteration,total,iterations
         QStringList split = line.split(',');
-        if (split.count() != 6) {
-            if (error) *error = QString("Wrong number of columns (%1)").arg(split.count());
+        if (split.size() != 6) {
+            if (error) *error = QString("Wrong number of columns (%1)").arg(split.size());
             return out;
         }
 
@@ -660,6 +636,11 @@ bool TestLogger::shouldIgnoreTest(const QString &test) const
         return true;
 #endif
 
+    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")) {
+        qDebug() << "TestLogger::shouldIgnoreTest() ignore" << test << "on wayland/xwayland!";
+        return true;
+    }
+
     // These tests are affected by timing and whether the CPU tick counter
     // is monotonically increasing. They won't work on some machines so
     // leave them off by default. Feel free to enable them for your own
@@ -677,7 +658,7 @@ bool TestLogger::shouldIgnoreTest(const QString &test) const
         return true;
 #endif
 
-#if defined(QT_NO_EXCEPTIONS) || defined(Q_CC_INTEL) || defined(Q_OS_WIN)
+#if defined(QT_NO_EXCEPTIONS) || defined(Q_OS_WIN)
     // Disable this test on Windows or for Intel compiler, as the run-times
     // will popup dialogs with warnings that uncaught exceptions were thrown
     if (test == "exceptionthrow")
@@ -694,7 +675,7 @@ bool TestLogger::shouldIgnoreTest(const QString &test) const
 #if defined(__GNUC__) && (defined(__i386) || defined(__x86_64)) && defined(Q_OS_LINUX)
         // Check that it's actually available
         QProcess checkProcess;
-        QStringList args{u"--version"_qs};
+        QStringList args{u"--version"_s};
         checkProcess.start("valgrind", args);
         if (!checkProcess.waitForFinished(-1)) {
             WARN("Valgrind broken or not available. Not running benchlibcallgrind test!");

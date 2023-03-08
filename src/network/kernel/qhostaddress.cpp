@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qhostaddress.h"
 #include "qhostaddress_p.h"
@@ -137,7 +101,7 @@ void QHostAddressPrivate::setAddress(const Q_IPV6ADDR &a_)
 static bool parseIp6(const QString &address, QIPAddressUtils::IPv6Address &addr, QString *scopeId)
 {
     QStringView tmp(address);
-    int scopeIdPos = tmp.lastIndexOf(QLatin1Char('%'));
+    qsizetype scopeIdPos = tmp.lastIndexOf(u'%');
     if (scopeIdPos != -1) {
         *scopeId = tmp.mid(scopeIdPos + 1).toString();
         tmp.chop(tmp.size() - scopeIdPos);
@@ -155,7 +119,7 @@ bool QHostAddressPrivate::parse(const QString &ipString)
         return false;
 
     // All IPv6 addresses contain a ':', and may contain a '.'.
-    if (a.contains(QLatin1Char(':'))) {
+    if (a.contains(u':')) {
         quint8 maybeIp6[16];
         if (parseIp6(a, maybeIp6, &scopeId)) {
             setAddress(maybeIp6);
@@ -742,7 +706,7 @@ QString QHostAddress::toString() const
     } else if (d->protocol == QHostAddress::IPv6Protocol) {
         QIPAddressUtils::toString(s, d->a6.c);
         if (!d->scopeId.isEmpty())
-            s.append(QLatin1Char('%') + d->scopeId);
+            s.append(u'%' + d->scopeId);
     }
     return s;
 }
@@ -824,7 +788,7 @@ bool QHostAddress::operator==(const QHostAddress &other) const
     Returns \c true if this host address is the same as the \a other address
     given; otherwise returns \c false.
 
-    The parameter \a mode controls which conversions are preformed between addresses
+    The parameter \a mode controls which conversions are performed between addresses
     of differing protocols. If no \a mode is given, \c TolerantConversion is performed
     by default.
 
@@ -858,7 +822,7 @@ bool QHostAddress::isEqual(const QHostAddress &other, ConversionMode mode) const
             return memcmp(&d->a6, &other.d->a6, sizeof(Q_IPV6ADDR)) == 0;
         case QHostAddress::AnyIPProtocol:
             return (mode & QHostAddress::ConvertUnspecifiedAddress)
-                    && (other.d->a6_64.c[0] == 0) && (other.d->a6_64.c[1] == 0);
+                    && (d->a6_64.c[0] == 0) && (d->a6_64.c[1] == 0);
         case QHostAddress::UnknownNetworkLayerProtocol:
             return false;
         }
@@ -1047,17 +1011,17 @@ QPair<QHostAddress, int> QHostAddress::parseSubnet(const QString &subnet)
     if (subnet.isEmpty())
         return invalid;
 
-    int slash = subnet.indexOf(QLatin1Char('/'));
+    qsizetype slash = subnet.indexOf(u'/');
     QStringView netStr(subnet);
     if (slash != -1)
         netStr.truncate(slash);
 
     int netmask = -1;
-    bool isIpv6 = netStr.contains(QLatin1Char(':'));
+    bool isIpv6 = netStr.contains(u':');
 
     if (slash != -1) {
         // is the netmask given in IP-form or in bit-count form?
-        if (!isIpv6 && subnet.indexOf(QLatin1Char('.'), slash + 1) != -1) {
+        if (!isIpv6 && subnet.indexOf(u'.', slash + 1) != -1) {
             // IP-style, convert it to bit-count form
             QHostAddress mask;
             QNetmask parser;
@@ -1093,15 +1057,15 @@ QPair<QHostAddress, int> QHostAddress::parseSubnet(const QString &subnet)
         return invalid;         // invalid netmask
 
     // parse the address manually
-    auto parts = netStr.split(QLatin1Char('.'));
-    if (parts.isEmpty() || parts.count() > 4)
+    auto parts = netStr.split(u'.');
+    if (parts.isEmpty() || parts.size() > 4)
         return invalid;         // invalid IPv4 address
 
     if (parts.constLast().isEmpty())
         parts.removeLast();
 
     quint32 addr = 0;
-    for (int i = 0; i < parts.count(); ++i) {
+    for (int i = 0; i < parts.size(); ++i) {
         bool ok;
         uint byteValue = parts.at(i).toUInt(&ok);
         if (!ok || byteValue > 255)
@@ -1110,9 +1074,9 @@ QPair<QHostAddress, int> QHostAddress::parseSubnet(const QString &subnet)
         addr <<= 8;
         addr += byteValue;
     }
-    addr <<= 8 * (4 - parts.count());
+    addr <<= 8 * (4 - parts.size());
     if (netmask == -1) {
-        netmask = 8 * parts.count();
+        netmask = 8 * parts.size();
     } else if (netmask == 0) {
         // special case here
         // x86's instructions "shr" and "shl" do not operate when

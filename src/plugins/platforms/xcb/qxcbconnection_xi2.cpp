@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qxcbconnection.h"
 #include "qxcbkeyboard.h"
@@ -52,6 +16,8 @@
 #include <xcb/xinput.h>
 
 #define QT_XCB_HAS_TOUCHPAD_GESTURES (XCB_INPUT_MINOR_VERSION >= 4)
+
+using namespace Qt::StringLiterals;
 
 using qt_xcb_input_device_event_t = xcb_input_button_press_event_t;
 #if QT_XCB_HAS_TOUCHPAD_GESTURES
@@ -260,7 +226,7 @@ void QXcbConnection::xi2SetupSlavePointerDevice(void *info, bool removeExisting,
     auto *deviceInfo = reinterpret_cast<xcb_input_xi_device_info_t *>(info);
     if (removeExisting) {
 #if QT_CONFIG(tabletevent)
-        for (int i = 0; i < m_tabletData.count(); ++i) {
+        for (int i = 0; i < m_tabletData.size(); ++i) {
             if (m_tabletData.at(i).deviceId == deviceInfo->deviceid) {
                 m_tabletData.remove(i);
                 break;
@@ -372,42 +338,42 @@ void QXcbConnection::xi2SetupSlavePointerDevice(void *info, bool removeExisting,
 
     // But we need to be careful not to take the touch and tablet-button devices as tablets.
     QByteArray nameLower = nameRaw.toLower();
-    QString dbgType = QLatin1String("UNKNOWN");
+    QString dbgType = "UNKNOWN"_L1;
     if (nameLower.contains("eraser")) {
         isTablet = true;
         tabletData.pointerType = QPointingDevice::PointerType::Eraser;
-        dbgType = QLatin1String("eraser");
+        dbgType = "eraser"_L1;
     } else if (nameLower.contains("cursor") && !(nameLower.contains("cursor controls") && nameLower.contains("trackball"))) {
         isTablet = true;
         tabletData.pointerType = QPointingDevice::PointerType::Cursor;
-        dbgType = QLatin1String("cursor");
+        dbgType = "cursor"_L1;
     } else if (nameLower.contains("wacom") && nameLower.contains("finger touch")) {
         isTablet = false;
     } else if ((nameLower.contains("pen") || nameLower.contains("stylus")) && isTablet) {
         tabletData.pointerType = QPointingDevice::PointerType::Pen;
-        dbgType = QLatin1String("pen");
+        dbgType = "pen"_L1;
     } else if (nameLower.contains("wacom") && isTablet && !nameLower.contains("touch")) {
         // combined device (evdev) rather than separate pen/eraser (wacom driver)
         tabletData.pointerType = QPointingDevice::PointerType::Pen;
-        dbgType = QLatin1String("pen");
+        dbgType = "pen"_L1;
     } else if (nameLower.contains("aiptek") /* && device == QXcbAtom::KEYBOARD */) {
         // some "Genius" tablets
         isTablet = true;
         tabletData.pointerType = QPointingDevice::PointerType::Pen;
-        dbgType = QLatin1String("pen");
+        dbgType = "pen"_L1;
     } else if (nameLower.contains("waltop") && nameLower.contains("tablet")) {
         // other "Genius" tablets
         // WALTOP International Corp. Slim Tablet
         isTablet = true;
         tabletData.pointerType = QPointingDevice::PointerType::Pen;
-        dbgType = QLatin1String("pen");
+        dbgType = "pen"_L1;
     } else if (nameLower.contains("uc-logic") && isTablet) {
         tabletData.pointerType = QPointingDevice::PointerType::Pen;
-        dbgType = QLatin1String("pen");
+        dbgType = "pen"_L1;
     } else if (nameLower.contains("ugee")) {
         isTablet = true;
         tabletData.pointerType = QPointingDevice::PointerType::Pen;
-        dbgType = QLatin1String("pen");
+        dbgType = "pen"_L1;
     } else {
         isTablet = false;
     }
@@ -826,7 +792,7 @@ void QXcbConnection::xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindo
     qreal nx = -1.0, ny = -1.0;
     qreal w = 0.0, h = 0.0;
     bool majorAxisIsY = touchPoint.area.height() > touchPoint.area.width();
-    for (const TouchDeviceData::ValuatorClassInfo &vci : qAsConst(dev->valuatorInfo)) {
+    for (const TouchDeviceData::ValuatorClassInfo &vci : std::as_const(dev->valuatorInfo)) {
         double value;
         if (!xi2GetValuatorValueIfSet(xiDeviceEvent, vci.number, &value))
             continue;
@@ -1057,7 +1023,7 @@ bool QXcbConnection::xi2SetMouseGrabEnabled(xcb_window_t w, bool grab)
         }
 #endif // QT_CONFIG(gestures) && QT_XCB_HAS_TOUCHPAD_GESTURES
 
-        for (int id : qAsConst(m_xiMasterPointerIds)) {
+        for (int id : std::as_const(m_xiMasterPointerIds)) {
             xcb_generic_error_t *error = nullptr;
             auto cookie = xcb_input_xi_grab_device(xcb_connection(), w, XCB_CURRENT_TIME, XCB_CURSOR_NONE, id,
                                                    XCB_INPUT_GRAB_MODE_22_ASYNC, XCB_INPUT_GRAB_MODE_22_ASYNC,
@@ -1075,7 +1041,7 @@ bool QXcbConnection::xi2SetMouseGrabEnabled(xcb_window_t w, bool grab)
             free(reply);
         }
     } else { // ungrab
-        for (int id : qAsConst(m_xiMasterPointerIds)) {
+        for (int id : std::as_const(m_xiMasterPointerIds)) {
             auto cookie = xcb_input_xi_ungrab_device_checked(xcb_connection(), XCB_CURRENT_TIME, id);
             xcb_generic_error_t *error = xcb_request_check(xcb_connection(), cookie);
             if (error) {
@@ -1661,7 +1627,7 @@ void QXcbConnection::xi2ReportTabletEvent(const void *event, TabletData *tabletD
 
 QXcbConnection::TabletData *QXcbConnection::tabletDataForDevice(int id)
 {
-    for (int i = 0; i < m_tabletData.count(); ++i) {
+    for (int i = 0; i < m_tabletData.size(); ++i) {
         if (m_tabletData.at(i).deviceId == id)
             return &m_tabletData[i];
     }

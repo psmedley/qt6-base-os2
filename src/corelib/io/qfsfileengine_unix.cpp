@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qplatformdefs.h"
 #include "private/qabstractfileengine_p.h"
@@ -106,7 +70,7 @@ static inline QString msgOpenDirectory()
 #if QT_CONFIG(translation)
     return QIODevice::tr(message);
 #else
-    return QLatin1String(message);
+    return QLatin1StringView(message);
 #endif
 }
 
@@ -167,7 +131,7 @@ bool QFSFileEnginePrivate::nativeOpenImpl(QIODevice::OpenMode openMode, mode_t m
 
             if (ret == -1) {
                 q->setError(errno == EMFILE ? QFile::ResourceError : QFile::OpenError,
-                            qt_error_string(int(errno)));
+                            qt_error_string(errno));
                 return false;
             }
         }
@@ -266,7 +230,7 @@ qint64 QFSFileEnginePrivate::nativeRead(char *data, qint64 len)
         }
         if (readBytes == 0 && !feof(fh)) {
             // if we didn't read anything and we're not at EOF, it must be an error
-            q->setError(QFile::ReadError, qt_error_string(int(errno)));
+            q->setError(QFile::ReadError, qt_error_string(errno));
             return -1;
         }
         return readBytes;
@@ -535,7 +499,8 @@ QString QFSFileEngine::fileName(FileName file) const
 bool QFSFileEngine::isRelativePath() const
 {
     Q_D(const QFSFileEngine);
-    return d->fileEntry.isRelative();
+    const QString fp = d->fileEntry.filePath();
+    return fp.isEmpty() || fp.at(0) != u'/';
 }
 
 uint QFSFileEngine::ownerId(FileOwner own) const
@@ -561,6 +526,10 @@ bool QFSFileEngine::setPermissions(uint perms)
     Q_D(QFSFileEngine);
     QSystemError error;
     bool ok;
+
+    // clear cached state (if any)
+    d->metaData.clearFlags(QFileSystemMetaData::Permissions);
+
     if (d->fd != -1)
         ok = QFileSystemEngine::setPermissions(d->fd, QFile::Permissions(perms), error);
     else
@@ -622,13 +591,13 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
 
     Q_Q(QFSFileEngine);
     if (openMode == QIODevice::NotOpen) {
-        q->setError(QFile::PermissionsError, qt_error_string(int(EACCES)));
+        q->setError(QFile::PermissionsError, qt_error_string(EACCES));
         return nullptr;
     }
 
     if (offset < 0 || offset > maxFileOffset
             || size < 0 || quint64(size) > quint64(size_t(-1))) {
-        q->setError(QFile::UnspecifiedError, qt_error_string(int(EINVAL)));
+        q->setError(QFile::UnspecifiedError, qt_error_string(EINVAL));
         return nullptr;
     }
 
@@ -656,7 +625,7 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
     int extra = offset % pageSize;
 
     if (quint64(size + extra) > quint64((size_t)-1)) {
-        q->setError(QFile::UnspecifiedError, qt_error_string(int(EINVAL)));
+        q->setError(QFile::UnspecifiedError, qt_error_string(EINVAL));
         return nullptr;
     }
 
@@ -681,16 +650,16 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
 
     switch(errno) {
     case EBADF:
-        q->setError(QFile::PermissionsError, qt_error_string(int(EACCES)));
+        q->setError(QFile::PermissionsError, qt_error_string(EACCES));
         break;
     case ENFILE:
     case ENOMEM:
-        q->setError(QFile::ResourceError, qt_error_string(int(errno)));
+        q->setError(QFile::ResourceError, qt_error_string(errno));
         break;
     case EINVAL:
         // size are out of bounds
     default:
-        q->setError(QFile::UnspecifiedError, qt_error_string(int(errno)));
+        q->setError(QFile::UnspecifiedError, qt_error_string(errno));
         break;
     }
     return nullptr;

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qgenericunixservices_p.h"
 #include <QtGui/private/qtguiglobal_p.h>
@@ -72,6 +36,8 @@
 #include <stdlib.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 #if QT_CONFIG(multiprocess)
 
@@ -146,7 +112,7 @@ static inline bool detectWebBrowser(const QByteArray &desktop,
             return true;
         // Konqueror launcher
         if (checkExecutable(QStringLiteral("kfmclient"), browser)) {
-            browser->append(QLatin1String(" exec"));
+            browser->append(" exec"_L1);
             return true;
         }
     } else if (desktop == QByteArray("GNOME")) {
@@ -155,18 +121,18 @@ static inline bool detectWebBrowser(const QByteArray &desktop,
     }
 
     for (size_t i = 0; i < sizeof(browsers)/sizeof(char *); ++i)
-        if (checkExecutable(QLatin1String(browsers[i]), browser))
+        if (checkExecutable(QLatin1StringView(browsers[i]), browser))
             return true;
     return false;
 }
 
 static inline bool launch(const QString &launcher, const QUrl &url)
 {
-    const QString command = launcher + QLatin1Char(' ') + QLatin1String(url.toEncoded());
+    const QString command = launcher + u' ' + QLatin1StringView(url.toEncoded());
     if (debug)
         qDebug("Launching %s", qPrintable(command));
 #if !QT_CONFIG(process)
-    const bool ok = ::system(qPrintable(command + QLatin1String(" &")));
+    const bool ok = ::system(qPrintable(command + " &"_L1));
 #else
     QStringList args = QProcess::splitCommand(command);
     bool ok = false;
@@ -183,7 +149,7 @@ static inline bool launch(const QString &launcher, const QUrl &url)
 #if QT_CONFIG(dbus)
 static inline bool checkNeedPortalSupport()
 {
-    return !QStandardPaths::locate(QStandardPaths::RuntimeLocation, QLatin1String("flatpak-info")).isEmpty() || qEnvironmentVariableIsSet("SNAP");
+    return !QStandardPaths::locate(QStandardPaths::RuntimeLocation, "flatpak-info"_L1).isEmpty() || qEnvironmentVariableIsSet("SNAP");
 }
 
 static inline QDBusMessage xdgDesktopPortalOpenFile(const QUrl &url)
@@ -200,15 +166,15 @@ static inline QDBusMessage xdgDesktopPortalOpenFile(const QUrl &url)
 #ifdef O_PATH
     const int fd = qt_safe_open(QFile::encodeName(url.toLocalFile()), O_PATH);
     if (fd != -1) {
-        QDBusMessage message = QDBusMessage::createMethodCall(QLatin1String("org.freedesktop.portal.Desktop"),
-                                                              QLatin1String("/org/freedesktop/portal/desktop"),
-                                                              QLatin1String("org.freedesktop.portal.OpenURI"),
-                                                              QLatin1String("OpenFile"));
+        QDBusMessage message = QDBusMessage::createMethodCall("org.freedesktop.portal.Desktop"_L1,
+                                                              "/org/freedesktop/portal/desktop"_L1,
+                                                              "org.freedesktop.portal.OpenURI"_L1,
+                                                              "OpenFile"_L1);
 
         QDBusUnixFileDescriptor descriptor;
         descriptor.giveFileDescriptor(fd);
 
-        const QVariantMap options = {{QLatin1String("writable"), true}};
+        const QVariantMap options = {{"writable"_L1, true}};
 
         // FIXME parent_window_id
         message << QString() << QVariant::fromValue(descriptor) << options;
@@ -235,10 +201,10 @@ static inline QDBusMessage xdgDesktopPortalOpenUrl(const QUrl &url)
     //                This key only takes effect the uri points to a local file that is exported in the document portal,
     //                and the chosen application is sandboxed itself.
 
-    QDBusMessage message = QDBusMessage::createMethodCall(QLatin1String("org.freedesktop.portal.Desktop"),
-                                                          QLatin1String("/org/freedesktop/portal/desktop"),
-                                                          QLatin1String("org.freedesktop.portal.OpenURI"),
-                                                          QLatin1String("OpenURI"));
+    QDBusMessage message = QDBusMessage::createMethodCall("org.freedesktop.portal.Desktop"_L1,
+                                                          "/org/freedesktop/portal/desktop"_L1,
+                                                          "org.freedesktop.portal.OpenURI"_L1,
+                                                          "OpenURI"_L1);
     // FIXME parent_window_id and handle writable option
     message << QString() << url.toString() << QVariantMap();
 
@@ -259,14 +225,14 @@ static inline QDBusMessage xdgDesktopPortalSendEmail(const QUrl &url)
 
     QUrlQuery urlQuery(url);
     QVariantMap options;
-    options.insert(QLatin1String("address"), url.path());
-    options.insert(QLatin1String("subject"), urlQuery.queryItemValue(QLatin1String("subject")));
-    options.insert(QLatin1String("body"), urlQuery.queryItemValue(QLatin1String("body")));
+    options.insert("address"_L1, url.path());
+    options.insert("subject"_L1, urlQuery.queryItemValue("subject"_L1));
+    options.insert("body"_L1, urlQuery.queryItemValue("body"_L1));
 
     // O_PATH seems to be present since Linux 2.6.39, which is not case of RHEL 6
 #ifdef O_PATH
     QList<QDBusUnixFileDescriptor> attachments;
-    const QStringList attachmentUris = urlQuery.allQueryItemValues(QLatin1String("attachment"));
+    const QStringList attachmentUris = urlQuery.allQueryItemValues("attachment"_L1);
 
     for (const QString &attachmentUri : attachmentUris) {
         const int fd = qt_safe_open(QFile::encodeName(attachmentUri), O_PATH);
@@ -277,13 +243,13 @@ static inline QDBusMessage xdgDesktopPortalSendEmail(const QUrl &url)
         }
     }
 
-    options.insert(QLatin1String("attachment_fds"), QVariant::fromValue(attachments));
+    options.insert("attachment_fds"_L1, QVariant::fromValue(attachments));
 #endif
 
-    QDBusMessage message = QDBusMessage::createMethodCall(QLatin1String("org.freedesktop.portal.Desktop"),
-                                                          QLatin1String("/org/freedesktop/portal/desktop"),
-                                                          QLatin1String("org.freedesktop.portal.Email"),
-                                                          QLatin1String("ComposeEmail"));
+    QDBusMessage message = QDBusMessage::createMethodCall("org.freedesktop.portal.Desktop"_L1,
+                                                          "/org/freedesktop/portal/desktop"_L1,
+                                                          "org.freedesktop.portal.Email"_L1,
+                                                          "ComposeEmail"_L1);
 
     // FIXME parent_window_id
     message << QString() << options;
@@ -300,7 +266,7 @@ QByteArray QGenericUnixServices::desktopEnvironment() const
 
 bool QGenericUnixServices::openUrl(const QUrl &url)
 {
-    if (url.scheme() == QLatin1String("mailto")) {
+    if (url.scheme() == "mailto"_L1) {
 #if QT_CONFIG(dbus)
         if (checkNeedPortalSupport()) {
             QDBusError error = xdgDesktopPortalSendEmail(url);

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qloggingregistry_p.h"
 
@@ -59,6 +23,8 @@
 #define warnMsg QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, "qt.core.logging").warning
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 Q_GLOBAL_STATIC(QLoggingRegistry, qtLoggingRegistry)
 
@@ -87,7 +53,7 @@ QLoggingRule::QLoggingRule(QStringView pattern, bool enabled) :
     Return value 1 means filter passed, 0 means filter doesn't influence this
     category, -1 means category doesn't pass this filter.
  */
-int QLoggingRule::pass(QLatin1String cat, QtMsgType msgType) const
+int QLoggingRule::pass(QLatin1StringView cat, QtMsgType msgType) const
 {
     // check message type
     if (messageType > -1 && messageType != msgType)
@@ -112,7 +78,7 @@ int QLoggingRule::pass(QLatin1String cat, QtMsgType msgType) const
                 return (enabled ? 1 : -1);
         } else if (flags == RightFilter) {
             // matches right
-            if (idx == (cat.size() - category.count()))
+            if (idx == (cat.size() - category.size()))
                 return (enabled ? 1 : -1);
         }
     }
@@ -133,34 +99,35 @@ void QLoggingRule::parse(QStringView pattern)
     QStringView p;
 
     // strip trailing ".messagetype"
-    if (pattern.endsWith(QLatin1String(".debug"))) {
+    if (pattern.endsWith(".debug"_L1)) {
         p = pattern.chopped(6); // strlen(".debug")
         messageType = QtDebugMsg;
-    } else if (pattern.endsWith(QLatin1String(".info"))) {
+    } else if (pattern.endsWith(".info"_L1)) {
         p = pattern.chopped(5); // strlen(".info")
         messageType = QtInfoMsg;
-    } else if (pattern.endsWith(QLatin1String(".warning"))) {
+    } else if (pattern.endsWith(".warning"_L1)) {
         p = pattern.chopped(8); // strlen(".warning")
         messageType = QtWarningMsg;
-    } else if (pattern.endsWith(QLatin1String(".critical"))) {
+    } else if (pattern.endsWith(".critical"_L1)) {
         p = pattern.chopped(9); // strlen(".critical")
         messageType = QtCriticalMsg;
     } else {
         p = pattern;
     }
 
-    if (!p.contains(QLatin1Char('*'))) {
+    const QChar asterisk = u'*';
+    if (!p.contains(asterisk)) {
         flags = FullText;
     } else {
-        if (p.endsWith(QLatin1Char('*'))) {
+        if (p.endsWith(asterisk)) {
             flags |= LeftFilter;
             p = p.chopped(1);
         }
-        if (p.startsWith(QLatin1Char('*'))) {
+        if (p.startsWith(asterisk)) {
             flags |= RightFilter;
             p = p.mid(1);
         }
-        if (p.contains(QLatin1Char('*'))) // '*' only supported at start/end
+        if (p.contains(asterisk)) // '*' only supported at start/end
             flags = PatternFlags();
     }
 
@@ -216,33 +183,33 @@ void QLoggingSettingsParser::parseNextLine(QStringView line)
     line = line.trimmed();
 
     // comment
-    if (line.startsWith(QLatin1Char(';')))
+    if (line.startsWith(u';'))
         return;
 
-    if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
+    if (line.startsWith(u'[') && line.endsWith(u']')) {
         // new section
         auto sectionName = line.mid(1).chopped(1).trimmed();
-        m_inRulesSection = sectionName.compare(QLatin1String("rules"), Qt::CaseInsensitive) == 0;
+        m_inRulesSection = sectionName.compare("rules"_L1, Qt::CaseInsensitive) == 0;
         return;
     }
 
     if (m_inRulesSection) {
-        int equalPos = line.indexOf(QLatin1Char('='));
+        int equalPos = line.indexOf(u'=');
         if (equalPos != -1) {
-            if (line.lastIndexOf(QLatin1Char('=')) == equalPos) {
+            if (line.lastIndexOf(u'=') == equalPos) {
                 const auto key = line.left(equalPos).trimmed();
 #if QT_CONFIG(settings)
                 QString tmp;
-                QSettingsPrivate::iniUnescapedKey(key.toUtf8(), 0, key.length(), tmp);
+                QSettingsPrivate::iniUnescapedKey(key.toUtf8(), tmp);
                 QStringView pattern = qToStringViewIgnoringNull(tmp);
 #else
                 QStringView pattern = key;
 #endif
                 const auto valueStr = line.mid(equalPos + 1).trimmed();
                 int value = -1;
-                if (valueStr == QLatin1String("true"))
+                if (valueStr == "true"_L1)
                     value = 1;
-                else if (valueStr == QLatin1String("false"))
+                else if (valueStr == "false"_L1)
                     value = 0;
                 QLoggingRule rule(pattern, (value == 1));
                 if (rule.flags != 0 && (value != -1))
@@ -479,7 +446,7 @@ void QLoggingRegistry::defaultCategoryFilter(QLoggingCategory *cat)
         }
     }
 
-    const auto categoryName = QLatin1String(cat->categoryName());
+    const auto categoryName = QLatin1StringView(cat->categoryName());
 
     for (const auto &ruleSet : reg->ruleSets) {
         for (const auto &rule : ruleSet) {

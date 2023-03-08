@@ -1,12 +1,14 @@
 
+# WARNING must keep in sync with wasm-emscripten/qmake.conf!
 function (qt_internal_setup_wasm_target_properties wasmTarget)
 
     target_link_options("${wasmTarget}" INTERFACE
     "SHELL:-s ERROR_ON_UNDEFINED_SYMBOLS=1"
-    "SHELL:-s EXPORTED_RUNTIME_METHODS=[UTF16ToString,stringToUTF16]"
-    "SHELL:-s USE_WEBGL2=1"
-    "--bind"
-    "SHELL:-s FETCH=1")
+    "SHELL:-s MAX_WEBGL_VERSION=2"
+    "SHELL:-s FETCH=1"
+    "SHELL:-s WASM_BIGINT=1")
+
+    target_link_libraries("${wasmTarget}" INTERFACE embind)
 
     # Enable MODULARIZE and set EXPORT_NAME, which makes it possible to
     # create application instances using a global constructor function,
@@ -20,16 +22,6 @@ function (qt_internal_setup_wasm_target_properties wasmTarget)
     #simd
     if (QT_FEATURE_sse2)
         target_compile_options("${wasmTarget}" INTERFACE -O2 -msimd128 -msse -msse2)
-    endif()
-
-    if (QT_FEATURE_opengles3)
-        target_link_options("${wasmTarget}" INTERFACE "SHELL:-s FULL_ES3=1")
-
-        target_link_options("${wasmTarget}" INTERFACE "SHELL:-s FULL_ES3=1"
-            "SHELL:-s MAX_WEBGL_VERSION=2"
-            "SHELL:-s WEBGL2_BACKWARDS_COMPATIBILITY_EMULATION=1")
-    else()
-        target_link_options("${wasmTarget}" INTERFACE "SHELL:-s FULL_ES2=1")
     endif()
 
     set(disable_exceptions_catching 1)
@@ -64,7 +56,6 @@ function (qt_internal_setup_wasm_target_properties wasmTarget)
     target_link_options("${wasmTarget}" INTERFACE $<$<CONFIG:Debug>:
         "SHELL:-s DEMANGLE_SUPPORT=1"
         "SHELL:-s GL_DEBUG=1"
-        "SHELL:-s ASSERTIONS=2"
         --profiling-funcs>)
 
     # target_link_options("${wasmTarget}" INTERFACE "SHELL:-s LIBRARY_DEBUG=1") # print out library calls, verbose
@@ -81,7 +72,17 @@ function (qt_internal_setup_wasm_target_properties wasmTarget)
         set(QT_CFLAGS_OPTIMIZE_DEBUG "-Os" CACHE STRING INTERNAL FORCE)
         set(QT_FEATURE_optimize_debug ON CACHE BOOL INTERNAL FORCE)
 
-        target_link_options("${wasmTarget}" INTERFACE "SHELL:-s ASYNCIFY" "-Os" "-s" "ASYNCIFY_IMPORTS=[qt_asyncify_suspend_js, qt_asyncify_resume_js]")
+        target_link_options("${wasmTarget}" INTERFACE "SHELL:-s ASYNCIFY" "-Os")
         target_compile_definitions("${wasmTarget}" INTERFACE QT_HAVE_EMSCRIPTEN_ASYNCIFY)
     endif()
+
+    #  Set ASYNCIFY_IMPORTS unconditionally in order to support enabling asyncify at link time.
+    target_link_options("${wasmTarget}" INTERFACE "SHELL:-sASYNCIFY_IMPORTS=qt_asyncify_suspend_js,qt_asyncify_resume_js")
+
 endfunction()
+
+function(qt_internal_wasm_add_finalizers target)
+    qt_add_list_file_finalizer(_qt_internal_add_wasm_extra_exported_methods ${target})
+endfunction()
+
+

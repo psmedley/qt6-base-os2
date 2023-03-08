@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include <QTest>
 #include <QtXml/QtXml>
 #include <QtGui/QFontInfo>
@@ -151,7 +126,7 @@ static const char *tokenName(QCss::TokenType t)
 static void debug(const QList<QCss::Symbol> &symbols, int index = -1)
 {
     qDebug() << "all symbols:";
-    for (int i = 0; i < symbols.count(); ++i)
+    for (int i = 0; i < symbols.size(); ++i)
         qDebug() << '(' << i << "); Token:" << tokenName(symbols.at(i).token) << "; Lexem:" << symbols.at(i).lexem();
     if (index != -1)
         qDebug() << "failure at index" << index;
@@ -169,10 +144,10 @@ void tst_QCssParser::scanner()
     QList<QCss::Symbol> symbols;
     QCss::Scanner::scan(QCss::Scanner::preprocess(QString::fromUtf8(inputFile.readAll())), &symbols);
 
-    QVERIFY(symbols.count() > 1);
+    QVERIFY(symbols.size() > 1);
     QCOMPARE(symbols.last().token, QCss::S);
     QCOMPARE(symbols.last().lexem(), QLatin1String("\n"));
-    symbols.remove(symbols.count() - 1, 1);
+    symbols.remove(symbols.size() - 1, 1);
 
     QFile outputFile(output);
     QVERIFY(outputFile.open(QIODevice::ReadOnly|QIODevice::Text));
@@ -184,14 +159,14 @@ void tst_QCssParser::scanner()
         lines.append(line);
     }
 
-    if (lines.count() != symbols.count()) {
+    if (lines.size() != symbols.size()) {
         debug(symbols);
-        QCOMPARE(lines.count(), symbols.count());
+        QCOMPARE(lines.size(), symbols.size());
     }
 
-    for (int i = 0; i < lines.count(); ++i) {
+    for (int i = 0; i < lines.size(); ++i) {
         QStringList l = lines.at(i).split(QChar::fromLatin1('|'));
-        QCOMPARE(l.count(), 2);
+        QCOMPARE(l.size(), 2);
         const QString expectedToken = l.at(0);
         const QString expectedLexem = l.at(1);
         QString actualToken = QString::fromLatin1(tokenName(symbols.at(i).token));
@@ -375,9 +350,9 @@ void tst_QCssParser::expr()
     QVERIFY(parser.testExpr());
     QCOMPARE(parser.parseExpr(&values), parseSuccess);
     if (parseSuccess) {
-        QCOMPARE(values.count(), expectedValues.count());
+        QCOMPARE(values.size(), expectedValues.size());
 
-        for (int i = 0; i < values.count(); ++i) {
+        for (int i = 0; i < values.size(); ++i) {
             QCOMPARE(int(values.at(i).type), int(expectedValues.at(i).type));
             QCOMPARE(values.at(i).variant, expectedValues.at(i).variant);
         }
@@ -396,7 +371,7 @@ void tst_QCssParser::import()
     QVERIFY(parser.testImport());
     QVERIFY(parser.parseImport(&rule));
     QCOMPARE(rule.href, QString("www.kde.org"));
-    QCOMPARE(rule.media.count(), 2);
+    QCOMPARE(rule.media.size(), 2);
     QCOMPARE(rule.media.at(0), QString("print"));
     QCOMPARE(rule.media.at(1), QString("screen"));
 }
@@ -407,7 +382,7 @@ void tst_QCssParser::media()
     QVERIFY(parser.testMedia());
     QCss::MediaRule rule;
     QVERIFY(parser.parseMedia(&rule));
-    QCOMPARE(rule.media.count(), 2);
+    QCOMPARE(rule.media.size(), 2);
     QCOMPARE(rule.media.at(0), QString("print"));
     QCOMPARE(rule.media.at(1), QString("screen"));
     QVERIFY(rule.styleRules.isEmpty());
@@ -430,8 +405,8 @@ void tst_QCssParser::ruleset()
         QVERIFY(parser.testRuleset());
         QCss::StyleRule rule;
         QVERIFY(parser.parseRuleset(&rule));
-        QCOMPARE(rule.selectors.count(), 1);
-        QCOMPARE(rule.selectors.at(0).basicSelectors.count(), 1);
+        QCOMPARE(rule.selectors.size(), 1);
+        QCOMPARE(rule.selectors.at(0).basicSelectors.size(), 1);
         QCOMPARE(rule.selectors.at(0).basicSelectors.at(0).elementName, QString("p"));
         QVERIFY(rule.declarations.isEmpty());
     }
@@ -441,10 +416,10 @@ void tst_QCssParser::ruleset()
         QVERIFY(parser.testRuleset());
         QCss::StyleRule rule;
         QVERIFY(parser.parseRuleset(&rule));
-        QCOMPARE(rule.selectors.count(), 2);
-        QCOMPARE(rule.selectors.at(0).basicSelectors.count(), 1);
+        QCOMPARE(rule.selectors.size(), 2);
+        QCOMPARE(rule.selectors.at(0).basicSelectors.size(), 1);
         QCOMPARE(rule.selectors.at(0).basicSelectors.at(0).elementName, QString("p"));
-        QCOMPARE(rule.selectors.at(1).basicSelectors.count(), 1);
+        QCOMPARE(rule.selectors.at(1).basicSelectors.size(), 1);
         QCOMPARE(rule.selectors.at(1).basicSelectors.at(0).elementName, QString("div"));
         QVERIFY(rule.declarations.isEmpty());
     }
@@ -454,14 +429,14 @@ void tst_QCssParser::ruleset()
         QVERIFY(parser.testRuleset());
         QCss::StyleRule rule;
         QVERIFY(parser.parseRuleset(&rule));
-        QCOMPARE(rule.selectors.count(), 2);
+        QCOMPARE(rule.selectors.size(), 2);
 
-        QCOMPARE(rule.selectors.at(0).basicSelectors.count(), 1);
-        QCOMPARE(rule.selectors.at(0).basicSelectors.at(0).pseudos.count(), 1);
+        QCOMPARE(rule.selectors.at(0).basicSelectors.size(), 1);
+        QCOMPARE(rule.selectors.at(0).basicSelectors.at(0).pseudos.size(), 1);
         QCOMPARE(rule.selectors.at(0).basicSelectors.at(0).pseudos.at(0).name, QString("before"));
 
-        QCOMPARE(rule.selectors.at(1).basicSelectors.count(), 1);
-        QCOMPARE(rule.selectors.at(1).basicSelectors.at(0).pseudos.count(), 1);
+        QCOMPARE(rule.selectors.at(1).basicSelectors.size(), 1);
+        QCOMPARE(rule.selectors.at(1).basicSelectors.at(0).pseudos.size(), 1);
         QCOMPARE(rule.selectors.at(1).basicSelectors.at(0).pseudos.at(0).name, QString("after"));
 
         QVERIFY(rule.declarations.isEmpty());
@@ -713,21 +688,21 @@ void tst_QCssParser::selector()
     QCss::Selector selector;
     QVERIFY(parser.parseSelector(&selector));
 
-    QCOMPARE(selector.basicSelectors.count(), expectedSelector.basicSelectors.count());
-    for (int i = 0; i < selector.basicSelectors.count(); ++i) {
+    QCOMPARE(selector.basicSelectors.size(), expectedSelector.basicSelectors.size());
+    for (int i = 0; i < selector.basicSelectors.size(); ++i) {
         const QCss::BasicSelector sel = selector.basicSelectors.at(i);
         const QCss::BasicSelector expectedSel = expectedSelector.basicSelectors.at(i);
         QCOMPARE(sel.elementName, expectedSel.elementName);
         QCOMPARE(int(sel.relationToNext), int(expectedSel.relationToNext));
 
-        QCOMPARE(sel.pseudos.count(), expectedSel.pseudos.count());
-        for (int i = 0; i < sel.pseudos.count(); ++i) {
+        QCOMPARE(sel.pseudos.size(), expectedSel.pseudos.size());
+        for (int i = 0; i < sel.pseudos.size(); ++i) {
             QCOMPARE(sel.pseudos.at(i).name, expectedSel.pseudos.at(i).name);
             QCOMPARE(sel.pseudos.at(i).function, expectedSel.pseudos.at(i).function);
         }
 
-        QCOMPARE(sel.attributeSelectors.count(), expectedSel.attributeSelectors.count());
-        for (int i = 0; i < sel.attributeSelectors.count(); ++i) {
+        QCOMPARE(sel.attributeSelectors.size(), expectedSel.attributeSelectors.size());
+        for (int i = 0; i < sel.attributeSelectors.size(); ++i) {
             QCOMPARE(sel.attributeSelectors.at(i).name, expectedSel.attributeSelectors.at(i).name);
             QCOMPARE(sel.attributeSelectors.at(i).value, expectedSel.attributeSelectors.at(i).value);
             QCOMPARE(int(sel.attributeSelectors.at(i).valueMatchCriterium), int(expectedSel.attributeSelectors.at(i).valueMatchCriterium));
@@ -785,13 +760,13 @@ void tst_QCssParser::malformedDeclarations()
     QCss::StyleRule rule;
     QVERIFY(parser.parseRuleset(&rule));
 
-    QCOMPARE(rule.selectors.count(), 1);
-    QCOMPARE(rule.selectors.at(0).basicSelectors.count(), 1);
+    QCOMPARE(rule.selectors.size(), 1);
+    QCOMPARE(rule.selectors.at(0).basicSelectors.size(), 1);
     QCOMPARE(rule.selectors.at(0).basicSelectors.at(0).elementName, QString("p"));
 
-    QVERIFY(rule.declarations.count() >= 1);
+    QVERIFY(rule.declarations.size() >= 1);
     QCOMPARE(int(rule.declarations.last().d->propertyId), int(QCss::Color));
-    QCOMPARE(rule.declarations.last().d->values.count(), 1);
+    QCOMPARE(rule.declarations.last().d->values.size(), 1);
     QCOMPARE(int(rule.declarations.last().d->values.at(0).type), int(QCss::Value::Identifier));
     QCOMPARE(rule.declarations.last().d->values.at(0).variant.toString(), QString("green"));
 }
@@ -811,17 +786,17 @@ void tst_QCssParser::invalidAtKeywords()
     QCss::StyleSheet sheet;
     QVERIFY(parser.parse(&sheet));
 
-    QCOMPARE(sheet.styleRules.count() + sheet.nameIndex.count(), 1);
+    QCOMPARE(sheet.styleRules.size() + sheet.nameIndex.size(), 1);
     QCss::StyleRule rule =  (!sheet.styleRules.isEmpty()) ?
             sheet.styleRules.at(0) : *sheet.nameIndex.begin();
 
-    QCOMPARE(rule.selectors.count(), 1);
-    QCOMPARE(rule.selectors.at(0).basicSelectors.count(), 1);
+    QCOMPARE(rule.selectors.size(), 1);
+    QCOMPARE(rule.selectors.at(0).basicSelectors.size(), 1);
     QCOMPARE(rule.selectors.at(0).basicSelectors.at(0).elementName, QString("h1"));
 
-    QCOMPARE(rule.declarations.count(), 1);
+    QCOMPARE(rule.declarations.size(), 1);
     QCOMPARE(int(rule.declarations.at(0).d->propertyId), int(QCss::Color));
-    QCOMPARE(rule.declarations.at(0).d->values.count(), 1);
+    QCOMPARE(rule.declarations.at(0).d->values.size(), 1);
     QCOMPARE(int(rule.declarations.at(0).d->values.at(0).type), int(QCss::Value::Identifier));
     QCOMPARE(rule.declarations.at(0).d->values.at(0).variant.toString(), QString("blue"));
 }
@@ -1166,9 +1141,9 @@ void tst_QCssParser::styleSelector()
     QList<QCss::Declaration> decls = testSelector.declarationsForNode(n);
 
     if (match) {
-        QCOMPARE(decls.count(), 1);
+        QCOMPARE(decls.size(), 1);
         QCOMPARE(int(decls.at(0).d->propertyId), int(QCss::BackgroundColor));
-        QCOMPARE(decls.at(0).d->values.count(), 1);
+        QCOMPARE(decls.at(0).d->values.size(), 1);
         QCOMPARE(int(decls.at(0).d->values.at(0).type), int(QCss::Value::Identifier));
         QCOMPARE(decls.at(0).d->values.at(0).variant.toString(), QString("green"));
     } else {
@@ -1208,11 +1183,11 @@ void tst_QCssParser::specificity()
     QCss::StyleSheet sheet;
     QVERIFY(parser.parse(&sheet));
 
-    QCOMPARE(sheet.styleRules.count() + sheet.nameIndex.count() + sheet.idIndex.count() , 1);
+    QCOMPARE(sheet.styleRules.size() + sheet.nameIndex.size() + sheet.idIndex.size() , 1);
     QCss::StyleRule rule =  (!sheet.styleRules.isEmpty()) ? sheet.styleRules.at(0)
                         :  (!sheet.nameIndex.isEmpty())  ? *sheet.nameIndex.begin()
                         :  *sheet.idIndex.begin();
-    QCOMPARE(rule.selectors.count(), 1);
+    QCOMPARE(rule.selectors.size(), 1);
     QTEST(rule.selectors.at(0).specificity(), "specificity");
 }
 
@@ -1261,15 +1236,15 @@ void tst_QCssParser::specificitySort()
         n.ptr = &e;
         QList<QCss::Declaration> decls = testSelector.declarationsForNode(n);
 
-        QCOMPARE(decls.count(), 2);
+        QCOMPARE(decls.size(), 2);
 
         QCOMPARE(int(decls.at(0).d->propertyId), int(QCss::Color));
-        QCOMPARE(decls.at(0).d->values.count(), 1);
+        QCOMPARE(decls.at(0).d->values.size(), 1);
         QCOMPARE(int(decls.at(0).d->values.at(0).type), int(QCss::Value::Identifier));
         QCOMPARE(decls.at(0).d->values.at(0).variant.toString(), QString("green"));
 
         QCOMPARE(int(decls.at(1).d->propertyId), int(QCss::Color));
-        QCOMPARE(decls.at(1).d->values.count(), 1);
+        QCOMPARE(decls.at(1).d->values.size(), 1);
         QCOMPARE(int(decls.at(1).d->values.at(0).type), int(QCss::Value::Identifier));
         QCOMPARE(decls.at(1).d->values.at(0).variant.toString(), QString("red"));
     }
@@ -1344,7 +1319,7 @@ void tst_QCssParser::rulesForNode()
     QList<QCss::StyleRule> rules = testSelector.styleRulesForNode(n);
 
     QList<QCss::Declaration> decls;
-    for (int i = 0; i < rules.count(); i++) {
+    for (int i = 0; i < rules.size(); i++) {
         const QCss::Selector &selector = rules.at(i).selectors.at(0);
         quint64 negated = 0;
         quint64 cssClass = selector.pseudoClass(&negated);
@@ -1353,7 +1328,7 @@ void tst_QCssParser::rulesForNode()
             decls += rules.at(i).declarations;
     }
 
-    QCOMPARE(decls.count(), declCount);
+    QCOMPARE(decls.size(), declCount);
 
     if (declCount > 0)
         QCOMPARE(decls.at(0).d->values.at(0).variant.toString(), value0);
@@ -1480,14 +1455,14 @@ void tst_QCssParser::pseudoElement()
     n.ptr = &e;
     QList<QCss::StyleRule> rules = testSelector.styleRulesForNode(n);
     QList<QCss::Declaration> decls;
-    for (int i = 0; i < rules.count(); i++) {
+    for (int i = 0; i < rules.size(); i++) {
         const QCss::Selector& selector = rules.at(i).selectors.at(0);
         if (pseudoElement.compare(selector.pseudoElement(), Qt::CaseInsensitive) != 0)
             continue;
         decls += rules.at(i).declarations;
 
     }
-    QCOMPARE(decls.count(), declCount);
+    QCOMPARE(decls.size(), declCount);
 }
 
 void tst_QCssParser::gradient_data()
@@ -1621,7 +1596,7 @@ void tst_QCssParser::extractFontFamily()
     QCss::StyleSheet sheet;
     QVERIFY(parser.parse(&sheet));
 
-    QCOMPARE(sheet.styleRules.count() + sheet.nameIndex.count(), 1);
+    QCOMPARE(sheet.styleRules.size() + sheet.nameIndex.size(), 1);
     QCss::StyleRule rule =  (!sheet.styleRules.isEmpty()) ?
             sheet.styleRules.at(0) : *sheet.nameIndex.begin();
 
@@ -1679,7 +1654,7 @@ void tst_QCssParser::extractBorder()
     QCss::StyleSheet sheet;
     QVERIFY(parser.parse(&sheet));
 
-    QCOMPARE(sheet.styleRules.count() + sheet.nameIndex.count(), 1);
+    QCOMPARE(sheet.styleRules.size() + sheet.nameIndex.size(), 1);
     QCss::StyleRule rule =  (!sheet.styleRules.isEmpty()) ?
             sheet.styleRules.at(0) : *sheet.nameIndex.begin();
     const QList<QCss::Declaration> decls = rule.declarations;
@@ -1709,7 +1684,7 @@ void tst_QCssParser::noTextDecoration()
     QCss::StyleSheet sheet;
     QVERIFY(parser.parse(&sheet));
 
-    QCOMPARE(sheet.styleRules.count() + sheet.nameIndex.count(), 1);
+    QCOMPARE(sheet.styleRules.size() + sheet.nameIndex.size(), 1);
     QCss::StyleRule rule =  (!sheet.styleRules.isEmpty()) ?
             sheet.styleRules.at(0) : *sheet.nameIndex.begin();
     const QList<QCss::Declaration> decls = rule.declarations;
@@ -1734,7 +1709,7 @@ void tst_QCssParser::quotedAndUnquotedIdentifiers()
     QCss::StyleSheet sheet;
     QVERIFY(parser.parse(&sheet));
 
-    QCOMPARE(sheet.styleRules.count() + sheet.nameIndex.count(), 1);
+    QCOMPARE(sheet.styleRules.size() + sheet.nameIndex.size(), 1);
     QCss::StyleRule rule = (!sheet.styleRules.isEmpty()) ?
            sheet.styleRules.at(0) : *sheet.nameIndex.begin();
     const QList<QCss::Declaration> decls = rule.declarations;

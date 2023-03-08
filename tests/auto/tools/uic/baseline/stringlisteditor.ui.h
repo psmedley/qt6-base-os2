@@ -1,31 +1,8 @@
 /*
-*********************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the autotests of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-*********************************************************************
+
+* Copyright (C) 2016 The Qt Company Ltd.
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+
 */
 
 /********************************************************************************
@@ -83,7 +60,7 @@ public:
     void setupUi(QDialog *qdesigner_internal__Dialog)
     {
         if (qdesigner_internal__Dialog->objectName().isEmpty())
-            qdesigner_internal__Dialog->setObjectName(QString::fromUtf8("qdesigner_internal__Dialog"));
+            qdesigner_internal__Dialog->setObjectName("qdesigner_internal__Dialog");
         qdesigner_internal__Dialog->resize(400, 300);
         vboxLayout = new QVBoxLayout(qdesigner_internal__Dialog);
 #ifndef Q_OS_MAC
@@ -92,9 +69,9 @@ public:
 #ifndef Q_OS_MAC
         vboxLayout->setContentsMargins(9, 9, 9, 9);
 #endif
-        vboxLayout->setObjectName(QString::fromUtf8("vboxLayout"));
+        vboxLayout->setObjectName("vboxLayout");
         groupBox = new QGroupBox(qdesigner_internal__Dialog);
-        groupBox->setObjectName(QString::fromUtf8("groupBox"));
+        groupBox->setObjectName("groupBox");
         gridLayout = new QGridLayout(groupBox);
 #ifndef Q_OS_MAC
         gridLayout->setSpacing(6);
@@ -102,7 +79,7 @@ public:
 #ifndef Q_OS_MAC
         gridLayout->setContentsMargins(9, 9, 9, 9);
 #endif
-        gridLayout->setObjectName(QString::fromUtf8("gridLayout"));
+        gridLayout->setObjectName("gridLayout");
         vboxLayout1 = new QVBoxLayout();
 #ifndef Q_OS_MAC
         vboxLayout1->setSpacing(6);
@@ -110,7 +87,7 @@ public:
 #ifndef Q_OS_MAC
         vboxLayout1->setContentsMargins(0, 0, 0, 0);
 #endif
-        vboxLayout1->setObjectName(QString::fromUtf8("vboxLayout1"));
+        vboxLayout1->setObjectName("vboxLayout1");
         hboxLayout = new QHBoxLayout();
 #ifndef Q_OS_MAC
         hboxLayout->setSpacing(6);
@@ -118,15 +95,15 @@ public:
 #ifndef Q_OS_MAC
         hboxLayout->setContentsMargins(0, 0, 0, 0);
 #endif
-        hboxLayout->setObjectName(QString::fromUtf8("hboxLayout"));
+        hboxLayout->setObjectName("hboxLayout");
         newButton = new QToolButton(groupBox);
-        newButton->setObjectName(QString::fromUtf8("newButton"));
+        newButton->setObjectName("newButton");
         newButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
         hboxLayout->addWidget(newButton);
 
         deleteButton = new QToolButton(groupBox);
-        deleteButton->setObjectName(QString::fromUtf8("deleteButton"));
+        deleteButton->setObjectName("deleteButton");
         deleteButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
         hboxLayout->addWidget(deleteButton);
@@ -143,14 +120,14 @@ public:
         hboxLayout1->setSpacing(6);
 #endif
         hboxLayout1->setContentsMargins(0, 0, 0, 0);
-        hboxLayout1->setObjectName(QString::fromUtf8("hboxLayout1"));
+        hboxLayout1->setObjectName("hboxLayout1");
         label = new QLabel(groupBox);
-        label->setObjectName(QString::fromUtf8("label"));
+        label->setObjectName("label");
 
         hboxLayout1->addWidget(label);
 
         valueEdit = new QLineEdit(groupBox);
-        valueEdit->setObjectName(QString::fromUtf8("valueEdit"));
+        valueEdit->setObjectName("valueEdit");
 
         hboxLayout1->addWidget(valueEdit);
 
@@ -165,18 +142,18 @@ public:
         vboxLayout2->setSpacing(6);
 #endif
         vboxLayout2->setContentsMargins(0, 0, 0, 0);
-        vboxLayout2->setObjectName(QString::fromUtf8("vboxLayout2"));
+        vboxLayout2->setObjectName("vboxLayout2");
         spacerItem1 = new QSpacerItem(20, 40, QSizePolicy::Minimum, QSizePolicy::Expanding);
 
         vboxLayout2->addItem(spacerItem1);
 
         upButton = new QToolButton(groupBox);
-        upButton->setObjectName(QString::fromUtf8("upButton"));
+        upButton->setObjectName("upButton");
 
         vboxLayout2->addWidget(upButton);
 
         downButton = new QToolButton(groupBox);
-        downButton->setObjectName(QString::fromUtf8("downButton"));
+        downButton->setObjectName("downButton");
 
         vboxLayout2->addWidget(downButton);
 
@@ -188,7 +165,7 @@ public:
         gridLayout->addLayout(vboxLayout2, 0, 1, 1, 1);
 
         listView = new QListView(groupBox);
-        listView->setObjectName(QString::fromUtf8("listView"));
+        listView->setObjectName("listView");
 
         gridLayout->addWidget(listView, 0, 0, 1, 1);
 
@@ -196,7 +173,7 @@ public:
         vboxLayout->addWidget(groupBox);
 
         buttonBox = new QDialogButtonBox(qdesigner_internal__Dialog);
-        buttonBox->setObjectName(QString::fromUtf8("buttonBox"));
+        buttonBox->setObjectName("buttonBox");
         buttonBox->setOrientation(Qt::Horizontal);
         buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::NoButton|QDialogButtonBox::Ok);
 

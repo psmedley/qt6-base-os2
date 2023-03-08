@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qmlutils.h"
 #include "utils.h"
@@ -39,6 +14,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 bool operator==(const QmlImportScanResult::Module &m1, const QmlImportScanResult::Module &m2)
 {
     return m1.className.isEmpty() ? m1.name == m2.name : m1.className == m2.className;
@@ -48,9 +25,9 @@ bool operator==(const QmlImportScanResult::Module &m1, const QmlImportScanResult
 QString QmlImportScanResult::Module::installPath(const QString &root) const
 {
     QString result = root;
-    const int lastSlashPos = relativePath.lastIndexOf(QLatin1Char('/'));
+    const qsizetype lastSlashPos = relativePath.lastIndexOf(u'/');
     if (lastSlashPos != -1) {
-        result += QLatin1Char('/');
+        result += u'/';
         result += QStringView{relativePath}.left(lastSlashPos);
     }
     return result;
@@ -121,14 +98,14 @@ QmlImportScanResult runQmlImportScanner(const QString &directory, const QStringL
     if (data.isNull() ) {
         *errorMessage = binary + QStringLiteral(" returned invalid JSON output: ")
                         + jsonParseError.errorString() + QStringLiteral(" :\"")
-                        + QString::fromLocal8Bit(stdOut) + QLatin1Char('"');
+                        + QString::fromLocal8Bit(stdOut) + u'"';
         return result;
     }
     const QJsonArray array = data.array();
     const int childCount = array.count();
     for (int c = 0; c < childCount; ++c) {
         const QJsonObject object = array.at(c).toObject();
-        if (object.value(QStringLiteral("type")).toString() == QLatin1String("module")) {
+        if (object.value(QStringLiteral("type")).toString() == "module"_L1) {
             const QString path = object.value(QStringLiteral("path")).toString();
             if (!path.isEmpty()) {
                 QmlImportScanResult::Module module;

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qxcbintegration.h"
 #include "qxcbconnection.h"
@@ -61,9 +25,6 @@
 
 #include <QtGui/private/qgenericunixfontdatabase_p.h>
 #include <QtGui/private/qgenericunixservices_p.h>
-#if QT_CONFIG(opengl)
-#include <QtOpenGL/qpa/qplatformbackingstoreopenglsupport.h>
-#endif
 
 #include <stdio.h>
 
@@ -87,9 +48,9 @@
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QScreen>
 #include <QtGui/QOffscreenSurface>
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 #include <qpa/qplatformaccessibility.h>
-#ifndef QT_NO_ACCESSIBILITY_ATSPI_BRIDGE
+#if QT_CONFIG(accessibility_atspi_bridge)
 #include <QtGui/private/qspiaccessiblebridge_p.h>
 #endif
 #endif
@@ -103,16 +64,18 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 // Find out if our parent process is gdb by looking at the 'exe' symlink under /proc,.
 // or, for older Linuxes, read out 'cmdline'.
 static bool runningUnderDebugger()
 {
 #if defined(QT_DEBUG) && defined(Q_OS_LINUX)
-    const QString parentProc = QLatin1String("/proc/") + QString::number(getppid());
-    const QFileInfo parentProcExe(parentProc + QLatin1String("/exe"));
+    const QString parentProc = "/proc/"_L1 + QString::number(getppid());
+    const QFileInfo parentProcExe(parentProc + "/exe"_L1);
     if (parentProcExe.isSymLink())
-        return parentProcExe.symLinkTarget().endsWith(QLatin1String("/gdb"));
-    QFile f(parentProc + QLatin1String("/cmdline"));
+        return parentProcExe.symLinkTarget().endsWith("/gdb"_L1);
+    QFile f(parentProc + "/cmdline"_L1);
     if (!f.open(QIODevice::ReadOnly))
         return false;
     QByteArray s;
@@ -180,7 +143,7 @@ QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char 
 
     bool underDebugger = runningUnderDebugger();
     if (noGrabArg && doGrabArg && underDebugger) {
-        qWarning("Both -nograb and -dograb command line arguments specified. Please pick one. -nograb takes prcedence");
+        qWarning("Both -nograb and -dograb command line arguments specified. Please pick one. -nograb takes precedence");
         doGrabArg = false;
     }
 
@@ -363,14 +326,14 @@ QAbstractEventDispatcher *QXcbIntegration::createEventDispatcher() const
 
 void QXcbIntegration::initialize()
 {
-    const QLatin1String defaultInputContext("compose");
+    const auto defaultInputContext = "compose"_L1;
     // Perform everything that may potentially need the event dispatcher (timers, socket
     // notifiers) here instead of the constructor.
     QString icStr = QPlatformInputContextFactory::requested();
     if (icStr.isNull())
         icStr = defaultInputContext;
     m_inputContext.reset(QPlatformInputContextFactory::create(icStr));
-    if (!m_inputContext && icStr != defaultInputContext && icStr != QLatin1String("none"))
+    if (!m_inputContext && icStr != defaultInputContext && icStr != "none"_L1)
         m_inputContext.reset(QPlatformInputContextFactory::create(defaultInputContext));
 
     connection()->keyboard()->initialize();
@@ -420,7 +383,7 @@ QPlatformInputContext *QXcbIntegration::inputContext() const
     return m_inputContext.data();
 }
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 QPlatformAccessibility *QXcbIntegration::accessibility() const
 {
 #if !defined(QT_NO_ACCESSIBILITY_ATSPI_BRIDGE)
@@ -504,7 +467,7 @@ static QString argv0BaseName()
     const QStringList arguments = QCoreApplication::arguments();
     if (!arguments.isEmpty() && !arguments.front().isEmpty()) {
         result = arguments.front();
-        const int lastSlashPos = result.lastIndexOf(QLatin1Char('/'));
+        const int lastSlashPos = result.lastIndexOf(u'/');
         if (lastSlashPos != -1)
             result.remove(0, lastSlashPos + 1);
     }

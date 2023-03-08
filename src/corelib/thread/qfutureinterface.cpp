@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 // qfutureinterface.h included from qfuture.h
 #include "qfuture.h"
@@ -79,6 +43,8 @@ const auto suspendingOrSuspended =
 
 QFutureCallOutInterface::~QFutureCallOutInterface()
     = default;
+
+Q_IMPL_EVENT_COMMON(QFutureCallOutEvent)
 
 QFutureInterfaceBase::QFutureInterfaceBase(State initialState)
     : d(new QFutureInterfaceBasePrivate(initialState))
@@ -139,6 +105,13 @@ void QFutureInterfaceBase::cancel(QFutureInterfaceBase::CancelMode mode)
         break;
     }
 
+    // Cancel the continuations chain
+    QFutureInterfaceBasePrivate *next = d->continuationData;
+    while (next) {
+        next->continuationState = QFutureInterfaceBasePrivate::Canceled;
+        next = next->continuationData;
+    }
+
     d->waitCondition.wakeAll();
     d->pausedWaitCondition.wakeAll();
 
@@ -182,7 +155,7 @@ void QFutureInterfaceBase::reportSuspended() const
     // i.e. no more events will be reported.
 
     QMutexLocker locker(&d->m_mutex);
-    const int state = d->state;
+    const int state = d->state.loadRelaxed();
     if (!(state & Suspending) || (state & Suspended))
         return;
 
@@ -753,7 +726,7 @@ void QFutureInterfaceBasePrivate::sendCallOut(const QFutureCallOutEvent &callOut
     if (outputConnections.isEmpty())
         return;
 
-    for (int i = 0; i < outputConnections.count(); ++i)
+    for (int i = 0; i < outputConnections.size(); ++i)
         outputConnections.at(i)->postCallOutEvent(callOutEvent);
 }
 
@@ -763,7 +736,7 @@ void QFutureInterfaceBasePrivate::sendCallOuts(const QFutureCallOutEvent &callOu
     if (outputConnections.isEmpty())
         return;
 
-    for (int i = 0; i < outputConnections.count(); ++i) {
+    for (int i = 0; i < outputConnections.size(); ++i) {
         QFutureCallOutInterface *interface = outputConnections.at(i);
         interface->postCallOutEvent(callOutEvent1);
         interface->postCallOutEvent(callOutEvent2);
@@ -850,16 +823,19 @@ void QFutureInterfaceBase::setContinuation(std::function<void(const QFutureInter
 {
     QMutexLocker lock(&d->continuationMutex);
 
-    if (continuationFutureData)
-        continuationFutureData->parentData = d;
-
     // If the state is ready, run continuation immediately,
     // otherwise save it for later.
     if (isFinished()) {
         lock.unlock();
         func(*this);
-    } else {
+        lock.relock();
+    }
+    // Unless the continuation has been cleaned earlier, we have to
+    // store the move-only continuation, to guarantee that the associated
+    // future's data stays alive.
+    if (d->continuationState != QFutureInterfaceBasePrivate::Cleaned) {
         d->continuation = std::move(func);
+        d->continuationData = continuationFutureData;
     }
 }
 
@@ -868,39 +844,34 @@ void QFutureInterfaceBase::cleanContinuation()
     if (!d)
         return;
 
-    // This is called when the associated QPromise is being destroyed.
-    // Clear the continuation, to make sure it doesn't keep any ref-counted
-    // copies of this, so that the allocated memory can be freed.
     QMutexLocker lock(&d->continuationMutex);
     d->continuation = nullptr;
+    d->continuationState = QFutureInterfaceBasePrivate::Cleaned;
 }
 
 void QFutureInterfaceBase::runContinuation() const
 {
     QMutexLocker lock(&d->continuationMutex);
     if (d->continuation) {
-        auto fn = std::exchange(d->continuation, nullptr);
+        // Save the continuation in a local function, to avoid calling
+        // a null std::function below, in case cleanContinuation() is
+        // called from some other thread right after unlock() below.
+        auto fn = std::move(d->continuation);
         lock.unlock();
         fn(*this);
+
+        lock.relock();
+        // Unless the continuation has been cleaned earlier, we have to
+        // store the move-only continuation, to guarantee that the associated
+        // future's data stays alive.
+        if (d->continuationState != QFutureInterfaceBasePrivate::Cleaned)
+            d->continuation = std::move(fn);
     }
 }
 
 bool QFutureInterfaceBase::isChainCanceled() const
 {
-    if (isCanceled())
-        return true;
-
-    auto parent = d->parentData;
-    while (parent) {
-        // If the future is in Canceled state because it had an exception, we want to
-        // continue checking the chain of parents for cancellation, otherwise if the exception
-        // is handeled inside the chain, it won't be interrupted even though cancellation has
-        // been requested.
-        if ((parent->state.loadRelaxed() & Canceled) && !parent->hasException)
-            return true;
-        parent = parent->parentData;
-    }
-    return false;
+    return isCanceled() || d->continuationState == QFutureInterfaceBasePrivate::Canceled;
 }
 
 void QFutureInterfaceBase::setLaunchAsync(bool value)

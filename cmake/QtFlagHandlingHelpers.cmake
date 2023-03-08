@@ -32,13 +32,26 @@ function(qt_internal_add_linker_version_script target)
 
         qt_ensure_perl()
 
-        add_custom_command(TARGET "${target}" PRE_LINK
-            COMMAND "${HOST_PERL}" "${QT_MKSPECS_DIR}/features/data/unix/findclasslist.pl" < "${infile}" > "${outfile}"
-            BYPRODUCTS "${outfile}" DEPENDS "${infile}"
+        set(generator_command "${HOST_PERL}"
+            "${QT_MKSPECS_DIR}/features/data/unix/findclasslist.pl"
+            "<" "${infile}" ">" "${outfile}"
+        )
+        set(generator_dependencies
+            "${infile}"
+            "${QT_MKSPECS_DIR}/features/data/unix/findclasslist.pl"
+        )
+
+        add_custom_command(
+            OUTPUT "${outfile}"
+            COMMAND ${generator_command}
+            DEPENDS ${generator_dependencies}
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            COMMENT "Generating version linker script"
-            )
-        target_link_options("${target}" PRIVATE "-Wl,--version-script,${outfile}")
+            COMMENT "Generating version linker script for target ${target}"
+            VERBATIM
+        )
+        add_custom_target(${target}_version_script DEPENDS ${outfile})
+        add_dependencies(${target} ${target}_version_script)
+        target_link_options(${target} PRIVATE "-Wl,--version-script,${outfile}")
     endif()
 endfunction()
 
@@ -129,6 +142,9 @@ function(qt_internal_apply_intel_cet target visibility)
 endfunction()
 
 function(qt_internal_library_deprecation_level result)
+    # QT_DISABLE_DEPPRECATED_BEFORE controls which version we use as a cut-off
+    # compiling in to the library. E.g. if it is set to QT_VERSION then no
+    # code which was deprecated before QT_VERSION will be compiled in.
     if(WIN32)
         # On Windows, due to the way DLLs work, we need to export all functions,
         # including the inlines
@@ -137,7 +153,10 @@ function(qt_internal_library_deprecation_level result)
         # On other platforms, Qt's own compilation goes needs to compile the Qt 5.0 API
         list(APPEND deprecations "QT_DISABLE_DEPRECATED_BEFORE=0x050000")
     endif()
-    list(APPEND deprecations "QT_DEPRECATED_WARNINGS_SINCE=0x060000")
+    # QT_DEPRECATED_WARNINGS_SINCE controls the upper-bound of deprecation
+    # warnings that are emitted. E.g. if it is set to 7.0 then all deprecations
+    # during the 6.* lifetime will be warned about in Qt builds.
+    list(APPEND deprecations "QT_DEPRECATED_WARNINGS_SINCE=0x070000")
     set("${result}" "${deprecations}" PARENT_SCOPE)
 endfunction()
 
@@ -217,11 +236,8 @@ function(qt_set_language_standards)
         set(CMAKE_CXX_STANDARD 17 PARENT_SCOPE)
     endif()
 
-    if (c_std_11 IN_LIST CMAKE_C_COMPILE_FEATURES)
-        set(CMAKE_C_STANDARD 11 PARENT_SCOPE)
-    elseif (c_std_99 IN_LIST CMAKE_C_COMPILE_FEATURES)
-        set(CMAKE_C_STANDARD 99 PARENT_SCOPE)
-    endif()
+    set(CMAKE_C_STANDARD 11 PARENT_SCOPE)
+    set(CMAKE_C_STANDARD_REQUIRED ON PARENT_SCOPE)
 endfunction()
 
 function(qt_set_language_standards_interface_compile_features target)

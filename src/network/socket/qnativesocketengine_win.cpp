@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 // Prevent windows system header files from defining min/max as macros.
 #define NOMINMAX 1
@@ -52,6 +16,7 @@
 #include <qdatetime.h>
 #include <qnetworkinterface.h>
 #include <qoperatingsystemversion.h>
+#include <qvarlengtharray.h>
 
 #include <algorithm>
 
@@ -808,10 +773,10 @@ bool QNativeSocketEnginePrivate::nativeListen(int backlog)
     return true;
 }
 
-int QNativeSocketEnginePrivate::nativeAccept()
+qintptr QNativeSocketEnginePrivate::nativeAccept()
 {
-    int acceptedDescriptor = WSAAccept(socketDescriptor, 0,0,0,0);
-    if (acceptedDescriptor == -1) {
+    SOCKET acceptedDescriptor = WSAAccept(socketDescriptor, 0,0,0,0);
+    if (acceptedDescriptor == INVALID_SOCKET) {
         int err = WSAGetLastError();
         switch (err) {
         case WSAEACCES:
@@ -845,7 +810,7 @@ int QNativeSocketEnginePrivate::nativeAccept()
             setError(QAbstractSocket::UnknownSocketError, UnknownSocketErrorString);
             break;
         }
-    } else if (acceptedDescriptor != -1 && QAbstractEventDispatcher::instance()) {
+    } else if (acceptedDescriptor != INVALID_SOCKET && QAbstractEventDispatcher::instance()) {
         // Because of WSAAsyncSelect() WSAAccept returns a non blocking socket
         // with the same attributes as the listening socket including the current
         // WSAAsyncSelect(). To be able to change the socket to blocking mode the
@@ -855,9 +820,9 @@ int QNativeSocketEnginePrivate::nativeAccept()
         n.setEnabled(false);
     }
 #if defined (QNATIVESOCKETENGINE_DEBUG)
-    qDebug("QNativeSocketEnginePrivate::nativeAccept() == %i", acceptedDescriptor);
+    qDebug("QNativeSocketEnginePrivate::nativeAccept() == %lld", qint64(acceptedDescriptor));
 #endif
-    return acceptedDescriptor;
+    return qintptr(acceptedDescriptor);
 }
 
 static bool multicastMembershipHelper(QNativeSocketEnginePrivate *d,

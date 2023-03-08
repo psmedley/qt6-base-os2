@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qeventdispatcher_win_p.h"
 
@@ -53,8 +17,6 @@
 #include <private/qthread_p.h>
 
 QT_BEGIN_NAMESPACE
-
-extern uint qGlobalPostedEventsCount();
 
 #ifndef TIME_KILL_SYNCHRONOUS
 #  define TIME_KILL_SYNCHRONOUS 0x0100
@@ -137,11 +99,7 @@ LRESULT QT_WIN_CALLBACK qt_internal_proc(HWND hwnd, UINT message, WPARAM wp, LPA
     if (dispatcher->filterNativeEvent(QByteArrayLiteral("windows_dispatcher_MSG"), &msg, &result))
         return result;
 
-#ifdef GWLP_USERDATA
     auto q = reinterpret_cast<QEventDispatcherWin32 *>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
-#else
-    auto q = reinterpret_cast<QEventDispatcherWin32 *>(GetWindowLong(hwnd, GWL_USERDATA));
-#endif
     QEventDispatcherWin32Private *d = nullptr;
     if (q != nullptr)
         d = q->d_func();
@@ -327,24 +285,52 @@ static HWND qt_create_internal_window(const QEventDispatcherWin32 *eventDispatch
         return 0;
     }
 
-#ifdef GWLP_USERDATA
     SetWindowLongPtr(wnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(eventDispatcher));
-#else
-    SetWindowLong(wnd, GWL_USERDATA, reinterpret_cast<LONG>(eventDispatcher));
-#endif
 
     return wnd;
 }
 
-static void calculateNextTimeout(WinTimerInfo *t, quint64 currentTime)
+static ULONG calculateNextTimeout(WinTimerInfo *t, quint64 currentTime)
 {
     uint interval = t->interval;
-    if ((interval >= 20000u && t->timerType != Qt::PreciseTimer) || t->timerType == Qt::VeryCoarseTimer) {
-        // round the interval, VeryCoarseTimers only have full second accuracy
-        interval = ((interval + 500)) / 1000 * 1000;
+    ULONG tolerance = TIMERV_DEFAULT_COALESCING;
+    switch (t->timerType) {
+    case Qt::PreciseTimer:
+        // high precision timer is based on millisecond precision
+        // so no adjustment is necessary
+        break;
+
+    case Qt::CoarseTimer:
+        // this timer has up to 5% coarseness
+        // so our boundaries are 20 ms and 20 s
+        // below 20 ms, 5% inaccuracy is below 1 ms, so we convert to high precision
+        // above 20 s, 5% inaccuracy is above 1 s, so we convert to VeryCoarseTimer
+        if (interval >= 20000) {
+            t->timerType = Qt::VeryCoarseTimer;
+        } else if (interval <= 20) {
+            // no adjustment necessary
+            t->timerType = Qt::PreciseTimer;
+            break;
+        } else {
+            tolerance = interval / 20;
+            break;
+        }
+        Q_FALLTHROUGH();
+    case Qt::VeryCoarseTimer:
+        // the very coarse timer is based on full second precision,
+        // so we round to closest second (but never to zero)
+        tolerance = 1000;
+        if (interval < 1000)
+            interval = 1000;
+        else
+            interval = (interval + 500) / 1000 * 1000;
+        currentTime = currentTime / 1000 * 1000;
+        break;
     }
+
     t->interval = interval;
     t->timeout = currentTime + interval;
+    return tolerance;
 }
 
 void QEventDispatcherWin32Private::registerTimer(WinTimerInfo *t)
@@ -354,13 +340,13 @@ void QEventDispatcherWin32Private::registerTimer(WinTimerInfo *t)
     Q_Q(QEventDispatcherWin32);
 
     bool ok = false;
-    calculateNextTimeout(t, qt_msectime());
+    ULONG tolerance = calculateNextTimeout(t, qt_msectime());
     uint interval = t->interval;
     if (interval == 0u) {
         // optimization for single-shot-zero-timer
         QCoreApplication::postEvent(q, new QZeroTimerEvent(t->timerId));
         ok = true;
-    } else if (interval < 20u || t->timerType == Qt::PreciseTimer) {
+    } else if (tolerance == TIMERV_DEFAULT_COALESCING) {
         // 3/2016: Although MSDN states timeSetEvent() is deprecated, the function
         // is still deemed to be the most reliable precision timer.
         t->fastTimerId = timeSetEvent(interval, 1, qt_fast_timer_proc, DWORD_PTR(t),
@@ -370,8 +356,10 @@ void QEventDispatcherWin32Private::registerTimer(WinTimerInfo *t)
 
     if (!ok) {
         // user normal timers for (Very)CoarseTimers, or if no more multimedia timers available
-        ok = SetTimer(internalHwnd, t->timerId, interval, 0);
+        ok = SetCoalescableTimer(internalHwnd, t->timerId, interval, nullptr, tolerance);
     }
+    if (!ok)
+        ok = SetTimer(internalHwnd, t->timerId, interval, nullptr);
 
     if (!ok)
         qErrnoWarning("QEventDispatcherWin32::registerTimer: Failed to create a timer");
@@ -776,7 +764,7 @@ QEventDispatcherWin32::registeredTimers(QObject *object) const
 
     Q_D(const QEventDispatcherWin32);
     QList<TimerInfo> list;
-    for (WinTimerInfo *t : qAsConst(d->timerDict)) {
+    for (WinTimerInfo *t : std::as_const(d->timerDict)) {
         Q_ASSERT(t);
         if (t->obj == object)
             list << TimerInfo(t->timerId, t->interval, t->timerType);
@@ -844,7 +832,7 @@ void QEventDispatcherWin32::closingDown()
     Q_ASSERT(d->active_fd.isEmpty());
 
     // clean up any timers
-    for (WinTimerInfo *t : qAsConst(d->timerDict))
+    for (WinTimerInfo *t : std::as_const(d->timerDict))
         d->unregisterTimer(t);
     d->timerDict.clear();
 

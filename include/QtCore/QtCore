@@ -5,6 +5,7 @@
 #include "q20algorithm.h"
 #include "q20functional.h"
 #include "q20iterator.h"
+#include "q23functional.h"
 #if QT_CONFIG(animation)
 #include "qabstractanimation.h"
 #endif
@@ -92,6 +93,7 @@
 #include "qfilesystemwatcher.h"
 #endif
 #include "qflags.h"
+#include "qforeach.h"
 #if QT_CONFIG(future)
 #include "qfuture.h"
 #endif
@@ -120,6 +122,7 @@
 #include "qiterator.h"
 #include "qjnienvironment.h"
 #include "qjniobject.h"
+#include "qjnitypes.h"
 #include "qjsonarray.h"
 #include "qjsondocument.h"
 #include "qjsonobject.h"
@@ -223,6 +226,7 @@
 #include "qstringalgorithms.h"
 #include "qstringbuilder.h"
 #include "qstringconverter.h"
+#include "qstringfwd.h"
 #include "qstringlist.h"
 #if QT_CONFIG(stringlistmodel)
 #include "qstringlistmodel.h"
@@ -235,6 +239,7 @@
 #include "qsystemdetection.h"
 #include "qsystemsemaphore.h"
 #include "qtaggedpointer.h"
+#include "qtconfigmacros.h"
 #include "qtemporarydir.h"
 #include "qtemporaryfile.h"
 #include "qtextboundaryfinder.h"
@@ -265,6 +270,9 @@
 #if QT_CONFIG(animation)
 #include "qvariantanimation.h"
 #endif
+#include "qvarianthash.h"
+#include "qvariantlist.h"
+#include "qvariantmap.h"
 #include "qvarlengtharray.h"
 #include "qvector.h"
 #include "qversionnumber.h"
@@ -272,5 +280,6 @@
 #include "qwaitcondition.h"
 #include "qwineventnotifier.h"
 #include "qxmlstream.h"
+#include "qxpfunctional.h"
 #include "qtcoreversion.h"
 #endif

@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <qtimezone.h>
@@ -77,6 +52,8 @@ private Q_SLOTS:
     void winTest();
     void localeSpecificDisplayName_data();
     void localeSpecificDisplayName();
+    void stdCompatibility_data();
+    void stdCompatibility();
 
 private:
     void printTimeZone(const QTimeZone &tz);
@@ -243,8 +220,8 @@ void tst_QTimeZone::createTest()
         tran.daylightTimeOffset = 3600;
         expected << tran;
         QTimeZone::OffsetDataList result = tz.transitions(janPrev, jan);
-        QCOMPARE(result.count(), expected.count());
-        for (int i = 0; i < expected.count(); ++i) {
+        QCOMPARE(result.size(), expected.size());
+        for (int i = 0; i < expected.size(); ++i) {
             QCOMPARE(result.at(i).atUtc, expected.at(i).atUtc);
             QCOMPARE(result.at(i).offsetFromUtc, expected.at(i).offsetFromUtc);
             QCOMPARE(result.at(i).standardTimeOffset, expected.at(i).standardTimeOffset);
@@ -341,6 +318,11 @@ void tst_QTimeZone::systemZone()
     };
     for (const auto &date : dates)
         QCOMPARE(date.startOfDay(Qt::LocalTime), date.startOfDay(zone));
+
+#if __cpp_lib_chrono >= 201907L
+    const std::chrono::time_zone *currentTimeZone = std::chrono::current_zone();
+    QCOMPARE(QByteArrayView(currentTimeZone->name()), QByteArrayView(zone.id()));
+#endif
 }
 
 void tst_QTimeZone::dataStreamTest()
@@ -404,7 +386,7 @@ void tst_QTimeZone::isTimeZoneIdAvailable()
 {
     const QList<QByteArray> available = QTimeZone::availableTimeZoneIds();
     for (const QByteArray &id : available) {
-        QVERIFY(QTimeZone::isTimeZoneIdAvailable(id));
+        QVERIFY2(QTimeZone::isTimeZoneIdAvailable(id), id);
         QVERIFY2(QTimeZone(id).isValid(), id);
     }
 }
@@ -529,7 +511,7 @@ void tst_QTimeZone::specificTransition_data()
     QTest::addColumn<QDate>("stop");
     QTest::addColumn<int>("count");
     QTest::addColumn<QDateTime>("atUtc");
-    // In minutes:
+    // In seconds:
     QTest::addColumn<int>("offset");
     QTest::addColumn<int>("stdoff");
     QTest::addColumn<int>("dstoff");
@@ -546,7 +528,7 @@ void tst_QTimeZone::specificTransition_data()
     {
         QTest::newRow("Moscow/2014") // From original bug-report
             << QByteArray("Europe/Moscow")
-            << QDate(2011, 4, 1) << QDate(2017, 12,31) << 1
+            << QDate(2011, 4, 1) << QDate(2021, 12, 31) << 1
             << QDateTime(QDate(2014, 10, 26), QTime(2, 0, 0),
                          Qt::OffsetFromUTC, 4 * 3600).toUTC()
             << 3 * 3600 << 3 * 3600 << 0;
@@ -576,14 +558,15 @@ void tst_QTimeZone::specificTransition()
     if (!timeZone.isValid())
         QSKIP("Missing time-zone data");
     QTimeZone::OffsetDataList transits =
-        timeZone.transitions(QDateTime(start, QTime(0, 0), timeZone),
-                             QDateTime(stop, QTime(23, 59), timeZone));
-    QCOMPARE(transits.length(), count);
-    const QTimeZone::OffsetData &transition = transits.at(0);
-    QCOMPARE(transition.offsetFromUtc, offset);
-    QCOMPARE(transition.standardTimeOffset, stdoff);
-    QCOMPARE(transition.daylightTimeOffset, dstoff);
-    QCOMPARE(transition.atUtc, atUtc);
+        timeZone.transitions(start.startOfDay(timeZone), stop.endOfDay(timeZone));
+    QCOMPARE(transits.size(), count);
+    if (count) {
+        const QTimeZone::OffsetData &transition = transits.at(0);
+        QCOMPARE(transition.offsetFromUtc, offset);
+        QCOMPARE(transition.standardTimeOffset, stdoff);
+        QCOMPARE(transition.daylightTimeOffset, dstoff);
+        QCOMPARE(transition.atUtc, atUtc);
+    }
 }
 
 void tst_QTimeZone::transitionEachZone_data()
@@ -598,19 +581,15 @@ void tst_QTimeZone::transitionEachZone_data()
         int start, stop;
         int year;
     } table[] = {
-        { 25666200, 3, 12, 1970 },  // 1970-10-25 01:30 UTC; North America
-        { 1288488600, -4, 8, 2010 } // 2010-10-31 01:30 UTC; Europe, Russia
+        { 1288488600, -4, 8, 2010 }, // 2010-10-31 01:30 UTC; Europe, Russia
+        { 25666200, 3, 12, 1970 },   // 1970-10-25 01:30 UTC; North America
     };
 
     const auto zones = QTimeZone::availableTimeZoneIds();
-    for (int k = std::size(table); k-- > 0; ) {
+    for (const auto &entry : table) {
         for (const QByteArray &zone : zones) {
-            const QString name = QString::asprintf("%s@%d", zone.constData(), table[k].year);
-            QTest::newRow(name.toUtf8().constData())
-                << zone
-                << table[k].baseSecs
-                << table[k].start
-                << table[k].stop;
+            QTest::addRow("%s@%d", zone.constData(), entry.year)
+                << zone << entry.baseSecs << entry.start << entry.stop;
         }
     }
 }
@@ -1559,8 +1538,8 @@ void tst_QTimeZone::testCetPrivate(const QTimeZonePrivate &tzp)
         tran.daylightTimeOffset = 0;
         expected << tran;
         QTimeZonePrivate::DataList result = tzp.transitions(prev, std);
-        QCOMPARE(result.count(), expected.count());
-        for (int i = 0; i < expected.count(); ++i) {
+        QCOMPARE(result.size(), expected.size());
+        for (int i = 0; i < expected.size(); ++i) {
             QCOMPARE(QDateTime::fromMSecsSinceEpoch(result.at(i).atMSecsSinceEpoch,
                                                     Qt::OffsetFromUTC, 3600),
                      QDateTime::fromMSecsSinceEpoch(expected.at(i).atMSecsSinceEpoch,
@@ -1611,6 +1590,47 @@ void tst_QTimeZone::testEpochTranPrivate(const QTimeZonePrivate &tzp)
     }
 }
 #endif // QT_BUILD_INTERNAL
+
+#if __cpp_lib_chrono >= 201907L
+Q_DECLARE_METATYPE(const std::chrono::time_zone *);
+#endif
+
+void tst_QTimeZone::stdCompatibility_data()
+{
+#if __cpp_lib_chrono >= 201907L
+    QTest::addColumn<const std::chrono::time_zone *>("timeZone");
+    const std::chrono::tzdb &tzdb = std::chrono::get_tzdb();
+    qDebug() << "Using tzdb version:" << QByteArrayView(tzdb.version);
+
+    for (const std::chrono::time_zone &zone : tzdb.zones)
+        QTest::addRow(zone.name().data()) << &zone;
+#else
+    QSKIP("This test requires C++20's <chrono>.");
+#endif
+}
+
+void tst_QTimeZone::stdCompatibility()
+{
+#if __cpp_lib_chrono >= 201907L
+    QFETCH(const std::chrono::time_zone *, timeZone);
+    QByteArrayView zoneName = QByteArrayView(timeZone->name());
+    QTimeZone tz = QTimeZone::fromStdTimeZonePtr(timeZone);
+    if (tz.isValid()) {
+        QCOMPARE(tz.id(), zoneName);
+    } else {
+        // QTBUG-102187: a few timezones reported by tzdb might not be
+        // recognized by QTimeZone. This happens for instance on Windows, where
+        // tzdb is using ICU, whose database does not match QTimeZone's.
+        const bool isKnownUnknown =
+                !zoneName.contains('/')
+                || zoneName == "Antarctica/Troll"
+                || zoneName.startsWith("SystemV/");
+        QVERIFY(isKnownUnknown);
+    }
+#else
+    QSKIP("This test requires C++20's <chrono>.");
+#endif
+}
 
 QTEST_APPLESS_MAIN(tst_QTimeZone)
 #include "tst_qtimezone.moc"

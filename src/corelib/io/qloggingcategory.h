@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QLOGGINGCATEGORY_H
 #define QLOGGINGCATEGORY_H
@@ -55,17 +19,11 @@ public:
     bool isEnabled(QtMsgType type) const;
     void setEnabled(QtMsgType type, bool enable);
 
-#ifdef Q_ATOMIC_INT8_IS_SUPPORTED
     bool isDebugEnabled() const { return bools.enabledDebug.loadRelaxed(); }
     bool isInfoEnabled() const { return bools.enabledInfo.loadRelaxed(); }
     bool isWarningEnabled() const { return bools.enabledWarning.loadRelaxed(); }
     bool isCriticalEnabled() const { return bools.enabledCritical.loadRelaxed(); }
-#else
-    bool isDebugEnabled() const { return enabled.loadRelaxed() >> DebugShift & 1; }
-    bool isInfoEnabled() const { return enabled.loadRelaxed() >> InfoShift & 1; }
-    bool isWarningEnabled() const { return enabled.loadRelaxed() >> WarningShift & 1; }
-    bool isCriticalEnabled() const { return enabled.loadRelaxed() >> CriticalShift & 1; }
-#endif
+
     const char *categoryName() const { return name; }
 
     // allows usage of both factory method and variable in qCX macros
@@ -85,19 +43,11 @@ private:
     Q_DECL_UNUSED_MEMBER void *d; // reserved for future use
     const char *name;
 
-#ifdef Q_BIG_ENDIAN
-    enum { DebugShift = 0, WarningShift = 8, CriticalShift = 16, InfoShift = 24 };
-#else
-    enum { DebugShift = 24, WarningShift = 16, CriticalShift = 8, InfoShift = 0};
-#endif
-
     struct AtomicBools {
-#ifdef Q_ATOMIC_INT8_IS_SUPPORTED
         QBasicAtomicInteger<bool> enabledDebug;
         QBasicAtomicInteger<bool> enabledWarning;
         QBasicAtomicInteger<bool> enabledCritical;
         QBasicAtomicInteger<bool> enabledInfo;
-#endif
     };
     union {
         AtomicBools bools;
@@ -112,12 +62,12 @@ template <QtMsgType Which> struct QLoggingCategoryMacroHolder
     static const bool IsOutputEnabled;
     const QLoggingCategory *category = nullptr;
     bool control = false;
-    QLoggingCategoryMacroHolder(const QLoggingCategory &cat)
+    explicit QLoggingCategoryMacroHolder(const QLoggingCategory &cat)
     {
         if (IsOutputEnabled)
             init(cat);
     }
-    QLoggingCategoryMacroHolder(QMessageLogger::CategoryFunction catfunc)
+    explicit QLoggingCategoryMacroHolder(QMessageLogger::CategoryFunction catfunc)
     {
         if (IsOutputEnabled)
             init(catfunc());
@@ -138,8 +88,8 @@ template <QtMsgType Which> struct QLoggingCategoryMacroHolder
             control = cat.isCriticalEnabled();
         }
     }
-    operator const char *() const { return category->categoryName(); }
-    operator bool() const { return Q_UNLIKELY(control); }
+    const char *name() const { return category->categoryName(); }
+    explicit operator bool() const { return Q_UNLIKELY(control); }
 };
 
 template <QtMsgType Which> const bool QLoggingCategoryMacroHolder<Which>::IsOutputEnabled = true;
@@ -166,7 +116,7 @@ template <> const bool QLoggingCategoryMacroHolder<QtWarningMsg>::IsOutputEnable
 
 #define QT_MESSAGE_LOGGER_COMMON(category, level) \
     for (QLoggingCategoryMacroHolder<level> qt_category(category); qt_category; qt_category.control = false) \
-        QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, qt_category)
+        QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, qt_category.name())
 
 #define qCDebug(category, ...) QT_MESSAGE_LOGGER_COMMON(category, QtDebugMsg).debug(__VA_ARGS__)
 #define qCInfo(category, ...) QT_MESSAGE_LOGGER_COMMON(category, QtInfoMsg).info(__VA_ARGS__)

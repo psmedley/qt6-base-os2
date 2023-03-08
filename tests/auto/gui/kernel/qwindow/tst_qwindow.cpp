@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <qrasterwindow.h>
 #include <qpa/qwindowsysteminterface.h>
@@ -95,6 +70,7 @@ private slots:
     void modalWithChildWindow();
     void modalWindowModallity();
     void modalWindowPosition();
+    void modalCloseWhileBlocked();
 #ifndef QT_NO_CURSOR
     void modalWindowEnterEventOnHide_QTBUG35109();
     void spuriousMouseMove();
@@ -110,6 +86,7 @@ private slots:
     void generatedMouseMove();
     void keepPendingUpdateRequests();
     void activateDeactivateEvent();
+    void qobject_castOnDestruction();
     void touchToMouseTranslationByPopup();
 
 private:
@@ -736,7 +713,7 @@ void tst_QWindow::stateChange()
     //  explicitly use non-fullscreen show. show() can be fullscreen on some platforms
     window.showNormal();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
-    for (Qt::WindowState state : qAsConst(stateSequence)) {
+    for (Qt::WindowState state : std::as_const(stateSequence)) {
         window.setWindowState(state);
         QCoreApplication::processEvents();
     }
@@ -1013,7 +990,7 @@ public:
         }
         touchEventType = event->type();
         QList<QTouchEvent::TouchPoint> points = event->points();
-        for (int i = 0; i < points.count(); ++i) {
+        for (int i = 0; i < points.size(); ++i) {
             const auto &point = points.at(i);
             switch (point.state()) {
             case QEventPoint::State::Pressed:
@@ -1530,7 +1507,7 @@ void tst_QWindow::orientation()
 
     QSignalSpy spy(&window, SIGNAL(contentOrientationChanged(Qt::ScreenOrientation)));
     window.reportContentOrientationChange(Qt::LandscapeOrientation);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 }
 
 void tst_QWindow::sizes()
@@ -1549,40 +1526,40 @@ void tst_QWindow::sizes()
     QCOMPARE(window.minimumHeight(), 0);
     QCOMPARE(window.minimumSize(), QSize(10, 0));
     QCOMPARE(window.maximumSize(), oldMaximum);
-    QCOMPARE(minimumWidthSpy.count(), 1);
-    QCOMPARE(minimumHeightSpy.count(), 0);
-    QCOMPARE(maximumWidthSpy.count(), 0);
-    QCOMPARE(maximumHeightSpy.count(), 0);
+    QCOMPARE(minimumWidthSpy.size(), 1);
+    QCOMPARE(minimumHeightSpy.size(), 0);
+    QCOMPARE(maximumWidthSpy.size(), 0);
+    QCOMPARE(maximumHeightSpy.size(), 0);
 
     window.setMinimumHeight(10);
     QCOMPARE(window.minimumWidth(), 10);
     QCOMPARE(window.minimumHeight(), 10);
     QCOMPARE(window.minimumSize(), QSize(10, 10));
     QCOMPARE(window.maximumSize(), oldMaximum);
-    QCOMPARE(minimumWidthSpy.count(), 1);
-    QCOMPARE(minimumHeightSpy.count(), 1);
-    QCOMPARE(maximumWidthSpy.count(), 0);
-    QCOMPARE(maximumHeightSpy.count(), 0);
+    QCOMPARE(minimumWidthSpy.size(), 1);
+    QCOMPARE(minimumHeightSpy.size(), 1);
+    QCOMPARE(maximumWidthSpy.size(), 0);
+    QCOMPARE(maximumHeightSpy.size(), 0);
 
     window.setMaximumWidth(100);
     QCOMPARE(window.maximumWidth(), 100);
     QCOMPARE(window.maximumHeight(), oldMaximum.height());
     QCOMPARE(window.minimumSize(), QSize(10, 10));
     QCOMPARE(window.maximumSize(), QSize(100, oldMaximum.height()));
-    QCOMPARE(minimumWidthSpy.count(), 1);
-    QCOMPARE(minimumHeightSpy.count(), 1);
-    QCOMPARE(maximumWidthSpy.count(), 1);
-    QCOMPARE(maximumHeightSpy.count(), 0);
+    QCOMPARE(minimumWidthSpy.size(), 1);
+    QCOMPARE(minimumHeightSpy.size(), 1);
+    QCOMPARE(maximumWidthSpy.size(), 1);
+    QCOMPARE(maximumHeightSpy.size(), 0);
 
     window.setMaximumHeight(100);
     QCOMPARE(window.maximumWidth(), 100);
     QCOMPARE(window.maximumHeight(), 100);
     QCOMPARE(window.minimumSize(), QSize(10, 10));
     QCOMPARE(window.maximumSize(), QSize(100, 100));
-    QCOMPARE(minimumWidthSpy.count(), 1);
-    QCOMPARE(minimumHeightSpy.count(), 1);
-    QCOMPARE(maximumWidthSpy.count(), 1);
-    QCOMPARE(maximumHeightSpy.count(), 1);
+    QCOMPARE(minimumWidthSpy.size(), 1);
+    QCOMPARE(minimumHeightSpy.size(), 1);
+    QCOMPARE(maximumWidthSpy.size(), 1);
+    QCOMPARE(maximumHeightSpy.size(), 1);
 }
 
 class CloseOnCloseEventWindow : public QWindow
@@ -1814,25 +1791,25 @@ void tst_QWindow::windowModality()
     QCOMPARE(window.modality(), Qt::NonModal);
     window.setModality(Qt::NonModal);
     QCOMPARE(window.modality(), Qt::NonModal);
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
 
     window.setModality(Qt::WindowModal);
     QCOMPARE(window.modality(), Qt::WindowModal);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     window.setModality(Qt::WindowModal);
     QCOMPARE(window.modality(), Qt::WindowModal);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     window.setModality(Qt::ApplicationModal);
     QCOMPARE(window.modality(), Qt::ApplicationModal);
-    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.size(), 2);
     window.setModality(Qt::ApplicationModal);
     QCOMPARE(window.modality(), Qt::ApplicationModal);
-    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.size(), 2);
 
     window.setModality(Qt::NonModal);
     QCOMPARE(window.modality(), Qt::NonModal);
-    QCOMPARE(spy.count(), 3);
+    QCOMPARE(spy.size(), 3);
 }
 
 void tst_QWindow::inputReentrancy()
@@ -2015,32 +1992,32 @@ void tst_QWindow::visibility()
     QVERIFY(window.isVisible());
     QVERIFY(window.visibility() != QWindow::Hidden);
     QVERIFY(window.visibility() != QWindow::AutomaticVisibility);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     spy.clear();
 
     window.setVisibility(QWindow::Hidden);
     QVERIFY(!window.isVisible());
     QCOMPARE(window.visibility(), QWindow::Hidden);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     spy.clear();
 
     window.setVisibility(QWindow::FullScreen);
     QVERIFY(window.isVisible());
     QCOMPARE(window.windowState(), Qt::WindowFullScreen);
     QCOMPARE(window.visibility(), QWindow::FullScreen);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QTRY_COMPARE(window.lastReceivedWindowState, Qt::WindowFullScreen);
     spy.clear();
 
     window.setWindowState(Qt::WindowNoState);
     QCOMPARE(window.visibility(), QWindow::Windowed);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QTRY_COMPARE(window.lastReceivedWindowState, Qt::WindowNoState);
     spy.clear();
 
     window.setVisible(false);
     QCOMPARE(window.visibility(), QWindow::Hidden);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     spy.clear();
 }
 
@@ -2087,8 +2064,6 @@ void tst_QWindow::initialSize()
     w.setTitle(QLatin1String(QTest::currentTestFunction()));
     w.setWidth(m_testWindowSize.width());
     w.showNormal();
-    if (isPlatformWayland())
-        QEXPECT_FAIL("", "Wayland: This fails. See QTBUG-66818.", Abort);
     QTRY_COMPARE(w.width(), m_testWindowSize.width());
     QTRY_VERIFY(w.height() > 0);
     }
@@ -2264,6 +2239,9 @@ void tst_QWindow::modalWindowModallity()
 
 void tst_QWindow::modalWindowPosition()
 {
+    if (isPlatformWayland())
+        QSKIP("Window position not queryable on Wayland");
+
     QWindow window;
     window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.setGeometry(QRect(m_availableTopLeft + QPoint(100, 100), m_testWindowSize));
@@ -2272,9 +2250,23 @@ void tst_QWindow::modalWindowPosition()
     window.setModality(Qt::WindowModal);
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
-    if (isPlatformWayland())
-        QEXPECT_FAIL("", "Wayland: This fails. See QTBUG-100888.", Abort);
     QCOMPARE(window.geometry(), origGeo);
+}
+
+void tst_QWindow::modalCloseWhileBlocked()
+{
+    QWindow first;
+    first.setModality(Qt::ApplicationModal);
+    first.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&first));
+
+    QWindow second;
+    second.setModality(Qt::ApplicationModal);
+    second.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&first));
+
+    first.close();
+    QTRY_VERIFY(!first.isVisible());
 }
 
 #ifndef QT_NO_CURSOR
@@ -2728,6 +2720,19 @@ void tst_QWindow::activateDeactivateEvent()
     QVERIFY(QTest::qWaitForWindowActive(&w2));
     QCOMPARE(w1.deactivateCount, 1);
     QCOMPARE(w2.activateCount, 1);
+}
+
+// Test that in a slot connected to destroyed() the emitter is
+// is no longer a QWindow.
+void tst_QWindow::qobject_castOnDestruction()
+{
+    QWindow window;
+    QObject::connect(&window, &QObject::destroyed, [](QObject *object)
+    {
+        QVERIFY(!qobject_cast<QWindow *>(object));
+        QVERIFY(!dynamic_cast<QWindow *>(object));
+        QVERIFY(!object->isWindowType());
+    });
 }
 
 void tst_QWindow::touchToMouseTranslationByPopup()

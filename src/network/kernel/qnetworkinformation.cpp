@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 // #define DEBUG_LOADING
 
@@ -124,7 +88,7 @@ bool QNetworkInformationPrivate::initializeList()
         return false;
     if (!dataHolder())
         return false;
-    static QBasicMutex mutex;
+    Q_CONSTINIT static QBasicMutex mutex;
     QMutexLocker initLocker(&mutex);
 
 #if QT_CONFIG(library)
@@ -223,7 +187,7 @@ QNetworkInformation *QNetworkInformationPrivate::create(QStringView name)
         } else {
             QString listNames;
             listNames.reserve(8 * dataHolder->factories.count());
-            for (const auto *factory : qAsConst(dataHolder->factories))
+            for (const auto *factory : std::as_const(dataHolder->factories))
                 listNames += factory->name() + QStringLiteral(", ");
             listNames.chop(2);
             qDebug().nospace() << "Couldn't find " << name << " in list with names: { "
@@ -279,7 +243,7 @@ QNetworkInformation *QNetworkInformationPrivate::create(QNetworkInformation::Fea
             } else {
                 QStringList names;
                 names.reserve(dataHolder->factories.count());
-                for (const auto *factory : qAsConst(dataHolder->factories))
+                for (const auto *factory : std::as_const(dataHolder->factories))
                     names += factory->name();
                 qDebug() << "None of the following backends has all the requested features:"
                          << names << features;
@@ -678,10 +642,12 @@ bool QNetworkInformation::loadDefaultBackend()
 #endif
     if (index == -1)
         return false;
-    return load(QNetworkInformationBackend::PluginNames[index]);
+    return loadBackendByName(QNetworkInformationBackend::PluginNames[index]);
 }
 
 /*!
+    \since 6.4
+
     Attempts to load a backend whose name matches \a backend
     (case insensitively).
 
@@ -690,13 +656,26 @@ bool QNetworkInformation::loadDefaultBackend()
 
     \sa instance
 */
-bool QNetworkInformation::load(QStringView backend)
+bool QNetworkInformation::loadBackendByName(QStringView backend)
 {
     auto loadedBackend = QNetworkInformationPrivate::create(backend);
     return loadedBackend && loadedBackend->backendName().compare(backend, Qt::CaseInsensitive) == 0;
 }
 
+#if QT_DEPRECATED_SINCE(6,4)
 /*!
+    \deprecated [6.4] Use loadBackendByName() instead.
+
+    \sa loadBackendByName(), loadDefaultBackend(), loadBackendByFeatures()
+*/
+bool QNetworkInformation::load(QStringView backend)
+{
+    return loadBackendByName(backend);
+}
+#endif // QT_DEPRECATED_SINCE(6,4)
+
+/*!
+    \since 6.4
     Load a backend which supports \a features.
 
     Returns \c true if it managed to load the requested backend or
@@ -704,11 +683,23 @@ bool QNetworkInformation::load(QStringView backend)
 
     \sa instance
 */
-bool QNetworkInformation::load(Features features)
+bool QNetworkInformation::loadBackendByFeatures(Features features)
 {
     auto loadedBackend = QNetworkInformationPrivate::create(features);
     return loadedBackend && loadedBackend->supports(features);
 }
+
+#if QT_DEPRECATED_SINCE(6,4)
+/*!
+    \deprecated [6.4] Use loadBackendByFeatures() instead.
+
+    \sa loadBackendByName(), loadDefaultBackend(), loadBackendByFeatures()
+*/
+bool QNetworkInformation::load(Features features)
+{
+    return loadBackendByFeatures(features);
+}
+#endif // QT_DEPRECATED_SINCE(6,4)
 
 /*!
     Returns a list of the names of all currently available backends.
@@ -730,3 +721,6 @@ QNetworkInformation *QNetworkInformation::instance()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qnetworkinformation.cpp"
+#include "moc_qnetworkinformation_p.cpp"

@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtDBus module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qdbusabstractinterface.h"
 #include "qdbusabstractinterface_p.h"
@@ -57,6 +21,8 @@
 #ifndef QT_NO_DBUS
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 namespace {
 // ### Qt6: change to a regular QEvent (customEvent)
@@ -163,9 +129,8 @@ bool QDBusAbstractInterfacePrivate::property(const QMetaProperty &mp, void *retu
             qWarning("QDBusAbstractInterface: type %s must be registered with Qt D-Bus before it can be "
                      "used to read property %s.%s",
                      mp.typeName(), qPrintable(interface), mp.name());
-            lastError = QDBusError(QDBusError::Failed,
-                                   QLatin1String("Unregistered type %1 cannot be handled")
-                                   .arg(QLatin1String(mp.typeName())));
+            lastError = QDBusError(QDBusError::Failed, "Unregistered type %1 cannot be handled"_L1
+                                   .arg(QLatin1StringView(mp.typeName())));
             return false;
         }
     }
@@ -182,9 +147,9 @@ bool QDBusAbstractInterfacePrivate::property(const QMetaProperty &mp, void *retu
         lastError = QDBusError(reply);
         return false;
     }
-    if (reply.signature() != QLatin1String("v")) {
-        QString errmsg = QLatin1String("Invalid signature `%1' in return from call to "
-                                       DBUS_INTERFACE_PROPERTIES);
+    if (reply.signature() != "v"_L1) {
+        QString errmsg = "Invalid signature `%1' in return from call to "
+                         DBUS_INTERFACE_PROPERTIES ""_L1;
         lastError = QDBusError(QDBusError::InvalidSignature, std::move(errmsg).arg(reply.signature()));
         return false;
     }
@@ -220,15 +185,15 @@ bool QDBusAbstractInterfacePrivate::property(const QMetaProperty &mp, void *retu
     }
 
     // there was an error...
-    const auto errmsg = QLatin1String("Unexpected `%1' (%2) when retrieving property `%3.%4' "
-                                      "(expected type `%5' (%6))");
+    const auto errmsg = "Unexpected `%1' (%2) when retrieving property `%3.%4' "
+                        "(expected type `%5' (%6))"_L1;
     lastError = QDBusError(QDBusError::InvalidSignature,
-                           errmsg.arg(QLatin1String(foundType),
-                                      QLatin1String(foundSignature),
+                           errmsg.arg(QLatin1StringView(foundType),
+                                      QLatin1StringView(foundSignature),
                                       interface,
-                                      QLatin1String(mp.name()),
-                                      QLatin1String(mp.typeName()),
-                                      QLatin1String(expectedSignature)));
+                                      QLatin1StringView(mp.name()),
+                                      QLatin1StringView(mp.typeName()),
+                                      QLatin1StringView(expectedSignature)));
     return false;
 }
 
@@ -460,7 +425,7 @@ QDBusMessage QDBusAbstractInterface::callWithArgumentList(QDBus::CallMode mode,
 
     QString m = method;
     // split out the signature from the method
-    int pos = method.indexOf(QLatin1Char('.'));
+    int pos = method.indexOf(u'.');
     if (pos != -1)
         m.truncate(pos);
 

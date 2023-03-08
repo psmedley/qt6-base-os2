@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2021 Intel Corporation.
-** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2021 Intel Corporation.
+// Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qvariant.h"
 #include "qbitarray.h"
@@ -45,6 +9,7 @@
 #include "qdatastream.h"
 #include "qdebug.h"
 #include "qmap.h"
+#include "qhash.h"
 #include "qdatetime.h"
 #if QT_CONFIG(easingcurve)
 #include "qeasingcurve.h"
@@ -88,6 +53,8 @@
 #include <cstring>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 namespace { // anonymous used to hide QVariant handlers
 
@@ -153,11 +120,11 @@ static qlonglong qConvertToNumber(const QVariant::Private *d, bool *ok, bool all
         if (*ok)
             return l;
         if (allowStringToBool) {
-            if (s == QLatin1String("false") || s == QLatin1String("0")) {
+            if (s == "false"_L1 || s == "0"_L1) {
                 *ok = true;
                 return 0;
             }
-            if (s == QLatin1String("true") || s == QLatin1String("1")) {
+            if (s == "true"_L1 || s == "1"_L1) {
                 *ok = true;
                 return 1;
             }
@@ -403,7 +370,7 @@ static void customClear(QVariant::Private *d)
     \value EasingCurve a QEasingCurve
     \value Uuid a QUuid
     \value ModelIndex a QModelIndex
-    \value PersistentModelIndex a QPersistentModelIndex (since 5.5)
+    \value [since 5.5] PersistentModelIndex a QPersistentModelIndex
     \value Font  a QFont
     \value Hash a QVariantHash
     \value Icon  a QIcon
@@ -547,7 +514,7 @@ QVariant::QVariant(const QVariant &p)
 */
 
 /*!
-  \fn QVariant::QVariant(QLatin1String val)
+    \fn QVariant::QVariant(QLatin1StringView val)
 
     Constructs a new variant with a string value, \a val.
 */
@@ -859,7 +826,7 @@ QVariant::QVariant(const QString &val)
 QVariant::QVariant(QChar val)
     : d(QMetaType::fromType<QChar>())
 { v_construct<QChar>(&d, val);  }
-QVariant::QVariant(QLatin1String val)
+QVariant::QVariant(QLatin1StringView val)
     : d(QMetaType::fromType<QString>())
 { v_construct<QString>(&d, val); }
 QVariant::QVariant(const QStringList &val)
@@ -1102,7 +1069,7 @@ void QVariant::clear()
 
 /*!
     \fn QVariant::Type QVariant::nameToType(const char *name)
-    \deprecated [6.0] Use \c QMetaType.fromName(name).id() instead
+    \deprecated [6.0] Use \c QMetaType::fromName(name).id() instead
 
     Converts the string representation of the storage type given in \a
     name, to its enum representation.
@@ -1345,8 +1312,20 @@ void QVariant::save(QDataStream &s) const
 
 /*!
     \since 4.4
+    \relates QVariant
 
     Reads a variant \a p from the stream \a s.
+
+    \note If the stream contains types that aren't the built-in ones (see \l
+    QMetaType::Type), those types must be registered using qRegisterMetaType()
+    or QMetaType::registerType() before the variant can be properly loaded. If
+    an unregistered type is found, QVariant will set the corrupt flag in the
+    stream, stop processing and print a warning. For example, for QList<int>
+    it would print the following:
+
+    \quotation
+    QVariant::load: unknown user type with name QList<int>
+    \endquotation
 
     \sa{Serializing Qt Data Types}{Format of the QDataStream operators}
 */
@@ -1358,6 +1337,7 @@ QDataStream &operator>>(QDataStream &s, QVariant &p)
 
 /*!
     Writes a variant \a p to the stream \a s.
+    \relates QVariant
 
     \sa{Serializing Qt Data Types}{Format of the QDataStream operators}
 */
@@ -1423,8 +1403,13 @@ QString QVariant::toString() const
 }
 
 /*!
-    Returns the variant as a QMap<QString, QVariant> if the variant
-    has type() \l QMetaType::QVariantMap; otherwise returns an empty map.
+    Returns the variant as a QVariantMap if the variant has type() \l
+    QMetaType::QVariantMap. If it doesn't, QVariant will attempt to
+    convert the type to a map and then return it. This will succeed for
+    any type that has registered a converter to QVariantMap or which was
+    declared as a associative container using
+    \l{Q_DECLARE_ASSOCIATIVE_CONTAINER_METATYPE}. If none of those
+    conditions are true, this function will return an empty map.
 
     \sa canConvert(), convert()
 */
@@ -1974,9 +1959,13 @@ qreal QVariant::toReal(bool *ok) const
 }
 
 /*!
-    Returns the variant as a QVariantList if the variant has userType()
-    \l QMetaType::QVariantList or \l QMetaType::QStringList; otherwise returns
-    an empty list.
+    Returns the variant as a QVariantList if the variant has userType() \l
+    QMetaType::QVariantList. If it doesn't, QVariant will attempt to convert
+    the type to a list and then return it. This will succeed for any type that
+    has registered a converter to QVariantList or which was declared as a
+    sequential container using \l{Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE}. If
+    none of those conditions are true, this function will return an empty
+    list.
 
     \sa canConvert(), convert()
 */
@@ -2627,9 +2616,6 @@ QT_WARNING_POP
     Example:
 
     \snippet code/src_corelib_kernel_qvariant.cpp 7
-
-    \note If you are working with custom types, you should use
-    the Q_DECLARE_METATYPE() macro to register your custom type.
 
     \sa setValue(), value()
 */

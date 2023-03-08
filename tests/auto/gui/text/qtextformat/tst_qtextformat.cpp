@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -212,7 +187,7 @@ void tst_QTextFormat::resolveFont()
     QTextCursor(&doc).insertText("Test", fmt);
 
     QList<QTextFormat> formats = doc.allFormats();
-    QCOMPARE(formats.count(), 3);
+    QCOMPARE(formats.size(), 3);
 
     QCOMPARE(formats.at(2).type(), int(QTextFormat::CharFormat));
     fmt = formats.at(2).toCharFormat();
@@ -337,8 +312,8 @@ void tst_QTextFormat::getSetTabs()
       public:
         Comparator(const QList<QTextOption::Tab> &tabs, const QList<QTextOption::Tab> &tabs2)
         {
-            QCOMPARE(tabs.count(), tabs2.count());
-            for(int i=0; i < tabs.count(); i++) {
+            QCOMPARE(tabs.size(), tabs2.size());
+            for(int i=0; i < tabs.size(); i++) {
                 QTextOption::Tab t1 = tabs[i];
                 QTextOption::Tab t2 = tabs2[i];
                 QCOMPARE(t1.position, t2.position);
@@ -389,7 +364,7 @@ void tst_QTextFormat::testTabsUsed()
     QCOMPARE(line.cursorToX(4), 100.);
 
     QTextOption option = layout->textOption();
-    QCOMPARE(option.tabs().count(), tabs.count());
+    QCOMPARE(option.tabs().size(), tabs.size());
 
 }
 
@@ -673,16 +648,16 @@ void tst_QTextFormat::clearCollection()
     charFormat2.setUnderlineStyle(QTextCharFormat::SingleUnderline);
     int formatIndex2 = collection.indexForFormat(charFormat2);
     QCOMPARE(formatIndex2, 1);
-    QCOMPARE(collection.formats.count(), 2);
-    QCOMPARE(collection.hashes.count(), 2);
+    QCOMPARE(collection.formats.size(), 2);
+    QCOMPARE(collection.hashes.size(), 2);
     QCOMPARE(collection.defaultFont(), f);
 
     collection.clear();
-    QCOMPARE(collection.formats.count(), 0);
-    QCOMPARE(collection.hashes.count(), 0);
+    QCOMPARE(collection.formats.size(), 0);
+    QCOMPARE(collection.hashes.size(), 0);
     QCOMPARE(collection.indexForFormat(charFormat2), 0);
-    QCOMPARE(collection.formats.count(), 1);
-    QCOMPARE(collection.hashes.count(), 1);
+    QCOMPARE(collection.formats.size(), 1);
+    QCOMPARE(collection.hashes.size(), 1);
     QCOMPARE(collection.defaultFont(), f); // kept, QTextDocument::clear or setPlainText should not reset the font set by setDefaultFont
 }
 

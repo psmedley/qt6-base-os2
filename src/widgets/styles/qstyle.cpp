@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qstyle.h"
 #include "qapplication.h"
@@ -412,6 +376,9 @@ QStyle::QStyle(QStylePrivate &dd)
 {
   Q_D(QStyle);
   d->proxyStyle = this;
+  Q_STATIC_ASSERT_X(int(StandardPixmap::NStandardPixmap) ==
+                    int(QPlatformTheme::StandardPixmap::NStandardPixmap),
+                    "StandardPixmap in QPlatformTheme and QStyle out of sync");
 }
 
 /*!
@@ -2120,6 +2087,7 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
     \value [since 5.14] SP_DialogIgnoreButton Icon for a standard Ignore button in a QDialogButtonBox.
     \value [since 5.14] SP_RestoreDefaultsButton Icon for a standard RestoreDefaults button in a QDialogButtonBox.
     \value [since 6.3] SP_TabCloseButton Icon for the close button in the tab of a QTabBar.
+    \omitvalue NStandardPixmap
     \value SP_CustomBase  Base value for custom standard pixmaps;
     custom values must be greater than this value.
 
@@ -2257,10 +2225,12 @@ Qt::Alignment QStyle::visualAlignment(Qt::LayoutDirection direction, Qt::Alignme
 
 int QStyle::sliderPositionFromValue(int min, int max, int logicalValue, int span, bool upsideDown)
 {
-    if (span <= 0 || logicalValue < min || max <= min)
+    if (span <= 0 || max <= min)
         return 0;
+    if (logicalValue < min)
+        return upsideDown ? span : 0;
     if (logicalValue > max)
-        return upsideDown ? span : min;
+        return upsideDown ? 0 : span;
 
     const uint range = qint64(max) - min;
     const uint p = upsideDown ? qint64(max) - logicalValue : qint64(logicalValue) - min;

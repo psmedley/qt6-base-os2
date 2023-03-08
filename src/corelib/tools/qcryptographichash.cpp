@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2013 Richard J. Moore <rich@kde.org>.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2013 Richard J. Moore <rich@kde.org>.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <qcryptographichash.h>
 #include <qiodevice.h>
@@ -79,17 +43,17 @@ typedef HashReturn (SHA3Final)(hashState *state, BitSequence *hashval);
 
 #include "../../3rdparty/sha3/KeccakF-1600-opt64.c"
 
-static SHA3Init * const sha3Init = Init;
-static SHA3Update * const sha3Update = Update;
-static SHA3Final * const sha3Final = Final;
+Q_CONSTINIT static SHA3Init * const sha3Init = Init;
+Q_CONSTINIT static SHA3Update * const sha3Update = Update;
+Q_CONSTINIT static SHA3Final * const sha3Final = Final;
 
 #else // 32 bit optimised fallback
 
 #include "../../3rdparty/sha3/KeccakF-1600-opt32.c"
 
-static SHA3Init * const sha3Init = Init;
-static SHA3Update * const sha3Update = Update;
-static SHA3Final * const sha3Final = Final;
+Q_CONSTINIT static SHA3Init * const sha3Init = Init;
+Q_CONSTINIT static SHA3Update * const sha3Update = Update;
+Q_CONSTINIT static SHA3Final * const sha3Final = Final;
 
 #endif
 
@@ -236,7 +200,7 @@ public:
         qsizetype size() const noexcept { return qsizetype{m_size}; }
         bool isEmpty() const noexcept { return size() == 0; }
         void clear() noexcept { m_size = 0; }
-        void resize(qsizetype s) {
+        void resizeForOverwrite(qsizetype s) {
             Q_ASSERT(s >= 0);
             Q_ASSERT(s <= MaxHashLength);
             m_size = std::uint8_t(s);
@@ -272,7 +236,7 @@ void QCryptographicHashPrivate::sha3Finish(int bitCount, Sha3Variant sha3Variant
     */
     static const unsigned char sha3FinalSuffix = 0x80;
 
-    result.resize(bitCount / 8);
+    result.resizeForOverwrite(bitCount / 8);
 
     SHA3Context copy = sha3Context;
 
@@ -587,7 +551,7 @@ void QCryptographicHashPrivate::finalize() noexcept
     switch (method) {
     case QCryptographicHash::Sha1: {
         Sha1State copy = sha1Context;
-        result.resize(20);
+        result.resizeForOverwrite(20);
         sha1FinalizeState(&copy);
         sha1ToHash(&copy, (unsigned char *)result.data());
         break;
@@ -600,37 +564,37 @@ void QCryptographicHashPrivate::finalize() noexcept
 #else
     case QCryptographicHash::Md4: {
         md4_context copy = md4Context;
-        result.resize(MD4_RESULTLEN);
+        result.resizeForOverwrite(MD4_RESULTLEN);
         md4_final(&copy, (unsigned char *)result.data());
         break;
     }
     case QCryptographicHash::Md5: {
         MD5Context copy = md5Context;
-        result.resize(16);
+        result.resizeForOverwrite(16);
         MD5Final(&copy, (unsigned char *)result.data());
         break;
     }
     case QCryptographicHash::Sha224: {
         SHA224Context copy = sha224Context;
-        result.resize(SHA224HashSize);
+        result.resizeForOverwrite(SHA224HashSize);
         SHA224Result(&copy, reinterpret_cast<unsigned char *>(result.data()));
         break;
     }
     case QCryptographicHash::Sha256: {
         SHA256Context copy = sha256Context;
-        result.resize(SHA256HashSize);
+        result.resizeForOverwrite(SHA256HashSize);
         SHA256Result(&copy, reinterpret_cast<unsigned char *>(result.data()));
         break;
     }
     case QCryptographicHash::Sha384: {
         SHA384Context copy = sha384Context;
-        result.resize(SHA384HashSize);
+        result.resizeForOverwrite(SHA384HashSize);
         SHA384Result(&copy, reinterpret_cast<unsigned char *>(result.data()));
         break;
     }
     case QCryptographicHash::Sha512: {
         SHA512Context copy = sha512Context;
-        result.resize(SHA512HashSize);
+        result.resizeForOverwrite(SHA512HashSize);
         SHA512Result(&copy, reinterpret_cast<unsigned char *>(result.data()));
         break;
     }
@@ -654,7 +618,7 @@ void QCryptographicHashPrivate::finalize() noexcept
     case QCryptographicHash::Blake2b_512: {
         const auto length = hashLengthInternal(method);
         blake2b_state copy = blake2bContext;
-        result.resize(length);
+        result.resizeForOverwrite(length);
         blake2b_final(&copy, reinterpret_cast<uint8_t *>(result.data()), length);
         break;
     }
@@ -664,7 +628,7 @@ void QCryptographicHashPrivate::finalize() noexcept
     case QCryptographicHash::Blake2s_256: {
         const auto length = hashLengthInternal(method);
         blake2s_state copy = blake2sContext;
-        result.resize(length);
+        result.resizeForOverwrite(length);
         blake2s_final(&copy, reinterpret_cast<uint8_t *>(result.data()), length);
         break;
     }

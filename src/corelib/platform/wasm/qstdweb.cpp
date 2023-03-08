@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qstdweb_p.h"
 
@@ -68,6 +32,11 @@ uint32_t ArrayBuffer::byteLength() const
     return m_arrayBuffer["byteLength"].as<uint32_t>();
 }
 
+emscripten::val ArrayBuffer::val()
+{
+    return m_arrayBuffer;
+}
+
 Blob::Blob(const emscripten::val &blob)
     :m_blob(blob)
 {
@@ -85,7 +54,7 @@ Blob Blob::copyFrom(const char *buffer, uint32_t size)
     Uint8Array contentCopy = Uint8Array::copyFrom(buffer, size);
 
     emscripten::val contentArray = emscripten::val::array();
-    contentArray.call<void>("push", contentCopy.m_uint8Array);
+    contentArray.call<void>("push", contentCopy.val());
     emscripten::val type = emscripten::val::object();
     type.set("type","application/octet-stream");
     return Blob(emscripten::val::global("Blob").new_(contentArray, type));
@@ -151,7 +120,7 @@ void File::stream(uint32_t offset, uint32_t length, char *buffer, const std::fun
             return;
         }
         char *nextChunkBuffer = chunkBuffer + result.byteLength();
-        fileReader->onLoad([=]() { (*chunkCompleted)(nextChunkBegin, nextChunkBuffer); });
+        fileReader->onLoad([=](emscripten::val) { (*chunkCompleted)(nextChunkBegin, nextChunkBuffer); });
         qstdweb::Blob blob = fileHandle.slice(nextChunkBegin, nextChunkEnd);
         fileReader->readAsArrayBuffer(blob);
     };
@@ -170,6 +139,11 @@ void File::stream(char *buffer, const std::function<void ()> &completed) const
 std::string File::type() const
 {
     return m_file["type"].as<std::string>();
+}
+
+emscripten::val File::val()
+{
+    return m_file;
 }
 
 FileList::FileList(const emscripten::val &fileList)
@@ -203,19 +177,24 @@ void FileReader::readAsArrayBuffer(const Blob &blob) const
     m_fileReader.call<void>("readAsArrayBuffer", blob.m_blob);
 }
 
-void FileReader::onLoad(const std::function<void ()> &onLoad)
+void FileReader::onLoad(const std::function<void(emscripten::val)> &onLoad)
 {
     m_onLoad.reset(new EventCallback(m_fileReader, "load", onLoad));
 }
 
-void FileReader::onError(const std::function<void ()> &onError)
+void FileReader::onError(const std::function<void(emscripten::val)> &onError)
 {
     m_onError.reset(new EventCallback(m_fileReader, "error", onError));
 }
 
-void FileReader::onAbort(const std::function<void ()> &onAbort)
+void FileReader::onAbort(const std::function<void(emscripten::val)> &onAbort)
 {
     m_onAbort.reset(new EventCallback(m_fileReader, "abort", onAbort));
+}
+
+emscripten::val FileReader::val()
+{
+    return m_fileReader;
 }
 
 Uint8Array Uint8Array::heap()
@@ -273,13 +252,13 @@ void Uint8Array::set(const Uint8Array &source)
     m_uint8Array.call<void>("set", source.m_uint8Array); // copies source content
 }
 
-// Copies the Uint8Array conent to a destination on the heap
+// Copies the Uint8Array content to a destination on the heap
 void Uint8Array::copyTo(char *destination) const
 {
     Uint8Array(destination, length()).set(*this);
 }
 
-// Copies the Uint8Array conent to a destination on the heap
+// Copies the Uint8Array content to a destination on the heap
 void Uint8Array::copy(char *destination, const Uint8Array &source)
 {
     Uint8Array(destination, source.length()).set(source);
@@ -291,6 +270,11 @@ Uint8Array Uint8Array::copyFrom(const char *buffer, uint32_t size)
     Uint8Array contentCopy(size);
     contentCopy.set(Uint8Array(buffer, size));
     return contentCopy;
+}
+
+emscripten::val Uint8Array::val()
+{
+    return m_uint8Array;
 }
 
 emscripten::val Uint8Array::heap_()
@@ -305,11 +289,22 @@ emscripten::val Uint8Array::constructor_()
 
 // Registers a callback function for a named event on the given element. The event
 // name must be the name as returned by the Event.type property: e.g. "load", "error".
-EventCallback::EventCallback(emscripten::val element, const std::string &name, const std::function<void ()> &fn)
-:m_fn(fn)
+EventCallback::~EventCallback()
 {
-    element.set(contextPropertyName(name).c_str(), emscripten::val(intptr_t(this)));
-    element.set((std::string("on") + name).c_str(), emscripten::val::module_property("qtStdWebEventCallbackActivate"));
+    // Clean up if this instance's callback is still installed on the element
+    if (m_element[contextPropertyName(m_eventName).c_str()].as<intptr_t>() == intptr_t(this)) {
+        m_element.set(contextPropertyName(m_eventName).c_str(), emscripten::val::undefined());
+        m_element.set((std::string("on") + m_eventName).c_str(), emscripten::val::undefined());
+    }
+}
+
+EventCallback::EventCallback(emscripten::val element, const std::string &name, const std::function<void(emscripten::val)> &fn)
+    :m_element(element)
+    ,m_eventName(name)
+    ,m_fn(fn)
+{
+    m_element.set(contextPropertyName(m_eventName).c_str(), emscripten::val(intptr_t(this)));
+    m_element.set((std::string("on") + m_eventName).c_str(), emscripten::val::module_property("qtStdWebEventCallbackActivate"));
 }
 
 void EventCallback::activate(emscripten::val event)
@@ -317,7 +312,7 @@ void EventCallback::activate(emscripten::val event)
     emscripten::val target = event["target"];
     std::string eventName = event["type"].as<std::string>();
     EventCallback *that = reinterpret_cast<EventCallback *>(target[contextPropertyName(eventName).c_str()].as<intptr_t>());
-    that->m_fn();
+    that->m_fn(event);
 }
 
 std::string EventCallback::contextPropertyName(const std::string &eventName)

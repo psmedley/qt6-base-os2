@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtNetwork/qtnetworkglobal.h>
 
@@ -62,6 +37,8 @@ Q_DECLARE_METATYPE(QNetworkRequest::Attribute)
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 QHttp2Configuration qt_defaultH2Configuration()
 {
     QHttp2Configuration config;
@@ -92,6 +69,7 @@ public slots:
     void init();
 private slots:
     // Tests:
+    void defaultQnamHttp2Configuration();
     void singleRequest_data();
     void singleRequest();
     void multipleRequests();
@@ -231,6 +209,12 @@ void tst_Http2::init()
     manager.reset(new QNetworkAccessManager);
 }
 
+void tst_Http2::defaultQnamHttp2Configuration()
+{
+    // The configuration we also implicitly use in QNAM.
+    QCOMPARE(qt_defaultH2Configuration(), QNetworkRequest().http2Configuration());
+}
+
 void tst_Http2::singleRequest_data()
 {
     QTest::addColumn<QNetworkRequest::Attribute>("h2Attribute");
@@ -308,7 +292,7 @@ void tst_Http2::singleRequest()
 
 #if QT_CONFIG(ssl)
     if (connectionType == H2Type::h2Alpn || connectionType == H2Type::h2Direct)
-        QCOMPARE(encSpy.count(), 1);
+        QCOMPARE(encSpy.size(), 1);
 #endif // QT_CONFIG(ssl)
 }
 
@@ -796,7 +780,7 @@ void tst_Http2::maxFrameSize()
 
     // Normally, with a 16kb limit, our server would split such
     // a response into 3 'DATA' frames (16kb + 16kb + 0|END_STREAM).
-    QCOMPARE(frameCounter.count(), 1);
+    QCOMPARE(frameCounter.size(), 1);
 
     QVERIFY(nRequests == 0);
     QVERIFY(prefaceOK);
@@ -1245,7 +1229,7 @@ void tst_Http2::redirect()
     QFETCH(const int, maxRedirects);
     QFETCH(const int, redirectCount);
     QFETCH(const bool, success);
-    const QByteArray redirectUrl = "/b.html"_qba;
+    const QByteArray redirectUrl = "/b.html"_ba;
 
     clearHTTP2State();
     serverPort = 0;

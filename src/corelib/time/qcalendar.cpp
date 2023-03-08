@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #include "qcalendar.h"
 #include "qcalendarbackend_p.h"
 #include "qgregoriancalendar_p.h"
@@ -50,6 +14,7 @@
 #include "qislamiccivilcalendar_p.h"
 #endif
 
+#include <private/qflatmap_p.h>
 #include "qatomic.h"
 #include "qdatetime.h"
 #include "qcalendarmath_p.h"
@@ -62,22 +27,15 @@ QT_BEGIN_NAMESPACE
 
 namespace {
 
-struct CalendarName : public QString
-{
-    CalendarName(const QString &name) : QString(name) {}
+struct CaseInsensitiveAnyStringViewLessThan {
+    struct is_transparent {};
+    bool operator()(QAnyStringView lhs, QAnyStringView rhs) const
+    {
+        return QAnyStringView::compare(lhs, rhs, Qt::CaseInsensitive) < 0;
+    }
 };
 
-inline bool operator==(const CalendarName &u, const CalendarName &v)
-{
-    return u.compare(v, Qt::CaseInsensitive) == 0;
-}
-
-inline size_t qHash(const CalendarName &key, size_t seed = 0) noexcept
-{
-    return qHash(key.toLower(), seed);
-}
-
-} // anonymous namespace
+} // unnamed namespace
 
 namespace QtPrivate {
 
@@ -88,6 +46,8 @@ namespace QtPrivate {
 class QCalendarRegistry
 {
     Q_DISABLE_COPY_MOVE(QCalendarRegistry); // This is a singleton.
+
+    static constexpr qsizetype ExpectedNumberOfBackends = qsizetype(QCalendar::System::Last) + 1;
 
     /*
         Lock protecting the registry from concurrent modification.
@@ -108,7 +68,12 @@ class QCalendarRegistry
         Each backend may be registered with several names associated with it.
         The names are case-insensitive.
     */
-    QHash<CalendarName, QCalendarBackend *> byName;
+    QFlatMap<
+        QString, QCalendarBackend *,
+        CaseInsensitiveAnyStringViewLessThan,
+        QStringList,
+        std::vector<QCalendarBackend *>
+    > byName;
 
     /*
         Pointer to the Gregorian backend for faster lockless access to it.
@@ -138,7 +103,11 @@ class QCalendarRegistry
                                  QCalendar::System system);
 
 public:
-    QCalendarRegistry() { byId.resize(int(QCalendar::System::Last) + 1); }
+    QCalendarRegistry()
+    {
+        byId.resize(ExpectedNumberOfBackends);
+        byName.reserve(ExpectedNumberOfBackends * 2); // assume one alias on average
+    }
 
     ~QCalendarRegistry();
 
@@ -339,12 +308,11 @@ void QCalendarRegistry::registerBackendLockHeld(QCalendarBackend *backend, const
 
     // Register any names.
     for (const auto &name : names) {
-        if (byName.contains(name)) {
+        auto [it, inserted] = byName.try_emplace(name, backend);
+        if (!inserted) {
             Q_ASSERT(system == QCalendar::System::User);
             qWarning("Cannot register name %ls (already in use) for %ls",
                      qUtf16Printable(name), qUtf16Printable(backend->name()));
-        } else {
-            byName[name] = backend;
         }
     }
 }
@@ -362,7 +330,7 @@ QStringList QCalendarRegistry::availableCalendars()
     ensurePopulated();
 
     QReadLocker locker(&lock);
-    return QStringList(byName.keyBegin(), byName.keyEnd());
+    return byName.keys();
 }
 
 /*
@@ -378,9 +346,8 @@ const QCalendarBackend *QCalendarRegistry::fromName(QAnyStringView name)
 {
     ensurePopulated();
 
-    const QString nameU16 = name.toString();
     QReadLocker locker(&lock);
-    return byName.value(nameU16, nullptr);
+    return byName.value(name, nullptr);
 }
 
 /*
@@ -450,13 +417,16 @@ QStringList QCalendarRegistry::backendNames(const QCalendarBackend *backend)
     QStringList l;
     l.reserve(byName.size()); // too large, but never really large, so ok
 
-    // same as byName.keys(backend), except for
-    // - the missing const on mapped_type and
-    // - CalendarName != QString as the key_type
-    for (auto it = byName.cbegin(), end = byName.cend(); it != end; ++it) {
-        if (it.value() == backend)
-            l.push_back(it.key());
+    QT_WARNING_PUSH
+    // Clang complains about the reference still causing a copy. The reference is idiomatic, but
+    // runs afoul of QFlatMap's iterators which return a pair of references instead of a reference
+    // to pair. Suppress the warning, because `const auto [key, value]` would look wrong.
+    QT_WARNING_DISABLE_CLANG("-Wrange-loop-analysis")
+    for (const auto &[key, value] : byName) {
+        if (value == backend)
+            l.push_back(key);
     }
+    QT_WARNING_POP
 
     return l;
 }
@@ -1169,8 +1139,7 @@ const QCalendarBackend *QCalendarBackend::gregorian()
 /*!
     \fn QCalendar::QCalendar()
     \fn QCalendar::QCalendar(QCalendar::System system)
-    \fn QCalendar::QCalendar(QLatin1String name)
-    \fn QCalendar::QCalendar(QStringView name)
+    \fn QCalendar::QCalendar(QAnyStringView name)
 
     Constructs a calendar object.
 
@@ -1179,6 +1148,9 @@ const QCalendarBackend *QCalendarBackend::gregorian()
     or Latin 1). Construction by name may depend on an instance of the given
     calendar being constructed by other means first. With no argument, the
     default constructor returns the Gregorian calendar.
+
+    \note In Qt versions before 6.4, the constructor by \a name accepted only
+    QStringView and QLatin1String, not QAnyStringView.
 
     \sa QCalendar, System, isValid()
 */
@@ -1213,13 +1185,7 @@ QCalendar::QCalendar(QCalendar::SystemId id)
     Q_ASSERT(!d_ptr || d_ptr->calendarId().index() == id.index());
 }
 
-QCalendar::QCalendar(QLatin1String name)
-    : d_ptr(QCalendarBackend::fromName(name))
-{
-    Q_ASSERT(!d_ptr || d_ptr->calendarId().isValid());
-}
-
-QCalendar::QCalendar(QStringView name)
+QCalendar::QCalendar(QAnyStringView name)
     : d_ptr(QCalendarBackend::fromName(name))
 {
     Q_ASSERT(!d_ptr || d_ptr->calendarId().isValid());

@@ -1,45 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-** Contact: http://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qstringview.h"
-#include "qstring.h"
-#include "qlocale_p.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -70,7 +32,7 @@ QT_BEGIN_NAMESPACE
     When used as an interface type, QStringView allows a single function to accept
     a wide variety of UTF-16 string data sources. One function accepting QStringView
     thus replaces three function overloads (taking QString and
-    \c{(const QChar*, int)}), while at the same time enabling even more string data
+    \c{(const QChar*, qsizetype)}), while at the same time enabling even more string data
     sources to be passed to the function, such as \c{u"Hello World"}, a \c char16_t
     string literal.
 
@@ -87,11 +49,11 @@ QT_BEGIN_NAMESPACE
             QChar constructor by itself.
         \li \e QString: if you store an unmodified copy of the string and thus would
             like to take advantage of QString's implicit sharing.
-        \li QLatin1String: if you can implement the function without converting the
-            QLatin1String to UTF-16 first; users expect a function overloaded on
-            QLatin1String to perform strictly less memory allocations than the
+        \li QLatin1StringView: if you can implement the function without converting the
+            QLatin1StringView to UTF-16 first; users expect a function overloaded on
+            QLatin1StringView to perform strictly less memory allocations than the
             semantically equivalent call of the QStringView version, involving
-            construction of a QString from the QLatin1String.
+            construction of a QString from the QLatin1StringView.
     \endlist
 
     QStringView can also be used as the return value of a function. If you call a
@@ -519,7 +481,7 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
-    \fn int QStringView::length() const
+    \fn QStringView::length() const
 
     Same as size().
 
@@ -550,7 +512,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn template <typename...Args> QString QStringView::arg(Args &&...args) const
-    \fn template <typename...Args> QString QLatin1String::arg(Args &&...args) const
+    \fn template <typename...Args> QString QLatin1StringView::arg(Args &&...args) const
     \fn template <typename...Args> QString QString::arg(Args &&...args) const
     \since 5.14
 
@@ -560,7 +522,7 @@ QT_BEGIN_NAMESPACE
     second of the \a args the \c{%N} with the next-lowest \c{N} etc.
 
     \c Args can consist of anything that implicitly converts to QString,
-    QStringView or QLatin1String.
+    QStringView or QLatin1StringView.
 
     In addition, the following types are also supported: QChar, QLatin1Char.
 
@@ -775,7 +737,7 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
-    \fn int QStringView::compare(QLatin1String l1, Qt::CaseSensitivity cs) const
+    \fn int QStringView::compare(QLatin1StringView l1, Qt::CaseSensitivity cs) const
     \fn int QStringView::compare(QChar ch) const
     \fn int QStringView::compare(QChar ch, Qt::CaseSensitivity cs) const
     \since 5.15
@@ -803,8 +765,23 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
+    \fn int QStringView::localeAwareCompare(QStringView other) const
+    \since 6.4
+
+    Compares this string view with the \a other string view and returns
+    an integer less than, equal to, or greater than zero if this string
+    view is less than, equal to, or greater than the \a other string view.
+
+    The comparison is performed in a locale- and also platform-dependent
+    manner. Use this function to present sorted lists of strings to the
+    user.
+
+    \sa {Comparing Strings}
+*/
+
+/*!
     \fn bool QStringView::startsWith(QStringView str, Qt::CaseSensitivity cs) const
-    \fn bool QStringView::startsWith(QLatin1String l1, Qt::CaseSensitivity cs) const
+    \fn bool QStringView::startsWith(QLatin1StringView l1, Qt::CaseSensitivity cs) const
     \fn bool QStringView::startsWith(QChar ch) const
     \fn bool QStringView::startsWith(QChar ch, Qt::CaseSensitivity cs) const
 
@@ -820,7 +797,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn bool QStringView::endsWith(QStringView str, Qt::CaseSensitivity cs) const
-    \fn bool QStringView::endsWith(QLatin1String l1, Qt::CaseSensitivity cs) const
+    \fn bool QStringView::endsWith(QLatin1StringView l1, Qt::CaseSensitivity cs) const
     \fn bool QStringView::endsWith(QChar ch) const
     \fn bool QStringView::endsWith(QChar ch, Qt::CaseSensitivity cs) const
 
@@ -836,7 +813,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn qsizetype QStringView::indexOf(QStringView str, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
-    \fn qsizetype QStringView::indexOf(QLatin1String l1, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    \fn qsizetype QStringView::indexOf(QLatin1StringView l1, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
     \fn qsizetype QStringView::indexOf(QChar c, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
     \since 5.14
 
@@ -855,7 +832,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn bool QStringView::contains(QStringView str, Qt::CaseSensitivity cs) const
-    \fn bool QStringView::contains(QLatin1String l1, Qt::CaseSensitivity cs) const
+    \fn bool QStringView::contains(QLatin1StringView l1, Qt::CaseSensitivity cs) const
     \fn bool QStringView::contains(QChar c, Qt::CaseSensitivity cs) const
     \since 5.14
 
@@ -870,7 +847,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn qsizetype QStringView::lastIndexOf(QStringView str, qsizetype from, Qt::CaseSensitivity cs) const
-    \fn qsizetype QStringView::lastIndexOf(QLatin1String l1, qsizetype from, Qt::CaseSensitivity cs) const
+    \fn qsizetype QStringView::lastIndexOf(QLatin1StringView l1, qsizetype from, Qt::CaseSensitivity cs) const
     \fn qsizetype QStringView::lastIndexOf(QChar c, qsizetype from, Qt::CaseSensitivity cs) const
     \since 5.14
 
@@ -896,7 +873,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn qsizetype QStringView::lastIndexOf(QStringView str, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
-    \fn qsizetype QStringView::lastIndexOf(QLatin1String l1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    \fn qsizetype QStringView::lastIndexOf(QLatin1StringView l1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
     \since 6.2
     \overload lastIndexOf()
 
@@ -1149,6 +1126,21 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
+    \fn qsizetype QStringView::count(QLatin1StringView l1, Qt::CaseSensitivity cs) const noexcept
+
+    \since 6.4
+    \overload count()
+
+    Returns the number of (potentially overlapping) occurrences of the
+    Latin-1 string \a l1 in this string view.
+
+    If \a cs is Qt::CaseSensitive (default), the search is
+    case sensitive; otherwise the search is case insensitive.
+
+    \sa QString::count(), contains(), indexOf()
+*/
+
+/*!
   \fn qint64 QStringView::toLongLong(bool *ok, int base) const
 
     Returns the string view converted to a \c{long long} using base \a
@@ -1369,7 +1361,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn template <typename Needle, typename...Flags> auto QStringView::tokenize(Needle &&sep, Flags...flags) const
-    \fn template <typename Needle, typename...Flags> auto QLatin1String::tokenize(Needle &&sep, Flags...flags) const
+    \fn template <typename Needle, typename...Flags> auto QLatin1StringView::tokenize(Needle &&sep, Flags...flags) const
     \fn template <typename Needle, typename...Flags> auto QString::tokenize(Needle &&sep, Flags...flags) const &
     \fn template <typename Needle, typename...Flags> auto QString::tokenize(Needle &&sep, Flags...flags) const &&
     \fn template <typename Needle, typename...Flags> auto QString::tokenize(Needle &&sep, Flags...flags) &&

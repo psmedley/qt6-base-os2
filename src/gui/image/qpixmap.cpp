@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <qglobal.h>
 
@@ -71,6 +35,8 @@
 #include <memory>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // MSVC 19.28 does show spurious warning "C4723: potential divide by 0" for code that divides
 // by height() in release builds. Anyhow, all the code paths in this file are only executed
@@ -654,7 +620,9 @@ void QPixmap::setDevicePixelRatio(qreal scaleFactor)
     This value should be used when using the pixmap size in user interface
     size calculations.
 
-    The return value is equivalent to pixmap.size() / pixmap.devicePixelRatio(),
+    The return value is equivalent to pixmap.size() / pixmap.devicePixelRatio().
+
+    \since 6.2
 */
 QSizeF QPixmap::deviceIndependentSize() const
 {
@@ -744,7 +712,7 @@ bool QPixmap::load(const QString &fileName, const char *format, Qt::ImageConvers
         if (info.completeSuffix().isEmpty() || info.exists()) {
             const bool inGuiThread = qApp->thread() == QThread::currentThread();
 
-            QString key = QLatin1String("qt_pixmap")
+            QString key = "qt_pixmap"_L1
                     % info.absoluteFilePath()
                     % HexString<uint>(info.lastModified().toSecsSinceEpoch())
                     % HexString<quint64>(info.size())

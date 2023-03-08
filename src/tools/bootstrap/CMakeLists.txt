@@ -32,25 +32,18 @@ qt_internal_extend_target(Bootstrap
         ../../corelib/io/qfsfileengine.cpp
         ../../corelib/io/qfsfileengine_iterator.cpp
         ../../corelib/io/qiodevice.cpp
-        ../../corelib/io/qipaddress.cpp
         ../../corelib/io/qloggingcategory.cpp
         ../../corelib/io/qloggingregistry.cpp
         ../../corelib/io/qresource.cpp
         ../../corelib/io/qsavefile.cpp
         ../../corelib/io/qstandardpaths.cpp
-        ../../corelib/io/qtemporarydir.cpp
         ../../corelib/io/qtemporaryfile.cpp
-        ../../corelib/io/qurl.cpp
-        ../../corelib/io/qurlidna.cpp
-        ../../corelib/io/qurlquery.cpp
-        ../../corelib/io/qurlrecode.cpp
         ../../corelib/kernel/qcoreapplication.cpp
         ../../corelib/kernel/qcoreglobaldata.cpp
         ../../corelib/kernel/qiterable.cpp
         ../../corelib/kernel/qmetacontainer.cpp
         ../../corelib/kernel/qmetatype.cpp
         ../../corelib/kernel/qsystemerror.cpp
-        ../../corelib/kernel/qsystemsemaphore.cpp
         ../../corelib/kernel/qvariant.cpp
         ../../corelib/plugin/quuid.cpp
         ../../corelib/serialization/qcborcommon.cpp
@@ -65,9 +58,6 @@ qt_internal_extend_target(Bootstrap
         ../../corelib/serialization/qjsonvalue.cpp
         ../../corelib/serialization/qjsonwriter.cpp
         ../../corelib/serialization/qtextstream.cpp
-        ../../corelib/serialization/qxmlstream.cpp
-        ../../corelib/serialization/qxmlstreamgrammar.cpp
-        ../../corelib/serialization/qxmlutils.cpp
         ../../corelib/text/qbytearray.cpp
         ../../corelib/text/qbytearraylist.cpp
         ../../corelib/text/qbytearraymatcher.cpp
@@ -82,6 +72,7 @@ qt_internal_extend_target(Bootstrap
         ../../corelib/time/qcalendar.cpp
         ../../corelib/time/qdatetime.cpp
         ../../corelib/time/qgregoriancalendar.cpp
+        ../../corelib/time/qlocaltime.cpp
         ../../corelib/time/qromancalendar.cpp
         ../../corelib/tools/qarraydata.cpp
         ../../corelib/tools/qbitarray.cpp
@@ -89,13 +80,8 @@ qt_internal_extend_target(Bootstrap
         ../../corelib/tools/qcommandlineparser.cpp
         ../../corelib/tools/qcryptographichash.cpp
         ../../corelib/tools/qhash.cpp
-        ../../corelib/tools/qline.cpp
-        ../../corelib/tools/qpoint.cpp
-        ../../corelib/tools/qrect.cpp
         ../../corelib/tools/qringbuffer.cpp
-        ../../corelib/tools/qsize.cpp
         ../../corelib/tools/qversionnumber.cpp
-        ../../xml/dom/qdom.cpp
     DEFINES
         HAVE_CONFIG_H
         QT_TYPESAFE_FLAGS
@@ -114,7 +100,6 @@ qt_internal_extend_target(Bootstrap
         ../../3rdparty/tinycbor/src
     PUBLIC_INCLUDE_DIRECTORIES  # special case
         $<TARGET_PROPERTY:Core,INCLUDE_DIRECTORIES> # special case
-        $<TARGET_PROPERTY:Xml,INCLUDE_DIRECTORIES> # special case
     PUBLIC_LIBRARIES  # special case
         Qt::Platform # special case
 )
@@ -135,9 +120,6 @@ qt_internal_extend_target(Bootstrap CONDITION UNIX
         ../../corelib/io/qfilesystemiterator_unix.cpp
         ../../corelib/io/qfsfileengine_unix.cpp
         ../../corelib/kernel/qcore_unix.cpp
-        ../../corelib/kernel/qsystemsemaphore_posix.cpp
-        ../../corelib/kernel/qsystemsemaphore_systemv.cpp
-        ../../corelib/kernel/qsystemsemaphore_unix.cpp
 )
 
 qt_internal_extend_target(Bootstrap CONDITION WIN32
@@ -148,7 +130,6 @@ qt_internal_extend_target(Bootstrap CONDITION WIN32
         ../../corelib/io/qfsfileengine_win.cpp
         ../../corelib/io/qstandardpaths_win.cpp
         ../../corelib/kernel/qcoreapplication_win.cpp
-        ../../corelib/kernel/qsystemsemaphore_win.cpp
         ../../corelib/kernel/qwinregistry.cpp
         ../../corelib/plugin/qsystemlibrary.cpp
     PUBLIC_LIBRARIES

@@ -1,38 +1,14 @@
-/****************************************************************************
-**
-** Copyright (C) 2022 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
-\page qt_finalize_project.html
+\page qt-finalize-project.html
 \ingroup cmake-commands-qtcore
 
 \title qt_finalize_project
 \target qt6_finalize_project
 
-\summary {Handles various common platform-specific tasks associated with Qt project.}
+\summary {Handles various common platform-specific tasks associated with a Qt project.}
 \preliminarycmakecommand
 
 \include cmake-find-package-core.qdocinc
@@ -50,13 +26,17 @@ qt_finalize_project()
 \section1 Description
 
 Some targets that are created using Qt commands require additional actions
-at the end of CMake configuring phase. Depending on the platform the function
-typically walks through the build tree, resolves dependencies between targets
-created by the user, and applies extra deployment steps.
+at the end of CMake configuring phase.
+Depending on the platform, the function typically:
+\list
+    \li Walks the build tree.
+    \li Resolves dependencies.
+    \li Applies any extra deployment steps.
+\endlist
 
-With CMake versions 3.19 and higher, you don't need to call this command since
+With CMake version 3.19 or later, you don't need to call this command since
 it consists of sub-commands that are ordinarily invoked at the end of
-\c CMAKE_SOURCE_DIR scope.
+\c CMAKE_SOURCE_DIR directory scope processing.
 
 \include cmake-android-qt-finalize-project-warning.cmake
 
@@ -68,4 +48,5 @@ function:
 
 \snippet cmake-macros/examples.cmake qt_finalize_project_manual
 
+\sa {cmake-variable-QT_NO_COLLECT_BUILD_TREE_APK_DEPS}{QT_NO_COLLECT_BUILD_TREE_APK_DEPS}
 */

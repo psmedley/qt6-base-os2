@@ -1,43 +1,9 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 // This file is included from qnsview.mm, and only used to organize the code
+
+using namespace Qt::StringLiterals;
 
 static const QPointingDevice *pointingDeviceFor(qint64 deviceID)
 {
@@ -60,7 +26,7 @@ static const QPointingDevice *pointingDeviceFor(qint64 deviceID)
         return primaryDevice;
     } else {
         // Register a new device. Name and capabilities may need updating later.
-        const auto *device = new QPointingDevice(QLatin1String("mouse"), deviceID,
+        const auto *device = new QPointingDevice("mouse"_L1, deviceID,
             QInputDevice::DeviceType::Mouse, QPointingDevice::PointerType::Generic,
             QInputDevice::Capability::Scroll | QInputDevice::Capability::Position,
             1, 3, QString(), QPointingDeviceUniqueId(), QCocoaIntegration::instance());
@@ -770,7 +736,7 @@ static const QPointingDevice *pointingDeviceFor(qint64 deviceID)
     if (theEvent.hasPreciseScrollingDeltas) {
         auto *devicePriv = QPointingDevicePrivate::get(const_cast<QPointingDevice *>(device));
         if (!devicePriv->capabilities.testFlag(QInputDevice::Capability::PixelScroll)) {
-            devicePriv->name = QLatin1String("trackpad or magic mouse");
+            devicePriv->name = "trackpad or magic mouse"_L1;
             devicePriv->deviceType = QInputDevice::DeviceType::TouchPad;
             devicePriv->capabilities |= QInputDevice::Capability::PixelScroll;
             qCDebug(lcInputDevices) << "mouse scrolling: updated capabilities" << device;

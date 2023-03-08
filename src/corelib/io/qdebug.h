@@ -1,54 +1,13 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QDEBUG_H
 #define QDEBUG_H
 
-#include <QtCore/qalgorithms.h>
-#include <QtCore/qhash.h>
-#include <QtCore/qlist.h>
-#include <QtCore/qmap.h>
+#include <QtCore/qcontainerfwd.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qstring.h>
-#include <QtCore/qset.h>
-#include <QtCore/qvarlengtharray.h>
 #include <QtCore/qcontiguouscache.h>
 #include <QtCore/qsharedpointer.h>
 
@@ -58,10 +17,16 @@
 #include <map>
 #include <utility>
 
+#if !defined(QT_LEAN_HEADERS) || QT_LEAN_HEADERS < 1
+#  include <QtCore/qlist.h>
+#  include <QtCore/qmap.h>
+#  include <QtCore/qset.h>
+#  include <QtCore/qvarlengtharray.h>
+#endif
+
 QT_BEGIN_NAMESPACE
 
-
-class Q_CORE_EXPORT QDebug : public QIODeviceBase
+class QT6_ONLY(Q_CORE_EXPORT) QDebug : public QIODeviceBase
 {
     friend class QMessageLogger;
     friend class QDebugStateSaver;
@@ -93,9 +58,9 @@ class Q_CORE_EXPORT QDebug : public QIODeviceBase
 
     enum Latin1Content { ContainsBinary = 0, ContainsLatin1 };
 
-    void putUcs4(uint ucs4);
-    void putString(const QChar *begin, size_t length);
-    void putByteArray(const char *begin, size_t length, Latin1Content content);
+    QT7_ONLY(Q_CORE_EXPORT) void putUcs4(uint ucs4);
+    QT7_ONLY(Q_CORE_EXPORT) void putString(const QChar *begin, size_t length);
+    QT7_ONLY(Q_CORE_EXPORT) void putByteArray(const char *begin, size_t length, Latin1Content content);
 public:
     explicit QDebug(QIODevice *device) : stream(new Stream(device)) {}
     explicit QDebug(QString *string) : stream(new Stream(string)) {}
@@ -107,7 +72,7 @@ public:
     ~QDebug();
     void swap(QDebug &other) noexcept { qt_ptr_swap(stream, other.stream); }
 
-    QDebug &resetFormat();
+    QT7_ONLY(Q_CORE_EXPORT) QDebug &resetFormat();
 
     inline QDebug &space() { stream->space = true; stream->ts << ' '; return *this; }
     inline QDebug &nospace() { stream->space = false; return *this; }
@@ -141,10 +106,10 @@ public:
     inline QDebug &operator<<(double t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(const char* t) { stream->ts << QString::fromUtf8(t); return maybeSpace(); }
     inline QDebug &operator<<(const char16_t *t)  { stream->ts << QStringView(t); return maybeSpace(); }
-    inline QDebug &operator<<(const QString & t) { putString(t.constData(), uint(t.length())); return maybeSpace(); }
+    inline QDebug &operator<<(const QString & t) { putString(t.constData(), size_t(t.size())); return maybeSpace(); }
     inline QDebug &operator<<(QStringView s) { putString(s.data(), size_t(s.size())); return maybeSpace(); }
     inline QDebug &operator<<(QUtf8StringView s) { putByteArray(reinterpret_cast<const char*>(s.data()), s.size(), ContainsBinary); return maybeSpace(); }
-    inline QDebug &operator<<(QLatin1String t) { putByteArray(t.latin1(), t.size(), ContainsLatin1); return maybeSpace(); }
+    inline QDebug &operator<<(QLatin1StringView t) { putByteArray(t.latin1(), t.size(), ContainsLatin1); return maybeSpace(); }
     inline QDebug &operator<<(const QByteArray & t) { putByteArray(t.constData(), t.size(), ContainsBinary); return maybeSpace(); }
     inline QDebug &operator<<(QByteArrayView t) { putByteArray(t.constData(), t.size(), ContainsBinary); return maybeSpace(); }
     inline QDebug &operator<<(const void * t) { stream->ts << t; return maybeSpace(); }
@@ -327,7 +292,7 @@ inline QDebugIfHasDebugStream<T> operator<<(QDebug debug, const QContiguousCache
 {
     const QDebugStateSaver saver(debug);
     debug.nospace() << "QContiguousCache(";
-    for (int i = cache.firstIndex(); i <= cache.lastIndex(); ++i) {
+    for (qsizetype i = cache.firstIndex(); i <= cache.lastIndex(); ++i) {
         debug << cache[i];
         if (i != cache.lastIndex())
             debug << ", ";
@@ -527,6 +492,7 @@ inline QDebug operator<<(QDebug debug, QKeyCombination combination)
 
 QT_END_NAMESPACE
 Q_FORWARD_DECLARE_CF_TYPE(CFString);
+struct objc_object;
 Q_FORWARD_DECLARE_OBJC_CLASS(NSObject);
 QT_FOR_EACH_CORE_FOUNDATION_TYPE(QT_FORWARD_DECLARE_CF_TYPE)
 QT_FOR_EACH_MUTABLE_CORE_FOUNDATION_TYPE(QT_FORWARD_DECLARE_MUTABLE_CF_TYPE)
@@ -551,6 +517,10 @@ QT_BEGIN_NAMESPACE
     }
 
 // Defined in qcore_mac_objc.mm
+#if defined(__OBJC__)
+Q_CORE_EXPORT QDebug operator<<(QDebug, id);
+#endif
+Q_CORE_EXPORT QDebug operator<<(QDebug, objc_object *);
 Q_CORE_EXPORT QDebug operator<<(QDebug, const NSObject *);
 Q_CORE_EXPORT QDebug operator<<(QDebug, CFStringRef);
 

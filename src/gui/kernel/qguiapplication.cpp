@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qguiapplication.h"
 
@@ -66,7 +30,7 @@
 #include <QtCore/qlibraryinfo.h>
 #include <QtCore/private/qnumeric_p.h>
 #include <QtDebug>
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 #include "qaccessible.h"
 #endif
 #include <qpalette.h>
@@ -123,12 +87,18 @@
 #include <emscripten.h>
 #endif
 
+#if QT_CONFIG(vulkan)
+#include <private/qvulkandefaultinstance_p.h>
+#endif
+
 #include <qtgui_tracepoints_p.h>
 
 #include <ctype.h>
 #include <limits>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // Helper macro for static functions to check on the existence of the application class.
 #define CHECK_QAPP_INSTANCE(...) \
@@ -139,81 +109,81 @@ QT_BEGIN_NAMESPACE
     }
 
 Q_CORE_EXPORT void qt_call_post_routines();
-Q_GUI_EXPORT bool qt_is_tty_app = false;
+Q_CONSTINIT Q_GUI_EXPORT bool qt_is_tty_app = false;
 
-Qt::MouseButtons QGuiApplicationPrivate::mouse_buttons = Qt::NoButton;
-Qt::KeyboardModifiers QGuiApplicationPrivate::modifier_buttons = Qt::NoModifier;
+Q_CONSTINIT Qt::MouseButtons QGuiApplicationPrivate::mouse_buttons = Qt::NoButton;
+Q_CONSTINIT Qt::KeyboardModifiers QGuiApplicationPrivate::modifier_buttons = Qt::NoModifier;
 
-QGuiApplicationPrivate::QLastCursorPosition QGuiApplicationPrivate::lastCursorPosition;
+Q_CONSTINIT QGuiApplicationPrivate::QLastCursorPosition QGuiApplicationPrivate::lastCursorPosition;
 
-QWindow *QGuiApplicationPrivate::currentMouseWindow = nullptr;
+Q_CONSTINIT QWindow *QGuiApplicationPrivate::currentMouseWindow = nullptr;
 
-QString QGuiApplicationPrivate::styleOverride;
+Q_CONSTINIT QString QGuiApplicationPrivate::styleOverride;
 
-Qt::ApplicationState QGuiApplicationPrivate::applicationState = Qt::ApplicationInactive;
+Q_CONSTINIT Qt::ApplicationState QGuiApplicationPrivate::applicationState = Qt::ApplicationInactive;
 
-Qt::HighDpiScaleFactorRoundingPolicy QGuiApplicationPrivate::highDpiScaleFactorRoundingPolicy =
+Q_CONSTINIT Qt::HighDpiScaleFactorRoundingPolicy QGuiApplicationPrivate::highDpiScaleFactorRoundingPolicy =
     Qt::HighDpiScaleFactorRoundingPolicy::PassThrough;
 
-QPointer<QWindow> QGuiApplicationPrivate::currentDragWindow;
+Q_CONSTINIT QPointer<QWindow> QGuiApplicationPrivate::currentDragWindow;
 
-QList<QGuiApplicationPrivate::TabletPointData> QGuiApplicationPrivate::tabletDevicePoints; // TODO remove
+Q_CONSTINIT QList<QGuiApplicationPrivate::TabletPointData> QGuiApplicationPrivate::tabletDevicePoints; // TODO remove
 
-QPlatformIntegration *QGuiApplicationPrivate::platform_integration = nullptr;
-QPlatformTheme *QGuiApplicationPrivate::platform_theme = nullptr;
+Q_CONSTINIT QPlatformIntegration *QGuiApplicationPrivate::platform_integration = nullptr;
+Q_CONSTINIT QPlatformTheme *QGuiApplicationPrivate::platform_theme = nullptr;
 
-QList<QObject *> QGuiApplicationPrivate::generic_plugin_list;
+Q_CONSTINIT QList<QObject *> QGuiApplicationPrivate::generic_plugin_list;
 
 enum ApplicationResourceFlags
 {
     ApplicationFontExplicitlySet = 0x2
 };
 
-static unsigned applicationResourceFlags = 0;
+Q_CONSTINIT static unsigned applicationResourceFlags = 0;
 
-QIcon *QGuiApplicationPrivate::app_icon = nullptr;
+Q_CONSTINIT QIcon *QGuiApplicationPrivate::app_icon = nullptr;
 
-QString *QGuiApplicationPrivate::platform_name = nullptr;
-QString *QGuiApplicationPrivate::displayName = nullptr;
-QString *QGuiApplicationPrivate::desktopFileName = nullptr;
+Q_CONSTINIT QString *QGuiApplicationPrivate::platform_name = nullptr;
+Q_CONSTINIT QString *QGuiApplicationPrivate::displayName = nullptr;
+Q_CONSTINIT QString *QGuiApplicationPrivate::desktopFileName = nullptr;
 
-QPalette *QGuiApplicationPrivate::app_pal = nullptr;        // default application palette
+Q_CONSTINIT QPalette *QGuiApplicationPrivate::app_pal = nullptr;        // default application palette
 
-Qt::MouseButton QGuiApplicationPrivate::mousePressButton = Qt::NoButton;
+Q_CONSTINIT Qt::MouseButton QGuiApplicationPrivate::mousePressButton = Qt::NoButton;
 
-static int mouseDoubleClickDistance = 0;
-static int touchDoubleTapDistance = 0;
+Q_CONSTINIT static int mouseDoubleClickDistance = 0;
+Q_CONSTINIT static int touchDoubleTapDistance = 0;
 
-QWindow *QGuiApplicationPrivate::currentMousePressWindow = nullptr;
+Q_CONSTINIT QWindow *QGuiApplicationPrivate::currentMousePressWindow = nullptr;
 
-static Qt::LayoutDirection layout_direction = Qt::LayoutDirectionAuto;
-static Qt::LayoutDirection effective_layout_direction = Qt::LeftToRight;
-static bool force_reverse = false;
+Q_CONSTINIT static Qt::LayoutDirection layout_direction = Qt::LayoutDirectionAuto;
+Q_CONSTINIT static Qt::LayoutDirection effective_layout_direction = Qt::LeftToRight;
+Q_CONSTINIT static bool force_reverse = false;
 
-QGuiApplicationPrivate *QGuiApplicationPrivate::self = nullptr;
-int QGuiApplicationPrivate::m_fakeMouseSourcePointId = -1;
+Q_CONSTINIT QGuiApplicationPrivate *QGuiApplicationPrivate::self = nullptr;
+Q_CONSTINIT int QGuiApplicationPrivate::m_fakeMouseSourcePointId = -1;
 
 #ifndef QT_NO_CLIPBOARD
-QClipboard *QGuiApplicationPrivate::qt_clipboard = nullptr;
+Q_CONSTINIT QClipboard *QGuiApplicationPrivate::qt_clipboard = nullptr;
 #endif
 
-QList<QScreen *> QGuiApplicationPrivate::screen_list;
+Q_CONSTINIT QList<QScreen *> QGuiApplicationPrivate::screen_list;
 
-QWindowList QGuiApplicationPrivate::window_list;
-QWindow *QGuiApplicationPrivate::focus_window = nullptr;
+Q_CONSTINIT QWindowList QGuiApplicationPrivate::window_list;
+Q_CONSTINIT QWindow *QGuiApplicationPrivate::focus_window = nullptr;
 
-static QBasicMutex applicationFontMutex;
-QFont *QGuiApplicationPrivate::app_font = nullptr;
-QStyleHints *QGuiApplicationPrivate::styleHints = nullptr;
-bool QGuiApplicationPrivate::obey_desktop_settings = true;
+Q_CONSTINIT static QBasicMutex applicationFontMutex;
+Q_CONSTINIT QFont *QGuiApplicationPrivate::app_font = nullptr;
+Q_CONSTINIT QStyleHints *QGuiApplicationPrivate::styleHints = nullptr;
+Q_CONSTINIT bool QGuiApplicationPrivate::obey_desktop_settings = true;
 
-QInputDeviceManager *QGuiApplicationPrivate::m_inputDeviceManager = nullptr;
+Q_CONSTINIT QInputDeviceManager *QGuiApplicationPrivate::m_inputDeviceManager = nullptr;
 
-qreal QGuiApplicationPrivate::m_maxDevicePixelRatio = 0.0;
+Q_CONSTINIT qreal QGuiApplicationPrivate::m_maxDevicePixelRatio = 0.0;
 
-static qreal fontSmoothingGamma = 1.7;
+Q_CONSTINIT static qreal fontSmoothingGamma = 1.7;
 
-bool QGuiApplicationPrivate::quitOnLastWindowClosed = true;
+Q_CONSTINIT bool QGuiApplicationPrivate::quitOnLastWindowClosed = true;
 
 extern void qRegisterGuiVariant();
 #if QT_CONFIG(animation)
@@ -226,7 +196,7 @@ static bool qt_detectRTLLanguage()
         (QGuiApplication::tr("QT_LAYOUT_DIRECTION",
                          "Translate this string to the string 'LTR' in left-to-right"
                          " languages or to 'RTL' in right-to-left languages (such as Hebrew"
-                         " and Arabic) to get proper widget layout.") == QLatin1String("RTL"));
+                         " and Arabic) to get proper widget layout.") == "RTL"_L1);
 }
 
 static void initFontUnlocked()
@@ -256,7 +226,7 @@ static void initThemeHints()
 static bool checkNeedPortalSupport()
 {
 #if QT_CONFIG(dbus)
-    return !QStandardPaths::locate(QStandardPaths::RuntimeLocation, QLatin1String("flatpak-info")).isEmpty() || qEnvironmentVariableIsSet("SNAP");
+    return !QStandardPaths::locate(QStandardPaths::RuntimeLocation, "flatpak-info"_L1).isEmpty() || qEnvironmentVariableIsSet("SNAP");
 #else
     return false;
 #endif // QT_CONFIG(dbus)
@@ -651,9 +621,9 @@ static QWindowGeometrySpecification windowGeometrySpecification = Q_WINDOW_GEOME
 #ifdef Q_QDOC
 QGuiApplication::QGuiApplication(int &argc, char **argv)
 #else
-QGuiApplication::QGuiApplication(int &argc, char **argv, int flags)
+QGuiApplication::QGuiApplication(int &argc, char **argv, int)
 #endif
-    : QCoreApplication(*new QGuiApplicationPrivate(argc, argv, flags))
+    : QCoreApplication(*new QGuiApplicationPrivate(argc, argv))
 {
     d_func()->init();
 
@@ -716,8 +686,8 @@ QGuiApplication::~QGuiApplication()
     QGuiApplicationPrivate::tabletDevicePoints.clear();
 }
 
-QGuiApplicationPrivate::QGuiApplicationPrivate(int &argc, char **argv, int flags)
-    : QCoreApplicationPrivate(argc, argv, flags),
+QGuiApplicationPrivate::QGuiApplicationPrivate(int &argc, char **argv)
+    : QCoreApplicationPrivate(argc, argv),
       inputMethod(nullptr),
       lastTouchType(QEvent::TouchEnd),
       ownGlobalShareContext(false)
@@ -863,7 +833,7 @@ void QGuiApplicationPrivate::showModalWindow(QWindow *modal)
         }
     }
 
-    for (QWindow *window : qAsConst(QGuiApplicationPrivate::window_list)) {
+    for (QWindow *window : std::as_const(QGuiApplicationPrivate::window_list)) {
         if (needsWindowBlockedEvent(window) && !window->d_func()->blockedByModalWindow)
             updateBlockedStatus(window);
     }
@@ -875,7 +845,7 @@ void QGuiApplicationPrivate::hideModalWindow(QWindow *window)
 {
     self->modalWindowList.removeAll(window);
 
-    for (QWindow *window : qAsConst(QGuiApplicationPrivate::window_list)) {
+    for (QWindow *window : std::as_const(QGuiApplicationPrivate::window_list)) {
         if (needsWindowBlockedEvent(window) && window->d_func()->blockedByModalWindow)
             updateBlockedStatus(window);
     }
@@ -897,7 +867,7 @@ bool QGuiApplicationPrivate::isWindowBlocked(QWindow *window, QWindow **blocking
         return false;
     }
 
-    for (int i = 0; i < modalWindowList.count(); ++i) {
+    for (int i = 0; i < modalWindowList.size(); ++i) {
         QWindow *modalWindow = modalWindowList.at(i);
 
         // A window is not blocked by another modal window if the two are
@@ -1128,7 +1098,7 @@ qreal QGuiApplication::devicePixelRatio() const
         return QGuiApplicationPrivate::m_maxDevicePixelRatio;
 
     QGuiApplicationPrivate::m_maxDevicePixelRatio = 1.0; // make sure we never return 0.
-    for (QScreen *screen : qAsConst(QGuiApplicationPrivate::screen_list))
+    for (QScreen *screen : std::as_const(QGuiApplicationPrivate::screen_list))
         QGuiApplicationPrivate::m_maxDevicePixelRatio = qMax(QGuiApplicationPrivate::m_maxDevicePixelRatio, screen->devicePixelRatio());
 
     return QGuiApplicationPrivate::m_maxDevicePixelRatio;
@@ -1201,12 +1171,12 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
         << "platformPluginPath" << platformPluginPath
         << "platformThemeName" << platformThemeName;
 
-    QStringList plugins = pluginNamesWithArguments.split(QLatin1Char(';'), Qt::SkipEmptyParts);
+    QStringList plugins = pluginNamesWithArguments.split(u';', Qt::SkipEmptyParts);
     QStringList platformArguments;
     QStringList availablePlugins = QPlatformIntegrationFactory::keys(platformPluginPath);
     for (const auto &pluginArgument : plugins) {
         // Split into platform name and arguments
-        QStringList arguments = pluginArgument.split(QLatin1Char(':'), Qt::SkipEmptyParts);
+        QStringList arguments = pluginArgument.split(u':', Qt::SkipEmptyParts);
         if (arguments.isEmpty())
             continue;
         const QString name = arguments.takeFirst().toLower();
@@ -1243,7 +1213,7 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
                                               "Reinstalling the application may fix this problem.\n");
 
         if (!availablePlugins.isEmpty())
-            fatalMessage += QStringLiteral("\nAvailable platform plugins are: %1.\n").arg(availablePlugins.join(QLatin1String(", ")));
+            fatalMessage += QStringLiteral("\nAvailable platform plugins are: %1.\n").arg(availablePlugins.join(", "_L1));
 
 #if defined(Q_OS_WIN)
         // Windows: Display message box unless it is a console application
@@ -1276,7 +1246,7 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
     qCDebug(lcQpaTheme) << "Adding platform integration's theme names to list of theme names:" << platformIntegrationThemeNames;
     themeNames += platformIntegrationThemeNames;
     // 4) Look for a theme plugin.
-    for (const QString &themeName : qAsConst(themeNames)) {
+    for (const QString &themeName : std::as_const(themeNames)) {
         qCDebug(lcQpaTheme) << "Attempting to create platform theme" << themeName << "via QPlatformThemeFactory::create";
         QGuiApplicationPrivate::platform_theme = QPlatformThemeFactory::create(themeName, platformPluginPath);
         if (QGuiApplicationPrivate::platform_theme) {
@@ -1288,7 +1258,7 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
     // 5) If no theme plugin was found ask the platform integration to
     // create a theme
     if (!QGuiApplicationPrivate::platform_theme) {
-        for (const QString &themeName : qAsConst(themeNames)) {
+        for (const QString &themeName : std::as_const(themeNames)) {
             qCDebug(lcQpaTheme) << "Attempting to create platform theme" << themeName << "via createPlatformTheme";
             QGuiApplicationPrivate::platform_theme = QGuiApplicationPrivate::platform_integration->createPlatformTheme(themeName);
             if (QGuiApplicationPrivate::platform_theme) {
@@ -1305,13 +1275,12 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
         QGuiApplicationPrivate::platform_theme = new QPlatformTheme;
     }
 
-#ifndef QT_NO_PROPERTIES
     // Set arguments as dynamic properties on the native interface as
     // boolean 'foo' or strings: 'foo=bar'
     if (!platformArguments.isEmpty()) {
         if (QObject *nativeInterface = QGuiApplicationPrivate::platform_integration->nativeInterface()) {
-            for (const QString &argument : qAsConst(platformArguments)) {
-                const int equalsPos = argument.indexOf(QLatin1Char('='));
+            for (const QString &argument : std::as_const(platformArguments)) {
+                const int equalsPos = argument.indexOf(u'=');
                 const QByteArray name =
                     equalsPos != -1 ? argument.left(equalsPos).toUtf8() : argument.toUtf8();
                 const QVariant value =
@@ -1320,7 +1289,6 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
             }
         }
     }
-#endif
 
     const auto platformIntegration = QGuiApplicationPrivate::platformIntegration();
     fontSmoothingGamma = platformIntegration->styleHint(QPlatformIntegration::FontSmoothingGamma).toReal();
@@ -1330,15 +1298,15 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
 
 static void init_plugins(const QList<QByteArray> &pluginList)
 {
-    for (int i = 0; i < pluginList.count(); ++i) {
+    for (int i = 0; i < pluginList.size(); ++i) {
         QByteArray pluginSpec = pluginList.at(i);
         int colonPos = pluginSpec.indexOf(':');
         QObject *plugin;
         if (colonPos < 0)
-            plugin = QGenericPluginFactory::create(QLatin1String(pluginSpec), QString());
+            plugin = QGenericPluginFactory::create(QLatin1StringView(pluginSpec), QString());
         else
-            plugin = QGenericPluginFactory::create(QLatin1String(pluginSpec.mid(0, colonPos)),
-                                                   QLatin1String(pluginSpec.mid(colonPos+1)));
+            plugin = QGenericPluginFactory::create(QLatin1StringView(pluginSpec.mid(0, colonPos)),
+                                                   QLatin1StringView(pluginSpec.mid(colonPos+1)));
         if (plugin)
             QGuiApplicationPrivate::generic_plugin_list.append(plugin);
         else
@@ -1501,7 +1469,7 @@ void QGuiApplicationPrivate::createPlatformIntegration()
 
     Q_UNUSED(platformExplicitlySelected);
 
-    init_platform(QLatin1String(platformName), platformPluginPath, platformThemeName, argc, argv);
+    init_platform(QLatin1StringView(platformName), platformPluginPath, platformThemeName, argc, argv);
 
     if (!icon.isEmpty())
         forcedWindowIcon = QDir::isAbsolutePath(icon) ? QIcon(icon) : QIcon::fromTheme(icon);
@@ -1584,12 +1552,12 @@ void QGuiApplicationPrivate::init()
         } else if (strncmp(arg, "-psn_", 5) == 0) {
             // eat "-psn_xxxx" on Mac, which is passed when starting an app from Finder.
             // special hack to change working directory (for an app bundle) when running from finder
-            if (QDir::currentPath() == QLatin1String("/")) {
+            if (QDir::currentPath() == "/"_L1) {
                 QCFType<CFURLRef> bundleURL(CFBundleCopyBundleURL(CFBundleGetMainBundle()));
                 QString qbundlePath = QCFString(CFURLCopyFileSystemPath(bundleURL,
                                                                         kCFURLPOSIXPathStyle));
-                if (qbundlePath.endsWith(QLatin1String(".app")))
-                    QDir::setCurrent(qbundlePath.section(QLatin1Char('/'), 0, -2));
+                if (qbundlePath.endsWith(".app"_L1))
+                    QDir::setCurrent(qbundlePath.section(u'/', 0, -2));
             }
 #endif
 #ifndef QT_NO_SESSIONMANAGER
@@ -1597,7 +1565,7 @@ void QGuiApplicationPrivate::init()
             ++i;
             if (argv[i] && *argv[i]) {
                 session_id = QString::fromLatin1(argv[i]);
-                int p = session_id.indexOf(QLatin1Char('_'));
+                int p = session_id.indexOf(u'_');
                 if (p >= 0) {
                     session_key = session_id.mid(p +1);
                     session_id = session_id.left(p);
@@ -1708,7 +1676,7 @@ QGuiApplicationPrivate::~QGuiApplicationPrivate()
     is_app_closing = true;
     is_app_running = false;
 
-    for (int i = 0; i < generic_plugin_list.count(); ++i)
+    for (int i = 0; i < generic_plugin_list.size(); ++i)
         delete generic_plugin_list.at(i);
     generic_plugin_list.clear();
 
@@ -1737,6 +1705,10 @@ QGuiApplicationPrivate::~QGuiApplicationPrivate()
         delete qt_gl_global_share_context();
         qt_gl_set_global_share_context(nullptr);
     }
+#endif
+
+#if QT_CONFIG(vulkan)
+    QVulkanDefaultInstance::cleanup();
 #endif
 
     platform_integration->destroy();
@@ -1881,7 +1853,7 @@ QFunctionPointer QGuiApplication::platformFunction(const QByteArray &function)
 */
 int QGuiApplication::exec()
 {
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     QAccessible::setRootObject(qApp);
 #endif
     return QCoreApplication::exec();
@@ -2579,11 +2551,26 @@ void QGuiApplicationPrivate::processSafeAreaMarginsChangedEvent(QWindowSystemInt
 void QGuiApplicationPrivate::processThemeChanged(QWindowSystemInterfacePrivate::ThemeChangeEvent *tce)
 {
     if (self)
-        self->notifyThemeChanged();
-    if (QWindow *window  = tce->window.data()) {
-        QEvent e(QEvent::ThemeChange);
-        QGuiApplication::sendSpontaneousEvent(window, &e);
+        self->handleThemeChanged();
+
+    QEvent themeChangeEvent(QEvent::ThemeChange);
+    const QWindowList windows = tce->window ? QWindowList{tce->window} : window_list;
+    for (auto *window : windows)
+        QGuiApplication::sendSpontaneousEvent(window, &themeChangeEvent);
+}
+
+void QGuiApplicationPrivate::handleThemeChanged()
+{
+    updatePalette();
+
+    QAbstractFileIconProviderPrivate::clearIconTypeCache();
+
+    if (!(applicationResourceFlags & ApplicationFontExplicitlySet)) {
+        const auto locker = qt_scoped_lock(applicationFontMutex);
+        clearFontUnlocked();
+        initFontUnlocked();
     }
+    initThemeHints();
 }
 
 void QGuiApplicationPrivate::processGeometryChangeEvent(QWindowSystemInterfacePrivate::GeometryChangeEvent *e)
@@ -2642,8 +2629,9 @@ void QGuiApplicationPrivate::processCloseEvent(QWindowSystemInterfacePrivate::Cl
 {
     if (e->window.isNull())
         return;
-    if (e->window.data()->d_func()->blockedByModalWindow) {
-        // a modal window is blocking this window, don't allow close events through
+    if (e->window.data()->d_func()->blockedByModalWindow && !e->window.data()->d_func()->inClose) {
+        // a modal window is blocking this window, don't allow close events through, unless they
+        // originate from a call to QWindow::close.
         return;
     }
 
@@ -2748,6 +2736,8 @@ void QGuiApplicationPrivate::processTabletEvent(QWindowSystemInterfacePrivate::T
         QWindowSystemInterfacePrivate::MouseEvent mouseEvent(window, e->timestamp, e->local,
             e->global, e->buttons, e->modifiers, button, mouseType, Qt::MouseEventNotSynthesized, false, device);
         mouseEvent.flags |= QWindowSystemInterfacePrivate::WindowSystemEvent::Synthetic;
+        qCDebug(lcPtrDispatch) << "synthesizing mouse from tablet event" << mouseType
+                               << e->local << button << e->buttons << e->modifiers;
         processMouseEvent(&mouseEvent);
     }
 #else
@@ -4175,7 +4165,10 @@ QInputMethod *QGuiApplication::inputMethod()
 /*!
     \fn void QGuiApplication::fontDatabaseChanged()
 
-    This signal is emitted when application fonts are loaded or removed.
+    This signal is emitted when the available fonts have changed.
+
+    This can happen when application fonts are added or removed, or when the
+    system fonts change.
 
     \sa QFontDatabase::addApplicationFont(),
     QFontDatabase::addApplicationFontFromData(),
@@ -4195,20 +4188,6 @@ QPoint QGuiApplicationPrivate::QLastCursorPosition::toPoint() const noexcept
     if (Q_UNLIKELY(qIsInf(thePoint.x())))
         return QPoint(std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
     return thePoint.toPoint();
-}
-
-void QGuiApplicationPrivate::notifyThemeChanged()
-{
-    updatePalette();
-
-    QAbstractFileIconProviderPrivate::clearIconTypeCache();
-
-    if (!(applicationResourceFlags & ApplicationFontExplicitlySet)) {
-        const auto locker = qt_scoped_lock(applicationFontMutex);
-        clearFontUnlocked();
-        initFontUnlocked();
-    }
-    initThemeHints();
 }
 
 #if QT_CONFIG(draganddrop)

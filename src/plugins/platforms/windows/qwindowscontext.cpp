@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwindowscontext.h"
 #include "qwindowsintegration.h"
@@ -81,6 +45,7 @@
 #include <QtCore/qscopedpointer.h>
 #include <QtCore/quuid.h>
 #include <QtCore/private/qwinregistry_p.h>
+#include <QtCore/private/qfactorycacheregistration_p.h>
 
 #include <QtGui/private/qwindowsguieventdispatcher_p.h>
 
@@ -93,6 +58,8 @@
 #include <shellscalingapi.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 Q_LOGGING_CATEGORY(lcQpaWindows, "qt.qpa.windows")
 Q_LOGGING_CATEGORY(lcQpaEvents, "qt.qpa.events")
@@ -255,8 +222,12 @@ QWindowsContext::~QWindowsContext()
         DestroyWindow(d->m_powerDummyWindow);
 
     unregisterWindowClasses();
-    if (d->m_oleInitializeResult == S_OK || d->m_oleInitializeResult == S_FALSE)
+    if (d->m_oleInitializeResult == S_OK || d->m_oleInitializeResult == S_FALSE) {
+#ifdef QT_USE_FACTORY_CACHE_REGISTRATION
+        detail::QWinRTFactoryCacheRegistration::clearAllCaches();
+#endif
         OleUninitialize();
+    }
 
     d->m_screenManager.clearScreens(); // Order: Potentially calls back to the windows.
     if (d->m_displayContext)
@@ -298,7 +269,7 @@ void QWindowsContext::registerTouchWindows()
 {
     if (QGuiApplicationPrivate::is_app_running
         && (d->m_systemInfo & QWindowsContext::SI_SupportsTouch) != 0) {
-        for (QWindowsWindow *w : qAsConst(d->m_windows))
+        for (QWindowsWindow *w : std::as_const(d->m_windows))
             w->registerTouchWindow();
     }
 }
@@ -410,8 +381,8 @@ void QWindowsContext::setProcessDpiAwareness(QtWindows::ProcessDpiAwareness dpiA
     const HRESULT hr = SetProcessDpiAwareness(static_cast<PROCESS_DPI_AWARENESS>(dpiAwareness));
     // E_ACCESSDENIED means set externally (MSVC manifest or external app loading Qt plugin).
     // Silence warning in that case unless debug is enabled.
-    if (FAILED(hr) && (hr != E_ACCESSDENIED || lcQpaWindows().isDebugEnabled())) {
-        qWarning().noquote().nospace() << "SetProcessDpiAwareness("
+    if (FAILED(hr) && hr != E_ACCESSDENIED) {
+        qCWarning(lcQpaWindows).noquote().nospace() << "SetProcessDpiAwareness("
             << dpiAwareness << ") failed: " << QWindowsContext::comErrorString(hr)
             << ", using " << QWindowsContext::processDpiAwareness();
     }
@@ -422,12 +393,16 @@ bool QWindowsContext::setProcessDpiV2Awareness()
     qCDebug(lcQpaWindows) << __FUNCTION__;
     const BOOL ok = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     if (!ok) {
-        const HRESULT errorCode = GetLastError();
-        qCWarning(lcQpaWindows).noquote().nospace() << "setProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) failed: "
-            << QWindowsContext::comErrorString(errorCode);
-        return false;
+        const DWORD dwError = GetLastError();
+        // ERROR_ACCESS_DENIED means set externally (MSVC manifest or external app loading Qt plugin).
+        // Silence warning in that case unless debug is enabled.
+        if (dwError != ERROR_ACCESS_DENIED) {
+            qCWarning(lcQpaWindows).noquote().nospace()
+                << "SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) failed: "
+                << QWindowsContext::comErrorString(HRESULT(dwError));
+            return false;
+        }
     }
-
     QWindowsContextPrivate::m_v2DpiAware = true;
     return true;
 }
@@ -543,28 +518,28 @@ QString QWindowsContext::registerWindowClass(const QWindow *w)
     }
     // Create a unique name for the flag combination
     QString cname = classNamePrefix();
-    cname += QLatin1String("QWindow");
+    cname += "QWindow"_L1;
     switch (type) {
     case Qt::Tool:
-        cname += QLatin1String("Tool");
+        cname += "Tool"_L1;
         break;
     case Qt::ToolTip:
-        cname += QLatin1String("ToolTip");
+        cname += "ToolTip"_L1;
         break;
     case Qt::Popup:
-        cname += QLatin1String("Popup");
+        cname += "Popup"_L1;
         break;
     default:
         break;
     }
     if (style & CS_DROPSHADOW)
-        cname += QLatin1String("DropShadow");
+        cname += "DropShadow"_L1;
     if (style & CS_SAVEBITS)
-        cname += QLatin1String("SaveBits");
+        cname += "SaveBits"_L1;
     if (style & CS_OWNDC)
-        cname += QLatin1String("OwnDC");
+        cname += "OwnDC"_L1;
     if (icon)
-        cname += QLatin1String("Icon");
+        cname += "Icon"_L1;
 
     return registerWindowClass(cname, qWindowsWndProc, style, GetSysColorBrush(COLOR_WINDOW), icon);
 }
@@ -635,7 +610,7 @@ void QWindowsContext::unregisterWindowClasses()
 {
     const auto appInstance = static_cast<HINSTANCE>(GetModuleHandle(nullptr));
 
-    for (const QString &name : qAsConst(d->m_registeredWindowClassNames)) {
+    for (const QString &name : std::as_const(d->m_registeredWindowClassNames)) {
         if (!UnregisterClass(reinterpret_cast<LPCWSTR>(name.utf16()), appInstance) && QWindowsContext::verbose)
             qErrnoWarning("UnregisterClass failed for '%s'", qPrintable(name));
     }
@@ -1130,18 +1105,22 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
 #endif
     case QtWindows::SettingChangedEvent: {
         QWindowsWindow::settingsChanged();
-        const bool darkMode = QWindowsTheme::queryDarkMode();
-        if (darkMode != QWindowsContextPrivate::m_darkMode) {
+        // Only refresh the window theme if the user changes the personalize settings.
+        if ((wParam == 0) && (lParam != 0) // lParam sometimes may be NULL.
+            && (wcscmp(reinterpret_cast<LPCWSTR>(lParam), L"ImmersiveColorSet") == 0)) {
+            const bool darkMode = QWindowsTheme::queryDarkMode();
+            const bool darkModeChanged = darkMode != QWindowsContextPrivate::m_darkMode;
             QWindowsContextPrivate::m_darkMode = darkMode;
             auto integration = QWindowsIntegration::instance();
-            if (integration->darkModeHandling().testFlag(QWindowsApplication::DarkModeWindowFrames)) {
-                for (QWindowsWindow *w : d->m_windows)
-                    w->setDarkBorder(QWindowsContextPrivate::m_darkMode);
-            }
             if (integration->darkModeHandling().testFlag(QWindowsApplication::DarkModeStyle)) {
                 QWindowsTheme::instance()->refresh();
-                for (QWindowsWindow *w : d->m_windows)
-                    QWindowSystemInterface::handleThemeChange(w->window());
+                QWindowSystemInterface::handleThemeChange();
+            }
+            if (darkModeChanged) {
+                if (integration->darkModeHandling().testFlag(QWindowsApplication::DarkModeWindowFrames)) {
+                    for (QWindowsWindow *w : d->m_windows)
+                        w->setDarkBorder(QWindowsContextPrivate::m_darkMode);
+                }
             }
         }
         return d->m_screenManager.handleScreenChanges();
@@ -1242,7 +1221,7 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
     case QtWindows::NonClientHitTest:
         return platformWindow->handleNonClientHitTest(QPoint(msg.pt.x, msg.pt.y), result);
     case QtWindows::GeometryChangingEvent:
-        return platformWindow->QWindowsWindow::handleGeometryChanging(&msg);
+        return platformWindow->handleGeometryChanging(&msg);
     case QtWindows::ExposeEvent:
         return platformWindow->handleWmPaint(hwnd, message, wParam, lParam, result);
     case QtWindows::NonClientMouseEvent:

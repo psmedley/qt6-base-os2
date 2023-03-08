@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qcborstreamwriter.h"
 
@@ -211,6 +175,7 @@ Q_DECLARE_TYPEINFO(CborEncoder, Q_PRIMITIVE_TYPE);
    \endlist
 
    \sa QCborStreamReader, QCborValue, QXmlStreamWriter
+   \sa {Cbordump Example}, {Convert Example}, {JSON Save Game Example}
  */
 
 class QCborStreamWriterPrivate
@@ -466,7 +431,7 @@ void QCborStreamWriter::append(QCborNegativeInteger n)
 
    \sa QCborStreamReader::isString(), QCborStreamReader::readString()
  */
-void QCborStreamWriter::append(QLatin1String str)
+void QCborStreamWriter::append(QLatin1StringView str)
 {
     // We've got Latin-1 but CBOR wants UTF-8, so check if the string is the
     // common subset (US-ASCII).
@@ -639,11 +604,11 @@ void QCborStreamWriter::appendByteString(const char *data, qsizetype len)
    The string pointed to by \a utf8 is expected to be properly encoded UTF-8.
    QCborStreamWriter performs no validation that this is the case.
 
-   Unlike the QLatin1String overload of append(), this function is not limited
+   Unlike the QLatin1StringView overload of append(), this function is not limited
    to 2 GB. However, note that neither QCborStreamReader::readString() nor
    QCborValue support reading CBOR streams with text strings larger than 2 GB.
 
-   \sa append(QLatin1String), append(QStringView),
+   \sa append(QLatin1StringView), append(QStringView),
        QCborStreamReader::isString(), QCborStreamReader::readString()
  */
 void QCborStreamWriter::appendTextString(const char *utf8, qsizetype len)
@@ -663,11 +628,11 @@ void QCborStreamWriter::appendTextString(const char *utf8, qsizetype len)
    The string pointed to by \a str is expected to be properly encoded UTF-8.
    QCborStreamWriter performs no validation that this is the case.
 
-   Unlike the QLatin1String overload of append(), this function is not limited
+   Unlike the QLatin1StringView overload of append(), this function is not limited
    to 2 GB. However, note that neither QCborStreamReader nor QCborValue support
    reading CBOR streams with text strings larger than 2 GB.
 
-   \sa append(QLatin1String), append(QStringView),
+   \sa append(QLatin1StringView), append(QStringView),
        QCborStreamReader::isString(), QCborStreamReader::readString()
  */
 

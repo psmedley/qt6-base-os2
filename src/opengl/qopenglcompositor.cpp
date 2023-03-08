@@ -1,45 +1,10 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtOpenGL/QOpenGLFramebufferObject>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QWindow>
+#include <QtGui/private/qrhi_p.h>
 #include <qpa/qplatformbackingstore.h>
 
 #include "qopenglcompositor_p.h"
@@ -93,12 +58,15 @@ QOpenGLCompositor::~QOpenGLCompositor()
     compositor = 0;
 }
 
-void QOpenGLCompositor::setTarget(QOpenGLContext *context, QWindow *targetWindow,
-                                  const QRect &nativeTargetGeometry)
+void QOpenGLCompositor::setTargetWindow(QWindow *targetWindow, const QRect &nativeTargetGeometry)
 {
-    m_context = context;
     m_targetWindow = targetWindow;
     m_nativeTargetGeometry = nativeTargetGeometry;
+}
+
+void QOpenGLCompositor::setTargetContext(QOpenGLContext *context)
+{
+    m_context = context;
 }
 
 void QOpenGLCompositor::setRotation(int degrees)
@@ -207,7 +175,8 @@ static void clippedBlit(const QPlatformTextureList *textures, int idx, const QRe
     const QMatrix3x3 source = QOpenGLTextureBlitter::sourceTransform(srcRect, rectInWindow.size(),
                                                                      QOpenGLTextureBlitter::OriginBottomLeft);
 
-    blitter->blit(textures->textureId(idx), target, source);
+    const uint textureId = textures->texture(idx)->nativeTexture().object;
+    blitter->blit(textureId, target, source);
 }
 
 void QOpenGLCompositor::render(QOpenGLCompositorWindow *window)
@@ -221,7 +190,7 @@ void QOpenGLCompositor::render(QOpenGLCompositorWindow *window)
     BlendStateBinder blend;
     const QRect sourceWindowRect = window->sourceWindow()->geometry();
     for (int i = 0; i < textures->count(); ++i) {
-        uint textureId = textures->textureId(i);
+        const uint textureId = textures->texture(i)->nativeTexture().object;
         const float opacity = window->sourceWindow()->opacity();
         if (opacity != currentOpacity) {
             currentOpacity = opacity;
@@ -277,7 +246,9 @@ void QOpenGLCompositor::addWindow(QOpenGLCompositorWindow *window)
 {
     if (!m_windows.contains(window)) {
         m_windows.append(window);
-        emit topWindowChanged(window);
+        ensureCorrectZOrder();
+        if (window == m_windows.constLast())
+            emit topWindowChanged(window);
     }
 }
 
@@ -290,9 +261,17 @@ void QOpenGLCompositor::removeWindow(QOpenGLCompositorWindow *window)
 
 void QOpenGLCompositor::moveToTop(QOpenGLCompositorWindow *window)
 {
+    if (!m_windows.isEmpty() && window == m_windows.constLast()) {
+        // Already on top
+        return;
+    }
+
     m_windows.removeOne(window);
     m_windows.append(window);
-    emit topWindowChanged(window);
+    ensureCorrectZOrder();
+
+    if (window == m_windows.constLast())
+        emit topWindowChanged(window);
 }
 
 void QOpenGLCompositor::changeWindowIndex(QOpenGLCompositorWindow *window, int newIdx)
@@ -300,9 +279,61 @@ void QOpenGLCompositor::changeWindowIndex(QOpenGLCompositorWindow *window, int n
     int idx = m_windows.indexOf(window);
     if (idx != -1 && idx != newIdx) {
         m_windows.move(idx, newIdx);
-        if (newIdx == m_windows.size() - 1)
+        ensureCorrectZOrder();
+        if (window == m_windows.constLast())
             emit topWindowChanged(m_windows.last());
     }
+}
+
+void QOpenGLCompositor::ensureCorrectZOrder()
+{
+    const auto originalOrder = m_windows;
+
+    std::sort(m_windows.begin(), m_windows.end(),
+              [this, &originalOrder](QOpenGLCompositorWindow *cw1, QOpenGLCompositorWindow *cw2) {
+                  QWindow *w1 = cw1->sourceWindow();
+                  QWindow *w2 = cw2->sourceWindow();
+
+                  // Case #1: The main window needs to have less z-order. It can never be in
+                  // front of our tool windows, popups etc, because it's fullscreen!
+                  if (w1 == m_targetWindow || w2 == m_targetWindow)
+                      return w1 == m_targetWindow;
+
+                  // Case #2:
+                  if (w2->isAncestorOf(w1)) {
+                      // w1 is transient child of w2. W1 goes in front then.
+                      return false;
+                  }
+
+                  if (w1->isAncestorOf(w2)) {
+                      // Or the other way around
+                      return true;
+                  }
+
+                  // Case #3: Modality gets higher Z
+                  if (w1->modality() != Qt::NonModal && w2->modality() == Qt::NonModal)
+                      return false;
+
+                  if (w2->modality() != Qt::NonModal && w1->modality() == Qt::NonModal)
+                      return true;
+
+                  const bool isTool1 = (w1->flags() & Qt::Tool) == Qt::Tool;
+                  const bool isTool2 = (w2->flags() & Qt::Tool) == Qt::Tool;
+                  const bool isPurePopup1 = !isTool1 && (w1->flags() & Qt::Popup) == Qt::Popup;
+                  const bool isPurePopup2 = !isTool2 && (w2->flags() & Qt::Popup) == Qt::Popup;
+
+                  // Case #4: By pure-popup we mean menus and tooltips. Qt::Tool implies Qt::Popup
+                  // and we don't want to catch QDockWidget and other tool windows just yet
+                  if (isPurePopup1 != isPurePopup2)
+                      return !isPurePopup1;
+
+                  // Case #5: One of the window is a Tool, that goes to front, as done in other QPAs
+                  if (isTool1 != isTool2)
+                      return !isTool1;
+
+                  // Case #6: Just preserve original sorting:
+                  return originalOrder.indexOf(cw1) < originalOrder.indexOf(cw2);
+              });
 }
 
 QT_END_NAMESPACE

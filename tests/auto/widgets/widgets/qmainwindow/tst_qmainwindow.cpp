@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -68,13 +43,13 @@ public:
     }
     void timerEvent(QTimerEvent*) override
     {
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseButtonPress, QPoint(6, 7), Qt::LeftButton, {}, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(7, 8), Qt::LeftButton, Qt::LeftButton, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(27, 23), Qt::LeftButton, Qt::LeftButton, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(30, 27), Qt::LeftButton, Qt::LeftButton, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(162, 109), Qt::LeftButton, Qt::LeftButton, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(10, 4), Qt::LeftButton, Qt::LeftButton, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseButtonRelease, QPoint(9, 4), Qt::LeftButton, {}, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseButtonPress, QPoint(6, 7), m_tb->mapToGlobal(QPoint(6, 7)), Qt::LeftButton, {}, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(7, 8), m_tb->mapToGlobal(QPoint(7, 8)), Qt::LeftButton, Qt::LeftButton, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(27, 23), m_tb->mapToGlobal(QPoint(27, 23)), Qt::LeftButton, Qt::LeftButton, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(30, 27), m_tb->mapToGlobal(QPoint(30, 27)), Qt::LeftButton, Qt::LeftButton, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(162, 109), m_tb->mapToGlobal(QPoint(162, 109)), Qt::LeftButton, Qt::LeftButton, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(10, 4), m_tb->mapToGlobal(QPoint(10, 4)), Qt::LeftButton, Qt::LeftButton, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseButtonRelease, QPoint(9, 4), m_tb->mapToGlobal(QPoint(6, 7)), Qt::LeftButton, {}, {}));
     }
 };
 
@@ -92,8 +67,8 @@ public:
 
     void timerEvent(QTimerEvent*) override
     {
-        QCoreApplication::postEvent(m_w, new QMouseEvent(QEvent::MouseButtonPress, QPoint(230, 370), Qt::LeftButton, {}, {}));
-        QCoreApplication::postEvent(m_w, new QMouseEvent(QEvent::MouseButtonRelease, QPoint(230, 370), Qt::LeftButton, {}, {}));
+        QCoreApplication::postEvent(m_w, new QMouseEvent(QEvent::MouseButtonPress, QPoint(230, 370), m_w->mapToGlobal(QPoint(230, 370)), Qt::LeftButton, {}, {}));
+        QCoreApplication::postEvent(m_w, new QMouseEvent(QEvent::MouseButtonRelease, QPoint(230, 370), m_w->mapToGlobal(QPoint(230, 370)), Qt::LeftButton, {}, {}));
     }
 };
 
@@ -2149,14 +2124,14 @@ void tst_QMainWindow::resizeDocks()
 
     int totalFromList = 0;
     int actualTotal = 0;
-    for (int i = 0; i < docks.count(); ++i) {
+    for (int i = 0; i < docks.size(); ++i) {
         totalFromList += sizes[i];
         QSize s = list[i]->size();
         actualTotal += (orientation == Qt::Horizontal) ? s.width() : s.height();
 //        qDebug() << list[i] << list[i]->size() << sizes[i];
     }
 
-    for (int i = 0; i < docks.count(); ++i) {
+    for (int i = 0; i < docks.size(); ++i) {
         QSize s = list[i]->size();
         int value = (orientation == Qt::Horizontal) ? s.width() : s.height();
         QCOMPARE(value,  qRound(sizes[i]*actualTotal/double(totalFromList)));

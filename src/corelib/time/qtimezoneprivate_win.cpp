@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2022 The Qt Company Ltd.
-** Copyright (C) 2013 John Layt <jlayt@kde.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2013 John Layt <jlayt@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtimezone.h"
 #include "qtimezoneprivate_p.h"
@@ -50,6 +14,8 @@
 #include <private/qwinregistry_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 /*
     Private
@@ -179,7 +145,7 @@ TIME_ZONE_INFORMATION getRegistryTzi(const QByteArray &windowsId, bool *ok)
     TIME_ZONE_INFORMATION tzi;
     REG_TZI_FORMAT regTzi;
     DWORD regTziSize = sizeof(regTzi);
-    const QString tziKeyPath = QString::fromWCharArray(tzRegPath) + QLatin1Char('\\')
+    const QString tziKeyPath = QString::fromWCharArray(tzRegPath) + u'\\'
                                + QString::fromUtf8(windowsId);
 
     QWinRegistryKey key(HKEY_LOCAL_MACHINE, tziKeyPath);
@@ -557,7 +523,7 @@ void QWinTimeZonePrivate::init(const QByteArray &ianaId)
     bool badMonth = false; // Only warn once per zone, if at all.
     if (!m_windowsId.isEmpty()) {
         // Open the base TZI for the time zone
-        const QString baseKeyPath = QString::fromWCharArray(tzRegPath) + QLatin1Char('\\')
+        const QString baseKeyPath = QString::fromWCharArray(tzRegPath) + u'\\'
                                    + QString::fromUtf8(m_windowsId);
         QWinRegistryKey baseKey(HKEY_LOCAL_MACHINE, baseKeyPath);
         if (baseKey.isValid()) {
@@ -566,7 +532,7 @@ void QWinTimeZonePrivate::init(const QByteArray &ianaId)
             m_standardName = baseKey.stringValue(L"Std");
             m_daylightName = baseKey.stringValue(L"Dlt");
             // On Vista and later the optional dynamic key holds historic data
-            const QString dynamicKeyPath = baseKeyPath + QLatin1String("\\Dynamic DST");
+            const QString dynamicKeyPath = baseKeyPath + "\\Dynamic DST"_L1;
             QWinRegistryKey dynamicKey(HKEY_LOCAL_MACHINE, dynamicKeyPath);
             if (dynamicKey.isValid()) {
                 // Find out the start and end years stored, then iterate over them

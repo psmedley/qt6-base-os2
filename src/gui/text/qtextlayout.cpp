@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtextlayout.h"
 #include "qtextengine_p.h"
@@ -663,8 +627,8 @@ int QTextLayout::nextCursorPosition(int oldPos, CursorMode mode) const
 {
     const QCharAttributes *attributes = d->attributes();
     int len = d->block.isValid() ? d->block.length() - 1
-                                 : d->layoutData->string.length();
-    Q_ASSERT(len <= d->layoutData->string.length());
+                                 : d->layoutData->string.size();
+    Q_ASSERT(len <= d->layoutData->string.size());
     if (!attributes || oldPos < 0 || oldPos >= len)
         return oldPos;
 
@@ -699,8 +663,8 @@ int QTextLayout::previousCursorPosition(int oldPos, CursorMode mode) const
 {
     const QCharAttributes *attributes = d->attributes();
     int len = d->block.isValid() ? d->block.length() - 1
-                                 : d->layoutData->string.length();
-    Q_ASSERT(len <= d->layoutData->string.length());
+                                 : d->layoutData->string.size();
+    Q_ASSERT(len <= d->layoutData->string.size());
     if (!attributes || oldPos <= 0 || oldPos > len)
         return oldPos;
 
@@ -771,7 +735,7 @@ int QTextLayout::leftCursorPosition(int oldPos) const
 bool QTextLayout::isValidCursorPosition(int pos) const
 {
     const QCharAttributes *attributes = d->attributes();
-    if (!attributes || pos < 0 || pos > (int)d->layoutData->string.length())
+    if (!attributes || pos < 0 || pos > (int)d->layoutData->string.size())
         return false;
     return attributes[pos].graphemeBoundary;
 }
@@ -812,7 +776,7 @@ QTextLine QTextLayout::createLine()
         }
     }
     int from = l > 0 ? d->lines.at(l-1).from + d->lines.at(l-1).length + d->lines.at(l-1).trailingSpaces : 0;
-    int strlen = d->layoutData->string.length();
+    int strlen = d->layoutData->string.size();
     if (l && from >= strlen) {
         if (!d->lines.at(l-1).length || d->layoutData->string.at(strlen - 1) != QChar::LineSeparator)
             return QTextLine();
@@ -1015,7 +979,7 @@ QList<QGlyphRun> QTextLayout::glyphRuns(int from, int length) const
     if (from < 0)
         from = 0;
     if (length < 0)
-        length = text().length();
+        length = text().size();
 
     QHash<QPair<QFontEngine *, int>, QGlyphRun> glyphRunHash;
     for (int i=0; i<d->lines.size(); ++i) {
@@ -1268,7 +1232,7 @@ void QTextLayout::drawCursor(QPainter *p, const QPointF &pos, int cursorPosition
 
     QPointF position = pos + d->position;
 
-    cursorPosition = qBound(0, cursorPosition, d->layoutData->string.length());
+    cursorPosition = qBound(0, cursorPosition, d->layoutData->string.size());
     int line = d->lineNumberForTextPosition(cursorPosition);
     if (line < 0)
         line = 0;
@@ -1282,7 +1246,6 @@ void QTextLayout::drawCursor(QPainter *p, const QPointF &pos, int cursorPosition
 
     QFixed base = sl.base();
     QFixed descent = sl.descent;
-    QFixed cursorDescent = descent;
     bool rightToLeft = d->isRightToLeft();
 
     const int realCursorPosition = cursorPosition;
@@ -1302,7 +1265,7 @@ void QTextLayout::drawCursor(QPainter *p, const QPointF &pos, int cursorPosition
             int neighborItem = itm;
             if (neighborItem > 0 && si->position == realCursorPosition)
                 --neighborItem;
-            else if (neighborItem < d->layoutData->items.count() - 1 && si->position + si->num_glyphs == realCursorPosition)
+            else if (neighborItem < d->layoutData->items.size() - 1 && si->position + si->num_glyphs == realCursorPosition)
                 ++neighborItem;
             const bool onBoundary = neighborItem != itm
                                  && si->analysis.bidiLevel != d->layoutData->items[neighborItem].analysis.bidiLevel;
@@ -1311,15 +1274,16 @@ void QTextLayout::drawCursor(QPainter *p, const QPointF &pos, int cursorPosition
                 si = &d->layoutData->items[itm];
             }
         }
-        if (si->ascent >= 0)
-            base = si->ascent;
-        if (si->descent == 0)
-            descent = si->descent;
-        else if (si->descent > 0 && si->descent < descent)
-            cursorDescent = si->descent;
+        // objects need some special treatment as they can have special alignment or be floating
+        if (si->analysis.flags != QScriptAnalysis::Object) {
+            if (si->ascent > 0)
+                base = si->ascent;
+            if (si->descent > 0)
+                descent = si->descent;
+        }
         rightToLeft = si->analysis.bidiLevel % 2;
     }
-    qreal y = position.y() + (sl.y + sl.base() + sl.descent - base - descent).toReal();
+    qreal y = position.y() + (sl.y + sl.base() - base).toReal();
     bool toggleAntialiasing = !(p->renderHints() & QPainter::Antialiasing)
                               && (p->transform().type() > QTransform::TxTranslate);
     if (toggleAntialiasing)
@@ -1330,7 +1294,7 @@ void QTextLayout::drawCursor(QPainter *p, const QPointF &pos, int cursorPosition
     const QTransform &deviceTransform = p->deviceTransform();
     const qreal xScale = deviceTransform.m11();
     if (deviceTransform.type() != QTransform::TxScale || std::trunc(xScale) == xScale) {
-        p->fillRect(QRectF(x, y, qreal(width), (base + cursorDescent).toReal()), p->pen().brush());
+        p->fillRect(QRectF(x, y, qreal(width), (base + descent).toReal()), p->pen().brush());
     } else {
         // Ensure consistently rendered cursor width under fractional scaling
         const QPen origPen = p->pen();
@@ -1338,7 +1302,7 @@ void QTextLayout::drawCursor(QPainter *p, const QPointF &pos, int cursorPosition
         pen.setCosmetic(true);
         const qreal center = x + qreal(width) / 2;
         p->setPen(pen);
-        p->drawLine(QPointF(center, y), QPointF(center, y + (base + cursorDescent).toReal()));
+        p->drawLine(QPointF(center, y), QPointF(center, y + (base + descent).toReal()));
         p->setPen(origPen);
     }
     p->setCompositionMode(origCompositionMode);
@@ -1596,7 +1560,7 @@ void QTextLine::setLineWidth(qreal width)
     line.width = QFixed::fromReal(width);
     if (line.length
         && line.textWidth <= line.width
-        && line.from + line.length == eng->layoutData->string.length())
+        && line.from + line.length == eng->layoutData->string.size())
         // no need to do anything if the line is already layouted and the last one. This optimization helps
         // when using things in a single line layout.
         return;
@@ -1812,12 +1776,12 @@ void QTextLine::layout_helper(int maxGlyphs)
     line.textWidth = 0;
     line.hasTrailingSpaces = false;
 
-    if (!eng->layoutData->items.size() || line.from >= eng->layoutData->string.length()) {
+    if (!eng->layoutData->items.size() || line.from >= eng->layoutData->string.size()) {
         line.setDefaultHeight(eng);
         return;
     }
 
-    Q_ASSERT(line.from < eng->layoutData->string.length());
+    Q_ASSERT(line.from < eng->layoutData->string.size());
 
     LineBreakHelper lbh;
 
@@ -1972,11 +1936,11 @@ void QTextLine::layout_helper(int maxGlyphs)
                 // spaces to behave as in previous Qt versions in the line breaking algorithm.
                 // The line breaks do not currently follow the Unicode specs, but fixing this would
                 // require refactoring the code and would cause behavioral regressions.
-                const bool isBreakableSpace = lbh.currentPosition < eng->layoutData->string.length()
+                const bool isBreakableSpace = lbh.currentPosition < eng->layoutData->string.size()
                                         && attributes[lbh.currentPosition].whiteSpace
                                         && eng->layoutData->string.at(lbh.currentPosition).decompositionTag() != QChar::NoBreak;
 
-                if (lbh.currentPosition >= eng->layoutData->string.length()
+                if (lbh.currentPosition >= eng->layoutData->string.size()
                     || isBreakableSpace
                     || attributes[lbh.currentPosition].lineBreak
                     || lbh.tmpData.textWidth >= QFIXED_MAX) {
@@ -2198,7 +2162,7 @@ int QTextLine::textStart() const
 int QTextLine::textLength() const
 {
     if (eng->option.flags() & QTextOption::ShowLineAndParagraphSeparators
-        && eng->block.isValid() && index == eng->lines.count()-1) {
+        && eng->block.isValid() && index == eng->lines.size()-1) {
         return eng->lines.at(index).length - 1;
     }
     return eng->lines.at(index).length + eng->lines.at(index).trailingSpaces;
@@ -2225,8 +2189,8 @@ static QGlyphRun glyphRunWithInfo(QFontEngine *fontEngine,
                                   const QGlyphLayout &glyphLayout,
                                   const QPointF &pos,
                                   const QGlyphRun::GlyphRunFlags &flags,
-                                  const QFixed &selectionX,
-                                  const QFixed &selectionWidth,
+                                  QFixed selectionX,
+                                  QFixed selectionWidth,
                                   int glyphsStart,
                                   int glyphsEnd,
                                   unsigned short *logClusters,
@@ -2536,7 +2500,7 @@ void QTextLine::draw_internal(QPainter *p, const QPointF &origPos,
 
             const qreal lineHeight = line.height().toReal();
             QRectF r(origPos.x() + line.x.toReal(), origPos.y() + line.y.toReal(),
-                     lineHeight / 2, QFontMetrics(eng->font()).horizontalAdvance(QLatin1Char(' ')));
+                     lineHeight / 2, QFontMetrics(eng->font()).horizontalAdvance(u' '));
             setPenAndDrawBackground(p, QPen(), selection->format, r);
             p->setPen(pen);
         }
@@ -2806,7 +2770,7 @@ qreal QTextLine::cursorToX(int *cursorPos, Edge edge) const
         int neighborItem = itm;
         if (neighborItem > 0 && scriptItem->position == pos)
             --neighborItem;
-        else if (neighborItem < eng->layoutData->items.count() - 1 && scriptItem->position + scriptItem->num_glyphs == pos)
+        else if (neighborItem < eng->layoutData->items.size() - 1 && scriptItem->position + scriptItem->num_glyphs == pos)
             ++neighborItem;
         const bool onBoundary = neighborItem != itm && scriptItem->analysis.bidiLevel != eng->layoutData->items[neighborItem].analysis.bidiLevel;
         // If we are, prioritise the neighbor item that has the same direction as the engine
@@ -3123,7 +3087,7 @@ int QTextLine::xToCursor(qreal _x, CursorPosition cpos) const
     // character between lines is a space and we want
     // to position the cursor to the left of that
     // character.
-    if (index < eng->lines.count() - 1)
+    if (index < eng->lines.size() - 1)
         pos = qMin(eng->previousLogicalPosition(pos), pos);
 
     return pos;

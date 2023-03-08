@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -33,6 +8,7 @@
 #include <qimage.h>
 #include <qimagereader.h>
 #include <qlist.h>
+#include <qset.h>
 #include <qtransform.h>
 #include <qrandom.h>
 #include <stdio.h>
@@ -249,6 +225,8 @@ private slots:
 
     void largeFillScale();
     void largeRasterScale();
+
+    void metadataChangeWithReadOnlyPixels();
 
 #if defined(Q_OS_WIN)
     void toWinHBITMAP_data();
@@ -3457,6 +3435,9 @@ void tst_QImage::exifInvalidData()
 
 void tst_QImage::exifReadComments()
 {
+#ifdef QT_NO_IMAGEIO_TEXT_LOADING
+    QSKIP("Reading text from image file is configured off");
+#endif
     QImage image;
     QVERIFY(image.load(m_prefix + "jpeg_exif_utf8_comment.jpg"));
     QVERIFY(!image.isNull());
@@ -4060,6 +4041,24 @@ void tst_QImage::largeRasterScale()
     }
 
 //    image.save("largeRasterScale.png", "PNG");
+}
+
+void tst_QImage::metadataChangeWithReadOnlyPixels()
+{
+    const QRgb data[3] = { qRgb(255, 0, 0), qRgb(0, 255, 0), qRgb(0, 0, 255) };
+    QImage image((const uchar *)data, 3, 1, QImage::Format_RGB32);
+
+    QCOMPARE(image.constBits(), (const uchar *)data);
+    image.setDotsPerMeterX(100);
+    QCOMPARE(image.constBits(), (const uchar *)data);
+
+    QImage image2 = image;
+    QCOMPARE(image2.constBits(), (const uchar *)data);
+    image2.setDotsPerMeterX(200);
+    // Pixels and metadata has the same sharing mechanism, so a change of a shared
+    // image metadata forces pixel detach (remove this sub-test if that ever changes).
+    QVERIFY(image2.constBits() != (const uchar *)data);
+    QCOMPARE(image.constBits(), (const uchar *)data);
 }
 
 #if defined(Q_OS_WIN)

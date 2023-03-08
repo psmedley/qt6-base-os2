@@ -1,31 +1,6 @@
 #!/usr/bin/env python3
-#############################################################################
-##
-## Copyright (C) 2020 The Qt Company Ltd.
-## Contact: https://www.qt.io/licensing/
-##
-## This file is part of the release tools of the Qt Toolkit.
-##
-## $QT_BEGIN_LICENSE:GPL-EXCEPT$
-## Commercial License Usage
-## Licensees holding valid commercial Qt licenses may use this file in
-## accordance with the commercial license agreement provided with the
-## Software or, alternatively, in accordance with the terms contained in
-## a written agreement between you and The Qt Company. For licensing terms
-## and conditions see https://www.qt.io/terms-conditions. For further
-## information use the contact form at https://www.qt.io/contact-us.
-##
-## GNU General Public License Usage
-## Alternatively, this file may be used under the terms of the GNU
-## General Public License version 3 as published by the Free Software
-## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-## included in the packaging of this file. Please review the following
-## information to ensure the GNU General Public License requirements will
-## be met: https://www.gnu.org/licenses/gpl-3.0.html.
-##
-## $QT_END_LICENSE$
-##
-#############################################################################
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 from argparse import ArgumentParser, RawTextHelpFormatter
 import os
@@ -57,14 +32,15 @@ TESTS = ['assert', 'badxml', 'benchlibcallgrind', 'benchlibcounting',
          'benchlibwalltime', 'blacklisted', 'cmptest', 'commandlinedata',
          'counting', 'crashes', 'datatable', 'datetime', 'deleteLater',
          'deleteLater_noApp', 'differentexec', 'eventloop', 'exceptionthrow',
-         'expectfail', 'failcleanup', 'faildatatype', 'failfetchtype', 'failinit',
-         'failinitdata', 'fetchbogus', 'findtestdata', 'float', 'globaldata',
-         'longstring', 'maxwarnings', 'mouse', 'multiexec', 'pairdiagnostics', 'pass',
+         'expectfail', "extendedcompare", 'failcleanup', 'failcleanuptestcase',
+         'faildatatype', 'failfetchtype', 'failinit', 'failinitdata',
+         'fetchbogus', 'findtestdata', 'float', 'globaldata', 'longstring',
+         'maxwarnings', 'mouse', 'multiexec', 'pairdiagnostics', 'pass',
          'printdatatags', 'printdatatagswithglobaltags', 'qexecstringlist',
          'signaldumper', 'silent', 'singleskip', 'skip', 'skipcleanup',
-         'skipinit', 'skipinitdata', 'sleep', 'strcmp', 'subtest', 'testlib',
-         'tuplediagnostics', 'verbose1', 'verbose2', 'verifyexceptionthrown',
-         'warnings', 'watchdog', 'junit', 'keyboard']
+         'skipcleanuptestcase', 'skipinit', 'skipinitdata', 'sleep', 'strcmp',
+         'subtest', 'testlib', 'tuplediagnostics', 'verbose1', 'verbose2',
+         'verifyexceptionthrown', 'warnings', 'watchdog', 'junit', 'keyboard']
 
 
 class Fail (Exception): pass
@@ -99,8 +75,12 @@ class Cleaner (object):
     def _read_qt_version(qtbase_dir):
         cmake_conf_file = os.path.join(qtbase_dir, '.cmake.conf')
         with open(cmake_conf_file) as f:
-            qtver = f.readline().strip()
-        return qtver.split('"')[1]   # set(QT_REPO_MODULE_VERSION "6.1.0")
+            for line in f:
+                # set(QT_REPO_MODULE_VERSION "6.1.0")
+                if 'set(QT_REPO_MODULE_VERSION' in line:
+                    return line.strip().split('"')[1]
+
+        raise RuntimeError("Someone broke .cmake.conf formatting again")
 
     @staticmethod
     def __getPatterns(patterns = (
@@ -225,7 +205,7 @@ del re
 def baseEnv(platname=None,
             keep=('PATH', 'QT_QPA_PLATFORM'),
             posix=('HOME', 'USER', 'QEMU_SET_ENV', 'QEMU_LD_PREFIX'),
-            nonapple=('DISPLAY', 'XAUTHLOCALHOSTNAME'), # and XDG_*
+            nonapple=('DISPLAY', 'XAUTHORITY', 'XAUTHLOCALHOSTNAME'), # and XDG_*
             # Don't actually know how to test for QNX, so this is ignored:
             qnx=('GRAPHICS_ROOT', 'TZ'),
             # Probably not actually relevant

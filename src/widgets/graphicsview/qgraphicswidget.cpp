@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qglobal.h"
 
@@ -66,6 +30,8 @@
 #include <qdebug.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 /*!
     \class QGraphicsWidget
@@ -233,7 +199,7 @@ QGraphicsWidget::~QGraphicsWidget()
     Q_D(QGraphicsWidget);
 #ifndef QT_NO_ACTION
     // Remove all actions from this widget
-    for (auto action : qAsConst(d->actions)) {
+    for (auto action : std::as_const(d->actions)) {
         QActionPrivate *apriv = action->d_func();
         apriv->associatedObjects.removeAll(this);
     }
@@ -2002,7 +1968,7 @@ void QGraphicsWidget::addAction(QAction *action)
 */
 void QGraphicsWidget::addActions(const QList<QAction *> &actions)
 {
-    for (int i = 0; i < actions.count(); ++i)
+    for (int i = 0; i < actions.size(); ++i)
         insertAction(nullptr, actions.at(i));
 }
 
@@ -2059,7 +2025,7 @@ void QGraphicsWidget::insertAction(QAction *before, QAction *action)
 */
 void QGraphicsWidget::insertActions(QAction *before, const QList<QAction *> &actions)
 {
-    for (int i = 0; i < actions.count(); ++i)
+    for (int i = 0; i < actions.size(); ++i)
         insertAction(before, actions.at(i));
 }
 
@@ -2401,7 +2367,7 @@ void QGraphicsWidget::dumpFocusChain()
             qWarning("Found a focus chain that is not circular, (next == 0)");
             break;
         }
-        qDebug() << i++ << QString::number(uint(next), 16) << next->className() << next->data(0) << QString::fromLatin1("focusItem:%1").arg(next->hasFocus() ? '1' : '0') << QLatin1String("next:") << next->d_func()->focusNext->data(0) << QLatin1String("prev:") << next->d_func()->focusPrev->data(0);
+        qDebug() << i++ << QString::number(uint(next), 16) << next->className() << next->data(0) << QString::fromLatin1("focusItem:%1").arg(next->hasFocus() ? '1' : '0') << "next:"_L1 << next->d_func()->focusNext->data(0) << "prev:"_L1 << next->d_func()->focusPrev->data(0);
         if (visited.contains(next)) {
             qWarning("Already visited this node. However, I expected to dump until I found myself.");
             break;

@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QtTest/private/qtesthelpers_p.h>
@@ -282,11 +257,11 @@ void tst_QMenu::onStatusMessageChanged(const QString &s)
 
 void tst_QMenu::addActionsAndClear()
 {
-    QCOMPARE(menus[0]->actions().count(), 0);
+    QCOMPARE(menus[0]->actions().size(), 0);
     createActions();
-    QCOMPARE(menus[0]->actions().count(), 8);
+    QCOMPARE(menus[0]->actions().size(), 8);
     menus[0]->clear();
-    QCOMPARE(menus[0]->actions().count(), 0);
+    QCOMPARE(menus[0]->actions().size(), 0);
 }
 
 static void testFunction0() {}
@@ -1287,7 +1262,7 @@ void tst_QMenu::click_while_dismissing_submenu()
     //the submenu must have been hidden for the bug to be triggered
     QVERIFY(!sub.isVisible());
     QTest::mouseRelease(menuWindow, Qt::LeftButton, {}, menu.rect().center() - QPoint(0, 2), 300);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 }
 #endif
 
@@ -1863,12 +1838,12 @@ void tst_QMenu::menuSize_Scrolling()
     private:
         void showEvent(QShowEvent *e) override
         {
-            QVERIFY(actions().length() == m_numItems);
+            QVERIFY(actions().size() == m_numItems);
 
             int hmargin = style()->pixelMetric(QStyle::PM_MenuHMargin, nullptr, this);
             int fw = style()->pixelMetric(QStyle::PM_MenuPanelWidth, nullptr, this);
             const QMargins cm = contentsMargins();
-            QRect lastItem = actionGeometry(actions().at(actions().length() - 1));
+            QRect lastItem = actionGeometry(actions().at(actions().size() - 1));
             QSize s = size();
             if (!QGuiApplication::platformName().compare(QLatin1String("minimal"), Qt::CaseInsensitive)
                 || !QGuiApplication::platformName().compare(QLatin1String("offscreen"), Qt::CaseInsensitive)) {
@@ -1934,7 +1909,7 @@ void tst_QMenu::menuSize_Scrolling()
     QVERIFY(QTest::qWaitForWindowExposed(&menu));
 
     QList<QAction *> actions = menu.actions();
-    QCOMPARE(actions.length(), numItems);
+    QCOMPARE(actions.size(), numItems);
 
     MenuMetrics mm(&menu);
     QTest::keyClick(&menu, Qt::Key_Home);
@@ -2014,11 +1989,11 @@ void tst_QMenu::QTBUG_61039_menu_shortcuts()
 
     QSignalSpy actionKamenSpy(actionKamen, &QAction::triggered);
     QTest::keyClick(&widget, Qt::Key_K);
-    QTRY_COMPARE(actionKamenSpy.count(), 1);
+    QTRY_COMPARE(actionKamenSpy.size(), 1);
 
     QSignalSpy actionJoeSpy(actionJoe, &QAction::triggered);
     QTest::keyClick(&widget, Qt::Key_J, Qt::ControlModifier);
-    QTRY_COMPARE(actionJoeSpy.count(), 1);
+    QTRY_COMPARE(actionJoeSpy.size(), 1);
 }
 
 void tst_QMenu::screenOrientationChangedCloseMenu()

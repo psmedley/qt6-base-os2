@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <qstringlist.h>
 #include <qset.h>
@@ -120,25 +84,7 @@ QT_BEGIN_NAMESPACE
 
     \section1 Iterating Over the Strings
 
-    To iterate over a list, you can either use index positions or
-    QList's Java-style and STL-style iterator types:
-
-    Indexing:
-
-    \snippet qstringlist/main.cpp 1
-
-    Java-style iterator:
-
-    \snippet qstringlist/main.cpp 2
-
-    STL-style iterator:
-
-    \snippet qstringlist/main.cpp 3
-
-    The QStringListIterator class is simply a type definition for
-    QListIterator<QString>. QStringList also provide the
-    QMutableStringListIterator class which is a type definition for
-    QMutableListIterator<QString>.
+    See \l {Iterating over Containers}.
 
     \section1 Manipulating the Strings
 
@@ -349,7 +295,7 @@ bool QtPrivate::QStringList_contains(const QStringList *that, QStringView str,
 }
 
 /*!
-    \fn bool QStringList::contains(QLatin1String str, Qt::CaseSensitivity cs) const
+    \fn bool QStringList::contains(QLatin1StringView str, Qt::CaseSensitivity cs) const
     \overload
     \since 5.10
 
@@ -359,7 +305,7 @@ bool QtPrivate::QStringList_contains(const QStringList *that, QStringView str,
 
     \sa indexOf(), lastIndexOf(), QString::contains()
  */
-bool QtPrivate::QStringList_contains(const QStringList *that, QLatin1String str,
+bool QtPrivate::QStringList_contains(const QStringList *that, QLatin1StringView str,
                                      Qt::CaseSensitivity cs)
 {
     return stringList_contains(*that, str, cs);
@@ -423,7 +369,7 @@ void QtPrivate::QStringList_replaceInStrings(QStringList *that, QStringView befo
                                              QStringView after, Qt::CaseSensitivity cs)
 {
     for (qsizetype i = 0; i < that->size(); ++i)
-        (*that)[i].replace(before.data(), before.length(), after.data(), after.length(), cs);
+        (*that)[i].replace(before.data(), before.size(), after.data(), after.size(), cs);
 }
 
 #if QT_CONFIG(regularexpression)
@@ -501,11 +447,11 @@ QString QtPrivate::QStringList_join(const QStringList *that, const QChar *sep, q
 }
 
 /*!
-    \fn QString QStringList::join(QLatin1String separator) const
+    \fn QString QStringList::join(QLatin1StringView separator) const
     \since 5.8
     \overload join()
 */
-QString QtPrivate::QStringList_join(const QStringList &list, QLatin1String sep)
+QString QtPrivate::QStringList_join(const QStringList &list, QLatin1StringView sep)
 {
     QString result;
     if (!list.isEmpty()) {
@@ -528,7 +474,7 @@ QString QtPrivate::QStringList_join(const QStringList &list, QLatin1String sep)
 */
 QString QtPrivate::QStringList_join(const QStringList *that, QStringView sep)
 {
-    return QStringList_join(that, sep.data(), sep.length());
+    return QStringList_join(that, sep.data(), sep.size());
 }
 
 /*!

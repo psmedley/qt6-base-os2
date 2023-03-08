@@ -1,46 +1,15 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qnetworklistmanagerevents.h"
 
+#include <QtCore/qpointer.h>
+
+#include <mutex>
+
 #ifdef SUPPORTS_WINRT
 #include <winrt/base.h>
+#include <QtCore/private/qfactorycacheregistration_p.h>
 // Workaround for Windows SDK bug.
 // See https://github.com/microsoft/Windows.UI.Composition-Win32-Samples/issues/47
 namespace winrt::impl
@@ -137,11 +106,16 @@ bool QNetworkListManagerEvents::start()
 
 #ifdef SUPPORTS_WINRT
     using namespace winrt::Windows::Networking::Connectivity;
+    using winrt::Windows::Foundation::IInspectable;
     // Register for changes in the network and store a token to unregister later:
     token = NetworkInformation::NetworkStatusChanged(
-            [this](const winrt::Windows::Foundation::IInspectable sender) {
+            [owner = QPointer(this)](const IInspectable sender) {
                 Q_UNUSED(sender);
-                emitWinRTUpdates();
+                if (owner) {
+                    std::scoped_lock locker(owner->winrtLock);
+                    if (owner->token)
+                        owner->emitWinRTUpdates();
+                }
             });
     // Emit initial state
     emitWinRTUpdates();
@@ -150,24 +124,28 @@ bool QNetworkListManagerEvents::start()
     return true;
 }
 
-bool QNetworkListManagerEvents::stop()
+void QNetworkListManagerEvents::stop()
 {
     Q_ASSERT(connectionPoint);
     auto hr = connectionPoint->Unadvise(cookie);
     if (FAILED(hr)) {
         qCWarning(lcNetInfoNLM) << "Failed to unsubscribe from network connectivity events:"
                                 << errorStringFromHResult(hr);
-        return false;
+    } else {
+        cookie = 0;
     }
-    cookie = 0;
+    // Even if we fail we should still try to unregister from winrt events:
 
 #ifdef SUPPORTS_WINRT
-    using namespace winrt::Windows::Networking::Connectivity;
-    // Pass the token we stored earlier to unregister:
-    NetworkInformation::NetworkStatusChanged(token);
-    token = {};
+    // Try to synchronize unregistering with potentially in-progress callbacks
+    std::scoped_lock locker(winrtLock);
+    if (token) {
+        using namespace winrt::Windows::Networking::Connectivity;
+        // Pass the token we stored earlier to unregister:
+        NetworkInformation::NetworkStatusChanged(token);
+        token = {};
+    }
 #endif
-    return true;
 }
 
 bool QNetworkListManagerEvents::checkBehindCaptivePortal()
@@ -221,7 +199,12 @@ QNetworkInformation::TransportMedium getTransportMedium(const ConnectionProfile 
     if (profile.IsWlanConnectionProfile())
         return QNetworkInformation::TransportMedium::WiFi;
 
-    NetworkAdapter adapter = profile.NetworkAdapter();
+    NetworkAdapter adapter(nullptr);
+    try {
+        adapter = profile.NetworkAdapter();
+    } catch (...) {
+        // pass, we will return Unknown anyway
+    }
     if (adapter == nullptr)
         return QNetworkInformation::TransportMedium::Unknown;
 
@@ -244,7 +227,14 @@ QNetworkInformation::TransportMedium getTransportMedium(const ConnectionProfile 
 
 [[nodiscard]] bool getMetered(const ConnectionProfile &profile)
 {
-    ConnectionCost cost = profile.GetConnectionCost();
+    ConnectionCost cost(nullptr);
+    try {
+        cost = profile.GetConnectionCost();
+    } catch (...) {
+        // pass, we return false if we get an empty object back anyway
+    }
+    if (cost == nullptr)
+        return false;
     NetworkCostType type = cost.NetworkCostType();
     return type == NetworkCostType::Fixed || type == NetworkCostType::Variable;
 }
@@ -253,7 +243,12 @@ QNetworkInformation::TransportMedium getTransportMedium(const ConnectionProfile 
 void QNetworkListManagerEvents::emitWinRTUpdates()
 {
     using namespace winrt::Windows::Networking::Connectivity;
-    ConnectionProfile profile = NetworkInformation::GetInternetConnectionProfile();
+    ConnectionProfile profile = nullptr;
+    try {
+        profile = NetworkInformation::GetInternetConnectionProfile();
+    } catch (...) {
+        // pass, we would just return early if we get an empty object back anyway
+    }
     if (profile == nullptr)
         return;
     emit transportMediumChanged(getTransportMedium(profile));

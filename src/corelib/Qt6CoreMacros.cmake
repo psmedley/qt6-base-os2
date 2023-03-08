@@ -36,8 +36,6 @@
 #
 ######################################
 
-include(CMakeParseArguments)
-
 set(__qt_core_macros_module_base_dir "${CMAKE_CURRENT_LIST_DIR}")
 
 # macro used to create the names of output files preserving relative dirs
@@ -130,8 +128,8 @@ function(_qt_internal_create_moc_command infile outfile moc_flags moc_options
         set(targetincludes "$<TARGET_PROPERTY:${moc_target},INCLUDE_DIRECTORIES>")
         set(targetdefines "$<TARGET_PROPERTY:${moc_target},COMPILE_DEFINITIONS>")
 
-        set(targetincludes "$<$<BOOL:${targetincludes}>:-I$<JOIN:${targetincludes},\n-I>\n>")
-        set(targetdefines "$<$<BOOL:${targetdefines}>:-D$<JOIN:${targetdefines},\n-D>\n>")
+        set(targetincludes "$<$<BOOL:${targetincludes}>:-I$<JOIN:$<REMOVE_DUPLICATES:${targetincludes}>,\n-I>\n>")
+        set(targetdefines "$<$<BOOL:${targetdefines}>:-D$<JOIN:$<REMOVE_DUPLICATES:${targetdefines}>,\n-D>\n>")
 
         file (GENERATE
             OUTPUT ${_moc_parameters_file}
@@ -291,6 +289,10 @@ function(qt6_add_binary_resources target )
     set(rcc_options ${_RCC_OPTIONS})
     set(rcc_destination ${_RCC_DESTINATION})
 
+    if(NOT QT_FEATURE_zstd)
+        list(APPEND rcc_options "--no-zstd")
+    endif()
+
     if(NOT rcc_destination)
         set(rcc_destination ${CMAKE_CURRENT_BINARY_DIR}/${target}.rcc)
     endif()
@@ -355,6 +357,10 @@ function(qt6_add_resources outfiles )
             message(WARNING "Use qt6_add_binary_resources for binary option")
         endif()
 
+        if(NOT QT_FEATURE_zstd)
+            list(APPEND rcc_options "--no-zstd")
+        endif()
+
         foreach(it ${rcc_files})
             get_filename_component(outfilename ${it} NAME_WE)
             get_filename_component(infile ${it} ABSOLUTE)
@@ -372,6 +378,7 @@ function(qt6_add_resources outfiles )
             set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOMOC ON
                                                               SKIP_AUTOUIC ON
                                                               SKIP_UNITY_BUILD_INCLUSION ON
+                                                              SKIP_PRECOMPILE_HEADERS ON
                                                               )
             list(APPEND ${outfiles} ${outfile})
         endforeach()
@@ -428,6 +435,10 @@ function(qt6_add_big_resources outfiles )
 
     if("${rcc_options}" MATCHES "-binary")
         message(WARNING "Use qt6_add_binary_resources for binary option")
+    endif()
+
+    if(NOT QT_FEATURE_zstd)
+        list(APPEND rcc_options "--no-zstd")
     endif()
 
     foreach(it ${rcc_files})
@@ -633,6 +644,7 @@ function(_qt_internal_finalize_executable target)
 
     if(EMSCRIPTEN)
         _qt_internal_wasm_add_target_helpers("${target}")
+        _qt_internal_add_wasm_extra_exported_methods("${target}")
     endif()
     if(IOS)
         _qt_internal_finalize_ios_app("${target}")
@@ -692,464 +704,6 @@ function(qt6_finalize_target target)
     if(target_type STREQUAL "EXECUTABLE" OR is_android_executable)
         _qt_internal_finalize_executable(${ARGV})
     endif()
-endfunction()
-
-function(_qt_internal_handle_ios_launch_screen target)
-    # Check if user provided a launch screen path via a variable.
-    set(launch_screen "")
-
-    # This variable is currently in Technical Preview.
-    if(QT_IOS_LAUNCH_SCREEN)
-        set(launch_screen "${QT_IOS_LAUNCH_SCREEN}")
-    endif()
-
-    # Check if user provided a launch screen path via a target property.
-    if(NOT launch_screen)
-
-        # This property is currently in Technical Preview.
-        get_target_property(launch_screen_from_prop "${target}" QT_IOS_LAUNCH_SCREEN)
-        if(launch_screen_from_prop)
-            set(launch_screen "${launch_screen_from_prop}")
-        endif()
-    endif()
-
-    # If user hasn't provided a launch screen path, use a copy of the one qmake uses.
-    # It needs to be a copy because configure_file can't handle all the escaped double quotes.
-    if(NOT launch_screen AND NOT QT_NO_SET_IOS_LAUNCH_SCREEN)
-        set(launch_screen "LaunchScreen.storyboard")
-        set(launch_screen
-            "${__qt_internal_cmake_ios_support_files_path}/${launch_screen}")
-    endif()
-
-    # Save the name of the launch screen in an internal cache var, so it is added as a
-    # UILaunchStoryboardName entry in the generated Info.plist.
-    # This is the only sensible but dirty way to set up a variable, so that CMake's internal
-    # configure_file call for Info.plist picks it up.
-    # Unfortunately CMake does not provide a way of setting a regular non-cache variable in a
-    # directory scope from within a nested function call.
-    # This means that the behavior below will only work if there's one single executable in the
-    # project.
-    # FIXME: Figure out if there's a better way of doing this.
-    #        Perhaps we should give up on using CMake's Info.plist mechanism and just call
-    #        configure_file ourselves.
-    if(launch_screen)
-        if(NOT IS_ABSOLUTE "${launch_screen}")
-            message(FATAL_ERROR
-                "Provided launch screen value should be an absolute path: '${launch_screen}'")
-        endif()
-
-        if(NOT EXISTS "${launch_screen}")
-            message(FATAL_ERROR
-                "Provided launch screen file does not exist: '${launch_screen}'")
-        endif()
-
-        get_filename_component(launch_screen_name "${launch_screen}" NAME)
-        set(QT_INTERNAL_IOS_LAUNCH_SCREEN_PLIST_ENTRY "${launch_screen_name}" CACHE INTERNAL "")
-    endif()
-
-    if(launch_screen AND NOT QT_NO_ADD_IOS_LAUNCH_SCREEN_TO_BUNDLE)
-        # Configure the file and place it in the build dir.
-        set(launch_screen_in_path "${launch_screen}")
-
-        string(MAKE_C_IDENTIFIER "${target}" target_identifier)
-        set(launch_screen_out_dir
-            "${CMAKE_CURRENT_BINARY_DIR}/qt_story_boards/${target_identifier}")
-
-        set(launch_screen_out_path
-            "${launch_screen_out_dir}/${launch_screen_name}")
-
-        file(MAKE_DIRECTORY "${launch_screen_out_dir}")
-
-        set(QT_IOS_LAUNCH_SCREEN_TEXT "${target}")
-        configure_file(
-            "${launch_screen_in_path}"
-            "${launch_screen_out_path}"
-            @ONLY
-        )
-
-        # Add it as a source file, otherwise CMake doesn't consider it a resource.
-        target_sources("${target}" PRIVATE "${launch_screen_out_path}")
-
-        # Ensure Xcode copies the file to the app bundle.
-        set_property(TARGET "${target}" APPEND PROPERTY RESOURCE "${launch_screen_out_path}")
-    endif()
-endfunction()
-
-function(_qt_internal_find_ios_development_team_id out_var)
-    get_property(team_id GLOBAL PROPERTY _qt_internal_ios_development_team_id)
-    get_property(team_id_computed GLOBAL PROPERTY _qt_internal_ios_development_team_id_computed)
-    if(team_id_computed)
-        # Just in case if the value is non-empty but still booly FALSE.
-        if(NOT team_id)
-            set(team_id "")
-        endif()
-        set("${out_var}" "${team_id}" PARENT_SCOPE)
-        return()
-    endif()
-
-    set_property(GLOBAL PROPERTY _qt_internal_ios_development_team_id_computed "TRUE")
-
-    set(home_dir "$ENV{HOME}")
-    set(xcode_preferences_path "${home_dir}/Library/Preferences/com.apple.dt.Xcode.plist")
-
-    # Extract the first account name (email) from the user's Xcode preferences
-    message(DEBUG "Trying to extract an Xcode development team id from '${xcode_preferences_path}'")
-    execute_process(COMMAND "/usr/libexec/PlistBuddy"
-                            -x -c "print IDEProvisioningTeams" "${xcode_preferences_path}"
-                    OUTPUT_VARIABLE teams_xml
-                    ERROR_VARIABLE plist_error)
-
-    # Parsing state.
-    set(is_free "")
-    set(current_team_id "")
-    set(parsing_is_free FALSE)
-    set(parsing_team_id FALSE)
-    set(first_team_id "")
-
-    # Parse the xml output and return the first encountered non-free team id. If no non-free team id
-    # is found, return the first encountered free team id.
-    # If no team is found, return an empty string.
-    #
-    # Example input:
-    #<plist version="1.0">
-    #<dict>
-    #    <key>marty@planet.local</key>
-    #    <array>
-    #        <dict>
-    #            <key>isFreeProvisioningTeam</key>
-    #            <false/>
-    #            <key>teamID</key>
-    #            <string>AAA</string>
-    #            ...
-    #        </dict>
-    #        <dict>
-    #            <key>isFreeProvisioningTeam</key>
-    #            <true/>
-    #            <key>teamID</key>
-    #            <string>BBB</string>
-    #            ...
-    #        </dict>
-    #    </array>
-    #</dict>
-    #</plist>
-    if(teams_xml AND NOT plist_error)
-        string(REPLACE "\n" ";" teams_xml_lines "${teams_xml}")
-
-        foreach(xml_line ${teams_xml_lines})
-            string(STRIP "${xml_line}" xml_line)
-            if(xml_line STREQUAL "<dict>")
-                # Clean any previously found values when a new team dict is matched.
-                set(is_free "")
-                set(current_team_id "")
-
-            elseif(xml_line STREQUAL "<key>isFreeProvisioningTeam</key>")
-                set(parsing_is_free TRUE)
-
-            elseif(parsing_is_free)
-                set(parsing_is_free FALSE)
-
-                if(xml_line MATCHES "true")
-                    set(is_free TRUE)
-                else()
-                    set(is_free FALSE)
-                endif()
-
-            elseif(xml_line STREQUAL "<key>teamID</key>")
-                set(parsing_team_id TRUE)
-
-            elseif(parsing_team_id)
-                set(parsing_team_id FALSE)
-                if(xml_line MATCHES "<string>([^<]+)</string>")
-                    set(current_team_id "${CMAKE_MATCH_1}")
-                else()
-                    continue()
-                endif()
-
-                string(STRIP "${current_team_id}" current_team_id)
-
-                # If this is the first team id we found so far, remember that, regardless if's free
-                # or not.
-                if(NOT first_team_id AND current_team_id)
-                    set(first_team_id "${current_team_id}")
-                endif()
-
-                # Break early if we found a non-free team id and use it, because we prefer
-                # a non-free team for signing, just like qmake.
-                if(NOT is_free AND current_team_id)
-                    set(first_team_id "${current_team_id}")
-                    break()
-                endif()
-            endif()
-        endforeach()
-    endif()
-
-    if(NOT first_team_id)
-        message(DEBUG "Failed to extract an Xcode development team id.")
-        set("${out_var}" "" PARENT_SCOPE)
-    else()
-        message(DEBUG "Successfully extracted the first encountered Xcode development team id.")
-        set_property(GLOBAL PROPERTY _qt_internal_ios_development_team_id "${first_team_id}")
-        set("${out_var}" "${first_team_id}" PARENT_SCOPE)
-    endif()
-endfunction()
-
-function(_qt_internal_get_ios_bundle_identifier_prefix out_var)
-    get_property(prefix GLOBAL PROPERTY _qt_internal_ios_bundle_identifier_prefix)
-    get_property(prefix_computed GLOBAL PROPERTY
-                 _qt_internal_ios_bundle_identifier_prefix_computed)
-    if(prefix_computed)
-        # Just in case if the value is non-empty but still booly FALSE.
-        if(NOT prefix)
-            set(prefix "")
-        endif()
-        set("${out_var}" "${prefix}" PARENT_SCOPE)
-        return()
-    endif()
-
-    set_property(GLOBAL PROPERTY _qt_internal_ios_bundle_identifier_prefix_computed "TRUE")
-
-    set(home_dir "$ENV{HOME}")
-    set(xcode_preferences_path "${home_dir}/Library/Preferences/com.apple.dt.Xcode.plist")
-
-    message(DEBUG "Trying to extract the default bundle identifier prefix from Xcode preferences.")
-    execute_process(COMMAND "/usr/libexec/PlistBuddy"
-                            -c "print IDETemplateOptions:bundleIdentifierPrefix"
-                            "${xcode_preferences_path}"
-                    OUTPUT_VARIABLE prefix
-                    ERROR_VARIABLE prefix_error)
-    if(prefix AND NOT prefix_error)
-        message(DEBUG "Successfully extracted the default bundle indentifier prefix.")
-        string(STRIP "${prefix}" prefix)
-    else()
-        message(DEBUG "Failed to extract the default bundle indentifier prefix.")
-    endif()
-
-    if(prefix AND NOT prefix_error)
-        set_property(GLOBAL PROPERTY _qt_internal_ios_bundle_identifier_prefix "${prefix}")
-        set("${out_var}" "${prefix}" PARENT_SCOPE)
-    else()
-        set("${out_var}" "" PARENT_SCOPE)
-    endif()
-endfunction()
-
-function(_qt_internal_escape_rfc_1034_identifier value out_var)
-    # According to https://datatracker.ietf.org/doc/html/rfc1034#section-3.5
-    # we can only use letters, digits, dot (.) and hyphens (-).
-    # Underscores are not allowed.
-    string(REGEX REPLACE "[^A-Za-z0-9.]" "-" value "${value}")
-
-    set("${out_var}" "${value}" PARENT_SCOPE)
-endfunction()
-
-function(_qt_internal_get_default_ios_bundle_identifier out_var)
-    _qt_internal_get_ios_bundle_identifier_prefix(prefix)
-    if(NOT prefix)
-        set(prefix "com.yourcompany")
-
-        # For a better out-of-the-box experience, try to create a unique prefix by appending
-        # the sha1 of the team id, if one is found.
-        _qt_internal_find_ios_development_team_id(team_id)
-        if(team_id)
-            string(SHA1 hash "${team_id}")
-            string(SUBSTRING "${hash}" 0 8 infix)
-            string(APPEND prefix ".${infix}")
-        else()
-            message(WARNING
-                "No organization bundle identifier prefix could be retrieved from Xcode "
-                "preferences. This can lead to code signing issues due to a non-unique bundle "
-                "identifier. Please set up an organization prefix by creating a new project within "
-                "Xcode, or consider providing a custom bundle identifier by specifying the "
-                "XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER property."
-            )
-        endif()
-    endif()
-
-    # Escape the prefix according to rfc 1034, it's important for code-signing. If an invalid
-    # identifier is used, calling xcodebuild on the command line says that no provisioning profile
-    # could be found, with no additional error message. If one opens the generated project with
-    # Xcode and clicks on 'Try again' to get a new profile, it shows a semi-useful error message
-    # that the identifier is invalid.
-    _qt_internal_escape_rfc_1034_identifier("${prefix}" prefix)
-
-    set(identifier "${prefix}.\${PRODUCT_NAME:rfc1034identifier}")
-    set("${out_var}" "${identifier}" PARENT_SCOPE)
-endfunction()
-
-function(_qt_internal_set_placeholder_apple_bundle_version target)
-    # If user hasn't provided neither a bundle version nor a bundle short version string for the
-    # app, set a placeholder value for both which will add them to the generated Info.plist file.
-    # This is required so that the app launches in the simulator (but apparently not for running
-    # on-device).
-    get_target_property(bundle_version "${target}" MACOSX_BUNDLE_BUNDLE_VERSION)
-    get_target_property(bundle_short_version "${target}" MACOSX_BUNDLE_SHORT_VERSION_STRING)
-
-    if(NOT MACOSX_BUNDLE_BUNDLE_VERSION AND
-       NOT MACOSX_BUNDLE_SHORT_VERSION_STRING AND
-       NOT bundle_version AND
-       NOT bundle_short_version AND
-       NOT QT_NO_SET_XCODE_BUNDLE_VERSION
-     )
-         set(bundle_version "0.0.1")
-         set(bundle_short_version "0.0.1")
-         set_target_properties("${target}"
-                               PROPERTIES
-                               MACOSX_BUNDLE_BUNDLE_VERSION "${bundle_version}"
-                               MACOSX_BUNDLE_SHORT_VERSION_STRING "${bundle_short_version}"
-                               )
-    endif()
-endfunction()
-
-function(_qt_internal_set_xcode_development_team_id target)
-    # If user hasn't provided a development team id, try to find the first one specified
-    # in the Xcode preferences.
-    if(NOT CMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM AND NOT QT_NO_SET_XCODE_DEVELOPMENT_TEAM_ID)
-        get_target_property(existing_team_id "${target}" XCODE_ATTRIBUTE_DEVELOPMENT_TEAM)
-        if(NOT existing_team_id)
-            _qt_internal_find_ios_development_team_id(team_id)
-            set_target_properties("${target}"
-                                  PROPERTIES XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${team_id}")
-        endif()
-    endif()
-endfunction()
-
-function(_qt_internal_set_xcode_bundle_identifier target)
-    # Skip all logic if requested.
-    if(QT_NO_SET_XCODE_BUNDLE_IDENTIFIER)
-        return()
-    endif()
-
-    # There are two fields to consider: the CFBundleIdentifier key (CFBI) to be written to
-    # Info.plist
-    # and the PRODUCT_BUNDLE_IDENTIFIER (PBI) property to set in the Xcode project.
-    # The following logic enables the best out-of-the-box experience combined with maximum
-    # customization.
-    # 1) If values for both fields are not provided, assign ${PRODUCT_BUNDLE_IDENTIFIER} to CFBI
-    #    (which is expanded by xcodebuild at build time and will use the value of PBI) and
-    #    auto-compute a default PBI from Xcode's ${PRODUCT_NAME}.
-    # 2) If CFBI is set and PBI isn't, use given CFBI and keep PBI empty.
-    # 3) If PBI is set and CFBI isn't, assign ${PRODUCT_BUNDLE_IDENTIFIER} to CFBI and use
-    #    the given PBI.
-    # 4) If both are set, use both given values.
-    # TLDR:
-    # cfbi    pbi   -> result_cfbi result_pbi
-    # unset   unset    computed    computed
-    # set     unset    given_val   unset
-    # unset   set      computed    given_val
-    # set     set      given_val   given_val
-
-    get_target_property(existing_cfbi "${target}" MACOSX_BUNDLE_GUI_IDENTIFIER)
-    if(NOT MACOSX_BUNDLE_GUI_IDENTIFIER AND NOT existing_cfbi)
-        set(is_cfbi_given FALSE)
-    else()
-        set(is_cfbi_given TRUE)
-    endif()
-
-    if(NOT is_cfbi_given)
-        set_target_properties("${target}"
-                              PROPERTIES
-                              MACOSX_BUNDLE_GUI_IDENTIFIER "\${PRODUCT_BUNDLE_IDENTIFIER}")
-    endif()
-
-    get_target_property(existing_pbi "${target}" XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER)
-    if(NOT CMAKE_XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER AND NOT existing_pbi)
-        set(is_pbi_given FALSE)
-    else()
-        set(is_pbi_given TRUE)
-    endif()
-
-    if(NOT is_pbi_given AND NOT is_cfbi_given)
-        _qt_internal_get_default_ios_bundle_identifier(bundle_id)
-        set_target_properties("${target}"
-                              PROPERTIES
-                              XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${bundle_id}")
-    endif()
-endfunction()
-
-function(_qt_internal_set_xcode_targeted_device_family target)
-    if(NOT CMAKE_XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY
-            AND NOT QT_NO_SET_XCODE_TARGETED_DEVICE_FAMILY)
-        get_target_property(existing_device_family
-            "${target}" XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY)
-        if(NOT existing_device_family)
-            set(device_family_iphone_and_ipad "1,2")
-            set_target_properties("${target}"
-                                  PROPERTIES
-                                  XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY
-                                  "${device_family_iphone_and_ipad}")
-        endif()
-    endif()
-endfunction()
-
-function(_qt_internal_set_xcode_code_sign_style target)
-    if(NOT CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_STYLE
-            AND NOT QT_NO_SET_XCODE_CODE_SIGN_STYLE)
-        get_target_property(existing_code_style
-            "${target}" XCODE_ATTRIBUTE_CODE_SIGN_STYLE)
-        if(NOT existing_code_style)
-            set(existing_code_style "Automatic")
-            set_target_properties("${target}"
-                                  PROPERTIES
-                                  XCODE_ATTRIBUTE_CODE_SIGN_STYLE
-                                  "${existing_code_style}")
-        endif()
-    endif()
-endfunction()
-
-function(_qt_internal_set_xcode_bundle_display_name target)
-    # We want the value of CFBundleDisplayName to be ${PRODUCT_NAME}, but we can't put that
-    # into the Info.plist.in template file directly, because the implicit configure_file(Info.plist)
-    # done by CMake is not using the @ONLY option, so CMake would treat the assignment as
-    # variable expansion. Escaping using backslashes does not help.
-    # Work around it by assigning the dollar char to a separate cache var, and expand it, so that
-    # the final value in the file will be ${PRODUCT_NAME}, to be evaluated at build time by Xcode.
-    set(QT_INTERNAL_DOLLAR_VAR "$" CACHE STRING "")
-endfunction()
-
-function(_qt_internal_set_xcode_bitcode_enablement target)
-    if(CMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE
-        OR QT_NO_SET_XCODE_ENABLE_BITCODE)
-        return()
-    endif()
-
-    get_target_property(existing_bitcode_enablement
-        "${target}" XCODE_ATTRIBUTE_ENABLE_BITCODE)
-    if(NOT existing_bitcode_enablement MATCHES "-NOTFOUND")
-        return()
-    endif()
-
-    # Disable bitcode to match Xcode 14's new default
-    set_target_properties("${target}"
-        PROPERTIES
-        XCODE_ATTRIBUTE_ENABLE_BITCODE
-        "NO")
-endfunction()
-
-function(_qt_internal_finalize_ios_app target)
-    _qt_internal_set_xcode_development_team_id("${target}")
-    _qt_internal_set_xcode_bundle_identifier("${target}")
-    _qt_internal_set_xcode_targeted_device_family("${target}")
-    _qt_internal_set_xcode_code_sign_style("${target}")
-    _qt_internal_set_xcode_bundle_display_name("${target}")
-    _qt_internal_set_xcode_bitcode_enablement("${target}")
-
-    _qt_internal_handle_ios_launch_screen("${target}")
-    _qt_internal_set_placeholder_apple_bundle_version("${target}")
-endfunction()
-
-function(_qt_internal_finalize_macos_app target)
-    get_target_property(is_bundle ${target} MACOSX_BUNDLE)
-    if(NOT is_bundle)
-        return()
-    endif()
-
-    # Make sure the install rpath has at least the minimum needed if the app
-    # has any non-static frameworks. We can't rigorously know if the app will
-    # have any, even with a static Qt, so always add this. If there are no
-    # frameworks, it won't do any harm.
-    get_property(install_rpath TARGET ${target} PROPERTY INSTALL_RPATH)
-    list(APPEND install_rpath "@executable_path/../Frameworks")
-    list(REMOVE_DUPLICATES install_rpath)
-    set_property(TARGET ${target} PROPERTY INSTALL_RPATH "${install_rpath}")
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
@@ -1441,6 +995,7 @@ function(qt6_extract_metatypes target)
                     ${multi_config_args}
                 COMMENT "Running AUTOMOC file extraction for target ${target}"
                 COMMAND_EXPAND_LISTS
+                VERBATIM
             )
 
         endif()
@@ -1502,6 +1057,7 @@ function(qt6_extract_metatypes target)
             ${metatypes_file_gen}
             ${metatypes_file}
         COMMENT "Running moc --collect-json for target ${target}"
+        VERBATIM
     )
 
     # We can't rely on policy CMP0118 since user project controls it
@@ -1810,6 +1366,7 @@ END
             add_custom_command(OUTPUT "${output}"
                 DEPENDS "${input}"
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different "${input}" "${output}"
+                VERBATIM
             )
             # We can't rely on policy CMP0118 since user project controls it
             set_source_files_properties(${output} ${scope_args} PROPERTIES
@@ -2075,7 +1632,18 @@ function(_qt_internal_process_resource target resourceName)
     string(REPLACE "/" "_" resourceName ${resourceName})
     string(REPLACE "." "_" resourceName ${resourceName})
 
-    set(resource_files ${rcc_FILES})
+    set(resource_files "")
+    # Strip the ending slashes from the file_path. If paths contain slashes in the end
+    # set/get source properties works incorrect and may have the same QT_RESOURCE_ALIAS
+    # for two different paths. See https://gitlab.kitware.com/cmake/cmake/-/issues/23212
+    # for details.
+    foreach(file_path IN LISTS rcc_FILES)
+        if(file_path MATCHES "(.+)/$")
+            set(file_path "${CMAKE_MATCH_1}")
+        endif()
+        list(APPEND resource_files ${file_path})
+    endforeach()
+
     if(NOT "${rcc_BASE}" STREQUAL "")
         get_filename_component(abs_base "${rcc_BASE}" ABSOLUTE)
         foreach(file_path IN LISTS resource_files)
@@ -2141,13 +1709,20 @@ function(_qt_internal_process_resource target resourceName)
         endif()
         get_source_file_property(
             target_dependency ${file} ${scope_args} _qt_resource_target_dependency)
-        if (NOT target_dependency)
-            list(APPEND resource_dependencies ${file})
-        else()
-            if (NOT TARGET ${target_dependency})
-                message(FATAL_ERROR "Target dependency on resource file ${file} is not a cmake target.")
+
+        # The target dependency code path does not take care of rebuilds when ${file}
+        # is touched. Limit its usage to the Xcode generator to avoid the Xcode common
+        # dependency issue.
+        # TODO: Figure out how to avoid the issue on Xcode, while also enabling proper
+        # dependency tracking when ${file} is touched.
+        if(target_dependency AND CMAKE_GENERATOR STREQUAL "Xcode")
+            if(NOT TARGET ${target_dependency})
+                message(FATAL_ERROR
+                        "Target dependency on resource file ${file} is not a cmake target.")
             endif()
             list(APPEND resource_dependencies ${target_dependency})
+        else()
+            list(APPEND resource_dependencies ${file})
         endif()
         _qt_internal_expose_source_file_to_ide(${target} "${file}")
     endforeach()
@@ -2220,6 +1795,7 @@ function(_qt_internal_process_resource target resourceName)
             SKIP_AUTOGEN TRUE
             GENERATED TRUE
             SKIP_UNITY_BUILD_INCLUSION TRUE
+            SKIP_PRECOMPILE_HEADERS TRUE
         )
         get_target_property(target_source_dir ${target} SOURCE_DIR)
         if(NOT target_source_dir STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -2546,30 +2122,6 @@ function(_qt_internal_apply_strict_cpp target)
                 OBJCXX_EXTENSIONS OFF)
         endif()
     endif()
-endfunction()
-
-# Wraps a tool command with a script that contains the necessary environment for the tool to run
-# correctly.
-# _qt_internal_wrap_tool_command(var <SET|APPEND> <command> [args...])
-# Arguments:
-#    APPEND Selects the 'append' mode for the out_variable argument.
-#    SET Selects the 'set' mode for the out_variable argument.
-function(_qt_internal_wrap_tool_command out_variable action)
-    set(append FALSE)
-    if(action STREQUAL "APPEND")
-        set(append TRUE)
-    elseif(NOT action STREQUAL "SET")
-        message(FATAL_ERROR "Invalid action specified ${action}. Supported actions: SET, APPEND")
-    endif()
-
-    set(cmd COMMAND ${QT_TOOL_COMMAND_WRAPPER_PATH} ${ARGN})
-
-    if(append)
-        list(APPEND ${out_variable} ${cmd})
-    else()
-        set(${out_variable} ${cmd})
-    endif()
-    set(${out_variable} "${${out_variable}}" PARENT_SCOPE)
 endfunction()
 
 # Copies properties of the dependency to the target.

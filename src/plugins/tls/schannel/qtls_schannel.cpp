@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 // #define QSSLSOCKET_DEBUG
 
@@ -161,6 +125,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 Q_LOGGING_CATEGORY(lcTlsBackendSchannel, "qt.tlsbackend.schannel");
 
 // Defined in qsslsocket_qt.cpp.
@@ -213,7 +179,7 @@ long QSchannelBackend::tlsLibraryVersionNumber() const
 QString QSchannelBackend::tlsLibraryVersionString() const
 {
     const auto os = QOperatingSystemVersion::current();
-    return QLatin1String("Secure Channel, %1 %2.%3.%4")
+    return "Secure Channel, %1 %2.%3.%4"_L1
             .arg(os.name(),
                  QString::number(os.majorVersion()),
                  QString::number(os.minorVersion()),
@@ -227,7 +193,7 @@ long QSchannelBackend::tlsLibraryBuildVersionNumber() const
 
 QString QSchannelBackend::tlsLibraryBuildVersionString() const
 {
-    return QLatin1String("Secure Channel (NTDDI: 0x%1)")
+    return "Secure Channel (NTDDI: 0x%1)"_L1
             .arg(QString::number(NTDDI_VERSION, 16).toUpper());
 }
 
@@ -571,11 +537,11 @@ bool isCertificateAuthority(const QList<QSslCertificateExtension> &extensions)
 {
     auto it = std::find_if(extensions.cbegin(), extensions.cend(),
                            [](const QSslCertificateExtension &extension) {
-                               return extension.name() == QLatin1String("basicConstraints");
+                               return extension.name() == "basicConstraints"_L1;
                            });
     if (it != extensions.cend()) {
         QVariantMap basicConstraints = it->value().toMap();
-        return basicConstraints.value(QLatin1String("ca"), false).toBool();
+        return basicConstraints.value("ca"_L1, false).toBool();
     }
     return false;
 }
@@ -2245,7 +2211,7 @@ bool TlsCryptographSchannel::verifyCertContext(CERT_CONTEXT *certContext)
         if (element->TrustStatus.dwErrorStatus & CERT_TRUST_INVALID_BASIC_CONSTRAINTS) {
             auto it = std::find_if(extensions.cbegin(), extensions.cend(),
                                    [](const QSslCertificateExtension &extension) {
-                                       return extension.name() == QLatin1String("basicConstraints");
+                                       return extension.name() == "basicConstraints"_L1;
                                    });
             if (it != extensions.cend()) {
                 // @Note: This is actually one of two errors:
@@ -2253,7 +2219,7 @@ bool TlsCryptographSchannel::verifyCertContext(CERT_CONTEXT *certContext)
                 // or the chain path length has been exceeded."
                 QVariantMap basicConstraints = it->value().toMap();
                 QSslError error;
-                if (i > 0 && !basicConstraints.value(QLatin1String("ca"), false).toBool())
+                if (i > 0 && !basicConstraints.value("ca"_L1, false).toBool())
                     error = QSslError(QSslError::InvalidPurpose, certificate);
                 else
                     error = QSslError(QSslError::PathLengthExceeded, certificate);

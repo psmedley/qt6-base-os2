@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QFUTURE_H
 #define QFUTURE_H
@@ -191,6 +155,14 @@ QT_WARNING_POP
     template<class Function, typename = std::enable_if_t<std::is_invocable_r_v<T, Function>>>
     QFuture<T> onCanceled(QObject *context, Function &&handler);
 
+#if !defined(Q_CLANG_QDOC)
+    template<class U = T, typename = std::enable_if_t<QtPrivate::isQFutureV<U>>>
+    auto unwrap();
+#else
+    template<class U>
+    QFuture<U> unwrap();
+#endif
+
     class const_iterator
     {
     public:
@@ -317,6 +289,8 @@ private:
     template<typename ResultType>
     friend struct QtPrivate::WhenAnyContext;
 
+    friend struct QtPrivate::UnwrapHandler;
+
     using QFuturePrivate =
             std::conditional_t<std::is_same_v<T, void>, QFutureInterfaceBase, QFutureInterface<T>>;
 
@@ -429,6 +403,16 @@ QFuture<T> QFuture<T>::onCanceled(QObject *context, Function &&handler)
     QtPrivate::CanceledHandler<std::decay_t<Function>, T>::create(std::forward<Function>(handler),
                                                                   this, promise, context);
     return promise.future();
+}
+
+template<class T>
+template<class U, typename>
+auto QFuture<T>::unwrap()
+{
+    if constexpr (QtPrivate::isQFutureV<typename QtPrivate::Future<T>::type>)
+        return QtPrivate::UnwrapHandler::unwrapImpl(this).unwrap();
+    else
+        return QtPrivate::UnwrapHandler::unwrapImpl(this);
 }
 
 inline QFuture<void> QFutureInterface<void>::future()

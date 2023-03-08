@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QSemaphore>
@@ -35,6 +10,7 @@
 #include <qelapsedtimer.h>
 #include <qmutex.h>
 #include <qthread.h>
+#include <qvarlengtharray.h>
 #include <qwaitcondition.h>
 #include <private/qvolatile_p.h>
 
@@ -91,9 +67,7 @@ enum {
     waitTime = 100
 };
 
-#if __has_include(<chrono>)
 static constexpr std::chrono::milliseconds waitTimeAsDuration(waitTime);
-#endif
 
 void tst_QMutex::convertToMilliseconds_data()
 {
@@ -101,10 +75,6 @@ void tst_QMutex::convertToMilliseconds_data()
     QTest::addColumn<double>("doubleValue");
     QTest::addColumn<qint64>("intValue");
     QTest::addColumn<qint64>("expected");
-
-#if !__has_include(<chrono>)
-    QSKIP("This test requires <chrono>");
-#endif
 
     auto add = [](TimeUnit unit, double d, long long i, qint64 expected) {
         const QScopedArrayPointer<char> enumName(QTest::toString(unit));
@@ -158,9 +128,6 @@ void tst_QMutex::convertToMilliseconds_data()
 
 void tst_QMutex::convertToMilliseconds()
 {
-#if !__has_include(<chrono>)
-    QSKIP("This test requires <chrono>");
-#else
     QFETCH(TimeUnit, unit);
     QFETCH(double, doubleValue);
     QFETCH(qint64, intValue);
@@ -198,7 +165,6 @@ void tst_QMutex::convertToMilliseconds()
 #undef DO
 #undef CASE
     }
-#endif
 }
 
 void tst_QMutex::tryLock_non_recursive()
@@ -326,10 +292,8 @@ void tst_QMutex::tryLock_non_recursive()
     thread.wait();
 }
 
-void tst_QMutex::try_lock_for_non_recursive() {
-#if !__has_include(<chrono>)
-    QSKIP("This test requires <chrono>");
-#else
+void tst_QMutex::try_lock_for_non_recursive()
+{
     class Thread : public QThread
     {
     public:
@@ -451,14 +415,10 @@ void tst_QMutex::try_lock_for_non_recursive() {
     testsTurn.acquire();
     threadsTurn.release();
     thread.wait();
-#endif
 }
 
 void tst_QMutex::try_lock_until_non_recursive()
 {
-#if !__has_include(<chrono>)
-    QSKIP("This test requires <chrono>");
-#else
     class Thread : public QThread
     {
     public:
@@ -580,7 +540,6 @@ void tst_QMutex::try_lock_until_non_recursive()
     testsTurn.acquire();
     threadsTurn.release();
     thread.wait();
-#endif
 }
 
 void tst_QMutex::tryLock_recursive()
@@ -709,9 +668,6 @@ void tst_QMutex::tryLock_recursive()
 
 void tst_QMutex::try_lock_for_recursive()
 {
-#if !__has_include(<chrono>)
-    QSKIP("This test requires <chrono>");
-#else
     class Thread : public QThread
     {
     public:
@@ -832,14 +788,10 @@ void tst_QMutex::try_lock_for_recursive()
     testsTurn.acquire();
     threadsTurn.release();
     thread.wait();
-#endif
 }
 
 void tst_QMutex::try_lock_until_recursive()
 {
-#if !__has_include(<chrono>)
-    QSKIP("This test requires <chrono>");
-#else
     class Thread : public QThread
     {
     public:
@@ -961,7 +913,6 @@ void tst_QMutex::try_lock_until_recursive()
     testsTurn.acquire();
     threadsTurn.release();
     thread.wait();
-#endif
 }
 
 class mutex_Thread : public QThread
@@ -1325,12 +1276,13 @@ QAtomicInt MoreStressTestThread::errorCount = 0;
 
 void tst_QMutex::moreStress()
 {
-    MoreStressTestThread threads[threadCount];
-    for (int i = 0; i < threadCount; ++i)
-        threads[i].start();
+    QVarLengthArray<MoreStressTestThread, threadCount> threads(qMin(QThread::idealThreadCount(),
+                                                                    int(threadCount)));
+    for (auto &thread : threads)
+        thread.start();
     QVERIFY(threads[0].wait(one_minute + 10000));
-    for (int i = 1; i < threadCount; ++i)
-        QVERIFY(threads[i].wait(10000));
+    for (auto &thread : threads)
+        QVERIFY(thread.wait(10000));
     qDebug("locked %d times", MoreStressTestThread::lockCount.loadRelaxed());
     QCOMPARE(MoreStressTestThread::errorCount.loadRelaxed(), 0);
 }

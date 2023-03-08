@@ -1,37 +1,14 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QTestEventLoop>
 #include <QSignalSpy>
 #include <QSemaphore>
 #include <QAbstractEventDispatcher>
+#if defined(Q_OS_WIN32)
 #include <QWinEventNotifier>
+#endif
 
 #include <qcoreapplication.h>
 #include <qelapsedtimer.h>
@@ -42,6 +19,8 @@
 #include <qdebug.h>
 #include <qmetaobject.h>
 #include <qscopeguard.h>
+#include <private/qobject_p.h>
+#include <private/qthread_p.h>
 
 #ifdef Q_OS_UNIX
 #include <pthread.h>
@@ -94,6 +73,7 @@ private slots:
     void adoptedThreadExecFinished();
     void adoptMultipleThreads();
     void adoptMultipleThreadsOverlap();
+    void adoptedThreadBindingStatus();
 
     void exitAndStart();
     void exitAndExec();
@@ -120,6 +100,8 @@ private slots:
 
     void terminateAndPrematureDestruction();
     void terminateAndDoubleDestruction();
+
+    void bindingListCleanupAfterDelete();
 };
 
 enum { one_minute = 60 * 1000, five_minutes = 5 * one_minute };
@@ -980,6 +962,20 @@ void tst_QThread::adoptMultipleThreadsOverlap()
     QCOMPARE(recorder.activationCount.loadRelaxed(), numThreads);
 }
 
+void tst_QThread::adoptedThreadBindingStatus()
+{
+    NativeThreadWrapper nativeThread;
+    nativeThread.setWaitForStop();
+
+    nativeThread.startAndWait();
+    QVERIFY(nativeThread.qthread);
+    auto privThread = static_cast<QThreadPrivate *>(QObjectPrivate::get(nativeThread.qthread));
+    QVERIFY(privThread->m_statusOrPendingObjects.bindingStatus());
+
+    nativeThread.stop();
+    nativeThread.join();
+}
+
 // Disconnects on WinCE
 void tst_QThread::stressTest()
 {
@@ -1244,10 +1240,6 @@ void tst_QThread::isRunningInFinished()
         QVERIFY(inThreadObject.ok);
     }
 }
-
-QT_BEGIN_NAMESPACE
-Q_CORE_EXPORT uint qGlobalPostedEventsCount();
-QT_END_NAMESPACE
 
 class DummyEventDispatcher : public QAbstractEventDispatcher {
 public:
@@ -1854,6 +1846,18 @@ void tst_QThread::terminateAndDoubleDestruction()
     };
 
     TestObject obj;
+}
+
+void tst_QThread::bindingListCleanupAfterDelete()
+{
+    QThread t;
+    auto optr = std::make_unique<QObject>();
+    optr->moveToThread(&t);
+    auto threadPriv =  static_cast<QThreadPrivate *>(QObjectPrivate::get(&t));
+    auto list = threadPriv->m_statusOrPendingObjects.list();
+    QVERIFY(list);
+    optr.reset();
+    QVERIFY(list->empty());
 }
 
 QTEST_MAIN(tst_QThread)

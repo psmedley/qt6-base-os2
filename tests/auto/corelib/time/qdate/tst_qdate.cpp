@@ -1,37 +1,15 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <private/qglobal_p.h> // for the icu feature test
 #include <QTest>
+#if QT_CONFIG(timezone)
 #include <QTimeZone>
+#endif
 #include <qdatetime.h>
 #include <qlocale.h>
+#include <QMap>
 
 class tst_QDate : public QObject
 {
@@ -198,6 +176,32 @@ void tst_QDate::isValid_data()
     QTest::newRow("jd latest formula")   << 1400000 << 12 << 31 << qint64(513060925) << true;
 }
 
+#if __cpp_lib_chrono >= 201907L
+// QDate has a bigger range than year_month_date. The tests use this bigger
+// range. However building a year_month_time with "out of range" data has
+// unspecified results, so don't do that. See [time.cal.year],
+// [time.cal.month], [time.cal.day]. Also, std::chrono::year has a year 0, so
+// take that into account.
+static std::optional<std::chrono::year_month_day> convertToStdYearMonthDay(int y, int m, int d)
+{
+    using namespace std::chrono;
+
+    if (y >= int((year::min)())
+            && y <= int((year::max)())
+            && m >= 0
+            && m <= 255
+            && d >= 0
+            && d <= 255)
+    {
+        if (y < 0)
+            ++y;
+        return std::make_optional(year(y) / m / d);
+    }
+
+    return std::nullopt;
+}
+#endif
+
 void tst_QDate::isValid()
 {
     QFETCH(int, year);
@@ -217,6 +221,19 @@ void tst_QDate::isValid()
         QCOMPARE(d.year(), year);
         QCOMPARE(d.month(), month);
         QCOMPARE(d.day(), day);
+#if __cpp_lib_chrono >= 201907L
+        std::optional<std::chrono::year_month_day> ymd = convertToStdYearMonthDay(year, month, day);
+        if (ymd) {
+            QDate d = *ymd;
+            QCOMPARE(d.year(), year);
+            QCOMPARE(d.month(), month);
+            QCOMPARE(d.day(), day);
+
+            const std::chrono::sys_days qdateSysDays = d.toStdSysDays();
+            const std::chrono::sys_days ymdSysDays = *ymd;
+            QCOMPARE(qdateSysDays, ymdSysDays);
+        }
+#endif
     } else {
         QCOMPARE(d.year(), 0);
         QCOMPARE(d.month(), 0);
@@ -641,6 +658,17 @@ void tst_QDate::startOfDay_endOfDay_bounds()
     QCOMPARE(last.date().startOfDay(Qt::UTC).time(), QTime(0, 0));
     QVERIFY(!first.date().startOfDay(Qt::UTC).isValid());
     QVERIFY(!last.date().endOfDay(Qt::UTC).isValid());
+
+    // Test for QTBUG-100873, shouldn't assert:
+    const QDate qdteMin(1752, 9, 14); // Used by QDateTimeEdit
+    QCOMPARE(qdteMin.startOfDay(Qt::UTC).date(), qdteMin);
+    QCOMPARE(qdteMin.startOfDay(Qt::LocalTime).date(), qdteMin);
+#if QT_CONFIG(timezone)
+    QCOMPARE(qdteMin.startOfDay(QTimeZone::systemTimeZone()).date(), qdteMin);
+    QTimeZone berlin("Europe/Berlin");
+    if (berlin.isValid())
+        QCOMPARE(qdteMin.startOfDay(berlin).date(), qdteMin);
+#endif
 }
 
 void tst_QDate::julianDaysLimits()
@@ -716,11 +744,19 @@ void tst_QDate::addDays()
     QFETCH( int, expectedDay );
 
     QDate dt( year, month, day );
-    dt = dt.addDays( amountToAdd );
+    QDate dt2 = dt.addDays( amountToAdd );
 
-    QCOMPARE( dt.year(), expectedYear );
-    QCOMPARE( dt.month(), expectedMonth );
-    QCOMPARE( dt.day(), expectedDay );
+    QCOMPARE( dt2.year(), expectedYear );
+    QCOMPARE( dt2.month(), expectedMonth );
+    QCOMPARE( dt2.day(), expectedDay );
+
+#if __cpp_lib_chrono >= 201907L
+    QDate dt3 = dt.addDuration( std::chrono::days( amountToAdd ) );
+
+    QCOMPARE( dt3.year(), expectedYear );
+    QCOMPARE( dt3.month(), expectedMonth );
+    QCOMPARE( dt3.day(), expectedDay );
+#endif
 }
 
 void tst_QDate::addDays_data()

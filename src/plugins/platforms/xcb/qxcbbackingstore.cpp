@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qxcbbackingstore.h"
 
@@ -901,17 +865,19 @@ void QXcbBackingStore::render(xcb_window_t window, const QRegion &region, const 
     m_image->put(window, region, offset);
 }
 
-#ifndef QT_NO_OPENGL
-void QXcbBackingStore::composeAndFlush(QWindow *window, const QRegion &region, const QPoint &offset,
-                                       QPlatformTextureList *textures,
-                                       bool translucentBackground)
+QPlatformBackingStore::FlushResult QXcbBackingStore::rhiFlush(QWindow *window,
+                                                              qreal sourceDevicePixelRatio,
+                                                              const QRegion &region,
+                                                              const QPoint &offset,
+                                                              QPlatformTextureList *textures,
+                                                              bool translucentBackground)
 {
     if (!m_image || m_image->size().isEmpty())
-        return;
+        return FlushFailed;
 
     m_image->flushScrolledRegion(true);
 
-    QPlatformBackingStore::composeAndFlush(window, region, offset, textures, translucentBackground);
+    QPlatformBackingStore::rhiFlush(window, sourceDevicePixelRatio, region, offset, textures, translucentBackground);
 
     QXcbWindow *platformWindow = static_cast<QXcbWindow *>(window->handle());
     if (platformWindow->needsSync()) {
@@ -919,8 +885,9 @@ void QXcbBackingStore::composeAndFlush(QWindow *window, const QRegion &region, c
     } else {
         xcb_flush(xcb_connection());
     }
+
+    return FlushSuccess;
 }
-#endif // QT_NO_OPENGL
 
 void QXcbBackingStore::resize(const QSize &size, const QRegion &)
 {

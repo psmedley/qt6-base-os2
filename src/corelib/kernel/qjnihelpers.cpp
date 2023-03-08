@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qjnihelpers_p.h"
 
@@ -70,7 +34,7 @@ static jobject g_jActivity = nullptr;
 static jobject g_jService = nullptr;
 static jobject g_jClassLoader = nullptr;
 
-Q_GLOBAL_STATIC_WITH_ARGS(QtAndroidPrivate::OnBindListener*, g_onBindListener, (nullptr));
+Q_GLOBAL_STATIC(QtAndroidPrivate::OnBindListener *, g_onBindListener, nullptr);
 Q_GLOBAL_STATIC(QMutex, g_onBindListenerMutex);
 Q_GLOBAL_STATIC(QSemaphore, g_waitForServiceSetupSemaphore);
 Q_GLOBAL_STATIC(QAtomicInt, g_serviceSetupLockers);
@@ -89,7 +53,7 @@ static jboolean dispatchGenericMotionEvent(JNIEnv *, jclass, jobject event)
 {
     jboolean ret = JNI_FALSE;
     QMutexLocker locker(&g_genericMotionEventListeners()->mutex);
-    for (auto *listener : qAsConst(g_genericMotionEventListeners()->listeners))
+    for (auto *listener : std::as_const(g_genericMotionEventListeners()->listeners))
         ret |= listener->handleGenericMotionEvent(event);
     return ret;
 }
@@ -106,7 +70,7 @@ static jboolean dispatchKeyEvent(JNIEnv *, jclass, jobject event)
 {
     jboolean ret = JNI_FALSE;
     QMutexLocker locker(&g_keyEventListeners()->mutex);
-    for (auto *listener : qAsConst(g_keyEventListeners()->listeners))
+    for (auto *listener : std::as_const(g_keyEventListeners()->listeners))
         ret |= listener->handleKeyEvent(event);
     return ret;
 }
@@ -326,18 +290,18 @@ jint QtAndroidPrivate::initJNI(JavaVM *vm, JNIEnv *env)
     return JNI_OK;
 }
 
-jobject QtAndroidPrivate::activity()
+QtJniTypes::Activity QtAndroidPrivate::activity()
 {
     QReadLocker locker(g_updateMutex());
     return g_jActivity;
 }
 
-jobject QtAndroidPrivate::service()
+QtJniTypes::Service QtAndroidPrivate::service()
 {
     return g_jService;
 }
 
-jobject QtAndroidPrivate::context()
+QtJniTypes::Context QtAndroidPrivate::context()
 {
     QReadLocker locker(g_updateMutex());
     if (g_jActivity)

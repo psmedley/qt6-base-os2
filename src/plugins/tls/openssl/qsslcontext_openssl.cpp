@@ -1,44 +1,8 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
-** Copyright (C) 2014 Governikus GmbH & Co. KG.
-** Copyright (C) 2016 Richard J. Moore <rich@kde.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// Copyright (C) 2014 BlackBerry Limited. All rights reserved.
+// Copyright (C) 2014 Governikus GmbH & Co. KG.
+// Copyright (C) 2016 Richard J. Moore <rich@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtNetwork/qsslsocket.h>
 #include <QtNetwork/qssldiffiehellmanparameters.h>
@@ -254,7 +218,7 @@ SSL* QSslContext::createSsl()
     QList<QByteArray> protocols = sslConfiguration.d.constData()->nextAllowedProtocols;
     if (!protocols.isEmpty()) {
         m_supportedNPNVersions.clear();
-        for (int a = 0; a < protocols.count(); ++a) {
+        for (int a = 0; a < protocols.size(); ++a) {
             if (protocols.at(a).size() > 255) {
                 qCWarning(lcTlsBackend) << "TLS NPN extension" << protocols.at(a)
                                  << "is too long and will be ignored.";
@@ -266,7 +230,7 @@ SSL* QSslContext::createSsl()
         }
         if (m_supportedNPNVersions.size()) {
             m_npnContext.data = reinterpret_cast<unsigned char *>(m_supportedNPNVersions.data());
-            m_npnContext.len = m_supportedNPNVersions.count();
+            m_npnContext.len = m_supportedNPNVersions.size();
             m_npnContext.status = QSslConfiguration::NextProtocolNegotiationNone;
             // Callback's type has a parameter 'const unsigned char ** out'
             // since it was introduced in 1.0.2. Internally, OpenSSL's own code
@@ -668,7 +632,7 @@ QT_WARNING_POP
 
         // If we have any intermediate certificates then we need to add them to our chain
         bool first = true;
-        for (const QSslCertificate &cert : qAsConst(configuration.d->localCertificateChain)) {
+        for (const QSslCertificate &cert : std::as_const(configuration.d->localCertificateChain)) {
             if (first) {
                 first = false;
                 continue;
@@ -738,7 +702,7 @@ QT_WARNING_POP
         const QByteArray &params = dhparams.d->derData;
         const char *ptr = params.constData();
         DH *dh = q_d2i_DHparams(nullptr, reinterpret_cast<const unsigned char **>(&ptr),
-                                params.length());
+                                params.size());
         if (dh == nullptr)
             qFatal("q_d2i_DHparams failed to convert QSslDiffieHellmanParameters to DER form");
         q_SSL_CTX_set_tmp_dh(sslContext->ctx, dh);

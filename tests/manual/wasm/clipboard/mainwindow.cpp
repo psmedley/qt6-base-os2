@@ -1,52 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the examples of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:BSD$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** BSD License Usage
-** Alternatively, you may use this file under the terms of the BSD license
-** as follows:
-**
-** "Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions are
-** met:
-**   * Redistributions of source code must retain the above copyright
-**     notice, this list of conditions and the following disclaimer.
-**   * Redistributions in binary form must reproduce the above copyright
-**     notice, this list of conditions and the following disclaimer in
-**     the documentation and/or other materials provided with the
-**     distribution.
-**   * Neither the name of The Qt Company Ltd nor the names of its
-**     contributors may be used to endorse or promote products derived
-**     from this software without specific prior written permission.
-**
-**
-** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
@@ -57,6 +10,8 @@
 #include <QRandomGenerator>
 #include <QPainter>
 #include <QKeyEvent>
+#include <QMimeDatabase>
+#include <QFileInfo>
 
 #ifdef Q_OS_WASM
 #include <emscripten.h>
@@ -78,6 +33,8 @@ MainWindow::MainWindow(QWidget *parent)
     ui->imageLabel->setBackgroundRole(QPalette::Base);
     ui->imageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     ui->imageLabel->setScaledContents(true);
+
+    setAcceptDrops(true);
 
     clipboard = QGuiApplication::clipboard();
     connect(
@@ -283,5 +240,72 @@ void MainWindow::on_pasteHtmlButton_clicked()
 void MainWindow::on_clearButton_clicked()
 {
     ui->textEdit_2->clear();
+    ui->imageLabel->clear();
+    ui->imageLabel->setText("Paste or drop image here");
 }
 
+void MainWindow::dragEnterEvent(QDragEnterEvent* e)
+{
+    e->acceptProposedAction();
+}
+
+void MainWindow::dropEvent(QDropEvent* e)
+{
+    QString sizeStr;
+    ui->textEdit_2->insertPlainText("New Drop has mime formats: " + e->mimeData()->formats().join(", ") + "\n");
+
+    QString urlMessage = QString("    Drop contains %1 urls\n").arg(e->mimeData()->urls().count());
+    ui->textEdit_2->insertPlainText(urlMessage);
+
+    foreach (const QUrl &url, e->mimeData()->urls()) {
+
+        QString urlStr = url.toDisplayString();
+        int size = urlStr.length();
+        sizeStr.setNum(size);
+        ui->textEdit_2->insertPlainText("    Drop has url data length: " + sizeStr + "\n");
+        ui->textEdit_2->insertPlainText(urlStr + "\n");
+
+        QString fname = url.toLocalFile();
+        QFileInfo info(fname);
+        if (info.exists()) { // this is a file
+            QMimeDatabase db;
+            QMimeType mt = db.mimeTypeForFile(info);
+            if (mt.name().contains("image")) {
+                QImage image = QImage(fname);
+                setImage(image);
+            }
+        }
+    }
+
+    if (e->mimeData()->hasImage()) {
+        qsizetype imageSize = qvariant_cast<QImage>(e->mimeData()->imageData()).sizeInBytes();
+        sizeStr.setNum(imageSize);
+        ui->textEdit_2->insertPlainText("    Drop has Image data length: " + sizeStr + "\n");
+        QImage image = qvariant_cast<QImage>(e->mimeData()->imageData());
+        setImage(image);
+        const QString message = tr("Obtained image from drop, %1x%2, Depth: %3")
+            .arg(image.width()).arg(image.height()).arg(image.depth());
+        statusBar()->showMessage(message);
+    }
+
+    if (e->mimeData()->hasHtml()) {
+        int size = e->mimeData()->html().length();
+        sizeStr.setNum(size);
+        ui->textEdit_2->insertPlainText("    Drop has html data length: " + sizeStr + "\n");
+        ui->textEdit_2->insertPlainText(e->mimeData()->html()+"\n");
+        ui->textEdit->insertHtml(e->mimeData()->html()+"<br>");
+    }
+    if (e->mimeData()->hasText()) {
+        int size = e->mimeData()->text().length();
+        sizeStr.setNum(size);
+        ui->textEdit_2->insertPlainText("    Drop has text data length: " + sizeStr + "\n");
+        ui->textEdit_2->insertPlainText(e->mimeData()->text());
+    }
+
+    const QString message = tr("    Drop accepted, %1 ")
+        .arg(e->mimeData()->formats().join(' '));
+
+    statusBar()->showMessage(message + sizeStr);
+
+     e->acceptProposedAction();
+}

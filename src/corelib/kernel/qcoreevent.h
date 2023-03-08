@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QCOREEVENT_H
 #define QCOREEVENT_H
@@ -52,6 +16,29 @@ protected: \
     Class(Class &&) = delete; \
     Class &operator=(const Class &other) = default; \
     Class &operator=(Class &&) = delete
+
+#define Q_DECL_EVENT_COMMON(Class) \
+    protected: \
+        Class(const Class &); \
+        Class(Class &&) = delete; \
+        Class &operator=(const Class &other) = default; \
+        Class &operator=(Class &&) = delete; \
+    public: \
+        Class* clone() const override; \
+        ~Class() override; \
+    private:
+
+#define Q_IMPL_EVENT_COMMON(Class) \
+    Class::Class(const Class &) = default; \
+    Class::~Class() = default; \
+    Class* Class::clone() const \
+    { \
+        auto c = new Class(*this); \
+        QEvent *e = c; \
+        /* check that covariant return is safe to add */ \
+        Q_ASSERT(reinterpret_cast<quintptr>(c) == reinterpret_cast<quintptr>(e)); \
+        return c; \
+    }
 
 class QEventPrivate;
 class Q_CORE_EXPORT QEvent           // event base class
@@ -285,7 +272,7 @@ public:
         StyleAnimationUpdate = 213,             // style animation target should be updated
         ApplicationStateChange = 214,
 
-        WindowChangeInternal = 215,             // internal for QQuickWidget
+        WindowChangeInternal = 215,             // internal for QQuickWidget and texture-based widgets
         ScreenChangeInternal = 216,
 
         PlatformSurface = 217,                  // Platform surface created or about to be destroyed
@@ -293,6 +280,9 @@ public:
         Pointer = 218,                          // Qt 5: QQuickPointerEvent; Qt 6: unused so far
 
         TabletTrackingChange = 219,             // tablet tracking state has changed
+
+        // GraphicsSceneLeave = 220,
+        WindowAboutToChangeInternal = 221,      // internal for QQuickWidget and texture-based widgets
 
         // 512 reserved for Qt Jambi's MetaCall event
         // 513 reserved for Qt Jambi's DeleteOnMainThread event
@@ -365,13 +355,10 @@ private:
 
 class Q_CORE_EXPORT QTimerEvent : public QEvent
 {
-    Q_EVENT_DISABLE_COPY(QTimerEvent);
+    Q_DECL_EVENT_COMMON(QTimerEvent)
 public:
     explicit QTimerEvent(int timerId);
-    ~QTimerEvent();
     int timerId() const { return id; }
-
-    QTimerEvent *clone() const override { return new QTimerEvent(*this); }
 
 protected:
     int id;
@@ -381,16 +368,14 @@ class QObject;
 
 class Q_CORE_EXPORT QChildEvent : public QEvent
 {
-    Q_EVENT_DISABLE_COPY(QChildEvent);
+    Q_DECL_EVENT_COMMON(QChildEvent)
 public:
     QChildEvent(Type type, QObject *child);
-    ~QChildEvent();
+
     QObject *child() const { return c; }
     bool added() const { return type() == ChildAdded; }
     bool polished() const { return type() == ChildPolished; }
     bool removed() const { return type() == ChildRemoved; }
-
-    QChildEvent *clone() const override { return new QChildEvent(*this); }
 
 protected:
     QObject *c;
@@ -398,14 +383,11 @@ protected:
 
 class Q_CORE_EXPORT QDynamicPropertyChangeEvent : public QEvent
 {
-    Q_EVENT_DISABLE_COPY(QDynamicPropertyChangeEvent);
+    Q_DECL_EVENT_COMMON(QDynamicPropertyChangeEvent)
 public:
     explicit QDynamicPropertyChangeEvent(const QByteArray &name);
-    ~QDynamicPropertyChangeEvent();
 
     inline QByteArray propertyName() const { return n; }
-
-    QDynamicPropertyChangeEvent *clone() const override { return new QDynamicPropertyChangeEvent(*this); }
 
 private:
     QByteArray n;
@@ -413,13 +395,10 @@ private:
 
 class Q_CORE_EXPORT QDeferredDeleteEvent : public QEvent
 {
-    Q_EVENT_DISABLE_COPY(QDeferredDeleteEvent);
+    Q_DECL_EVENT_COMMON(QDeferredDeleteEvent)
 public:
     explicit QDeferredDeleteEvent();
-    ~QDeferredDeleteEvent();
     int loopLevel() const { return level; }
-
-    QDeferredDeleteEvent *clone() const override { return new QDeferredDeleteEvent(*this); }
 
 private:
     int level;

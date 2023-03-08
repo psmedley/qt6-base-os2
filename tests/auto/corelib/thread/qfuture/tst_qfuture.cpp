@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #define QFUTURE_TEST
 
 #include <QCoreApplication>
@@ -33,6 +8,9 @@
 #include <QTestEventLoop>
 #include <QTimer>
 #include <QSignalSpy>
+#include <QVarLengthArray>
+#include <QSet>
+#include <QList>
 
 #include <QTest>
 #include <qfuture.h>
@@ -51,6 +29,8 @@
 #if defined(Q_OS_WIN) && defined(interface)
 #  undef interface
 #endif
+
+using namespace Qt::StringLiterals;
 
 class SenderObject : public QObject
 {
@@ -241,6 +221,8 @@ private slots:
     void whenAnyDifferentTypesWithFailed();
 
     void continuationsDontLeak();
+
+    void unwrap();
 
 private:
     using size_type = std::vector<int>::size_type;
@@ -1094,13 +1076,13 @@ void tst_QFuture::multipleResults()
     QList<int> fasit = QList<int>() << 1 << 2 << 3 << 4;
     {
         QList<int> results;
-        for (int result : qAsConst(f))
+        for (int result : std::as_const(f))
             results.append(result);
         QCOMPARE(results, fasit);
     }
     {
         QList<int> results;
-        for (int result : qAsConst(copy))
+        for (int result : std::as_const(copy))
             results.append(result);
         QCOMPARE(results, fasit);
     }
@@ -2258,6 +2240,26 @@ void tst_QFuture::then()
         QVERIFY(threadId1 != QThread::currentThreadId());
         QVERIFY(threadId2 != QThread::currentThreadId());
     }
+
+    // QTBUG-106083 & QTBUG-105182
+    {
+        QThread thread;
+        thread.start();
+
+        QObject context;
+        context.moveToThread(&thread);
+
+        auto future = QtConcurrent::run([] {
+            return 42;
+        }).then([] (int result) {
+            return result + 1;
+        }).then(&context, [] (int result) {
+            return result + 1;
+        });
+        QCOMPARE(future.result(), 44);
+        thread.quit();
+        thread.wait();
+    }
 }
 
 template<class Type, class Callable>
@@ -3097,7 +3099,7 @@ void tst_QFuture::cancelContinuations()
 
 #ifndef QT_NO_EXCEPTIONS
     // The chain is cancelled in the middle of execution of continuations,
-    // while there's an exception in the chain, which is handeled inside
+    // while there's an exception in the chain, which is handled inside
     // the continuations.
     {
         QPromise<int> promise;
@@ -3134,6 +3136,57 @@ void tst_QFuture::cancelContinuations()
         QCOMPARE(checkpoint, 3);
     }
 #endif // QT_NO_EXCEPTIONS
+
+    // Check notifications from QFutureWatcher
+    {
+        QPromise<void> p;
+        auto f = p.future();
+
+        auto f1 = f.then([] {});
+        auto f2 = f1.then([] {});
+
+        QFutureWatcher<void> watcher1, watcher2;
+        int state = 0;
+        QObject::connect(&watcher1, &QFutureWatcher<void>::started, [&] {
+            QCOMPARE(state, 0);
+            ++state;
+        });
+        QObject::connect(&watcher1, &QFutureWatcher<void>::canceled, [&] {
+            QCOMPARE(state, 1);
+            ++state;
+        });
+        QObject::connect(&watcher1, &QFutureWatcher<void>::finished, [&] {
+            QCOMPARE(state, 2);
+            ++state;
+        });
+        QObject::connect(&watcher2, &QFutureWatcher<void>::started, [&] {
+            QCOMPARE(state, 3);
+            ++state;
+        });
+        QObject::connect(&watcher2, &QFutureWatcher<void>::canceled, [&] {
+            QCOMPARE(state, 4);
+            ++state;
+        });
+        QObject::connect(&watcher2, &QFutureWatcher<int>::finished, [&] {
+            QCOMPARE(state, 5);
+            ++state;
+        });
+
+        watcher1.setFuture(f1);
+        watcher2.setFuture(f2);
+
+        p.start();
+        f.cancel();
+        p.finish();
+
+        qApp->processEvents();
+
+        QCOMPARE(state, 6);
+        QVERIFY(watcher1.isFinished());
+        QVERIFY(watcher1.isCanceled());
+        QVERIFY(watcher2.isFinished());
+        QVERIFY(watcher2.isCanceled());
+    }
 }
 
 void tst_QFuture::continuationsWithContext()
@@ -4302,7 +4355,7 @@ void tst_QFuture::whenAllDifferentTypesWithCanceled()
     QPromise<int> pInt;
     QPromise<QString> pString;
 
-    const QString someValue = u"some value"_qs;
+    const QString someValue = u"some value"_s;
 
     bool finished = false;
     using Futures = std::variant<QFuture<int>, QFuture<QString>>;
@@ -4341,7 +4394,7 @@ void tst_QFuture::whenAllDifferentTypesWithFailed()
     QPromise<int> pInt;
     QPromise<QString> pString;
 
-    const QString someValue = u"some value"_qs;
+    const QString someValue = u"some value"_s;
 
     bool finished = false;
     using Futures = std::variant<QFuture<int>, QFuture<QString>>;
@@ -4657,6 +4710,271 @@ void tst_QFuture::continuationsDontLeak()
         QVERIFY(continuationIsRun);
     }
     QCOMPARE(InstanceCounter::count, 0);
+}
+
+void tst_QFuture::unwrap()
+{
+    // The nested future succeeds
+    {
+        QPromise<int> p;
+        QFuture<QFuture<int>> f = p.future().then([] (int value) {
+            QFuture<int> nested = QtConcurrent::run([value] {
+                return value + 1;
+            });
+            return nested;
+        });
+
+        QFuture<int> unwrapped = f.unwrap();
+        QVERIFY(!unwrapped.isStarted());
+        QVERIFY(!unwrapped.isFinished());
+
+        p.start();
+        p.addResult(42);
+        p.finish();
+
+        unwrapped.waitForFinished();
+
+        QVERIFY(unwrapped.isStarted());
+        QVERIFY(unwrapped.isFinished());
+        QCOMPARE(unwrapped.result(), 43);
+    }
+
+    // The nested future succeeds with multiple results
+    {
+        QPromise<int> p;
+        QFuture<QFuture<int>> f = p.future().then([] (int value) {
+            QPromise<int> nested;
+            nested.start();
+            nested.addResult(++value);
+            nested.addResult(++value);
+            nested.addResult(++value);
+            nested.finish();
+            return nested.future();
+        });
+
+        QFuture<int> unwrapped = f.unwrap();
+        QVERIFY(!unwrapped.isStarted());
+        QVERIFY(!unwrapped.isFinished());
+
+        p.start();
+        p.addResult(42);
+        p.finish();
+
+        f.waitForFinished();
+
+        QVERIFY(unwrapped.isStarted());
+        QVERIFY(unwrapped.isFinished());
+        QCOMPARE(unwrapped.results(), QList<int>() << 43 << 44 << 45);
+    }
+
+    // The chain is canceled, check that unwrap() propagates the cancellation.
+    {
+        QPromise<int> p;
+        QFuture<int> f = p.future().then([] (int value) {
+            QFuture<int> nested = QtConcurrent::run([value] {
+                return value + 1;
+            });
+            return nested;
+        }).unwrap().then([] (int result) {
+            return result;
+        }).onCanceled([] {
+            return -1;
+        });
+
+        p.start();
+        p.future().cancel();
+        p.finish();
+
+        f.waitForFinished();
+
+        QVERIFY(f.isStarted());
+        QVERIFY(f.isFinished());
+        QCOMPARE(f.result(), -1);
+    }
+
+#ifndef QT_NO_EXCEPTIONS
+    // The chain has an exception, check that unwrap() propagates it.
+    {
+        QPromise<int> p;
+        QFuture<int> f = p.future().then([] (int value) {
+            QFuture<int> nested = QtConcurrent::run([value] {
+                return value + 1;
+            });
+            return nested;
+        }).unwrap().then([] (int result) {
+            return result;
+        }).onFailed([] (QException &) {
+            return -1;
+        });
+
+        p.start();
+        p.setException(QException());
+        p.finish();
+
+        f.waitForFinished();
+
+        QVERIFY(f.isStarted());
+        QVERIFY(f.isFinished());
+        QCOMPARE(f.result(), -1);
+    }
+
+#endif // QT_NO_EXCEPTIONS
+
+    // The nested future is canceled
+    {
+        QPromise<int> p;
+        QFuture<int> f = p.future().then([] (int value) {
+            QFuture<int> nested = QtConcurrent::run([value] {
+                return value + 1;
+            });
+            nested.cancel();
+            return nested;
+        }).unwrap().then([] (int result) {
+            return result;
+        }).onCanceled([] {
+            return -1;
+        });
+
+        p.start();
+        p.addResult(42);
+        p.finish();
+
+        f.waitForFinished();
+
+        QVERIFY(f.isStarted());
+        QVERIFY(f.isFinished());
+        QCOMPARE(f.result(), -1);
+    }
+
+#ifndef QT_NO_EXCEPTIONS
+    // The nested future fails with an exception
+    {
+        QPromise<int> p;
+        QFuture<int> f = p.future().then([] (int value) {
+            QFuture<int> nested = QtConcurrent::run([value] {
+                throw QException();
+                return value + 1;
+            });
+            return nested;
+        }).unwrap().then([] (int result) {
+            return result;
+        }).onFailed([] (QException &) {
+            return -1;
+        });
+
+        p.start();
+        p.addResult(42);
+        p.finish();
+
+        f.waitForFinished();
+
+        QVERIFY(f.isStarted());
+        QVERIFY(f.isFinished());
+        QCOMPARE(f.result(), -1);
+    }
+#endif // QT_NO_EXCEPTIONS
+
+    // Check that continuations are called in the right order
+    {
+        QPromise<void> p;
+
+        std::atomic<bool> firstThenInvoked = false;
+        std::atomic<bool> secondThenInvoked = false;
+        std::atomic<bool> nestedThenInvoked = false;
+        auto f = p.future().then([&] {
+            if (!firstThenInvoked && !secondThenInvoked && !nestedThenInvoked)
+                firstThenInvoked = true;
+            QFuture<void> nested = QtConcurrent::run([&] {
+                QVERIFY(firstThenInvoked);
+                QVERIFY(!nestedThenInvoked);
+                QVERIFY(!secondThenInvoked);
+                nestedThenInvoked = true;
+            });
+            return nested;
+        }).unwrap().then([&] {
+            QVERIFY(firstThenInvoked);
+            QVERIFY(nestedThenInvoked);
+            QVERIFY(!secondThenInvoked);
+            secondThenInvoked = true;
+        });
+
+        QVERIFY(!firstThenInvoked);
+        QVERIFY(!nestedThenInvoked);
+        QVERIFY(!secondThenInvoked);
+
+        p.start();
+        p.finish();
+
+        f.waitForFinished();
+
+        if (QTest::currentTestFailed())
+            return;
+
+        QVERIFY(firstThenInvoked);
+        QVERIFY(nestedThenInvoked);
+        QVERIFY(secondThenInvoked);
+    }
+
+    // Unwrap multiple nested futures
+    {
+        QPromise<int> p;
+        QFuture<QFuture<QFuture<int>>> f = p.future().then([] (int value) {
+            QFuture<QFuture<int>> nested = QtConcurrent::run([value] {
+                QFuture<int> doubleNested = QtConcurrent::run([value] {
+                    return value + 1;
+                });
+                return doubleNested;
+            });
+            return nested;
+        });
+
+        QFuture<int> unwrapped = f.unwrap();
+        QVERIFY(!unwrapped.isStarted());
+        QVERIFY(!unwrapped.isFinished());
+
+        p.start();
+        p.addResult(42);
+        p.finish();
+
+        unwrapped.waitForFinished();
+
+        QVERIFY(unwrapped.isStarted());
+        QVERIFY(unwrapped.isFinished());
+        QCOMPARE(unwrapped.result(), 43);
+    }
+
+    // Unwrap multiple nested void futures
+    {
+        QPromise<void> p;
+        std::atomic<bool> nestedInvoked = false;
+        std::atomic<bool> doubleNestedInvoked = false;
+        QFuture<QFuture<QFuture<void>>> f = p.future().then([&] {
+            QFuture<QFuture<void>> nested = QtConcurrent::run([&] {
+                QFuture<void> doubleNested = QtConcurrent::run([&] {
+                    doubleNestedInvoked = true;
+                });
+                nestedInvoked = true;
+                return doubleNested;
+            });
+            return nested;
+        });
+
+        QFuture<void> unwrapped = f.unwrap();
+        QVERIFY(!nestedInvoked);
+        QVERIFY(!doubleNestedInvoked);
+        QVERIFY(!unwrapped.isStarted());
+        QVERIFY(!unwrapped.isFinished());
+
+        p.start();
+        p.finish();
+
+        unwrapped.waitForFinished();
+
+        QVERIFY(unwrapped.isStarted());
+        QVERIFY(unwrapped.isFinished());
+        QVERIFY(nestedInvoked);
+        QVERIFY(doubleNestedInvoked);
+    }
 }
 
 QTEST_MAIN(tst_QFuture)

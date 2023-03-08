@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QLOCALE_P_H
 #define QLOCALE_P_H
@@ -58,6 +22,7 @@
 #include "QtCore/qvariant.h"
 #include "QtCore/qnumeric.h"
 #include <QtCore/qcalendar.h>
+#include <QtCore/qcontainerfwd.h>
 
 #include "qlocale.h"
 
@@ -66,7 +31,6 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_SYSTEMLOCALE
 struct QLocaleData;
 // Subclassed by Android platform plugin:
 class Q_CORE_EXPORT QSystemLocale
@@ -136,14 +100,13 @@ public:
     virtual QVariant query(QueryType type, QVariant in = QVariant()) const;
 
     virtual QLocale fallbackLocale() const;
-    inline uint fallbackLocaleIndex() const;
+    inline qsizetype fallbackLocaleIndex() const;
 private:
     QSystemLocale(bool);
     friend class QSystemLocaleSingleton;
 };
 Q_DECLARE_TYPEINFO(QSystemLocale::QueryType, Q_PRIMITIVE_TYPE);
 Q_DECLARE_TYPEINFO(QSystemLocale::CurrencyToStringArgument, Q_RELOCATABLE_TYPE);
-#endif
 
 #if QT_CONFIG(icu)
 namespace QIcu {
@@ -196,7 +159,7 @@ struct QLocaleData
 public:
     // Having an index for each locale enables us to have diverse sources of
     // data, e.g. calendar locales, as well as the main CLDR-derived data.
-    [[nodiscard]] static int findLocaleIndex(QLocaleId localeId);
+    [[nodiscard]] static qsizetype findLocaleIndex(QLocaleId localeId);
     [[nodiscard]] static const QLocaleData *c();
 
     enum DoubleForm {
@@ -327,11 +290,11 @@ public:
         {
             return { reinterpret_cast<const QChar *>(table + offset), size };
         }
-        [[nodiscard]] QString getListEntry(const char16_t *table, int index) const
+        [[nodiscard]] QString getListEntry(const char16_t *table, qsizetype index) const
         {
             return listEntry(table, index).getData(table);
         }
-        [[nodiscard]] QStringView viewListEntry(const char16_t *table, int index) const
+        [[nodiscard]] QStringView viewListEntry(const char16_t *table, qsizetype index) const
         {
             return listEntry(table, index).viewData(table);
         }
@@ -344,7 +307,7 @@ public:
             return 0;
         }
     private:
-        [[nodiscard]] DataRange listEntry(const char16_t *table, int index) const
+        [[nodiscard]] DataRange listEntry(const char16_t *table, qsizetype index) const
         {
             const char16_t separator = ';';
             quint16 i = 0;
@@ -407,7 +370,7 @@ public:
 class QLocalePrivate
 {
 public:
-    constexpr QLocalePrivate(const QLocaleData *data, const uint index,
+    constexpr QLocalePrivate(const QLocaleData *data, qsizetype index,
                              QLocale::NumberOptions numberOptions = QLocale::DefaultNumberOptions,
                              int refs = 0)
         : m_data(data), ref Q_BASIC_ATOMIC_INITIALIZER(refs),
@@ -418,22 +381,22 @@ public:
 
     [[nodiscard]] QByteArray bcp47Name(char separator = '-') const;
 
-    [[nodiscard]] inline QLatin1String
+    [[nodiscard]] inline QLatin1StringView
     languageCode(QLocale::LanguageCodeTypes codeTypes = QLocale::AnyLanguageCode) const
     {
         return languageToCode(QLocale::Language(m_data->m_language_id), codeTypes);
     }
-    [[nodiscard]] inline QLatin1String scriptCode() const
+    [[nodiscard]] inline QLatin1StringView scriptCode() const
     { return scriptToCode(QLocale::Script(m_data->m_script_id)); }
-    [[nodiscard]] inline QLatin1String territoryCode() const
+    [[nodiscard]] inline QLatin1StringView territoryCode() const
     { return territoryToCode(QLocale::Territory(m_data->m_territory_id)); }
 
     [[nodiscard]] static const QLocalePrivate *get(const QLocale &l) { return l.d; }
-    [[nodiscard]] static QLatin1String
+    [[nodiscard]] static QLatin1StringView
     languageToCode(QLocale::Language language,
                    QLocale::LanguageCodeTypes codeTypes = QLocale::AnyLanguageCode);
-    [[nodiscard]] static QLatin1String scriptToCode(QLocale::Script script);
-    [[nodiscard]] static QLatin1String territoryToCode(QLocale::Territory territory);
+    [[nodiscard]] static QLatin1StringView scriptToCode(QLocale::Script script);
+    [[nodiscard]] static QLatin1StringView territoryToCode(QLocale::Territory territory);
     [[nodiscard]] static QLocale::Language
     codeToLanguage(QStringView code,
                    QLocale::LanguageCodeTypes codeTypes = QLocale::AnyLanguageCode) noexcept;
@@ -445,14 +408,14 @@ public:
     // System locale has an m_data all its own; all others have m_data = locale_data + m_index
     const QLocaleData *const m_data;
     QBasicAtomicInt ref;
-    const uint m_index;
+    const qsizetype m_index;
     QLocale::NumberOptions m_numberOptions;
 
     static QBasicAtomicInt s_generation;
 };
 
 #ifndef QT_NO_SYSTEMLOCALE
-uint QSystemLocale::fallbackLocaleIndex() const { return fallbackLocale().d->m_index; }
+qsizetype QSystemLocale::fallbackLocaleIndex() const { return fallbackLocale().d->m_index; }
 #endif
 
 template <>
@@ -511,7 +474,7 @@ inline char QLocaleData::numericToCLocale(QStringView in) const
 
 // Also used to merely skip over an escape in a format string, advancint idx to
 // point after it (so not [[nodiscard]]):
-QString qt_readEscapedFormatString(QStringView format, int *idx);
+QString qt_readEscapedFormatString(QStringView format, qsizetype *idx);
 [[nodiscard]] bool qt_splitLocaleName(QStringView name, QStringView *lang = nullptr,
                                       QStringView *script = nullptr, QStringView *cntry = nullptr);
 [[nodiscard]] qsizetype qt_repeatCount(QStringView s);
@@ -527,26 +490,13 @@ enum { AsciiSpaceMask = (1u << (' ' - 1)) |
     return c >= 1u && c <= 32u && (AsciiSpaceMask >> uint(c - 1)) & 1u;
 }
 
-static_assert(ascii_isspace(' '));
-static_assert(ascii_isspace('\t'));
-static_assert(ascii_isspace('\n'));
-static_assert(ascii_isspace('\v'));
-static_assert(ascii_isspace('\f'));
-static_assert(ascii_isspace('\r'));
-static_assert(!ascii_isspace('\0'));
-static_assert(!ascii_isspace('\a'));
-static_assert(!ascii_isspace('a'));
-static_assert(!ascii_isspace('\177'));
-static_assert(!ascii_isspace(uchar('\200')));
-static_assert(!ascii_isspace(uchar('\xA0')));
-static_assert(!ascii_isspace(uchar('\377')));
-
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QStringView)
-Q_DECLARE_METATYPE(QList<Qt::DayOfWeek>)
+// ### move to qnamespace.h
+QT_DECL_METATYPE_EXTERN_TAGGED(QList<Qt::DayOfWeek>, QList_Qt__DayOfWeek, Q_CORE_EXPORT)
 #ifndef QT_NO_SYSTEMLOCALE
-Q_DECLARE_METATYPE(QSystemLocale::CurrencyToStringArgument)
+QT_DECL_METATYPE_EXTERN_TAGGED(QSystemLocale::CurrencyToStringArgument,
+                               QSystemLocale__CurrencyToStringArgument, Q_CORE_EXPORT)
 #endif
 
 #endif // QLOCALE_P_H

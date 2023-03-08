@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qxcbdrag.h"
 #include <xcb/xcb.h>
@@ -650,7 +614,7 @@ void QXcbDrag::stopListeningForActionListChanges()
 int QXcbDrag::findTransactionByWindow(xcb_window_t window)
 {
     int at = -1;
-    for (int i = 0; i < transactions.count(); ++i) {
+    for (int i = 0; i < transactions.size(); ++i) {
         const Transaction &t = transactions.at(i);
         if (t.target == window || t.proxy_target == window) {
             at = i;
@@ -663,7 +627,7 @@ int QXcbDrag::findTransactionByWindow(xcb_window_t window)
 int QXcbDrag::findTransactionByTime(xcb_timestamp_t timestamp)
 {
     int at = -1;
-    for (int i = 0; i < transactions.count(); ++i) {
+    for (int i = 0; i < transactions.size(); ++i) {
         const Transaction &t = transactions.at(i);
         if (t.timestamp == timestamp) {
             at = i;
@@ -756,7 +720,7 @@ void QXcbDrag::handleEnter(QPlatformWindow *, const xcb_client_message_event_t *
                 xdnd_types.append(event->data.data32[i]);
         }
     }
-    for(int i = 0; i < xdnd_types.length(); ++i)
+    for(int i = 0; i < xdnd_types.size(); ++i)
         qCDebug(lcQpaXDnd) << "    " << connection()->atomName(xdnd_types.at(i));
 }
 
@@ -770,7 +734,7 @@ void QXcbDrag::handle_xdnd_position(QPlatformWindow *w, const xcb_client_message
     QPoint p((e->data.data32[2] & 0xffff0000) >> 16, e->data.data32[2] & 0x0000ffff);
     Q_ASSERT(w);
     QRect geometry = w->geometry();
-    p -= geometry.topLeft();
+    p -= w->isEmbedded() ? w->mapToGlobal(geometry.topLeft()) : geometry.topLeft();
 
     if (!w || !w->window() || (w->window()->type() == Qt::Desktop))
         return;
@@ -1016,21 +980,30 @@ void QXcbDrag::handleDrop(QPlatformWindow *, const xcb_client_message_event_t *e
 
     Qt::DropActions supported_drop_actions;
     QMimeData *dropData = nullptr;
+    // this could be a same-application drop, just proxied due to
+    // some XEMBEDding, so try to find the real QMimeData used
+    // based on the timestamp for this drop.
+    int at = findTransactionByTime(target_time);
+    if (at != -1) {
+        qCDebug(lcQpaXDnd) << "found one transaction via findTransactionByTime()";
+        dropData = transactions.at(at).drag->mimeData();
+        // Can't use the source QMimeData if we need the image conversion code from xdndObtainData
+        if (dropData && dropData->hasImage())
+            dropData = 0;
+    }
+    // if we can't find it, then use the data in the drag manager
     if (currentDrag()) {
-        dropData = currentDrag()->mimeData();
+        if (!dropData)
+            dropData = currentDrag()->mimeData();
         supported_drop_actions = Qt::DropActions(l[4]);
     } else {
-        dropData = m_dropData;
+        if (!dropData)
+            dropData = m_dropData;
         supported_drop_actions = accepted_drop_action | toDropActions(drop_actions);
     }
 
     if (!dropData)
         return;
-    // ###
-    //        int at = findXdndDropTransactionByTime(target_time);
-    //        if (at != -1)
-    //            dropData = QDragManager::dragPrivate(X11->dndDropTransactions.at(at).object)->data;
-    // if we can't find it, then use the data in the drag manager
 
     auto buttons = currentDrag() ? b : connection()->queryMouseButtons();
     auto modifiers = currentDrag() ? mods : connection()->queryKeyboardModifiers();
@@ -1039,7 +1012,12 @@ void QXcbDrag::handleDrop(QPlatformWindow *, const xcb_client_message_event_t *e
                 currentWindow.data(), dropData, currentPosition, supported_drop_actions,
                 buttons, modifiers);
 
-    setExecutedDropAction(response.acceptedAction());
+    Qt::DropAction acceptedAaction = response.acceptedAction();
+    if (!response.isAccepted()) {
+        // Ignore a failed drag
+        acceptedAaction = Qt::IgnoreAction;
+    }
+    setExecutedDropAction(acceptedAaction);
 
     xcb_client_message_event_t finished = {};
     finished.response_type = XCB_CLIENT_MESSAGE;
@@ -1049,7 +1027,7 @@ void QXcbDrag::handleDrop(QPlatformWindow *, const xcb_client_message_event_t *e
     finished.type = atom(QXcbAtom::XdndFinished);
     finished.data.data32[0] = currentWindow ? xcb_window(currentWindow.data()) : XCB_NONE;
     finished.data.data32[1] = response.isAccepted(); // flags
-    finished.data.data32[2] = toXdndAction(response.acceptedAction());
+    finished.data.data32[2] = toXdndAction(acceptedAaction);
 
     qCDebug(lcQpaXDnd) << "sending XdndFinished to source:" << xdnd_dragsource;
 
@@ -1111,7 +1089,7 @@ void QXcbDrag::timerEvent(QTimerEvent* e)
 {
     if (e->timerId() == cleanup_timer) {
         bool stopTimer = true;
-        for (int i = 0; i < transactions.count(); ++i) {
+        for (int i = 0; i < transactions.size(); ++i) {
             const Transaction &t = transactions.at(i);
             if (t.targetWindow) {
                 // dnd within the same process, don't delete, these are taken care of
@@ -1253,6 +1231,7 @@ void QXcbDrag::handleSelectionRequest(const xcb_selection_request_event_t *event
 
 bool QXcbDrag::dndEnable(QXcbWindow *w, bool on)
 {
+    qCDebug(lcQpaXDnd) << "dndEnable" << w << on;
     // Windows announce that they support the XDND protocol by creating a window property XdndAware.
     if (on) {
         QXcbWindow *window = nullptr;
@@ -1330,14 +1309,14 @@ QVariant QXcbDropData::xdndObtainData(const QByteArray &format, QMetaType reques
     QXcbWindow *xcb_window = c->platformWindowFromId(drag->xdnd_dragsource);
     if (xcb_window && drag->currentDrag() && xcb_window->window()->type() != Qt::Desktop) {
         QMimeData *data = drag->currentDrag()->mimeData();
-        if (data->hasFormat(QLatin1String(format)))
-            result = data->data(QLatin1String(format));
+        if (data->hasFormat(QLatin1StringView(format)))
+            result = data->data(QLatin1StringView(format));
         return result;
     }
 
     QList<xcb_atom_t> atoms = drag->xdnd_types;
     bool hasUtf8 = false;
-    xcb_atom_t a = mimeAtomForFormat(c, QLatin1String(format), requestedType, atoms, &hasUtf8);
+    xcb_atom_t a = mimeAtomForFormat(c, QLatin1StringView(format), requestedType, atoms, &hasUtf8);
     if (a == XCB_NONE)
         return result;
 
@@ -1349,7 +1328,7 @@ QVariant QXcbDropData::xdndObtainData(const QByteArray &format, QMetaType reques
     result = c->clipboard()->getSelection(xdnd_selection, a, xdnd_selection, drag->targetTime());
 #endif
 
-    return mimeConvertToFormat(c, a, result, QLatin1String(format), requestedType, hasUtf8);
+    return mimeConvertToFormat(c, a, result, QLatin1StringView(format), requestedType, hasUtf8);
 }
 
 bool QXcbDropData::hasFormat_sys(const QString &format) const

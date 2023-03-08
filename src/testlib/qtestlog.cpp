@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtTest module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtTest/qtestassert.h>
 
@@ -76,6 +40,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 static void saveCoverageTool(const char * appname, bool testfailed, bool installedTestCoverage)
 {
 #ifdef __COVERAGESCANNER__
@@ -104,7 +70,7 @@ static void saveCoverageTool(const char * appname, bool testfailed, bool install
 static QElapsedTimer elapsedFunctionTime;
 static QElapsedTimer elapsedTotalTime;
 
-#define FOREACH_TEST_LOGGER for (const auto &logger : qAsConst(*QTest::loggers()))
+#define FOREACH_TEST_LOGGER for (const auto &logger : std::as_const(*QTest::loggers()))
 
 namespace QTest {
 
@@ -112,6 +78,7 @@ namespace QTest {
     int passes = 0;
     int skips = 0;
     int blacklists = 0;
+    enum { Unresolved, Passed, Skipped, Suppressed, Failed } currentTestState;
 
     struct IgnoreResultList
     {
@@ -148,8 +115,8 @@ namespace QTest {
             // ignore an optional whitespace at the end of str
             // (the space was added automatically by ~QDebug() until Qt 5.3,
             //  so autotests still might expect it)
-            if (expected.endsWith(QLatin1Char(' ')))
-                return actual == QStringView{expected}.left(expected.length() - 1);
+            if (expected.endsWith(u' '))
+                return actual == QStringView{expected}.left(expected.size() - 1);
 
             return false;
         }
@@ -172,7 +139,7 @@ namespace QTest {
     };
 
     static IgnoreResultList *ignoreResultList = nullptr;
-    static QBasicMutex mutex;
+    Q_CONSTINIT static QBasicMutex mutex;
 
     static std::vector<QVariant> failOnWarningList;
 
@@ -333,10 +300,11 @@ void QTestLog::printUnhandledIgnoreMessages()
     QTest::IgnoreResultList *list = QTest::ignoreResultList;
     while (list) {
         if (list->pattern.userType() == QMetaType::QString) {
-            message = QStringLiteral("Did not receive message: \"") + list->pattern.toString() + QLatin1Char('"');
+            message = "Did not receive message: \"%1\""_L1.arg(list->pattern.toString());
         } else {
 #if QT_CONFIG(regularexpression)
-            message = QStringLiteral("Did not receive any message matching: \"") + list->pattern.toRegularExpression().pattern() + QLatin1Char('"');
+            message = "Did not receive any message matching: \"%1\""_L1.arg(
+                    list->pattern.toRegularExpression().pattern());
 #endif
         }
         FOREACH_TEST_LOGGER
@@ -352,9 +320,15 @@ void QTestLog::clearIgnoreMessages()
     QTest::IgnoreResultList::clearList(QTest::ignoreResultList);
 }
 
+
 void QTestLog::clearFailOnWarnings()
 {
     QTest::failOnWarningList.clear();
+}
+
+void QTestLog::clearCurrentTestState()
+{
+    QTest::currentTestState = QTest::Unresolved;
 }
 
 void QTestLog::addPass(const char *msg)
@@ -363,8 +337,10 @@ void QTestLog::addPass(const char *msg)
         return;
 
     QTEST_ASSERT(msg);
+    Q_ASSERT(QTest::currentTestState == QTest::Unresolved);
 
     ++QTest::passes;
+    QTest::currentTestState = QTest::Passed;
 
     FOREACH_TEST_LOGGER
         logger->addIncident(QAbstractTestLogger::Pass, msg);
@@ -374,8 +350,18 @@ void QTestLog::addFail(const char *msg, const char *file, int line)
 {
     QTEST_ASSERT(msg);
 
-    ++QTest::fails;
+    if (QTest::currentTestState == QTest::Unresolved) {
+        ++QTest::fails;
+    } else {
+        // After an XPASS/Continue, or fail or skip in a function the test
+        // calls, we can subsequently fail.
+        Q_ASSERT(QTest::currentTestState == QTest::Failed
+                 || QTest::currentTestState == QTest::Skipped);
+    }
+    // It is up to particular loggers to decide whether to report such
+    // subsequent failures; they may carry useful information.
 
+    QTest::currentTestState = QTest::Failed;
     FOREACH_TEST_LOGGER
         logger->addIncident(QAbstractTestLogger::Fail, msg, file, line);
 }
@@ -394,8 +380,16 @@ void QTestLog::addXPass(const char *msg, const char *file, int line)
 {
     QTEST_ASSERT(msg);
 
-    ++QTest::fails;
+    if (QTest::currentTestState == QTest::Unresolved) {
+        ++QTest::fails;
+    } else {
+        // After an XPASS/Continue, we can subsequently XPASS again.
+        // Likewise after a fail or skip in a function called by the test.
+        Q_ASSERT(QTest::currentTestState == QTest::Failed
+                 || QTest::currentTestState == QTest::Skipped);
+    }
 
+    QTest::currentTestState = QTest::Failed;
     FOREACH_TEST_LOGGER
         logger->addIncident(QAbstractTestLogger::XPass, msg, file, line);
 }
@@ -403,8 +397,10 @@ void QTestLog::addXPass(const char *msg, const char *file, int line)
 void QTestLog::addBPass(const char *msg)
 {
     QTEST_ASSERT(msg);
+    Q_ASSERT(QTest::currentTestState == QTest::Unresolved);
 
-    ++QTest::blacklists;
+    ++QTest::blacklists; // Not passes ?
+    QTest::currentTestState = QTest::Suppressed;
 
     FOREACH_TEST_LOGGER
         logger->addIncident(QAbstractTestLogger::BlacklistedPass, msg);
@@ -414,8 +410,16 @@ void QTestLog::addBFail(const char *msg, const char *file, int line)
 {
     QTEST_ASSERT(msg);
 
-    ++QTest::blacklists;
+    if (QTest::currentTestState == QTest::Unresolved) {
+        ++QTest::blacklists;
+    } else {
+        // After a BXPASS/Continue, we can subsequently fail.
+        // Likewise after a fail or skip in a function called by a test.
+        Q_ASSERT(QTest::currentTestState == QTest::Suppressed
+                 || QTest::currentTestState == QTest::Skipped);
+    }
 
+    QTest::currentTestState = QTest::Suppressed;
     FOREACH_TEST_LOGGER
         logger->addIncident(QAbstractTestLogger::BlacklistedFail, msg, file, line);
 }
@@ -424,8 +428,16 @@ void QTestLog::addBXPass(const char *msg, const char *file, int line)
 {
     QTEST_ASSERT(msg);
 
-    ++QTest::blacklists;
+    if (QTest::currentTestState == QTest::Unresolved) {
+        ++QTest::blacklists;
+    } else {
+        // After a BXPASS/Continue, we may BXPASS again.
+        // Likewise after a fail or skip in a function called by a test.
+        Q_ASSERT(QTest::currentTestState == QTest::Suppressed
+                 || QTest::currentTestState == QTest::Skipped);
+    }
 
+    QTest::currentTestState = QTest::Suppressed;
     FOREACH_TEST_LOGGER
         logger->addIncident(QAbstractTestLogger::BlacklistedXPass, msg, file, line);
 }
@@ -444,7 +456,18 @@ void QTestLog::addSkip(const char *msg, const char *file, int line)
 {
     QTEST_ASSERT(msg);
 
-    ++QTest::skips;
+    if (QTest::currentTestState == QTest::Unresolved) {
+        ++QTest::skips;
+        QTest::currentTestState = QTest::Skipped;
+    } else {
+        // After an B?XPASS/Continue, we might subsequently skip.
+        // Likewise after a skip in a function called by a test.
+        Q_ASSERT(QTest::currentTestState == QTest::Suppressed
+                 || QTest::currentTestState == QTest::Failed
+                 || QTest::currentTestState == QTest::Skipped);
+    }
+    // It is up to particular loggers to decide whether to report such
+    // subsequent skips; they may carry useful information.
 
     FOREACH_TEST_LOGGER
         logger->addIncident(QAbstractTestLogger::Skip, msg, file, line);

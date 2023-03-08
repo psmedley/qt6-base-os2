@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qhttpnetworkreply_p.h"
 #include "qhttpnetworkconnection_p.h"
@@ -49,6 +13,8 @@
 #include <private/qdecompresshelper_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QHttpNetworkReply::QHttpNetworkReply(const QUrl &url, QObject *parent)
     : QObject(*new QHttpNetworkReplyPrivate(url), parent)
@@ -352,8 +318,7 @@ QHttpNetworkReplyPrivate::QHttpNetworkReplyPrivate(const QUrl &newUrl)
 
 {
     QString scheme = newUrl.scheme();
-    if (scheme == QLatin1String("preconnect-http")
-            || scheme == QLatin1String("preconnect-https"))
+    if (scheme == "preconnect-http"_L1 || scheme == "preconnect-https"_L1)
         // make sure we do not close the socket after preconnecting
         connectionCloseEnabled = false;
 }
@@ -455,7 +420,7 @@ qint64 QHttpNetworkReplyPrivate::readStatus(QAbstractSocket *socket)
         if (c == '\n') {
             // remove the CR at the end
             if (fragment.endsWith('\r')) {
-                fragment.truncate(fragment.length()-1);
+                fragment.truncate(fragment.size()-1);
             }
             bool ok = parseStatus(fragment);
             state = ReadingHeaderState;
@@ -469,7 +434,7 @@ qint64 QHttpNetworkReplyPrivate::readStatus(QAbstractSocket *socket)
         }
 
         // is this a valid reply?
-        if (fragment.length() == 5 && !fragment.startsWith("HTTP/")) {
+        if (fragment.size() == 5 && !fragment.startsWith("HTTP/")) {
             fragment.clear();
             return -1;
         }
@@ -517,8 +482,8 @@ qint64 QHttpNetworkReplyPrivate::readHeader(QAbstractSocket *socket)
                     allHeaders = true;
 
                 // there is another case: We have no headers. Then the fragment equals just the line ending
-                if ((fragment.length() == 2 && fragment.endsWith("\r\n"))
-                    || (fragment.length() == 1 && fragment.endsWith("\n")))
+                if ((fragment.size() == 2 && fragment.endsWith("\r\n"))
+                    || (fragment.size() == 1 && fragment.endsWith("\n")))
                     allHeaders = true;
             }
         }
@@ -855,3 +820,5 @@ void QHttpNetworkReply::ignoreSslErrors(const QList<QSslError> &errors)
 
 
 QT_END_NAMESPACE
+
+#include "moc_qhttpnetworkreply_p.cpp"

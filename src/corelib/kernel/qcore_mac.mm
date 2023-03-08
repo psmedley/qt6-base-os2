@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2014 Petroules Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2014 Petroules Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <private/qcore_mac_p.h>
 
@@ -55,6 +19,7 @@
 #include <objc/runtime.h>
 #include <mach-o/dyld.h>
 #include <sys/sysctl.h>
+#include <spawn.h>
 
 #include <qdebug.h>
 
@@ -64,6 +29,19 @@
 #include "qmutex.h"
 #include "qvarlengtharray.h"
 #include "private/qlocking_p.h"
+
+#if !defined(QT_APPLE_NO_PRIVATE_APIS)
+extern "C" {
+typedef uint32_t csr_config_t;
+extern int csr_get_active_config(csr_config_t *) __attribute__((weak_import));
+
+int responsibility_spawnattrs_setdisclaim(posix_spawnattr_t attrs, int disclaim)
+__attribute__((availability(macos,introduced=10.14),weak_import));
+pid_t responsibility_get_pid_responsible_for_pid(pid_t) __attribute__((weak_import));
+char *** _NSGetArgv();
+extern char **environ;
+}
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -173,6 +151,27 @@ os_log_type_t AppleUnifiedLogger::logTypeForMessageType(QtMsgType msgType)
 
 // -------------------------------------------------------------------------
 
+QDebug operator<<(QDebug dbg, id obj)
+{
+    if (!obj) {
+        // Match NSLog
+        dbg << "(null)";
+        return dbg;
+    }
+
+    for (Class cls = object_getClass(obj); cls; cls = class_getSuperclass(cls)) {
+        if (cls == NSObject.class) {
+            dbg << static_cast<NSObject*>(obj);
+            return dbg;
+        }
+    }
+
+    // Match NSObject.debugDescription
+    const QDebugStateSaver saver(dbg);
+    dbg.nospace() << '<' << object_getClassName(obj) << ": " << static_cast<void*>(obj) << '>';
+    return dbg;
+}
+
 QDebug operator<<(QDebug dbg, const NSObject *nsObject)
 {
     return dbg << (nsObject ?
@@ -256,16 +255,9 @@ QMacAutoReleasePool::QMacAutoReleasePool()
 
 #ifdef QT_DEBUG
     void *poolFrame = nullptr;
-    if (__builtin_available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 5.0, *)) {
-        void *frame;
-        if (backtrace_from_fp(__builtin_frame_address(0), &frame, 1))
-            poolFrame = frame;
-    } else {
-        static const int maxFrames = 3;
-        void *callstack[maxFrames];
-        if (backtrace(callstack, maxFrames) == maxFrames)
-            poolFrame = callstack[maxFrames - 1];
-    }
+    void *frame;
+    if (backtrace_from_fp(__builtin_frame_address(0), &frame, 1))
+        poolFrame = frame;
 
     if (poolFrame) {
         Dl_info info;
@@ -336,14 +328,9 @@ QDebug operator<<(QDebug debug, const QCFString &string)
 #ifdef Q_OS_MACOS
 bool qt_mac_applicationIsInDarkMode()
 {
-#if QT_MACOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_10_14)
-    if (__builtin_available(macOS 10.14, *)) {
-        auto appearance = [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:
-                @[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
-        return [appearance isEqualToString:NSAppearanceNameDarkAqua];
-    }
-#endif
-    return false;
+    auto appearance = [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:
+            @[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
+    return [appearance isEqualToString:NSAppearanceNameDarkAqua];
 }
 
 bool qt_mac_runningUnderRosetta()
@@ -358,6 +345,12 @@ bool qt_mac_runningUnderRosetta()
 std::optional<uint32_t> qt_mac_sipConfiguration()
 {
     static auto configuration = []() -> std::optional<uint32_t> {
+#if !defined(QT_APPLE_NO_PRIVATE_APIS)
+        csr_config_t config;
+        if (csr_get_active_config && csr_get_active_config(&config) == 0)
+            return config;
+#endif
+
         QIOType<io_registry_entry_t> nvram = IORegistryEntryFromPath(kIOMasterPortDefault, "IODeviceTree:/options");
         if (!nvram) {
             qWarning("Failed to locate NVRAM entry in IO registry");
@@ -366,10 +359,8 @@ std::optional<uint32_t> qt_mac_sipConfiguration()
 
         QCFType<CFTypeRef> csrConfig = IORegistryEntryCreateCFProperty(nvram,
             CFSTR("csr-active-config"), kCFAllocatorDefault, IOOptionBits{});
-        if (!csrConfig) {
-            qWarning("Failed to locate SIP config in NVRAM");
-            return {};
-        }
+        if (!csrConfig)
+            return {}; // SIP config is not available
 
         if (auto type = CFGetTypeID(csrConfig); type != CFDataGetTypeID()) {
             qWarning() << "Unexpected SIP config type" << CFCopyTypeIDDescription(type);
@@ -386,6 +377,51 @@ std::optional<uint32_t> qt_mac_sipConfiguration()
     }();
     return configuration;
 }
+
+#define CHECK_SPAWN(expr) \
+    if (int err = (expr)) { \
+        posix_spawnattr_destroy(&attr); \
+        return; \
+    }
+
+void qt_mac_ensureResponsible()
+{
+#if !defined(QT_APPLE_NO_PRIVATE_APIS)
+    if (!responsibility_get_pid_responsible_for_pid || !responsibility_spawnattrs_setdisclaim)
+        return;
+
+    auto pid = getpid();
+    if (responsibility_get_pid_responsible_for_pid(pid) == pid)
+        return; // Already responsible
+
+    posix_spawnattr_t attr = {};
+    CHECK_SPAWN(posix_spawnattr_init(&attr));
+
+    // Behave as exec
+    short flags = POSIX_SPAWN_SETEXEC;
+
+    // Reset signal mask
+    sigset_t no_signals;
+    sigemptyset(&no_signals);
+    CHECK_SPAWN(posix_spawnattr_setsigmask(&attr, &no_signals));
+    flags |= POSIX_SPAWN_SETSIGMASK;
+
+    // Reset all signals to their default handlers
+    sigset_t all_signals;
+    sigfillset(&all_signals);
+    CHECK_SPAWN(posix_spawnattr_setsigdefault(&attr, &all_signals));
+    flags |= POSIX_SPAWN_SETSIGDEF;
+
+    CHECK_SPAWN(posix_spawnattr_setflags(&attr, flags));
+
+    CHECK_SPAWN(responsibility_spawnattrs_setdisclaim(&attr, 1));
+
+    char **argv = *_NSGetArgv();
+    posix_spawnp(&pid, argv[0], nullptr, &attr, argv, environ);
+    posix_spawnattr_destroy(&attr);
+#endif
+}
+
 #endif
 
 bool qt_apple_isApplicationExtension()
@@ -662,11 +698,9 @@ QMacVersion::VersionTuple QMacVersion::versionsForImage(const mach_header *machH
             || loadCommand->cmd == LC_VERSION_MIN_TVOS || loadCommand->cmd == LC_VERSION_MIN_WATCHOS) {
             auto versionCommand = reinterpret_cast<version_min_command *>(loadCommand);
             return makeVersionTuple(versionCommand->version, versionCommand->sdk, osForLoadCommand(loadCommand->cmd));
-#if QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_10_13, __IPHONE_11_0, __TVOS_11_0, __WATCHOS_4_0)
         } else if (loadCommand->cmd == LC_BUILD_VERSION) {
             auto versionCommand = reinterpret_cast<build_version_command *>(loadCommand);
             return makeVersionTuple(versionCommand->minos, versionCommand->sdk, osForPlatform(versionCommand->platform));
-#endif
         }
         commandCursor += loadCommand->cmdsize;
     }

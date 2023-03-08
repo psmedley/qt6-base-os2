@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qpalette.h"
 #include "qguiapplication.h"
@@ -71,14 +35,25 @@ class QPalettePrivate
 public:
     class Data : public QSharedData {
     public:
-        Data() : ser_no(qt_palette_count++) { }
+        // Every instance of Data has to have a unique serial number, even
+        // if it gets created by copying another - we wouldn't create a copy
+        // in the first place if the serial number should be the same!
+        Data(const Data &other)
+            : QSharedData(other)
+        {
+            for (int grp = 0; grp < int(QPalette::NColorGroups); grp++) {
+                for (int role = 0; role < int(QPalette::NColorRoles); role++)
+                    br[grp][role] = other.br[grp][role];
+            }
+        }
+        Data() = default;
 
         QBrush br[QPalette::NColorGroups][QPalette::NColorRoles];
-        const int ser_no;
+        const int ser_no = qt_palette_count++;
     };
 
     QPalettePrivate(const QExplicitlySharedDataPointer<Data> &data)
-        : ref(1), detach_no(0), data(data)
+        : ref(1), data(data)
     { }
     QPalettePrivate()
         : QPalettePrivate(QExplicitlySharedDataPointer<Data>(new Data))
@@ -86,7 +61,8 @@ public:
 
     QAtomicInt ref;
     QPalette::ResolveMask resolveMask = {0};
-    int detach_no;
+    static inline int qt_palette_private_count = 0;
+    int detach_no = ++qt_palette_private_count;
     QExplicitlySharedDataPointer<Data> data;
 };
 
@@ -94,6 +70,34 @@ static QColor qt_mix_colors(QColor a, QColor b)
 {
     return QColor((a.red() + b.red()) / 2, (a.green() + b.green()) / 2,
                   (a.blue() + b.blue()) / 2, (a.alpha() + b.alpha()) / 2);
+}
+
+/*!
+    \internal
+
+    Derive undefined \l PlaceholderText colors from \l Text colors.
+    Unless already set, PlaceholderText colors will be derived from their Text pendents.
+    Colors of existing PlaceHolderText brushes will not be replaced.
+
+    \a alpha represents the dim factor as a percentage. By default, a PlaceHolderText color
+    becomes a 50% more transparent version of the corresponding Text color.
+*/
+static void qt_placeholder_from_text(QPalette &pal, int alpha = 50)
+{
+    if (alpha < 0 or alpha > 100)
+        return;
+
+    for (int cg = 0; cg < int(QPalette::NColorGroups); ++cg) {
+        const QPalette::ColorGroup group = QPalette::ColorGroup(cg);
+
+        // skip if the brush has been set already
+        if (!pal.isBrushSet(group, QPalette::PlaceholderText)) {
+            QColor c = pal.color(group, QPalette::Text);
+            const int a = (c.alpha() * alpha) / 100;
+            c.setAlpha(a);
+            pal.setColor(group, QPalette::PlaceholderText, c);
+        }
+    }
 }
 
 static void qt_palette_from_color(QPalette &pal, const QColor &button)
@@ -118,6 +122,8 @@ static void qt_palette_from_color(QPalette &pal, const QColor &button)
     pal.setColorGroup(QPalette::Disabled, buttonBrushDark, buttonBrush, buttonBrushLight150,
                       buttonBrushDark, buttonBrushDark150, buttonBrushDark,
                       whiteBrush, buttonBrush, buttonBrush);
+
+    qt_placeholder_from_text(pal);
 }
 
 /*!
@@ -605,6 +611,8 @@ QPalette::QPalette(const QBrush &windowText, const QBrush &button,
     init();
     setColorGroup(All, windowText, button, light, dark, mid, text, bright_text,
                   base, window);
+
+    qt_placeholder_from_text(*this);
 }
 
 
@@ -660,6 +668,8 @@ QPalette::QPalette(const QColor &button, const QColor &window)
     setColorGroup(Disabled, disabledForeground, buttonBrush, buttonBrushLight150,
                   buttonBrushDark, buttonBrushDark150, disabledForeground,
                   whiteBrush, baseBrush, windowBrush);
+
+    qt_placeholder_from_text(*this);
 }
 
 /*!
@@ -854,8 +864,9 @@ void QPalette::detach()
         if (!d->ref.deref())
             delete d;
         d = x;
+    } else {
+        d->detach_no = ++QPalettePrivate::qt_palette_private_count;
     }
-    ++d->detach_no;
 }
 
 /*!
@@ -937,6 +948,17 @@ qint64 QPalette::cacheKey() const
     return (((qint64) d->data->ser_no) << 32) | ((qint64) (d->detach_no));
 }
 
+static constexpr QPalette::ResolveMask allResolveMask()
+{
+    QPalette::ResolveMask mask = {0};
+    for (int role = 0; role < int(QPalette::NColorRoles); ++role) {
+        for (int grp = 0; grp < int(QPalette::NColorGroups); ++grp) {
+            mask |= (QPalette::ResolveMask(1) << bitPosition(QPalette::ColorGroup(grp), QPalette::ColorRole(role)));
+        }
+    }
+    return mask;
+}
+
 /*!
     Returns a new QPalette that is a union of this instance and \a other.
     Color roles set in this instance take precedence.
@@ -949,6 +971,9 @@ QPalette QPalette::resolve(const QPalette &other) const
         o.setResolveMask(d->resolveMask);
         return o;
     }
+
+    if (d->resolveMask == allResolveMask())
+        return *this;
 
     QPalette palette(*this);
     palette.detach();
@@ -1185,47 +1210,6 @@ void QPalette::setColorGroup(ColorGroup cg, const QBrush &foreground, const QBru
     setBrush(cg, ToolTipText, toolTipText);
 }
 
-Q_GUI_EXPORT QPalette qt_fusionPalette()
-{
-    QColor backGround(239, 239, 239);
-    QColor light = backGround.lighter(150);
-    QColor mid(backGround.darker(130));
-    QColor midLight = mid.lighter(110);
-    QColor base = Qt::white;
-    QColor disabledBase(backGround);
-    QColor dark = backGround.darker(150);
-    QColor darkDisabled = QColor(209, 209, 209).darker(110);
-    QColor text = Qt::black;
-    QColor hightlightedText = Qt::white;
-    QColor disabledText = QColor(190, 190, 190);
-    QColor button = backGround;
-    QColor shadow = dark.darker(135);
-    QColor disabledShadow = shadow.lighter(150);
-    QColor placeholder = text;
-    placeholder.setAlpha(128);
-
-    QPalette fusionPalette(Qt::black,backGround,light,dark,mid,text,base);
-    fusionPalette.setBrush(QPalette::Midlight, midLight);
-    fusionPalette.setBrush(QPalette::Button, button);
-    fusionPalette.setBrush(QPalette::Shadow, shadow);
-    fusionPalette.setBrush(QPalette::HighlightedText, hightlightedText);
-
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Text, disabledText);
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::WindowText, disabledText);
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::ButtonText, disabledText);
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Base, disabledBase);
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Dark, darkDisabled);
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Shadow, disabledShadow);
-
-    fusionPalette.setBrush(QPalette::Active, QPalette::Highlight, QColor(48, 140, 198));
-    fusionPalette.setBrush(QPalette::Inactive, QPalette::Highlight, QColor(48, 140, 198));
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Highlight, QColor(145, 145, 145));
-
-    fusionPalette.setBrush(QPalette::PlaceholderText, placeholder);
-
-    return fusionPalette;
-}
-
 #ifndef QT_NO_DEBUG_STREAM
 static QString groupsToString(const QPalette &p, QPalette::ColorRole cr)
 {
@@ -1237,8 +1221,8 @@ static QString groupsToString(const QPalette &p, QPalette::ColorRole cr)
 
         if (p.isBrushSet(cg, cr)) {
             const auto &color = p.color(cg, cr);
-            groupString += QString::fromUtf8(groupEnum.valueToKey(cg)) + QLatin1Char(':') +
-                           color.name(QColor::HexArgb) + QLatin1Char(',');
+            groupString += QString::fromUtf8(groupEnum.valueToKey(cg)) + u':' +
+                           color.name(QColor::HexArgb) + u',';
         }
     }
     groupString.chop(1);

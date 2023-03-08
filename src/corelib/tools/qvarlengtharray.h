@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QVARLENGTHARRAY_H
 #define QVARLENGTHARRAY_H
@@ -242,9 +206,9 @@ protected:
     }
 
     void append_impl(qsizetype prealloc, void *array, const T *buf, qsizetype n);
-    void reallocate_impl(qsizetype prealloc, void *array, qsizetype size, qsizetype alloc);
-    void resize_impl(qsizetype prealloc, void *array, qsizetype sz)
-    { reallocate_impl(prealloc, array, sz, qMax(sz, capacity())); }
+    void reallocate_impl(qsizetype prealloc, void *array, qsizetype size, qsizetype alloc, const T *v = nullptr);
+    void resize_impl(qsizetype prealloc, void *array, qsizetype sz, const T *v = nullptr)
+    { reallocate_impl(prealloc, array, sz, qMax(sz, capacity()), v); }
 
     bool isValidIterator(const const_iterator &i) const
     {
@@ -265,6 +229,9 @@ class QVarLengthArray
     using Storage = QVLAStorage<sizeof(T), alignof(T), Prealloc>;
     static_assert(std::is_nothrow_destructible_v<T>, "Types with throwing destructors are not supported in Qt containers.");
     using Base::verify;
+
+    template <typename U>
+    using if_copyable = std::enable_if_t<std::is_copy_constructible_v<U>, bool>;
 public:
     using size_type = typename Base::size_type;
     using value_type = typename Base::value_type;
@@ -287,6 +254,15 @@ public:
     }
 
     inline explicit QVarLengthArray(qsizetype size);
+
+#ifndef Q_QDOC
+    template <typename U = T, if_copyable<U> = true>
+#endif
+    explicit QVarLengthArray(qsizetype sz, const T &v)
+        : QVarLengthArray{}
+    {
+        resize(sz, v);
+    }
 
     QVarLengthArray(const QVarLengthArray &other)
         : QVarLengthArray{}
@@ -398,6 +374,11 @@ public:
     }
     bool isEmpty() const { return empty(); }
     void resize(qsizetype sz) { Base::resize_impl(Prealloc, this->array, sz); }
+#ifndef Q_QDOC
+    template <typename U = T, if_copyable<U> = true>
+#endif
+    void resize(qsizetype sz, const T &v)
+    { Base::resize_impl(Prealloc, this->array, sz, &v); }
     inline void clear() { resize(0); }
     void squeeze() { reallocate(size(), size()); }
 
@@ -725,7 +706,7 @@ Q_OUTOFLINE_TEMPLATE void QVLABase<T>::append_impl(qsizetype prealloc, void *arr
 }
 
 template <class T>
-Q_OUTOFLINE_TEMPLATE void QVLABase<T>::reallocate_impl(qsizetype prealloc, void *array, qsizetype asize, qsizetype aalloc)
+Q_OUTOFLINE_TEMPLATE void QVLABase<T>::reallocate_impl(qsizetype prealloc, void *array, qsizetype asize, qsizetype aalloc, const T *v)
 {
     Q_ASSERT(aalloc >= asize);
     Q_ASSERT(data());
@@ -767,7 +748,16 @@ Q_OUTOFLINE_TEMPLATE void QVLABase<T>::reallocate_impl(qsizetype prealloc, void 
     if (oldPtr != reinterpret_cast<T *>(array) && oldPtr != data())
         free(oldPtr);
 
-    if constexpr (QTypeInfo<T>::isComplex) {
+    if (v) {
+        if constexpr (std::is_copy_constructible_v<T>) {
+            while (size() < asize) {
+                new (data() + size()) T(*v);
+                ++s;
+            }
+        } else {
+            Q_UNREACHABLE();
+        }
+    } else if constexpr (QTypeInfo<T>::isComplex) {
         // call default constructor for new objects (which can throw)
         while (size() < asize) {
             new (data() + size()) T;

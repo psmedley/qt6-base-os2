@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QFUTURE_H
 #error Do not include qfuture_impl.h directly
@@ -150,7 +114,7 @@ auto createTuple(Arg &&arg, Args &&... args)
     constexpr auto Size = sizeof...(Args); // One less than the size of all arguments
     if constexpr (QtPrivate::IsPrivateSignalArg<std::tuple_element_t<Size, TupleType>>) {
         if constexpr (Size == 1) {
-            return arg;
+            return std::forward<Arg>(arg);
         } else {
             return cutTuple(std::make_tuple(std::forward<Arg>(arg), std::forward<Args>(args)...),
                             std::make_index_sequence<Size>());
@@ -459,7 +423,7 @@ void Continuation<Function, ResultType, ParentResultType>::runFunction()
                 fulfillPromiseWithResult();
             } else {
                 // This assert normally should never fail, this is to make sure
-                // that nothing unexpected happend.
+                // that nothing unexpected happened.
                 static_assert(std::is_invocable_v<Function, QFuture<ParentResultType>>,
                               "The continuation is not invocable with the provided arguments");
                 fulfillPromise(parentFuture);
@@ -474,7 +438,7 @@ void Continuation<Function, ResultType, ParentResultType>::runFunction()
                 fulfillVoidPromise();
             } else {
                 // This assert normally should never fail, this is to make sure
-                // that nothing unexpected happend.
+                // that nothing unexpected happened.
                 static_assert(std::is_invocable_v<Function, QFuture<ParentResultType>>,
                               "The continuation is not invocable with the provided arguments");
                 function(parentFuture);
@@ -867,6 +831,59 @@ public:
     }
 };
 
+struct UnwrapHandler
+{
+    template<class T>
+    static auto unwrapImpl(T *outer)
+    {
+        Q_ASSERT(outer);
+
+        using ResultType = typename QtPrivate::Future<std::decay_t<T>>::type;
+        using NestedType = typename QtPrivate::Future<ResultType>::type;
+        QFutureInterface<NestedType> promise(QFutureInterfaceBase::State::Pending);
+
+        outer->then([promise](const QFuture<ResultType> &outerFuture) mutable {
+            // We use the .then([](QFuture<ResultType> outerFuture) {...}) version
+            // (where outerFuture == *outer), to propagate the exception if the
+            // outer future has failed.
+            Q_ASSERT(outerFuture.isFinished());
+#ifndef QT_NO_EXCEPTIONS
+            if (outerFuture.d.hasException()) {
+                promise.reportStarted();
+                promise.reportException(outerFuture.d.exceptionStore().exception());
+                promise.reportFinished();
+                return;
+            }
+#endif
+
+            promise.reportStarted();
+            ResultType nestedFuture = outerFuture.result();
+
+            nestedFuture.then([promise] (const QFuture<NestedType> &nested) mutable {
+#ifndef QT_NO_EXCEPTIONS
+                if (nested.d.hasException()) {
+                    promise.reportException(nested.d.exceptionStore().exception());
+                } else
+#endif
+                {
+                    if constexpr (!std::is_void_v<NestedType>)
+                        promise.reportResults(nested.results());
+                }
+                promise.reportFinished();
+            }).onCanceled([promise] () mutable {
+                promise.reportCanceled();
+                promise.reportFinished();
+            });
+        }).onCanceled([promise]() mutable {
+            // propagate the cancellation of the outer future
+            promise.reportStarted();
+            promise.reportCanceled();
+            promise.reportFinished();
+        });
+        return promise.future();
+    }
+};
+
 } // namespace QtPrivate
 
 namespace QtFuture {
@@ -1003,20 +1020,21 @@ struct WhenAllContext
 {
     using ValueType = typename ResultFutures::value_type;
 
-    WhenAllContext(qsizetype size) : count(size) {}
+    explicit WhenAllContext(qsizetype size) : remaining(size) {}
 
     template<typename T = ValueType>
     void checkForCompletion(qsizetype index, T &&future)
     {
         futures[index] = std::forward<T>(future);
-        Q_ASSERT(count > 0);
-        if (--count <= 0) {
+        const auto oldRemaining = remaining.fetchAndSubRelaxed(1);
+        Q_ASSERT(oldRemaining > 0);
+        if (oldRemaining <= 1) { // that was the last one
             promise.addResult(futures);
             promise.finish();
         }
     }
 
-    QAtomicInteger<qsizetype> count;
+    QAtomicInteger<qsizetype> remaining;
     QPromise<ResultFutures> promise;
     ResultFutures futures;
 };

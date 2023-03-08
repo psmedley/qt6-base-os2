@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "private/qxpmhandler_p.h"
 
@@ -754,15 +718,12 @@ inline bool operator<(const char *name, const XPMRGBData &data)
 inline bool operator<(const XPMRGBData &data, const char *name)
 { return qstrcmp(data.name, name) < 0; }
 
-static inline bool qt_get_named_xpm_rgb(const char *name_no_space, QRgb *rgb)
+static inline std::optional<QRgb> qt_get_named_xpm_rgb(const char *name_no_space)
 {
     const XPMRGBData *r = std::lower_bound(xpmRgbTbl, xpmRgbTbl + xpmRgbTblSize, name_no_space);
-    if ((r != xpmRgbTbl + xpmRgbTblSize) && !(name_no_space < *r)) {
-        *rgb = r->value;
-        return true;
-    } else {
-        return false;
-    }
+    if ((r != xpmRgbTbl + xpmRgbTblSize) && !(name_no_space < *r))
+        return r->value;
+    return {};
 }
 
 /*****************************************************************************
@@ -772,7 +733,7 @@ static QString fbname(const QString &fileName) // get file basename (sort of)
 {
     QString s = fileName;
     if (!s.isEmpty()) {
-        int i = qMax(s.lastIndexOf(QLatin1Char('/')), s.lastIndexOf(QLatin1Char('\\')));
+        int i = qMax(s.lastIndexOf(u'/'), s.lastIndexOf(u'\\'));
         if (i < 0)
             i = 0;
         auto isAsciiLetterOrNumber = [](QChar ch) -> bool {
@@ -782,7 +743,7 @@ static QString fbname(const QString &fileName) // get file basename (sort of)
                     ch.unicode() == '_';
         };
         int start = -1;
-        for (; i < s.length(); ++i) {
+        for (; i < s.size(); ++i) {
             if (isAsciiLetterOrNumber(s.at(i))) {
                 start = i;
             } else if (start > 0)
@@ -931,25 +892,25 @@ static bool read_xpm_body(
             int transparentColor = currentColor;
             if (ncols <= 256) {
                 image.setColor(transparentColor, 0);
-                colorMap.insert(xpmHash(QLatin1String(index.constData())), transparentColor);
+                colorMap.insert(xpmHash(QLatin1StringView(index.constData())), transparentColor);
             } else {
-                colorMap.insert(xpmHash(QLatin1String(index.constData())), 0);
+                colorMap.insert(xpmHash(QLatin1StringView(index.constData())), 0);
             }
         } else {
             QRgb c_rgb = 0;
-            if (((buf.length()-1) % 3) && (buf[0] == '#')) {
-                buf.truncate(((buf.length()-1) / 4 * 3) + 1); // remove alpha channel left by imagemagick
+            if (((buf.size()-1) % 3) && (buf[0] == '#')) {
+                buf.truncate(((buf.size()-1) / 4 * 3) + 1); // remove alpha channel left by imagemagick
             }
             if (buf[0] == '#') {
-                qt_get_hex_rgb(buf, &c_rgb);
+                c_rgb = qt_get_hex_rgb(buf).value_or(0);
             } else {
-                qt_get_named_xpm_rgb(buf, &c_rgb);
+                c_rgb = qt_get_named_xpm_rgb(buf).value_or(0);
             }
             if (ncols <= 256) {
                 image.setColor(currentColor, 0xff000000 | c_rgb);
-                colorMap.insert(xpmHash(QLatin1String(index.constData())), currentColor);
+                colorMap.insert(xpmHash(QLatin1StringView(index.constData())), currentColor);
             } else {
-                colorMap.insert(xpmHash(QLatin1String(index.constData())), 0xff000000 | c_rgb);
+                colorMap.insert(xpmHash(QLatin1StringView(index.constData())), 0xff000000 | c_rgb);
             }
         }
     }
@@ -971,7 +932,7 @@ static bool read_xpm_body(
         if (image.depth() == 8) {
             uchar *p = image.scanLine(y);
             uchar *d = (uchar *)buf.data();
-            uchar *end = d + buf.length();
+            uchar *end = d + buf.size();
             int x;
             if (cpp == 1) {
                 char b[2];
@@ -997,7 +958,7 @@ static bool read_xpm_body(
         } else {
             QRgb *p = (QRgb*)image.scanLine(y);
             uchar *d = (uchar *)buf.data();
-            uchar *end = d + buf.length();
+            uchar *end = d + buf.size();
             int x;
             char b[16];
             b[cpp] = '\0';

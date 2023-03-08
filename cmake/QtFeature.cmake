@@ -236,7 +236,7 @@ function(qt_feature_check_and_save_user_provided_value resultVar feature conditi
     if (DEFINED "FEATURE_${feature}")
         # Revisit new user provided value
         set(user_value "${FEATURE_${feature}}")
-        set(result "${user_value}")
+        string(TOUPPER "${user_value}" result)
 
         # If the build is marked as dirty and the user_value doesn't meet the new condition,
         # reset it to the computed one.
@@ -1074,7 +1074,7 @@ function(qt_config_compile_test_x86simd extension label)
     qt_get_platform_try_compile_vars(platform_try_compile_vars)
     list(APPEND flags ${platform_try_compile_vars})
 
-    message(STATUS "Performing SIMD Test ${label}")
+    message(STATUS "Performing Test ${label} intrinsics")
     try_compile("TEST_X86SIMD_${extension}"
         "${CMAKE_CURRENT_BINARY_DIR}/config.tests/x86_simd_${extension}"
         "${CMAKE_CURRENT_SOURCE_DIR}/config.tests/x86_simd"
@@ -1085,12 +1085,12 @@ function(qt_config_compile_test_x86simd extension label)
     else()
         set(status_label "Failed")
     endif()
-    message(STATUS "Performing SIMD Test ${label} - ${status_label}")
+    message(STATUS "Performing Test ${label} intrinsics - ${status_label}")
     set(TEST_subarch_${extension} "${TEST_X86SIMD_${extension}}" CACHE INTERNAL "${label}")
 endfunction()
 
 function(qt_config_compile_test_machine_tuple label)
-    if(DEFINED TEST_MACHINE_TUPLE OR NOT LINUX OR ANDROID)
+    if(DEFINED TEST_MACHINE_TUPLE OR NOT (LINUX OR HURD) OR ANDROID)
         return()
     endif()
 

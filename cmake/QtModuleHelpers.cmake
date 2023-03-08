@@ -95,7 +95,9 @@ function(qt_internal_add_module target)
         ${ARGN}
     )
 
+    set(is_internal_module FALSE)
     if(arg_INTERNAL_MODULE)
+        set(is_internal_module TRUE)
         set(arg_INTERNAL_MODULE "INTERNAL_MODULE")
         set(arg_NO_PRIVATE_MODULE TRUE)
         # Assume the interface name of the internal module should be the module name without the
@@ -153,8 +155,32 @@ function(qt_internal_add_module target)
 
     set_target_properties(${target} PROPERTIES
         _qt_module_interface_name "${arg_MODULE_INTERFACE_NAME}"
+        _qt_package_version "${PROJECT_VERSION}"
+        _qt_package_name "${INSTALL_CMAKE_NAMESPACE}${target}"
     )
-    set_property(TARGET ${target} APPEND PROPERTY EXPORT_PROPERTIES _qt_module_interface_name)
+    set(export_properties
+        "_qt_module_interface_name"
+        "_qt_package_version"
+        "_qt_package_name"
+    )
+    if(NOT is_internal_module)
+        set_target_properties(${target} PROPERTIES
+            _qt_is_public_module TRUE
+        )
+        list(APPEND export_properties
+            "_qt_is_public_module"
+        )
+        if(NOT ${arg_NO_PRIVATE_MODULE})
+            set_target_properties(${target} PROPERTIES
+                _qt_private_module_target_name "${target}Private"
+            )
+            list(APPEND export_properties
+                "_qt_private_module_target_name"
+            )
+        endif()
+    endif()
+
+    set_property(TARGET ${target} APPEND PROPERTY EXPORT_PROPERTIES "${export_properties}")
 
     qt_internal_module_info(module "${target}")
     qt_internal_add_qt_repo_known_module("${target}")
@@ -177,7 +203,6 @@ function(qt_internal_add_module target)
 
     set(property_prefix "INTERFACE_")
     if(NOT arg_HEADER_MODULE)
-        qt_set_common_target_properties(${target})
         set(property_prefix "")
     endif()
 
@@ -202,7 +227,8 @@ function(qt_internal_add_module target)
         qt_internal_get_framework_info(fw ${target})
     endif()
 
-    if(QT_FEATURE_reduce_relocations AND UNIX AND NOT is_interface_lib)
+    if(NOT QT_FEATURE_no_direct_extern_access AND QT_FEATURE_reduce_relocations AND
+            UNIX AND NOT is_interface_lib)
         # On x86 and x86-64 systems with ELF binaries (especially Linux), due to
         # a new optimization in GCC 5.x in combination with a recent version of
         # GNU binutils, compiling Qt applications with -fPIE is no longer
@@ -238,9 +264,21 @@ function(qt_internal_add_module target)
         add_library("${target_private}" INTERFACE)
         qt_internal_add_target_aliases("${target_private}")
         set_target_properties(${target_private} PROPERTIES
-            _qt_config_module_name ${arg_CONFIG_MODULE_NAME}_private)
+            _qt_config_module_name ${arg_CONFIG_MODULE_NAME}_private
+            _qt_package_version "${PROJECT_VERSION}"
+            _qt_package_name "${INSTALL_CMAKE_NAMESPACE}${target}"
+            _qt_is_private_module TRUE
+            _qt_public_module_target_name "${target}"
+        )
+        set(export_properties
+            "_qt_config_module_name"
+            "_qt_package_version"
+            "_qt_package_name"
+            "_qt_is_private_module"
+            "_qt_public_module_target_name"
+        )
         set_property(TARGET "${target_private}" APPEND PROPERTY
-                     EXPORT_PROPERTIES _qt_config_module_name)
+                     EXPORT_PROPERTIES "${export_properties}")
     endif()
 
     if(NOT arg_HEADER_MODULE)
@@ -291,6 +329,8 @@ function(qt_internal_add_module target)
                 OUTPUT_NAME "${INSTALL_CMAKE_NAMESPACE}${module_interface_name}${QT_LIBINFIX}"
             )
         endif()
+
+        qt_set_common_target_properties(${target})
 
         if (WIN32 AND BUILD_SHARED_LIBS)
             _qt_internal_generate_win32_rc_file(${target})
@@ -380,7 +420,7 @@ function(qt_internal_add_module target)
             else()
                 qt_install(
                     FILES ${module_headers_qpa}
-                    DESTINATION "${module_install_interface_versioned_inner_include_dir}/qpa")
+                    DESTINATION "${module_install_interface_qpa_include_dir}")
             endif()
         endif()
     endif()
@@ -708,9 +748,8 @@ set(QT_LIBINFIX \"${QT_LIBINFIX}\")")
         qt_install(DIRECTORY "${arg_EXTERNAL_HEADERS_DIR}/"
             DESTINATION "${module_install_interface_include_dir}"
         )
-        unset(public_header_destination)
-    else()
-        set(public_header_destination PUBLIC_HEADER DESTINATION "${module_install_interface_include_dir}")
+        get_target_property(public_header_backup ${target} PUBLIC_HEADER)
+        set_property(TARGET ${target} PROPERTY PUBLIC_HEADER "")
     endif()
 
     qt_install(TARGETS ${exported_targets}
@@ -720,11 +759,16 @@ set(QT_LIBINFIX \"${QT_LIBINFIX}\")")
         ARCHIVE DESTINATION ${INSTALL_LIBDIR}
         FRAMEWORK DESTINATION ${INSTALL_LIBDIR}
         PRIVATE_HEADER DESTINATION "${module_install_interface_private_include_dir}"
-        ${public_header_destination}
-        )
+        PUBLIC_HEADER DESTINATION "${module_install_interface_include_dir}"
+    )
+    if(arg_EXTERNAL_HEADERS_DIR)
+        set_property(TARGET ${target} PROPERTY PUBLIC_HEADER ${public_header_backup})
+        unset(public_header_backup)
+    endif()
 
     if(BUILD_SHARED_LIBS)
         qt_apply_rpaths(TARGET "${target}" INSTALL_PATH "${INSTALL_LIBDIR}" RELATIVE_RPATH)
+        qt_internal_apply_staging_prefix_build_rpath_workaround()
     endif()
 
     if (ANDROID AND NOT arg_HEADER_MODULE)
@@ -853,6 +897,7 @@ endfunction()
 #  * foo_versioned_include_dir with the value "QtCore/6.2.0"
 #  * foo_versioned_inner_include_dir with the value "QtCore/6.2.0/QtCore"
 #  * foo_private_include_dir with the value "QtCore/6.2.0/QtCore/private"
+#  * foo_qpa_include_dir with the value "QtCore/6.2.0/QtCore/qpa"
 #  * foo_interface_name the interface name of the module stored in _qt_module_interface_name
 #    property, e.g. Core.
 #
@@ -872,6 +917,9 @@ endfunction()
 #  * foo_<build|install>_private_include_dir with
 #    qtbase_build_dir/include/QtCore/6.2.0/QtCore/private for build interface and
 #    include/QtCore/6.2.0/QtCore/private for install interface.
+#  * foo_<build|install>_qpa_include_dir with
+#    qtbase_build_dir/include/QtCore/6.2.0/QtCore/qpa for build interface and
+#    include/QtCore/6.2.0/QtCore/qpa for install interface.
 # The following values are set by the function and might be useful in caller's scope:
 #  * repo_install_interface_include_dir contains path to the top-level repository include directory,
 #    e.g. qtbase_build_dir/include
@@ -904,6 +952,8 @@ the different base name for the module info variables.")
         "${${result}_versioned_include_dir}/${${result}_include_name}")
     set("${result}_private_include_dir"
         "${${result}_versioned_inner_include_dir}/private")
+    set("${result}_qpa_include_dir"
+        "${${result}_versioned_inner_include_dir}/qpa")
 
     # Module build interface directories
     set(repo_build_interface_include_dir "${QT_BUILD_DIR}/include")
@@ -915,8 +965,10 @@ the different base name for the module info variables.")
         "${repo_build_interface_include_dir}/${${result}_versioned_inner_include_dir}")
     set("${result}_build_interface_private_include_dir"
         "${repo_build_interface_include_dir}/${${result}_private_include_dir}")
+    set("${result}_build_interface_qpa_include_dir"
+        "${repo_build_interface_include_dir}/${${result}_qpa_include_dir}")
 
-    # Module install interface direcotries
+    # Module install interface directories
     set(repo_install_interface_include_dir "${INSTALL_INCLUDEDIR}")
     set("${result}_install_interface_include_dir"
         "${repo_install_interface_include_dir}/${${result}_include_name}")
@@ -926,6 +978,8 @@ the different base name for the module info variables.")
         "${repo_install_interface_include_dir}/${${result}_versioned_inner_include_dir}")
     set("${result}_install_interface_private_include_dir"
         "${repo_install_interface_include_dir}/${${result}_private_include_dir}")
+    set("${result}_install_interface_qpa_include_dir"
+        "${repo_install_interface_include_dir}/${${result}_qpa_include_dir}")
 
     set("${result}" "${module}" PARENT_SCOPE)
     set("${result}_versioned" "${module_versioned}" PARENT_SCOPE)
@@ -938,6 +992,7 @@ the different base name for the module info variables.")
     set("${result}_versioned_inner_include_dir"
         "${${result}_versioned_inner_include_dir}" PARENT_SCOPE)
     set("${result}_private_include_dir" "${${result}_private_include_dir}" PARENT_SCOPE)
+    set("${result}_qpa_include_dir" "${${result}_qpa_include_dir}" PARENT_SCOPE)
     set("${result}_interface_name" "${module_interface_name}" PARENT_SCOPE)
 
     # Setting module build interface directories in parent scope
@@ -950,6 +1005,8 @@ the different base name for the module info variables.")
         "${${result}_build_interface_versioned_inner_include_dir}" PARENT_SCOPE)
     set("${result}_build_interface_private_include_dir"
         "${${result}_build_interface_private_include_dir}" PARENT_SCOPE)
+    set("${result}_build_interface_qpa_include_dir"
+        "${${result}_build_interface_qpa_include_dir}" PARENT_SCOPE)
 
     # Setting module install interface directories in parent scope
     set(repo_install_interface_include_dir "${repo_install_interface_include_dir}" PARENT_SCOPE)
@@ -961,6 +1018,8 @@ the different base name for the module info variables.")
         "${${result}_install_interface_versioned_inner_include_dir}" PARENT_SCOPE)
     set("${result}_install_interface_private_include_dir"
         "${${result}_install_interface_private_include_dir}" PARENT_SCOPE)
+    set("${result}_install_interface_qpa_include_dir"
+        "${${result}_install_interface_qpa_include_dir}" PARENT_SCOPE)
 endfunction()
 
 # Generate a module description file based on the template in ModuleDescription.json.in

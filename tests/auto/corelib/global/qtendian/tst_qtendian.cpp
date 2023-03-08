@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -402,8 +377,9 @@ void testBitfieldUnion()
     using upper = Member<21, 11, uint>;
     using lower = Member<10, 11, uint>;
     using bottom = Member<0, 10, int>;
+    using all = Member<0, 32, uint>;
 
-    using UnionType = Union<upper, lower, bottom>;
+    using UnionType = Union<upper, lower, bottom, all>;
     UnionType u;
 
     u.template set<upper>(200);
@@ -426,6 +402,15 @@ void testBitfieldUnion()
 
     UnionType u2(QSpecialIntegerBitfieldZero);
     QCOMPARE(u2.data(), 0U);
+
+    u2.template set<all>(std::numeric_limits<uint>::max());
+    QCOMPARE(u2.template get<all>(), std::numeric_limits<uint>::max());
+
+    u2.template set<all>(453);
+    QCOMPARE(u2.template get<all>(), 453U);
+
+    u2.template set<all>(0);
+    QCOMPARE(u2.template get<all>(), 0U);
 
     UnionType u3(42U);
     QCOMPARE(u3.data(), 42U);

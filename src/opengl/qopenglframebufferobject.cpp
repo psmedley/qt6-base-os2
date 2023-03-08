@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtOpenGL module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qopenglframebufferobject.h"
 #include "qopenglframebufferobject_p.h"
@@ -1029,7 +993,7 @@ QOpenGLFramebufferObject::~QOpenGLFramebufferObject()
     if (isBound())
         release();
 
-    for (const auto &color : qAsConst(d->colorAttachments)) {
+    for (const auto &color : std::as_const(d->colorAttachments)) {
         if (color.guard)
             color.guard->free();
     }
@@ -1089,7 +1053,7 @@ void QOpenGLFramebufferObject::addColorAttachment(const QSize &size, GLenum inte
 
     QOpenGLFramebufferObjectPrivate::ColorAttachment color(size, effectiveInternalFormat(internalFormat));
     d->colorAttachments.append(color);
-    const int idx = d->colorAttachments.count() - 1;
+    const int idx = d->colorAttachments.size() - 1;
 
     if (d->requestedSamples == 0) {
         d->initTexture(idx);
@@ -1170,7 +1134,7 @@ bool QOpenGLFramebufferObject::bind()
 
     if (d->format.samples() == 0) {
         // Create new textures to replace the ones stolen via takeTexture().
-        for (int i = 0; i < d->colorAttachments.count(); ++i) {
+        for (int i = 0; i < d->colorAttachments.size(); ++i) {
             if (!d->colorAttachments.at(i).guard)
                 d->initTexture(i);
         }
@@ -1250,7 +1214,7 @@ QList<GLuint> QOpenGLFramebufferObject::textures() const
     QList<GLuint> ids;
     if (d->format.samples() != 0)
         return ids;
-    ids.reserve(d->colorAttachments.count());
+    ids.reserve(d->colorAttachments.size());
     for (const auto &color : d->colorAttachments)
         ids.append(color.guard ? color.guard->id() : 0);
     return ids;
@@ -1302,7 +1266,7 @@ GLuint QOpenGLFramebufferObject::takeTexture(int colorAttachmentIndex)
 {
     Q_D(QOpenGLFramebufferObject);
     GLuint id = 0;
-    if (isValid() && d->format.samples() == 0 && d->colorAttachments.count() > colorAttachmentIndex) {
+    if (isValid() && d->format.samples() == 0 && d->colorAttachments.size() > colorAttachmentIndex) {
         QOpenGLContext *current = QOpenGLContext::currentContext();
         if (current && current->shareGroup() == d->fbo_guard->group() && isBound())
             release();
@@ -1527,7 +1491,7 @@ QImage QOpenGLFramebufferObject::toImage(bool flipped, int colorAttachmentIndex)
         return QImage();
     }
 
-    if (d->colorAttachments.count() <= colorAttachmentIndex) {
+    if (d->colorAttachments.size() <= colorAttachmentIndex) {
         qWarning("QOpenGLFramebufferObject::toImage() called for missing color attachment");
         return QImage();
     }

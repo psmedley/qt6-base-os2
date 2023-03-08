@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 
@@ -37,6 +12,7 @@
 #include <QDebug>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QTemporaryFile>
 #include <QStringConverter>
 #include <QTcpSocket>
 #include <QTemporaryDir>
@@ -226,6 +202,9 @@ private slots:
     void setEncoding();
 
     void textModeOnEmptyRead();
+
+    void autodetectUnicode_data();
+    void autodetectUnicode();
 
 private:
     void generateLineData(bool for_QString);
@@ -1434,7 +1413,7 @@ void tst_QTextStream::pos3LargeFile()
         // NOTE: The unusual spacing is to ensure non-1-character whitespace.
         QString lineString = " 0  1  2\t3  4\t \t5  6  7  8   9 \n";
         // Approximate 50kb text file
-        const int NbLines = (50*1024) / lineString.length() + 1;
+        const int NbLines = (50*1024) / lineString.size() + 1;
         for (int line = 0; line < NbLines; ++line)
             out << lineString;
         // File is automatically flushed and closed on destruction.
@@ -1929,9 +1908,18 @@ void tst_QTextStream::char16_t_operators_FromDevice_data()
 // ------------------------------------------------------------------------------
 void tst_QTextStream::char16_t_operators_FromDevice()
 {
+    QFETCH(QByteArray, input);
     QFETCH(const QChar, qchar_output);
     QFETCH(const QByteArray, write_output);
     const char16_t char16_t_output = qchar_output.unicode();
+
+    QBuffer buf(&input);
+    buf.open(QBuffer::ReadOnly);
+    QTextStream stream(&buf);
+    stream.setEncoding(QStringConverter::Latin1);
+    char16_t tmp;
+    stream >> tmp;
+    QCOMPARE(tmp, qchar_output);
 
     QBuffer writeBuf;
     writeBuf.open(QBuffer::WriteOnly);
@@ -3057,6 +3045,57 @@ void tst_QTextStream::textModeOnEmptyRead()
     QVERIFY(file.isTextModeEnabled());
     QString emptyLine = stream.readLine(); // Text mode flag cleared here
     QVERIFY(file.isTextModeEnabled());
+}
+
+void tst_QTextStream::autodetectUnicode_data()
+{
+    QTest::addColumn<QStringConverter::Encoding>("encoding");
+    QTest::newRow("Utf8") << QStringConverter::Utf8;
+    QTest::newRow("Utf16BE") << QStringConverter::Utf16BE;
+    QTest::newRow("Utf16LE") << QStringConverter::Utf16LE;
+    QTest::newRow("Utf32BE") << QStringConverter::Utf32BE;
+    QTest::newRow("Utf32LE") << QStringConverter::Utf32LE;
+}
+
+void tst_QTextStream::autodetectUnicode()
+{
+    QFETCH(QStringConverter::Encoding, encoding);
+
+    QTemporaryFile file;
+    QVERIFY(file.open());
+
+    QString original("HelloWorld👋");
+
+    {
+        QTextStream out(&file);
+        out.setGenerateByteOrderMark(true);
+        out.setEncoding(encoding);
+        out << original;
+    }
+    file.seek(0);
+    {
+        QTextStream in(&file);
+        QString actual;
+        in >> actual;
+        QCOMPARE(actual, original);
+        QCOMPARE(in.encoding(), encoding);
+    }
+    file.seek(0);
+    // Again, but change order of calls to QTextStream...
+    {
+        QTextStream out(&file);
+        out.setEncoding(encoding);
+        out.setGenerateByteOrderMark(true);
+        out << original;
+    }
+    file.seek(0);
+    {
+        QTextStream in(&file);
+        QString actual;
+        in >> actual;
+        QCOMPARE(actual, original);
+        QCOMPARE(in.encoding(), encoding);
+    }
 }
 
 

@@ -1,31 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 or (at your option) any later version
-** approved by the KDE Free Qt Foundation. The licenses are as published by
-** the Free Software Foundation and appearing in the file LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "qwasmintegration.h"
 #include "qwasmeventtranslator.h"
@@ -41,7 +15,6 @@
 #include "qwasmwindow.h"
 #ifndef QT_NO_OPENGL
 # include "qwasmbackingstore.h"
-# include <QtOpenGL/qpa/qplatformbackingstoreopenglsupport.h>
 #endif
 #include "qwasmfontdatabase.h"
 #if defined(Q_OS_UNIX)
@@ -58,23 +31,27 @@
 
 // this is where EGL headers are pulled in, make sure it is last
 #include "qwasmscreen.h"
+#include <private/qsimpledrag_p.h>
 
-using namespace emscripten;
 QT_BEGIN_NAMESPACE
 
-static void addCanvasElement(emscripten::val canvas)
+using namespace emscripten;
+
+using namespace Qt::StringLiterals;
+
+static void addContainerElement(emscripten::val element)
 {
-    QWasmIntegration::get()->addScreen(canvas);
+    QWasmIntegration::get()->addScreen(element);
 }
 
-static void removeCanvasElement(emscripten::val canvas)
+static void removeContainerElement(emscripten::val element)
 {
-    QWasmIntegration::get()->removeScreen(canvas);
+    QWasmIntegration::get()->removeScreen(element);
 }
 
-static void resizeCanvasElement(emscripten::val canvas)
+static void resizeContainerElement(emscripten::val element)
 {
-    QWasmIntegration::get()->resizeScreen(canvas);
+    QWasmIntegration::get()->resizeScreen(element);
 }
 
 static void qtUpdateDpi()
@@ -90,9 +67,9 @@ static void resizeAllScreens(emscripten::val event)
 
 EMSCRIPTEN_BINDINGS(qtQWasmIntegraton)
 {
-    function("qtAddCanvasElement", &addCanvasElement);
-    function("qtRemoveCanvasElement", &removeCanvasElement);
-    function("qtResizeCanvasElement", &resizeCanvasElement);
+    function("qtAddContainerElement", &addContainerElement);
+    function("qtRemoveContainerElement", &removeContainerElement);
+    function("qtResizeContainerElement", &resizeContainerElement);
     function("qtUpdateDpi", &qtUpdateDpi);
     function("qtResizeAllScreens", &resizeAllScreens);
 }
@@ -106,19 +83,36 @@ QWasmIntegration::QWasmIntegration()
 {
     s_instance = this;
 
-    // We expect that qtloader.js has populated Module.qtCanvasElements with one or more canvases.
-    emscripten::val qtCanvaseElements = val::module_property("qtCanvasElements");
-    emscripten::val canvas = val::module_property("canvas"); // TODO: remove for Qt 6.0
+   touchPoints = emscripten::val::global("navigator")["maxTouchPoints"].as<int>();
 
-    if (!qtCanvaseElements.isUndefined()) {
-        int screenCount = qtCanvaseElements["length"].as<int>();
-        for (int i = 0; i < screenCount; ++i) {
-            addScreen(qtCanvaseElements[i].as<emscripten::val>());
+    // Create screens for container elements. Each container element can be a div element (preferred),
+    // or a canvas element (legacy). Qt versions prior to 6.x read the "qtCanvasElements" module property,
+    // which we continue to do to preserve compatibility. The preferred property is now "qtContainerElements".
+    emscripten::val qtContainerElements = val::module_property("qtContainerElements");
+    emscripten::val qtCanvasElements = val::module_property("qtCanvasElements");
+    if (!qtContainerElements.isUndefined()) {
+        emscripten::val length = qtContainerElements["length"];
+        int count = length.as<int>();
+        if (length.isUndefined())
+            qWarning("qtContainerElements does not have the length property set. Qt expects an array of html elements (possibly containing one element only)");
+        for (int i = 0; i < count; ++i) {
+            emscripten::val element = qtContainerElements[i].as<emscripten::val>();
+            if (element.isNull() ||element.isUndefined()) {
+                 qWarning() << "Skipping null or undefined element in qtContainerElements";
+            } else {
+                addScreen(element);
+            }
         }
-    } else if (!canvas.isUndefined()) {
-        qWarning() << "Module.canvas is deprecated. A future version of Qt will stop reading this property. "
-                   << "Instead, set Module.qtCanvasElements to be an array of canvas elements, or use qtloader.js.";
-        addScreen(canvas);
+    } else if (!qtCanvasElements.isUndefined()) {
+        qWarning() << "The qtCanvaseElements property is deprecated. Qt will stop reading"
+                   << "it in some future version, please use qtContainerElements instead";
+        emscripten::val length = qtCanvasElements["length"];
+        int count = length.as<int>();
+        for (int i = 0; i < count; ++i)
+            addScreen(qtCanvasElements[i].as<emscripten::val>());
+    } else {
+        // No screens, which may or may not be intended
+        qWarning() << "Note: The qtContainerElements module property was not set. Proceeding with no screens.";
     }
 
     // install browser window resize handler
@@ -142,6 +136,7 @@ QWasmIntegration::QWasmIntegration()
         visualViewport.call<void>("addEventListener", val("resize"),
                           val::module_property("qtResizeAllScreens"));
     }
+    m_drag = new QWasmDrag();
 }
 
 QWasmIntegration::~QWasmIntegration()
@@ -156,9 +151,13 @@ QWasmIntegration::~QWasmIntegration()
 
     delete m_fontDb;
     delete m_desktopServices;
+    if (m_platformInputContext)
+        delete m_platformInputContext;
+    delete m_drag;
 
-    for (const auto &canvasAndScreen : m_screens)
-        QWindowSystemInterface::handleScreenRemoved(canvasAndScreen.second);
+    for (const auto &elementAndScreen : m_screens)
+        elementAndScreen.second->deleteScreen();
+
     m_screens.clear();
 
     s_instance = nullptr;
@@ -210,9 +209,14 @@ QPlatformOpenGLContext *QWasmIntegration::createPlatformOpenGLContext(QOpenGLCon
 
 void QWasmIntegration::initialize()
 {
+    if (qgetenv("QT_IM_MODULE").isEmpty() && touchPoints < 1)
+        return;
+
     QString icStr = QPlatformInputContextFactory::requested();
     if (!icStr.isNull())
         m_inputContext.reset(QPlatformInputContextFactory::create(icStr));
+    else
+        m_inputContext.reset(new QWasmInputContext());
 }
 
 QPlatformInputContext *QWasmIntegration::inputContext() const
@@ -257,12 +261,12 @@ Qt::WindowState QWasmIntegration::defaultWindowState(Qt::WindowFlags flags) cons
 
 QStringList QWasmIntegration::themeNames() const
 {
-    return QStringList() << QLatin1String("webassembly");
+    return QStringList() << "webassembly"_L1;
 }
 
 QPlatformTheme *QWasmIntegration::createPlatformTheme(const QString &name) const
 {
-    if (name == QLatin1String("webassembly"))
+    if (name == "webassembly"_L1)
         return new QWasmTheme;
     return QPlatformIntegration::createPlatformTheme(name);
 }
@@ -279,34 +283,31 @@ QPlatformClipboard* QWasmIntegration::clipboard() const
     return m_clipboard;
 }
 
-void QWasmIntegration::addScreen(const emscripten::val &canvas)
+void QWasmIntegration::addScreen(const emscripten::val &element)
 {
-    QWasmScreen *screen = new QWasmScreen(canvas);
-    m_screens.append(qMakePair(canvas, screen));
-    m_clipboard->installEventHandlers(canvas);
+    QWasmScreen *screen = new QWasmScreen(element);
+    m_screens.append(qMakePair(element, screen));
+    m_clipboard->installEventHandlers(element);
     QWindowSystemInterface::handleScreenAdded(screen);
 }
 
-void QWasmIntegration::removeScreen(const emscripten::val &canvas)
+void QWasmIntegration::removeScreen(const emscripten::val &element)
 {
     auto it = std::find_if(m_screens.begin(), m_screens.end(),
-        [&] (const QPair<emscripten::val, QWasmScreen *> &candidate) { return candidate.first.equals(canvas); });
+        [&] (const QPair<emscripten::val, QWasmScreen *> &candidate) { return candidate.first.equals(element); });
     if (it == m_screens.end()) {
-        qWarning() << "Attempting to remove non-existing screen for canvas" << QWasmString::toQString(canvas["id"]);;
+        qWarning() << "Attempting to remove non-existing screen for element" << QWasmString::toQString(element["id"]);;
         return;
     }
-    QWasmScreen *exScreen = it->second;
-    m_screens.erase(it);
-    exScreen->destroy(); // clean up before deleting the screen
-    QWindowSystemInterface::handleScreenRemoved(exScreen);
+    it->second->deleteScreen();
 }
 
-void QWasmIntegration::resizeScreen(const emscripten::val &canvas)
+void QWasmIntegration::resizeScreen(const emscripten::val &element)
 {
     auto it = std::find_if(m_screens.begin(), m_screens.end(),
-        [&] (const QPair<emscripten::val, QWasmScreen *> &candidate) { return candidate.first.equals(canvas); });
+        [&] (const QPair<emscripten::val, QWasmScreen *> &candidate) { return candidate.first.equals(element); });
     if (it == m_screens.end()) {
-        qWarning() << "Attempting to resize non-existing screen for canvas" << QWasmString::toQString(canvas["id"]);;
+        qWarning() << "Attempting to resize non-existing screen for element" << QWasmString::toQString(element["id"]);;
         return;
     }
     it->second->updateQScreenAndCanvasRenderSize();
@@ -318,19 +319,26 @@ void QWasmIntegration::updateDpi()
     if (dpi.isUndefined())
         return;
     qreal dpiValue = dpi.as<qreal>();
-    for (const auto &canvasAndScreen : m_screens)
-        QWindowSystemInterface::handleScreenLogicalDotsPerInchChange(canvasAndScreen.second->screen(), dpiValue, dpiValue);
+    for (const auto &elementAndScreen : m_screens)
+        QWindowSystemInterface::handleScreenLogicalDotsPerInchChange(elementAndScreen.second->screen(), dpiValue, dpiValue);
 }
 
 void QWasmIntegration::resizeAllScreens()
 {
-    for (const auto &canvasAndScreen : m_screens)
-        canvasAndScreen.second->updateQScreenAndCanvasRenderSize();
+    for (const auto &elementAndScreen : m_screens)
+        elementAndScreen.second->updateQScreenAndCanvasRenderSize();
 }
 
 quint64 QWasmIntegration::getTimestamp()
 {
     return emscripten_performance_now();
 }
+
+#if QT_CONFIG(draganddrop)
+QPlatformDrag *QWasmIntegration::drag() const
+{
+    return m_drag;
+}
+#endif // QT_CONFIG(draganddrop)
 
 QT_END_NAMESPACE

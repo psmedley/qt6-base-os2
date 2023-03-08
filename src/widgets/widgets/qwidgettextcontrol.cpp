@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwidgettextcontrol_p.h"
 #include "qwidgettextcontrol_p_p.h"
@@ -60,6 +24,7 @@
 #endif
 #include "qtextdocument.h"
 #include "private/qtextdocument_p.h"
+#include "private/qtextdocumentfragment_p.h"
 #include "qtextlist.h"
 #include "private/qwidgettextcontrol_p.h"
 #if QT_CONFIG(style_stylesheet)
@@ -100,7 +65,7 @@
 #include <qkeysequence.h>
 #define ACCEL_KEY(k) (!QCoreApplication::testAttribute(Qt::AA_DontShowShortcutsInContextMenus) \
                       && !QGuiApplicationPrivate::instance()->shortcutMap.hasShortcutForKeySequence(k) ? \
-                      QLatin1Char('\t') + QKeySequence(k).toString(QKeySequence::NativeText) : QString())
+                      u'\t' + QKeySequence(k).toString(QKeySequence::NativeText) : QString())
 
 #else
 #define ACCEL_KEY(k) QString()
@@ -109,6 +74,8 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // could go into QTextCursor...
 static QTextLine currentTextLine(const QTextCursor &cursor)
@@ -612,7 +579,7 @@ void QWidgetTextControlPrivate::selectionChanged(bool forceEmitSelectionChanged 
     Q_Q(QWidgetTextControl);
     if (forceEmitSelectionChanged) {
         emit q->selectionChanged();
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
         if (q->parent() && q->parent()->isWidgetType()) {
             QAccessibleTextSelectionEvent ev(q->parent(), cursor.anchor(), cursor.position());
             QAccessible::updateAccessibility(&ev);
@@ -635,7 +602,7 @@ void QWidgetTextControlPrivate::selectionChanged(bool forceEmitSelectionChanged 
                 && (cursor.position() != lastSelectionPosition
                     || cursor.anchor() != lastSelectionAnchor)))) {
         emit q->selectionChanged();
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
         if (q->parent() && q->parent()->isWidgetType()) {
             QAccessibleTextSelectionEvent ev(q->parent(), cursor.anchor(), cursor.position());
             QAccessible::updateAccessibility(&ev);
@@ -676,7 +643,7 @@ void QWidgetTextControlPrivate::_q_emitCursorPosChanged(const QTextCursor &someC
 
 void QWidgetTextControlPrivate::_q_contentsChanged(int from, int charsRemoved, int charsAdded)
 {
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     Q_Q(QWidgetTextControl);
 
     if (QAccessible::isActive() && q->parent() && q->parent()->isWidgetType()) {
@@ -688,7 +655,7 @@ void QWidgetTextControlPrivate::_q_contentsChanged(int from, int charsRemoved, i
         QString newText = tmp.selectedText();
 
         // always report the right number of removed chars, but in lack of the real string use spaces
-        QString oldText = QString(charsRemoved, QLatin1Char(' '));
+        QString oldText = QString(charsRemoved, u' ');
 
         QAccessibleEvent *ev = nullptr;
         if (charsRemoved == 0) {
@@ -1436,16 +1403,14 @@ QRectF QWidgetTextControlPrivate::rectForPosition(int position) const
         if (relativePos == preeditPos)
             relativePos += preeditCursor;
         else if (relativePos > preeditPos)
-            relativePos += layout->preeditAreaText().length();
+            relativePos += layout->preeditAreaText().size();
     }
     QTextLine line = layout->lineForTextPosition(relativePos);
 
     int cursorWidth;
     {
         bool ok = false;
-#ifndef QT_NO_PROPERTIES
         cursorWidth = docLayout->property("cursorWidth").toInt(&ok);
-#endif
         if (!ok)
             cursorWidth = 1;
     }
@@ -1459,7 +1424,7 @@ QRectF QWidgetTextControlPrivate::rectForPosition(int position) const
             if (relativePos < line.textLength() - line.textStart())
                 w = line.cursorToX(relativePos + 1) - x;
             else
-                w = QFontMetrics(block.layout()->font()).horizontalAdvance(QLatin1Char(' ')); // in sync with QTextLine::draw()
+                w = QFontMetrics(block.layout()->font()).horizontalAdvance(u' '); // in sync with QTextLine::draw()
         }
         r = QRectF(layoutPos.x() + x, layoutPos.y() + line.y(),
                    cursorWidth + w, line.height());
@@ -1935,7 +1900,7 @@ bool QWidgetTextControlPrivate::sendMouseEventToInputContext(
         QTextLayout *layout = cursor.block().layout();
         int cursorPos = q->hitTest(pos, Qt::FuzzyHit) - cursor.position();
 
-        if (cursorPos < 0 || cursorPos > layout->preeditAreaText().length())
+        if (cursorPos < 0 || cursorPos > layout->preeditAreaText().size())
             cursorPos = -1;
 
         if (cursorPos >= 0) {
@@ -2095,7 +2060,7 @@ void QWidgetTextControlPrivate::inputMethodEvent(QInputMethodEvent *e)
     QList<QTextLayout::FormatRange> overrides;
     overrides.reserve(e->attributes().size());
     const int oldPreeditCursor = preeditCursor;
-    preeditCursor = e->preeditString().length();
+    preeditCursor = e->preeditString().size();
     hideCursor = false;
     for (int i = 0; i < e->attributes().size(); ++i) {
         const QInputMethodEvent::Attribute &a = e->attributes().at(i);
@@ -2130,7 +2095,7 @@ void QWidgetTextControlPrivate::inputMethodEvent(QInputMethodEvent *e)
 
     if (cursor.charFormat().isValid()) {
         int start = cursor.position() - block.position();
-        int end = start + e->preeditString().length();
+        int end = start + e->preeditString().size();
 
         QList<QTextLayout::FormatRange>::iterator it = overrides.begin();
         while (it != overrides.end()) {
@@ -2203,12 +2168,12 @@ QVariant QWidgetTextControl::inputMethodQuery(Qt::InputMethodQuery property, QVa
         QTextCursor tmpCursor = d->cursor;
         int localPos = d->cursor.position() - block.position();
         QString result = block.text().mid(localPos);
-        while (result.length() < maxLength) {
+        while (result.size() < maxLength) {
             int currentBlock = tmpCursor.blockNumber();
             tmpCursor.movePosition(QTextCursor::NextBlock);
             if (tmpCursor.blockNumber() == currentBlock)
                 break;
-            result += QLatin1Char('\n') + tmpCursor.block().text();
+            result += u'\n' + tmpCursor.block().text();
         }
         return QVariant(result);
     }
@@ -2229,7 +2194,7 @@ QVariant QWidgetTextControl::inputMethodQuery(Qt::InputMethodQuery property, QVa
         }
         QString result;
         while (numBlocks) {
-            result += tmpCursor.block().text() + QLatin1Char('\n');
+            result += tmpCursor.block().text() + u'\n';
             tmpCursor.movePosition(QTextCursor::NextBlock);
             --numBlocks;
         }
@@ -2478,24 +2443,16 @@ void QWidgetTextControl::setOverwriteMode(bool overwrite)
 
 int QWidgetTextControl::cursorWidth() const
 {
-#ifndef QT_NO_PROPERTIES
     Q_D(const QWidgetTextControl);
     return d->doc->documentLayout()->property("cursorWidth").toInt();
-#else
-    return 1;
-#endif
 }
 
 void QWidgetTextControl::setCursorWidth(int width)
 {
     Q_D(QWidgetTextControl);
-#ifdef QT_NO_PROPERTIES
-    Q_UNUSED(width);
-#else
     if (width == -1)
         width = QApplication::style()->pixelMetric(QStyle::PM_TextCursorWidth, nullptr);
     d->doc->documentLayout()->setProperty("cursorWidth", width);
-#endif
     d->repaintCursor();
 }
 
@@ -2518,12 +2475,12 @@ void QWidgetTextControl::setExtraSelections(const QList<QTextEdit::ExtraSelectio
     Q_D(QWidgetTextControl);
 
     QMultiHash<int, int> hash;
-    for (int i = 0; i < d->extraSelections.count(); ++i) {
+    for (int i = 0; i < d->extraSelections.size(); ++i) {
         const QAbstractTextDocumentLayout::Selection &esel = d->extraSelections.at(i);
         hash.insert(esel.cursor.anchor(), i);
     }
 
-    for (int i = 0; i < selections.count(); ++i) {
+    for (int i = 0; i < selections.size(); ++i) {
         const QTextEdit::ExtraSelection &sel = selections.at(i);
         const auto it = hash.constFind(sel.cursor.anchor());
         if (it != hash.cend()) {
@@ -2552,8 +2509,8 @@ void QWidgetTextControl::setExtraSelections(const QList<QTextEdit::ExtraSelectio
         emit updateRequest(r);
     }
 
-    d->extraSelections.resize(selections.count());
-    for (int i = 0; i < selections.count(); ++i) {
+    d->extraSelections.resize(selections.size());
+    for (int i = 0; i < selections.size(); ++i) {
         d->extraSelections[i].cursor = selections.at(i).cursor;
         d->extraSelections[i].format = selections.at(i).format;
     }
@@ -2563,7 +2520,7 @@ QList<QTextEdit::ExtraSelection> QWidgetTextControl::extraSelections() const
 {
     Q_D(const QWidgetTextControl);
     QList<QTextEdit::ExtraSelection> selections;
-    const int numExtraSelections = d->extraSelections.count();
+    const int numExtraSelections = d->extraSelections.size();
     selections.reserve(numExtraSelections);
     for (int i = 0; i < numExtraSelections; ++i) {
         QTextEdit::ExtraSelection sel;
@@ -2727,8 +2684,8 @@ bool QWidgetTextControl::canInsertFromMimeData(const QMimeData *source) const
     if (d->acceptRichText)
         return (source->hasText() && !source->text().isEmpty())
             || source->hasHtml()
-            || source->hasFormat(QLatin1String("application/x-qrichtext"))
-            || source->hasFormat(QLatin1String("application/x-qt-richtext"));
+            || source->hasFormat("application/x-qrichtext"_L1)
+            || source->hasFormat("application/x-qt-richtext"_L1);
     else
         return source->hasText() && !source->text().isEmpty();
 }
@@ -2741,26 +2698,32 @@ void QWidgetTextControl::insertFromMimeData(const QMimeData *source)
 
     bool hasData = false;
     QTextDocumentFragment fragment;
+#if QT_CONFIG(textmarkdownreader)
+    if (source->formats().first() == "text/markdown"_L1) {
+        auto s = QString::fromUtf8(source->data("text/markdown"_L1));
+        fragment = QTextDocumentFragment::fromMarkdown(s);
+        hasData = true;
+    } else
+#endif
 #ifndef QT_NO_TEXTHTMLPARSER
-    if (source->hasFormat(QLatin1String("application/x-qrichtext")) && d->acceptRichText) {
+    if (source->hasFormat("application/x-qrichtext"_L1) && d->acceptRichText) {
         // x-qrichtext is always UTF-8 (taken from Qt3 since we don't use it anymore).
-        const QString richtext = QLatin1String("<meta name=\"qrichtext\" content=\"1\" />")
-                + QString::fromUtf8(source->data(QLatin1String("application/x-qrichtext")));
+        const QString richtext = "<meta name=\"qrichtext\" content=\"1\" />"_L1
+                + QString::fromUtf8(source->data("application/x-qrichtext"_L1));
         fragment = QTextDocumentFragment::fromHtml(richtext, d->doc);
         hasData = true;
     } else if (source->hasHtml() && d->acceptRichText) {
         fragment = QTextDocumentFragment::fromHtml(source->html(), d->doc);
         hasData = true;
-    } else {
-        QString text = source->text();
+    }
+#endif // QT_NO_TEXTHTMLPARSER
+    if (!hasData) {
+        const QString text = source->text();
         if (!text.isNull()) {
             fragment = QTextDocumentFragment::fromPlainText(text);
             hasData = true;
         }
     }
-#else
-    fragment = QTextDocumentFragment::fromPlainText(source->text());
-#endif // QT_NO_TEXTHTMLPARSER
 
     if (hasData)
         d->cursor.insertFragment(fragment);
@@ -3477,9 +3440,12 @@ void QUnicodeControlCharacterMenu::menuActionTriggered()
 QStringList QTextEditMimeData::formats() const
 {
     if (!fragment.isEmpty())
-        return QStringList() << QString::fromLatin1("text/plain") << QString::fromLatin1("text/html")
+        return QStringList() << u"text/plain"_s << u"text/html"_s
+#if QT_CONFIG(textmarkdownwriter)
+            << u"text/markdown"_s
+#endif
 #ifndef QT_NO_TEXTODFWRITER
-            << QString::fromLatin1("application/vnd.oasis.opendocument.text")
+            << u"application/vnd.oasis.opendocument.text"_s
 #endif
         ;
     else
@@ -3497,7 +3463,10 @@ void QTextEditMimeData::setup() const
 {
     QTextEditMimeData *that = const_cast<QTextEditMimeData *>(this);
 #ifndef QT_NO_TEXTHTMLPARSER
-    that->setData(QLatin1String("text/html"), fragment.toHtml().toUtf8());
+    that->setData("text/html"_L1, fragment.toHtml().toUtf8());
+#endif
+#if QT_CONFIG(textmarkdownwriter)
+    that->setData("text/markdown"_L1, fragment.toMarkdown().toUtf8());
 #endif
 #ifndef QT_NO_TEXTODFWRITER
     {
@@ -3505,7 +3474,7 @@ void QTextEditMimeData::setup() const
         QTextDocumentWriter writer(&buffer, "ODF");
         writer.write(fragment);
         buffer.close();
-        that->setData(QLatin1String("application/vnd.oasis.opendocument.text"), buffer.data());
+        that->setData("application/vnd.oasis.opendocument.text"_L1, buffer.data());
     }
 #endif
     that->setText(fragment.toPlainText());

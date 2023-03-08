@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtCore/QCoreApplication>
 #include <QTest>
@@ -41,6 +16,8 @@ private slots:
     void skip();
     void fail();
     void xfail();
+    void multiSkip();
+    void multiFail();
     void xfailContinueSkip();
     void xfailContinueFail();
     void xpass();
@@ -86,6 +63,23 @@ void tst_Blacklisted::fail()
     QVERIFY2(false, "This test should BFAIL");
 }
 
+void tst_Blacklisted::multiFail() // cf. ../subtest/'s similar tests
+{
+    ++blacklisted;
+    for (int i = 0; i < 10; ++i)
+        []() { QFAIL("This failure message should be repeated ten times"); }();
+    QFAIL("But this test should only contribute one to the blacklisted count");
+}
+
+void tst_Blacklisted::multiSkip()
+{
+    // Similar to multiFail()
+    ++skipped;
+    for (int i = 0; i < 10; ++i)
+        []() { QSKIP("This skip should be repeated ten times"); }();
+    QSKIP("But this test should only contribute one to the skip count");
+}
+
 void tst_Blacklisted::xfail()
 {
     ++blacklisted;
@@ -121,7 +115,6 @@ void tst_Blacklisted::xpassContinueSkip()
     ++blacklisted;
     QEXPECT_FAIL("", "This test should BXPASS then SKIP", Continue);
     QVERIFY2(true, "This test should BXPASS then SKIP");
-    // FIXME QTBUG-95661: skip gets counted
     QSKIP("This skip should be seen but not counted");
 }
 
@@ -130,7 +123,6 @@ void tst_Blacklisted::xpassContinueFail()
     ++blacklisted;
     QEXPECT_FAIL("", "This test should BXPASS then BFAIL", Continue);
     QVERIFY2(true, "This test should BXPASS then BFAIL");
-    // FIXME QTBUG-95661: gets double-counted
     QFAIL("This fail should be seen and not counted (due to prior XPASS)");
 }
 

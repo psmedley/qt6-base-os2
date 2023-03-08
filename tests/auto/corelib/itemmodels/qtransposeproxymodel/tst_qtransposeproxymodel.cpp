@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 Luca Beldi <v.ronin@yahoo.it>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 Luca Beldi <v.ronin@yahoo.it>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QTest>
 #include <QSignalSpy>
@@ -300,8 +264,8 @@ void tst_QTransposeProxyModel::sort()
     QVERIFY(layoutAboutToBeChangedSpy.isValid());
     QPersistentModelIndex firstIndexBeforeSort = proxyModel.index(0, 0);
     baseModel.sort(0, Qt::AscendingOrder);
-    QCOMPARE(layoutChangedSpy.count(), 1);
-    QCOMPARE(layoutAboutToBeChangedSpy.count(), 1);
+    QCOMPARE(layoutChangedSpy.size(), 1);
+    QCOMPARE(layoutAboutToBeChangedSpy.size(), 1);
     QCOMPARE(layoutChangedSpy.takeFirst().at(1).toInt(), int(QAbstractItemModel::HorizontalSortHint));
     QCOMPARE(firstIndexBeforeSort.data().toString(), firstItemBeforeSort);
     for (int i = 0; i < 100; ++i)
@@ -334,8 +298,8 @@ void tst_QTransposeProxyModel::removeColumnBase()
     QVERIFY(model->removeColumn(1, parent));
     QCOMPARE(proxy.rowCount(proxy.mapFromSource(parent)), oldRowCount - 1);
     QCOMPARE(proxy.index(1, 0, proxy.mapFromSource(parent)).data(), expectedNewVal);
-    QCOMPARE(rowRemoveSpy.count(), 1);
-    QCOMPARE(rowAboutToBeRemoveSpy.count(), 1);
+    QCOMPARE(rowRemoveSpy.size(), 1);
+    QCOMPARE(rowAboutToBeRemoveSpy.size(), 1);
     for (const auto &spyArgs : {rowRemoveSpy.takeFirst(),
         rowAboutToBeRemoveSpy.takeFirst()}) {
         QCOMPARE(spyArgs.at(0).value<QModelIndex>(), proxy.mapFromSource(parent));
@@ -448,8 +412,8 @@ void tst_QTransposeProxyModel::insertColumnBase()
     QVERIFY(model->insertColumn(1, parent));
     QCOMPARE(proxy.rowCount(proxy.mapFromSource(parent)), oldRowCount + 1);
     QVERIFY(!proxy.index(1, 0, proxy.mapFromSource(parent)).data().isValid());
-    QCOMPARE(rowInsertSpy.count(), 1);
-    QCOMPARE(rowAboutToBeInsertSpy.count(), 1);
+    QCOMPARE(rowInsertSpy.size(), 1);
+    QCOMPARE(rowAboutToBeInsertSpy.size(), 1);
     for (const auto &spyArgs : {rowInsertSpy.takeFirst(),
         rowAboutToBeInsertSpy.takeFirst()}) {
         QCOMPARE(spyArgs.at(0).value<QModelIndex>(), proxy.mapFromSource(parent));
@@ -486,8 +450,8 @@ void tst_QTransposeProxyModel::removeRowBase()
     QVERIFY(model->removeRow(1, parent));
     QCOMPARE(proxy.columnCount(proxy.mapFromSource(parent)), oldColCount - 1);
     QCOMPARE(proxy.index(0, 1, proxy.mapFromSource(parent)).data(), expectedNewVal);
-    QCOMPARE(columnsRemoveSpy.count(), 1);
-    QCOMPARE(columnsAboutToBeRemoveSpy.count(), 1);
+    QCOMPARE(columnsRemoveSpy.size(), 1);
+    QCOMPARE(columnsAboutToBeRemoveSpy.size(), 1);
     for (const auto &spyArgs : {columnsRemoveSpy.takeFirst(),
         columnsAboutToBeRemoveSpy.takeFirst()}) {
         QCOMPARE(spyArgs.at(0).value<QModelIndex>(), proxy.mapFromSource(parent));
@@ -524,8 +488,8 @@ void tst_QTransposeProxyModel::insertRowBase()
     QCOMPARE(proxy.columnCount(proxy.mapFromSource(parent)), oldColCount + 1);
     QVariant result = proxy.index(0, 1, proxy.mapFromSource(parent)).data();
     QVERIFY(result.isNull() || (result.metaType().id() == QMetaType::QString && result.toString().isNull()));
-    QCOMPARE(columnsInsertSpy.count(), 1);
-    QCOMPARE(columnsAboutToBeInsertSpy.count(), 1);
+    QCOMPARE(columnsInsertSpy.size(), 1);
+    QCOMPARE(columnsAboutToBeInsertSpy.size(), 1);
     for (const auto &spyArgs : {columnsInsertSpy.takeFirst(),
         columnsAboutToBeInsertSpy.takeFirst()}) {
         QCOMPARE(spyArgs.at(0).value<QModelIndex>(), proxy.mapFromSource(parent));
@@ -570,10 +534,10 @@ void tst_QTransposeProxyModel::removeColumnProxy()
     QCOMPARE(model->rowCount(sourceParent), oldRowCount - 1);
     QCOMPARE(proxy.index(0, 1, proxyParent).data(), expectedNewVal);
     QCOMPARE(model->index(1, 0, sourceParent).data(), expectedNewVal);
-    QCOMPARE(columnsRemoveSpy.count(), 1);
-    QCOMPARE(columnsAboutToBeRemoveSpy.count(), 1);
-    QCOMPARE(rowsRemoveSpy.count(), 1);
-    QCOMPARE(rowsAboutToBeRemoveSpy.count(), 1);
+    QCOMPARE(columnsRemoveSpy.size(), 1);
+    QCOMPARE(columnsAboutToBeRemoveSpy.size(), 1);
+    QCOMPARE(rowsRemoveSpy.size(), 1);
+    QCOMPARE(rowsAboutToBeRemoveSpy.size(), 1);
     for (const auto &spyArgs : {columnsRemoveSpy.takeFirst(),
         columnsAboutToBeRemoveSpy.takeFirst()}) {
         QCOMPARE(spyArgs.at(0).value<QModelIndex>(), proxyParent);
@@ -625,10 +589,10 @@ void tst_QTransposeProxyModel::insertColumnProxy()
     QVERIFY(result.isNull() || (result.metaType().id() == QMetaType::QString && result.toString().isNull()));
     result = model->index(1, 0, sourceParent).data();
     QVERIFY(result.isNull() || (result.metaType().id() == QMetaType::QString && result.toString().isNull()));
-    QCOMPARE(columnsInsertSpy.count(), 1);
-    QCOMPARE(columnsAboutToBeInsertSpy.count(), 1);
-    QCOMPARE(rowsInsertSpy.count(), 1);
-    QCOMPARE(rowsAboutToBeInsertSpy.count(), 1);
+    QCOMPARE(columnsInsertSpy.size(), 1);
+    QCOMPARE(columnsAboutToBeInsertSpy.size(), 1);
+    QCOMPARE(rowsInsertSpy.size(), 1);
+    QCOMPARE(rowsAboutToBeInsertSpy.size(), 1);
     for (const auto &spyArgs : {columnsInsertSpy.takeFirst(),
         columnsAboutToBeInsertSpy.takeFirst()}) {
         QCOMPARE(spyArgs.at(0).value<QModelIndex>(), proxyParent);
@@ -678,10 +642,10 @@ void tst_QTransposeProxyModel::removeRowProxy()
     QCOMPARE(model->columnCount(sourceParent), oldColCount - 1);
     QCOMPARE(proxy.index(1, 0, proxyParent).data(), expectedNewVal);
     QCOMPARE(model->index(0, 1, sourceParent).data(), expectedNewVal);
-    QCOMPARE(columnsRemoveSpy.count(), 1);
-    QCOMPARE(columnsAboutToBeRemoveSpy.count(), 1);
-    QCOMPARE(rowsRemoveSpy.count(), 1);
-    QCOMPARE(rowsAboutToBeRemoveSpy.count(), 1);
+    QCOMPARE(columnsRemoveSpy.size(), 1);
+    QCOMPARE(columnsAboutToBeRemoveSpy.size(), 1);
+    QCOMPARE(rowsRemoveSpy.size(), 1);
+    QCOMPARE(rowsAboutToBeRemoveSpy.size(), 1);
     for (const auto &spyArgs : {columnsRemoveSpy.takeFirst(),
         columnsAboutToBeRemoveSpy.takeFirst()}) {
         QCOMPARE(spyArgs.at(0).value<QModelIndex>(), sourceParent);
@@ -730,10 +694,10 @@ void tst_QTransposeProxyModel::insertRowProxy()
     QCOMPARE(model->columnCount(sourceParent), oldColCount + 1);
     QVERIFY(proxy.index(1, 0, proxyParent).data().isNull());
     QVERIFY(model->index(0, 1, sourceParent).data().isNull());
-    QCOMPARE(columnsInsertSpy.count(), 1);
-    QCOMPARE(columnsAboutToBeInsertSpy.count(), 1);
-    QCOMPARE(rowsInsertSpy.count(), 1);
-    QCOMPARE(rowsAboutToBeInsertSpy.count(), 1);
+    QCOMPARE(columnsInsertSpy.size(), 1);
+    QCOMPARE(columnsAboutToBeInsertSpy.size(), 1);
+    QCOMPARE(rowsInsertSpy.size(), 1);
+    QCOMPARE(rowsAboutToBeInsertSpy.size(), 1);
     for (const auto &spyArgs : {columnsInsertSpy.takeFirst(),
         columnsAboutToBeInsertSpy.takeFirst()}) {
         QCOMPARE(spyArgs.at(0).value<QModelIndex>(), sourceParent);
@@ -905,8 +869,8 @@ void tst_QTransposeProxyModel::moveRowsBase()
     QVERIFY(model.moveRows(QModelIndex(), 0, 1, QModelIndex(), 2));
     for (int i = 0; i < expectedNewVal.size(); ++i)
         QCOMPARE(proxy.index(0, i).data(), expectedNewVal.at(i));
-    QCOMPARE(columnsMoveSpy.count(), 1);
-    QCOMPARE(columnsAboutToBeMoveSpy.count(), 1);
+    QCOMPARE(columnsMoveSpy.size(), 1);
+    QCOMPARE(columnsAboutToBeMoveSpy.size(), 1);
     for (const auto &spyArgs : {columnsMoveSpy.takeFirst(),
         columnsAboutToBeMoveSpy.takeFirst()}) {
         QVERIFY(!spyArgs.at(0).value<QModelIndex>().isValid());
@@ -937,10 +901,10 @@ void tst_QTransposeProxyModel::moveColumnsProxy()
         QCOMPARE(proxy.index(0, i).data(), expectedNewVal.at(i));
     for (int i = 0; i < expectedNewVal.size(); ++i)
         QCOMPARE(model.index(i, 0).data(), expectedNewVal.at(i));
-    QCOMPARE(columnsMoveSpy.count(), 1);
-    QCOMPARE(columnsAboutToBeMoveSpy.count(), 1);
-    QCOMPARE(rowsMoveSpy.count(), 1);
-    QCOMPARE(rowsAboutToBeMoveSpy.count(), 1);
+    QCOMPARE(columnsMoveSpy.size(), 1);
+    QCOMPARE(columnsAboutToBeMoveSpy.size(), 1);
+    QCOMPARE(rowsMoveSpy.size(), 1);
+    QCOMPARE(rowsAboutToBeMoveSpy.size(), 1);
     for (const auto &spyArgs : {columnsMoveSpy.takeFirst(),
         columnsAboutToBeMoveSpy.takeFirst(),
         rowsMoveSpy.takeFirst(),rowsAboutToBeMoveSpy.takeFirst()}) {

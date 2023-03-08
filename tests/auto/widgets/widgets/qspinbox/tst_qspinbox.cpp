@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <qdebug.h>
 #include <qapplication.h>
@@ -964,38 +939,38 @@ void tst_QSpinBox::editingFinished()
     QTest::keyClick(box, Qt::Key_Up);
     QTest::keyClick(box, Qt::Key_Up);
 
-    QCOMPARE(editingFinishedSpy1.count(), 0);
-    QCOMPARE(editingFinishedSpy2.count(), 0);
+    QCOMPARE(editingFinishedSpy1.size(), 0);
+    QCOMPARE(editingFinishedSpy2.size(), 0);
 
     QTest::keyClick(box2, Qt::Key_Up);
     QTest::keyClick(box2, Qt::Key_Up);
     box2->setFocus();
-    QCOMPARE(editingFinishedSpy1.count(), 1);
+    QCOMPARE(editingFinishedSpy1.size(), 1);
     box->setFocus();
-    QCOMPARE(editingFinishedSpy1.count(), 1);
-    QCOMPARE(editingFinishedSpy2.count(), 1);
+    QCOMPARE(editingFinishedSpy1.size(), 1);
+    QCOMPARE(editingFinishedSpy2.size(), 1);
     QTest::keyClick(box, Qt::Key_Up);
-    QCOMPARE(editingFinishedSpy1.count(), 1);
-    QCOMPARE(editingFinishedSpy2.count(), 1);
+    QCOMPARE(editingFinishedSpy1.size(), 1);
+    QCOMPARE(editingFinishedSpy2.size(), 1);
     QTest::keyClick(box, Qt::Key_Enter);
-    QCOMPARE(editingFinishedSpy1.count(), 2);
-    QCOMPARE(editingFinishedSpy2.count(), 1);
+    QCOMPARE(editingFinishedSpy1.size(), 2);
+    QCOMPARE(editingFinishedSpy2.size(), 1);
     QTest::keyClick(box, Qt::Key_Return);
-    QCOMPARE(editingFinishedSpy1.count(), 3);
-    QCOMPARE(editingFinishedSpy2.count(), 1);
+    QCOMPARE(editingFinishedSpy1.size(), 3);
+    QCOMPARE(editingFinishedSpy2.size(), 1);
     box2->setFocus();
-    QCOMPARE(editingFinishedSpy1.count(), 4);
-    QCOMPARE(editingFinishedSpy2.count(), 1);
+    QCOMPARE(editingFinishedSpy1.size(), 4);
+    QCOMPARE(editingFinishedSpy2.size(), 1);
     QTest::keyClick(box2, Qt::Key_Enter);
-    QCOMPARE(editingFinishedSpy1.count(), 4);
-    QCOMPARE(editingFinishedSpy2.count(), 2);
+    QCOMPARE(editingFinishedSpy1.size(), 4);
+    QCOMPARE(editingFinishedSpy2.size(), 2);
     QTest::keyClick(box2, Qt::Key_Return);
-    QCOMPARE(editingFinishedSpy1.count(), 4);
-    QCOMPARE(editingFinishedSpy2.count(), 3);
+    QCOMPARE(editingFinishedSpy1.size(), 4);
+    QCOMPARE(editingFinishedSpy2.size(), 3);
 
     testFocusWidget.hide();
-    QCOMPARE(editingFinishedSpy1.count(), 4);
-    QCOMPARE(editingFinishedSpy2.count(), 4);
+    QCOMPARE(editingFinishedSpy1.size(), 4);
+    QCOMPARE(editingFinishedSpy2.size(), 4);
 
     //task203285
     editingFinishedSpy1.clear();
@@ -1012,7 +987,7 @@ void tst_QSpinBox::editingFinished()
     box2->setFocus();
     QTRY_VERIFY(qApp->focusWidget() != box);
     QCOMPARE(box->text(), QLatin1String("20"));
-    QCOMPARE(editingFinishedSpy1.count(), 1);
+    QCOMPARE(editingFinishedSpy1.size(), 1);
 }
 
 void tst_QSpinBox::removeAll()
@@ -1282,7 +1257,7 @@ void tst_QSpinBox::lineEditReturnPressed()
     QSignalSpy spyCurrentChanged(spinBox.lineEdit(), SIGNAL(returnPressed()));
     spinBox.show();
     QTest::keyClick(&spinBox, Qt::Key_Return);
-    QCOMPARE(spyCurrentChanged.count(), 1);
+    QCOMPARE(spyCurrentChanged.size(), 1);
 }
 
 void tst_QSpinBox::positiveSign()
@@ -1872,13 +1847,13 @@ void tst_QSpinBox::stepModifierPressAndHold()
     qDebug() << "QGuiApplication::focusWindow():" << QGuiApplication::focusWindow();
     qDebug() << "QGuiApplication::topLevelWindows():" << QGuiApplication::topLevelWindows();
     QTest::mousePress(&spin, Qt::LeftButton, modifiers, buttonRect.center());
-    QTRY_VERIFY2(spy.length() >= 3, qPrintable(QString::fromLatin1(
-        "Expected valueChanged() to be emitted 3 or more times, but it was only emitted %1 times").arg(spy.length())));
+    QTRY_VERIFY2(spy.size() >= 3, qPrintable(QString::fromLatin1(
+        "Expected valueChanged() to be emitted 3 or more times, but it was only emitted %1 times").arg(spy.size())));
     QTest::mouseRelease(&spin, Qt::LeftButton, modifiers, buttonRect.center());
 
     const auto value = spy.last().at(0);
     QVERIFY(value.metaType().id() == QMetaType::Int);
-    QCOMPARE(value.toInt(), spy.length() * expectedStepModifier);
+    QCOMPARE(value.toInt(), spy.size() * expectedStepModifier);
 }
 
 void tst_QSpinBox::stepSelectAll_data()

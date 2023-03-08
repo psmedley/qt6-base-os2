@@ -17,6 +17,35 @@ function(_qt_internal_android_get_sdk_build_tools_revision out_var)
     set(${out_var} "${android_build_tools_latest}" PARENT_SCOPE)
 endfunction()
 
+# The function appends to the 'out_var' a 'json_property' that contains the 'tool' path. If 'tool'
+# target or its IMPORTED_LOCATION are not found the function displays warning, but is not failing
+# at the project configuring phase.
+function(_qt_internal_add_tool_to_android_deployment_settings out_var tool json_property target)
+    unset(tool_binary_path)
+    __qt_internal_get_tool_imported_location(tool_binary_path ${tool})
+    if("${tool_binary_path}" STREQUAL "")
+        # Fallback search for the tool in host bin and host libexec directories
+        find_program(tool_binary_path
+            NAMES ${tool} ${tool}.exe
+            PATHS
+                "${QT_HOST_PATH}/${QT6_HOST_INFO_BINDIR}"
+                "${QT_HOST_PATH}/${QT6_HOST_INFO_LIBEXECDIR}"
+            NO_DEFAULT_PATH
+        )
+        if(NOT tool_binary_path)
+            message(WARNING "Unable to locate ${tool}. Android package deployment of ${target}"
+            " target can be incomplete. Make sure the host Qt has ${tool} installed.")
+            return()
+        endif()
+    endif()
+
+    file(TO_CMAKE_PATH "${tool_binary_path}" tool_binary_path)
+    string(APPEND ${out_var}
+        "   \"${json_property}\" : \"${tool_binary_path}\",\n")
+
+    set(${out_var} "${${out_var}}" PARENT_SCOPE)
+endfunction()
+
 # Generate the deployment settings json file for a cmake target.
 function(qt6_android_generate_deployment_settings target)
     # Information extracted from mkspecs/features/android/android_deployment_settings.prf
@@ -185,6 +214,10 @@ function(qt6_android_generate_deployment_settings target)
     _qt_internal_add_android_deployment_multi_value_property(file_contents "android-extra-libs"
         ${target} "_qt_android_native_extra_libs" )
 
+    # Alternative path to Qt libraries on target device
+    _qt_internal_add_android_deployment_property(file_contents "android-system-libs-prefix"
+        ${target} "QT_ANDROID_SYSTEM_LIBS_PREFIX")
+
     # package source dir
     _qt_internal_add_android_deployment_property(file_contents "android-package-source-directory"
         ${target} "_qt_android_native_package_source_dir")
@@ -205,29 +238,9 @@ function(qt6_android_generate_deployment_settings target)
     _qt_internal_add_android_deployment_property(file_contents "android-target-sdk-version"
         ${target} "QT_ANDROID_TARGET_SDK_VERSION")
 
-    # QML import paths
-    if(NOT "${QT_QML_OUTPUT_DIRECTORY}" STREQUAL "")
-        # Need to prepend the default qml module output directory to take precedence
-        # over other qml import paths. By default QT_QML_OUTPUT_DIRECTORY is set to
-        # ${CMAKE_BINARY_DIR}/android-qml for Android.
-        get_target_property(native_qml_import_paths "${target}" _qt_native_qml_import_paths)
-        if(native_qml_import_paths)
-            list(PREPEND native_qml_import_paths "${QT_QML_OUTPUT_DIRECTORY}")
-        else()
-            set(native_qml_import_paths "${QT_QML_OUTPUT_DIRECTORY}")
-        endif()
-        set_property(TARGET "${target}" PROPERTY
-            "_qt_native_qml_import_paths" "${native_qml_import_paths}")
-    endif()
-    _qt_internal_add_android_deployment_multi_value_property(file_contents "qml-import-paths"
-        ${target} "_qt_native_qml_import_paths")
-
-    # QML root paths
-    file(TO_CMAKE_PATH "${target_source_dir}" native_target_source_dir)
-    set_property(TARGET ${target} APPEND PROPERTY
-        _qt_android_native_qml_root_paths "${native_target_source_dir}")
-    _qt_internal_add_android_deployment_list_property(file_contents "qml-root-path"
-        ${target} "_qt_android_native_qml_root_paths")
+    # should Qt shared libs be excluded from deployment
+    _qt_internal_add_android_deployment_property(file_contents "android-no-deploy-qt-libs"
+        ${target} "QT_ANDROID_NO_DEPLOY_QT_LIBS")
 
     # App binary
     string(APPEND file_contents
@@ -239,23 +252,15 @@ function(qt6_android_generate_deployment_settings target)
             "   \"android-application-arguments\": \"${QT_ANDROID_APPLICATION_ARGUMENTS}\",\n")
     endif()
 
-    # Override qmlimportscanner binary path
-    set(qml_importscanner_binary_path "${QT_HOST_PATH}/${QT6_HOST_INFO_LIBEXECDIR}/qmlimportscanner")
-    if (WIN32)
-        string(APPEND qml_importscanner_binary_path ".exe")
+    if(COMMAND _qt_internal_generate_android_qml_deployment_settings)
+        _qt_internal_generate_android_qml_deployment_settings(file_contents ${target})
+    else()
+        string(APPEND file_contents
+            "   \"qml-skip-import-scanning\": true,\n")
     endif()
-    file(TO_CMAKE_PATH "${qml_importscanner_binary_path}" qml_importscanner_binary_path_native)
-    string(APPEND file_contents
-        "   \"qml-importscanner-binary\" : \"${qml_importscanner_binary_path_native}\",\n")
 
     # Override rcc binary path
-    set(rcc_binary_path "${QT_HOST_PATH}/${QT6_HOST_INFO_LIBEXECDIR}/rcc")
-    if (WIN32)
-        string(APPEND rcc_binary_path ".exe")
-    endif()
-    file(TO_CMAKE_PATH "${rcc_binary_path}" rcc_binary_path_native)
-    string(APPEND file_contents
-        "   \"rcc-binary\" : \"${rcc_binary_path_native}\",\n")
+    _qt_internal_add_tool_to_android_deployment_settings(file_contents rcc "rcc-binary" "${target}")
 
     # Extra prefix paths
     foreach(prefix IN LISTS CMAKE_FIND_ROOT_PATH)
@@ -386,6 +391,15 @@ function(qt6_android_add_apk_target target)
         COMMENT "Copying ${target} binary to apk folder"
     )
 
+    set(sign_apk "")
+    if(QT_ANDROID_SIGN_APK)
+        set(sign_apk "--sign")
+    endif()
+    set(sign_aab "")
+    if(QT_ANDROID_SIGN_AAB)
+        set(sign_aab "--sign")
+    endif()
+
     set(extra_args "")
     if(QT_INTERNAL_NO_ANDROID_RCC_BUNDLE_CLEANUP)
         list(APPEND extra_args "--no-rcc-bundle-cleanup")
@@ -394,13 +408,7 @@ function(qt6_android_add_apk_target target)
         list(APPEND extra_args "--verbose")
     endif()
 
-    # The DEPFILE argument to add_custom_command is only available with Ninja or CMake>=3.20 and
-    # make.
-    set(has_depfile_support FALSE)
-    if(CMAKE_GENERATOR MATCHES "Ninja" OR
-        (CMAKE_VERSION VERSION_GREATER_EQUAL 3.20 AND CMAKE_GENERATOR MATCHES "Makefiles"))
-        set(has_depfile_support TRUE)
-    endif()
+    _qt_internal_check_depfile_support(has_depfile_support)
 
     if(has_depfile_support)
         cmake_policy(PUSH)
@@ -426,10 +434,12 @@ function(qt6_android_add_apk_target target)
                 --apk "${apk_final_file_path}"
                 --depfile "${dep_file_path}"
                 --builddir "${relative_to_dir}"
+                ${sign_apk}
                 ${extra_args}
             COMMENT "Creating APK for ${target}"
             DEPENDS "${target}" "${deployment_file}" ${extra_deps}
             DEPFILE "${dep_file_path}"
+            VERBATIM
         )
         cmake_policy(POP)
 
@@ -442,6 +452,7 @@ function(qt6_android_add_apk_target target)
                 --input ${deployment_file}
                 --output ${apk_final_dir}
                 --apk ${apk_final_file_path}
+                ${sign_apk}
                 ${extra_args}
             COMMENT "Creating APK for ${target}"
         )
@@ -457,6 +468,7 @@ function(qt6_android_add_apk_target target)
             --output ${apk_final_dir}
             --apk ${apk_final_file_path}
             --aab
+            ${sign_aab}
             ${extra_args}
         COMMENT "Creating AAB for ${target}"
     )
@@ -497,6 +509,7 @@ function(qt6_android_add_apk_target target)
                     --builddir "${CMAKE_BINARY_DIR}"
                 COMMENT "Resolving ${CMAKE_ANDROID_ARCH_ABI} dependencies for the ${target} APK"
                 DEPFILE "${dep_file}"
+                VERBATIM
             )
             add_custom_target(qt_internal_${target}_copy_apk_dependencies
                 DEPENDS "${timestamp_file}")
@@ -541,8 +554,8 @@ endfunction()
 
 # The function collects all known non-imported shared libraries that are created in the build tree.
 # It uses the CMake DEFER CALL feature if the CMAKE_VERSION is greater
-# than or equal to 3.18.
-# Note: Users that use cmake version less that 3.18 need to call qt_finalize_project
+# than or equal to 3.19.
+# Note: Users that use cmake version less that 3.19 need to call qt_finalize_project
 # in the end of a project's top-level CMakeLists.txt.
 function(_qt_internal_collect_apk_dependencies_defer)
     # User opted-out the functionality
@@ -556,13 +569,14 @@ function(_qt_internal_collect_apk_dependencies_defer)
     endif()
     set_property(GLOBAL PROPERTY _qt_is_collect_apk_dependencies_defer_called TRUE)
 
-    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
         cmake_language(EVAL CODE "cmake_language(DEFER DIRECTORY \"${CMAKE_SOURCE_DIR}\"
             CALL _qt_internal_collect_apk_dependencies)")
     else()
         # User don't want to see the warning
         if(NOT QT_NO_WARN_BUILD_TREE_APK_DEPS)
-            message(WARNING "CMake version you use is less than 3.18. APK dependencies, that are a"
+            message(WARNING
+                    "The CMake version you use is less than 3.19. APK dependencies, that are a"
                     " part of the project tree, might not be collected correctly."
                     " Please call qt_finalize_project in the end of a project's top-level"
                     " CMakeLists.txt file to make sure that all the APK dependencies are"
@@ -573,8 +587,8 @@ function(_qt_internal_collect_apk_dependencies_defer)
     endif()
 endfunction()
 
-# The function collects shared libraries from the build system tree, that might be dependencies for
-# the main apk targets.
+# The function collects project-built shared libraries that might be dependencies for
+# the main apk targets. It stores their locations in a global custom target property.
 function(_qt_internal_collect_apk_dependencies)
     # User opted-out the functionality
     if(QT_NO_COLLECT_BUILD_TREE_APK_DEPS)
@@ -617,8 +631,8 @@ function(_qt_internal_collect_apk_dependencies)
     )
 endfunction()
 
-# The function recursively goes through the project subfolders and collects targets that supposed to
-# be shared libraries of any kind.
+# This function recursively walks the current directory and its subdirectories to collect shared
+# library targets built in those directories.
 function(_qt_internal_collect_buildsystem_shared_libraries out_var subdir)
     set(result "")
     get_directory_property(buildsystem_targets DIRECTORY ${subdir} BUILDSYSTEM_TARGETS)
@@ -956,16 +970,30 @@ function(_qt_internal_configure_android_multiabi_target target)
         list(APPEND extra_cmake_args "-DANDROID_NDK_ROOT=${ANDROID_NDK}")
     endif()
 
+    if(DEFINED QT_NO_PACKAGE_VERSION_CHECK)
+        list(APPEND extra_cmake_args "-DQT_NO_PACKAGE_VERSION_CHECK=${QT_NO_PACKAGE_VERSION_CHECK}")
+    endif()
+
+    if(DEFINED QT_HOST_PATH_CMAKE_DIR)
+        list(APPEND extra_cmake_args "-DQT_HOST_PATH_CMAKE_DIR=${QT_HOST_PATH_CMAKE_DIR}")
+    endif()
+
     if(CMAKE_MAKE_PROGRAM)
         list(APPEND extra_cmake_args "-DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}")
     endif()
 
     if(CMAKE_C_COMPILER_LAUNCHER)
-        list(APPEND extra_cmake_args "-DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}")
+        list(JOIN CMAKE_C_COMPILER_LAUNCHER "$<SEMICOLON>"
+            compiler_launcher)
+        list(APPEND extra_cmake_args
+            "-DCMAKE_C_COMPILER_LAUNCHER=${compiler_launcher}")
     endif()
 
     if(CMAKE_CXX_COMPILER_LAUNCHER)
-        list(APPEND extra_cmake_args "-DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}")
+        list(JOIN CMAKE_CXX_COMPILER_LAUNCHER "$<SEMICOLON>"
+            compiler_launcher)
+        list(APPEND extra_cmake_args
+            "-DCMAKE_CXX_COMPILER_LAUNCHER=${compiler_launcher}")
     endif()
 
     set(missing_qt_abi_toolchains "")
@@ -991,13 +1019,17 @@ function(_qt_internal_configure_android_multiabi_target target)
             ExternalProject_Add("qt_internal_android_${abi}"
                 SOURCE_DIR "${CMAKE_SOURCE_DIR}"
                 BINARY_DIR "${android_abi_build_dir}"
-                CMAKE_ARGS
+                CONFIGURE_COMMAND
+                    "${CMAKE_COMMAND}"
+                    "-G${CMAKE_GENERATOR}"
                     "-DCMAKE_TOOLCHAIN_FILE=${qt_abi_toolchain_path}"
                     "-DQT_HOST_PATH=${QT_HOST_PATH}"
                     "-DQT_IS_ANDROID_MULTI_ABI_EXTERNAL_PROJECT=ON"
                     "-DQT_INTERNAL_ANDROID_MULTI_ABI_BINARY_DIR=${CMAKE_BINARY_DIR}"
                     "${config_arg}"
                     "${extra_cmake_args}"
+                    "-B" "${android_abi_build_dir}"
+                    "-S" "${CMAKE_SOURCE_DIR}"
                 EXCLUDE_FROM_ALL TRUE
                 BUILD_COMMAND "" # avoid top-level build of external project
             )

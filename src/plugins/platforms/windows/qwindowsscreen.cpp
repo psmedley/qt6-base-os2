@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwindowsscreen.h"
 #include "qwindowscontext.h"
@@ -59,6 +23,8 @@
 #include <shellscalingapi.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 static inline QDpi deviceDPI(HDC hdc)
 {
@@ -151,8 +117,21 @@ static bool monitorData(HMONITOR hMonitor, QWindowsScreenData *data)
     data->hMonitor = hMonitor;
     data->geometry = QRect(QPoint(info.rcMonitor.left, info.rcMonitor.top), QPoint(info.rcMonitor.right - 1, info.rcMonitor.bottom - 1));
     data->availableGeometry = QRect(QPoint(info.rcWork.left, info.rcWork.top), QPoint(info.rcWork.right - 1, info.rcWork.bottom - 1));
-    data->name = QString::fromWCharArray(info.szDevice);
-    if (data->name == u"WinDisc") {
+    data->deviceName = QString::fromWCharArray(info.szDevice);
+    DISPLAYCONFIG_PATH_INFO pathInfo = {};
+    const bool hasPathInfo = getPathInfo(info, &pathInfo);
+    if (hasPathInfo) {
+        DISPLAYCONFIG_TARGET_DEVICE_NAME deviceName = {};
+        deviceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+        deviceName.header.size = sizeof(DISPLAYCONFIG_TARGET_DEVICE_NAME);
+        deviceName.header.adapterId = pathInfo.targetInfo.adapterId;
+        deviceName.header.id = pathInfo.targetInfo.id;
+        if (DisplayConfigGetDeviceInfo(&deviceName.header) == ERROR_SUCCESS)
+            data->name = QString::fromWCharArray(deviceName.monitorFriendlyDeviceName);
+    }
+    if (data->name.isEmpty())
+        data->name = data->deviceName;
+    if (data->deviceName == u"WinDisc") {
         data->flags |= QWindowsScreenData::LockScreen;
     } else {
         if (const HDC hdc = CreateDC(info.szDevice, nullptr, nullptr, nullptr)) {
@@ -167,15 +146,14 @@ static bool monitorData(HMONITOR hMonitor, QWindowsScreenData *data)
             DeleteDC(hdc);
         } else {
             qWarning("%s: Unable to obtain handle for monitor '%s', defaulting to %g DPI.",
-                     __FUNCTION__, qPrintable(QString::fromWCharArray(info.szDevice)),
+                     __FUNCTION__, qPrintable(data->deviceName),
                      data->dpi.first);
         } // CreateDC() failed
     } // not lock screen
 
     // ### We might want to consider storing adapterId/id from DISPLAYCONFIG_PATH_TARGET_INFO,
     // if we are going to use DISPLAYCONFIG lookups more.
-    DISPLAYCONFIG_PATH_INFO pathInfo = {};
-    if (getPathInfo(info, &pathInfo)) {
+    if (hasPathInfo) {
         switch (pathInfo.targetInfo.rotation) {
         case DISPLAYCONFIG_ROTATION_IDENTITY:
             data->orientation = Qt::LandscapeOrientation;
@@ -204,11 +182,8 @@ static bool monitorData(HMONITOR hMonitor, QWindowsScreenData *data)
     // EnumDisplayMonitors (as opposed to EnumDisplayDevices) enumerates only
     // virtual desktop screens.
     data->flags |= QWindowsScreenData::VirtualDesktop;
-    if (info.dwFlags & MONITORINFOF_PRIMARY) {
+    if (info.dwFlags & MONITORINFOF_PRIMARY)
         data->flags |= QWindowsScreenData::PrimaryScreen;
-        if ((data->flags & QWindowsScreenData::LockScreen) == 0)
-            QWindowsFontDatabase::setDefaultVerticalDPI(data->dpi.second);
-    }
     return true;
 }
 
@@ -218,6 +193,16 @@ BOOL QT_WIN_CALLBACK monitorEnumCallback(HMONITOR hMonitor, HDC, LPRECT, LPARAM 
     QWindowsScreenData data;
     if (monitorData(hMonitor, &data)) {
         auto *result = reinterpret_cast<WindowsScreenDataList *>(p);
+        auto it = std::find_if(result->rbegin(), result->rend(),
+            [&data](QWindowsScreenData i){ return i.name == data.name; });
+        if (it != result->rend()) {
+            int previousIndex = 1;
+            if (it->deviceIndex.has_value())
+                previousIndex = it->deviceIndex.value();
+            else
+                (*it).deviceIndex = 1;
+            data.deviceIndex = previousIndex + 1;
+        }
         // QWindowSystemInterface::handleScreenAdded() documentation specifies that first
         // added screen will be the primary screen, so order accordingly.
         // Note that the side effect of this policy is that there is no way to change primary
@@ -251,7 +236,8 @@ static QDebug operator<<(QDebug dbg, const QWindowsScreenData &d)
         << " physical: " << d.physicalSizeMM.width() << 'x' << d.physicalSizeMM.height()
         << " DPI: " << d.dpi.first << 'x' << d.dpi.second << " Depth: " << d.depth
         << " Format: " << d.format
-        << " hMonitor: " << d.hMonitor;
+        << " hMonitor: " << d.hMonitor
+        << " device name: " << d.deviceName;
     if (d.flags & QWindowsScreenData::PrimaryScreen)
         dbg << " primary";
     if (d.flags & QWindowsScreenData::VirtualDesktop)
@@ -275,6 +261,13 @@ QWindowsScreen::QWindowsScreen(const QWindowsScreenData &data) :
     , m_cursor(new QWindowsCursor(this))
 #endif
 {
+}
+
+QString QWindowsScreen::name() const
+{
+    return m_data.deviceIndex.has_value()
+               ? (u"%1 (%2)"_s).arg(m_data.name, QString::number(m_data.deviceIndex.value()))
+               : m_data.name;
 }
 
 Q_GUI_EXPORT QPixmap qt_pixmapFromWinHBITMAP(HBITMAP bitmap, int hbitmapFormat = 0);
@@ -485,9 +478,9 @@ QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTy
 {
     QPlatformScreen::SubpixelAntialiasingType type = QPlatformScreen::subpixelAntialiasingTypeHint();
     if (type == QPlatformScreen::Subpixel_None) {
-        QSettings settings(QLatin1String(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Avalon.Graphics\DISPLAY1)"),
+        QSettings settings(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Avalon.Graphics\DISPLAY1)"_L1,
                            QSettings::NativeFormat);
-        int registryValue = settings.value(QLatin1String("PixelStructure"), -1).toInt();
+        int registryValue = settings.value("PixelStructure"_L1, -1).toInt();
         switch (registryValue) {
         case 0:
             type = QPlatformScreen::Subpixel_None;
@@ -563,19 +556,19 @@ bool QWindowsScreenManager::isSingleScreen()
 }
 
 static inline int indexOfMonitor(const QWindowsScreenManager::WindowsScreenList &screens,
-                                 const QString &monitorName)
+                                 const QString &deviceName)
 {
     for (int i= 0; i < screens.size(); ++i)
-        if (screens.at(i)->data().name == monitorName)
+        if (screens.at(i)->data().deviceName == deviceName)
             return i;
     return -1;
 }
 
 static inline int indexOfMonitor(const WindowsScreenDataList &screenData,
-                                 const QString &monitorName)
+                                 const QString &deviceName)
 {
     for (int i = 0; i < screenData.size(); ++i)
-        if (screenData.at(i).name == monitorName)
+        if (screenData.at(i).deviceName == deviceName)
             return i;
     return -1;
 }
@@ -641,7 +634,7 @@ bool QWindowsScreenManager::handleScreenChanges()
     const bool lockScreen = newDataList.size() == 1 && (newDataList.front().flags & QWindowsScreenData::LockScreen);
     bool primaryScreenChanged = false;
     for (const QWindowsScreenData &newData : newDataList) {
-        const int existingIndex = indexOfMonitor(m_screens, newData.name);
+        const int existingIndex = indexOfMonitor(m_screens, newData.deviceName);
         if (existingIndex != -1) {
             m_screens.at(existingIndex)->handleChanges(newData);
             if (existingIndex == 0)
@@ -658,7 +651,7 @@ bool QWindowsScreenManager::handleScreenChanges()
     // temporary lock screen to avoid window recreation (QTBUG-33062).
     if (!lockScreen) {
         for (int i = m_screens.size() - 1; i >= 0; --i) {
-            if (indexOfMonitor(newDataList, m_screens.at(i)->data().name) == -1)
+            if (indexOfMonitor(newDataList, m_screens.at(i)->data().deviceName) == -1)
                 removeScreen(i);
         }     // for existing screens
     }     // not lock screen

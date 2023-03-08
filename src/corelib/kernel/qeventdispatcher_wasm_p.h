@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QEVENTDISPATCHER_WASM_P_H
 #define QEVENTDISPATCHER_WASM_P_H
@@ -86,25 +50,28 @@ public:
     void interrupt() override;
     void wakeUp() override;
 
-protected:
+    static void socketSelect(int timeout, int socket, bool waitForRead, bool waitForWrite,
+                            bool *selectForRead, bool *selectForWrite, bool *socketDisconnect);
+                        protected:
     virtual void processWindowSystemEvents(QEventLoop::ProcessEventsFlags flags);
 
 private:
     bool isMainThreadEventDispatcher();
     bool isSecondaryThreadEventDispatcher();
+    static bool isValidEventDispatcherPointer(QEventDispatcherWasm *eventDispatcher);
 
     void handleApplicationExec();
     void handleDialogExec();
-    void pollForNativeEvents();
-    bool waitForForEvents();
+    bool wait(int timeout = -1);
+    bool wakeEventDispatcherThread();
     static void callProcessEvents(void *eventDispatcher);
 
     void processTimers();
     void updateNativeTimer();
     static void callProcessTimers(void *eventDispatcher);
 
-    void setEmscriptenSocketCallbacks();
-    void clearEmscriptenSocketCallbacks();
+    static void setEmscriptenSocketCallbacks();
+    static void clearEmscriptenSocketCallbacks();
     static void socketError(int fd, int err, const char* msg, void *context);
     static void socketOpen(int fd, void *context);
     static void socketListen(int fd, void *context);
@@ -112,9 +79,15 @@ private:
     static void socketMessage(int fd, void *context);
     static void socketClose(int fd, void *context);
 
-#if QT_CONFIG(thread)
-    void runOnMainThread(std::function<void(void)> fn);
-#endif
+    static void setSocketState(int socket, bool setReadyRead, bool setReadyWrite);
+    static void clearSocketState(int socket);
+    void waitForSocketState(int timeout, int socket, bool checkRead, bool checkWrite,
+                            bool *selectForRead, bool *selectForWrite, bool *socketDisconnect);
+
+    static void run(std::function<void(void)> fn);
+    static void runAsync(std::function<void(void)> fn);
+    static void runOnMainThread(std::function<void(void)> fn);
+    static void runOnMainThreadAsync(std::function<void(void)> fn);
 
     static QEventDispatcherWasm *g_mainThreadEventDispatcher;
 
@@ -132,9 +105,23 @@ private:
     std::condition_variable m_moreEvents;
 
     static QVector<QEventDispatcherWasm *> g_secondaryThreadEventDispatchers;
-    static std::mutex g_secondaryThreadEventDispatchersMutex;
+    static std::mutex g_staticDataMutex;
+
+    // Note on mutex usage: the global g_staticDataMutex protects the global (g_ prefixed) data,
+    // while the per eventdispatcher m_mutex protects the state accociated with blocking and waking
+    // that eventdispatcher thread. The locking order is g_staticDataMutex first, then m_mutex.
 #endif
+
     static std::multimap<int, QSocketNotifier *> g_socketNotifiers;
+
+    struct SocketReadyState {
+        QEventDispatcherWasm *waiter = nullptr;
+        bool waitForReadyRead = false;
+        bool waitForReadyWrite = false;
+        bool readyRead = false;
+        bool readyWrite = false;
+    };
+    static std::map<int, SocketReadyState> g_socketState;
 };
 
 #endif // QEVENTDISPATCHER_WASM_P_H

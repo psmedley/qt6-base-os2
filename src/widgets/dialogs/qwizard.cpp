@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwizard.h"
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
@@ -80,6 +44,8 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // These fudge terms were needed a few places to obtain pixel-perfect results
 const int GapBetweenLogoAndRightEdge = 5;
@@ -206,7 +172,7 @@ QWizardField::QWizardField(QWizardPage *page, const QString &spec, QObject *obje
     : page(page), name(spec), mandatory(false), object(object), property(property),
       changedSignal(changedSignal)
 {
-    if (name.endsWith(QLatin1Char('*'))) {
+    if (name.endsWith(u'*')) {
         name.chop(1);
         mandatory = true;
     }
@@ -215,7 +181,7 @@ QWizardField::QWizardField(QWizardPage *page, const QString &spec, QObject *obje
 void QWizardField::resolve(const QList<QWizardDefaultProperty> &defaultPropertyTable)
 {
     if (property.isEmpty())
-        findProperty(defaultPropertyTable.constData(), defaultPropertyTable.count());
+        findProperty(defaultPropertyTable.constData(), defaultPropertyTable.size());
     initialValue = object->property(property);
 }
 
@@ -383,7 +349,7 @@ void QWizardHeader::setup(const QWizardLayoutInfo &info, const QString &title,
     logoLabel->setPixmap(logo);
 
     subTitleLabel->setTextFormat(subTitleFormat);
-    subTitleLabel->setText(QLatin1String("Pq\nPq"));
+    subTitleLabel->setText("Pq\nPq"_L1);
     int desiredSubTitleHeight = subTitleLabel->sizeHint().height();
     subTitleLabel->setText(subTitle);
 
@@ -729,10 +695,10 @@ void QWizardPrivate::reset()
     if (current != -1) {
         q->currentPage()->hide();
         cleanupPagesNotInHistory();
-        for (int i = history.count() - 1; i >= 0; --i)
+        for (int i = history.size() - 1; i >= 0; --i)
             q->cleanupPage(history.at(i));
         history.clear();
-        for (QWizardPage *page : qAsConst(pageMap))
+        for (QWizardPage *page : std::as_const(pageMap))
             page->d_func()->initialized = false;
 
         current = -1;
@@ -766,7 +732,7 @@ void QWizardPrivate::addField(const QWizardField &field)
         return;
     }
 
-    fieldIndexMap.insert(myField.name, fields.count());
+    fieldIndexMap.insert(myField.name, fields.size());
     fields += myField;
     if (myField.mandatory && !myField.changedSignal.isEmpty())
         QObject::connect(myField.object, myField.changedSignal,
@@ -1049,7 +1015,7 @@ void QWizardPrivate::recreateLayout(const QWizardLayoutInfo &info)
 
         if (aero) {
             // ### hardcoded for now:
-            titleFont = QFont(QLatin1String("Segoe UI"), 12);
+            titleFont = QFont("Segoe UI"_L1, 12);
             QPalette pal(titleLabel->palette());
             pal.setColor(QPalette::Text, QColor(0x00, 0x33, 0x99));
             titleLabel->setPalette(pal);
@@ -1365,11 +1331,11 @@ static QString object_name_for_button(QWizard::WizardButton which)
 {
     switch (which) {
     case QWizard::CommitButton:
-        return QLatin1String("qt_wizard_") + QLatin1String("commit");
+        return "qt_wizard_commit"_L1;
     case QWizard::FinishButton:
-        return QLatin1String("qt_wizard_") + QLatin1String("finish");
+        return "qt_wizard_finish"_L1;
     case QWizard::CancelButton:
-        return QLatin1String("qt_wizard_") + QLatin1String("cancel");
+        return "qt_wizard_cancel"_L1;
     case QWizard::BackButton:
     case QWizard::NextButton:
     case QWizard::HelpButton:
@@ -1377,7 +1343,7 @@ static QString object_name_for_button(QWizard::WizardButton which)
     case QWizard::CustomButton2:
     case QWizard::CustomButton3:
         // Make navigation buttons detectable as passive interactor in designer
-        return QLatin1String("__qt__passive_wizardbutton") + QString::number(which);
+        return "__qt__passive_wizardbutton"_L1 + QString::number(which);
     case QWizard::Stretch:
     case QWizard::NoButton:
     //case QWizard::NStandardButtons:
@@ -1459,10 +1425,10 @@ void QWizardPrivate::updateButtonTexts()
 void QWizardPrivate::updateButtonLayout()
 {
     if (buttonsHaveCustomLayout) {
-        QVarLengthArray<QWizard::WizardButton, QWizard::NButtons> array(buttonsCustomLayout.count());
-        for (int i = 0; i < buttonsCustomLayout.count(); ++i)
+        QVarLengthArray<QWizard::WizardButton, QWizard::NButtons> array(buttonsCustomLayout.size());
+        for (int i = 0; i < buttonsCustomLayout.size(); ++i)
             array[i] = buttonsCustomLayout.at(i);
-        setButtonLayout(array.constData(), array.count());
+        setButtonLayout(array.constData(), array.size());
     } else {
         // Positions:
         //     Help Stretch Custom1 Custom2 Custom3 Cancel Back Next Commit Finish Cancel Help
@@ -1679,15 +1645,15 @@ void QWizardPrivate::_q_updateButtonStates()
     const QWizardPage *page = q->currentPage();
     bool complete = page && page->isComplete();
 
-    btn.back->setEnabled(history.count() > 1
-                         && !q->page(history.at(history.count() - 2))->isCommitPage()
+    btn.back->setEnabled(history.size() > 1
+                         && !q->page(history.at(history.size() - 2))->isCommitPage()
                          && (!canFinish || !(opts & QWizard::DisabledBackButtonOnLastPage)));
     btn.next->setEnabled(canContinue && complete);
     btn.commit->setEnabled(canContinue && complete);
     btn.finish->setEnabled(canFinish && complete);
 
     const bool backButtonVisible = buttonLayoutContains(QWizard::BackButton)
-        && (history.count() > 1 || !(opts & QWizard::NoBackButtonOnStartPage))
+        && (history.size() > 1 || !(opts & QWizard::NoBackButtonOnStartPage))
         && (canContinue || !(opts & QWizard::NoBackButtonOnLastPage));
     bool commitPage = page && page->isCommitPage();
     btn.back->setVisible(backButtonVisible);
@@ -2262,7 +2228,7 @@ void QWizard::setPage(int theid, QWizardPage *page)
     page->setParent(d->pageFrame);
 
     QList<QWizardField> &pendingFields = page->d_func()->pendingFields;
-    for (int i = 0; i < pendingFields.count(); ++i)
+    for (int i = 0; i < pendingFields.size(); ++i)
         d->addField(pendingFields.at(i));
     pendingFields.clear();
 
@@ -2303,11 +2269,11 @@ void QWizard::removePage(int id)
     QWizardPage *removedPage = nullptr;
 
     // update startItem accordingly
-    if (d->pageMap.count() > 0) { // only if we have any pages
+    if (d->pageMap.size() > 0) { // only if we have any pages
         if (d->start == id) {
             const int firstId = d->pageMap.constBegin().key();
             if (firstId == id) {
-                if (d->pageMap.count() > 1)
+                if (d->pageMap.size() > 1)
                     d->start = (++d->pageMap.constBegin()).key(); // secondId
                 else
                     d->start = -1; // removing the last page
@@ -2330,7 +2296,7 @@ void QWizard::removePage(int id)
         removedPage = d->pageMap.take(id);
         d->history.removeOne(id);
         d->_q_updateButtonStates();
-    } else if (d->history.count() == 1) {
+    } else if (d->history.size() == 1) {
         // Case 3: removing the current page which is the first (and only) one in the history
         d->reset();
         removedPage = d->pageMap.take(id);
@@ -2353,7 +2319,7 @@ void QWizard::removePage(int id)
 
         d->pageVBoxLayout->removeWidget(removedPage);
 
-        for (int i = d->fields.count() - 1; i >= 0; --i) {
+        for (int i = d->fields.size() - 1; i >= 0; --i) {
             if (d->fields.at(i).page == removedPage) {
                 removedPage->d_func()->pendingFields += d->fields.at(i);
                 d->removeFieldAt(i);
@@ -2431,7 +2397,7 @@ void QWizard::setStartId(int theid)
     Q_D(QWizard);
     int newStart = theid;
     if (theid == -1)
-        newStart = d->pageMap.count() ? d->pageMap.constBegin().key() : -1;
+        newStart = d->pageMap.size() ? d->pageMap.constBegin().key() : -1;
 
     if (d->start == newStart) {
         d->startSetByUser = theid != -1;
@@ -2740,7 +2706,7 @@ void QWizard::setButtonLayout(const QList<WizardButton> &layout)
 {
     Q_D(QWizard);
 
-    for (int i = 0; i < layout.count(); ++i) {
+    for (int i = 0; i < layout.size(); ++i) {
         WizardButton button1 = layout.at(i);
 
         if (button1 == NoButton || button1 == Stretch)
@@ -2925,7 +2891,7 @@ void QWizard::setDefaultProperty(const char *className, const char *property,
                                  const char *changedSignal)
 {
     Q_D(QWizard);
-    for (int i = d->defaultPropertyTable.count() - 1; i >= 0; --i) {
+    for (int i = d->defaultPropertyTable.size() - 1; i >= 0; --i) {
         if (qstrcmp(d->defaultPropertyTable.at(i).className, className) == 0) {
             d->defaultPropertyTable.remove(i);
             break;
@@ -3105,7 +3071,7 @@ QSize QWizard::sizeHint() const
 void QWizard::back()
 {
     Q_D(QWizard);
-    int n = d->history.count() - 2;
+    int n = d->history.size() - 2;
     if (n < 0)
         return;
     d->switchToPage(d->history.at(n), QWizardPrivate::Backward);
@@ -3139,6 +3105,42 @@ void QWizard::next()
             d->switchToPage(next, QWizardPrivate::Forward);
         }
     }
+}
+
+/*!
+    Sets currentId to \a id, without visiting the pages between currentId and \a id.
+
+    Returns without page change, if
+    \list
+    \li wizard holds no pages
+    \li current page is invalid
+    \li given page equals currentId()
+    \li given page is out of range
+    \endlist
+
+    Note: If pages have been forward skipped and \a id is 0, page visiting history
+    will be deleted
+*/
+
+void QWizard::setCurrentId(int id)
+{
+    Q_D(QWizard);
+
+    if (d->current == -1)
+        return;
+
+    if (currentId() == id)
+        return;
+
+    if (!validateCurrentPage())
+        return;
+
+    if (id < 0 || Q_UNLIKELY(!d->pageMap.contains(id))) {
+        qWarning("QWizard::setCurrentId: No such page: %d", id);
+        return;
+    }
+
+    d->switchToPage(id, (id < currentId()) ? QWizardPrivate::Backward : QWizardPrivate::Forward);
 }
 
 /*!
@@ -3668,7 +3670,7 @@ bool QWizardPage::isComplete() const
         return true;
 
     const QList<QWizardField> &wizardFields = d->wizard->d_func()->fields;
-    for (int i = wizardFields.count() - 1; i >= 0; --i) {
+    for (int i = wizardFields.size() - 1; i >= 0; --i) {
         const QWizardField &field = wizardFields.at(i);
         if (field.page == this && field.mandatory) {
             QVariant value = field.object->property(field.property);

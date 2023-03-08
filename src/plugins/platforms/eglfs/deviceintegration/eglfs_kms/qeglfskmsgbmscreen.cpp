@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Copyright (C) 2015 Pier Luigi Fiorini <pierluigi.fiorini@gmail.com>
-** Copyright (C) 2016 Pelagicore AG
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// Copyright (C) 2015 Pier Luigi Fiorini <pierluigi.fiorini@gmail.com>
+// Copyright (C) 2016 Pelagicore AG
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qeglfskmsgbmscreen_p.h"
 #include "qeglfskmsgbmdevice_p.h"
@@ -55,6 +19,8 @@
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(qLcEglfsKmsDebug)
+
+QMutex QEglFSKmsGbmScreen::m_nonThreadedFlipMutex;
 
 static inline uint32_t drmFormatToGbmFormat(uint32_t drmFormat)
 {
@@ -95,7 +61,7 @@ QEglFSKmsGbmScreen::FrameBuffer *QEglFSKmsGbmScreen::framebufferForBufferObject(
     uint32_t offsets[4] = { 0 };
     uint32_t pixelFormat = gbmFormatToDrmFormat(gbm_bo_get_format(bo));
 
-    QScopedPointer<FrameBuffer> fb(new FrameBuffer);
+    auto fb = std::make_unique<FrameBuffer>();
     qCDebug(qLcEglfsKmsDebug, "Adding FB, size %ux%u, DRM format 0x%x, stride %u, handle %u",
             width, height, pixelFormat, strides[0], handles[0]);
 
@@ -107,8 +73,8 @@ QEglFSKmsGbmScreen::FrameBuffer *QEglFSKmsGbmScreen::framebufferForBufferObject(
         return nullptr;
     }
 
-    gbm_bo_set_user_data(bo, fb.data(), bufferDestroyedHandler);
-    return fb.take();
+    gbm_bo_set_user_data(bo, fb.get(), bufferDestroyedHandler);
+    return fb.release();
 }
 
 QEglFSKmsGbmScreen::QEglFSKmsGbmScreen(QEglFSKmsDevice *device, const QKmsOutput &output, bool headless)
@@ -207,8 +173,10 @@ void QEglFSKmsGbmScreen::initCloning(QPlatformScreen *screenThisScreenClones,
         qWarning("QEglFSKmsGbmScreen %s cannot be clone source and destination at the same time", qPrintable(name()));
         return;
     }
-    if (clonesAnother)
+    if (clonesAnother) {
         m_cloneSource = static_cast<QEglFSKmsGbmScreen *>(screenThisScreenClones);
+        qCDebug(qLcEglfsKmsDebug, "Screen %s clones %s", qPrintable(name()), qPrintable(m_cloneSource->name()));
+    }
 
     // clone sources need to know their additional destinations
     for (QPlatformScreen *s : screensCloningThisScreen) {
@@ -263,6 +231,29 @@ void QEglFSKmsGbmScreen::ensureModeSet(uint32_t fb)
     }
 }
 
+void QEglFSKmsGbmScreen::nonThreadedPageFlipHandler(int fd,
+                                                    unsigned int sequence,
+                                                    unsigned int tv_sec,
+                                                    unsigned int tv_usec,
+                                                    void *user_data)
+{
+    // note that with cloning involved this callback is called also for screens that clone another one
+    Q_UNUSED(fd);
+    QEglFSKmsGbmScreen *screen = static_cast<QEglFSKmsGbmScreen *>(user_data);
+    screen->flipFinished();
+    screen->pageFlipped(sequence, tv_sec, tv_usec);
+}
+
+void QEglFSKmsGbmScreen::waitForFlipWithEventReader(QEglFSKmsGbmScreen *screen)
+{
+    m_flipMutex.lock();
+    QEglFSKmsGbmDevice *dev = static_cast<QEglFSKmsGbmDevice *>(device());
+    dev->eventReader()->startWaitFlip(screen, &m_flipMutex, &m_flipCond);
+    m_flipCond.wait(&m_flipMutex);
+    m_flipMutex.unlock();
+    screen->flipFinished();
+}
+
 void QEglFSKmsGbmScreen::waitForFlip()
 {
     if (m_headless || m_cloneSource)
@@ -272,17 +263,68 @@ void QEglFSKmsGbmScreen::waitForFlip()
     if (!m_gbm_bo_next)
         return;
 
-    m_flipMutex.lock();
-    device()->eventReader()->startWaitFlip(this, &m_flipMutex, &m_flipCond);
-    m_flipCond.wait(&m_flipMutex);
-    m_flipMutex.unlock();
-
-    flipFinished();
+    QEglFSKmsGbmDevice *dev = static_cast<QEglFSKmsGbmDevice *>(device());
+    if (dev->usesEventReader()) {
+        waitForFlipWithEventReader(this);
+        // Now, unlike on the other code path, we need to ensure the
+        // flips have completed for the screens that just scan out
+        // this one's content, because the eventReader's wait is
+        // per-output.
+        for (CloneDestination &d : m_cloneDests) {
+            if (d.screen != this)
+                waitForFlipWithEventReader(d.screen);
+        }
+    } else {
+        QMutexLocker lock(&m_nonThreadedFlipMutex);
+        while (m_gbm_bo_next) {
+            drmEventContext drmEvent;
+            memset(&drmEvent, 0, sizeof(drmEvent));
+            drmEvent.version = 2;
+            drmEvent.vblank_handler = nullptr;
+            drmEvent.page_flip_handler = nonThreadedPageFlipHandler;
+            drmHandleEvent(device()->fd(), &drmEvent);
+        }
+    }
 
 #if QT_CONFIG(drm_atomic)
     device()->threadLocalAtomicReset();
 #endif
 }
+
+#if QT_CONFIG(drm_atomic)
+static void addAtomicFlip(drmModeAtomicReq *request, const QKmsOutput &output, uint32_t fb)
+{
+    drmModeAtomicAddProperty(request, output.eglfs_plane->id,
+                             output.eglfs_plane->framebufferPropertyId, fb);
+
+    drmModeAtomicAddProperty(request, output.eglfs_plane->id,
+                             output.eglfs_plane->crtcPropertyId, output.crtc_id);
+
+    drmModeAtomicAddProperty(request, output.eglfs_plane->id,
+                             output.eglfs_plane->srcwidthPropertyId, output.size.width() << 16);
+
+    drmModeAtomicAddProperty(request, output.eglfs_plane->id,
+                             output.eglfs_plane->srcXPropertyId, 0);
+
+    drmModeAtomicAddProperty(request, output.eglfs_plane->id,
+                             output.eglfs_plane->srcYPropertyId, 0);
+
+    drmModeAtomicAddProperty(request, output.eglfs_plane->id,
+                             output.eglfs_plane->srcheightPropertyId, output.size.height() << 16);
+
+    drmModeAtomicAddProperty(request, output.eglfs_plane->id,
+                             output.eglfs_plane->crtcXPropertyId, 0);
+
+    drmModeAtomicAddProperty(request, output.eglfs_plane->id,
+                             output.eglfs_plane->crtcYPropertyId, 0);
+
+    drmModeAtomicAddProperty(request, output.eglfs_plane->id,
+                             output.eglfs_plane->crtcwidthPropertyId, output.modes[output.mode].hdisplay);
+
+    drmModeAtomicAddProperty(request, output.eglfs_plane->id,
+                             output.eglfs_plane->crtcheightPropertyId, output.modes[output.mode].vdisplay);
+}
+#endif
 
 void QEglFSKmsGbmScreen::flip()
 {
@@ -303,14 +345,14 @@ void QEglFSKmsGbmScreen::flip()
 
     m_gbm_bo_next = gbm_surface_lock_front_buffer(m_gbm_surface);
     if (!m_gbm_bo_next) {
-        qWarning("Could not lock GBM surface front buffer!");
+        qWarning("Could not lock GBM surface front buffer for screen %s", qPrintable(name()));
         return;
     }
 
     FrameBuffer *fb = framebufferForBufferObject(m_gbm_bo_next);
     ensureModeSet(fb->fb);
 
-    QKmsOutput &op(output());
+    const QKmsOutput &thisOutput(output());
     const int fd = device()->fd();
     m_flipPending = true;
 
@@ -318,35 +360,25 @@ void QEglFSKmsGbmScreen::flip()
 #if QT_CONFIG(drm_atomic)
         drmModeAtomicReq *request = device()->threadLocalAtomicRequest();
         if (request) {
-            drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->framebufferPropertyId, fb->fb);
-            drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->crtcPropertyId, op.crtc_id);
-            drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->srcwidthPropertyId,
-                                     op.size.width() << 16);
-            drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->srcXPropertyId, 0);
-            drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->srcYPropertyId, 0);
-            drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->srcheightPropertyId,
-                                     op.size.height() << 16);
-            drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->crtcXPropertyId, 0);
-            drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->crtcYPropertyId, 0);
-            drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->crtcwidthPropertyId,
-                                     m_output.modes[m_output.mode].hdisplay);
-            drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->crtcheightPropertyId,
-                                     m_output.modes[m_output.mode].vdisplay);
-
+            addAtomicFlip(request, thisOutput, fb->fb);
             static int zpos = qEnvironmentVariableIntValue("QT_QPA_EGLFS_KMS_ZPOS");
-            if (zpos)
-                drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->zposPropertyId, zpos);
+            if (zpos) {
+                drmModeAtomicAddProperty(request, thisOutput.eglfs_plane->id,
+                                         thisOutput.eglfs_plane->zposPropertyId, zpos);
+            }
             static uint blendOp = uint(qEnvironmentVariableIntValue("QT_QPA_EGLFS_KMS_BLEND_OP"));
-            if (blendOp)
-                drmModeAtomicAddProperty(request, op.eglfs_plane->id, op.eglfs_plane->blendOpPropertyId, blendOp);
+            if (blendOp) {
+                drmModeAtomicAddProperty(request, thisOutput.eglfs_plane->id,
+                                         thisOutput.eglfs_plane->blendOpPropertyId, blendOp);
+            }
         }
 #endif
     } else {
         int ret = drmModePageFlip(fd,
-                              op.crtc_id,
-                              fb->fb,
-                              DRM_MODE_PAGE_FLIP_EVENT,
-                              this);
+                                  thisOutput.crtc_id,
+                                  fb->fb,
+                                  DRM_MODE_PAGE_FLIP_EVENT,
+                                  this);
         if (ret) {
             qErrnoWarning("Could not queue DRM page flip on screen %s", qPrintable(name()));
             m_flipPending = false;
@@ -360,17 +392,20 @@ void QEglFSKmsGbmScreen::flip()
         if (d.screen != this) {
             d.screen->ensureModeSet(fb->fb);
             d.cloneFlipPending = true;
-            QKmsOutput &destOutput(d.screen->output());
+            const QKmsOutput &destOutput(d.screen->output());
 
             if (device()->hasAtomicSupport()) {
 #if QT_CONFIG(drm_atomic)
                 drmModeAtomicReq *request = device()->threadLocalAtomicRequest();
-                if (request) {
-                    drmModeAtomicAddProperty(request, destOutput.eglfs_plane->id,
-                                                      destOutput.eglfs_plane->framebufferPropertyId, fb->fb);
-                    drmModeAtomicAddProperty(request, destOutput.eglfs_plane->id,
-                                                      destOutput.eglfs_plane->crtcPropertyId, destOutput.crtc_id);
-                }
+                if (request)
+                    addAtomicFlip(request, destOutput, fb->fb);
+
+                // ### This path is broken. On the other branch we can easily
+                // pass in d.screen as the user_data for drmModePageFlip, but
+                // using one atomic request breaks down here since we get events
+                // with the same user_data passed to drmModeAtomicCommit.  Until
+                // this gets reworked (multiple requests?) screen cloning is not
+                // compatible with atomic.
 #endif
             } else {
                 int ret = drmModePageFlip(fd,
@@ -379,7 +414,9 @@ void QEglFSKmsGbmScreen::flip()
                                           DRM_MODE_PAGE_FLIP_EVENT,
                                           d.screen);
                 if (ret) {
-                    qErrnoWarning("Could not queue DRM page flip for clone screen %s", qPrintable(name()));
+                    qErrnoWarning("Could not queue DRM page flip for screen %s (clones screen %s)",
+                                  qPrintable(d.screen->name()),
+                                  qPrintable(name()));
                     d.cloneFlipPending = false;
                 }
             }
@@ -415,19 +452,23 @@ void QEglFSKmsGbmScreen::cloneDestFlipFinished(QEglFSKmsGbmScreen *cloneDestScre
 
 void QEglFSKmsGbmScreen::updateFlipStatus()
 {
-    Q_ASSERT(!m_cloneSource);
+    // only for 'real' outputs that own the color buffer, i.e. that are not cloning another one
+    if (m_cloneSource)
+        return;
 
+    // proceed only if flips for both this and all others that clone this have finished
     if (m_flipPending)
         return;
 
-    for (const CloneDestination &d : qAsConst(m_cloneDests)) {
+    for (const CloneDestination &d : std::as_const(m_cloneDests)) {
         if (d.cloneFlipPending)
             return;
     }
 
-    if (m_gbm_bo_current)
+    if (m_gbm_bo_current) {
         gbm_surface_release_buffer(m_gbm_surface,
                                    m_gbm_bo_current);
+    }
 
     m_gbm_bo_current = m_gbm_bo_next;
     m_gbm_bo_next = nullptr;

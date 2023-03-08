@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2021 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2021 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QT_BOOTSTRAPPED
 #include <qcoreapplication.h>
@@ -50,7 +14,7 @@
 
 //#define PARSER_DEBUG
 #ifdef PARSER_DEBUG
-static int indent = 0;
+Q_CONSTINIT static int indent = 0;
 #define BEGIN qDebug() << QByteArray(4*indent++, ' ').constData() << "pos=" << current
 #define END --indent
 #define DEBUG qDebug() << QByteArray(4*indent, ' ').constData()
@@ -193,7 +157,7 @@ QString QJsonParseError::errorString() const
 #ifndef QT_BOOTSTRAPPED
     return QCoreApplication::translate("QJsonParseError", sz);
 #else
-    return QLatin1String(sz);
+    return QLatin1StringView(sz);
 #endif
 }
 
@@ -389,12 +353,24 @@ static Iterator customAssigningUniqueLast(Iterator first, Iterator last,
     if (first == last)
         return last;
 
-    Iterator result = first;
+    // After adjacent_find, we know that *first and *(first+1) compare equal,
+    // and that first+1 != last.
+    Iterator result = first++;
+    Q_ASSERT(compare(*result, *first));
+    assign(*result, *first);
+    Q_ASSERT(first != last);
+
     while (++first != last) {
         if (!compare(*result, *first))
             ++result;
-        if (result != first)
-            assign(*result, *first);
+
+        // Due to adjacent_find above, we know that we've at least eliminated one element.
+        // Therefore we have to move each further element across the gap.
+        Q_ASSERT(result != first);
+
+        // We have to overwrite each element we want to eliminate, to deref() the container.
+        // Therefore we don't try to optimize the number of assignments here.
+        assign(*result, *first);
     }
 
     return ++result;
@@ -433,10 +409,7 @@ static void sortContainer(QCborContainerPrivate *container)
             if (bKey.flags & QtCbor::Element::StringIsUtf16)
                 return QCborContainerPrivate::compareUtf8(aData, bData->asStringView());
 
-            // We're missing an explicit UTF-8 to UTF-8 comparison in Qt, but
-            // UTF-8 to UTF-8 comparison retains simple byte ordering, so we'll
-            // abuse the Latin-1 comparison function.
-            return QtPrivate::compareStrings(aData->asLatin1(), bData->asLatin1());
+            return QtPrivate::compareStrings(aData->asUtf8StringView(), bData->asUtf8StringView());
         }
     };
 
@@ -579,7 +552,7 @@ bool Parser::parseArray()
         }
     }
 
-    DEBUG << "size =" << (container ? container->elements.length() : 0);
+    DEBUG << "size =" << (container ? container->elements.size() : 0);
     END;
 
     --nestingLevel;
@@ -947,7 +920,7 @@ bool Parser::parseString()
         return false;
     }
 
-    container->appendByteData(reinterpret_cast<const char *>(ucs4.utf16()), ucs4.size() * 2,
+    container->appendByteData(reinterpret_cast<const char *>(ucs4.constData()), ucs4.size() * 2,
                               QCborValue::String, QtCbor::Element::StringIsUtf16);
     END;
     return true;

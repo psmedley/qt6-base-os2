@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qcolor.h"
 #include "qcolor_p.h"
@@ -48,6 +12,7 @@
 #include "private/qtools_p.h"
 
 #include <algorithm>
+#include <optional>
 
 #include <stdio.h>
 #include <limits.h>
@@ -80,10 +45,10 @@ static inline int hex2int(const char *s, int n)
     return result;
 }
 
-static bool get_hex_rgb(const char *name, size_t len, QRgba64 *rgb)
+static std::optional<QRgba64> get_hex_rgb(const char *name, size_t len)
 {
     if (name[0] != '#')
-        return false;
+        return std::nullopt;
     name++;
     --len;
     int a, r, g, b;
@@ -97,7 +62,7 @@ static bool get_hex_rgb(const char *name, size_t len, QRgba64 *rgb)
         g = hex2int(name + 3, 3);
         b = hex2int(name + 6, 3);
         if (r == -1 || g == -1 || b == -1)
-            return false;
+            return std::nullopt;
         r = (r << 4) | (r >> 8);
         g = (g << 4) | (g >> 8);
         b = (b << 4) | (b >> 8);
@@ -117,32 +82,34 @@ static bool get_hex_rgb(const char *name, size_t len, QRgba64 *rgb)
     } else {
         r = g = b = -1;
     }
-    if ((uint)r > 65535 || (uint)g > 65535 || (uint)b > 65535 || (uint)a > 65535) {
-        *rgb = 0;
-        return false;
-    }
-    *rgb = qRgba64(r, g ,b, a);
-    return true;
+    if (uint(r) > 65535 || uint(g) > 65535 || uint(b) > 65535 || uint(a) > 65535)
+        return std::nullopt;
+    return qRgba64(r, g ,b, a);
 }
 
-bool qt_get_hex_rgb(const char *name, QRgb *rgb)
+std::optional<QRgb> qt_get_hex_rgb(const char *name)
 {
-    QRgba64 rgba64;
-    if (!get_hex_rgb(name, qstrlen(name), &rgba64))
-        return false;
-    *rgb = rgba64.toArgb32();
-    return true;
+    if (std::optional<QRgba64> rgba64 = get_hex_rgb(name, qstrlen(name)))
+        return rgba64->toArgb32();
+    return std::nullopt;
 }
 
-static bool get_hex_rgb(const QChar *str, size_t len, QRgba64 *rgb)
+static std::optional<QRgba64> get_hex_rgb(const QChar *str, size_t len)
 {
     if (len > 13)
-        return false;
+        return std::nullopt;
     char tmp[16];
     for (size_t i = 0; i < len; ++i)
         tmp[i] = str[i].toLatin1();
     tmp[len] = 0;
-    return get_hex_rgb(tmp, len, rgb);
+    return get_hex_rgb(tmp, len);
+}
+
+static std::optional<QRgba64> get_hex_rgb(QAnyStringView name)
+{
+    return name.visit([] (auto name) {
+        return get_hex_rgb(name.data(), name.size());
+    });
 }
 
 #ifndef QT_NO_COLORNAMES
@@ -157,7 +124,7 @@ static bool get_hex_rgb(const QChar *str, size_t len, QRgba64 *rgb)
 #define rgb(r,g,b) (0xff000000 | (r << 16) |  (g << 8) | b)
 
 // keep this is in sync with QColorConstants
-static const struct RGBData {
+static constexpr struct RGBData {
     const char name[21];
     uint  value;
 } rgbTbl[] = {
@@ -313,6 +280,16 @@ static const struct RGBData {
 
 static const int rgbTblSize = sizeof(rgbTbl) / sizeof(RGBData);
 
+static_assert([] {
+    for (auto e : rgbTbl) {
+        for (auto it = e.name; *it ; ++it) {
+            if (uchar(*it) > 127)
+                return false;
+        }
+    }
+    return true;
+    }(), "the lookup code expects color names to be US-ASCII-only");
+
 #undef rgb
 
 inline bool operator<(const char *name, const RGBData &data)
@@ -320,43 +297,35 @@ inline bool operator<(const char *name, const RGBData &data)
 inline bool operator<(const RGBData &data, const char *name)
 { return qstrcmp(data.name, name) < 0; }
 
-static bool get_named_rgb_no_space(const char *name_no_space, QRgb *rgb)
+static std::optional<QRgb> get_named_rgb_no_space(const char *name_no_space)
 {
     const RGBData *r = std::lower_bound(rgbTbl, rgbTbl + rgbTblSize, name_no_space);
-    if ((r != rgbTbl + rgbTblSize) && !(name_no_space < *r)) {
-        *rgb = r->value;
-        return true;
-    }
-    return false;
+    if ((r != rgbTbl + rgbTblSize) && !(name_no_space < *r))
+        return r->value;
+    return std::nullopt;
 }
 
-static bool get_named_rgb(const char *name, int len, QRgb* rgb)
-{
-    if (len > 255)
-        return false;
-    char name_no_space[256];
-    int pos = 0;
-    for (int i = 0; i < len; i++) {
-        if (name[i] != '\t' && name[i] != ' ')
-            name_no_space[pos++] = QChar::toLower(name[i]);
-    }
-    name_no_space[pos] = 0;
-
-    return get_named_rgb_no_space(name_no_space, rgb);
+namespace {
+// named colors are US-ASCII (enforced by static_assert above):
+static char to_char(char ch) noexcept { return ch; }
+static char to_char(QChar ch) noexcept { return ch.toLatin1(); }
 }
 
-static bool get_named_rgb(const QChar *name, int len, QRgb *rgb)
+static std::optional<QRgb> get_named_rgb(QAnyStringView name)
 {
-    if (len > 255)
-        return false;
+    if (name.size() > 255)
+        return std::nullopt;
     char name_no_space[256];
     int pos = 0;
-    for (int i = 0; i < len; i++) {
-        if (name[i] != QLatin1Char('\t') && name[i] != QLatin1Char(' '))
-            name_no_space[pos++] = name[i].toLower().toLatin1();
-    }
+    name.visit([&pos, &name_no_space] (auto name) {
+        for (auto c : name) {
+            if (c != u'\t' && c != u' ')
+                name_no_space[pos++] = QtMiscUtils::toAsciiLower(to_char(c));
+        }
+    });
     name_no_space[pos] = 0;
-    return get_named_rgb_no_space(name_no_space, rgb);
+
+    return get_named_rgb_no_space(name_no_space);
 }
 
 #endif // QT_NO_COLORNAMES
@@ -367,7 +336,7 @@ static QStringList get_colornames()
 #ifndef QT_NO_COLORNAMES
     lst.reserve(rgbTblSize);
     for (int i = 0; i < rgbTblSize; i++)
-        lst << QLatin1String(rgbTbl[i].name);
+        lst << QLatin1StringView(rgbTbl[i].name);
 #endif
     return lst;
 }
@@ -411,7 +380,7 @@ static QStringList get_colornames()
 
     A color can be set by passing an RGB string (such as "#112233"),
     or an ARGB string (such as "#ff112233") or a color name (such as "blue"),
-    to the setNamedColor() function.
+    to the fromString() function.
     The color names are taken from the SVG 1.0 color names. The name()
     function returns the name of the color in the format
     "#RRGGBB". Colors can also be set using setRgb(), setHsv() and
@@ -815,6 +784,7 @@ QColor::QColor(Spec spec) noexcept
     }
 }
 
+// ### Qt 7: remove those after deprecating them for the last Qt 6 LTS release
 /*!
     \fn QColor::QColor(const QString &name)
 
@@ -837,7 +807,7 @@ QColor::QColor(Spec spec) noexcept
 */
 
 /*!
-    \fn QColor::QColor(QLatin1String name)
+    \fn QColor::QColor(QLatin1StringView name)
 
     Constructs a named color in the same way as setNamedColor() using
     the given \a name.
@@ -858,22 +828,25 @@ QColor::QColor(Spec spec) noexcept
 
     Returns the name of the color in the specified \a format.
 
-    \sa setNamedColor(), NameFormat
+    \sa fromString(), NameFormat
 */
 
 QString QColor::name(NameFormat format) const
 {
     switch (format) {
     case HexRgb:
-        return QLatin1Char('#') + QStringView{QString::number(rgba() | 0x1000000, 16)}.right(6);
+        return u'#' + QStringView{QString::number(rgba() | 0x1000000, 16)}.right(6);
     case HexArgb:
         // it's called rgba() but it does return AARRGGBB
-        return QLatin1Char('#') + QStringView{QString::number(rgba() | Q_INT64_C(0x100000000), 16)}.right(8);
+        return u'#' + QStringView{QString::number(rgba() | Q_INT64_C(0x100000000), 16)}.right(8);
     }
     return QString();
 }
 
+#if QT_DEPRECATED_SINCE(6, 6)
 /*!
+    \deprecated [6.6] Use fromString() instead.
+
     Sets the RGB value of this QColor to \a name, which may be in one
     of these formats:
 
@@ -899,31 +872,35 @@ QString QColor::name(NameFormat format) const
 
 void QColor::setNamedColor(const QString &name)
 {
-    setColorFromString(qToStringViewIgnoringNull(name));
+    *this = fromString(qToAnyStringViewIgnoringNull(name));
 }
 
 /*!
     \overload
     \since 5.10
+    \deprecated [6.6] Use fromString() instead.
 */
 
 void QColor::setNamedColor(QStringView name)
 {
-    setColorFromString(name);
+    *this = fromString(name);
 }
 
 /*!
     \overload
     \since 5.8
+    \deprecated [6.6] Use fromString() instead.
 */
 
-void QColor::setNamedColor(QLatin1String name)
+void QColor::setNamedColor(QLatin1StringView name)
 {
-    setColorFromString(name);
+    *this = fromString(name);
 }
 
 /*!
    \since 4.7
+
+   \deprecated [6.6] Use isValidColorName() instead.
 
    Returns \c true if the \a name is a valid color name and can
    be used to construct a valid QColor object, otherwise returns
@@ -935,57 +912,86 @@ void QColor::setNamedColor(QLatin1String name)
 */
 bool QColor::isValidColor(const QString &name)
 {
-    return isValidColor(qToStringViewIgnoringNull(name));
+    return isValidColorName(qToAnyStringViewIgnoringNull(name));
 }
 
 /*!
     \overload
     \since 5.10
+    \deprecated [6.6] Use isValidColorName() instead.
 */
 bool QColor::isValidColor(QStringView name) noexcept
 {
-    return name.size() && QColor().setColorFromString(name);
+    return isValidColorName(name);
 }
 
 /*!
     \overload
     \since 5.8
+    \deprecated [6.6] Use isValidColorName() instead.
 */
-bool QColor::isValidColor(QLatin1String name) noexcept
+bool QColor::isValidColor(QLatin1StringView name) noexcept
 {
-    return name.size() && QColor().setColorFromString(name);
+    return isValidColorName(name);
+}
+#endif // QT_DEPRECATED_SINCE(6, 6)
+
+/*!
+   \since 6.4
+
+   Returns \c true if the \a name is a valid color name and can
+   be used to construct a valid QColor object, otherwise returns
+   false.
+
+   It uses the same algorithm used in fromString().
+
+   \sa fromString()
+*/
+bool QColor::isValidColorName(QAnyStringView name) noexcept
+{
+    return fromString(name).isValid();
 }
 
-template <typename String>
-bool QColor::setColorFromString(String name)
+/*!
+    \since 6.4
+
+    Returns an RGB QColor parsed from \a name, which may be in one
+    of these formats:
+
+    \list
+    \li #RGB (each of R, G, and B is a single hex digit)
+    \li #RRGGBB
+    \li #AARRGGBB (Since 5.2)
+    \li #RRRGGGBBB
+    \li #RRRRGGGGBBBB
+    \li A name from the list of colors defined in the list of
+       \l{https://www.w3.org/TR/SVG11/types.html#ColorKeywords}{SVG color keyword names}
+       provided by the World Wide Web Consortium; for example, "steelblue" or "gainsboro".
+       These color names work on all platforms. Note that these color names are \e not the
+       same as defined by the Qt::GlobalColor enums, e.g. "green" and Qt::green does not
+       refer to the same color.
+    \li \c transparent - representing the absence of a color.
+    \endlist
+
+    Returns an invalid color if \a name cannot be parsed.
+
+    \sa isValidColorName()
+*/
+QColor QColor::fromString(QAnyStringView name) noexcept
 {
-    if (!name.size()) {
-        invalidate();
-        return true;
-    }
+    if (!name.size())
+        return {};
 
-    if (name[0] == QLatin1Char('#')) {
-        QRgba64 rgba;
-        if (get_hex_rgb(name.data(), name.size(), &rgba)) {
-            setRgba64(rgba);
-            return true;
-        } else {
-            invalidate();
-            return false;
-        }
-    }
-
+    if (name.front() == u'#') {
+        if (std::optional<QRgba64> r = get_hex_rgb(name))
+            return QColor::fromRgba64(*r);
 #ifndef QT_NO_COLORNAMES
-    QRgb rgb;
-    if (get_named_rgb(name.data(), name.size(), &rgb)) {
-        setRgba(rgb);
-        return true;
-    } else
+    } else if (std::optional<QRgb> r = get_named_rgb(name)) {
+        return QColor::fromRgba(*r);
 #endif
-    {
-        invalidate();
-        return false;
     }
+
+    return {};
 }
 
 /*!
@@ -1248,15 +1254,12 @@ void QColor::getRgbF(float *r, float *g, float *b, float *a) const
     if (!r || !g || !b)
         return;
 
-    if (cspec == Invalid)
-        return;
-
-    if (cspec != Rgb && cspec != ExtendedRgb) {
+    if (cspec != Invalid && cspec != Rgb && cspec != ExtendedRgb) {
         toRgb().getRgbF(r, g, b, a);
         return;
     }
 
-    if (cspec == Rgb) {
+    if (cspec == Rgb || cspec == Invalid) {
         *r = ct.argb.red   / float(USHRT_MAX);
         *g = ct.argb.green / float(USHRT_MAX);
         *b = ct.argb.blue  / float(USHRT_MAX);

@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*! \class QFuture
     \inmodule QtCore
@@ -1355,6 +1331,41 @@
     See the documentation of the other overload for more details about \a handler.
 
     \sa then(), onFailed()
+*/
+
+/*! \fn template<class T> template<class U> QFuture<U> QFuture<T>::unwrap()
+
+    \since 6.4
+
+    Unwraps the inner future from this \c QFuture<T>, where \c T is a future
+    of type \c QFuture<U>, i.e. this future has type of \c QFuture<QFuture<U>>.
+    For example:
+
+    \snippet code/src_corelib_thread_qfuture.cpp 28
+
+    \c unwrappedFuture will be fulfilled as soon as the inner future nested
+    inside the \c outerFuture is fulfilled, with the same result or exception
+    and in the same thread that reports the inner future as finished. If the
+    inner future is canceled, \c unwrappedFuture will also be canceled.
+
+    This is especially useful when chaining multiple computations, and one of
+    them returns a \c QFuture as its result type. For example, let's say we
+    want to download multiple images from an URL, scale the images, and reduce
+    them to a single image using QtConcurrent::mappedReduced(). We could write
+    something like:
+
+    \snippet code/src_corelib_thread_qfuture.cpp 29
+
+    Here \c QtConcurrent::mappedReduced() returns a \c QFuture<QImage>, so
+    \c .then(processImages) returns a \c QFuture<QFuture<QImage>>. Since
+    \c show() takes a \c QImage as argument, the result of \c .then(processImages)
+    can't be passed to it directly. We need to call \c .unwrap(), that will
+    get the result of the inner future when it's ready and pass it to the next
+    continuation.
+
+    In case of multiple nesting, \c .unwrap() goes down to the innermost level:
+
+    \snippet code/src_corelib_thread_qfuture.cpp 30
 */
 
 /*! \fn template<typename OutputSequence, typename InputIt> QFuture<OutputSequence> QtFuture::whenAll(InputIt first, InputIt last)

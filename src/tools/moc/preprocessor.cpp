@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "preprocessor.h"
 #include "utils.h"
@@ -33,6 +8,7 @@
 #include <qfile.h>
 #include <qdir.h>
 #include <qfileinfo.h>
+#include <qvarlengtharray.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -1004,7 +980,7 @@ static void mergeStringLiterals(Symbols *_symbols)
                 for (Symbols::iterator j = mergeSymbol + 1; j != i; ++j)
                     mergeSymbolLexem.append(j->lex.constData() + j->from + 1, j->len - 2); // append j->unquotedLexem()
                 mergeSymbolLexem.append('"');
-                mergeSymbol->len = mergeSymbol->lex.length();
+                mergeSymbol->len = mergeSymbol->lex.size();
                 mergeSymbol->from = 0;
                 i = symbols.erase(mergeSymbol + 1, i);
             }
@@ -1015,9 +991,15 @@ static void mergeStringLiterals(Symbols *_symbols)
 }
 
 static QByteArray searchIncludePaths(const QList<Parser::IncludePath> &includepaths,
-                                     const QByteArray &include)
+                                     const QByteArray &include,
+                                     const bool debugIncludes)
 {
     QFileInfo fi;
+
+    if (Q_UNLIKELY(debugIncludes)) {
+        fprintf(stderr, "debug-includes: searching for '%s'\n", include.constData());
+    }
+
     for (int j = 0; j < includepaths.size() && !fi.exists(); ++j) {
         const Parser::IncludePath &p = includepaths.at(j);
         if (p.isFrameworkPath) {
@@ -1029,6 +1011,12 @@ static QByteArray searchIncludePaths(const QList<Parser::IncludePath> &includepa
         } else {
             fi.setFile(QString::fromLocal8Bit(p.path), QString::fromLocal8Bit(include));
         }
+
+        if (Q_UNLIKELY(debugIncludes)) {
+            const auto candidate = fi.filePath().toLocal8Bit();
+            fprintf(stderr, "debug-includes: considering '%s'\n", candidate.constData());
+        }
+
         // try again, maybe there's a file later in the include paths with the same name
         // (186067)
         if (fi.isDir()) {
@@ -1037,9 +1025,20 @@ static QByteArray searchIncludePaths(const QList<Parser::IncludePath> &includepa
         }
     }
 
-    if (!fi.exists() || fi.isDir())
+    if (!fi.exists() || fi.isDir()) {
+        if (Q_UNLIKELY(debugIncludes)) {
+            fprintf(stderr, "debug-includes: can't find '%s'\n", include.constData());
+        }
         return QByteArray();
-    return fi.canonicalFilePath().toLocal8Bit();
+    }
+
+    const auto result = fi.canonicalFilePath().toLocal8Bit();
+
+    if (Q_UNLIKELY(debugIncludes)) {
+        fprintf(stderr, "debug-includes: found '%s'\n", result.constData());
+    }
+
+    return result;
 }
 
 QByteArray Preprocessor::resolveInclude(const QByteArray &include, const QByteArray &relativeTo)
@@ -1053,7 +1052,11 @@ QByteArray Preprocessor::resolveInclude(const QByteArray &include, const QByteAr
 
     auto it = nonlocalIncludePathResolutionCache.find(include);
     if (it == nonlocalIncludePathResolutionCache.end())
-       it = nonlocalIncludePathResolutionCache.insert(include, searchIncludePaths(includes, include));
+       it = nonlocalIncludePathResolutionCache.insert(include,
+                                                      searchIncludePaths(
+                                                          includes,
+                                                          include,
+                                                          debugIncludes));
     return it.value();
 }
 
@@ -1281,7 +1284,7 @@ void Preprocessor::parseDefineArguments(Macro *m)
                 if (!test(PP_RPAREN))
                     error("missing ')' in macro argument list");
                 break;
-            } else if (!is_identifier(l.constData(), l.length())) {
+            } else if (!is_identifier(l.constData(), l.size())) {
                 error("Unexpected character in macro argument list.");
             }
         }
@@ -1317,5 +1320,11 @@ void Preprocessor::until(Token t)
     while(hasNext() && next() != t)
         ;
 }
+
+void Preprocessor::setDebugIncludes(bool value)
+{
+    debugIncludes = value;
+}
+
 
 QT_END_NAMESPACE

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 //#define QTCPSERVER_DEBUG
 
@@ -54,7 +18,9 @@
 
     Call listen() to have the server listen for incoming connections.
     The newConnection() signal is then emitted each time a client
-    connects to the server.
+    connects to the server. When the client connection has been added
+    to the pending connection queue using the addPendingConnection()
+    function, the pendingConnectionAvailable() signal is emitted.
 
     Call nextPendingConnection() to accept the pending connection as
     a connected QTcpSocket. The function returns a pointer to a
@@ -83,9 +49,19 @@
 
 /*! \fn void QTcpServer::newConnection()
 
-    This signal is emitted every time a new connection is available.
+    This signal is emitted every time a new connection is available, regardless
+    of whether it has been added to the pending connections queue or not.
 
     \sa hasPendingConnections(), nextPendingConnection()
+*/
+
+/*! \fn void QTcpServer::pendingConnectionAvailable()
+
+    This signal is emitted every time a new connection has been added to the
+    pending connections queue.
+
+    \sa hasPendingConnections(), nextPendingConnection()
+    \since 6.4
 */
 
 /*! \fn void QTcpServer::acceptError(QAbstractSocket::SocketError socketError)
@@ -157,7 +133,7 @@ QNetworkProxy QTcpServerPrivate::resolveProxy(const QHostAddress &address, quint
     }
 
     // return the first that we can use
-    for (const QNetworkProxy &p : qAsConst(proxies)) {
+    for (const QNetworkProxy &p : std::as_const(proxies)) {
         if (socketType == QAbstractSocket::TcpSocket &&
             (p.capabilities() & QNetworkProxy::ListeningCapability) != 0)
             return p;
@@ -196,7 +172,7 @@ void QTcpServerPrivate::readNotification()
 {
     Q_Q(QTcpServer);
     for (;;) {
-        if (pendingConnections.count() >= maxConnections) {
+        if (totalPendingConnections() >= maxConnections) {
 #if defined (QTCPSERVER_DEBUG)
             qDebug("QTcpServerPrivate::_q_processIncomingConnection() too many connections");
 #endif
@@ -205,7 +181,7 @@ void QTcpServerPrivate::readNotification()
             return;
         }
 
-        int descriptor = socketEngine->accept();
+        qintptr descriptor = socketEngine->accept();
         if (descriptor == -1) {
             if (socketEngine->error() != QAbstractSocket::TemporaryError) {
                 q->pauseAccepting();
@@ -218,13 +194,29 @@ void QTcpServerPrivate::readNotification()
 #if defined (QTCPSERVER_DEBUG)
         qDebug("QTcpServerPrivate::_q_processIncomingConnection() accepted socket %i", descriptor);
 #endif
+        QPointer<QTcpServer> that = q;
         q->incomingConnection(descriptor);
 
-        QPointer<QTcpServer> that = q;
-        emit q->newConnection();
+        if (that)
+            emit q->newConnection();
+
         if (!that || !q->isListening())
             return;
     }
+}
+
+/*!
+    \internal
+    Return the amount of sockets currently in queue for the server.
+    This is to make maxPendingConnections work properly with servers that don't
+    necessarily have 'ready-to-go' sockets as soon as they connect,
+    e.g. QSslServer.
+    By default we just return pendingConnections.size(), which is equivalent to
+    what it did before.
+*/
+int QTcpServerPrivate::totalPendingConnections() const
+{
+    return int(pendingConnections.size());
 }
 
 /*!
@@ -608,14 +600,17 @@ void QTcpServer::incomingConnection(qintptr socketDescriptor)
 
     \note Don't forget to call this member from reimplemented
     incomingConnection() if you do not want to break the
-    Pending Connections mechanism.
+    Pending Connections mechanism. This function emits the
+    pendingConnectionAvailable() signal after the socket has been
+    added.
 
-    \sa incomingConnection()
+    \sa incomingConnection(), pendingConnectionAvailable()
     \since 4.7
 */
 void QTcpServer::addPendingConnection(QTcpSocket* socket)
 {
     d_func()->pendingConnections.append(socket);
+    emit pendingConnectionAvailable(QPrivateSignal());
 }
 
 /*!

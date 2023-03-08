@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2018 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2018 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qpluginloader.h"
 
@@ -52,6 +16,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 #if QT_CONFIG(library)
 
@@ -269,7 +235,7 @@ static QString locatePlugin(const QString& fileName)
     suffixes.prepend(QString());
 
     // Split up "subdir/filename"
-    const int slash = fileName.lastIndexOf(QLatin1Char('/'));
+    const int slash = fileName.lastIndexOf(u'/');
     const auto baseName = QStringView{fileName}.mid(slash + 1);
     const auto basePath = isAbsolute ? QStringView() : QStringView{fileName}.left(slash + 1); // keep the '/'
 
@@ -280,19 +246,19 @@ static QString locatePlugin(const QString& fileName)
         paths = QCoreApplication::libraryPaths();
     }
 
-    for (const QString &path : qAsConst(paths)) {
-        for (const QString &prefix : qAsConst(prefixes)) {
-            for (const QString &suffix : qAsConst(suffixes)) {
+    for (const QString &path : std::as_const(paths)) {
+        for (const QString &prefix : std::as_const(prefixes)) {
+            for (const QString &suffix : std::as_const(suffixes)) {
 #ifdef Q_OS_ANDROID
                 {
                     QString pluginPath = basePath + prefix + baseName + suffix;
-                    const QString fn = path + QLatin1String("/lib") + pluginPath.replace(QLatin1Char('/'), QLatin1Char('_'));
+                    const QString fn = path + "/lib"_L1 + pluginPath.replace(u'/', u'_');
                     qCDebug(qt_lcDebugPlugins) << "Trying..." << fn;
                     if (QFileInfo(fn).isFile())
                         return fn;
                 }
 #endif
-                const QString fn = path + QLatin1Char('/') + basePath + prefix + baseName + suffix;
+                const QString fn = path + u'/' + basePath + prefix + baseName + suffix;
                 qCDebug(qt_lcDebugPlugins) << "Trying..." << fn;
                 if (QFileInfo(fn).isFile())
                     return fn;

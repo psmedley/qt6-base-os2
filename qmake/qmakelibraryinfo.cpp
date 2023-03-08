@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qmakelibraryinfo.h"
 
@@ -112,7 +76,7 @@ void QMakeLibraryInfo::sysrootify(QString &path)
     if (sysroot.isEmpty())
         return;
 
-    if (path.length() > 2 && path.at(1) == QLatin1Char(':')
+    if (path.size() > 2 && path.at(1) == QLatin1Char(':')
         && (path.at(2) == QLatin1Char('/') || path.at(2) == QLatin1Char('\\'))) {
         path.replace(0, 2, sysroot); // Strip out the drive on Windows targets
     } else {
@@ -169,17 +133,22 @@ static QLibraryInfoPrivate::LocationInfo defaultLocationInfo(int loc)
     return result;
 }
 
+static QString libraryInfoPath(QLibraryInfo::LibraryPath location)
+{
+    return QLibraryInfoPrivate::path(location, QLibraryInfoPrivate::UsedFromQtBinDir);
+}
+
 static QString storedPath(int loc)
 {
     QString result;
     if (loc < QMakeLibraryInfo::FirstHostPath) {
-        result = QLibraryInfo::path(static_cast<QLibraryInfo::LibraryPath>(loc));
+        result = libraryInfoPath(static_cast<QLibraryInfo::LibraryPath>(loc));
     } else if (loc <= QMakeLibraryInfo::LastHostPath) {
         if (loc == QMakeLibraryInfo::HostDataPath) {
             // Handle QT_HOST_DATADIR specially. It is not necessarily equal to QT_INSTALL_DATA.
             result = QT_HOST_DATADIR;
         } else {
-            result = QLibraryInfo::path(hostToTargetPathEnum(loc));
+            result = libraryInfoPath(hostToTargetPathEnum(loc));
         }
     } else if (loc == QMakeLibraryInfo::SysrootPath) {
         // empty result
@@ -248,7 +217,7 @@ QString QMakeLibraryInfo::rawLocation(int loc, QMakeLibraryInfo::PathGroup group
                 startIndex = ret.indexOf(QLatin1Char('$'), startIndex);
                 if (startIndex < 0)
                     break;
-                if (ret.length() < startIndex + 3)
+                if (ret.size() < startIndex + 3)
                     break;
                 if (ret.at(startIndex + 1) != QLatin1Char('(')) {
                     startIndex++;
@@ -262,7 +231,7 @@ QString QMakeLibraryInfo::rawLocation(int loc, QMakeLibraryInfo::PathGroup group
                 QString value =
                         QString::fromLocal8Bit(qgetenv(envVarName.toLocal8Bit().constData()));
                 ret.replace(startIndex, endIndex - startIndex + 1, value);
-                startIndex += value.length();
+                startIndex += value.size();
             }
             config->endGroup();
 

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "androidjnimain.h"
 #include "qandroidassetsfileenginehandler.h"
@@ -49,25 +13,27 @@
 
 QT_BEGIN_NAMESPACE
 
-static const QLatin1String assetsPrefix("assets:");
+using namespace Qt::StringLiterals;
+
+static const auto assetsPrefix = "assets:"_L1;
 const static int prefixSize = 7;
 
 static inline QString cleanedAssetPath(QString file)
 {
     if (file.startsWith(assetsPrefix))
         file.remove(0, prefixSize);
-    file.replace(QLatin1String("//"), QLatin1String("/"));
-    if (file.startsWith(QLatin1Char('/')))
+    file.replace("//"_L1, "/"_L1);
+    if (file.startsWith(u'/'))
         file.remove(0, 1);
-    if (file.endsWith(QLatin1Char('/')))
+    if (file.endsWith(u'/'))
         file.chop(1);
     return file;
 }
 
 static inline QString prefixedPath(QString path)
 {
-    path = assetsPrefix + QLatin1Char('/') + path;
-    path.replace(QLatin1String("//"), QLatin1String("/"));
+    path = assetsPrefix + u'/' + path;
+    path.replace("//"_L1, "/"_L1);
     return path;
 }
 
@@ -81,7 +47,7 @@ struct AssetItem {
     AssetItem (const QString &rawName)
         : name(rawName)
     {
-        if (name.endsWith(QLatin1Char('/'))) {
+        if (name.endsWith(u'/')) {
             type = Type::Folder;
             name.chop(1);
         }
@@ -115,7 +81,7 @@ public:
     {
         if (filePath.isEmpty())
             return AssetItem::Type::Folder;
-        const QStringList paths = filePath.split(QLatin1Char('/'));
+        const QStringList paths = filePath.split(u'/');
         QString fullPath;
         AssetItem::Type res = AssetItem::Type::Invalid;
         for (const auto &path: paths) {
@@ -126,7 +92,7 @@ public:
             if (it == folder->end() || it->name != path)
                 return AssetItem::Type::Invalid;
             if (!fullPath.isEmpty())
-                fullPath.append(QLatin1Char('/'));
+                fullPath.append(u'/');
             fullPath += path;
             res = it->type;
         }
@@ -157,8 +123,8 @@ public:
                 }), item);
             }
         }
-        m_path = assetsPrefix + QLatin1Char('/') + m_path + QLatin1Char('/');
-        m_path.replace(QLatin1String("//"), QLatin1String("/"));
+        m_path = assetsPrefix + u'/' + m_path + u'/';
+        m_path.replace("//"_L1, "/"_L1);
     }
 
     QString currentFileName() const
@@ -331,21 +297,21 @@ public:
 
     QString fileName(FileName file = DefaultName) const override
     {
-        int pos;
+        qsizetype pos;
         switch (file) {
         case DefaultName:
         case AbsoluteName:
         case CanonicalName:
                 return prefixedPath(m_fileName);
         case BaseName:
-            if ((pos = m_fileName.lastIndexOf(QChar(QLatin1Char('/')))) != -1)
+            if ((pos = m_fileName.lastIndexOf(u'/')) != -1)
                 return prefixedPath(m_fileName.mid(pos));
             else
                 return prefixedPath(m_fileName);
         case PathName:
         case AbsolutePathName:
         case CanonicalPathName:
-            if ((pos = m_fileName.lastIndexOf(QChar(QLatin1Char('/')))) != -1)
+            if ((pos = m_fileName.lastIndexOf(u'/')) != -1)
                 return prefixedPath(m_fileName.left(pos));
             else
                 return prefixedPath(m_fileName);
@@ -405,7 +371,7 @@ private:
     AAsset *m_assetFile = nullptr;
     AAssetManager *m_assetManager = nullptr;
     // initialize with a name that can't be used as a file name
-    QString m_fileName = QLatin1String(".");
+    QString m_fileName = "."_L1;
     QSharedPointer<AssetItem> m_assetInfo;
 
     static QCache<QString, QSharedPointer<AssetItem>> m_assetsInfoCache;
@@ -429,10 +395,10 @@ QAbstractFileEngine * AndroidAssetsFileEngineHandler::create(const QString &file
         return nullptr;
 
     QString path = fileName.mid(prefixSize);
-    path.replace(QLatin1String("//"), QLatin1String("/"));
-    if (path.startsWith(QLatin1Char('/')))
+    path.replace("//"_L1, "/"_L1);
+    if (path.startsWith(u'/'))
         path.remove(0, 1);
-    if (path.endsWith(QLatin1Char('/')))
+    if (path.endsWith(u'/'))
         path.chop(1);
     return new AndroidAbstractFileEngine(m_assetManager, path);
 }

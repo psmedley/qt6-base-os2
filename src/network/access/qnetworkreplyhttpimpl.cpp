@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 //#define QNETWORKACCESSHTTPBACKEND_DEBUG
 
@@ -67,6 +31,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 class QNetworkProxy;
 
 static inline bool isSeparator(char c)
@@ -88,7 +54,7 @@ static QHash<QByteArray, QByteArray> parseHttpOptionHeader(const QByteArray &hea
     while (true) {
         // skip spaces
         pos = nextNonWhitespace(header, pos);
-        if (pos == header.length())
+        if (pos == header.size())
             return result;      // end of parsing
 
         // pos points to a non-whitespace
@@ -102,7 +68,7 @@ static QHash<QByteArray, QByteArray> parseHttpOptionHeader(const QByteArray &hea
         // of the header, whichever comes first
         int end = comma;
         if (end == -1)
-            end = header.length();
+            end = header.size();
         if (equal != -1 && end > equal)
             end = equal;        // equal sign comes before comma/end
         QByteArray key = QByteArray(header.constData() + pos, end - pos).trimmed().toLower();
@@ -112,26 +78,26 @@ static QHash<QByteArray, QByteArray> parseHttpOptionHeader(const QByteArray &hea
             // case: token "=" (token | quoted-string)
             // skip spaces
             pos = nextNonWhitespace(header, pos);
-            if (pos == header.length())
+            if (pos == header.size())
                 // huh? Broken header
                 return result;
 
             QByteArray value;
-            value.reserve(header.length() - pos);
+            value.reserve(header.size() - pos);
             if (header.at(pos) == '"') {
                 // case: quoted-string
                 // quoted-string  = ( <"> *(qdtext | quoted-pair ) <"> )
                 // qdtext         = <any TEXT except <">>
                 // quoted-pair    = "\" CHAR
                 ++pos;
-                while (pos < header.length()) {
+                while (pos < header.size()) {
                     char c = header.at(pos);
                     if (c == '"') {
                         // end of quoted text
                         break;
                     } else if (c == '\\') {
                         ++pos;
-                        if (pos >= header.length())
+                        if (pos >= header.size())
                             // broken header
                             return result;
                         c = header.at(pos);
@@ -142,7 +108,7 @@ static QHash<QByteArray, QByteArray> parseHttpOptionHeader(const QByteArray &hea
                 }
             } else {
                 // case: token
-                while (pos < header.length()) {
+                while (pos < header.size()) {
                     char c = header.at(pos);
                     if (isSeparator(c))
                         break;
@@ -182,7 +148,7 @@ QNetworkReplyHttpImpl::QNetworkReplyHttpImpl(QNetworkAccessManager* const manage
     d->outgoingData = outgoingData;
     d->url = request.url();
 #ifndef QT_NO_SSL
-    if (request.url().scheme() == QLatin1String("https"))
+    if (request.url().scheme() == "https"_L1)
         d->sslConfiguration.reset(new QSslConfiguration(request.sslConfiguration()));
 #endif
 
@@ -360,6 +326,7 @@ qint64 QNetworkReplyHttpImpl::readData(char* data, qint64 maxlen)
             d->error(QNetworkReplyImpl::NetworkError::UnknownContentError,
                      QCoreApplication::translate("QHttp", "Decompression failed: %1")
                              .arg(d->decompressHelper.errorString()));
+            d->decompressHelper.clear();
             return -1;
         }
         if (d->cacheSaveDevice) {
@@ -659,13 +626,11 @@ void QNetworkReplyHttpImplPrivate::postRequest(const QNetworkRequest &newHttpReq
     httpRequest.setRedirectCount(newHttpRequest.maximumRedirectsAllowed());
 
     QString scheme = url.scheme();
-    bool ssl = (scheme == QLatin1String("https")
-                || scheme == QLatin1String("preconnect-https"));
+    bool ssl = (scheme == "https"_L1 || scheme == "preconnect-https"_L1);
     q->setAttribute(QNetworkRequest::ConnectionEncryptedAttribute, ssl);
     httpRequest.setSsl(ssl);
 
-    bool preConnect = (scheme == QLatin1String("preconnect-http")
-                       || scheme == QLatin1String("preconnect-https"));
+    bool preConnect = (scheme == "preconnect-http"_L1 || scheme == "preconnect-https"_L1);
     httpRequest.setPreConnect(preConnect);
 
 #ifndef QT_NO_NETWORKPROXY
@@ -782,7 +747,7 @@ void QNetworkReplyHttpImplPrivate::postRequest(const QNetworkRequest &newHttpReq
         }
     }
 
-    for (const QByteArray &header : qAsConst(headers))
+    for (const QByteArray &header : std::as_const(headers))
         httpRequest.setHeaderField(header, newHttpRequest.rawHeader(header));
 
     if (newHttpRequest.attribute(QNetworkRequest::HttpPipeliningAllowedAttribute).toBool())
@@ -1071,9 +1036,6 @@ void QNetworkReplyHttpImplPrivate::replyDownloadData(QByteArray d)
 
     // cache this, we need it later and it's invalidated when dealing with compressed data
     auto dataSize = d.size();
-    // Grab this to compare later (only relevant for compressed data) in case none of the data
-    // will be propagated to the user
-    const qint64 previousBytesDownloaded = bytesDownloaded;
 
     if (cacheEnabled && isCachingAllowed() && !cacheSaveDevice)
         initCacheSaveDevice();
@@ -1089,6 +1051,7 @@ void QNetworkReplyHttpImplPrivate::replyDownloadData(QByteArray d)
             error(QNetworkReplyImpl::NetworkError::UnknownContentError,
                   QCoreApplication::translate("QHttp", "Decompression failed: %1")
                           .arg(decompressHelper.errorString()));
+            decompressHelper.clear();
             return;
         }
 
@@ -1108,6 +1071,7 @@ void QNetworkReplyHttpImplPrivate::replyDownloadData(QByteArray d)
                     error(QNetworkReplyImpl::NetworkError::UnknownContentError,
                           QCoreApplication::translate("QHttp",
                                                       "Data downloaded is too large to store"));
+                    decompressHelper.clear();
                     return;
                 }
                 d.resize(nextSize);
@@ -1116,6 +1080,7 @@ void QNetworkReplyHttpImplPrivate::replyDownloadData(QByteArray d)
                     error(QNetworkReplyImpl::NetworkError::UnknownContentError,
                           QCoreApplication::translate("QHttp", "Decompression failed: %1")
                                   .arg(decompressHelper.errorString()));
+                    decompressHelper.clear();
                     return;
                 }
             }
@@ -1157,11 +1122,12 @@ void QNetworkReplyHttpImplPrivate::replyDownloadData(QByteArray d)
 
     // This can occur when downloading compressed data as some of the data may be the content
     // encoding's header. Don't emit anything for this.
-    if (previousBytesDownloaded == bytesDownloaded) {
+    if (lastReadyReadEmittedSize == bytesDownloaded) {
         if (readBufferMaxSize)
             emit q->readBufferFreed(dataSize);
         return;
     }
+    lastReadyReadEmittedSize = bytesDownloaded;
 
     QVariant totalSize = cookedHeaders.value(QNetworkRequest::ContentLengthHeader);
 
@@ -1244,13 +1210,12 @@ void QNetworkReplyHttpImplPrivate::onRedirected(const QUrl &redirectUrl, int htt
         // equal to "80", the port component value MUST be preserved;
         // otherwise, if the URI does not contain an explicit port
         // component, the UA MUST NOT add one.
-        url.setScheme(QLatin1String("https"));
+        url.setScheme("https"_L1);
         if (url.port() == 80)
             url.setPort(443);
     }
 
-    const bool isLessSafe = schemeBefore == QLatin1String("https")
-                            && url.scheme() == QLatin1String("http");
+    const bool isLessSafe = schemeBefore == "https"_L1 && url.scheme() == "http"_L1;
     if (httpRequest.redirectPolicy() == QNetworkRequest::NoLessSafeRedirectPolicy
         && isLessSafe) {
         error(QNetworkReply::InsecureRedirectError,
@@ -1326,7 +1291,7 @@ void QNetworkReplyHttpImplPrivate::checkForRedirect(const int statusCode)
         QByteArray header = q->rawHeader("location");
         QUrl url = QUrl(QString::fromUtf8(header));
         if (!url.isValid())
-            url = QUrl(QLatin1String(header));
+            url = QUrl(QLatin1StringView(header));
         q->setAttribute(QNetworkRequest::RedirectionTargetAttribute, url);
     }
 }
@@ -1350,7 +1315,7 @@ void QNetworkReplyHttpImplPrivate::replyDownloadMetaData(const QList<QPair<QByte
     // RFC6797, 8.1
     // If an HTTP response is received over insecure transport, the UA MUST
     // ignore any present STS header field(s).
-    if (url.scheme() == QLatin1String("https") && managerPrivate->stsEnabled)
+    if (url.scheme() == "https"_L1 && managerPrivate->stsEnabled)
         managerPrivate->stsCache.updateFromHeaders(hm, url);
 #endif
     // Download buffer
@@ -1364,6 +1329,11 @@ void QNetworkReplyHttpImplPrivate::replyDownloadMetaData(const QList<QPair<QByte
     q->setAttribute(QNetworkRequest::HttpPipeliningWasUsedAttribute, pu);
     q->setAttribute(QNetworkRequest::Http2WasUsedAttribute, h2Used);
 
+    // A user having manually defined which encodings they accept is, for
+    // somwehat unknown (presumed legacy compatibility) reasons treated as
+    // disabling our decompression:
+    const bool autoDecompress = request.rawHeader("accept-encoding").isEmpty();
+    const bool shouldDecompress = isCompressed && autoDecompress;
     // reconstruct the HTTP header
     QList<QPair<QByteArray, QByteArray> > headerMap = hm;
     QList<QPair<QByteArray, QByteArray> >::ConstIterator it = headerMap.constBegin(),
@@ -1377,7 +1347,7 @@ void QNetworkReplyHttpImplPrivate::replyDownloadMetaData(const QList<QPair<QByte
         if (it->first.toLower() == "location")
             value.clear();
 
-        if (isCompressed && !decompressHelper.isValid()
+        if (shouldDecompress && !decompressHelper.isValid()
             && it->first.compare("content-encoding", Qt::CaseInsensitive) == 0) {
 
             if (!synchronous) // with synchronous all the data is expected to be handled at once
@@ -1747,7 +1717,7 @@ QNetworkCacheMetaData QNetworkReplyHttpImplPrivate::fetchCacheMetaData(const QNe
         // Don't store Warning 1xx headers
         if (header == "warning") {
             QByteArray v = q->rawHeader(header);
-            if (v.length() == 3
+            if (v.size() == 3
                 && v[0] == '1'
                 && v[1] >= '0' && v[1] <= '9'
                 && v[2] >= '0' && v[2] <= '9')
@@ -2154,9 +2124,6 @@ void QNetworkReplyHttpImplPrivate::error(QNetworkReplyImpl::NetworkError code, c
         return;
     }
 
-    if (decompressHelper.isValid())
-        decompressHelper.clear(); // Just get rid of any data that might be stored
-
     errorCode = code;
     q->setErrorString(errorMessage);
 
@@ -2245,3 +2212,5 @@ void QNetworkReplyHttpImplPrivate::completeCacheSave()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qnetworkreplyhttpimpl_p.cpp"

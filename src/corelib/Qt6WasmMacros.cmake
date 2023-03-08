@@ -1,9 +1,9 @@
 # Copy in Qt HTML/JS launch files for apps.
 function(_qt_internal_wasm_add_target_helpers target)
+
+    _qt_test_emscripten_version()
     get_target_property(targetType "${target}" TYPE)
     if("${targetType}" STREQUAL "EXECUTABLE")
-
-        set(APPNAME ${target})
 
         if(QT6_INSTALL_PREFIX)
             set(WASM_BUILD_DIR "${QT6_INSTALL_PREFIX}")
@@ -11,12 +11,29 @@ function(_qt_internal_wasm_add_target_helpers target)
             set(WASM_BUILD_DIR "${QT_BUILD_DIR}")
         endif()
 
+        get_target_property(output_name ${target} OUTPUT_NAME)
+        if(output_name)
+            set(_target_output_name "${output_name}")
+        else()
+            set(_target_output_name "${target}")
+        endif()
+
+        set(APPNAME ${_target_output_name})
+
+        get_target_property(target_output_directory ${target} RUNTIME_OUTPUT_DIRECTORY)
+
+        if(target_output_directory)
+            set(_target_directory "${target_output_directory}")
+        else()
+            set(_target_directory "${CMAKE_CURRENT_BINARY_DIR}")
+        endif()
+
         configure_file("${WASM_BUILD_DIR}/plugins/platforms/wasm_shell.html"
-            "${target}.html")
+            "${_target_directory}/${_target_output_name}.html")
         configure_file("${WASM_BUILD_DIR}/plugins/platforms/qtloader.js"
-            qtloader.js COPYONLY)
+            ${_target_directory}/qtloader.js COPYONLY)
         configure_file("${WASM_BUILD_DIR}/plugins/platforms/qtlogo.svg"
-            qtlogo.svg COPYONLY)
+            ${_target_directory}/qtlogo.svg COPYONLY)
 
         if(QT_FEATURE_thread)
             set(POOL_SIZE 4)
@@ -57,3 +74,21 @@ function(_qt_internal_wasm_add_target_helpers target)
     endif()
 endfunction()
 
+function(_qt_internal_add_wasm_extra_exported_methods target)
+    get_target_property(wasm_extra_exported_methods "${target}" QT_WASM_EXTRA_EXPORTED_METHODS)
+
+    if(NOT wasm_extra_exported_methods)
+        set(wasm_extra_exported_methods ${QT_WASM_EXTRA_EXPORTED_METHODS})
+    endif()
+
+    if(wasm_extra_exported_methods)
+        target_link_options("${target}" PRIVATE
+        "SHELL:-s EXPORTED_RUNTIME_METHODS=UTF16ToString,stringToUTF16,${wasm_extra_exported_methods}"
+        )
+    else()
+        # an errant dangling comma will break this
+        target_link_options("${target}" PRIVATE
+            "SHELL:-s EXPORTED_RUNTIME_METHODS=UTF16ToString,stringToUTF16"
+        )
+    endif()
+endfunction()

@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qmainwindowlayout_p.h"
 
@@ -84,6 +48,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 extern QMainWindowLayout *qt_mainwindow_layout(const QMainWindow *window);
 
 /******************************************************************************
@@ -100,14 +66,14 @@ static void dumpLayout(QTextStream &qout, const QDockAreaLayoutItem &item, QStri
             << "pos: " << item.pos << " size:" << item.size
             << " gap:" << (item.flags & QDockAreaLayoutItem::GapItem)
             << " keepSize:" << (item.flags & QDockAreaLayoutItem::KeepSize) << '\n';
-    indent += QLatin1String("  ");
+    indent += "  "_L1;
     if (item.widgetItem != nullptr) {
         qout << indent << "widget: "
             << item.widgetItem->widget()->metaObject()->className()
             << " \"" << item.widgetItem->widget()->windowTitle() << "\"\n";
     } else if (item.subinfo != nullptr) {
         qout << indent << "subinfo:\n";
-        dumpLayout(qout, *item.subinfo, indent + QLatin1String("  "));
+        dumpLayout(qout, *item.subinfo, indent + "  "_L1);
     } else if (item.placeHolderItem != nullptr) {
         QRect r = item.placeHolderItem->topLevelRect;
         qout << indent << "placeHolder: "
@@ -138,11 +104,11 @@ static void dumpLayout(QTextStream &qout, const QDockAreaLayoutInfo &layout, QSt
 #endif
             << '\n';
 
-    indent += QLatin1String("  ");
+    indent += "  "_L1;
 
-    for (int i = 0; i < layout.item_list.count(); ++i) {
+    for (int i = 0; i < layout.item_list.size(); ++i) {
         qout << indent << "Item: " << i << '\n';
-        dumpLayout(qout, layout.item_list.at(i), indent + QLatin1String("  "));
+        dumpLayout(qout, layout.item_list.at(i), indent + "  "_L1);
     }
 }
 
@@ -155,13 +121,13 @@ static void dumpLayout(QTextStream &qout, const QDockAreaLayout &layout)
             << layout.rect.height() << '\n';
 
     qout << "TopDockArea:\n";
-    dumpLayout(qout, layout.docks[QInternal::TopDock], QLatin1String("  "));
+    dumpLayout(qout, layout.docks[QInternal::TopDock], "  "_L1);
     qout << "LeftDockArea:\n";
-    dumpLayout(qout, layout.docks[QInternal::LeftDock], QLatin1String("  "));
+    dumpLayout(qout, layout.docks[QInternal::LeftDock], "  "_L1);
     qout << "RightDockArea:\n";
-    dumpLayout(qout, layout.docks[QInternal::RightDock], QLatin1String("  "));
+    dumpLayout(qout, layout.docks[QInternal::RightDock], "  "_L1);
     qout << "BottomDockArea:\n";
-    dumpLayout(qout, layout.docks[QInternal::BottomDock], QLatin1String("  "));
+    dumpLayout(qout, layout.docks[QInternal::BottomDock], "  "_L1);
 }
 
 QDebug operator<<(QDebug debug, const QDockAreaLayout &layout)
@@ -400,7 +366,7 @@ QDockWidget *QDockWidgetGroupWindow::activeTabbedDockWidget() const
         }
     }
     if (!dw) {
-        for (int i = 0; !dw && i < info->item_list.count(); ++i) {
+        for (int i = 0; !dw && i < info->item_list.size(); ++i) {
             const QDockAreaLayoutItem &item = info->item_list.at(i);
             if (item.skip())
                 continue;
@@ -1504,7 +1470,7 @@ inline static Qt::DockWidgetArea toDockWidgetArea(int pos)
 #if QT_CONFIG(dockwidget)
 static bool isAreaAllowed(QWidget *widget, const QList<int> &path)
 {
-    Q_ASSERT_X((path.count() > 1), "isAreaAllowed", "invalid path size");
+    Q_ASSERT_X((path.size() > 1), "isAreaAllowed", "invalid path size");
     const Qt::DockWidgetArea area = toDockWidgetArea(path[1]);
 
     // Read permissions directly from a single dock widget
@@ -1519,7 +1485,7 @@ static bool isAreaAllowed(QWidget *widget, const QList<int> &path)
     if (QDockWidgetGroupWindow *dwgw = qobject_cast<QDockWidgetGroupWindow *>(widget)) {
         const QList<QDockWidget *> children = dwgw->findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly);
 
-        if (children.count() == 1) {
+        if (children.size() == 1) {
             // Group window has a single child => read its permissions
             const bool allowed = children.at(0)->isAreaAllowed(area);
             if (!allowed)
@@ -1527,7 +1493,7 @@ static bool isAreaAllowed(QWidget *widget, const QList<int> &path)
             return allowed;
         } else {
             // Group window has more than one or no children => dock it anywhere
-            qCDebug(lcQpaDockWidgets) << "DockWidgetGroupWindow" << widget << "has" << children.count() << "children:";
+            qCDebug(lcQpaDockWidgets) << "DockWidgetGroupWindow" << widget << "has" << children.size() << "children:";
             qCDebug(lcQpaDockWidgets) << children;
             qCDebug(lcQpaDockWidgets) << "DockWidgetGroupWindow" << widget << "can dock at" << area << "and anywhere else.";
             return true;
@@ -1622,9 +1588,9 @@ void QMainWindowLayout::setDocumentMode(bool enabled)
     _documentMode = enabled;
 
     // Update the document mode for all tab bars
-    for (QTabBar *bar : qAsConst(usedTabBars))
+    for (QTabBar *bar : std::as_const(usedTabBars))
         bar->setDocumentMode(_documentMode);
-    for (QTabBar *bar : qAsConst(unusedTabBars))
+    for (QTabBar *bar : std::as_const(unusedTabBars))
         bar->setDocumentMode(_documentMode);
 }
 
@@ -1895,7 +1861,7 @@ QWidget *QMainWindowLayout::getSeparatorWidget()
         result = new QWidget(parentWidget());
         result->setAttribute(Qt::WA_MouseNoMask, true);
         result->setAutoFillBackground(false);
-        result->setObjectName(QLatin1String("qt_qmainwindow_extended_splitter"));
+        result->setObjectName("qt_qmainwindow_extended_splitter"_L1);
     }
     usedSeparatorWidgets.insert(result);
     return result;
@@ -2446,7 +2412,7 @@ QMainWindowLayout::QMainWindowLayout(QMainWindow *mainwindow, QLayout *parentLay
 #endif // QT_CONFIG(dockwidget)
     pluggingWidget = nullptr;
 
-    setObjectName(mainwindow->objectName() + QLatin1String("_layout"));
+    setObjectName(mainwindow->objectName() + "_layout"_L1);
 }
 
 QMainWindowLayout::~QMainWindowLayout()
@@ -2688,6 +2654,21 @@ QLayoutItem *QMainWindowLayout::unplug(QWidget *widget, bool group)
         } else
 #endif // QT_CONFIG(tabwidget)
         {
+            // Dock widget is unplugged from the main window
+            // => geometry needs to be adjusted by separator size
+            switch (dockWidgetArea(dw)) {
+            case Qt::LeftDockWidgetArea:
+            case Qt::RightDockWidgetArea:
+                r.adjust(0, 0, 0, -sep);
+                break;
+            case Qt::TopDockWidgetArea:
+            case Qt::BottomDockWidgetArea:
+                r.adjust(0, 0, -sep, 0);
+                break;
+            case Qt::NoDockWidgetArea:
+            case Qt::DockWidgetArea_Mask:
+                break;
+            }
             dw->d_func()->unplug(r);
         }
     }
@@ -2729,7 +2710,7 @@ void QMainWindowLayout::updateGapIndicator()
         if (!gapIndicator) {
             gapIndicator = new QRubberBand(QRubberBand::Rectangle, expectedParent);
             // For accessibility to identify this special widget.
-            gapIndicator->setObjectName(QLatin1String("qt_rubberband"));
+            gapIndicator->setObjectName("qt_rubberband"_L1);
         } else if (gapIndicator->parent() != expectedParent) {
             gapIndicator->setParent(expectedParent);
         }
@@ -3011,7 +2992,7 @@ bool QMainWindowLayout::restoreState(QDataStream &stream)
 #if QT_CONFIG(dockwidget)
     if (parentWidget()->isVisible()) {
 #if QT_CONFIG(tabbar)
-        for (QTabBar *tab_bar : qAsConst(usedTabBars))
+        for (QTabBar *tab_bar : std::as_const(usedTabBars))
             tab_bar->show();
 
 #endif

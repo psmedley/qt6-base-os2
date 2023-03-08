@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsharedmemory.h"
 #include "qsharedmemory_p.h"
@@ -59,6 +23,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 #if !(defined(QT_NO_SHAREDMEMORY) && defined(QT_NO_SYSTEMSEMAPHORE))
 /*!
@@ -90,22 +56,22 @@ QSharedMemoryPrivate::makePlatformSafeKey(const QString &key,
         // so we can't use the logic below of combining the prefix, key, and a hash,
         // to ensure a unique and valid name. Instead we use the first part of the
         // hash, which should still long enough to avoid collisions in practice.
-        return QLatin1Char('/') + hex.left(SHM_NAME_MAX - 1);
+        return u'/' + hex.left(SHM_NAME_MAX - 1);
     }
 #endif
 
     QString result = prefix;
     for (QChar ch : key) {
-        if ((ch >= QLatin1Char('a') && ch <= QLatin1Char('z')) ||
-           (ch >= QLatin1Char('A') && ch <= QLatin1Char('Z')))
+        if ((ch >= u'a' && ch <= u'z') ||
+           (ch >= u'A' && ch <= u'Z'))
            result += ch;
     }
-    result.append(QLatin1String(hex));
+    result.append(QLatin1StringView(hex));
 
 #ifdef Q_OS_WIN
     return result;
 #elif defined(QT_POSIX_IPC)
-    return QLatin1Char('/') + result;
+    return u'/' + result;
 #elif defined(Q_OS_OS2)
     QString ns;
     if (prefix == QLatin1String("qipc_sharedmemory_")) {
@@ -123,7 +89,7 @@ QSharedMemoryPrivate::makePlatformSafeKey(const QString &key,
         result = result.right(maxlen);
     return ns + result;
 #else
-    return QDir::tempPath() + QLatin1Char('/') + result;
+    return QDir::tempPath() + u'/' + result;
 #endif
 }
 #endif // QT_NO_SHAREDMEMORY && QT_NO_SHAREDMEMORY
@@ -193,6 +159,12 @@ QSharedMemoryPrivate::makePlatformSafeKey(const QString &key,
 
 
     \endlist
+
+  Qt for iOS comes with support for POSIX shared memory out of the box.
+  With Qt for \macos an additional configure flag must be added when
+  building Qt to enable the feature. To enable the feature pass
+  \c {-feature-ipc_posix}  Note that the pre-built Qt libraries for
+  \macos available through the Qt installer do not include this feature.
 
   \endlist
 
@@ -337,7 +309,7 @@ bool QSharedMemoryPrivate::initKey()
     systemSemaphore.setKey(QString(), 1);
     systemSemaphore.setKey(key, 1);
     if (systemSemaphore.error() != QSystemSemaphore::NoError) {
-        QString function = QLatin1String("QSharedMemoryPrivate::initKey");
+        QString function = "QSharedMemoryPrivate::initKey"_L1;
         errorString = QSharedMemory::tr("%1: unable to set key on lock").arg(function);
         switch(systemSemaphore.error()) {
         case QSystemSemaphore::PermissionDenied:
@@ -428,7 +400,7 @@ bool QSharedMemory::create(qsizetype size, AccessMode mode)
 #endif
 #endif
 
-    QString function = QLatin1String("QSharedMemory::create");
+    QString function = "QSharedMemory::create"_L1;
 #ifndef QT_NO_SYSTEMSEMAPHORE
     QSharedMemoryLocker lock(this);
     if (!d->key.isNull() && !d->tryLocker(&lock, function))
@@ -495,7 +467,7 @@ bool QSharedMemory::attach(AccessMode mode)
         return false;
 #ifndef QT_NO_SYSTEMSEMAPHORE
     QSharedMemoryLocker lock(this);
-    if (!d->key.isNull() && !d->tryLocker(&lock, QLatin1String("QSharedMemory::attach")))
+    if (!d->key.isNull() && !d->tryLocker(&lock, "QSharedMemory::attach"_L1))
         return false;
 #endif
 
@@ -539,7 +511,7 @@ bool QSharedMemory::detach()
 
 #ifndef QT_NO_SYSTEMSEMAPHORE
     QSharedMemoryLocker lock(this);
-    if (!d->key.isNull() && !d->tryLocker(&lock, QLatin1String("QSharedMemory::detach")))
+    if (!d->key.isNull() && !d->tryLocker(&lock, "QSharedMemory::detach"_L1))
         return false;
 #endif
 
@@ -608,7 +580,7 @@ bool QSharedMemory::lock()
         d->lockedByMe = true;
         return true;
     }
-    QString function = QLatin1String("QSharedMemory::lock");
+    const auto function = "QSharedMemory::lock"_L1;
     d->errorString = QSharedMemory::tr("%1: unable to lock").arg(function);
     d->error = QSharedMemory::LockError;
     return false;
@@ -630,7 +602,7 @@ bool QSharedMemory::unlock()
     d->lockedByMe = false;
     if (d->systemSemaphore.release())
         return true;
-    QString function = QLatin1String("QSharedMemory::unlock");
+    const auto function = "QSharedMemory::unlock"_L1;
     d->errorString = QSharedMemory::tr("%1: unable to unlock").arg(function);
     d->error = QSharedMemory::LockError;
     return false;

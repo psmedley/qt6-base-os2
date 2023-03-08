@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qaccessiblewidgets_p.h"
 #include "qabstracttextdocumentlayout.h"
@@ -92,9 +56,11 @@
 #include <QMenu>
 #endif
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QString qt_accStripAmp(const QString &text);
 QString qt_accHotKey(const QString &text);
@@ -114,8 +80,8 @@ QList<QWidget*> childWidgets(const QWidget *widget)
 #if QT_CONFIG(menu)
               && !qobject_cast<QMenu*>(w)
 #endif
-              && objectName != QLatin1String("qt_rubberband")
-              && objectName != QLatin1String("qt_qmainwindow_extended_splitter")) {
+              && objectName != "qt_rubberband"_L1
+              && objectName != "qt_qmainwindow_extended_splitter"_L1) {
             widgets.append(w);
         }
     }
@@ -393,7 +359,7 @@ QAccessibleMdiArea::QAccessibleMdiArea(QWidget *widget)
 
 int QAccessibleMdiArea::childCount() const
 {
-    return mdiArea()->subWindowList().count();
+    return mdiArea()->subWindowList().size();
 }
 
 QAccessibleInterface *QAccessibleMdiArea::child(int index) const
@@ -432,7 +398,7 @@ QString QAccessibleMdiSubWindow::text(QAccessible::Text textType) const
 {
     if (textType == QAccessible::Name) {
         QString title = mdiSubWindow()->windowTitle();
-        title.replace(QLatin1String("[*]"), QLatin1String(""));
+        title.replace("[*]"_L1, ""_L1);
         return title;
     }
     return QAccessibleWidget::text(textType);
@@ -570,7 +536,7 @@ QCalendarWidget *QAccessibleCalendarWidget::calendarWidget() const
 QAbstractItemView *QAccessibleCalendarWidget::calendarView() const
 {
     for (QObject *child : calendarWidget()->children()) {
-        if (child->objectName() == QLatin1String("qt_calendar_calendarview"))
+        if (child->objectName() == "qt_calendar_calendarview"_L1)
             return static_cast<QAbstractItemView *>(child);
     }
     return nullptr;
@@ -579,7 +545,7 @@ QAbstractItemView *QAccessibleCalendarWidget::calendarView() const
 QWidget *QAccessibleCalendarWidget::navigationBar() const
 {
     for (QObject *child : calendarWidget()->children()) {
-        if (child->objectName() == QLatin1String("qt_calendar_navigationbar"))
+        if (child->objectName() == "qt_calendar_navigationbar"_L1)
             return static_cast<QWidget *>(child);
     }
     return nullptr;
@@ -761,7 +727,7 @@ class AttributeFormatterRef {
 public:
     template <typename RHS>
     void operator=(RHS &&rhs)
-    { string += QLatin1String(key) + QLatin1Char(':') + std::forward<RHS>(rhs) + QLatin1Char(';'); }
+    { string += QLatin1StringView(key) + u':' + std::forward<RHS>(rhs) + u';'; }
 };
 
 /*!
@@ -769,7 +735,7 @@ public:
     \brief Small string-builder class that supports a map-like API to serialize key-value pairs.
     \code
     AttributeFormatter attrs;
-    attrs["foo"] = QLatinString("hello") + world + QLatin1Char('!');
+    attrs["foo"] = QLatinString("hello") + world + u'!';
     \endcode
     The key type is always \c{const char*}, and the right-hand-side can
     be any QStringBuilder expression.
@@ -852,13 +818,13 @@ QString QAccessibleTextWidget::attributes(int offset, int *startOffset, int *end
     AttributeFormatter attrs;
     QString family = charFormatFont.families().value(0, QString());
     if (!family.isEmpty()) {
-        family = family.replace(u'\\', QLatin1String("\\\\"));
-        family = family.replace(u':', QLatin1String("\\:"));
-        family = family.replace(u',', QLatin1String("\\,"));
-        family = family.replace(u'=', QLatin1String("\\="));
-        family = family.replace(u';', QLatin1String("\\;"));
-        family = family.replace(u'\"', QLatin1String("\\\""));
-        attrs["font-family"] = QLatin1Char('"') + family + QLatin1Char('"');
+        family = family.replace(u'\\', "\\\\"_L1);
+        family = family.replace(u':', "\\:"_L1);
+        family = family.replace(u',', "\\,"_L1);
+        family = family.replace(u'=', "\\="_L1);
+        family = family.replace(u';', "\\;"_L1);
+        family = family.replace(u'\"', "\\\""_L1);
+        attrs["font-family"] = u'"' + family + u'"';
     }
 
     int fontSize = int(charFormatFont.pointSize());
@@ -966,7 +932,7 @@ QString QAccessibleTextWidget::text(int startOffset, int endOffset) const
     cursor.setPosition(startOffset, QTextCursor::MoveAnchor);
     cursor.setPosition(endOffset, QTextCursor::KeepAnchor);
 
-    return cursor.selectedText().replace(QChar(QChar::ParagraphSeparator), QLatin1Char('\n'));
+    return cursor.selectedText().replace(QChar(QChar::ParagraphSeparator), u'\n');
 }
 
 QPoint QAccessibleTextWidget::scrollBarPosition() const
@@ -1106,7 +1072,7 @@ QAccessibleMainWindow::QAccessibleMainWindow(QWidget *widget)
 QAccessibleInterface *QAccessibleMainWindow::child(int index) const
 {
     QList<QWidget*> kids = childWidgets(mainWindow());
-    if (index >= 0 && index < kids.count()) {
+    if (index >= 0 && index < kids.size()) {
         return QAccessible::queryAccessibleInterface(kids.at(index));
     }
     return nullptr;
@@ -1115,7 +1081,7 @@ QAccessibleInterface *QAccessibleMainWindow::child(int index) const
 int QAccessibleMainWindow::childCount() const
 {
     QList<QWidget*> kids = childWidgets(mainWindow());
-    return kids.count();
+    return kids.size();
 }
 
 int QAccessibleMainWindow::indexOfChild(const QAccessibleInterface *iface) const
@@ -1152,4 +1118,4 @@ QMainWindow *QAccessibleMainWindow::mainWindow() const
 
 QT_END_NAMESPACE
 
-#endif // QT_NO_ACCESSIBILITY
+#endif // QT_CONFIG(accessibility)

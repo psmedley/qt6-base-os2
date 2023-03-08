@@ -1,35 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include <qtconcurrentthreadengine.h>
 #include <qexception.h>
 #include <QThread>
 #include <QElapsedTimer>
 #include <QTest>
+#include <QSet>
 
 using namespace QtConcurrent;
 
@@ -258,7 +234,7 @@ void tst_QtConcurrentThreadEngine::threadCount()
     const int repeats = 10;
     for (int i = 0; i < repeats; ++i) {
         (new ThreadCountUser())->startAsynchronously().waitForFinished();
-        const auto count = threads.count();
+        const auto count = threads.size();
         const auto maxThreadCount = QThreadPool::globalInstance()->maxThreadCount();
         QVERIFY(count <= maxThreadCount);
         QVERIFY(!threads.contains(QThread::currentThread()));
@@ -267,7 +243,7 @@ void tst_QtConcurrentThreadEngine::threadCount()
     // Set the finish flag immediately, this should give us one thread only.
     for (int i = 0; i < repeats; ++i) {
         (new ThreadCountUser(true /*finishImmediately*/))->startAsynchronously().waitForFinished();
-        const auto count = threads.count();
+        const auto count = threads.size();
         QCOMPARE(count, 1);
         QVERIFY(!threads.contains(QThread::currentThread()));
     }
@@ -295,7 +271,7 @@ void tst_QtConcurrentThreadEngine::multipleResults()
 {
     MultipleResultsUser *engine =  new MultipleResultsUser();
     QFuture<int> f = engine->startAsynchronously();
-    QCOMPARE(f.results().count() , 10);
+    QCOMPARE(f.results().size() , 10);
     QCOMPARE(f.resultAt(0), 0);
     QCOMPARE(f.resultAt(5), 5);
     QCOMPARE(f.resultAt(9), 9);

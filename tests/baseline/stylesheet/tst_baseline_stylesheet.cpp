@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <qbaselinetest.h>
 #include <qwidgetbaselinetest.h>
@@ -185,19 +160,29 @@ void tst_Stylesheet::tst_QTreeView()
     tw->header()->hide();
     layout->addWidget(tw);
 
-    for (int i = 0; i < 6; ++i) {
+    enum {
+        Unchecked           = 0,
+        Checked             = 1,
+        Children            = 2,
+        Disabled            = 3,
+        CheckedDisabled     = 4,
+        ChildrenDisabled    = 5,
+        NConfigs
+    };
+
+    for (int i = 0; i < NConfigs; ++i) {
         QTreeWidgetItem *topLevelItem = new QTreeWidgetItem(tw, QStringList{QString("top %1").arg(i)});
         switch (i) {
-        case 0:
-        case 3:
+        case Unchecked:
+        case Disabled:
             topLevelItem->setCheckState(0, Qt::Unchecked);
             break;
-        case 1:
-        case 4:
+        case Checked:
+        case CheckedDisabled:
             topLevelItem->setCheckState(0, Qt::Checked);
             break;
-        case 2:
-        case 5:
+        case Children:
+        case ChildrenDisabled:
             topLevelItem->setCheckState(0, Qt::PartiallyChecked);
             topLevelItem->setExpanded(true);
             for (int j = 0; j < 2; ++j) {
@@ -206,7 +191,7 @@ void tst_Stylesheet::tst_QTreeView()
             }
             break;
         }
-        topLevelItem->setDisabled(i > 2);
+        topLevelItem->setDisabled(i >= Disabled);
     }
     testWindow()->setLayout(layout);
     tw->setRootIsDecorated(true);
@@ -215,6 +200,9 @@ void tst_Stylesheet::tst_QTreeView()
     QBASELINE_CHECK_DEFERRED(takeSnapshot(), "rootDecorated");
     tw->setRootIsDecorated(false);
     QBASELINE_CHECK_DEFERRED(takeSnapshot(), "rootNotDecorated");
+
+    tw->topLevelItem(Children)->child(0)->setSelected(true);
+    QBASELINE_CHECK_DEFERRED(takeSnapshot(), "itemSelected");
 }
 
 #define main _realmain

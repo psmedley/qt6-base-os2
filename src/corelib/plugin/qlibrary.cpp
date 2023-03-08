@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2021 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2021 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #include "qlibrary.h"
 #include "qlibrary_p.h"
 
@@ -67,6 +31,8 @@
 #include <qtcore_tracepoints_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // On Unix systema and on Windows with MinGW, we can mix and match debug and
 // release plugins without problems. (unless compiled in debug-and-release mode
@@ -209,6 +175,8 @@ static QLibraryScanResult qt_find_pattern(const char *s, qsizetype s_len, QStrin
     return QMachOParser::parse(s, s_len, errMsg);
 #elif defined(Q_OS_WIN)
     return QCoffPeParser::parse({s, s_len}, errMsg);
+#else
+#   warning "Qt does not know how to efficiently parse your platform's binary format; using slow fall-back."
 #endif
     static constexpr auto matcher = [] {
         // QPluginMetaData::MagicString is not NUL-terminated, but
@@ -350,9 +318,9 @@ private:
     LibraryMap libraryMap;
 };
 
-static QBasicMutex qt_library_mutex;
-static QLibraryStore *qt_library_data = nullptr;
-static bool qt_library_data_once;
+Q_CONSTINIT static QBasicMutex qt_library_mutex;
+Q_CONSTINIT static QLibraryStore *qt_library_data = nullptr;
+Q_CONSTINIT static bool qt_library_data_once;
 
 QLibraryStore::~QLibraryStore()
 {
@@ -394,7 +362,7 @@ inline void QLibraryStore::cleanup()
 
     // dump all objects that remain
     if (lcDebugLibrary().isDebugEnabled()) {
-        for (QLibraryPrivate *lib : qAsConst(data->libraryMap)) {
+        for (QLibraryPrivate *lib : std::as_const(data->libraryMap)) {
             if (lib)
                 qDebug(lcDebugLibrary)
                         << "On QtCore unload," << lib->fileName << "was leaked, with"
@@ -626,11 +594,11 @@ QtPluginInstanceFunction QLibraryPrivate::loadPlugin()
 bool QLibrary::isLibrary(const QString &fileName)
 {
 #if defined(Q_OS_DOSLIKE)
-    return fileName.endsWith(QLatin1String(".dll"), Qt::CaseInsensitive);
+    return fileName.endsWith(".dll"_L1, Qt::CaseInsensitive);
 #else // Generic Unix
 # if defined(Q_OS_DARWIN)
     // On Apple platforms, dylib look like libmylib.1.0.0.dylib
-    if (fileName.endsWith(QLatin1String(".dylib")))
+    if (fileName.endsWith(".dylib"_L1))
         return true;
 # endif
     QString completeSuffix = QFileInfo(fileName).completeSuffix();
@@ -638,25 +606,25 @@ bool QLibrary::isLibrary(const QString &fileName)
         return false;
 
     // if this throws an empty-array error, you need to fix the #ifdef's:
-    const QLatin1String candidates[] = {
+    const QLatin1StringView candidates[] = {
 # if defined(Q_OS_HPUX)
 /*
     See "HP-UX Linker and Libraries User's Guide", section "Link-time Differences between PA-RISC and IPF":
     "In PA-RISC (PA-32 and PA-64) shared libraries are suffixed with .sl. In IPF (32-bit and 64-bit),
     the shared libraries are suffixed with .so. For compatibility, the IPF linker also supports the .sl suffix."
 */
-        QLatin1String("sl"),
+        "sl"_L1,
 #  if defined __ia64
-        QLatin1String("so"),
+        "so"_L1,
 #  endif
 # elif defined(Q_OS_AIX)
-        QLatin1String("a"),
-        QLatin1String("so"),
+        "a"_L1,
+        "so"_L1,
 # elif defined(Q_OS_DARWIN)
-        QLatin1String("so"),
-        QLatin1String("bundle"),
+        "so"_L1,
+        "bundle"_L1,
 # elif defined(Q_OS_UNIX)
-        QLatin1String("so"),
+        "so"_L1,
 # endif
     }; // candidates
 
@@ -739,7 +707,7 @@ void QLibraryPrivate::updatePluginState()
     bool success = false;
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
-    if (fileName.endsWith(QLatin1String(".debug"))) {
+    if (fileName.endsWith(".debug"_L1)) {
         // refuse to load a file that ends in .debug
         // these are the debug symbols from the libraries
         // the problem is that they are valid shared library files
@@ -787,7 +755,7 @@ void QLibraryPrivate::updatePluginState()
                  QString::number((qt_version & 0xff0000) >> 16),
                  QString::number((qt_version & 0xff00) >> 8),
                  QString::number(qt_version & 0xff),
-                 debug ? QLatin1String("debug") : QLatin1String("release"));
+                 debug ? "debug"_L1 : "release"_L1);
     } else if (PluginMustMatchQtDebug && debug != QtBuildIsDebug) {
         //don't issue a qWarning since we will hopefully find a non-debug? --Sam
         errorString = QLibrary::tr("The plugin '%1' uses incompatible Qt library."
@@ -946,13 +914,7 @@ QLibrary::~QLibrary()
 
 void QLibrary::setFileName(const QString &fileName)
 {
-    QLibrary::LoadHints lh;
-    if (d) {
-        lh = d->loadHints();
-        d->release();
-        d = {};
-    }
-    d = QLibraryPrivate::findOrCreate(fileName, QString(), lh);
+    setFileNameAndVersion(fileName, QString());
 }
 
 QString QLibrary::fileName() const
@@ -975,13 +937,7 @@ QString QLibrary::fileName() const
 */
 void QLibrary::setFileNameAndVersion(const QString &fileName, int verNum)
 {
-    QLibrary::LoadHints lh;
-    if (d) {
-        lh = d->loadHints();
-        d->release();
-        d = {};
-    }
-    d = QLibraryPrivate::findOrCreate(fileName, verNum >= 0 ? QString::number(verNum) : QString(), lh);
+    setFileNameAndVersion(fileName, verNum >= 0 ? QString::number(verNum) : QString());
 }
 
 /*!
@@ -999,9 +955,10 @@ void QLibrary::setFileNameAndVersion(const QString &fileName, const QString &ver
     if (d) {
         lh = d->loadHints();
         d->release();
-        d = {};
     }
-    d = QLibraryPrivate::findOrCreate(fileName, version, lh);
+    QLibraryPrivate *dd = QLibraryPrivate::findOrCreate(fileName, version, lh);
+    d = dd;
+    d.setTag(isLoaded() ? Loaded : NotLoaded);
 }
 
 /*!

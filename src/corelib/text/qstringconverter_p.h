@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2020 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2020 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QSTRINGCONVERTER_P_H
 #define QSTRINGCONVERTER_P_H
@@ -55,11 +19,14 @@
 #include <QtCore/qstring.h>
 #include <QtCore/qendian.h>
 #include <QtCore/qstringconverter.h>
+#include <QtCore/private/qglobal_p.h>
 
 QT_BEGIN_NAMESPACE
 
 #ifndef __cpp_char8_t
-enum char8_t : uchar {};
+enum qchar8_t : uchar {};
+#else
+using qchar8_t = char8_t;
 #endif
 
 struct QUtf8BaseTraits
@@ -73,25 +40,25 @@ struct QUtf8BaseTraits
     static void appendByte(uchar *&ptr, uchar b)
     { *ptr++ = b; }
 
-    static void appendByte(char8_t *&ptr, char8_t b)
+    static void appendByte(qchar8_t *&ptr, qchar8_t b)
     { *ptr++ = b; }
 
     static uchar peekByte(const uchar *ptr, qsizetype n = 0)
     { return ptr[n]; }
 
-    static uchar peekByte(const char8_t *ptr, qsizetype n = 0)
+    static uchar peekByte(const qchar8_t *ptr, qsizetype n = 0)
     { return ptr[n]; }
 
     static qptrdiff availableBytes(const uchar *ptr, const uchar *end)
     { return end - ptr; }
 
-    static qptrdiff availableBytes(const char8_t *ptr, const char8_t *end)
+    static qptrdiff availableBytes(const qchar8_t *ptr, const qchar8_t *end)
     { return end - ptr; }
 
     static void advanceByte(const uchar *&ptr, qsizetype n = 1)
     { ptr += n; }
 
-    static void advanceByte(const char8_t *&ptr, qsizetype n = 1)
+    static void advanceByte(const qchar8_t *&ptr, qsizetype n = 1)
     { ptr += n; }
 
     static void appendUtf16(char16_t *&ptr, char16_t uc)
@@ -309,7 +276,7 @@ struct QUtf8
     };
     static ValidUtf8Result isValidUtf8(QByteArrayView in);
     static int compareUtf8(QByteArrayView utf8, QStringView utf16) noexcept;
-    static int compareUtf8(QByteArrayView utf8, QLatin1String s);
+    static int compareUtf8(QByteArrayView utf8, QLatin1StringView s);
 };
 
 struct QUtf16
@@ -336,8 +303,32 @@ struct Q_CORE_EXPORT QLocal8Bit
     static QByteArray convertFromUnicode(QStringView in, QStringConverter::State *state)
     { return QUtf8::convertFromUnicode(in, state); }
 #else
-    static QString convertToUnicode(QByteArrayView, QStringConverter::State *);
-    static QByteArray convertFromUnicode(QStringView, QStringConverter::State *);
+    static int checkUtf8();
+    static bool isUtf8()
+    {
+        Q_CONSTINIT
+        static QBasicAtomicInteger<qint8> result = { 0 };
+        int r = result.loadRelaxed();
+        if (r == 0) {
+            r = checkUtf8();
+            result.storeRelaxed(r);
+        }
+        return r > 0;
+    }
+    static QString convertToUnicode_sys(QByteArrayView, QStringConverter::State *);
+    static QString convertToUnicode(QByteArrayView in, QStringConverter::State *state)
+    {
+        if (isUtf8())
+            return QUtf8::convertToUnicode(in, state);
+        return convertToUnicode_sys(in, state);
+    }
+    static QByteArray convertFromUnicode_sys(QStringView, QStringConverter::State *);
+    static QByteArray convertFromUnicode(QStringView in, QStringConverter::State *state)
+    {
+        if (isUtf8())
+            return QUtf8::convertFromUnicode(in, state);
+        return convertFromUnicode_sys(in, state);
+    }
 #endif
 };
 

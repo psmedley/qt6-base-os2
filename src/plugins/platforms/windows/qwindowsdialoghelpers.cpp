@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #define QT_NO_URL_CAST_FROM_STRING 1
 
@@ -78,6 +42,8 @@
 // #define USE_NATIVE_COLOR_DIALOG /* Testing purposes only */
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 #ifndef QT_NO_DEBUG_STREAM
 /* Output UID (IID, CLSID) as C++ constants.
@@ -237,18 +203,16 @@ QWindowsDialogHelperBase<BaseClass>::~QWindowsDialogHelperBase()
 template <class BaseClass>
 void QWindowsDialogHelperBase<BaseClass>::cleanupThread()
 {
-    if (m_thread) { // Thread may be running if the dialog failed to close.
-        if (m_thread->isRunning())
-            m_thread->wait(500);
-        if (m_thread->isRunning()) {
-            m_thread->terminate();
-            m_thread->wait(300);
-            if (m_thread->isRunning())
-                qCCritical(lcQpaDialogs) <<__FUNCTION__ << "Failed to terminate thread.";
-            else
-                qCWarning(lcQpaDialogs) << __FUNCTION__ << "Thread terminated.";
-        }
-        delete m_thread;
+    if (m_thread) {
+        // Thread may be running if the dialog failed to close. Give it a bit
+        // to exit, but let it be a memory leak if that fails. We must not
+        // terminate the thread, it might be stuck in Comdlg32 or an IModalWindow
+        // implementation, and we might end up dead-locking the application if the thread
+        // holds a mutex or critical section.
+        if (m_thread->wait(500))
+            delete m_thread;
+        else
+            qCCritical(lcQpaDialogs) <<__FUNCTION__ << "Thread failed to finish.";
         m_thread = nullptr;
     }
 }
@@ -580,8 +544,18 @@ QWindowsShellItem::QWindowsShellItem(IShellItem *item)
     : m_item(item)
     , m_attributes(0)
 {
-    if (FAILED(item->GetAttributes(SFGAO_CAPABILITYMASK | SFGAO_DISPLAYATTRMASK | SFGAO_CONTENTSMASK | SFGAO_STORAGECAPMASK, &m_attributes)))
+    SFGAOF mask = (SFGAO_CAPABILITYMASK | SFGAO_CONTENTSMASK | SFGAO_STORAGECAPMASK);
+
+    // Check for attributes which might be expensive to enumerate for subfolders
+    if (FAILED(item->GetAttributes((SFGAO_STREAM | SFGAO_COMPRESSED), &m_attributes))) {
         m_attributes = 0;
+    } else {
+        // If the item is compressed or stream, skip expensive subfolder test
+        if (m_attributes & (SFGAO_STREAM | SFGAO_COMPRESSED))
+            mask &= ~SFGAO_HASSUBFOLDER;
+        if (FAILED(item->GetAttributes(mask, &m_attributes)))
+            m_attributes = 0;
+    }
 }
 
 QString QWindowsShellItem::path() const
@@ -621,7 +595,7 @@ QUrl QWindowsShellItem::url() const
         return urlV;
     // Last resort: encode the absolute desktop parsing id as data URL
     const QString data = QStringLiteral("data:text/plain;base64,")
-        + QLatin1String(desktopAbsoluteParsing().toLatin1().toBase64());
+        + QLatin1StringView(desktopAbsoluteParsing().toLatin1().toBase64());
     return QUrl(data);
 }
 
@@ -654,14 +628,14 @@ QWindowsShellItem::IShellItems QWindowsShellItem::itemsFromItemArray(IShellItemA
 bool QWindowsShellItem::copyData(QIODevice *out, QString *errorMessage)
 {
     if (!canStream()) {
-        *errorMessage = QLatin1String("Item not streamable");
+        *errorMessage = "Item not streamable"_L1;
         return false;
     }
     IStream *istream = nullptr;
     HRESULT hr = m_item->BindToHandler(nullptr, BHID_Stream, IID_PPV_ARGS(&istream));
     if (FAILED(hr)) {
-        *errorMessage = QLatin1String("BindToHandler() failed: ")
-                        + QLatin1String(QWindowsContext::comErrorString(hr));
+        *errorMessage = "BindToHandler() failed: "_L1
+                        + QLatin1StringView(QWindowsContext::comErrorString(hr));
         return false;
     }
     enum : ULONG { bufSize = 102400 };
@@ -677,8 +651,8 @@ bool QWindowsShellItem::copyData(QIODevice *out, QString *errorMessage)
     }
     istream->Release();
     if (hr != S_OK && hr != S_FALSE) {
-        *errorMessage = QLatin1String("Read() failed: ")
-                        + QLatin1String(QWindowsContext::comErrorString(hr));
+        *errorMessage = "Read() failed: "_L1
+                        + QLatin1StringView(QWindowsContext::comErrorString(hr));
         return false;
     }
     return true;
@@ -1041,7 +1015,7 @@ static QList<FilterSpec> filterSpecs(const QStringList &filters,
 #if QT_CONFIG(regularexpression)
         filterSpec.filter.replace(filterSeparatorRE, separator);
 #else
-        filterSpec.filter.replace(QLatin1Char(' '), QLatin1Char(';'));
+        filterSpec.filter.replace(u' ', u';');
 #endif
         filterSpec.description = filterString;
         if (hideFilterDetails && openingParenPos != -1) { // Do not show pattern in description
@@ -1391,7 +1365,7 @@ Q_GLOBAL_STATIC(QStringList, temporaryItemCopies)
 
 static void cleanupTemporaryItemCopies()
 {
-    for (const QString &file : qAsConst(*temporaryItemCopies()))
+    for (const QString &file : std::as_const(*temporaryItemCopies()))
         QFile::remove(file);
 }
 
@@ -1427,14 +1401,14 @@ QString tempFilePattern(QString name)
 static QString createTemporaryItemCopy(QWindowsShellItem &qItem, QString *errorMessage)
 {
     if (!qItem.canStream()) {
-        *errorMessage = QLatin1String("Item not streamable");
+        *errorMessage = "Item not streamable"_L1;
         return QString();
     }
 
     QTemporaryFile targetFile(tempFilePattern(qItem.normalDisplay()));
     targetFile.setAutoRemove(false);
     if (!targetFile.open())  {
-        *errorMessage = QLatin1String("Cannot create temporary file: ")
+        *errorMessage = "Cannot create temporary file: "_L1
                         + targetFile.errorString();
         return QString();
     }

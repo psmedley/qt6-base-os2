@@ -57,11 +57,18 @@ function(qt_generate_qconfig_cpp in_file out_file)
     # Expected output is something like
     #   C:/work/qt/install
     # so it includes a drive letter and forward slashes.
-    set(QT_CONFIGURE_PREFIX_PATH_STR "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}")
-    if(CMAKE_HOST_WIN32)
-        get_filename_component(
-            QT_CONFIGURE_PREFIX_PATH_STR
-            "${QT_CONFIGURE_PREFIX_PATH_STR}" REALPATH)
+    if(QT_FEATURE_relocatable)
+        # A relocatable Qt does not need a hardcoded prefix path.
+        # This makes reproducible builds a closer reality, because we don't embed a CI path
+        # into the binaries.
+        set(QT_CONFIGURE_PREFIX_PATH_STR "")
+    else()
+        set(QT_CONFIGURE_PREFIX_PATH_STR "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}")
+        if(CMAKE_HOST_WIN32)
+            get_filename_component(
+                QT_CONFIGURE_PREFIX_PATH_STR
+                "${QT_CONFIGURE_PREFIX_PATH_STR}" REALPATH)
+        endif()
     endif()
 
     configure_file(${in_file} ${out_file} @ONLY)
@@ -78,7 +85,7 @@ function(qt_generate_qmake_and_qtpaths_wrapper_for_target)
 
     # Call the configuration file something else but qt.conf to avoid
     # being picked up by the qmake executable that's created if
-    # QT_BUILD_TOOLS_WHEN_CROSSCOMPILING is enabled.
+    # QT_FORCE_BUILD_TOOLS is enabled.
     qt_path_join(qt_conf_path "${INSTALL_BINDIR}" "target_qt.conf")
 
     set(prefix "${CMAKE_INSTALL_PREFIX}")
@@ -88,7 +95,8 @@ function(qt_generate_qmake_and_qtpaths_wrapper_for_target)
         "${host_prefix}")
     file(RELATIVE_PATH ext_prefix_relative_to_conf_file "${ext_prefix}/${INSTALL_BINDIR}"
         "${ext_prefix}")
-    file(RELATIVE_PATH ext_prefix_relative_to_host_prefix "${host_prefix}" "${ext_prefix}")
+    file(RELATIVE_PATH ext_datadir_relative_to_host_prefix "${host_prefix}"
+        "${ext_prefix}/${INSTALL_MKSPECSDIR}/..")
 
     set(content "")
 
@@ -120,7 +128,10 @@ Prefix=${prefix}
         "[Paths]
 Prefix=${ext_prefix_relative_to_conf_file}
 HostPrefix=${host_prefix_relative_to_conf_file}
-HostData=${ext_prefix_relative_to_host_prefix}
+HostBinaries=${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_BINDIR}
+HostLibraries=${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_LIBDIR}
+HostLibraryExecutables=${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_LIBEXECDIR}
+HostData=${ext_datadir_relative_to_host_prefix}
 Sysroot=${sysroot}
 SysrootifyPrefix=${sysrootify_prefix}
 TargetSpec=${QT_QMAKE_TARGET_MKSPEC}
@@ -139,7 +150,7 @@ HostSpec=${QT_QMAKE_HOST_MKSPEC}
     endif()
 
     set(wrapper_prefix)
-    if(QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
+    if(QT_FORCE_BUILD_TOOLS)
         # Avoid collisions with the cross-compiled qmake/qtpaths binaries.
         set(wrapper_prefix "host-")
     endif()

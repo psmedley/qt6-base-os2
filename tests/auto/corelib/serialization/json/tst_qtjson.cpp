@@ -1,33 +1,10 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2021 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2022 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
+#include <QMap>
+#include <QVariantList>
 
 QT_WARNING_DISABLE_DEPRECATED
 
@@ -177,6 +154,8 @@ private Q_SLOTS:
     void fromToVariantConversions();
 
     void testIteratorComparison();
+
+    void noLeakOnNameClash_data();
     void noLeakOnNameClash();
 
 private:
@@ -405,7 +384,7 @@ void tst_QtJson::testNumbers_2()
             QVERIFY2(floatValues_1[index - 1] == (floatValues_1[index] * 2), QString("Value should be double adjacent value at index %1").arg(index).toLatin1());
         }
     } else {
-        QSKIP("Skipping 'denorm' as this type lacks denormals on this system");
+        qInfo("Skipping denormal test as this system's double type lacks support");
     }
 }
 
@@ -961,7 +940,7 @@ void tst_QtJson::testValueRef()
     QCOMPARE(object.value(QLatin1String("null")), QJsonValue());
     object[QLatin1String("null")] = 100.;
     QCOMPARE(object.value(QLatin1String("null")).type(), QJsonValue::Double);
-    QJsonValue val = qAsConst(object)[QLatin1String("null")];
+    QJsonValue val = std::as_const(object)[QLatin1String("null")];
     QCOMPARE(val.toDouble(), 100.);
     QCOMPARE(object.size(), 2);
 
@@ -1035,8 +1014,9 @@ void tst_QtJson::testObjectIteration()
     for (QJsonObject::iterator it = object.begin(); it != object.end(); ++it)
         QFAIL("Iterator after property add-and-remove should be empty");
 
-    for (int i = 0; i < 10; ++i)
-        object[QString::number(i)] = (double)i;
+    // insert in weird order to confirm keys are sorted
+    for (int i : {0, 9, 5, 7, 8, 2, 1, 3, 6, 4})
+        object[QString::number(i)] = double(i);
 
     QCOMPARE(object.size(), 10);
 
@@ -1052,14 +1032,37 @@ void tst_QtJson::testObjectIteration()
         QCOMPARE(object, object2);
 
         QJsonValue val = *object2.begin();
-        object2.erase(object2.begin());
+        auto next = object2.erase(object2.begin());
         QCOMPARE(object.size(), 10);
         QCOMPARE(object2.size(), 9);
+        QVERIFY(next == object2.begin());
 
-        for (QJsonObject::const_iterator it = object2.constBegin(); it != object2.constEnd(); ++it) {
+        double d = 1;   // we erased the first item
+        for (auto it = object2.constBegin(); it != object2.constEnd(); ++it, d += 1) {
             QJsonValue value = it.value();
             QVERIFY(it.value() != val);
-            QCOMPARE((double)it.key().toInt(), value.toDouble());
+            QCOMPARE(it.value(), d);
+            QCOMPARE(it.value().toDouble(), d);
+            QCOMPARE(it.key().toInt(), value.toDouble());
+        }
+    }
+
+    {
+        QJsonObject object2 = object;
+        QCOMPARE(object, object2);
+
+        QJsonValue val = *(object2.end() - 1);
+        auto next = object2.erase(object2.end() - 1);
+        QCOMPARE(object.size(), 10);
+        QCOMPARE(object2.size(), 9);
+        QVERIFY(next == object2.end());
+        double d = 0;
+        for (auto it = object2.constBegin(); it != object2.constEnd(); ++it, d += 1) {
+            QJsonValue value = it.value();
+            QVERIFY(it.value() != val);
+            QCOMPARE(it.value(), d);
+            QCOMPARE(it.value().toDouble(), d);
+            QCOMPARE(it.key().toInt(), value.toDouble());
         }
     }
 
@@ -1069,14 +1072,20 @@ void tst_QtJson::testObjectIteration()
 
         QJsonObject::iterator it = object2.find(QString::number(5));
         QJsonValue val = *it;
-        object2.erase(it);
+        auto next = object2.erase(it);
         QCOMPARE(object.size(), 10);
         QCOMPARE(object2.size(), 9);
+        QCOMPARE(*next, 6);
 
-        for (QJsonObject::const_iterator it = object2.constBegin(); it != object2.constEnd(); ++it) {
+        int i = 0;
+        for (auto it = object2.constBegin(); it != object2.constEnd(); ++it, ++i) {
+            if (i == 5)
+                ++i;
             QJsonValue value = it.value();
             QVERIFY(it.value() != val);
-            QCOMPARE((double)it.key().toInt(), value.toDouble());
+            QCOMPARE(it.value(), i);
+            QCOMPARE(it.value().toInt(), i);
+            QCOMPARE(it.key().toInt(), value.toDouble());
         }
     }
 
@@ -1132,14 +1141,38 @@ void tst_QtJson::testArrayIteration()
         QCOMPARE(array, array2);
 
         QJsonValue val = *array2.begin();
-        array2.erase(array2.begin());
+        auto next = array2.erase(array2.begin());
         QCOMPARE(array.size(), 10);
         QCOMPARE(array2.size(), 9);
+        QVERIFY(next == array2.begin());
 
         i = 1;
-        for (QJsonArray::const_iterator it = array2.constBegin(); it != array2.constEnd(); ++it, ++i) {
+        for (auto it = array2.constBegin(); it != array2.constEnd(); ++it, ++i) {
             QJsonValue value = (*it);
-            QCOMPARE((double)i, value.toDouble());
+            QCOMPARE(value.toInt(), i);
+            QCOMPARE(value.toDouble(), i);
+            QCOMPARE(it->toInt(), i);
+            QCOMPARE(it->toDouble(), i);
+        }
+    }
+
+    {
+        QJsonArray array2 = array;
+        QCOMPARE(array, array2);
+
+        QJsonValue val = array2.last();
+        auto next = array2.erase(array2.end() - 1);
+        QCOMPARE(array.size(), 10);
+        QCOMPARE(array2.size(), 9);
+        QVERIFY(next == array2.end());
+
+        i = 0;
+        for (auto it = array2.constBegin(); it != array2.constEnd(); ++it, ++i) {
+            QJsonValue value = (*it);
+            QCOMPARE(value.toInt(), i);
+            QCOMPARE(value.toDouble(), i);
+            QCOMPARE(it->toInt(), i);
+            QCOMPARE(it->toDouble(), i);
         }
     }
 
@@ -1185,14 +1218,12 @@ void tst_QtJson::testObjectFind()
     QJsonObject::iterator it = object.find(QLatin1String("1"));
     QCOMPARE((*it).toDouble(), 1.);
     it = object.find(QString("11"));
-    QCOMPARE((*it).type(), QJsonValue::Undefined);
     QCOMPARE(it, object.end());
 
     QJsonObject::const_iterator cit = object.constFind(QLatin1String("1"));
     QCOMPARE((*cit).toDouble(), 1.);
     cit = object.constFind(QString("11"));
-    QCOMPARE((*it).type(), QJsonValue::Undefined);
-    QCOMPARE(it, object.end());
+    QCOMPARE(cit, object.constEnd());
 }
 
 void tst_QtJson::testDocument()
@@ -2290,30 +2321,28 @@ void tst_QtJson::parseNumbers()
             QCOMPARE(val.toDouble(), numbers[i].n);
         }
     }
-    {
-        if constexpr (std::numeric_limits<double>::has_denorm == std::denorm_present) {
-             Numbers numbers [] = {
-                { "1.1e-308", 1.1e-308 },
-                { "-1.1e-308", -1.1e-308 }
-            };
-            int size = sizeof(numbers)/sizeof(Numbers);
-            for (int i = 0; i < size; ++i) {
-                QByteArray json = "[ ";
-                json += numbers[i].str;
-                json += " ]";
-                QJsonDocument doc = QJsonDocument::fromJson(json);
-                QVERIFY(!doc.isEmpty());
-                QCOMPARE(doc.isArray(), true);
-                QCOMPARE(doc.isObject(), false);
-                QJsonArray array = doc.array();
-                QCOMPARE(array.size(), 1);
-                QJsonValue val = array.at(0);
-                QCOMPARE(val.type(), QJsonValue::Double);
-                QCOMPARE(val.toDouble(), numbers[i].n);
-            }
-        } else {
-            QSKIP("Skipping 'denorm' as this type lacks denormals on this system");
+    if constexpr (std::numeric_limits<double>::has_denorm == std::denorm_present) {
+        Numbers numbers [] = {
+            { "1.1e-308", 1.1e-308 },
+            { "-1.1e-308", -1.1e-308 }
+        };
+        int size = sizeof(numbers)/sizeof(Numbers);
+        for (int i = 0; i < size; ++i) {
+            QByteArray json = "[ ";
+            json += numbers[i].str;
+            json += " ]";
+            QJsonDocument doc = QJsonDocument::fromJson(json);
+            QVERIFY(!doc.isEmpty());
+            QCOMPARE(doc.isArray(), true);
+            QCOMPARE(doc.isObject(), false);
+            QJsonArray array = doc.array();
+            QCOMPARE(array.size(), 1);
+            QJsonValue val = array.at(0);
+            QCOMPARE(val.type(), QJsonValue::Double);
+            QCOMPARE(val.toDouble(), numbers[i].n);
         }
+    } else {
+        qInfo("Skipping denormal test as this system's double type lacks support");
     }
 }
 
@@ -3661,16 +3690,13 @@ void tst_QtJson::fromToVariantConversions_data()
     QTest::newRow("NaN")      << QVariant(qQNaN()) << QJsonValue(QJsonValue::Null)
                               << QVariant::fromValue(nullptr);
 
-    const qulonglong ulongValue = (1ul << 63) + 1;
-    const double uLongToDouble = ulongValue;
-    qint64 n;
-    if (convertDoubleTo(uLongToDouble, &n)) {
-        QTest::newRow("ulonglong") << QVariant(ulongValue) << QJsonValue(uLongToDouble)
-                                   << QVariant(n);
-    } else {
-        QTest::newRow("ulonglong") << QVariant(ulongValue) << QJsonValue(uLongToDouble)
-                                   << QVariant(uLongToDouble);
-    }
+    static_assert(std::numeric_limits<double>::digits <= 63,
+            "double is too big on this platform, this test would fail");
+    constexpr quint64 Threshold = Q_UINT64_C(1) << 63;
+    const qulonglong ulongValue = qulonglong(Threshold) + 1;
+    const double uLongToDouble = Threshold;
+    QTest::newRow("ulonglong") << QVariant(ulongValue) << QJsonValue(uLongToDouble)
+                               << QVariant(uLongToDouble);
 }
 
 void tst_QtJson::fromToVariantConversions()
@@ -3770,22 +3796,48 @@ void tst_QtJson::testIteratorComparison()
     QVERIFY(t.end() > t.begin());
 }
 
+void tst_QtJson::noLeakOnNameClash_data()
+{
+    QTest::addColumn<QString>("fileName");
+    QTest::addColumn<QByteArray>("result");
+    QTest::addRow("simple")
+            << QStringLiteral("simple.duplicates.json")
+            << QByteArray(R"({"": 0})");
+    QTest::addRow("test")
+            << QStringLiteral("test.duplicates.json")
+            << QByteArray(R"([
+                    "JSON Test Pattern pass1", {"a": ["array with 1 element"]}, {}, [], -42, true,
+                    false, null, {"a": "A key can be any string"}, 0.5, 98.6, 99.44, 1066, 10, 1,
+                    0.1, 1, 2, 2, "rosebud", {"a": "bar"}, {"a": {"a": 2000}}, {"a": {"a": 2000}},
+                    {"a": {"a": 2000}}, {"a": {"a": 2000}}
+                ])");
+    QTest::addRow("test3")
+            << QStringLiteral("test3.duplicates.json")
+            << QByteArray(R"({"a": [{"a": "212 555-1234"}, {"a": "646 555-4567"}]})");
+}
+
 void tst_QtJson::noLeakOnNameClash()
 {
-    QJsonDocument doc = QJsonDocument::fromJson("{\"\":{\"\":0},\"\":0}");
-    QVERIFY(!doc.isNull());
-    const QJsonObject obj = doc.object();
+    QFETCH(QString, fileName);
+    QFETCH(QByteArray, result);
 
-    // Removed the duplicate key.
-    QCOMPARE(obj.length(), 1);
+    QFile file(testDataDir + u'/' + fileName);
+    QVERIFY(file.open(QFile::ReadOnly));
+    QByteArray testJson = file.readAll();
+    QVERIFY(!testJson.isEmpty());
 
-    // Retained the last of the duplicates.
-    const QJsonValue val = obj.begin().value();
-    QVERIFY(val.isDouble());
-    QCOMPARE(val.toDouble(), 0.0);
+    QJsonParseError error;
+
+    // Retains the last one of each set of duplicate keys.
+    QJsonDocument doc = QJsonDocument::fromJson(testJson, &error);
+    QVERIFY2(!doc.isNull(), qPrintable(error.errorString()));
+    QJsonDocument expected = QJsonDocument::fromJson(result, &error);
+    QVERIFY2(!expected.isNull(), qPrintable(error.errorString()));
+
+    QCOMPARE(doc, expected);
 
     // It should not leak.
-    // In particular it should not forget to deref the container for the inner object.
+    // In particular it should not forget to deref the container for the inner objects.
 }
 
 QTEST_MAIN(tst_QtJson)

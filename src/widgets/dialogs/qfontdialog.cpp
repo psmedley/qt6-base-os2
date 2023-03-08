@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwindowdefs.h"
 #include "qfontdialog.h"
@@ -62,6 +26,8 @@
 #include <private/qfont_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 class QFontListView : public QListView
 {
@@ -228,7 +194,7 @@ void QFontDialogPrivate::init()
     sampleEdit->setAlignment(Qt::AlignCenter);
     // Note that the sample text is *not* translated with tr(), as the
     // characters used depend on the charset encoding.
-    sampleEdit->setText(QLatin1String("AaBbYyZz"));
+    sampleEdit->setText("AaBbYyZz"_L1);
     hbox->addWidget(sampleEdit);
 
     writingSystemCombo = new QComboBox(q);
@@ -326,7 +292,7 @@ void QFontDialogPrivate::init()
 
     familyList->setFocus();
     retranslateStrings();
-    sampleEdit->setObjectName(QLatin1String("qt_fontDialog_sampleEdit"));
+    sampleEdit->setObjectName("qt_fontDialog_sampleEdit"_L1);
 }
 
 /*!
@@ -585,20 +551,20 @@ void QFontDialogPrivate::updateStyles()
                  }
             }
             if (!found && first) {
-                if (cstyle.contains(QLatin1String("Italic"))) {
-                    cstyle.replace(QLatin1String("Italic"), QLatin1String("Oblique"));
+                if (cstyle.contains("Italic"_L1)) {
+                    cstyle.replace("Italic"_L1, "Oblique"_L1);
                     first = false;
                     goto redo;
-                } else if (cstyle.contains(QLatin1String("Oblique"))) {
-                    cstyle.replace(QLatin1String("Oblique"), QLatin1String("Italic"));
+                } else if (cstyle.contains("Oblique"_L1)) {
+                    cstyle.replace("Oblique"_L1, "Italic"_L1);
                     first = false;
                     goto redo;
-                } else if (cstyle.contains(QLatin1String("Regular"))) {
-                    cstyle.replace(QLatin1String("Regular"), QLatin1String("Normal"));
+                } else if (cstyle.contains("Regular"_L1)) {
+                    cstyle.replace("Regular"_L1, "Normal"_L1);
                     first = false;
                     goto redo;
-                } else if (cstyle.contains(QLatin1String("Normal"))) {
-                    cstyle.replace(QLatin1String("Normal"), QLatin1String("Regular"));
+                } else if (cstyle.contains("Normal"_L1)) {
+                    cstyle.replace("Normal"_L1, "Regular"_L1);
                     first = false;
                     goto redo;
                 }
@@ -1051,8 +1017,8 @@ bool QFontDialogPrivate::canBeNativeDialog() const
         return false;
     }
 
-    QLatin1String staticName(QFontDialog::staticMetaObject.className());
-    QLatin1String dynamicName(q->metaObject()->className());
+    QLatin1StringView staticName(QFontDialog::staticMetaObject.className());
+    QLatin1StringView dynamicName(q->metaObject()->className());
     return (staticName == dynamicName);
 }
 

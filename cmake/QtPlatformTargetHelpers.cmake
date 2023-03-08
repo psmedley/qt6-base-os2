@@ -19,6 +19,13 @@ function(qt_internal_setup_public_platform_target)
         )
     target_compile_definitions(Platform INTERFACE ${QT_PLATFORM_DEFINITIONS})
 
+    set_target_properties(Platform PROPERTIES
+        _qt_package_version "${PROJECT_VERSION}"
+    )
+    set_property(TARGET Platform
+                 APPEND PROPERTY
+                 EXPORT_PROPERTIES "_qt_package_version")
+
     # When building on android we need to link against the logging library
     # in order to satisfy linker dependencies. Both of these libraries are part of
     # the NDK.
@@ -33,6 +40,10 @@ function(qt_internal_setup_public_platform_target)
             set(libc_link_option "$<$<LINK_LANGUAGE:CXX>:-stdlib=libc++>")
         endif()
         target_link_options(Platform INTERFACE "${libc_link_option}")
+    endif()
+    if (QT_FEATURE_no_direct_extern_access)
+        target_compile_options(Platform INTERFACE "$<$<CXX_COMPILER_ID:GNU>:-mno-direct-extern-access>")
+        target_compile_options(Platform INTERFACE "$<$<CXX_COMPILER_ID:Clang>:-fno-direct-access-external-data>")
     endif()
 
     qt_set_msvc_cplusplus_options(Platform INTERFACE)

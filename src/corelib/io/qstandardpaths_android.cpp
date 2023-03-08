@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qstandardpaths.h"
 
@@ -49,14 +13,14 @@
 QT_BEGIN_NAMESPACE
 
 using namespace QNativeInterface;
+using namespace Qt::StringLiterals;
 
 typedef QMap<QString, QString> AndroidDirCache;
 Q_GLOBAL_STATIC(AndroidDirCache, androidDirCache)
 
 static QString testDir()
 {
-    return QStandardPaths::isTestModeEnabled() ? QLatin1String("/qttest")
-                                               : QLatin1String("");
+    return QStandardPaths::isTestModeEnabled() ? "/qttest"_L1 : ""_L1;
 }
 
 static inline QString getAbsolutePath(const QJniObject &file)
@@ -75,7 +39,7 @@ static inline QString getAbsolutePath(const QJniObject &file)
  */
 static QString getExternalFilesDir(const char *directoryField = nullptr)
 {
-    QString &path = (*androidDirCache)[QLatin1String("APPNAME_%1").arg(QLatin1String(directoryField))];
+    QString &path = (*androidDirCache)["APPNAME_%1"_L1.arg(QLatin1StringView(directoryField))];
     if (!path.isEmpty())
         return path;
 
@@ -83,7 +47,7 @@ static QString getExternalFilesDir(const char *directoryField = nullptr)
     if (!appCtx.isValid())
         return QString();
 
-    QJniObject dirField = QJniObject::fromString(QLatin1String(""));
+    QJniObject dirField = QJniObject::fromString(""_L1);
     if (directoryField && strlen(directoryField) > 0) {
         dirField = QJniObject::getStaticObjectField("android/os/Environment",
                                                     directoryField,
@@ -184,7 +148,7 @@ QString QStandardPaths::writableLocation(StandardLocation type)
     case QStandardPaths::GenericConfigLocation:
     case QStandardPaths::ConfigLocation:
     case QStandardPaths::AppConfigLocation:
-        return getFilesDir() + testDir() + QLatin1String("/settings");
+        return getFilesDir() + testDir() + "/settings"_L1;
     case QStandardPaths::GenericDataLocation:
         return getExternalFilesDir() + testDir();
     case QStandardPaths::AppDataLocation:
@@ -200,6 +164,8 @@ QString QStandardPaths::writableLocation(StandardLocation type)
         return getFilesDir();
     case QStandardPaths::ApplicationsLocation:
     case QStandardPaths::FontsLocation:
+    case QStandardPaths::PublicShareLocation:
+    case QStandardPaths::TemplatesLocation:
     default:
         break;
     }
@@ -258,7 +224,7 @@ QStringList QStandardPaths::standardLocations(StandardLocation type)
 
         // Don't cache the fallback, as we might just have been called before
         // QT_ANDROID_FONT_LOCATION has been set.
-        return QStringList(QLatin1String("/system/fonts"));
+        return QStringList("/system/fonts"_L1);
     }
 
     return QStringList(writableLocation(type));

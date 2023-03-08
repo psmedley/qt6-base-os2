@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2014 Ivan Komissarov <ABBAPOH@gmail.com>
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2014 Ivan Komissarov <ABBAPOH@gmail.com>
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qstorageinfo_p.h"
 
@@ -119,6 +83,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 class QStorageIterator
 {
 public:
@@ -190,7 +156,7 @@ template <typename String>
 static bool isParentOf(const String &parent, const QString &dirName)
 {
     return dirName.startsWith(parent) &&
-            (dirName.size() == parent.size() || dirName.at(parent.size()) == QLatin1Char('/') ||
+            (dirName.size() == parent.size() || dirName.at(parent.size()) == u'/' ||
              parent.size() == 1);
 }
 
@@ -214,11 +180,11 @@ static bool shouldIncludeFs(const QStorageIterator &it)
      */
 
     QString mountDir = it.rootPath();
-    if (isParentOf(QLatin1String("/dev"), mountDir)
-        || isParentOf(QLatin1String("/proc"), mountDir)
-        || isParentOf(QLatin1String("/sys"), mountDir)
-        || isParentOf(QLatin1String("/var/run"), mountDir)
-        || isParentOf(QLatin1String("/var/lock"), mountDir)) {
+    if (isParentOf("/dev"_L1, mountDir)
+        || isParentOf("/proc"_L1, mountDir)
+        || isParentOf("/sys"_L1, mountDir)
+        || isParentOf("/var/run"_L1, mountDir)
+        || isParentOf("/var/lock"_L1, mountDir)) {
         return false;
     }
 
@@ -485,32 +451,35 @@ inline bool QStorageIterator::next()
     const char *const stop = ptr + len - 1;
 
     // parse the line
-    bool ok;
     mnt.mnt_freq = 0;
     mnt.mnt_passno = 0;
 
-    mnt.mount_id = qstrntoll(ptr, stop - ptr, const_cast<const char **>(&ptr), 10, &ok);
-    if (!ok)
+    auto r = qstrntoll(ptr, stop - ptr, 10);
+    if (!r.ok())
         return false;
+    mnt.mount_id = r.result;
 
-    int parent_id = qstrntoll(ptr, stop - ptr, const_cast<const char **>(&ptr), 10, &ok);
+    r = qstrntoll(r.endptr, stop - r.endptr, 10);
+    if (!r.ok())
+        return false;
+    int parent_id = r.result;
     Q_UNUSED(parent_id);
-    if (!ok)
+
+    r = qstrntoll(r.endptr, stop - r.endptr, 10);
+    if (!r.ok())
+        return false;
+    if (*r.endptr != ':')
+        return false;
+    int rdevmajor = r.result;
+    r = qstrntoll(r.endptr + 1, stop - r.endptr - 1, 10);
+    if (!r.ok())
+        return false;
+    mnt.rdev = makedev(rdevmajor, r.result);
+
+    if (*r.endptr != ' ')
         return false;
 
-    int rdevmajor = qstrntoll(ptr, stop - ptr, const_cast<const char **>(&ptr), 10, &ok);
-    if (!ok)
-        return false;
-    if (*ptr != ':')
-        return false;
-    int rdevminor = qstrntoll(ptr + 1, stop - ptr - 1, const_cast<const char **>(&ptr), 10, &ok);
-    if (!ok)
-        return false;
-    mnt.rdev = makedev(rdevmajor, rdevminor);
-
-    if (*ptr != ' ')
-        return false;
-
+    ptr = const_cast<char *>(r.endptr);
     mnt.subvolume = ++ptr;
     ptr = parseMangledPath(ptr);
     if (!ptr)
@@ -745,8 +714,8 @@ void QStorageInfoPrivate::initRootPath()
         const QString mountDir = it.rootPath();
         const QByteArray fsName = it.fileSystemType();
         // we try to find most suitable entry
-        if (isParentOf(mountDir, oldRootPath) && maxLength < mountDir.length()) {
-            maxLength = mountDir.length();
+        if (isParentOf(mountDir, oldRootPath) && maxLength < mountDir.size()) {
+            maxLength = mountDir.size();
             rootPath = mountDir;
             device = it.device();
             fileSystemType = fsName;
@@ -767,8 +736,7 @@ static QString decodeFsEncString(const QString &str)
     int i = 0;
     while (i < str.size()) {
         if (i <= str.size() - 4) {    // we need at least four characters \xAB
-            if (str.at(i) == QLatin1Char('\\') &&
-                str.at(i+1) == QLatin1Char('x')) {
+            if (QStringView{str}.sliced(i).startsWith("\\x"_L1)) {
                 bool bOk;
                 const int code = QStringView{str}.mid(i+2, 2).toInt(&bOk, 16);
                 // only decode characters between 0x20 and 0x7f but not
@@ -795,7 +763,7 @@ static inline QString retrieveLabel(const QByteArray &device)
     QFileInfo devinfo(QFile::decodeName(device));
     QString devicePath = devinfo.canonicalFilePath();
 
-    QDirIterator it(QLatin1String(pathDiskByLabel), QDir::NoDotAndDotDot);
+    QDirIterator it(QLatin1StringView(pathDiskByLabel), QDir::NoDotAndDotDot);
     while (it.hasNext()) {
         QFileInfo fileInfo = it.nextFileInfo();
         if (fileInfo.isSymLink() && fileInfo.symLinkTarget() == devicePath)

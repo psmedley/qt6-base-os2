@@ -1,32 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
-#include <QtCore>
 #include <QTest>
 #include "tst_qmetatype_common.h"
 #include "tst_qvariant_common.h"
@@ -110,6 +84,7 @@ private slots:
     void isRegistered();
     void isRegisteredStaticLess_data();
     void isRegisteredStaticLess();
+    void isNotRegistered();
     void isEnum();
     void automaticTemplateRegistration_1();
     void automaticTemplateRegistration_2(); // defined in tst_qmetatype3.cpp
@@ -131,6 +106,10 @@ private slots:
     void fromType();
     void operatorEq_data();
     void operatorEq();
+    void operatorEq2_data();
+    void operatorEq2();
+    void operatorEqAcrossLibs_data();
+    void operatorEqAcrossLibs();
     void typesWithInaccessibleDTors();
     void voidIsNotUnknown();
     void typeNameNormalization();
@@ -216,6 +195,22 @@ struct CustomEqualsOnlyType
 
 static_assert(QTypeTraits::has_operator_equal_v<CustomEqualsOnlyType>);
 static_assert(!QTypeTraits::has_operator_less_than_v<CustomEqualsOnlyType>);
+
+struct BaseGadgetType
+{
+    Q_GADGET
+public:
+    explicit BaseGadgetType(QVariant foo = QVariant()) : m_foo(std::move(foo)) {}
+    QVariant m_foo;
+};
+
+struct DerivedGadgetType : public BaseGadgetType
+{
+    Q_GADGET
+public:
+    explicit DerivedGadgetType(QVariant foo = QVariant()) : BaseGadgetType(std::move(foo)) {}
+    int bar = 25;
+};
 
 Q_DECLARE_METATYPE(CustomConvertibleType);
 Q_DECLARE_METATYPE(CustomConvertibleType2);

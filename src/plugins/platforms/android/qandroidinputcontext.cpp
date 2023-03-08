@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
+// Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <android/log.h>
 
@@ -990,7 +954,6 @@ void QAndroidInputContext::setFocusObject(QObject *object)
         m_focusObject = object;
         reset();
     }
-    QPlatformInputContext::setFocusObject(object);
     updateSelectionHandles();
 }
 
@@ -1158,7 +1121,7 @@ void QAndroidInputContext::focusObjectStartComposing()
         return;
 
     // Composing strings containing newline characters are rare and may cause problems
-    if (m_composingText.contains(QLatin1Char('\n')))
+    if (m_composingText.contains(u'\n'))
         return;
 
     QSharedPointer<QInputMethodQueryEvent> query = focusObjectInputMethodQuery();
@@ -1241,7 +1204,7 @@ jint QAndroidInputContext::getCursorCapsMode(jint /*reqModes*/)
         if (focusObjectIsComposing())
             surroundingText += QStringView{m_composingText}.left(m_composingCursor - m_composingTextStart);
         // Add a character to see if it is at the end of the sentence or not
-        QTextBoundaryFinder finder(QTextBoundaryFinder::Sentence, surroundingText + QLatin1Char('A'));
+        QTextBoundaryFinder finder(QTextBoundaryFinder::Sentence, surroundingText + u'A');
         finder.setPosition(surroundingText.length());
         if (finder.isAtBoundary())
             atWordBoundary = finder.isAtBoundary();
@@ -1461,7 +1424,7 @@ jboolean QAndroidInputContext::setComposingText(const QString &text, jint newCur
     const bool focusObjectWasComposing = focusObjectIsComposing();
 
     // Same checks as in focusObjectStartComposing()
-    if (!m_composingText.isEmpty() && !m_composingText.contains(QLatin1Char('\n'))
+    if (!m_composingText.isEmpty() && !m_composingText.contains(u'\n')
             && newAbsoluteCursorPos >= m_composingTextStart
             && newAbsoluteCursorPos <= m_composingTextStart + m_composingText.length())
         m_composingCursor = newAbsoluteCursorPos;

@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -49,6 +24,10 @@
 #include "qplatformdefs.h"
 #endif
 
+#include <optional>
+
+using namespace Qt::StringLiterals;
+
 class tst_QTemporaryDir : public QObject
 {
     Q_OBJECT
@@ -59,6 +38,7 @@ public slots:
 
 private slots:
     void construction();
+    void moveSemantics();
     void fileTemplate();
     void fileTemplate_data();
     void getSetCheck();
@@ -103,6 +83,58 @@ void tst_QTemporaryDir::construction()
     QVERIFY(dir.path().contains("tst_qtemporarydir"));
     QVERIFY(QFileInfo(dir.path()).isDir());
     QCOMPARE(dir.errorString(), QString());
+}
+
+void tst_QTemporaryDir::moveSemantics()
+{
+    {
+        auto original = std::optional<QTemporaryDir>(std::in_place);
+        QVERIFY(original->isValid());
+
+        original->setAutoRemove(true);
+
+        auto OriginalDirectoryInfo = QFileInfo(original->path());
+        OriginalDirectoryInfo.setCaching(false);
+        QVERIFY(OriginalDirectoryInfo.exists());
+
+        QTemporaryDir movedInto = std::move(*original);
+
+        original.reset();
+
+        QVERIFY(OriginalDirectoryInfo.exists());
+        QVERIFY(movedInto.path() == OriginalDirectoryInfo.filePath());
+    }
+
+    {
+        auto movedInto = QTemporaryDir();
+        QVERIFY(movedInto.isValid());
+
+        movedInto.setAutoRemove(true);
+
+        auto movedIntoInitialDirectoryInfo = QFileInfo(movedInto.path());
+        movedIntoInitialDirectoryInfo.setCaching(false);
+        QVERIFY(movedIntoInitialDirectoryInfo.exists());
+
+        auto OriginalDirectoryInfo = QFileInfo();
+        OriginalDirectoryInfo.setCaching(false);
+
+        {
+            auto original = QTemporaryDir();
+            QVERIFY(original.isValid());
+
+            original.setAutoRemove(true);
+
+            OriginalDirectoryInfo.setFile(original.path());
+            QVERIFY(OriginalDirectoryInfo.exists());
+
+            movedInto = std::move(original);
+        }
+
+        QVERIFY(!movedIntoInitialDirectoryInfo.exists());
+        QVERIFY(OriginalDirectoryInfo.exists());
+
+        QVERIFY(movedInto.path() == OriginalDirectoryInfo.filePath());
+    }
 }
 
 // Testing get/set functions
@@ -169,19 +201,19 @@ void tst_QTemporaryDir::fileTemplate_data()
         return; // skip if we have no drive letter
 
     tmp.data()[1] = u'$';
-    const auto tmpPath = tmp + uR"(\UNC.XXXXXX.tmpDir)"_qs;
+    const auto tmpPath = tmp + uR"(\UNC.XXXXXX.tmpDir)"_s;
 
     QTest::newRow("UNC-backslash")
-            << uR"(\\localhost\)"_qs + tmpPath << "UNC."
+            << uR"(\\localhost\)"_s + tmpPath << "UNC."
             << ".tmpDir";
     QTest::newRow("UNC-prefix")
-            << uR"(\\?\UNC\localhost\)"_qs + tmpPath << "UNC."
+            << uR"(\\?\UNC\localhost\)"_s + tmpPath << "UNC."
             << ".tmpDir";
     QTest::newRow("UNC-slash")
-            << u"//localhost/"_qs + QDir::fromNativeSeparators(tmpPath) << "UNC."
+            << u"//localhost/"_s + QDir::fromNativeSeparators(tmpPath) << "UNC."
             << ".tmpDir";
     QTest::newRow("UNC-prefix-slash")
-            << uR"(//?/UNC/localhost/)"_qs + QDir::fromNativeSeparators(tmpPath) << "UNC."
+            << uR"(//?/UNC/localhost/)"_s + QDir::fromNativeSeparators(tmpPath) << "UNC."
             << ".tmpDir";
 #endif
 }
@@ -197,9 +229,9 @@ void tst_QTemporaryDir::fileTemplate()
     QVERIFY(tempDir.isValid());
 
     QString dirName = QDir(tempDir.path()).dirName();
-    if (prefix.length()) {
-        QCOMPARE(dirName.left(prefix.length()), prefix);
-        QCOMPARE(dirName.right(suffix.length()), suffix);
+    if (prefix.size()) {
+        QCOMPARE(dirName.left(prefix.size()), prefix);
+        QCOMPARE(dirName.right(suffix.size()), suffix);
     }
 }
 

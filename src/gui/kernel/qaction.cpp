@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qaction.h"
 #include "qactiongroup.h"
@@ -59,14 +23,16 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 /*
   internal: guesses a descriptive text from a text suited for a menu entry
  */
 static QString qt_strippedText(QString s)
 {
-    s.remove(QLatin1String("..."));
+    s.remove("..."_L1);
     for (int i = 0; i < s.size(); ++i) {
-        if (s.at(i) == QLatin1Char('&'))
+        if (s.at(i) == u'&')
             s.remove(i, 1);
     }
     return s.trimmed();
@@ -115,26 +81,26 @@ void QActionPrivate::sendDataChanged()
 void QActionPrivate::redoGrab(QShortcutMap &map)
 {
     Q_Q(QAction);
-    for (int id : qAsConst(shortcutIds)) {
+    for (int id : std::as_const(shortcutIds)) {
         if (id)
             map.removeShortcut(id, q);
     }
 
     shortcutIds.clear();
-    for (const QKeySequence &shortcut : qAsConst(shortcuts)) {
+    for (const QKeySequence &shortcut : std::as_const(shortcuts)) {
         if (!shortcut.isEmpty())
             shortcutIds.append(map.addShortcut(q, shortcut, shortcutContext, contextMatcher()));
         else
             shortcutIds.append(0);
     }
     if (!enabled) {
-        for (int id : qAsConst(shortcutIds)) {
+        for (int id : std::as_const(shortcutIds)) {
             if (id)
                 map.setShortcutEnabled(false, id, q);
         }
     }
     if (!autorepeat) {
-        for (int id : qAsConst(shortcutIds)) {
+        for (int id : std::as_const(shortcutIds)) {
             if (id)
                 map.setShortcutAutoRepeat(false, id, q);
         }
@@ -144,7 +110,7 @@ void QActionPrivate::redoGrab(QShortcutMap &map)
 void QActionPrivate::setShortcutEnabled(bool enable, QShortcutMap &map)
 {
     Q_Q(QAction);
-    for (int id : qAsConst(shortcutIds)) {
+    for (int id : std::as_const(shortcutIds)) {
         if (id)
             map.setShortcutEnabled(enable, id, q);
     }
@@ -492,7 +458,7 @@ QAction::~QAction()
         d->group->removeAction(this);
 #if QT_CONFIG(shortcut)
     if (qApp) {
-        for (int id : qAsConst(d->shortcutIds)) {
+        for (int id : std::as_const(d->shortcutIds)) {
             if (id)
                 QGuiApplicationPrivate::instance()->shortcutMap.removeShortcut(id, this);
         }
@@ -654,7 +620,7 @@ QString QAction::text() const
     QString s = d->text;
     if (s.isEmpty()) {
         s = d->iconText;
-        s.replace(QLatin1Char('&'), QLatin1String("&&"));
+        s.replace(u'&', "&&"_L1);
     }
     return s;
 }
@@ -1058,7 +1024,7 @@ bool QAction::event(QEvent *e)
 {
     Q_D(QAction);
     if (e->type() == QEvent::ActionChanged) {
-        for (auto object : qAsConst(d->associatedObjects))
+        for (auto object : std::as_const(d->associatedObjects))
             QCoreApplication::sendEvent(object, e);
     }
 

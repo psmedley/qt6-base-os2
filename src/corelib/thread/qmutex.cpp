@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Copyright (C) 2012 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// Copyright (C) 2012 Olivier Goffart <ogoffart@woboq.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "global/qglobal.h"
 #include "qplatformdefs.h"
@@ -334,10 +298,14 @@ QRecursiveMutex::~QRecursiveMutex()
 */
 bool QRecursiveMutex::tryLock(int timeout) QT_MUTEX_LOCK_NOEXCEPT
 {
+    unsigned tsanFlags = QtTsan::MutexWriteReentrant | QtTsan::TryLock;
+    QtTsan::mutexPreLock(this, tsanFlags);
+
     Qt::HANDLE self = QThread::currentThreadId();
     if (owner.loadRelaxed() == self) {
         ++count;
         Q_ASSERT_X(count != 0, "QMutex::lock", "Overflow in recursion counter");
+        QtTsan::mutexPostLock(this, tsanFlags, 0);
         return true;
     }
     bool success = true;
@@ -349,6 +317,11 @@ bool QRecursiveMutex::tryLock(int timeout) QT_MUTEX_LOCK_NOEXCEPT
 
     if (success)
         owner.storeRelaxed(self);
+    else
+        tsanFlags |= QtTsan::TryLockFailed;
+
+    QtTsan::mutexPostLock(this, tsanFlags, 0);
+
     return success;
 }
 
@@ -412,6 +385,7 @@ bool QRecursiveMutex::tryLock(int timeout) QT_MUTEX_LOCK_NOEXCEPT
 void QRecursiveMutex::unlock() noexcept
 {
     Q_ASSERT(owner.loadRelaxed() == QThread::currentThreadId());
+    QtTsan::mutexPreUnlock(this, 0u);
 
     if (count > 0) {
         count--;
@@ -419,6 +393,8 @@ void QRecursiveMutex::unlock() noexcept
         owner.storeRelaxed(nullptr);
         mutex.unlock();
     }
+
+    QtTsan::mutexPostUnlock(this, 0u);
 }
 
 
@@ -486,12 +462,54 @@ void QRecursiveMutex::unlock() noexcept
 */
 
 /*!
+    \fn template <typename Mutex> QMutexLocker<Mutex>::QMutexLocker(QMutexLocker &&other) noexcept
+    \since 6.4
+
+    Move-constructs a QMutexLocker from \a other. The mutex and the
+    state of \a other is transferred to the newly constructed instance.
+    After the move, \a other will no longer be managing any mutex.
+
+    \sa QMutex::lock()
+*/
+
+/*!
+    \fn template <typename Mutex> QMutexLocker<Mutex> &QMutexLocker<Mutex>::operator=(QMutexLocker &&other) noexcept
+    \since 6.4
+
+    Move-assigns \a other onto this QMutexLocker. If this QMutexLocker
+    was holding a locked mutex before the assignment, the mutex will be
+    unlocked. The mutex and the state of \a other is then transferred
+    to this QMutexLocker. After the move, \a other will no longer be
+    managing any mutex.
+
+    \sa QMutex::lock()
+*/
+
+/*!
+    \fn template <typename Mutex> void QMutexLocker<Mutex>::swap(QMutexLocker &other) noexcept
+    \since 6.4
+
+    Swaps the mutex and the state of this QMutexLocker with \a other.
+    This operation is very fast and never fails.
+
+    \sa QMutex::lock()
+*/
+
+/*!
     \fn template <typename Mutex> QMutexLocker<Mutex>::~QMutexLocker() noexcept
 
     Destroys the QMutexLocker and unlocks the mutex that was locked
     in the constructor.
 
     \sa QMutex::unlock()
+*/
+
+/*!
+    \fn template <typename Mutex> bool QMutexLocker<Mutex>::isLocked() const noexcept
+    \since 6.4
+
+    Returns true if this QMutexLocker is currently locking its associated
+    mutex, or false otherwise.
 */
 
 /*!
@@ -793,7 +811,7 @@ struct FreeListConstants : QFreeListDefaultConstants {
     enum { BlockCount = 4, MaxIndex=0xffff };
     static const int Sizes[BlockCount];
 };
-const int FreeListConstants::Sizes[FreeListConstants::BlockCount] = {
+Q_CONSTINIT const int FreeListConstants::Sizes[FreeListConstants::BlockCount] = {
     16,
     128,
     1024,
@@ -802,7 +820,7 @@ const int FreeListConstants::Sizes[FreeListConstants::BlockCount] = {
 
 typedef QFreeList<QMutexPrivate, FreeListConstants> FreeList;
 // We cannot use Q_GLOBAL_STATIC because it uses QMutex
-static FreeList freeList_;
+Q_CONSTINIT static FreeList freeList_;
 FreeList *freelist()
 {
     return &freeList_;
@@ -847,12 +865,10 @@ void QMutexPrivate::derefWaiters(int value) noexcept
 
 QT_END_NAMESPACE
 
-#if defined(Q_OS_LINUX) && defined(QT_ALWAYS_USE_FUTEX)
+#if defined(QT_ALWAYS_USE_FUTEX)
 // nothing
 #elif defined(Q_OS_MAC)
 #  include "qmutex_mac.cpp"
-#elif defined(Q_OS_WIN)
-#  include "qmutex_win.cpp"
 #elif defined(Q_OS_UNIX)
 #  include "qmutex_unix.cpp"
 #elif defined(Q_OS_OS2x)

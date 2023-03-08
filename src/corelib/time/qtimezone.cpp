@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2022 The Qt Company Ltd.
-** Copyright (C) 2013 John Layt <jlayt@kde.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2013 John Layt <jlayt@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtimezone.h"
 #include "qtimezoneprivate_p.h"
@@ -49,6 +13,8 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // Create default time zone using appropriate backend
 static QTimeZonePrivate *newBackendTimeZone()
@@ -776,7 +742,7 @@ QTimeZone::OffsetDataList QTimeZone::transitions(const QDateTime &fromDateTime,
     if (hasTransitions()) {
         const QTimeZonePrivate::DataList plist = d->transitions(fromDateTime.toMSecsSinceEpoch(),
                                                                 toDateTime.toMSecsSinceEpoch());
-        list.reserve(plist.count());
+        list.reserve(plist.size());
         for (const QTimeZonePrivate::Data &pdata : plist)
             list.append(QTimeZonePrivate::toOffsetData(pdata));
     }
@@ -972,6 +938,15 @@ QList<QByteArray> QTimeZone::windowsIdToIanaIds(const QByteArray &windowsId, QLo
     return QTimeZonePrivate::windowsIdToIanaIds(windowsId, territory);
 }
 
+/*!
+    \fn QTimeZone QTimeZone::fromStdTimeZonePtr(const std::chrono::time_zone *timeZone)
+    \since 6.4
+
+    Returns a QTimeZone object representing the same time zone as \a timeZone.
+    The IANA ID of \a timeZone must be one of the available system IDs,
+    otherwise an invalid time zone will be returned.
+*/
+
 #ifndef QT_NO_DATASTREAM
 // Invalid, as an IANA ID: too long, starts with - and has other invalid characters in it
 static inline QString invalidId() { return QStringLiteral("-No Time Zone Specified!"); }
@@ -991,7 +966,7 @@ QDataStream &operator>>(QDataStream &ds, QTimeZone &tz)
     ds >> ianaId;
     if (ianaId == invalidId()) {
         tz = QTimeZone();
-    } else if (ianaId == QLatin1String("OffsetFromUtc")) {
+    } else if (ianaId == "OffsetFromUtc"_L1) {
         int utcOffset;
         QString name;
         QString abbreviation;

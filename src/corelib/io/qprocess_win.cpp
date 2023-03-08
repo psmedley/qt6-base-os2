@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2017 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2017 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 //#define QPROCESS_DEBUG
 #include <qdebug.h>
@@ -63,6 +27,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QProcessEnvironment QProcessEnvironment::systemEnvironment()
 {
@@ -391,44 +357,44 @@ static QString qt_create_commandline(const QString &program, const QStringList &
     QString args;
     if (!program.isEmpty()) {
         QString programName = program;
-        if (!programName.startsWith(QLatin1Char('\"')) && !programName.endsWith(QLatin1Char('\"')) && programName.contains(QLatin1Char(' ')))
-            programName = QLatin1Char('\"') + programName + QLatin1Char('\"');
-        programName.replace(QLatin1Char('/'), QLatin1Char('\\'));
+        if (!programName.startsWith(u'\"') && !programName.endsWith(u'\"') && programName.contains(u' '))
+            programName = u'\"' + programName + u'\"';
+        programName.replace(u'/', u'\\');
 
         // add the program as the first arg ... it works better
-        args = programName + QLatin1Char(' ');
+        args = programName + u' ';
     }
 
     for (qsizetype i = 0; i < arguments.size(); ++i) {
         QString tmp = arguments.at(i);
         // Quotes are escaped and their preceding backslashes are doubled.
-        qsizetype index = tmp.indexOf(QLatin1Char('"'));
+        qsizetype index = tmp.indexOf(u'"');
         while (index >= 0) {
             // Escape quote
-            tmp.insert(index++, QLatin1Char('\\'));
+            tmp.insert(index++, u'\\');
             // Double preceding backslashes (ignoring the one we just inserted)
-            for (qsizetype i = index - 2 ; i >= 0 && tmp.at(i) == QLatin1Char('\\') ; --i) {
-                tmp.insert(i, QLatin1Char('\\'));
+            for (qsizetype i = index - 2 ; i >= 0 && tmp.at(i) == u'\\' ; --i) {
+                tmp.insert(i, u'\\');
                 index++;
             }
-            index = tmp.indexOf(QLatin1Char('"'), index + 1);
+            index = tmp.indexOf(u'"', index + 1);
         }
-        if (tmp.isEmpty() || tmp.contains(QLatin1Char(' ')) || tmp.contains(QLatin1Char('\t'))) {
+        if (tmp.isEmpty() || tmp.contains(u' ') || tmp.contains(u'\t')) {
             // The argument must not end with a \ since this would be interpreted
             // as escaping the quote -- rather put the \ behind the quote: e.g.
             // rather use "foo"\ than "foo\"
             qsizetype i = tmp.length();
-            while (i > 0 && tmp.at(i - 1) == QLatin1Char('\\'))
+            while (i > 0 && tmp.at(i - 1) == u'\\')
                 --i;
-            tmp.insert(i, QLatin1Char('"'));
-            tmp.prepend(QLatin1Char('"'));
+            tmp.insert(i, u'"');
+            tmp.prepend(u'"');
         }
-        args += QLatin1Char(' ') + tmp;
+        args += u' ' + tmp;
     }
 
     if (!nativeArguments.isEmpty()) {
         if (!args.isEmpty())
-             args += QLatin1Char(' ');
+             args += u' ';
         args += nativeArguments;
     }
 
@@ -441,7 +407,7 @@ static QByteArray qt_create_environment(const QProcessEnvironmentPrivate::Map &e
     QProcessEnvironmentPrivate::Map copy = environment;
 
     // add PATH if necessary (for DLL loading)
-    QProcessEnvironmentPrivate::Key pathKey(QLatin1String("PATH"));
+    QProcessEnvironmentPrivate::Key pathKey("PATH"_L1);
     if (!copy.contains(pathKey)) {
         QByteArray path = qgetenv("PATH");
         if (!path.isEmpty())
@@ -449,7 +415,7 @@ static QByteArray qt_create_environment(const QProcessEnvironmentPrivate::Map &e
     }
 
     // add systemroot if needed
-    QProcessEnvironmentPrivate::Key rootKey(QLatin1String("SystemRoot"));
+    QProcessEnvironmentPrivate::Key rootKey("SystemRoot"_L1);
     if (!copy.contains(rootKey)) {
         QByteArray systemRoot = qgetenv("SystemRoot");
         if (!systemRoot.isEmpty())
@@ -471,14 +437,14 @@ static QByteArray qt_create_environment(const QProcessEnvironmentPrivate::Map &e
         envlist.resize(envlist.size() + tmpSize);
 
         tmpSize = it.key().length() * sizeof(wchar_t);
-        memcpy(envlist.data() + pos, it.key().utf16(), tmpSize);
+        memcpy(envlist.data() + pos, it.key().data(), tmpSize);
         pos += tmpSize;
 
         memcpy(envlist.data() + pos, &equal, sizeof(wchar_t));
         pos += sizeof(wchar_t);
 
         tmpSize = it.value().length() * sizeof(wchar_t);
-        memcpy(envlist.data() + pos, it.value().utf16(), tmpSize);
+        memcpy(envlist.data() + pos, it.value().data(), tmpSize);
         pos += tmpSize;
 
         memcpy(envlist.data() + pos, &nul, sizeof(wchar_t));

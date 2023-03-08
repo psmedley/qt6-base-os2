@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 Crimson AS <info@crimson.no>
-** Copyright (C) 2018 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 Crimson AS <info@crimson.no>
+// Copyright (C) 2018 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTimeZone>
 #include <QTest>
@@ -60,15 +35,22 @@ static QList<QByteArray> enoughZones()
     for (conat auto &name : available)
         result << name;
 #else
-    QList<QByteArray> result { QByteArray("UTC"),
-                               // Those named overtly in tst_QDateTime:
-                               QByteArray("Europe/Oslo"), QByteArray("America/Vancouver"),
-                               QByteArray("Europe/Berlin"), QByteArray("America/Sao_Paulo"),
-                               QByteArray("Pacific/Auckland"), QByteArray("Australia/Eucla"),
-                               QByteArray("Asia/Kathmandu"), QByteArray("Pacific/Kiritimati"),
-                               QByteArray("Pacific/Apia"), QByteArray("UTC+12:00"),
-                               QByteArray("Australia/Sydney"), QByteArray("Asia/Singapore"),
-                               QByteArray("Australia/Brisbane") };
+    QList<QByteArray> result {
+        QByteArray("UTC"),
+        // Those named overtly in tst_QDateTime - special cases first:
+        QByteArray("UTC-02:00"), QByteArray("UTC+02:00"), QByteArray("UTC+12:00"),
+        QByteArray("Etc/GMT+3"), QByteArray("GMT-2"), QByteArray("GMT"),
+        // ... then ordinary names in alphabetic order:
+        QByteArray("America/New_York"), QByteArray("America/Sao_Paulo"),
+        QByteArray("America/Vancouver"),
+        QByteArray("Asia/Kathmandu"), QByteArray("Asia/Singapore"),
+        QByteArray("Australia/Brisbane"), QByteArray("Australia/Eucla"),
+        QByteArray("Australia/Sydney"),
+        QByteArray("Europe/Berlin"), QByteArray("Europe/Helsinki"),
+        QByteArray("Europe/Rome"), QByteArray("Europe/Oslo"),
+        QByteArray("Pacific/Apia"), QByteArray("Pacific/Auckland"),
+        QByteArray("Pacific/Kiritimati")
+    };
 #endif
     result << QByteArray("Vulcan/ShiKahr"); // invalid: also worth testing
     return result;

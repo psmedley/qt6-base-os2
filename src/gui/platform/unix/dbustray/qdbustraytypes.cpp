@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2009 Marco Martin <notmart@gmail.com>
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2009 Marco Martin <notmart@gmail.com>
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QT_NO_SYSTEMTRAYICON
 
@@ -81,7 +45,7 @@ QXdgDBusImageVector iconToQXdgDBusImageVector(const QIcon &icon)
     bool hasSmallIcon = false;
     bool hasMediumIcon = false;
     QList<QSize> toRemove;
-    for (const QSize &size : qAsConst(sizes)) {
+    for (const QSize &size : std::as_const(sizes)) {
         int maxSize = qMax(size.width(), size.height());
         if (maxSize <= IconNormalSmallSize)
             hasSmallIcon = true;
@@ -90,7 +54,7 @@ QXdgDBusImageVector iconToQXdgDBusImageVector(const QIcon &icon)
         else if (maxSize > IconSizeLimit)
             toRemove << size;
     }
-    for (const QSize &size : qAsConst(toRemove))
+    for (const QSize &size : std::as_const(toRemove))
         sizes.removeOne(size);
     if (!hasSmallIcon)
         sizes.append(QSize(IconNormalSmallSize, IconNormalSmallSize));
@@ -98,7 +62,7 @@ QXdgDBusImageVector iconToQXdgDBusImageVector(const QIcon &icon)
         sizes.append(QSize(IconNormalMediumSize, IconNormalMediumSize));
 
     ret.reserve(sizes.size());
-    for (const QSize &size : qAsConst(sizes)) {
+    for (const QSize &size : std::as_const(sizes)) {
         // Protocol specifies ARGB32 format in network byte order
         QImage im = engine->pixmap(size, QIcon::Normal, QIcon::Off).toImage().convertToFormat(QImage::Format_ARGB32);
         // letterbox if necessary to make it square

@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtCore/QUrl>
 #include <QTest>
@@ -40,6 +15,8 @@
 #define STRINGPREP_CONTAINS_PROHIBITED 3
 #define STRINGPREP_BIDI_BOTH_L_AND_RAL 4
 #define STRINGPREP_BIDI_LEADTRAIL_NOT_RAL 5
+
+using namespace Qt::StringLiterals;
 
 struct char16array {
     char16array() {}
@@ -259,8 +236,8 @@ void tst_QUrlInternal::ace_testsuite_data()
     QTest::newRow("ascii-upper") << "FLUKE" << "fluke" << "fluke" << "fluke";
 
     // U+FB01 LATIN SMALL LIGATURE FI
-    QTest::newRow("asciifolded") << u"\uFB01le"_qs << "file" << "." << "file";
-    QTest::newRow("asciifolded-dotcom") << u"\uFB01le.example.com"_qs << "file.example.com" << "." << "file.example.com";
+    QTest::newRow("asciifolded") << u"\uFB01le"_s << "file" << "." << "file";
+    QTest::newRow("asciifolded-dotcom") << u"\uFB01le.example.com"_s << "file.example.com" << "." << "file.example.com";
     QTest::newRow("greek-mu") << QString::fromLatin1("\265V")
                               <<"xn--v-lmb"
                               << "."
@@ -744,7 +721,7 @@ void tst_QUrlInternal::encodingRecodeInvalidUtf8()
     output = QTest::currentDataTag();
     if (!qt_urlRecode(output, input, QUrl::FullyEncoded))
         output += input;
-    for (int i = int(strlen(QTest::currentDataTag())); i < output.length(); ++i) {
+    for (int i = int(strlen(QTest::currentDataTag())); i < output.size(); ++i) {
         QVERIFY2(output.at(i).unicode() < 0x80 || output.at(i) == QChar::ReplacementCharacter,
                  qPrintable(QString("Character at i == %1 was U+%2").arg(i).arg(output.at(i).unicode(), 4, 16, QLatin1Char('0'))));
     }

@@ -1,31 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 or (at your option) any later version
-** approved by the KDE Free Qt Foundation. The licenses are as published by
-** the Free Software Foundation and appearing in the file LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #ifndef QWASMINTEGRATION_H
 #define QWASMINTEGRATION_H
@@ -41,6 +15,13 @@
 #include <emscripten.h>
 #include <emscripten/html5.h>
 #include <emscripten/val.h>
+
+#include "qwasminputcontext.h"
+#include <private/qstdweb_p.h>
+
+#if QT_CONFIG(draganddrop)
+#include "qwasmdrag.h"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -79,8 +60,12 @@ public:
     void initialize() override;
     QPlatformInputContext *inputContext() const override;
 
-    QWasmClipboard *getWasmClipboard() { return m_clipboard; }
+#if QT_CONFIG(draganddrop)
+    QPlatformDrag *drag() const override;
+#endif
 
+    QWasmClipboard *getWasmClipboard() { return m_clipboard; }
+    QWasmInputContext *getWasmInputContext() { return m_platformInputContext; }
     static QWasmIntegration *get() { return s_instance; }
 
     void addScreen(const emscripten::val &canvas);
@@ -91,6 +76,8 @@ public:
     void removeBackingStore(QWindow* window);
     static quint64 getTimestamp();
 
+    int touchPoints;
+
 private:
     mutable QWasmFontDatabase *m_fontDb;
     mutable QWasmServices *m_desktopServices;
@@ -100,6 +87,13 @@ private:
     qreal m_fontDpi = -1;
     mutable QScopedPointer<QPlatformInputContext> m_inputContext;
     static QWasmIntegration *s_instance;
+
+    mutable QWasmInputContext *m_platformInputContext = nullptr;
+
+#if QT_CONFIG(draganddrop)
+    QWasmDrag *m_drag;
+#endif
+
 };
 
 QT_END_NAMESPACE

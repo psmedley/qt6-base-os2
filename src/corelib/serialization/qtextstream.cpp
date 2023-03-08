@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 //#define QTEXTSTREAM_DEBUG
 static const int QTEXTSTREAM_BUFFERSIZE = 16384;
@@ -279,6 +243,8 @@ static const int QTEXTSTREAM_BUFFERSIZE = 16384;
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 //-------------------------------------------------------------------
 
 /*!
@@ -310,7 +276,7 @@ void QTextStreamPrivate::Params::reset()
     realNumberPrecision = 6;
     integerBase = 0;
     fieldWidth = 0;
-    padChar = QLatin1Char(' ');
+    padChar = u' ';
     fieldAlignment = QTextStream::AlignRight;
     realNumberNotation = QTextStream::SmartNotation;
     numberFlags = { };
@@ -415,7 +381,7 @@ bool QTextStreamPrivate::fillReadBuffer(qint64 maxBytes)
 
     // remove all '\r\n' in the string.
     if (readBuffer.size() > oldReadBufferSize && textModeEnabled) {
-        QChar CR = QLatin1Char('\r');
+        QChar CR = u'\r';
         QChar *writePtr = readBuffer.data() + oldReadBufferSize;
         QChar *readPtr = readBuffer.data() + oldReadBufferSize;
         QChar *endPtr = readBuffer.data() + readBuffer.size();
@@ -483,7 +449,7 @@ void QTextStreamPrivate::flushWriteBuffer()
     bool textModeEnabled = device->isTextModeEnabled();
     if (textModeEnabled) {
         device->setTextModeEnabled(false);
-        writeBuffer.replace(QLatin1Char('\n'), QLatin1String("\r\n"));
+        writeBuffer.replace(u'\n', "\r\n"_L1);
     }
 #endif
 
@@ -590,9 +556,9 @@ bool QTextStreamPrivate::scan(const QChar **ptr, int *length, int maxlen, TokenD
                 }
                 break;
             case EndOfLine:
-                if (ch == QLatin1Char('\n')) {
+                if (ch == u'\n') {
                     foundToken = true;
-                    delimSize = (lastChar == QLatin1Char('\r')) ? 2 : 1;
+                    delimSize = (lastChar == u'\r') ? 2 : 1;
                     consumeDelimiter = true;
                 }
                 lastChar = ch;
@@ -614,7 +580,7 @@ bool QTextStreamPrivate::scan(const QChar **ptr, int *length, int maxlen, TokenD
     // don't make it part of the line.
     if (delimiter == EndOfLine && totalSize > 0 && !foundToken) {
         if (((string && stringOffset + totalSize == string->size()) || (device && device->atEnd()))
-            && lastChar == QLatin1Char('\r')) {
+            && lastChar == u'\r') {
             consumeDelimiter = true;
             ++delimSize;
         }
@@ -712,7 +678,7 @@ inline void QTextStreamPrivate::restoreToSavedConverterState()
 /*!
     \internal
 */
-void QTextStreamPrivate::write(const QChar *data, int len)
+void QTextStreamPrivate::write(const QChar *data, qsizetype len)
 {
     if (string) {
         // ### What about seek()??
@@ -742,7 +708,7 @@ inline void QTextStreamPrivate::write(QChar ch)
 /*!
     \internal
 */
-void QTextStreamPrivate::write(QLatin1String data)
+void QTextStreamPrivate::write(QLatin1StringView data)
 {
     if (string) {
         // ### What about seek()??
@@ -757,7 +723,7 @@ void QTextStreamPrivate::write(QLatin1String data)
 /*!
     \internal
 */
-void QTextStreamPrivate::writePadding(int len)
+void QTextStreamPrivate::writePadding(qsizetype len)
 {
     if (string) {
         // ### What about seek()??
@@ -822,7 +788,7 @@ inline void QTextStreamPrivate::putChar(QChar ch)
 /*!
     \internal
 */
-QTextStreamPrivate::PaddingResult QTextStreamPrivate::padding(int len) const
+QTextStreamPrivate::PaddingResult QTextStreamPrivate::padding(qsizetype len) const
 {
     Q_ASSERT(params.fieldWidth > len); // calling padding() when no padding is needed is an error
 
@@ -849,7 +815,7 @@ QTextStreamPrivate::PaddingResult QTextStreamPrivate::padding(int len) const
 /*!
     \internal
 */
-void QTextStreamPrivate::putString(const QChar *data, int len, bool number)
+void QTextStreamPrivate::putString(const QChar *data, qsizetype len, bool number)
 {
     if (Q_UNLIKELY(params.fieldWidth > len)) {
 
@@ -878,7 +844,7 @@ void QTextStreamPrivate::putString(const QChar *data, int len, bool number)
 /*!
     \internal
 */
-void QTextStreamPrivate::putString(QLatin1String data, bool number)
+void QTextStreamPrivate::putString(QLatin1StringView data, bool number)
 {
     if (Q_UNLIKELY(params.fieldWidth > data.size())) {
 
@@ -891,7 +857,7 @@ void QTextStreamPrivate::putString(QLatin1String data, bool number)
             if (sign == locale.negativeSign() || sign == locale.positiveSign()) {
                 // write the sign before the padding, then skip it later
                 write(&sign, 1);
-                data = QLatin1String(data.data() + 1, data.size() - 1);
+                data = QLatin1StringView(data.data() + 1, data.size() - 1);
             }
         }
 
@@ -1646,7 +1612,7 @@ QTextStreamPrivate::NumberParsingStatus QTextStreamPrivate::getNumber(qulonglong
         QChar ch;
         if (!getChar(&ch))
             return npsInvalidPrefix;
-        if (ch == QLatin1Char('0')) {
+        if (ch == u'0') {
             QChar ch2;
             if (!getChar(&ch2)) {
                 // Result is the number 0
@@ -1655,9 +1621,9 @@ QTextStreamPrivate::NumberParsingStatus QTextStreamPrivate::getNumber(qulonglong
             }
             ch2 = ch2.toLower();
 
-            if (ch2 == QLatin1Char('x')) {
+            if (ch2 == u'x') {
                 base = 16;
-            } else if (ch2 == QLatin1Char('b')) {
+            } else if (ch2 == u'b') {
                 base = 2;
             } else if (ch2.isDigit() && ch2.digitValue() >= 0 && ch2.digitValue() <= 7) {
                 base = 8;
@@ -1682,9 +1648,9 @@ QTextStreamPrivate::NumberParsingStatus QTextStreamPrivate::getNumber(qulonglong
     case 2: {
         QChar pf1, pf2, dig;
         // Parse prefix '0b'
-        if (!getChar(&pf1) || pf1 != QLatin1Char('0'))
+        if (!getChar(&pf1) || pf1 != u'0')
             return npsInvalidPrefix;
-        if (!getChar(&pf2) || pf2.toLower() != QLatin1Char('b'))
+        if (!getChar(&pf2) || pf2.toLower() != u'b')
             return npsInvalidPrefix;
         // Parse digits
         int ndigits = 0;
@@ -1710,7 +1676,7 @@ QTextStreamPrivate::NumberParsingStatus QTextStreamPrivate::getNumber(qulonglong
     case 8: {
         QChar pf, dig;
         // Parse prefix '0'
-        if (!getChar(&pf) || pf != QLatin1Char('0'))
+        if (!getChar(&pf) || pf != u'0')
             return npsInvalidPrefix;
         // Parse digits
         int ndigits = 0;
@@ -1773,9 +1739,9 @@ QTextStreamPrivate::NumberParsingStatus QTextStreamPrivate::getNumber(qulonglong
     case 16: {
         QChar pf1, pf2, dig;
         // Parse prefix ' 0x'
-        if (!getChar(&pf1) || pf1 != QLatin1Char('0'))
+        if (!getChar(&pf1) || pf1 != u'0')
             return npsInvalidPrefix;
-        if (!getChar(&pf2) || pf2.toLower() != QLatin1Char('x'))
+        if (!getChar(&pf2) || pf2.toLower() != u'x')
             return npsInvalidPrefix;
         // Parse digits
         int ndigits = 0;
@@ -1992,6 +1958,14 @@ QTextStream &QTextStream::operator>>(char &c)
     c = ch.toLatin1();
     return *this;
 }
+
+/*!
+    \fn QTextStream &QTextStream::operator>>(char16_t &c)
+    \overload
+    \since 6.4
+
+    Reads a character from the stream and stores it in \a c.
+*/
 
 /*!
     Reads an integer from the stream and stores it in \a i, then
@@ -2251,8 +2225,8 @@ void QTextStreamPrivate::putNumber(qulonglong number, bool negative)
         // workaround for backward compatibility - in octal form with
         // ShowBase flag set zero should be written as '00'
         if (number == 0 && base == 8 && params.numberFlags & QTextStream::ShowBase
-            && result == QLatin1String("0")) {
-            result.prepend(QLatin1Char('0'));
+            && result == "0"_L1) {
+            result.prepend(u'0');
         }
     }
     putString(result, true);
@@ -2505,7 +2479,7 @@ QTextStream &QTextStream::operator<<(QStringView string)
     Writes \a string to the stream, and returns a reference to the
     QTextStream.
 */
-QTextStream &QTextStream::operator<<(QLatin1String string)
+QTextStream &QTextStream::operator<<(QLatin1StringView string)
 {
     Q_D(QTextStream);
     CHECK_VALID_STREAM(*this);
@@ -2523,7 +2497,7 @@ QTextStream &QTextStream::operator<<(const QByteArray &array)
 {
     Q_D(QTextStream);
     CHECK_VALID_STREAM(*this);
-    d->putString(QString::fromUtf8(array.constData(), array.length()));
+    d->putString(QString::fromUtf8(array.constData(), array.size()));
     return *this;
 }
 
@@ -2853,7 +2827,7 @@ QTextStream &center(QTextStream &stream)
 */
 QTextStream &endl(QTextStream &stream)
 {
-    return stream << QLatin1Char('\n') << Qt::flush;
+    return stream << '\n'_L1 << Qt::flush;
 }
 
 /*!
@@ -2967,7 +2941,7 @@ void QTextStream::setEncoding(QStringConverter::Encoding encoding)
 
     d->encoding = encoding;
     d->toUtf16 = QStringDecoder(d->encoding);
-    bool generateBOM = d->hasWrittenData && d->generateBOM;
+    bool generateBOM = !d->hasWrittenData && d->generateBOM;
     d->fromUtf16 = QStringEncoder(d->encoding,
                                   generateBOM ? QStringEncoder::Flag::WriteBom : QStringEncoder::Flag::Default);
 

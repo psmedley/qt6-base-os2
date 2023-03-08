@@ -1,31 +1,8 @@
 /*
-*********************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the autotests of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-*********************************************************************
+
+* Copyright (C) 2016 The Qt Company Ltd.
+* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+
 */
 
 /********************************************************************************
@@ -65,39 +42,39 @@ public:
     void setupUi(QDialog *PluginDialog)
     {
         if (PluginDialog->objectName().isEmpty())
-            PluginDialog->setObjectName(QString::fromUtf8("PluginDialog"));
+            PluginDialog->setObjectName("PluginDialog");
         PluginDialog->resize(401, 331);
         vboxLayout = new QVBoxLayout(PluginDialog);
         vboxLayout->setSpacing(6);
-        vboxLayout->setObjectName(QString::fromUtf8("vboxLayout"));
+        vboxLayout->setObjectName("vboxLayout");
         vboxLayout->setContentsMargins(8, 8, 8, 8);
         label = new QLabel(PluginDialog);
-        label->setObjectName(QString::fromUtf8("label"));
+        label->setObjectName("label");
         label->setWordWrap(true);
 
         vboxLayout->addWidget(label);
 
         treeWidget = new QTreeWidget(PluginDialog);
-        treeWidget->setObjectName(QString::fromUtf8("treeWidget"));
+        treeWidget->setObjectName("treeWidget");
         treeWidget->setTextElideMode(Qt::ElideNone);
 
         vboxLayout->addWidget(treeWidget);
 
         message = new QLabel(PluginDialog);
-        message->setObjectName(QString::fromUtf8("message"));
+        message->setObjectName("message");
         message->setWordWrap(true);
 
         vboxLayout->addWidget(message);
 
         hboxLayout = new QHBoxLayout();
         hboxLayout->setSpacing(6);
-        hboxLayout->setObjectName(QString::fromUtf8("hboxLayout"));
+        hboxLayout->setObjectName("hboxLayout");
         hboxLayout->setContentsMargins(0, 0, 0, 0);
 
         vboxLayout->addLayout(hboxLayout);
 
         buttonBox = new QDialogButtonBox(PluginDialog);
-        buttonBox->setObjectName(QString::fromUtf8("buttonBox"));
+        buttonBox->setObjectName("buttonBox");
         buttonBox->setOrientation(Qt::Horizontal);
         buttonBox->setStandardButtons(QDialogButtonBox::Close);
 

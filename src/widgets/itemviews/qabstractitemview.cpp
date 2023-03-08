@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qabstractitemview.h"
 
@@ -66,7 +30,7 @@
 #include <private/qapplication_p.h>
 #include <private/qguiapplication_p.h>
 #include <private/qscrollbar_p.h>
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 #include <qaccessible.h>
 #endif
 #if QT_CONFIG(gestures) && QT_CONFIG(scroller)
@@ -243,6 +207,16 @@ void QAbstractItemViewPrivate::_q_scrollerStateChanged()
 }
 
 #endif // QT_NO_GESTURES
+
+void QAbstractItemViewPrivate::_q_delegateSizeHintChanged(const QModelIndex &index)
+{
+    Q_Q(QAbstractItemView);
+    if (model) {
+        if (!model->checkIndex(index))
+            qWarning("Delegate size hint changed for a model index that does not belong to this view");
+    }
+    QMetaObject::invokeMethod(q, &QAbstractItemView::doItemsLayout, Qt::QueuedConnection);
+}
 
 /*!
     \class QAbstractItemView
@@ -853,7 +827,7 @@ void QAbstractItemView::setItemDelegate(QAbstractItemDelegate *delegate)
             disconnect(d->itemDelegate, SIGNAL(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)),
                        this, SLOT(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)));
             disconnect(d->itemDelegate, SIGNAL(commitData(QWidget*)), this, SLOT(commitData(QWidget*)));
-            disconnect(d->itemDelegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(doItemsLayout()));
+            disconnect(d->itemDelegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(_q_delegateSizeHintChanged(QModelIndex)));
         }
     }
 
@@ -862,7 +836,7 @@ void QAbstractItemView::setItemDelegate(QAbstractItemDelegate *delegate)
             connect(delegate, SIGNAL(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)),
                     this, SLOT(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)));
             connect(delegate, SIGNAL(commitData(QWidget*)), this, SLOT(commitData(QWidget*)));
-            connect(delegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(doItemsLayout()), Qt::QueuedConnection);
+            connect(delegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(_q_delegateSizeHintChanged(QModelIndex)));
         }
     }
     d->itemDelegate = delegate;
@@ -937,7 +911,7 @@ void QAbstractItemView::setItemDelegateForRow(int row, QAbstractItemDelegate *de
             disconnect(rowDelegate, SIGNAL(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)),
                        this, SLOT(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)));
             disconnect(rowDelegate, SIGNAL(commitData(QWidget*)), this, SLOT(commitData(QWidget*)));
-            disconnect(rowDelegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(doItemsLayout()));
+            disconnect(rowDelegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(_q_delegateSizeHintChanged(QModelIndex)));
         }
         d->rowDelegates.remove(row);
     }
@@ -946,7 +920,7 @@ void QAbstractItemView::setItemDelegateForRow(int row, QAbstractItemDelegate *de
             connect(delegate, SIGNAL(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)),
                     this, SLOT(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)));
             connect(delegate, SIGNAL(commitData(QWidget*)), this, SLOT(commitData(QWidget*)));
-            connect(delegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(doItemsLayout()), Qt::QueuedConnection);
+            connect(delegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(_q_delegateSizeHintChanged(QModelIndex)));
         }
         d->rowDelegates.insert(row, delegate);
     }
@@ -997,7 +971,7 @@ void QAbstractItemView::setItemDelegateForColumn(int column, QAbstractItemDelega
             disconnect(columnDelegate, SIGNAL(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)),
                        this, SLOT(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)));
             disconnect(columnDelegate, SIGNAL(commitData(QWidget*)), this, SLOT(commitData(QWidget*)));
-            disconnect(columnDelegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(doItemsLayout()));
+            disconnect(columnDelegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(_q_delegateSizeHintChanged(QModelIndex)));
         }
         d->columnDelegates.remove(column);
     }
@@ -1006,7 +980,7 @@ void QAbstractItemView::setItemDelegateForColumn(int column, QAbstractItemDelega
             connect(delegate, SIGNAL(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)),
                     this, SLOT(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)));
             connect(delegate, SIGNAL(commitData(QWidget*)), this, SLOT(commitData(QWidget*)));
-            connect(delegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(doItemsLayout()), Qt::QueuedConnection);
+            connect(delegate, SIGNAL(sizeHintChanged(QModelIndex)), this, SLOT(_q_delegateSizeHintChanged(QModelIndex)));
         }
         d->columnDelegates.insert(column, delegate);
     }
@@ -1157,7 +1131,7 @@ void QAbstractItemView::reset()
     setRootIndex(QModelIndex());
     if (d->selectionModel)
         d->selectionModel->reset();
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     if (QAccessible::isActive()) {
         QAccessibleTableModelChangeEvent accessibleEvent(this, QAccessibleTableModelChangeEvent::ModelReset);
         QAccessible::updateAccessibility(&accessibleEvent);
@@ -2855,10 +2829,10 @@ void QAbstractItemView::updateEditorGeometries()
 
     //we hide and release the editor outside of the loop because it might change the focus and try
     //to change the editors hashes.
-    for (int i = 0; i < editorsToHide.count(); ++i) {
+    for (int i = 0; i < editorsToHide.size(); ++i) {
         editorsToHide.at(i)->hide();
     }
-    for (int i = 0; i < editorsToRelease.count(); ++i) {
+    for (int i = 0; i < editorsToRelease.size(); ++i) {
         d->releaseEditor(editorsToRelease.at(i));
     }
 }
@@ -2936,8 +2910,10 @@ void QAbstractItemView::closeEditor(QWidget *editor, QAbstractItemDelegate::EndE
         bool isPersistent = d->persistent.contains(editor);
         bool hadFocus = editor->hasFocus();
         QModelIndex index = d->indexForEditor(editor);
-        if (!index.isValid())
+        if (!index.isValid()) {
+            qWarning("QAbstractItemView::closeEditor called with an editor that does not belong to this view");
             return; // the editor was not registered
+        }
 
         // start a timer that expires immediately when we return to the event loop
         // to identify whether this close was triggered by a mousepress-initiated
@@ -3015,8 +2991,10 @@ void QAbstractItemView::commitData(QWidget *editor)
     if (!editor || !d->itemDelegate || d->currentlyCommittingEditor)
         return;
     QModelIndex index = d->indexForEditor(editor);
-    if (!index.isValid())
+    if (!index.isValid()) {
+        qWarning("QAbstractItemView::commitData called with an editor that does not belong to this view");
         return;
+    }
     d->currentlyCommittingEditor = editor;
     QAbstractItemDelegate *delegate = itemDelegateForIndex(index);
     editor->removeEventFilter(delegate);
@@ -3075,9 +3053,9 @@ void QAbstractItemView::keyboardSearch(const QString &search)
 
     // special case for searches with same key like 'aaaaa'
     bool sameKey = false;
-    if (d->keyboardInput.length() > 1) {
-        int c = d->keyboardInput.count(d->keyboardInput.at(d->keyboardInput.length() - 1));
-        sameKey = (c == d->keyboardInput.length());
+    if (d->keyboardInput.size() > 1) {
+        int c = d->keyboardInput.count(d->keyboardInput.at(d->keyboardInput.size() - 1));
+        sameKey = (c == d->keyboardInput.size());
         if (sameKey)
             skipRow = true;
     }
@@ -3420,7 +3398,7 @@ void QAbstractItemView::dataChanged(const QModelIndex &topLeft, const QModelInde
         }
     }
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     if (QAccessible::isActive()) {
         QAccessibleTableModelChangeEvent accessibleEvent(this, QAccessibleTableModelChangeEvent::DataChanged);
         accessibleEvent.setFirstRow(topLeft.row());
@@ -3548,7 +3526,7 @@ void QAbstractItemViewPrivate::_q_rowsRemoved(const QModelIndex &index, int star
     if (q->isVisible())
         q->updateEditorGeometries();
     q->setState(QAbstractItemView::NoState);
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     if (QAccessible::isActive()) {
         QAccessibleTableModelChangeEvent accessibleEvent(q, QAccessibleTableModelChangeEvent::RowsRemoved);
         accessibleEvent.setFirstRow(start);
@@ -3639,7 +3617,7 @@ void QAbstractItemViewPrivate::_q_columnsRemoved(const QModelIndex &index, int s
     if (q->isVisible())
         q->updateEditorGeometries();
     q->setState(QAbstractItemView::NoState);
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     if (QAccessible::isActive()) {
         QAccessibleTableModelChangeEvent accessibleEvent(q, QAccessibleTableModelChangeEvent::ColumnsRemoved);
         accessibleEvent.setFirstColumn(start);
@@ -3662,7 +3640,7 @@ void QAbstractItemViewPrivate::_q_rowsInserted(const QModelIndex &index, int sta
     Q_UNUSED(start);
     Q_UNUSED(end);
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     Q_Q(QAbstractItemView);
     if (QAccessible::isActive()) {
         QAccessibleTableModelChangeEvent accessibleEvent(q, QAccessibleTableModelChangeEvent::RowsInserted);
@@ -3688,7 +3666,7 @@ void QAbstractItemViewPrivate::_q_columnsInserted(const QModelIndex &index, int 
     Q_Q(QAbstractItemView);
     if (q->isVisible())
         q->updateEditorGeometries();
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     if (QAccessible::isActive()) {
         QAccessibleTableModelChangeEvent accessibleEvent(q, QAccessibleTableModelChangeEvent::ColumnsInserted);
         accessibleEvent.setFirstColumn(start);
@@ -3716,7 +3694,7 @@ void QAbstractItemViewPrivate::_q_modelDestroyed()
 void QAbstractItemViewPrivate::_q_layoutChanged()
 {
     doDelayedItemsLayout();
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     Q_Q(QAbstractItemView);
     if (QAccessible::isActive()) {
         QAccessibleTableModelChangeEvent accessibleEvent(q, QAccessibleTableModelChangeEvent::ModelReset);
@@ -3815,7 +3793,7 @@ void QAbstractItemView::startDrag(Qt::DropActions supportedActions)
 {
     Q_D(QAbstractItemView);
     QModelIndexList indexes = d->selectedDraggableIndexes();
-    if (indexes.count() > 0) {
+    if (indexes.size() > 0) {
         QMimeData *data = d->model->mimeData(indexes);
         if (!data)
             return;
@@ -4658,7 +4636,7 @@ QPixmap QAbstractItemViewPrivate::renderToPixmap(const QModelIndexList &indexes,
     QStyleOptionViewItem option;
     q->initViewItemOption(&option);
     option.state |= QStyle::State_Selected;
-    for (int j = 0; j < paintPairs.count(); ++j) {
+    for (int j = 0; j < paintPairs.size(); ++j) {
         option.rect = paintPairs.at(j).rect.translated(-r->topLeft());
         const QModelIndex &current = paintPairs.at(j).index;
         adjustViewOptionsForIndex(&option, current);

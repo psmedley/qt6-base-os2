@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtCore/QDebug>
@@ -71,7 +35,13 @@
 #undef explicit
 #include <xcb/xinput.h>
 
+#if QT_CONFIG(xcb_xlib)
+#include "qt_xlib_wrapper.h"
+#endif
+
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 Q_LOGGING_CATEGORY(lcQpaXInput, "qt.qpa.input")
 Q_LOGGING_CATEGORY(lcQpaXInputDevices, "qt.qpa.input.devices")
@@ -115,8 +85,8 @@ QXcbConnection::QXcbConnection(QXcbNativeInterface *nativeInterface, bool canGra
     m_drag = new QXcbDrag(this);
 #endif
 
-    m_startupId = qgetenv("DESKTOP_STARTUP_ID");
-    if (!m_startupId.isNull())
+    setStartupId(qgetenv("DESKTOP_STARTUP_ID"));
+    if (!startupId().isNull())
         qunsetenv("DESKTOP_STARTUP_ID");
 
     const int focusInDelay = 100;
@@ -483,12 +453,12 @@ void QXcbConnection::printXcbError(const char *message, xcb_generic_error_t *err
     uint clamped_error_code = qMin<uint>(error->error_code, (sizeof(xcb_errors) / sizeof(xcb_errors[0])) - 1);
     uint clamped_major_code = qMin<uint>(error->major_code, (sizeof(xcb_protocol_request_codes) / sizeof(xcb_protocol_request_codes[0])) - 1);
 
-    qCWarning(lcQpaXcb, "%s: %d (%s), sequence: %d, resource id: %d, major code: %d (%s), minor code: %d",
-             message,
-             int(error->error_code), xcb_errors[clamped_error_code],
-             int(error->sequence), int(error->resource_id),
-             int(error->major_code), xcb_protocol_request_codes[clamped_major_code],
-             int(error->minor_code));
+    qCDebug(lcQpaXcb, "%s: %d (%s), sequence: %d, resource id: %d, major code: %d (%s), minor code: %d",
+            message,
+            int(error->error_code), xcb_errors[clamped_error_code],
+            int(error->sequence), int(error->resource_id),
+            int(error->major_code), xcb_protocol_request_codes[clamped_major_code],
+            int(error->minor_code));
 }
 
 static Qt::MouseButtons translateMouseButtons(int s)
@@ -747,7 +717,7 @@ void QXcbConnection::handleXcbEvent(xcb_generic_event_t *event)
 #ifndef QT_NO_CLIPBOARD
         m_clipboard->handleXFixesSelectionRequest(notify_event);
 #endif
-        for (QXcbVirtualDesktop *virtualDesktop : qAsConst(m_virtualDesktops))
+        for (QXcbVirtualDesktop *virtualDesktop : std::as_const(m_virtualDesktops))
             virtualDesktop->handleXFixesSelectionNotify(notify_event);
     } else if (isXRandrType(response_type, XCB_RANDR_NOTIFY)) {
         if (!isAtLeastXRandR15())
@@ -803,6 +773,28 @@ void QXcbConnection::setMouseGrabber(QXcbWindow *w)
 void QXcbConnection::setMousePressWindow(QXcbWindow *w)
 {
     m_mousePressWindow = w;
+}
+
+QByteArray QXcbConnection::startupId() const
+{
+    return m_startupId;
+}
+void QXcbConnection::setStartupId(const QByteArray &nextId)
+{
+    m_startupId = nextId;
+    if (m_clientLeader) {
+        if (!nextId.isEmpty())
+            xcb_change_property(xcb_connection(),
+                                XCB_PROP_MODE_REPLACE,
+                                clientLeader(),
+                                atom(QXcbAtom::_NET_STARTUP_ID),
+                                atom(QXcbAtom::UTF8_STRING),
+                                8,
+                                nextId.size(),
+                                nextId.constData());
+        else
+            xcb_delete_property(xcb_connection(), clientLeader(), atom(QXcbAtom::_NET_STARTUP_ID));
+    }
 }
 
 void QXcbConnection::grabServer()
@@ -898,7 +890,7 @@ xcb_window_t QXcbConnection::qtSelectionOwner()
                           nullptr);                           // value list
 
         QXcbWindow::setWindowTitle(connection(), m_qtSelectionOwner,
-                                   QLatin1String("Qt Selection Owner for ") + QCoreApplication::applicationName());
+                                   "Qt Selection Owner for "_L1 + QCoreApplication::applicationName());
     }
     return m_qtSelectionOwner;
 }
@@ -947,10 +939,12 @@ xcb_window_t QXcbConnection::clientLeader()
                                 atom(QXcbAtom::SM_CLIENT_ID),
                                 XCB_ATOM_STRING,
                                 8,
-                                session.length(),
+                                session.size(),
                                 session.constData());
         }
 #endif
+
+        setStartupId(startupId());
     }
     return m_clientLeader;
 }
@@ -1100,6 +1094,10 @@ void QXcbConnection::processXcbEvents(QEventLoop::ProcessEventsFlags flags)
         m_eventQueue->flushBufferedEvents();
     }
 
+#if QT_CONFIG(xcb_xlib)
+    qt_XFlush(static_cast<Display *>(xlib_display()));
+#endif
+
     xcb_flush(xcb_connection());
 }
 
@@ -1162,7 +1160,7 @@ QXcbGlIntegration *QXcbConnection::glIntegration() const
     QString glIntegrationName = QString::fromLocal8Bit(qgetenv("QT_XCB_GL_INTEGRATION"));
     if (!glIntegrationName.isEmpty()) {
         qCDebug(lcQpaGl) << "QT_XCB_GL_INTEGRATION is set to" << glIntegrationName;
-        if (glIntegrationName != QLatin1String("none")) {
+        if (glIntegrationName != "none"_L1) {
             glIntegrationNames.removeAll(glIntegrationName);
             glIntegrationNames.prepend(glIntegrationName);
         } else {

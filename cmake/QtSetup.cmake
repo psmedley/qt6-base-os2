@@ -59,6 +59,12 @@ elseif(CMAKE_CONFIGURATION_TYPES)
         message(STATUS
             "Default build configuration set to '${CMAKE_NINJA_MULTI_DEFAULT_BUILD_TYPE}'.")
     endif()
+    if(CMAKE_GENERATOR STREQUAL "Ninja")
+        message(FATAL_ERROR
+            "It's not possible to build multiple configurations with the single config Ninja "
+            "generator. Consider configuring with -G\"Ninja Multi-Config\" instead of -GNinja."
+        )
+    endif()
 else()
     message(STATUS "CMAKE_BUILD_TYPE was set to: '${CMAKE_BUILD_TYPE}'")
 endif()
@@ -216,11 +222,19 @@ if(QT_BUILD_STANDALONE_TESTS)
 endif()
 set(BUILD_TESTING ${QT_BUILD_TESTS} CACHE INTERNAL "")
 
+# QT_BUILD_TOOLS_WHEN_CROSSCOMPILING -> QT_FORCE_BUILD_TOOLS
+# pre-6.4 compatibility flag (remove sometime in the future)
+if(CMAKE_CROSSCOMPILING AND QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
+    message(WARNING "QT_BUILD_TOOLS_WHEN_CROSSCOMPILING is deprecated. "
+        "Please use QT_FORCE_BUILD_TOOLS instead.")
+    set(QT_FORCE_BUILD_TOOLS TRUE CACHE INTERNAL "" FORCE)
+endif()
+
 # When cross-building, we don't build tools by default. Sometimes this also covers Qt apps as well.
 # Like in qttools/assistant/assistant.pro, load(qt_app), which is guarded by a qtNomakeTools() call.
 
 set(_qt_build_tools_by_default_default ON)
-if(CMAKE_CROSSCOMPILING AND NOT QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
+if(CMAKE_CROSSCOMPILING AND NOT QT_FORCE_BUILD_TOOLS)
     set(_qt_build_tools_by_default_default OFF)
 endif()
 option(QT_BUILD_TOOLS_BY_DEFAULT "Should tools be built as part of the default 'all' target."
@@ -244,27 +258,17 @@ option(QT_BUILD_EXAMPLES_AS_EXTERNAL "Should examples be built as ExternalProjec
 unset(_qt_build_examples_as_external)
 
 option(QT_BUILD_MANUAL_TESTS "Build Qt manual tests" OFF)
-option(QT_BUILD_MINIMAL_STATIC_TESTS "Build minimal subset of tests for static Qt builds" OFF)
 
-## Find host tools (if non native):
+if(WASM)
+    option(QT_BUILD_MINIMAL_STATIC_TESTS "Build minimal subset of tests for static Qt builds" ON)
+else()
+    option(QT_BUILD_MINIMAL_STATIC_TESTS "Build minimal subset of tests for static Qt builds" OFF)
+endif()
+
+## Path used to find host tools, either when cross-compiling or just when using the tools from
+## a different host build.
 set(QT_HOST_PATH "$ENV{QT_HOST_PATH}" CACHE PATH
     "Installed Qt host directory path, used for cross compiling.")
-
-if (CMAKE_CROSSCOMPILING)
-    if(NOT IS_DIRECTORY "${QT_HOST_PATH}")
-        message(FATAL_ERROR "You need to set QT_HOST_PATH to cross compile Qt.")
-    endif()
-endif()
-
-if(NOT "${QT_HOST_PATH}" STREQUAL "")
-    find_package(${INSTALL_CMAKE_NAMESPACE}HostInfo
-                 CONFIG
-                 REQUIRED
-                 PATHS "${QT_HOST_PATH}"
-                       "${QT_HOST_PATH_CMAKE_DIR}"
-                 NO_CMAKE_FIND_ROOT_PATH
-                 NO_DEFAULT_PATH)
-endif()
 
 ## Android platform settings
 if(ANDROID)

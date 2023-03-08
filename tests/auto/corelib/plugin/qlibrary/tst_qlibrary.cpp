@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -106,6 +81,7 @@ enum QLibraryOperation {
     QString directory;
 private slots:
     void initTestCase();
+    void cleanup();
 
     void load();
     void load_data();
@@ -147,6 +123,38 @@ void tst_QLibrary::initTestCase()
     QVERIFY2(QDir::setCurrent(testdatadir), qPrintable("Could not chdir to " + testdatadir));
     directory = QCoreApplication::applicationDirPath();
 #endif
+}
+
+void tst_QLibrary::cleanup()
+{
+    // unload the libraries, if they are still loaded after the test ended
+    // (probably in a failure)
+
+    static struct {
+        QString name;
+        int version = -1;
+    } libs[] = {
+        { directory + "/mylib" },
+        { directory + "/mylib", 1 },
+        { directory + "/mylib", 2 },
+        { sys_qualifiedLibraryName("mylib") },
+
+        // stuff that load_data() succeeds with
+        { directory + "/" PREFIX "mylib" },
+        { directory + "/" PREFIX "mylib" SUFFIX },
+#if defined(Q_OS_WIN32)
+        { directory + "/mylib.dl2" },
+        { directory + "/system.qt.test.mylib.dll" },
+#elif !defined(Q_OS_ANDROID)
+        // .so even on macOS
+        { directory + "/libmylib.so2" },
+        { directory + "/system.qt.test.mylib.so" },
+#endif
+
+    };
+    for (const auto &entry : libs) {
+        do {} while (QLibrary(entry.name, entry.version).unload());
+    }
 }
 
 void tst_QLibrary::version_data()

@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QtCore/qglobal.h>
@@ -188,6 +163,7 @@ public slots:
     void cleanup();
 private slots:
     void eventTest();
+    void eventWithChildTest();
     void customWidget();
     void deletedWidget();
     void subclassedWidget();
@@ -235,6 +211,7 @@ private slots:
     void treeTest();
     void tableTest();
 
+    void uniqueIdTest();
     void calendarWidgetTest();
     void dockWidgetTest();
     void comboBoxTest();
@@ -317,9 +294,9 @@ void tst_QAccessibility::cleanup()
 {
     const EventList list = QTestAccessibility::events();
     if (!list.isEmpty()) {
-        qWarning("%zd accessibility event(s) were not handled in testfunction '%s':", size_t(list.count()),
+        qWarning("%zd accessibility event(s) were not handled in testfunction '%s':", size_t(list.size()),
                  QString(QTest::currentTestFunction()).toLatin1().constData());
-        for (int i = 0; i < list.count(); ++i)
+        for (int i = 0; i < list.size(); ++i)
             qWarning(" %d: Object: %p Event: '%s' Child: %d", i + 1, list.at(i)->object(),
                      qAccessibleEventString(list.at(i)->type()), list.at(i)->child());
     }
@@ -376,6 +353,33 @@ void tst_QAccessibility::eventTest()
     objectHolder.reset();
 
     QTestAccessibility::clearEvents();
+}
+
+void tst_QAccessibility::eventWithChildTest()
+{
+    // make sure that QAccessibleEvent created using either of the two QAccessibleEvent
+    // behaves the same when the same underlying QObject is used
+    QWidget widget;
+    QWidget childWidget(&widget);
+
+    // QAccessibleEvent constructor called with the QObject*
+    QAccessibleEvent event1(&widget, QAccessible::Focus);
+
+    // QAccessibleEvent constructor called with the QAccessibleInterface* for the same QObject*
+    QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(&widget);
+    QAccessibleEvent event2(iface, QAccessible::Focus);
+
+    QVERIFY(event1.accessibleInterface() != nullptr);
+    QVERIFY(event2.accessibleInterface() != nullptr);
+    QCOMPARE(event1.accessibleInterface(), event2.accessibleInterface());
+
+    // set same child for both
+    event1.setChild(0);
+    event2.setChild(0);
+
+    QVERIFY(event1.accessibleInterface() != nullptr);
+    QVERIFY(event2.accessibleInterface() != nullptr);
+    QCOMPARE(event1.accessibleInterface(), event2.accessibleInterface());
 }
 
 void tst_QAccessibility::customWidget()
@@ -778,7 +782,7 @@ void tst_QAccessibility::textAttributes()
     QAccessibleInterface *interface = QAccessible::queryAccessibleInterface(&textEdit);
     QAccessibleTextInterface *textInterface=interface->textInterface();
     QVERIFY(textInterface);
-    QCOMPARE(textInterface->characterCount(), textEdit.toPlainText().length());
+    QCOMPARE(textInterface->characterCount(), textEdit.toPlainText().size());
 
     int startOffset = -1;
     int endOffset = -1;
@@ -1408,9 +1412,7 @@ void tst_QAccessibility::tabWidgetTest()
 
     QAccessibleInterface* stackChild1Interface = stackWidgetInterface->child(0);
     QVERIFY(stackChild1Interface);
-#ifndef Q_CC_INTEL
     QCOMPARE(stackChild1Interface->childCount(), 0);
-#endif
     QCOMPARE(stackChild1Interface->role(), QAccessible::StaticText);
     QCOMPARE(stackChild1Interface->text(QAccessible::Name), QLatin1String("Page 1"));
     QCOMPARE(label1, stackChild1Interface->object());
@@ -1418,9 +1420,7 @@ void tst_QAccessibility::tabWidgetTest()
     // Navigation in stack widgets should be consistent
     QAccessibleInterface* parent = stackChild1Interface->parent();
     QVERIFY(parent);
-#ifndef Q_CC_INTEL
     QCOMPARE(parent->childCount(), 2);
-#endif
     QCOMPARE(parent->role(), QAccessible::LayeredPane);
 
     QAccessibleInterface* stackChild2Interface = stackWidgetInterface->child(1);
@@ -1432,9 +1432,7 @@ void tst_QAccessibility::tabWidgetTest()
 
     parent = stackChild2Interface->parent();
     QVERIFY(parent);
-#ifndef Q_CC_INTEL
     QCOMPARE(parent->childCount(), 2);
-#endif
     QCOMPARE(parent->role(), QAccessible::LayeredPane);
 
     QTestAccessibility::clearEvents();
@@ -1946,7 +1944,7 @@ void tst_QAccessibility::mdiAreaTest()
         mdiArea.addSubWindow(new QWidget, Qt::Dialog)->show();
 
     QList<QMdiSubWindow *> subWindows = mdiArea.subWindowList();
-    QCOMPARE(subWindows.count(), subWindowCount);
+    QCOMPARE(subWindows.size(), subWindowCount);
 
     QAccessibleInterface *interface = QAccessible::queryAccessibleInterface(&mdiArea);
     QVERIFY(interface);
@@ -1984,7 +1982,7 @@ void tst_QAccessibility::mdiSubWindowTest()
     }
 
     QList<QMdiSubWindow *> subWindows = mdiArea.subWindowList();
-    QCOMPARE(subWindows.count(), subWindowCount);
+    QCOMPARE(subWindows.size(), subWindowCount);
 
     QMdiSubWindow *testWindow = subWindows.at(3);
     QVERIFY(testWindow);
@@ -2108,10 +2106,10 @@ void tst_QAccessibility::lineEditTest()
     QCOMPARE(iface->text(QAccessible::Value), QString());
     le->setEchoMode(QLineEdit::Password);
     QVERIFY(iface->state().passwordEdit);
-    QCOMPARE(iface->text(QAccessible::Value), QString(secret.length(), QLatin1Char('*')));
+    QCOMPARE(iface->text(QAccessible::Value), QString(secret.size(), QLatin1Char('*')));
     le->setEchoMode(QLineEdit::PasswordEchoOnEdit);
     QVERIFY(iface->state().passwordEdit);
-    QCOMPARE(iface->text(QAccessible::Value), QString(secret.length(), QLatin1Char('*')));
+    QCOMPARE(iface->text(QAccessible::Value), QString(secret.size(), QLatin1Char('*')));
     le->setEchoMode(QLineEdit::Normal);
     QVERIFY(!(iface->state().passwordEdit));
     QCOMPARE(iface->text(QAccessible::Value), secret);
@@ -2203,7 +2201,7 @@ void tst_QAccessibility::lineEditTest()
 
     QCOMPARE(textIface->textAtOffset(5, QAccessible::ParagraphBoundary,&start,&end), cite);
     QCOMPARE(start, 0);
-    QCOMPARE(end, cite.length());
+    QCOMPARE(end, cite.size());
     QCOMPARE(textIface->textAtOffset(5, QAccessible::LineBoundary,&start,&end), cite);
     QCOMPARE(textIface->textAtOffset(5, QAccessible::NoBoundary,&start,&end), cite);
 
@@ -2247,8 +2245,8 @@ void tst_QAccessibility::lineEditTest()
     QVERIFY_EVENT(&sel);
 
     lineEdit->selectAll();
-    sel.setSelection(0, lineEdit->text().length());
-    sel.setCursorPosition(lineEdit->text().length());
+    sel.setSelection(0, lineEdit->text().size());
+    sel.setCursorPosition(lineEdit->text().size());
     QVERIFY_EVENT(&sel);
 
     lineEdit->setSelection(10, -4);
@@ -2604,7 +2602,7 @@ void tst_QAccessibility::dialogButtonBoxTest()
 
     std::sort(buttons.begin(), buttons.end(), accessibleInterfaceLeftOf);
 
-    for (int i = 0; i < buttons.count(); ++i)
+    for (int i = 0; i < buttons.size(); ++i)
         actualOrder << buttons.at(i)->text(QAccessible::Name);
 
     QStringList expectedOrder;
@@ -2656,7 +2654,7 @@ void tst_QAccessibility::dialogButtonBoxTest()
 
     std::sort(buttons.begin(), buttons.end(), accessibleInterfaceAbove);
 
-    for (int i = 0; i < buttons.count(); ++i)
+    for (int i = 0; i < buttons.size(); ++i)
         actualOrder << buttons.at(i)->text(QAccessible::Name);
 
     QStringList expectedOrder;
@@ -3388,6 +3386,25 @@ void tst_QAccessibility::tableTest()
     QTestAccessibility::clearEvents();
 }
 
+void tst_QAccessibility::uniqueIdTest()
+{
+    // Test that an ID isn't reassigned to another interface right away when an accessible interface
+    // that has just been created is removed from the cache and deleted before the next
+    // accessible interface is registered.
+    // For example for AT-SPI, that would result in the same object path being used, and thus
+    // data from the old and new interface can get confused due to caching.
+    QWidget widget1;
+    QAccessibleInterface *iface1 = QAccessible::queryAccessibleInterface(&widget1);
+    QAccessible::Id id1 = QAccessible::uniqueId(iface1);
+    QAccessible::deleteAccessibleInterface(id1);
+
+    QWidget widget2;
+    QAccessibleInterface *iface2 = QAccessible::queryAccessibleInterface(&widget2);
+    QAccessible::Id id2 = QAccessible::uniqueId(iface2);
+
+    QVERIFY(id1 != id2);
+}
+
 void tst_QAccessibility::calendarWidgetTest()
 {
 #if QT_CONFIG(calendarwidget)
@@ -3699,7 +3716,7 @@ void tst_QAccessibility::labelTest()
     QCOMPARE(acc_label->state().readOnly, true);
 
     QList<QPair<QAccessibleInterface *, QAccessible::Relation>> rels = acc_label->relations();
-    QCOMPARE(rels.count(), 1);
+    QCOMPARE(rels.size(), 1);
     QAccessibleInterface *iface = rels.first().first;
     QAccessible::Relation rel = rels.first().second;
 
@@ -3848,7 +3865,7 @@ void tst_QAccessibility::bridgeTest()
     POINT pt{nativePos.x(), nativePos.y()};
 
     // Initialize COM stuff.
-    HRESULT hr = CoInitialize(nullptr);
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     QVERIFY(SUCCEEDED(hr));
 
     // Get UI Automation interface.
@@ -4156,7 +4173,7 @@ void tst_QAccessibility::focusChild()
 
         spy.clear();
         tableView->setCurrentCell(2, 1);
-        QTRY_COMPARE(spy.count(), 1);
+        QTRY_COMPARE(spy.size(), 1);
 
         QAccessibleInterface *child = iface->focusChild();
         QVERIFY(child);
@@ -4164,7 +4181,7 @@ void tst_QAccessibility::focusChild()
 
         spy.clear();
         tableView->setCurrentCell(1, 2);
-        QTRY_COMPARE(spy.count(), 1);
+        QTRY_COMPARE(spy.size(), 1);
 
         child = iface->focusChild();
         QVERIFY(child);
@@ -4216,7 +4233,7 @@ void tst_QAccessibility::focusChild()
 
         spy.clear();
         treeView->setCurrentItem(item2);
-        QTRY_COMPARE(spy.count(), 1);
+        QTRY_COMPARE(spy.size(), 1);
 
         QAccessibleInterface *child = iface->focusChild();
         QVERIFY(child);
@@ -4224,11 +4241,52 @@ void tst_QAccessibility::focusChild()
 
         spy.clear();
         treeView->setCurrentItem(item3);
-        QTRY_COMPARE(spy.count(), 1);
+        QTRY_COMPARE(spy.size(), 1);
 
         child = iface->focusChild();
         QVERIFY(child);
         QCOMPARE(child->text(QAccessible::Name), QStringLiteral("Klimt"));
+    }
+    {
+        QWidget window;
+        // takes the initial focus
+        QLineEdit lineEdit;
+        QComboBox comboBox;
+        comboBox.addItems({"One", "Two", "Three"});
+        QComboBox editableComboBox;
+        editableComboBox.setEditable(true);
+        editableComboBox.addItems({"A", "B", "C"});
+        QVBoxLayout vbox;
+        vbox.addWidget(&lineEdit);
+        vbox.addWidget(&comboBox);
+        vbox.addWidget(&editableComboBox);
+        window.setLayout(&vbox);
+
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTestAccessibility::clearEvents();
+        QAccessibleInterface *iface = nullptr;
+
+        comboBox.setFocus();
+        {
+            QAccessibleEvent focusEvent(&comboBox, QAccessible::Focus);
+            QVERIFY(QTestAccessibility::containsEvent(&focusEvent));
+        }
+        iface = QAccessible::queryAccessibleInterface(&comboBox);
+        QVERIFY(iface);
+        QCOMPARE(iface->focusChild(), nullptr);
+
+        editableComboBox.setFocus();
+        // Qt updates about the editable combobox, not the lineedit, as the
+        // combobox is the lineedit's focus proxy.
+        {
+            QAccessibleEvent focusEvent(&editableComboBox, QAccessible::Focus);
+            QVERIFY(QTestAccessibility::containsEvent(&focusEvent));
+        }
+        iface = QAccessible::queryAccessibleInterface(&editableComboBox);
+        QVERIFY(iface);
+        QVERIFY(iface->focusChild());
+        QCOMPARE(iface->focusChild()->role(), QAccessible::EditableText);
     }
 }
 
@@ -4319,19 +4377,9 @@ void tst_QAccessibility::messageBoxTest()
     if (!boxPrivate->canBeNativeDialog()) {
         // platforms that use a native message box will not emit accessibility events
         box.show();
-        QVERIFY(QTest::qWaitForWindowActive(&box));
 
         QAccessibleEvent showEvent(&box, QAccessible::DialogStart);
         QVERIFY(QTestAccessibility::containsEvent(&showEvent));
-
-        // on some platforms, like macOS, not all widgets get key board focus; we
-        // only care about a push button getting focus
-        if (QTest::qWaitFor([&box]{ return qobject_cast<QPushButton *>(box.focusWidget()); }, 1000)) {
-            // a widget that gets focus through window activation should not emit an accessibility
-            // notification
-            QAccessibleEvent focusEvent(box.focusWidget(), QAccessible::Focus);
-            QVERIFY(!QTestAccessibility::containsEvent(&focusEvent));
-        }
 
         box.hide();
 

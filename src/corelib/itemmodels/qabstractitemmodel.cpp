@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qabstractitemmodel.h"
 #include <private/qabstractitemmodel_p.h>
@@ -50,6 +14,7 @@
 #  include <qregularexpression.h>
 #endif
 #include <qstack.h>
+#include <qmap.h>
 #include <qbitarray.h>
 #include <qdatetime.h>
 #include <qloggingcategory.h>
@@ -748,7 +713,7 @@ QAbstractItemModel *QAbstractItemModelPrivate::staticEmptyModel()
 
 void QAbstractItemModelPrivate::invalidatePersistentIndexes()
 {
-    for (QPersistentModelIndexData *data : qAsConst(persistent.indexes))
+    for (QPersistentModelIndexData *data : std::as_const(persistent.indexes))
         data->index = QModelIndex();
     persistent.indexes.clear();
 }
@@ -768,7 +733,7 @@ void QAbstractItemModelPrivate::invalidatePersistentIndex(const QModelIndex &ind
 }
 
 using DefaultRoleNames = QHash<int, QByteArray>;
-Q_GLOBAL_STATIC_WITH_ARGS(DefaultRoleNames, qDefaultRoleNames, (
+Q_GLOBAL_STATIC(DefaultRoleNames, qDefaultRoleNames,
     {
         { Qt::DisplayRole,    "display"    },
         { Qt::DecorationRole, "decoration" },
@@ -776,7 +741,7 @@ Q_GLOBAL_STATIC_WITH_ARGS(DefaultRoleNames, qDefaultRoleNames, (
         { Qt::ToolTipRole,    "toolTip"    },
         { Qt::StatusTipRole,  "statusTip"  },
         { Qt::WhatsThisRole,  "whatsThis"  },
-    }))
+    })
 
 const QHash<int,QByteArray> &QAbstractItemModelPrivate::defaultRoleNames()
 {
@@ -875,13 +840,13 @@ void QAbstractItemModelPrivate::removePersistentIndexData(QPersistentModelIndexD
         Q_UNUSED(removed);
     }
     // make sure our optimization still works
-    for (int i = persistent.moved.count() - 1; i >= 0; --i) {
+    for (int i = persistent.moved.size() - 1; i >= 0; --i) {
         int idx = persistent.moved.at(i).indexOf(data);
         if (idx >= 0)
             persistent.moved[i].remove(idx);
     }
     // update the references to invalidated persistent indexes
-    for (int i = persistent.invalidated.count() - 1; i >= 0; --i) {
+    for (int i = persistent.invalidated.size() - 1; i >= 0; --i) {
         int idx = persistent.invalidated.at(i).indexOf(data);
         if (idx >= 0)
             persistent.invalidated[i].remove(idx);
@@ -896,7 +861,7 @@ void QAbstractItemModelPrivate::rowsAboutToBeInserted(const QModelIndex &parent,
     Q_UNUSED(last);
     QList<QPersistentModelIndexData *> persistent_moved;
     if (first < q->rowCount(parent)) {
-        for (auto *data : qAsConst(persistent.indexes)) {
+        for (auto *data : std::as_const(persistent.indexes)) {
             const QModelIndex &index = data->index;
             if (index.row() >= first && index.isValid() && index.parent() == parent) {
                 persistent_moved.append(data);
@@ -932,7 +897,7 @@ void QAbstractItemModelPrivate::itemsAboutToBeMoved(const QModelIndex &srcParent
     const bool sameParent = (srcParent == destinationParent);
     const bool movingUp = (srcFirst > destinationChild);
 
-    for (auto *data : qAsConst(persistent.indexes)) {
+    for (auto *data : std::as_const(persistent.indexes)) {
         const QModelIndex &index = data->index;
         const QModelIndex &parent = index.parent();
         const bool isSourceIndex = (parent == srcParent);
@@ -1030,7 +995,7 @@ void QAbstractItemModelPrivate::rowsAboutToBeRemoved(const QModelIndex &parent,
     QList<QPersistentModelIndexData *> persistent_invalidated;
     // find the persistent indexes that are affected by the change, either by being in the removed subtree
     // or by being on the same level and below the removed rows
-    for (auto *data : qAsConst(persistent.indexes)) {
+    for (auto *data : std::as_const(persistent.indexes)) {
         bool level_changed = false;
         QModelIndex current = data->index;
         while (current.isValid()) {
@@ -1082,7 +1047,7 @@ void QAbstractItemModelPrivate::columnsAboutToBeInserted(const QModelIndex &pare
     Q_UNUSED(last);
     QList<QPersistentModelIndexData *> persistent_moved;
     if (first < q->columnCount(parent)) {
-        for (auto *data : qAsConst(persistent.indexes)) {
+        for (auto *data : std::as_const(persistent.indexes)) {
             const QModelIndex &index = data->index;
             if (index.column() >= first && index.isValid() && index.parent() == parent)
                 persistent_moved.append(data);
@@ -1115,7 +1080,7 @@ void QAbstractItemModelPrivate::columnsAboutToBeRemoved(const QModelIndex &paren
     QList<QPersistentModelIndexData *> persistent_invalidated;
     // find the persistent indexes that are affected by the change, either by being in the removed subtree
     // or by being on the same level and to the right of the removed columns
-    for (auto *data : qAsConst(persistent.indexes)) {
+    for (auto *data : std::as_const(persistent.indexes)) {
         bool level_changed = false;
         QModelIndex current = data->index;
         while (current.isValid()) {
@@ -1859,13 +1824,13 @@ QAbstractItemModel::~QAbstractItemModel()
 */
 
 /*!
-    \fn void QAbstractItemModel::rowsMoved(const QModelIndex &parent, int start, int end, const QModelIndex &destination, int row)
+    \fn void QAbstractItemModel::rowsMoved(const QModelIndex &sourceParent, int sourceStart, int sourceEnd, const QModelIndex &destinationParent, int destinationRow)
     \since 4.6
 
     This signal is emitted after rows have been moved within the
-    model. The items between \a start and \a end
-    inclusive, under the given \a parent item have been moved to \a destination
-    starting at the row \a row.
+    model. The items between \a sourceStart and \a sourceEnd
+    inclusive, under the given \a sourceParent item have been moved to \a destinationParent
+    starting at the row \a destinationRow.
 
     \b{Note:} Components connected to this signal use it to adapt to changes
     in the model's dimensions. It can only be emitted by the QAbstractItemModel
@@ -1891,13 +1856,13 @@ QAbstractItemModel::~QAbstractItemModel()
 */
 
 /*!
-    \fn void QAbstractItemModel::columnsMoved(const QModelIndex &parent, int start, int end, const QModelIndex &destination, int column)
+    \fn void QAbstractItemModel::columnsMoved(const QModelIndex &sourceParent, int sourceStart, int sourceEnd, const QModelIndex &destinationParent, int destinationColumn)
     \since 4.6
 
     This signal is emitted after columns have been moved within the
-    model. The items between \a start and \a end
-    inclusive, under the given \a parent item have been moved to \a destination
-    starting at the column \a column.
+    model. The items between \a sourceStart and \a sourceEnd
+    inclusive, under the given \a sourceParent item have been moved to \a destinationParent
+    starting at the column \a destinationColumn.
 
     \b{Note:} Components connected to this signal use it to adapt to changes
     in the model's dimensions. It can only be emitted by the QAbstractItemModel
@@ -2155,7 +2120,7 @@ QStringList QAbstractItemModel::mimeTypes() const
 */
 QMimeData *QAbstractItemModel::mimeData(const QModelIndexList &indexes) const
 {
-    if (indexes.count() <= 0)
+    if (indexes.size() <= 0)
         return nullptr;
     QStringList types = mimeTypes();
     if (types.isEmpty())
@@ -2194,7 +2159,7 @@ bool QAbstractItemModel::canDropMimeData(const QMimeData *data, Qt::DropAction a
         return false;
 
     const QStringList modelTypes = mimeTypes();
-    for (int i = 0; i < modelTypes.count(); ++i) {
+    for (int i = 0; i < modelTypes.size(); ++i) {
         if (data->hasFormat(modelTypes.at(i)))
             return true;
     }
@@ -2551,7 +2516,7 @@ QModelIndexList QAbstractItemModel::match(const QModelIndex &start, int role,
 
     // iterates twice if wrapping
     for (int i = 0; (wrap && i < 2) || (!wrap && i < 1); ++i) {
-        for (int r = from; (r < to) && (allHits || result.count() < hits); ++r) {
+        for (int r = from; (r < to) && (allHits || result.size() < hits); ++r) {
             QModelIndex idx = index(r, column, p);
             if (!idx.isValid())
                  continue;
@@ -2617,7 +2582,7 @@ QModelIndexList QAbstractItemModel::match(const QModelIndex &start, int role,
                 if (hasChildren(parent)) { // search the hierarchy
                     result += match(index(0, column, parent), role,
                                     (text.isEmpty() ? value : text),
-                                    (allHits ? -1 : hits - result.count()), flags);
+                                    (allHits ? -1 : hits - result.size()), flags);
                 }
             }
         }
@@ -2810,15 +2775,15 @@ bool QAbstractItemModel::decodeData(int row, int column, const QModelIndex &pare
 
     // Compute the number of continuous rows upon insertion and modify the rows to match
     QList<int> rowsToInsert(bottom + 1);
-    for (int i = 0; i < rows.count(); ++i)
+    for (int i = 0; i < rows.size(); ++i)
         rowsToInsert[rows.at(i)] = 1;
-    for (int i = 0; i < rowsToInsert.count(); ++i) {
+    for (int i = 0; i < rowsToInsert.size(); ++i) {
         if (rowsToInsert.at(i) == 1){
             rowsToInsert[i] = dragRowCount;
             ++dragRowCount;
         }
     }
-    for (int i = 0; i < rows.count(); ++i)
+    for (int i = 0; i < rows.size(); ++i)
         rows[i] = top + rowsToInsert.at(rows.at(i));
 
     QBitArray isWrittenTo(dragRowCount * dragColumnCount);
@@ -3481,8 +3446,8 @@ void QAbstractItemModel::changePersistentIndexList(const QModelIndexList &from,
     if (d->persistent.indexes.isEmpty())
         return;
     QList<QPersistentModelIndexData *> toBeReinserted;
-    toBeReinserted.reserve(to.count());
-    for (int i = 0; i < from.count(); ++i) {
+    toBeReinserted.reserve(to.size());
+    for (int i = 0; i < from.size(); ++i) {
         if (from.at(i) == to.at(i))
             continue;
         const auto it = d->persistent.indexes.constFind(from.at(i));
@@ -3495,7 +3460,7 @@ void QAbstractItemModel::changePersistentIndexList(const QModelIndexList &from,
         }
     }
 
-    for (auto *data : qAsConst(toBeReinserted))
+    for (auto *data : std::as_const(toBeReinserted))
         d->persistent.insertMultiAtEnd(data->index, data);
 }
 
@@ -3508,8 +3473,8 @@ QModelIndexList QAbstractItemModel::persistentIndexList() const
 {
     Q_D(const QAbstractItemModel);
     QModelIndexList result;
-    result.reserve(d->persistent.indexes.count());
-    for (auto *data : qAsConst(d->persistent.indexes))
+    result.reserve(d->persistent.indexes.size());
+    for (auto *data : std::as_const(d->persistent.indexes))
         result.append(data->index);
     return result;
 }

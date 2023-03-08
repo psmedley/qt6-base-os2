@@ -2,21 +2,6 @@
 # as well as CMake application projects.
 # Expects various global variables to be set.
 function(qt_internal_create_toolchain_file)
-    set(qt_host_path_required FALSE)
-
-    if(NOT "${QT_HOST_PATH}" STREQUAL "")
-        # If a QT_HOST_PATH is provided when configuring qtbase, we assume it's a cross build
-        # and thus we require the QT_HOST_PATH to be provided also when using the cross-built Qt.
-        # This tells the Qt toolchain file to do appropriate requirement checks.
-        set(qt_host_path_required TRUE)
-
-        # TODO: Figure out how to make the initial QT_HOST_PATH var relocatable in relation
-        # to the target CMAKE_INSTALL_DIR, if at all possible to do so in a reliable way.
-        get_filename_component(qt_host_path_absolute "${QT_HOST_PATH}" ABSOLUTE)
-        get_filename_component(qt_host_path_cmake_dir_absolute
-            "${Qt${PROJECT_VERSION_MAJOR}HostInfo_DIR}/.." ABSOLUTE)
-    endif()
-
     if(CMAKE_TOOLCHAIN_FILE)
         file(TO_CMAKE_PATH "${CMAKE_TOOLCHAIN_FILE}" __qt_chainload_toolchain_file)
         set(init_original_toolchain_file
@@ -41,6 +26,57 @@ set(__qt_chainload_toolchain_file \"\${__qt_initially_configured_toolchain_file}
         list(APPEND init_platform "set(CMAKE_SYSTEM_NAME Windows CACHE STRING \"\")")
         list(APPEND init_platform "set(CMAKE_SYSTEM_VERSION 10 CACHE STRING \"\")")
         list(APPEND init_platform "set(CMAKE_SYSTEM_PROCESSOR arm64 CACHE STRING \"\")")
+    endif()
+
+    if("${QT_QMAKE_TARGET_MKSPEC}" STREQUAL "linux-g++-32" AND NOT QT_NO_AUTO_DETECT_LINUX_X86)
+        set(__qt_toolchain_common_flags_init "-m32")
+
+        if(NOT QT_NO_OVERRIDE_LANG_FLAGS_INIT)
+            list(APPEND init_platform
+                "if(NOT QT_NO_OVERRIDE_LANG_FLAGS_INIT)")
+
+            list(APPEND init_platform
+                "    set(__qt_toolchain_common_flags_init \"-m32\")")
+            list(APPEND init_platform
+                "    set(CMAKE_C_FLAGS_INIT \"\${__qt_toolchain_common_flags_init}\")")
+            list(APPEND init_platform
+                "    set(CMAKE_CXX_FLAGS_INIT \"\${__qt_toolchain_common_flags_init}\")")
+            list(APPEND init_platform
+                "    set(CMAKE_ASM_FLAGS_INIT \"\${__qt_toolchain_common_flags_init}\")")
+
+            list(APPEND init_platform "endif()")
+        endif()
+
+        # Ubuntu-specific paths are used below.
+        # See comments of qt_auto_detect_linux_x86() for details.
+        if(NOT QT_NO_OVERRIDE_CMAKE_IGNORE_PATH)
+            list(APPEND init_platform
+                "if(NOT QT_NO_OVERRIDE_CMAKE_IGNORE_PATH)")
+
+            get_property(linux_x86_ignore_path GLOBAL PROPERTY _qt_internal_linux_x86_ignore_path)
+
+            string(REPLACE ";" "LITERAL_SEMICOLON"
+                linux_x86_ignore_path "${linux_x86_ignore_path}")
+
+            list(APPEND init_platform
+                "    set(CMAKE_IGNORE_PATH \"${linux_x86_ignore_path}\")")
+
+            list(APPEND init_platform "endif()")
+        endif()
+
+        if(NOT QT_NO_OVERRIDE_PKG_CONFIG_LIBDIR)
+            list(APPEND init_platform
+                "if(NOT QT_NO_OVERRIDE_PKG_CONFIG_LIBDIR)")
+
+            get_property(pc_config_libdir GLOBAL PROPERTY _qt_internal_linux_x86_pc_config_libdir)
+
+            list(APPEND init_platform
+                "    set(ENV{PKG_CONFIG_LIBDIR} \"${pc_config_libdir}\")")
+            list(APPEND init_platform
+                "    set(ENV{PKG_CONFIG_DIR} \"\")")
+
+            list(APPEND init_platform "endif()")
+        endif()
     endif()
 
     # By default we don't want to allow mixing compilers for building different repositories, so we
@@ -159,8 +195,8 @@ set(__qt_chainload_toolchain_file \"\${__qt_initially_configured_toolchain_file}
         # xcodebuild from the command line would try to build with the wrong architecture. Also
         # provide an opt-out option just in case.
         #
-        # For a multi-architecture build (so simulator_and_device) we don't set an explicit
-        # architecture and let Xcode and the developer handle it.
+        # For a multi-architecture build (so simulator_and_device) we set an explicit
+        # architecture for simulator only, via _qt_internal_set_ios_simulator_arch.
         #
         # When using the Ninja generator, specify the first architecture from QT_OSX_ARCHITECTURES
         # (even with a simulator_and_device Qt build). This ensures that the default configuration

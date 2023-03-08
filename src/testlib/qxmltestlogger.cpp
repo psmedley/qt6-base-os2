@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtTest module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <stdio.h>
 #include <string.h>
@@ -101,6 +65,26 @@ namespace QTest {
 
 }
 
+/*! \internal
+    \class QXmlTestLogger
+    \inmodule QtTest
+
+    QXmlTestLogger implements two XML formats specific to Qt.
+
+    The two formats are distinguished by the XmlMode enum.
+*/
+/*! \internal
+    \enum QXmlTestLogger::XmlMode
+
+    This enumerated type selects the type of XML output to produce.
+
+    \value Complete A full self-contained XML document
+    \value Light XML content suitable for embedding in an XML document
+
+    The Complete form wraps the Light form in a <TestCase> element whose name
+    attribute identifies the test class whose private slots are to be run. It
+    also includes the usual <?xml ...> preamble.
+*/
 
 QXmlTestLogger::QXmlTestLogger(XmlMode mode, const char *filename)
     : QAbstractTestLogger(filename), xmlmode(mode)
@@ -131,11 +115,11 @@ void QXmlTestLogger::startLogging()
     QTestCharBuffer quotedBuild;
     if (!QLibraryInfo::build() || xmlQuote(&quotedBuild, QLibraryInfo::build())) {
         QTest::qt_asprintf(&buf,
-                           "<Environment>\n"
+                           "  <Environment>\n"
                            "    <QtVersion>%s</QtVersion>\n"
                            "    <QtBuild>%s</QtBuild>\n"
                            "    <QTestVersion>" QTEST_VERSION_STR "</QTestVersion>\n"
-                           "</Environment>\n", qVersion(), quotedBuild.constData());
+                           "  </Environment>\n", qVersion(), quotedBuild.constData());
         outputString(buf.constData());
     }
 }
@@ -144,7 +128,7 @@ void QXmlTestLogger::stopLogging()
 {
     QTestCharBuffer buf;
 
-    QTest::qt_asprintf(&buf, "<Duration msecs=\"%s\"/>\n",
+    QTest::qt_asprintf(&buf, "  <Duration msecs=\"%s\"/>\n",
         QString::number(QTestLog::msecsTotalTime()).toUtf8().constData());
     outputString(buf.constData());
     if (xmlmode == QXmlTestLogger::Complete)
@@ -158,7 +142,7 @@ void QXmlTestLogger::enterTestFunction(const char *function)
     QTestCharBuffer quotedFunction;
     if (xmlQuote(&quotedFunction, function)) {
         QTestCharBuffer buf;
-        QTest::qt_asprintf(&buf, "<TestFunction name=\"%s\">\n", quotedFunction.constData());
+        QTest::qt_asprintf(&buf, "  <TestFunction name=\"%s\">\n", quotedFunction.constData());
         outputString(buf.constData());
     } else {
         // Unconditional end-tag => omitting the start tag is bad.
@@ -172,7 +156,7 @@ void QXmlTestLogger::leaveTestFunction()
     QTestCharBuffer buf;
     QTest::qt_asprintf(&buf,
                 "    <Duration msecs=\"%s\"/>\n"
-                "</TestFunction>\n",
+                "  </TestFunction>\n",
         QString::number(QTestLog::msecsFunctionTime()).toUtf8().constData());
 
     outputString(buf.constData());
@@ -190,45 +174,45 @@ static const char *incidentFormatString(bool noDescription, bool noTag)
 {
     if (noDescription) {
         return noTag
-            ?   "<Incident type=\"%s\" file=\"%s\" line=\"%d\" />\n"
-            :   "<Incident type=\"%s\" file=\"%s\" line=\"%d\">\n"
-                "    <DataTag><![CDATA[%s%s%s%s]]></DataTag>\n"
-                "</Incident>\n";
+            ?   "    <Incident type=\"%s\" file=\"%s\" line=\"%d\" />\n"
+            :   "    <Incident type=\"%s\" file=\"%s\" line=\"%d\">\n"
+                "      <DataTag><![CDATA[%s%s%s%s]]></DataTag>\n"
+                "    </Incident>\n";
     }
     return noTag
-        ? "<Incident type=\"%s\" file=\"%s\" line=\"%d\">\n"
-          "    <Description><![CDATA[%s%s%s%s]]></Description>\n"
-          "</Incident>\n"
-        : "<Incident type=\"%s\" file=\"%s\" line=\"%d\">\n"
-          "    <DataTag><![CDATA[%s%s%s]]></DataTag>\n"
-          "    <Description><![CDATA[%s]]></Description>\n"
-          "</Incident>\n";
+        ? "    <Incident type=\"%s\" file=\"%s\" line=\"%d\">\n"
+          "      <Description><![CDATA[%s%s%s%s]]></Description>\n"
+          "    </Incident>\n"
+        : "    <Incident type=\"%s\" file=\"%s\" line=\"%d\">\n"
+          "      <DataTag><![CDATA[%s%s%s]]></DataTag>\n"
+          "      <Description><![CDATA[%s]]></Description>\n"
+          "    </Incident>\n";
 }
 
 static const char *benchmarkResultFormatString()
 {
-    return "<BenchmarkResult metric=\"%s\" tag=\"%s\" value=\"%.6g\" iterations=\"%d\" />\n";
+    return "  <BenchmarkResult metric=\"%s\" tag=\"%s\" value=\"%.6g\" iterations=\"%d\" />\n";
 }
 
 static const char *messageFormatString(bool noDescription, bool noTag)
 {
     if (noDescription) {
         if (noTag)
-            return "<Message type=\"%s\" file=\"%s\" line=\"%d\" />\n";
+            return "  <Message type=\"%s\" file=\"%s\" line=\"%d\" />\n";
         else
-            return "<Message type=\"%s\" file=\"%s\" line=\"%d\">\n"
+            return "  <Message type=\"%s\" file=\"%s\" line=\"%d\">\n"
                 "    <DataTag><![CDATA[%s%s%s%s]]></DataTag>\n"
-                "</Message>\n";
+                "  </Message>\n";
     } else {
         if (noTag)
-            return "<Message type=\"%s\" file=\"%s\" line=\"%d\">\n"
+            return "  <Message type=\"%s\" file=\"%s\" line=\"%d\">\n"
                 "    <Description><![CDATA[%s%s%s%s]]></Description>\n"
-                "</Message>\n";
+                "  </Message>\n";
         else
-            return "<Message type=\"%s\" file=\"%s\" line=\"%d\">\n"
+            return "  <Message type=\"%s\" file=\"%s\" line=\"%d\">\n"
                 "    <DataTag><![CDATA[%s%s%s]]></DataTag>\n"
                 "    <Description><![CDATA[%s]]></Description>\n"
-                "</Message>\n";
+                "  </Message>\n";
     }
 }
 

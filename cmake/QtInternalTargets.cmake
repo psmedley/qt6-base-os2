@@ -8,6 +8,11 @@ function(qt_internal_set_warnings_are_errors_flags target target_scope)
                 # We do mixed enum arithmetic all over the place:
                 list(APPEND flags -Wno-error=deprecated-enum-enum-conversion)
             endif()
+            if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+                # Clang 14 introduced these two but we are not clean for it.
+                list(APPEND flags -Wno-error=deprecated-copy-with-user-provided-copy)
+                list(APPEND flags -Wno-error=unused-but-set-variable)
+            endif()
         endif()
     elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         # using GCC
@@ -63,7 +68,7 @@ function(qt_internal_set_warnings_are_errors_flags target target_scope)
     set(warnings_are_errors_enabled_genex
         "$<NOT:$<BOOL:$<TARGET_PROPERTY:QT_SKIP_WARNINGS_ARE_ERRORS>>>")
 
-    # Apprently qmake only adds -Werror to CXX and OBJCXX files, not C files. We have to do the
+    # Apparently qmake only adds -Werror to CXX and OBJCXX files, not C files. We have to do the
     # same otherwise MinGW builds break when building 3rdparty\md4c\md4c.c (and probably on other
     # platforms too).
     set(cxx_only_genex "$<OR:$<COMPILE_LANGUAGE:CXX>,$<COMPILE_LANGUAGE:OBJCXX>>")
@@ -123,23 +128,23 @@ function(qt_internal_add_global_definition definition)
 endfunction()
 
 add_library(PlatformCommonInternal INTERFACE)
-add_library(Qt::PlatformCommonInternal ALIAS PlatformCommonInternal)
+qt_internal_add_target_aliases(PlatformCommonInternal)
 target_link_libraries(PlatformCommonInternal INTERFACE Platform)
 
 add_library(PlatformModuleInternal INTERFACE)
-add_library(Qt::PlatformModuleInternal ALIAS PlatformModuleInternal)
+qt_internal_add_target_aliases(PlatformModuleInternal)
 target_link_libraries(PlatformModuleInternal INTERFACE PlatformCommonInternal)
 
 add_library(PlatformPluginInternal INTERFACE)
-add_library(Qt::PlatformPluginInternal ALIAS PlatformPluginInternal)
+qt_internal_add_target_aliases(PlatformPluginInternal)
 target_link_libraries(PlatformPluginInternal INTERFACE PlatformCommonInternal)
 
 add_library(PlatformAppInternal INTERFACE)
-add_library(Qt::PlatformAppInternal ALIAS PlatformAppInternal)
+qt_internal_add_target_aliases(PlatformAppInternal)
 target_link_libraries(PlatformAppInternal INTERFACE PlatformCommonInternal)
 
 add_library(PlatformToolInternal INTERFACE)
-add_library(Qt::PlatformToolInternal ALIAS PlatformToolInternal)
+qt_internal_add_target_aliases(PlatformToolInternal)
 target_link_libraries(PlatformToolInternal INTERFACE PlatformAppInternal)
 
 qt_internal_add_global_definition(QT_NO_JAVA_STYLE_ITERATORS)
@@ -260,7 +265,7 @@ if (MSVC)
     )
 
     target_compile_options(PlatformCommonInternal INTERFACE
-        $<$<NOT:$<CONFIG:Debug>>:-guard:cf>
+        $<$<NOT:$<CONFIG:Debug>>:-guard:cf -Gw>
     )
 
     target_link_options(PlatformCommonInternal INTERFACE
@@ -275,6 +280,18 @@ endif()
 
 if (GCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "9.2")
     target_compile_options(PlatformCommonInternal INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wsuggest-override>)
+endif()
+
+if(QT_FEATURE_intelcet)
+    if(MSVC)
+        target_link_options(PlatformCommonInternal INTERFACE
+            -CETCOMPAT
+        )
+    else()
+        target_compile_options(PlatformCommonInternal INTERFACE
+            -fcf-protection
+        )
+    endif()
 endif()
 
 if(QT_FEATURE_force_asserts)

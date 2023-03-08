@@ -1,36 +1,12 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QQueue>
 #include <QStack>
+#include <QSet>
 
 #include <qvariant.h>
 #include <QtCore/private/qvariant_p.h>
@@ -38,6 +14,7 @@
 #include <qbytearraylist.h>
 #include <qdatetime.h>
 #include <qmap.h>
+#include <QHash>
 #include <qiodevice.h>
 #include <qurl.h>
 #include <qlocale.h>
@@ -3090,57 +3067,57 @@ void tst_QVariant::convertIterables() const
     {
         QStringList list;
         list.append("Hello");
-        QCOMPARE(QVariant::fromValue(list).value<QVariantList>().count(), list.count());
+        QCOMPARE(QVariant::fromValue(list).value<QVariantList>().size(), list.size());
     }
     {
         QByteArrayList list;
         list.append("Hello");
-        QCOMPARE(QVariant::fromValue(list).value<QVariantList>().count(), list.count());
+        QCOMPARE(QVariant::fromValue(list).value<QVariantList>().size(), list.size());
     }
     {
         QVariantList list;
         list.append("World");
-        QCOMPARE(QVariant::fromValue(list).value<QVariantList>().count(), list.count());
+        QCOMPARE(QVariant::fromValue(list).value<QVariantList>().size(), list.size());
     }
     {
         QMap<QString, int> map;
         map.insert("3", 4);
-        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().count(), map.count());
-        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().count(), map.count());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().size(), map.size());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().size(), map.size());
 
         map.insert("4", 5);
-        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().count(), map.count());
-        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().count(), map.count());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().size(), map.size());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().size(), map.size());
     }
     {
         QVariantMap map;
         map.insert("3", 4);
-        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().count(), map.count());
-        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().count(), map.count());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().size(), map.size());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().size(), map.size());
 
         map.insert("4", 5);
-        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().count(), map.count());
-        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().count(), map.count());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().size(), map.size());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().size(), map.size());
     }
     {
         QHash<QString, int> hash;
         hash.insert("3", 4);
-        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().count(), hash.count());
-        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().count(), hash.count());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().size(), hash.size());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().size(), hash.size());
 
         hash.insert("4", 5);
-        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().count(), hash.count());
-        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().count(), hash.count());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().size(), hash.size());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().size(), hash.size());
     }
     {
         QVariantHash hash;
         hash.insert("3", 4);
-        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().count(), hash.count());
-        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().count(), hash.count());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().size(), hash.size());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().size(), hash.size());
 
         hash.insert("4", 5);
-        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().count(), hash.count());
-        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().count(), hash.count());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().size(), hash.size());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().size(), hash.size());
     }
 }
 
@@ -4326,7 +4303,7 @@ void testSequentialIteration()
         int numSeen = 0;
         auto varList = listVariant.value<QVariantList>();
         auto varIter = varList.begin();
-        for (const QVariant &v : qAsConst(listIter)) {
+        for (const QVariant &v : std::as_const(listIter)) {
             QVERIFY(ContainerAPI<Container>::compare(v, *varIter));
             ++varIter;
             ++numSeen;
@@ -4738,6 +4715,13 @@ void tst_QVariant::metaEnums()
     METAENUMS_TEST(MetaEnumTest_Enum5_value);
     METAENUMS_TEST(MetaEnumTest_Enum6_value);
     METAENUMS_TEST(MetaEnumTest_Enum8_value);
+
+#undef METAENUMS_TEST
+
+    testVariantMeta(Qt::RichText, &ok, "RichText");
+    testVariantMeta(Qt::Alignment(Qt::AlignBottom), &ok, "AlignBottom");
+    testVariantMeta(Qt::Alignment(Qt::AlignHCenter | Qt::AlignBottom), &ok,
+                    "AlignHCenter|AlignBottom");
 }
 
 void tst_QVariant::nullConvert()

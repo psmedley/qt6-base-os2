@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QAnyStringView>
 #include <QChar>
@@ -74,6 +49,8 @@
     QSKIP("This test requires C++20 spaceship operator (<=>) " \
           "support enabled in the standard library.")
 #endif
+
+using namespace Qt::StringLiterals;
 
 template <typename T>
 constexpr inline bool CanConvert = std::is_convertible_v<T, QAnyStringView>;
@@ -254,6 +231,7 @@ class tst_QAnyStringView : public QObject
 private Q_SLOTS:
     void constExpr() const;
     void basics() const;
+    void asciiLiteralIsLatin1() const;
 
     void fromQString() const { fromQStringOrByteArray<QString>(); }
     void fromQByteArray() const { fromQStringOrByteArray<QByteArray>(); }
@@ -319,7 +297,7 @@ private Q_SLOTS:
     void fromChar16TContainers() const { fromContainers<char16_t>(); }
     void fromWCharTContainers() const { ONLY_WIN(fromContainers<wchar_t>()); }
 
-    void fromQStringBuilder_QString_QString() const { fromQStringBuilder(u"1"_qs % u"2"_qs, u"12"); }
+    void fromQStringBuilder_QString_QString() const { fromQStringBuilder(u"1"_s % u"2"_s, u"12"); }
 
     void comparison();
     void compare3way();
@@ -438,6 +416,27 @@ void tst_QAnyStringView::basics() const
 
     QVERIFY(sv2 == sv1);
     QVERIFY(!(sv2 != sv1));
+}
+
+void tst_QAnyStringView::asciiLiteralIsLatin1() const
+{
+    if constexpr (QAnyStringView::detects_US_ASCII_at_compile_time) {
+        constexpr bool asciiCstringIsLatin1 = QAnyStringView("Hello, World").isLatin1();
+        QVERIFY(asciiCstringIsLatin1);
+        constexpr bool asciiUtf8stringIsLatin1 = QAnyStringView(u8"Hello, World").isLatin1();
+        QVERIFY(asciiUtf8stringIsLatin1);
+        constexpr bool utf8StringIsNotLatin1 = !QAnyStringView(u8"Tørrfisk").isLatin1();
+        QVERIFY(utf8StringIsNotLatin1);
+        constexpr bool asciiCstringArrayIsLatin1 =
+                QAnyStringView::fromArray("Hello, World").isLatin1();
+        QVERIFY(asciiCstringArrayIsLatin1);
+        constexpr bool asciiUtfstringArrayIsLatin1 =
+                QAnyStringView::fromArray(u8"Hello, World").isLatin1();
+        QVERIFY(asciiUtfstringArrayIsLatin1);
+        constexpr bool utf8StringArrayIsNotLatin1 =
+                !QAnyStringView::fromArray(u8"Tørrfisk").isLatin1();
+        QVERIFY(utf8StringArrayIsNotLatin1);
+    }
 }
 
 template <typename StringBuilder>

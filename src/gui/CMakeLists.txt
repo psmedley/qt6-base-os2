@@ -147,6 +147,8 @@ qt_internal_add_module(Gui
         math3d/qvector4d.h
         math3d/qvectornd.cpp math3d/qvectornd.h
         painting/qbackingstore.cpp painting/qbackingstore.h
+        painting/qbackingstoredefaultcompositor.cpp painting/qbackingstoredefaultcompositor_p.h
+        painting/qbackingstorerhisupport.cpp painting/qbackingstorerhisupport_p.h
         painting/qbezier.cpp painting/qbezier_p.h
         painting/qblendfunctions.cpp painting/qblendfunctions_p.h
         painting/qblittable.cpp painting/qblittable_p.h
@@ -169,7 +171,8 @@ qt_internal_add_module(Gui
         painting/qfixed_p.h
         painting/qgrayraster.c painting/qgrayraster_p.h
         painting/qicc.cpp painting/qicc_p.h
-        painting/qimagescale.cpp
+        painting/qimagescale.cpp painting/qimagescale_p.h
+        painting/qmath_p.h
         painting/qmemrotate.cpp painting/qmemrotate_p.h
         painting/qoutlinemapper.cpp painting/qoutlinemapper_p.h
         painting/qpagedpaintdevice.cpp painting/qpagedpaintdevice.h painting/qpagedpaintdevice_p.h
@@ -187,7 +190,7 @@ qt_internal_add_module(Gui
         painting/qpathsimplifier.cpp painting/qpathsimplifier_p.h
         painting/qpdf.cpp painting/qpdf_p.h
         painting/qpdfwriter.cpp painting/qpdfwriter.h
-        painting/qpen.cpp painting/qpen.h
+        painting/qpen.cpp painting/qpen.h painting/qpen_p.h
         painting/qpixellayout.cpp painting/qpixellayout_p.h
         painting/qplatformbackingstore.cpp painting/qplatformbackingstore.h
         painting/qpolygon.cpp painting/qpolygon.h
@@ -208,8 +211,6 @@ qt_internal_add_module(Gui
         rhi/qrhi_p_p.h
         rhi/qrhinull.cpp rhi/qrhinull_p.h
         rhi/qrhinull_p_p.h
-        rhi/qrhiprofiler.cpp rhi/qrhiprofiler_p.h
-        rhi/qrhiprofiler_p_p.h
         rhi/qshader.cpp rhi/qshader_p.h
         rhi/qshader_p_p.h
         rhi/qshaderdescription.cpp rhi/qshaderdescription_p.h
@@ -293,6 +294,14 @@ qt_internal_add_resource(Gui "qpdf"
         ${qpdf_resource_files}
 )
 
+qt_internal_add_resource(Gui "gui_shaders"
+    PREFIX
+        "/qt-project.org/gui"
+    FILES
+        "painting/shaders/backingstorecompose.vert.qsb"
+        "painting/shaders/backingstorecompose.frag.qsb"
+)
+
 if(QT_FEATURE_reduce_relocations AND UNIX AND GCC)
     target_link_options(Gui PRIVATE
                         "LINKER:--dynamic-list=${CMAKE_CURRENT_LIST_DIR}/QtGui.dynlist")
@@ -343,6 +352,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_opengl
         kernel/qopenglcontext_platform.h
         kernel/qplatformopenglcontext.cpp kernel/qplatformopenglcontext.h
         opengl/qopengl.cpp opengl/qopengl.h opengl/qopengl_p.h
+        opengl/qopenglext.h
         opengl/qopenglextensions_p.h
         opengl/qopenglextrafunctions.h
         opengl/qopenglfunctions.cpp opengl/qopenglfunctions.h
@@ -369,6 +379,7 @@ qt_internal_extend_target(Gui CONDITION APPLE
         image/qimage_darwin.mm
         painting/qcoregraphics.mm painting/qcoregraphics_p.h
         painting/qrasterbackingstore.cpp painting/qrasterbackingstore_p.h
+        painting/qrhibackingstore.cpp painting/qrhibackingstore_p.h
         platform/darwin/qmacmime.mm platform/darwin/qmacmime_p.h
         platform/darwin/qapplekeymapper.mm platform/darwin/qapplekeymapper_p.h
         text/coretext/qcoretextfontdatabase.mm text/coretext/qcoretextfontdatabase_p.h
@@ -394,8 +405,10 @@ qt_internal_extend_target(Gui CONDITION WIN32
         platform/windows/qwindowsguieventdispatcher.cpp platform/windows/qwindowsguieventdispatcher_p.h
         platform/windows/qwindowsmime_p.h
         platform/windows/qwindowsnativeinterface.cpp
+        rhi/cs_tdr_p.h
         rhi/qrhid3d11.cpp rhi/qrhid3d11_p.h
         rhi/qrhid3d11_p_p.h
+        rhi/vs_test_p.h
         text/windows/qwindowsfontdatabase.cpp text/windows/qwindowsfontdatabase_p.h
         text/windows/qwindowsfontdatabasebase.cpp text/windows/qwindowsfontdatabasebase_p.h
         text/windows/qwindowsfontengine.cpp text/windows/qwindowsfontengine_p.h
@@ -469,7 +482,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_egl
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_accessibility
     SOURCES
-        accessible/qaccessible.cpp accessible/qaccessible.h
+        accessible/qaccessible.cpp accessible/qaccessible.h accessible/qaccessible_base.h
         accessible/qaccessiblebridge.cpp accessible/qaccessiblebridge.h
         accessible/qaccessiblebridgeutils.cpp accessible/qaccessiblebridgeutils_p.h
         accessible/qaccessiblecache.cpp accessible/qaccessiblecache_p.h
@@ -575,38 +588,45 @@ qt_internal_extend_target(Gui CONDITION ((QT_FEATURE_png) AND (WIN32 AND MINGW))
         -fno-reorder-blocks-and-partition
 )
 
+if(TEST_architecture_arch STREQUAL x86_64)
+    qt_internal_extend_target(Gui
+       SOURCES
+            painting/qdrawhelper_sse2.cpp
+    )
+else()
+    qt_internal_add_simd_part(Gui SIMD sse2
+        SOURCES
+            painting/qdrawhelper_sse2.cpp
+    )
+endif()
+
+qt_internal_add_simd_part(Gui SIMD ssse3
+    SOURCES
+        image/qimage_ssse3.cpp
+        painting/qdrawhelper_ssse3.cpp
+)
+
+qt_internal_add_simd_part(Gui SIMD sse4_1
+    SOURCES
+        painting/qdrawhelper_sse4.cpp
+        painting/qimagescale_sse4.cpp
+)
+
+qt_internal_add_simd_part(Gui SIMD arch_haswell
+    SOURCES
+        painting/qdrawhelper_avx2.cpp
+    EXCLUDE_OSX_ARCHITECTURES
+        arm64
+)
+
+qt_internal_add_simd_part(Gui SIMD neon
+    SOURCES
+        image/qimage_neon.cpp
+        painting/qdrawhelper_neon.cpp painting/qdrawhelper_neon_p.h
+        painting/qimagescale_neon.cpp
+)
+
 if(NOT ANDROID)
-    if(TEST_architecture_arch STREQUAL x86_64)
-        qt_internal_extend_target(Gui
-           SOURCES
-                painting/qdrawhelper_sse2.cpp
-        )
-    else()
-        qt_internal_add_simd_part(Gui SIMD sse2
-            SOURCES
-                painting/qdrawhelper_sse2.cpp
-        )
-    endif()
-
-    qt_internal_add_simd_part(Gui SIMD ssse3
-        SOURCES
-            image/qimage_ssse3.cpp
-            painting/qdrawhelper_ssse3.cpp
-    )
-
-    qt_internal_add_simd_part(Gui SIMD sse4_1
-        SOURCES
-            painting/qdrawhelper_sse4.cpp
-            painting/qimagescale_sse4.cpp
-    )
-
-    qt_internal_add_simd_part(Gui SIMD neon
-        SOURCES
-            image/qimage_neon.cpp
-            painting/qdrawhelper_neon.cpp painting/qdrawhelper_neon_p.h
-            painting/qimagescale_neon.cpp
-    )
-
     qt_internal_add_simd_part(Gui SIMD mips_dsp
         SOURCES
             painting/qdrawhelper_mips_dsp.cpp painting/qdrawhelper_mips_dsp_p.h
@@ -619,13 +639,6 @@ if(NOT ANDROID)
             image/qimage_mips_dspr2.cpp
             image/qimage_mips_dspr2_asm.S
             painting/qdrawhelper_mips_dspr2_asm.S
-    )
-
-    qt_internal_add_simd_part(Gui SIMD arch_haswell
-        SOURCES
-            painting/qdrawhelper_avx2.cpp
-        EXCLUDE_OSX_ARCHITECTURES
-            arm64
     )
 endif()
 
@@ -712,7 +725,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_textmarkdownwriter
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_cssparser
     SOURCES
-        painting/qcssutil.cpp
+        painting/qcssutil.cpp painting/qcssutil_p.h
         text/qcssparser.cpp text/qcssparser_p.h
 )
 
@@ -831,17 +844,15 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_opengl AND QT_FEATURE_xlib AN
         X11::X11
 )
 
+qt_internal_extend_target(Gui CONDITION QT_FEATURE_opengles2
+    SOURCES
+        opengl/qopengles2ext.h
+)
+
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_egl AND QT_FEATURE_opengl
     SOURCES
         opengl/platform/egl/qeglpbuffer.cpp opengl/platform/egl/qeglpbuffer_p.h
         opengl/platform/egl/qeglplatformcontext.cpp opengl/platform/egl/qeglplatformcontext_p.h
-)
-
-qt_internal_extend_target(Gui CONDITION QT_FEATURE_egl AND QT_FEATURE_egl_x11
-    SOURCES
-        opengl/platform/egl/qxlibeglintegration.cpp opengl/platform/egl/qxlibeglintegration_p.h
-    LIBRARIES
-        X11::X11
 )
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_egl AND NOT QT_FEATURE_egl_x11
@@ -869,10 +880,12 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_vulkan
     SOURCES
         rhi/qrhivulkan.cpp rhi/qrhivulkan_p.h
         rhi/qrhivulkan_p_p.h
+        rhi/qrhivulkanext_p.h
         vulkan/qbasicvulkanplatforminstance.cpp vulkan/qbasicvulkanplatforminstance_p.h
         vulkan/qplatformvulkaninstance.cpp vulkan/qplatformvulkaninstance.h
+        vulkan/qvulkandefaultinstance.cpp vulkan/qvulkandefaultinstance_p.h
         vulkan/qvulkanfunctions.cpp
-        vulkan/qvulkaninstance.cpp vulkan/qvulkaninstance.h
+        vulkan/qvulkaninstance.cpp vulkan/qvulkaninstance.h vulkan/qvulkaninstance_p.h
         vulkan/qvulkanwindow.cpp vulkan/qvulkanwindow.h vulkan/qvulkanwindow_p.h
 )
 if(QT_FEATURE_vulkan)
@@ -930,6 +943,7 @@ add_custom_command(
     OUTPUT ${vulkan_fun_outputs}
     ${vulkan_fun_command_content}
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+    VERBATIM
 )
 # special case end
 
@@ -1040,7 +1054,7 @@ qt_internal_extend_target(Gui CONDITION IOS OR MACOS
 
 qt_internal_extend_target(Gui # special case CONDITION NOT GCC OR NOT QT_COMPILER_VERSION_MAJOR STREQUAL 5 # source subtraction gone wrong
     SOURCES
-        painting/qdrawhelper.cpp
+        painting/qdrawhelper.cpp painting/qdrawhelper_neon_p.h
     NO_PCH_SOURCES
         "painting/qdrawhelper.cpp"
 )

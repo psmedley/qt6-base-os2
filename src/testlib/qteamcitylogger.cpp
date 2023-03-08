@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2017 Borgar Ovsthus
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtTest module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2017 Borgar Ovsthus
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtTest/private/qtestresult_p.h>
 #include <QtTest/qtestassert.h>
@@ -49,6 +13,8 @@
 #include <string.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 namespace QTest {
 
@@ -99,6 +65,13 @@ namespace QTest {
     }
 }
 
+/*! \internal
+    \class QTeamCityLogger
+    \inmodule QtTest
+
+    QTeamCityLogger implements logging in the \l{TeamCity} format.
+*/
+
 QTeamCityLogger::QTeamCityLogger(const char *filename)
     : QAbstractTestLogger(filename)
 {
@@ -112,13 +85,13 @@ void QTeamCityLogger::startLogging()
 
     flowID = tcEscapedString(QString::fromUtf8(QTestResult::currentTestObjectName()));
 
-    QString str = QLatin1String("##teamcity[testSuiteStarted name='%1' flowId='%1']\n").arg(flowID);
+    QString str = "##teamcity[testSuiteStarted name='%1' flowId='%1']\n"_L1.arg(flowID);
     outputString(qPrintable(str));
 }
 
 void QTeamCityLogger::stopLogging()
 {
-    QString str = QLatin1String("##teamcity[testSuiteFinished name='%1' flowId='%1']\n").arg(flowID);
+    QString str = "##teamcity[testSuiteFinished name='%1' flowId='%1']\n"_L1.arg(flowID);
     outputString(qPrintable(str));
 
     QAbstractTestLogger::stopLogging();
@@ -146,7 +119,7 @@ void QTeamCityLogger::addIncident(IncidentTypes type, const char *description,
     QString tmpFuncName = escapedTestFuncName();
 
     if (tmpFuncName != currTestFuncName) {
-        buf = QLatin1String("##teamcity[testStarted name='%1' flowId='%2']\n").arg(tmpFuncName, flowID);
+        buf = "##teamcity[testStarted name='%1' flowId='%2']\n"_L1.arg(tmpFuncName, flowID);
         outputString(qPrintable(buf));
     }
 
@@ -161,27 +134,27 @@ void QTeamCityLogger::addIncident(IncidentTypes type, const char *description,
 
     // Test failed
     if (type == Fail || type == XPass) {
-        QString messageText(QLatin1String("Failure!"));
+        QString messageText(u"Failure!"_s);
 
         if (file)
-            messageText += QLatin1String(" |[Loc: %1(%2)|]").arg(QString::fromUtf8(file)).arg(line);
+            messageText += " |[Loc: %1(%2)|]"_L1.arg(QString::fromUtf8(file)).arg(line);
 
-        buf = QLatin1String("##teamcity[testFailed name='%1' message='%2' details='%3' flowId='%4']\n")
+        buf = "##teamcity[testFailed name='%1' message='%2' details='%3' flowId='%4']\n"_L1
                         .arg(tmpFuncName, messageText, detailedText, flowID);
 
         outputString(qPrintable(buf));
     } else if (type == Skip) {
         if (file)
-            detailedText.append(QLatin1String(" |[Loc: %1(%2)|]").arg(QString::fromUtf8(file)).arg(line));
+            detailedText.append(" |[Loc: %1(%2)|]"_L1.arg(QString::fromUtf8(file)).arg(line));
 
-        buf = QLatin1String("##teamcity[testIgnored name='%1' message='%2' flowId='%3']\n")
+        buf = "##teamcity[testIgnored name='%1' message='%2' flowId='%3']\n"_L1
                 .arg(escapedTestFuncName(), detailedText, flowID);
 
         outputString(qPrintable(buf));
     }
 
     if (!pendingMessages.isEmpty()) {
-        buf = QLatin1String("##teamcity[testStdOut name='%1' out='%2' flowId='%3']\n")
+        buf = "##teamcity[testStdOut name='%1' out='%2' flowId='%3']\n"_L1
                 .arg(tmpFuncName, pendingMessages, flowID);
 
         outputString(qPrintable(buf));
@@ -189,7 +162,7 @@ void QTeamCityLogger::addIncident(IncidentTypes type, const char *description,
         pendingMessages.clear();
     }
 
-    buf = QLatin1String("##teamcity[testFinished name='%1' flowId='%2']\n").arg(tmpFuncName, flowID);
+    buf = "##teamcity[testFinished name='%1' flowId='%2']\n"_L1.arg(tmpFuncName, flowID);
     outputString(qPrintable(buf));
 }
 
@@ -216,22 +189,22 @@ QString QTeamCityLogger::tcEscapedString(const QString &str) const
     for (QChar ch : str) {
         switch (ch.toLatin1()) {
         case '\n':
-            formattedString.append(QLatin1String("|n"));
+            formattedString.append("|n"_L1);
             break;
         case '\r':
-            formattedString.append(QLatin1String("|r"));
+            formattedString.append("|r"_L1);
             break;
         case '|':
-            formattedString.append(QLatin1String("||"));
+            formattedString.append("||"_L1);
             break;
         case '[':
-            formattedString.append(QLatin1String("|["));
+            formattedString.append("|["_L1);
             break;
         case ']':
-            formattedString.append(QLatin1String("|]"));
+            formattedString.append("|]"_L1);
             break;
         case '\'':
-            formattedString.append(QLatin1String("|'"));
+            formattedString.append("|'"_L1);
             break;
         default:
             formattedString.append(ch);
@@ -255,15 +228,15 @@ void QTeamCityLogger::addPendingMessage(const char *type, const QString &msg, co
     QString pendMessage;
 
     if (!pendingMessages.isEmpty())
-        pendMessage += QLatin1String("|n");
+        pendMessage += "|n"_L1;
 
     if (file) {
-        pendMessage += QLatin1String("%1 |[Loc: %2(%3)|]: %4")
+        pendMessage += "%1 |[Loc: %2(%3)|]: %4"_L1
                 .arg(QString::fromUtf8(type), QString::fromUtf8(file),
                      QString::number(line), msg);
 
     } else {
-        pendMessage += QLatin1String("%1: %2").arg(QString::fromUtf8(type), msg);
+        pendMessage += "%1: %2"_L1.arg(QString::fromUtf8(type), msg);
     }
 
     pendingMessages.append(pendMessage);

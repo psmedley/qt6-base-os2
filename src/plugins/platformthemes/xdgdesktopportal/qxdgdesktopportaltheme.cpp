@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qxdgdesktopportaltheme.h"
 #include "qxdgdesktopportalfiledialog_p.h"
@@ -53,6 +17,8 @@
 #include <QDBusReply>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 class QXdgDesktopPortalThemePrivate : public QPlatformThemePrivate
 {
@@ -109,7 +75,7 @@ QXdgDesktopPortalTheme::QXdgDesktopPortalTheme()
     QStringList themeNames;
     themeNames += QGuiApplicationPrivate::platform_integration->themeNames();
     // 1) Look for a theme plugin.
-    for (const QString &themeName : qAsConst(themeNames)) {
+    for (const QString &themeName : std::as_const(themeNames)) {
         d->baseTheme = QPlatformThemeFactory::create(themeName, nullptr);
         if (d->baseTheme)
             break;
@@ -118,7 +84,7 @@ QXdgDesktopPortalTheme::QXdgDesktopPortalTheme()
     // 2) If no theme plugin was found ask the platform integration to
     // create a theme
     if (!d->baseTheme) {
-        for (const QString &themeName : qAsConst(themeNames)) {
+        for (const QString &themeName : std::as_const(themeNames)) {
             d->baseTheme = QGuiApplicationPrivate::platform_integration->createPlatformTheme(themeName);
             if (d->baseTheme)
                 break;
@@ -131,11 +97,11 @@ QXdgDesktopPortalTheme::QXdgDesktopPortalTheme()
         d->baseTheme = new QPlatformTheme;
 
     // Get information about portal version
-    QDBusMessage message = QDBusMessage::createMethodCall(QLatin1String("org.freedesktop.portal.Desktop"),
-                                                          QLatin1String("/org/freedesktop/portal/desktop"),
-                                                          QLatin1String("org.freedesktop.DBus.Properties"),
-                                                          QLatin1String("Get"));
-    message << QLatin1String("org.freedesktop.portal.FileChooser") << QLatin1String("version");
+    QDBusMessage message = QDBusMessage::createMethodCall("org.freedesktop.portal.Desktop"_L1,
+                                                          "/org/freedesktop/portal/desktop"_L1,
+                                                          "org.freedesktop.DBus.Properties"_L1,
+                                                          "Get"_L1);
+    message << "org.freedesktop.portal.FileChooser"_L1 << "version"_L1;
     QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(message);
     QDBusPendingCallWatcher *watcher = new QDBusPendingCallWatcher(pendingCall);
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, [d] (QDBusPendingCallWatcher *watcher) {
@@ -147,11 +113,11 @@ QXdgDesktopPortalTheme::QXdgDesktopPortalTheme()
     });
 
     // Get information about system theme preference
-    message = QDBusMessage::createMethodCall(QLatin1String("org.freedesktop.portal.Desktop"),
-                                             QLatin1String("/org/freedesktop/portal/desktop"),
-                                             QLatin1String("org.freedesktop.portal.Settings"),
-                                             QLatin1String("Read"));
-    message << QLatin1String("org.freedesktop.appearance") << QLatin1String("color-scheme");
+    message = QDBusMessage::createMethodCall("org.freedesktop.portal.Desktop"_L1,
+                                             "/org/freedesktop/portal/desktop"_L1,
+                                             "org.freedesktop.portal.Settings"_L1,
+                                             "Read"_L1);
+    message << "org.freedesktop.appearance"_L1 << "color-scheme"_L1;
 
     // this must not be asyncCall() because we have to set appearance now
     QDBusReply<QVariant> reply = QDBusConnection::sessionBus().call(message);

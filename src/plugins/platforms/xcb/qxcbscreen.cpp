@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qxcbscreen.h"
 #include "qxcbwindow.h"
@@ -128,7 +92,7 @@ QXcbVirtualDesktop::~QXcbVirtualDesktop()
 {
     delete m_xSettings;
 
-    for (auto cmap : qAsConst(m_visualColormaps))
+    for (auto cmap : std::as_const(m_visualColormaps))
         xcb_free_colormap(xcb_connection(), cmap);
 }
 
@@ -258,7 +222,7 @@ void QXcbVirtualDesktop::handleScreenChange(xcb_randr_screen_change_notify_event
     case XCB_RANDR_ROTATION_REFLECT_Y: break;
     }
 
-    for (QPlatformScreen *platformScreen : qAsConst(m_screens)) {
+    for (QPlatformScreen *platformScreen : std::as_const(m_screens)) {
         QDpi ldpi = platformScreen->logicalDpi();
         QWindowSystemInterface::handleScreenLogicalDotsPerInchChange(platformScreen->screen(), ldpi.first, ldpi.second);
     }
@@ -307,7 +271,7 @@ void QXcbVirtualDesktop::updateWorkArea()
     QRect workArea = getWorkArea();
     if (m_workArea != workArea) {
         m_workArea = workArea;
-        for (QPlatformScreen *screen : qAsConst(m_screens))
+        for (QPlatformScreen *screen : std::as_const(m_screens))
             ((QXcbScreen *)screen)->updateAvailableGeometry();
     }
 }
@@ -592,11 +556,11 @@ void QXcbScreen::updateColorSpaceAndEdid()
                                                    m_edid.greenChromaticity, m_edid.blueChromaticity,
                                                    QColorSpace::TransferFunction::Gamma, m_edid.gamma);
                     } else {
-                        if (m_edid.tables.length() == 1) {
+                        if (m_edid.tables.size() == 1) {
                             m_colorSpace = QColorSpace(m_edid.whiteChromaticity, m_edid.redChromaticity,
                                                        m_edid.greenChromaticity, m_edid.blueChromaticity,
                                                        m_edid.tables[0]);
-                        } else if (m_edid.tables.length() == 3) {
+                        } else if (m_edid.tables.size() == 3) {
                             m_colorSpace = QColorSpace(m_edid.whiteChromaticity, m_edid.redChromaticity,
                                                        m_edid.greenChromaticity, m_edid.blueChromaticity,
                                                        m_edid.tables[0], m_edid.tables[1], m_edid.tables[2]);
@@ -731,7 +695,7 @@ QString QXcbScreen::defaultName()
     int dotPos = displayName.lastIndexOf('.');
     if (dotPos != -1)
         displayName.truncate(dotPos);
-    name = QString::fromLocal8Bit(displayName) + QLatin1Char('.')
+    name = QString::fromLocal8Bit(displayName) + u'.'
             + QString::number(m_virtualDesktop->number());
     return name;
 }
@@ -774,7 +738,7 @@ QString QXcbScreen::getName(xcb_randr_monitor_info_t *monitorInfo)
         int dotPos = displayName.lastIndexOf('.');
         if (dotPos != -1)
             displayName.truncate(dotPos);
-        name = QString::fromLocal8Bit(displayName) + QLatin1Char('.')
+        name = QString::fromLocal8Bit(displayName) + u'.'
                 + QString::number(m_virtualDesktop->number());
     }
     return name;
@@ -832,7 +796,7 @@ void QXcbScreen::windowShown(QXcbWindow *window)
     // Freedesktop.org Startup Notification
     if (!connection()->startupId().isEmpty() && window->window()->isTopLevel()) {
         sendStartupMessage(QByteArrayLiteral("remove: ID=") + connection()->startupId());
-        connection()->clearStartupId();
+        connection()->setStartupId({});
     }
 }
 
@@ -857,7 +821,7 @@ void QXcbScreen::sendStartupMessage(const QByteArray &message) const
     ev.sequence = 0;
     ev.window = rootWindow;
     int sent = 0;
-    int length = message.length() + 1; // include NUL byte
+    int length = message.size() + 1; // include NUL byte
     const char *data = message.constData();
     do {
         if (sent == 20)
@@ -875,7 +839,7 @@ void QXcbScreen::sendStartupMessage(const QByteArray &message) const
 QRect QXcbScreen::availableGeometry() const
 {
     static bool enforceNetWorkarea = !qEnvironmentVariableIsEmpty("QT_RELY_ON_NET_WORKAREA_ATOM");
-    bool isMultiHeadSystem = virtualSiblings().length() > 1;
+    bool isMultiHeadSystem = virtualSiblings().size() > 1;
     bool useScreenGeometry = isMultiHeadSystem && !enforceNetWorkarea;
     return useScreenGeometry ? m_geometry : m_availableGeometry;
 }

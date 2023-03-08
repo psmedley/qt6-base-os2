@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include <QTest>
 #include <QSignalSpy>
 #include <QtWidgets/QPushButton>
@@ -122,7 +97,7 @@ void tst_QDialogButtonBox::testConstructor1()
     QDialogButtonBox buttonbox;
     QCOMPARE(buttonbox.orientation(), Qt::Horizontal);
 
-    QCOMPARE(buttonbox.buttons().count(), 0);
+    QCOMPARE(buttonbox.buttons().size(), 0);
 }
 
 void tst_QDialogButtonBox::layoutReuse()
@@ -155,7 +130,7 @@ void tst_QDialogButtonBox::testConstructor2()
     QDialogButtonBox buttonBox(orient);
 
     QCOMPARE(buttonBox.orientation(), orient);
-    QCOMPARE(buttonBox.buttons().count(), 0);
+    QCOMPARE(buttonBox.buttons().size(), 0);
 }
 
 void tst_QDialogButtonBox::testConstructor3_data()
@@ -192,7 +167,7 @@ void tst_QDialogButtonBox::testConstructor3()
 
     QDialogButtonBox buttonBox(buttons, (Qt::Orientation)orientation);
     QCOMPARE(int(buttonBox.orientation()), orientation);
-    QTEST(int(buttonBox.buttons().count()), "buttonCount");
+    QTEST(int(buttonBox.buttons().size()), "buttonCount");
 }
 
 void tst_QDialogButtonBox::testConstructor4_data()
@@ -227,7 +202,7 @@ void tst_QDialogButtonBox::testConstructor4()
 
     QDialogButtonBox buttonBox(buttons);
     QCOMPARE(buttonBox.orientation(), Qt::Horizontal);
-    QTEST(int(buttonBox.buttons().count()), "buttonCount");
+    QTEST(int(buttonBox.buttons().size()), "buttonCount");
 }
 
 void tst_QDialogButtonBox::setOrientation_data()
@@ -290,12 +265,12 @@ void tst_QDialogButtonBox::addButton1()
 {
     QFETCH(QDialogButtonBox::ButtonRole, role);
     QDialogButtonBox buttonBox;
-    QCOMPARE(buttonBox.buttons().count(), 0);
+    QCOMPARE(buttonBox.buttons().size(), 0);
     QPushButton *button = new QPushButton();
     buttonBox.addButton(button, role);
-    QTEST(int(buttonBox.buttons().count()), "totalCount");
+    QTEST(int(buttonBox.buttons().size()), "totalCount");
     QList<QAbstractButton *> children = buttonBox.findChildren<QAbstractButton *>();
-    QTEST(int(children.count()), "totalCount");
+    QTEST(int(children.size()), "totalCount");
     delete button;
 }
 
@@ -318,11 +293,11 @@ void tst_QDialogButtonBox::addButton2()
     QFETCH(QString, text);
     QFETCH(QDialogButtonBox::ButtonRole, role);
     QDialogButtonBox buttonBox;
-    QCOMPARE(buttonBox.buttons().count(), 0);
+    QCOMPARE(buttonBox.buttons().size(), 0);
     buttonBox.addButton(text, role);
-    QTEST(int(buttonBox.buttons().count()), "totalCount");
+    QTEST(int(buttonBox.buttons().size()), "totalCount");
     QList<QAbstractButton *> children = buttonBox.findChildren<QAbstractButton *>();
-    QTEST(int(children.count()), "totalCount");
+    QTEST(int(children.size()), "totalCount");
 }
 
 void tst_QDialogButtonBox::addButton3_data()
@@ -345,11 +320,11 @@ void tst_QDialogButtonBox::addButton3()
 {
     QFETCH(QDialogButtonBox::StandardButton, button);
     QDialogButtonBox buttonBox;
-    QCOMPARE(buttonBox.buttons().count(), 0);
+    QCOMPARE(buttonBox.buttons().size(), 0);
     buttonBox.addButton(button);
-    QTEST(int(buttonBox.buttons().count()), "totalCount");
+    QTEST(int(buttonBox.buttons().size()), "totalCount");
     QList<QAbstractButton *> children = buttonBox.findChildren<QAbstractButton *>();
-    QTEST(int(children.count()), "totalCount");
+    QTEST(int(children.size()), "totalCount");
 }
 
 void tst_QDialogButtonBox::clear_data()
@@ -369,9 +344,9 @@ void tst_QDialogButtonBox::clear()
     for (int i = 1; i < rolesToAdd; ++i)
         buttonBox.addButton("Happy", QDialogButtonBox::ButtonRole(i));
     buttonBox.clear();
-    QCOMPARE(buttonBox.buttons().count(), 0);
+    QCOMPARE(buttonBox.buttons().size(), 0);
     QList<QAbstractButton *> children = buttonBox.findChildren<QAbstractButton *>();
-    QCOMPARE(children.count(), 0);
+    QCOMPARE(children.size(), 0);
 }
 
 void tst_QDialogButtonBox::removeButton_data()
@@ -387,31 +362,31 @@ void tst_QDialogButtonBox::removeButton()
     QFETCH(QDialogButtonBox::ButtonRole, roleToAdd);
 
     QDialogButtonBox buttonBox;
-    QCOMPARE(buttonBox.buttons().count(), 0);
+    QCOMPARE(buttonBox.buttons().size(), 0);
     QPushButton *button = new QPushButton("RemoveButton test");
     buttonBox.addButton(button, roleToAdd);
-    QTEST(int(buttonBox.buttons().count()), "expectedCount");
+    QTEST(int(buttonBox.buttons().size()), "expectedCount");
 
     buttonBox.removeButton(button);
-    QCOMPARE(buttonBox.buttons().count(), 0);
+    QCOMPARE(buttonBox.buttons().size(), 0);
     delete button;
 }
 
 void tst_QDialogButtonBox::testDelete()
 {
     QDialogButtonBox buttonBox;
-    QCOMPARE(buttonBox.buttons().count(), 0);
+    QCOMPARE(buttonBox.buttons().size(), 0);
 
     QPushButton *deleteMe = new QPushButton("Happy");
     buttonBox.addButton(deleteMe, QDialogButtonBox::HelpRole);
-    QCOMPARE(buttonBox.buttons().count(), 1);
+    QCOMPARE(buttonBox.buttons().size(), 1);
     QList<QAbstractButton *> children = buttonBox.findChildren<QAbstractButton *>();
-    QCOMPARE(children.count(), 1);
+    QCOMPARE(children.size(), 1);
 
     delete deleteMe;
     children = buttonBox.findChildren<QAbstractButton *>();
-    QCOMPARE(children.count(), 0);
-    QCOMPARE(buttonBox.buttons().count(), 0);
+    QCOMPARE(children.size(), 0);
+    QCOMPARE(buttonBox.buttons().size(), 0);
 }
 
 class ObjectDeleter : public QObject
@@ -433,7 +408,7 @@ void tst_QDialogButtonBox::testSignalEmissionAfterDelete_QTBUG_45835()
 {
     {
         QDialogButtonBox buttonBox;
-        QCOMPARE(buttonBox.buttons().count(), 0);
+        QCOMPARE(buttonBox.buttons().size(), 0);
 
         QSignalSpy buttonClickedSpy(&buttonBox, &QDialogButtonBox::clicked);
         QVERIFY(buttonClickedSpy.isValid());
@@ -442,21 +417,21 @@ void tst_QDialogButtonBox::testSignalEmissionAfterDelete_QTBUG_45835()
         QVERIFY(buttonBoxAcceptedSpy.isValid());
 
         QPushButton *button = buttonBox.addButton("Test", QDialogButtonBox::AcceptRole);
-        QCOMPARE(buttonBox.buttons().count(), 1);
+        QCOMPARE(buttonBox.buttons().size(), 1);
 
         ObjectDeleter objectDeleter;
         connect(&buttonBox, &QDialogButtonBox::clicked, &objectDeleter, &ObjectDeleter::deleteButton);
 
         button->click();
 
-        QCOMPARE(buttonBox.buttons().count(), 0);
-        QCOMPARE(buttonClickedSpy.count(), 1);
-        QCOMPARE(buttonBoxAcceptedSpy.count(), 1);
+        QCOMPARE(buttonBox.buttons().size(), 0);
+        QCOMPARE(buttonClickedSpy.size(), 1);
+        QCOMPARE(buttonBoxAcceptedSpy.size(), 1);
     }
 
     {
         QPointer<QDialogButtonBox> buttonBox(new QDialogButtonBox);
-        QCOMPARE(buttonBox->buttons().count(), 0);
+        QCOMPARE(buttonBox->buttons().size(), 0);
 
         QSignalSpy buttonClickedSpy(buttonBox.data(), &QDialogButtonBox::clicked);
         QVERIFY(buttonClickedSpy.isValid());
@@ -465,7 +440,7 @@ void tst_QDialogButtonBox::testSignalEmissionAfterDelete_QTBUG_45835()
         QVERIFY(buttonBoxAcceptedSpy.isValid());
 
         QPushButton *button = buttonBox->addButton("Test", QDialogButtonBox::AcceptRole);
-        QCOMPARE(buttonBox->buttons().count(), 1);
+        QCOMPARE(buttonBox->buttons().size(), 1);
 
         ObjectDeleter objectDeleter;
         connect(buttonBox.data(), &QDialogButtonBox::clicked, &objectDeleter, &ObjectDeleter::deleteSender);
@@ -473,8 +448,8 @@ void tst_QDialogButtonBox::testSignalEmissionAfterDelete_QTBUG_45835()
         button->click();
 
         QVERIFY(buttonBox.isNull());
-        QCOMPARE(buttonClickedSpy.count(), 1);
-        QCOMPARE(buttonBoxAcceptedSpy.count(), 0);
+        QCOMPARE(buttonClickedSpy.size(), 1);
+        QCOMPARE(buttonBoxAcceptedSpy.size(), 0);
     }
 }
 
@@ -482,24 +457,24 @@ void tst_QDialogButtonBox::testMultipleAdd()
 {
     // Add a button into the thing multiple times.
     QDialogButtonBox buttonBox;
-    QCOMPARE(buttonBox.buttons().count(), 0);
+    QCOMPARE(buttonBox.buttons().size(), 0);
 
     QPushButton *button = new QPushButton("Foo away");
     buttonBox.addButton(button, QDialogButtonBox::AcceptRole);
-    QCOMPARE(buttonBox.buttons().count(), 1);
+    QCOMPARE(buttonBox.buttons().size(), 1);
     QCOMPARE(buttonBox.buttonRole(button), QDialogButtonBox::AcceptRole);
     buttonBox.addButton(button, QDialogButtonBox::AcceptRole);
-    QCOMPARE(buttonBox.buttons().count(), 1);
+    QCOMPARE(buttonBox.buttons().size(), 1);
     QCOMPARE(buttonBox.buttonRole(button), QDialogButtonBox::AcceptRole);
 
     // Add it again with a different role
     buttonBox.addButton(button, QDialogButtonBox::RejectRole);
-    QCOMPARE(buttonBox.buttons().count(), 1);
+    QCOMPARE(buttonBox.buttons().size(), 1);
     QCOMPARE(buttonBox.buttonRole(button), QDialogButtonBox::RejectRole);
 
     // Add it as an "invalid" role
     buttonBox.addButton(button, QDialogButtonBox::InvalidRole);
-    QCOMPARE(buttonBox.buttons().count(), 1);
+    QCOMPARE(buttonBox.buttons().size(), 1);
     QCOMPARE(buttonBox.buttonRole(button), QDialogButtonBox::RejectRole);
 }
 
@@ -619,13 +594,13 @@ void tst_QDialogButtonBox::testSignals()
     if (clickMe)
         clickMe->click();
 
-    QTRY_COMPARE(clicked2.count(), clicked2Count);
-    if (clicked2.count() > 0)
+    QTRY_COMPARE(clicked2.size(), clicked2Count);
+    if (clicked2.size() > 0)
         QCOMPARE(qvariant_cast<QAbstractButton *>(clicked2.at(0).at(0)), clickMe);
 
-    QTEST(int(accept.count()), "acceptCount");
-    QTEST(int(reject.count()), "rejectCount");
-    QTEST(int(helpRequested.count()), "helpRequestedCount");
+    QTEST(int(accept.size()), "acceptCount");
+    QTEST(int(reject.size()), "rejectCount");
+    QTEST(int(helpRequested.size()), "helpRequestedCount");
 }
 
 void tst_QDialogButtonBox::testSignalOrder()
@@ -781,7 +756,7 @@ void tst_QDialogButtonBox::testRemove()
 
     button->click();
     QTest::qWait(100);
-    QCOMPARE(clicked.count(), 0);
+    QCOMPARE(clicked.size(), 0);
     delete button;
 }
 
@@ -843,7 +818,7 @@ void tst_QDialogButtonBox::task191642_default()
     QVERIFY(QTest::qWaitForWindowActive(&dlg));
     QVERIFY(def->isDefault());
     QTest::keyPress( &dlg, Qt::Key_Enter );
-    QCOMPARE(clicked.count(), 1);
+    QCOMPARE(clicked.size(), 1);
 }
 
 void tst_QDialogButtonBox::testDeletedStandardButton()

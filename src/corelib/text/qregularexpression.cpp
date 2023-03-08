@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 Giuseppe D'Angelo <dangelog@gmail.com>.
-** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 Giuseppe D'Angelo <dangelog@gmail.com>.
+// Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qregularexpression.h"
 
@@ -47,7 +11,6 @@
 #include <QtCore/qmutex.h>
 #include <QtCore/qstringlist.h>
 #include <QtCore/qdebug.h>
-#include <QtCore/qthreadstorage.h>
 #include <QtCore/qglobal.h>
 #include <QtCore/qatomic.h>
 #include <QtCore/qdatastream.h>
@@ -61,6 +24,8 @@
 #include <pcre2.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 /*!
     \class QRegularExpression
@@ -826,6 +791,24 @@ struct QRegularExpressionMatchIteratorPrivate : QSharedData
 
 /*!
     \internal
+
+    Used to centralize the warning about using an invalid QRegularExpression.
+    In case the pattern is an illegal UTF-16 string, we can't pass print it
+    (pass it to qUtf16Printable, etc.), so we need to check for that.
+*/
+Q_DECL_COLD_FUNCTION
+void qtWarnAboutInvalidRegularExpression(const QString &pattern, const char *where)
+{
+    if (pattern.isValidUtf16()) {
+        qWarning("%s(): called on an invalid QRegularExpression object "
+                 "(pattern is '%ls')", where, qUtf16Printable(pattern));
+    } else {
+        qWarning("%s(): called on an invalid QRegularExpression object", where);
+    }
+}
+
+/*!
+    \internal
 */
 QRegularExpression::QRegularExpression(QRegularExpressionPrivate &dd)
     : d(&dd)
@@ -911,7 +894,7 @@ void QRegularExpressionPrivate::compilePattern()
 
     PCRE2_SIZE patternErrorOffset;
     compiledPattern = pcre2_compile_16(reinterpret_cast<PCRE2_SPTR16>(pattern.constData()),
-                                       pattern.length(),
+                                       pattern.size(),
                                        options,
                                        &errorCode,
                                        &patternErrorOffset,
@@ -962,43 +945,24 @@ void QRegularExpressionPrivate::getPatternInfo()
     Simple "smartpointer" wrapper around a pcre2_jit_stack_16, to be used with
     QThreadStorage.
 */
-class QPcreJitStackPointer
+namespace {
+struct PcreJitStackFree
 {
-    Q_DISABLE_COPY(QPcreJitStackPointer)
-
-public:
-    /*!
-        \internal
-    */
-    QPcreJitStackPointer()
-    {
-        // The default JIT stack size in PCRE is 32K,
-        // we allocate from 32K up to 512K.
-        stack = pcre2_jit_stack_create_16(32 * 1024, 512 * 1024, nullptr);
-    }
-    /*!
-        \internal
-    */
-    ~QPcreJitStackPointer()
+    void operator()(pcre2_jit_stack_16 *stack)
     {
         if (stack)
             pcre2_jit_stack_free_16(stack);
     }
-
-    pcre2_jit_stack_16 *stack;
 };
-
-Q_GLOBAL_STATIC(QThreadStorage<QPcreJitStackPointer *>, jitStacks)
+static thread_local std::unique_ptr<pcre2_jit_stack_16, PcreJitStackFree> jitStacks;
+}
 
 /*!
     \internal
 */
 static pcre2_jit_stack_16 *qtPcreCallback(void *)
 {
-    if (jitStacks()->hasLocalData())
-        return jitStacks()->localData()->stack;
-
-    return nullptr;
+    return jitStacks.get();
 }
 
 /*!
@@ -1094,9 +1058,10 @@ static int safe_pcre2_match_16(const pcre2_code_16 *code,
     int result = pcre2_match_16(code, subject, length,
                                 startOffset, options, matchData, matchContext);
 
-    if (result == PCRE2_ERROR_JIT_STACKLIMIT && !jitStacks()->hasLocalData()) {
-        QPcreJitStackPointer *p = new QPcreJitStackPointer;
-        jitStacks()->setLocalData(p);
+    if (result == PCRE2_ERROR_JIT_STACKLIMIT && !jitStacks) {
+        // The default JIT stack size in PCRE is 32K,
+        // we allocate from 32K up to 512K.
+        jitStacks.reset(pcre2_jit_stack_create_16(32 * 1024, 512 * 1024, NULL));
 
         result = pcre2_match_16(code, subject, length,
                                 startOffset, options, matchData, matchContext);
@@ -1150,7 +1115,7 @@ void QRegularExpressionPrivate::doMatch(QRegularExpressionMatchPrivate *priv,
         return;
 
     if (Q_UNLIKELY(!compiledPattern)) {
-        qWarning("QRegularExpressionPrivate::doMatch(): called on an invalid QRegularExpression object");
+        qtWarnAboutInvalidRegularExpression(pattern, "QRegularExpressionPrivate::doMatch");
         return;
     }
 
@@ -1212,8 +1177,8 @@ void QRegularExpressionPrivate::doMatch(QRegularExpressionMatchPrivate *priv,
 
             if (usingCrLfNewlines
                     && offset < subjectLength
-                    && subjectUtf16[offset - 1] == QLatin1Char('\r')
-                    && subjectUtf16[offset] == QLatin1Char('\n')) {
+                    && subjectUtf16[offset - 1] == u'\r'
+                    && subjectUtf16[offset] == u'\n') {
                 ++offset;
             } else if (offset < subjectLength
                        && QChar::isLowSurrogate(subjectUtf16[offset])) {
@@ -1582,10 +1547,10 @@ QString QRegularExpression::errorString() const
         QString errorString;
         int errorStringLength;
         do {
-            errorString.resize(errorString.length() + 64);
+            errorString.resize(errorString.size() + 64);
             errorStringLength = pcre2_get_error_message_16(d->errorCode,
                                                            reinterpret_cast<ushort *>(errorString.data()),
-                                                           errorString.length());
+                                                           errorString.size());
         } while (errorStringLength < 0);
         errorString.resize(errorStringLength);
 
@@ -1596,7 +1561,7 @@ QString QRegularExpression::errorString() const
 #endif
     }
 #ifdef QT_NO_TRANSLATION
-        return QLatin1String("no error");
+        return u"no error"_s;
 #else
     return QCoreApplication::translate("QRegularExpression", "no error");
 #endif
@@ -1836,14 +1801,13 @@ QString QRegularExpression::escape(QStringView str)
             // unlike Perl, a literal NUL must be escaped with
             // "\\0" (backslash + 0) and not "\\\0" (backslash + NUL),
             // because pcre16_compile uses a NUL-terminated string
-            result.append(QLatin1Char('\\'));
-            result.append(QLatin1Char('0'));
-        } else if ( (current < QLatin1Char('a') || current > QLatin1Char('z')) &&
-                    (current < QLatin1Char('A') || current > QLatin1Char('Z')) &&
-                    (current < QLatin1Char('0') || current > QLatin1Char('9')) &&
-                     current != QLatin1Char('_') )
-        {
-            result.append(QLatin1Char('\\'));
+            result.append(u'\\');
+            result.append(u'0');
+        } else if ((current < u'a' || current > u'z') &&
+                   (current < u'A' || current > u'Z') &&
+                   (current < u'0' || current > u'9') &&
+                   current != u'_') {
+            result.append(u'\\');
             result.append(current);
             if (current.isHighSurrogate() && i < (count - 1))
                 result.append(str.at(++i));
@@ -1937,13 +1901,13 @@ QString QRegularExpression::wildcardToRegularExpression(QStringView pattern, Wil
     const QChar *wc = pattern.data();
 
 #ifdef Q_OS_WIN
-    const QLatin1Char nativePathSeparator('\\');
-    const QLatin1String starEscape("[^/\\\\]*");
-    const QLatin1String questionMarkEscape("[^/\\\\]");
+    const char16_t nativePathSeparator = u'\\';
+    const auto starEscape = "[^/\\\\]*"_L1;
+    const auto questionMarkEscape = "[^/\\\\]"_L1;
 #else
-    const QLatin1Char nativePathSeparator('/');
-    const QLatin1String starEscape("[^/]*");
-    const QLatin1String questionMarkEscape("[^/]");
+    const char16_t nativePathSeparator = u'/';
+    const auto starEscape = "[^/]*"_L1;
+    const auto questionMarkEscape = "[^/]"_L1;
 #endif
 
     while (i < wclen) {
@@ -1958,7 +1922,7 @@ QString QRegularExpression::wildcardToRegularExpression(QStringView pattern, Wil
         case '\\':
 #ifdef Q_OS_WIN
         case '/':
-            rx += QLatin1String("[/\\\\]");
+            rx += "[/\\\\]"_L1;
             break;
 #endif
         case '$':
@@ -1970,29 +1934,29 @@ QString QRegularExpression::wildcardToRegularExpression(QStringView pattern, Wil
         case '{':
         case '|':
         case '}':
-            rx += QLatin1Char('\\');
+            rx += u'\\';
             rx += c;
             break;
         case '[':
             rx += c;
             // Support for the [!abc] or [!a-c] syntax
             if (i < wclen) {
-                if (wc[i] == QLatin1Char('!')) {
-                    rx += QLatin1Char('^');
+                if (wc[i] == u'!') {
+                    rx += u'^';
                     ++i;
                 }
 
-                if (i < wclen && wc[i] == QLatin1Char(']'))
+                if (i < wclen && wc[i] == u']')
                     rx += wc[i++];
 
-                while (i < wclen && wc[i] != QLatin1Char(']')) {
+                while (i < wclen && wc[i] != u']') {
                     // The '/' appearing in a character class invalidates the
                     // regular expression parsing. It also concerns '\\' on
                     // Windows OS types.
-                    if (wc[i] == QLatin1Char('/') || wc[i] == nativePathSeparator)
+                    if (wc[i] == u'/' || wc[i] == nativePathSeparator)
                         return rx;
-                    if (wc[i] == QLatin1Char('\\'))
-                        rx += QLatin1Char('\\');
+                    if (wc[i] == u'\\')
+                        rx += u'\\';
                     rx += wc[i++];
                 }
             }
@@ -2045,9 +2009,9 @@ QRegularExpression QRegularExpression::fromWildcard(QStringView pattern, Qt::Cas
 QString QRegularExpression::anchoredPattern(QStringView expression)
 {
     return QString()
-           + QLatin1String("\\A(?:")
+           + "\\A(?:"_L1
            + expression
-           + QLatin1String(")\\z");
+           + ")\\z"_L1;
 }
 
 /*!

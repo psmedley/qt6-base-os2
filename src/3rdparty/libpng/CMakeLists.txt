@@ -7,6 +7,7 @@
 qt_internal_add_3rdparty_library(BundledLibpng
     QMAKE_LIB_NAME libpng
     STATIC
+    SKIP_AUTOMOC
     INSTALL
     SOURCES
         png.c
@@ -27,6 +28,8 @@ qt_internal_add_3rdparty_library(BundledLibpng
     DEFINES
         PNG_ARM_NEON_OPT=0
         PNG_POWERPC_VSX_OPT=0
+        PNG_IMPEXP=
+        _CRT_SECURE_NO_DEPRECATE
     PUBLIC_INCLUDE_DIRECTORIES
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )

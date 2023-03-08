@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QSignalSpy>
@@ -38,6 +13,8 @@
 #include <QTimer>
 #include <QScreen>
 #include <QWindow>
+
+using namespace Qt::StringLiterals;
 
 class TabBar;
 
@@ -232,7 +209,7 @@ void tst_QTabBar::testCurrentChanged()
     QCOMPARE(tabBar.currentIndex(), 0);
     tabBar.setCurrentIndex(tabToSet);
     QCOMPARE(tabBar.currentIndex(), tabToSet);
-    QCOMPARE(spy.count(), expectedCount);
+    QCOMPARE(spy.size(), expectedCount);
 }
 
 class TabBar : public QTabBar
@@ -306,7 +283,7 @@ void tst_QTabBar::removeTab()
     tabbar.setCurrentIndex(currentIndex);
     QSignalSpy spy(&tabbar, SIGNAL(currentChanged(int)));
     tabbar.removeTab(deleteIndex);
-    QTEST(int(spy.count()), "spyCount");
+    QTEST(int(spy.size()), "spyCount");
     QTEST(tabbar.currentIndex(), "finalIndex");
 }
 
@@ -337,7 +314,7 @@ void tst_QTabBar::hideTab()
     tabbar.setCurrentIndex(currentIndex);
     QSignalSpy spy(&tabbar, &QTabBar::currentChanged);
     tabbar.setTabVisible(hideIndex, false);
-    QTEST(int(spy.count()), "spyCount");
+    QTEST(int(spy.size()), "spyCount");
     QTEST(tabbar.currentIndex(), "finalIndex");
 }
 
@@ -481,12 +458,12 @@ void tst_QTabBar::removeLastTab()
     QTabBar tabbar;
     QSignalSpy spy(&tabbar, SIGNAL(currentChanged(int)));
     int index = tabbar.addTab("foo");
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QCOMPARE(spy.at(0).at(0).toInt(), index);
     spy.clear();
 
     tabbar.removeTab(index);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QCOMPARE(spy.at(0).at(0).toInt(), -1);
     spy.clear();
 }
@@ -505,7 +482,7 @@ void tst_QTabBar::removeLastVisibleTab()
     {
         QSignalSpy spy(&tabbar, SIGNAL(currentChanged(int)));
         tabbar.removeTab(visible);
-        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.size(), 1);
         QCOMPARE(spy.at(0).at(0).toInt(), -1);
         QCOMPARE(tabbar.currentIndex(), -1);
     }
@@ -518,7 +495,7 @@ void tst_QTabBar::removeLastVisibleTab()
     {
         QSignalSpy spy(&tabbar, SIGNAL(currentChanged(int)));
         tabbar.removeTab(visible);
-        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.size(), 1);
         QCOMPARE(spy.at(0).at(0).toInt(), -1);
         QCOMPARE(tabbar.currentIndex(), -1);
     }
@@ -542,7 +519,7 @@ void tst_QTabBar::closeButton()
     QSignalSpy spy(&tabbar, SIGNAL(tabCloseRequested(int)));
     button->click();
     QCOMPARE(tabbar.count(), 1);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 }
 
 Q_DECLARE_METATYPE(QTabBar::ButtonPosition)
@@ -814,36 +791,36 @@ void tst_QTabBar::tabBarClicked()
     QSignalSpy clickSpy(&tabBar, SIGNAL(tabBarClicked(int)));
     QSignalSpy doubleClickSpy(&tabBar, SIGNAL(tabBarDoubleClicked(int)));
 
-    QCOMPARE(clickSpy.count(), 0);
-    QCOMPARE(doubleClickSpy.count(), 0);
+    QCOMPARE(clickSpy.size(), 0);
+    QCOMPARE(doubleClickSpy.size(), 0);
 
     Qt::MouseButton button = Qt::LeftButton;
     while (button <= Qt::MaxMouseButton) {
         const QPoint tabPos = tabBar.tabRect(0).center();
 
         QTest::mouseClick(&tabBar, button, {}, tabPos);
-        QCOMPARE(clickSpy.count(), 1);
+        QCOMPARE(clickSpy.size(), 1);
         QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), 0);
-        QCOMPARE(doubleClickSpy.count(), 0);
+        QCOMPARE(doubleClickSpy.size(), 0);
 
         QTest::mouseDClick(&tabBar, button, {}, tabPos);
-        QCOMPARE(clickSpy.count(), 1);
+        QCOMPARE(clickSpy.size(), 1);
         QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), 0);
-        QCOMPARE(doubleClickSpy.count(), 1);
+        QCOMPARE(doubleClickSpy.size(), 1);
         QCOMPARE(doubleClickSpy.takeFirst().takeFirst().toInt(), 0);
         QTest::mouseRelease(&tabBar, button, {}, tabPos);
 
         const QPoint barPos(tabBar.tabRect(0).right() + 5, tabBar.tabRect(0).center().y());
 
         QTest::mouseClick(&tabBar, button, {}, barPos);
-        QCOMPARE(clickSpy.count(), 1);
+        QCOMPARE(clickSpy.size(), 1);
         QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), -1);
-        QCOMPARE(doubleClickSpy.count(), 0);
+        QCOMPARE(doubleClickSpy.size(), 0);
 
         QTest::mouseDClick(&tabBar, button, {}, barPos);
-        QCOMPARE(clickSpy.count(), 1);
+        QCOMPARE(clickSpy.size(), 1);
         QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), -1);
-        QCOMPARE(doubleClickSpy.count(), 1);
+        QCOMPARE(doubleClickSpy.size(), 1);
         QCOMPARE(doubleClickSpy.takeFirst().takeFirst().toInt(), -1);
         QTest::mouseRelease(&tabBar, button, {}, barPos);
 
@@ -1047,8 +1024,8 @@ void tst_QTabBar::kineticWheel()
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-    const auto *leftButton = tabbar.findChild<QAbstractButton*>(u"ScrollLeftButton"_qs);
-    const auto *rightButton = tabbar.findChild<QAbstractButton*>(u"ScrollRightButton"_qs);
+    const auto *leftButton = tabbar.findChild<QAbstractButton*>(u"ScrollLeftButton"_s);
+    const auto *rightButton = tabbar.findChild<QAbstractButton*>(u"ScrollRightButton"_s);
     QVERIFY(leftButton && rightButton);
     QVERIFY(leftButton->isEnabled() && rightButton->isEnabled());
 
@@ -1226,8 +1203,8 @@ void tst_QTabBar::scrollButtons()
     window.show();
     QVERIFY(QTest::qWaitForWindowActive(&window));
 
-    auto *leftB = tabWidget.tabBar()->findChild<QAbstractButton*>(u"ScrollLeftButton"_qs);
-    auto *rightB = tabWidget.tabBar()->findChild<QAbstractButton*>(u"ScrollRightButton"_qs);
+    auto *leftB = tabWidget.tabBar()->findChild<QAbstractButton*>(u"ScrollLeftButton"_s);
+    auto *rightB = tabWidget.tabBar()->findChild<QAbstractButton*>(u"ScrollRightButton"_s);
 
     QVERIFY(leftB->isVisible());
     QVERIFY(!leftB->isEnabled());

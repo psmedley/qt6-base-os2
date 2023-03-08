@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qandroidplatformintegration.h"
 
@@ -79,6 +43,8 @@
 #include <QtGui/qpa/qplatforminputcontextfactory_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QSize QAndroidPlatformIntegration::m_defaultScreenSize = QSize(320, 455);
 QRect QAndroidPlatformIntegration::m_defaultAvailableGeometry = QRect(0, 0, 320, 455);
@@ -165,10 +131,10 @@ void QAndroidPlatformNativeInterface::customEvent(QEvent *event)
     QAndroidPlatformIntegration *api = static_cast<QAndroidPlatformIntegration *>(QGuiApplicationPrivate::platformIntegration());
     QtAndroid::setAndroidPlatformIntegration(api);
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     // Android accessibility activation event might have been already received
     api->accessibility()->setActive(QtAndroidAccessibility::isActive());
-#endif // QT_NO_ACCESSIBILITY
+#endif // QT_CONFIG(accessibility)
 
     if (!m_running) {
         m_running = true;
@@ -179,7 +145,7 @@ void QAndroidPlatformNativeInterface::customEvent(QEvent *event)
 
 QAndroidPlatformIntegration::QAndroidPlatformIntegration(const QStringList &paramList)
     : m_touchDevice(nullptr)
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     , m_accessibility(nullptr)
 #endif
 {
@@ -213,9 +179,9 @@ QAndroidPlatformIntegration::QAndroidPlatformIntegration(const QStringList &para
 
     m_androidSystemLocale = new QAndroidSystemLocale;
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
         m_accessibility = new QAndroidPlatformAccessibility();
-#endif // QT_NO_ACCESSIBILITY
+#endif // QT_CONFIG(accessibility)
 
     QJniObject javaActivity(QtAndroid::activity());
     if (!javaActivity.isValid())
@@ -286,9 +252,9 @@ QAndroidPlatformIntegration::QAndroidPlatformIntegration(const QStringList &para
 static bool needsBasicRenderloopWorkaround()
 {
     static bool needsWorkaround =
-            QtAndroid::deviceName().compare(QLatin1String("samsung SM-T211"), Qt::CaseInsensitive) == 0
-            || QtAndroid::deviceName().compare(QLatin1String("samsung SM-T210"), Qt::CaseInsensitive) == 0
-            || QtAndroid::deviceName().compare(QLatin1String("samsung SM-T215"), Qt::CaseInsensitive) == 0;
+            QtAndroid::deviceName().compare("samsung SM-T211"_L1, Qt::CaseInsensitive) == 0
+            || QtAndroid::deviceName().compare("samsung SM-T210"_L1, Qt::CaseInsensitive) == 0
+            || QtAndroid::deviceName().compare("samsung SM-T215"_L1, Qt::CaseInsensitive) == 0;
     return needsWorkaround;
 }
 
@@ -457,7 +423,7 @@ Qt::WindowState QAndroidPlatformIntegration::defaultWindowState(Qt::WindowFlags 
     return QPlatformIntegration::defaultWindowState(flags);
 }
 
-static const QLatin1String androidThemeName("android");
+static const auto androidThemeName = "android"_L1;
 QStringList QAndroidPlatformIntegration::themeNames() const
 {
     return QStringList(QString(androidThemeName));
@@ -466,7 +432,7 @@ QStringList QAndroidPlatformIntegration::themeNames() const
 QPlatformTheme *QAndroidPlatformIntegration::createPlatformTheme(const QString &name) const
 {
     if (androidThemeName == name)
-        return new QAndroidPlatformTheme(m_androidPlatformNativeInterface);
+        return QAndroidPlatformTheme::instance(m_androidPlatformNativeInterface);
 
     return 0;
 }
@@ -497,7 +463,7 @@ void QAndroidPlatformIntegration::flushPendingUpdates()
     }
 }
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 QPlatformAccessibility *QAndroidPlatformIntegration::accessibility() const
 {
     return m_accessibility;
@@ -520,6 +486,18 @@ void QAndroidPlatformIntegration::setScreenSize(int width, int height)
 {
     if (m_primaryScreen)
         QMetaObject::invokeMethod(m_primaryScreen, "setSize", Qt::AutoConnection, Q_ARG(QSize, QSize(width, height)));
+}
+
+QPlatformTheme::Appearance QAndroidPlatformIntegration::m_appearance = QPlatformTheme::Appearance::Light;
+
+void QAndroidPlatformIntegration::setAppearance(QPlatformTheme::Appearance newAppearance)
+{
+    if (m_appearance == newAppearance)
+        return;
+    m_appearance = newAppearance;
+
+    QMetaObject::invokeMethod(qGuiApp,
+                    [] () { QAndroidPlatformTheme::instance()->updateAppearance();});
 }
 
 void QAndroidPlatformIntegration::setScreenSizeParameters(const QSize &physicalSize,

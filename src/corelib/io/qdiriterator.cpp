@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 /*!
     \since 4.3
@@ -111,6 +75,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 template <class Iterator>
 class QDirIteratorPrivateIteratorStack : public QStack<Iterator *>
 {
@@ -163,7 +129,7 @@ public:
 QDirIteratorPrivate::QDirIteratorPrivate(const QFileSystemEntry &entry, const QStringList &nameFilters,
                                          QDir::Filters _filters, QDirIterator::IteratorFlags flags, bool resolveEngine)
     : dirEntry(entry)
-      , nameFilters(nameFilters.contains(QLatin1String("*")) ? QStringList() : nameFilters)
+      , nameFilters(nameFilters.contains("*"_L1) ? QStringList() : nameFilters)
       , filters(QDir::NoFilter == _filters ? QDir::AllEntries : _filters)
       , iteratorFlags(flags)
 {
@@ -301,7 +267,7 @@ void QDirIteratorPrivate::checkAndPushDirectory(const QFileInfo &fileInfo)
 
     // Never follow . and ..
     QString fileName = fileInfo.fileName();
-    if (QLatin1String(".") == fileName || QLatin1String("..") == fileName)
+    if ("."_L1 == fileName || ".."_L1 == fileName)
         return;
 
     // No hidden directories unless requested
@@ -328,10 +294,10 @@ bool QDirIteratorPrivate::matchesFilters(const QString &fileName, const QFileInf
         return false;
 
     // filter . and ..?
-    const int fileNameSize = fileName.size();
-    const bool dotOrDotDot = fileName[0] == QLatin1Char('.')
+    const qsizetype fileNameSize = fileName.size();
+    const bool dotOrDotDot = fileName[0] == u'.'
                              && ((fileNameSize == 1)
-                                 ||(fileNameSize == 2 && fileName[1] == QLatin1Char('.')));
+                                 ||(fileNameSize == 2 && fileName[1] == u'.'));
     if ((filters & QDir::NoDot) && dotOrDotDot && fileNameSize == 1)
         return false;
     if ((filters & QDir::NoDotDot) && dotOrDotDot && fileNameSize == 2)

@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -236,45 +211,45 @@ void tst_QIntValidator::notifySignals()
     QSignalSpy changedSpy(&iv, SIGNAL(changed()));
 
     iv.setTop(9);
-    QCOMPARE(topSpy.count(), 1);
-    QCOMPARE(changedSpy.count(), 1);
+    QCOMPARE(topSpy.size(), 1);
+    QCOMPARE(changedSpy.size(), 1);
     QCOMPARE(iv.top(), 9);
     iv.setBottom(1);
-    QCOMPARE(bottomSpy.count(), 1);
-    QCOMPARE(changedSpy.count(), 2);
+    QCOMPARE(bottomSpy.size(), 1);
+    QCOMPARE(changedSpy.size(), 2);
     QCOMPARE(iv.bottom(), 1);
 
     iv.setRange(1, 8);
-    QCOMPARE(topSpy.count(), 2);
-    QCOMPARE(bottomSpy.count(), 1);
-    QCOMPARE(changedSpy.count(), 3);
+    QCOMPARE(topSpy.size(), 2);
+    QCOMPARE(bottomSpy.size(), 1);
+    QCOMPARE(changedSpy.size(), 3);
     QCOMPARE(iv.top(), 8);
     QCOMPARE(iv.bottom(), 1);
 
     iv.setRange(2, 8);
-    QCOMPARE(topSpy.count(), 2);
-    QCOMPARE(bottomSpy.count(), 2);
-    QCOMPARE(changedSpy.count(), 4);
+    QCOMPARE(topSpy.size(), 2);
+    QCOMPARE(bottomSpy.size(), 2);
+    QCOMPARE(changedSpy.size(), 4);
     QCOMPARE(iv.top(), 8);
     QCOMPARE(iv.bottom(), 2);
 
     iv.setRange(3, 7);
-    QCOMPARE(topSpy.count(), 3);
-    QCOMPARE(bottomSpy.count(), 3);
-    QCOMPARE(changedSpy.count(), 5);
+    QCOMPARE(topSpy.size(), 3);
+    QCOMPARE(bottomSpy.size(), 3);
+    QCOMPARE(changedSpy.size(), 5);
     QCOMPARE(iv.top(), 7);
     QCOMPARE(iv.bottom(), 3);
 
     iv.setRange(3, 7);
-    QCOMPARE(topSpy.count(), 3);
-    QCOMPARE(bottomSpy.count(), 3);
-    QCOMPARE(changedSpy.count(), 5);
+    QCOMPARE(topSpy.size(), 3);
+    QCOMPARE(bottomSpy.size(), 3);
+    QCOMPARE(changedSpy.size(), 5);
 
     iv.setLocale(QLocale("C"));
-    QCOMPARE(changedSpy.count(), 5);
+    QCOMPARE(changedSpy.size(), 5);
 
     iv.setLocale(QLocale("en"));
-    QCOMPARE(changedSpy.count(), 6);
+    QCOMPARE(changedSpy.size(), 6);
 }
 
 void tst_QIntValidator::fixup()

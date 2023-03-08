@@ -178,6 +178,23 @@ std::filesystem::copy(
 "
 )
 
+# dladdr
+qt_config_compile_test(dladdr
+    LABEL "dladdr"
+    LIBRARIES
+        dl
+    CODE
+"#define _GNU_SOURCE 1
+#include <dlfcn.h>
+int i = 0;
+int main(void)
+{
+    Dl_info info;
+    dladdr(&i, &info);
+    return 0;
+}"
+)
+
 # eventfd
 qt_config_compile_test(eventfd
     LABEL "eventfd"
@@ -545,6 +562,10 @@ qt_feature("cxx17_filesystem" PUBLIC
     LABEL "C++17 <filesystem>"
     CONDITION TEST_cxx17_filesystem
 )
+qt_feature("dladdr" PRIVATE
+    LABEL "dladdr"
+    CONDITION QT_FEATURE_dlopen AND TEST_dladdr
+)
 qt_feature("eventfd" PUBLIC
     LABEL "eventfd"
     CONDITION NOT WASM AND TEST_eventfd
@@ -574,7 +595,7 @@ qt_feature("glib" PUBLIC PRIVATE
 qt_feature_definition("glib" "QT_NO_GLIB" NEGATE VALUE "1")
 qt_feature("glibc" PRIVATE
     LABEL "GNU libc"
-    AUTODETECT LINUX
+    AUTODETECT ( LINUX OR HURD )
     CONDITION TEST_glibc
 )
 qt_feature("icu" PRIVATE
@@ -608,7 +629,7 @@ qt_feature("system-libb2" PRIVATE
 # Currently only used by QTemporaryFile; linkat() exists on Android, but hardlink creation fails due to security rules
 qt_feature("linkat" PRIVATE
     LABEL "linkat()"
-    AUTODETECT LINUX AND NOT ANDROID
+    AUTODETECT ( LINUX AND NOT ANDROID ) OR HURD
     CONDITION TEST_linkat
 )
 qt_feature("std-atomic64" PUBLIC
@@ -665,7 +686,7 @@ qt_feature("qqnx_pps" PRIVATE
 )
 qt_feature("renameat2" PRIVATE
     LABEL "renameat2()"
-    CONDITION LINUX AND TEST_renameat2
+    CONDITION ( LINUX OR HURD ) AND TEST_renameat2
 )
 qt_feature("slog2" PRIVATE
     LABEL "slog2"
@@ -673,7 +694,7 @@ qt_feature("slog2" PRIVATE
 )
 qt_feature("statx" PRIVATE
     LABEL "statx() in libc"
-    CONDITION LINUX AND TEST_statx
+    CONDITION ( LINUX OR HURD ) AND TEST_statx
 )
 qt_feature("syslog" PRIVATE
     LABEL "syslog"
@@ -686,12 +707,6 @@ qt_feature("threadsafe-cloexec"
 )
 qt_feature_definition("threadsafe-cloexec" "QT_THREADSAFE_CLOEXEC" VALUE "1")
 qt_feature_config("threadsafe-cloexec" QMAKE_PUBLIC_QT_CONFIG)
-qt_feature("properties" PUBLIC
-    SECTION "Kernel"
-    LABEL "Properties"
-    PURPOSE "Supports scripting Qt-based applications."
-)
-qt_feature_definition("properties" "QT_NO_PROPERTIES" NEGATE VALUE "1")
 qt_feature("regularexpression" PUBLIC
     SECTION "Kernel"
     LABEL "QRegularExpression"
@@ -728,7 +743,7 @@ qt_feature("xmlstream" PUBLIC
     LABEL "XML Streaming APIs"
     PURPOSE "Provides a simple streaming API for XML."
 )
-qt_feature("cpp-winrt" PRIVATE
+qt_feature("cpp-winrt" PRIVATE PUBLIC
     LABEL "cpp/winrt base"
     PURPOSE "basic cpp/winrt language projection support"
     CONDITION WIN32 AND TEST_cpp_winrt
@@ -868,7 +883,7 @@ qt_feature("animation" PUBLIC
     SECTION "Utilities"
     LABEL "Animation"
     PURPOSE "Provides a framework for animations."
-    CONDITION QT_FEATURE_properties AND QT_FEATURE_easingcurve
+    CONDITION QT_FEATURE_easingcurve
 )
 qt_feature_definition("animation" "QT_NO_ANIMATION" NEGATE VALUE "1")
 qt_feature("gestures" PUBLIC

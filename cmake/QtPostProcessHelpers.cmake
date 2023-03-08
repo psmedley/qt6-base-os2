@@ -80,11 +80,6 @@ function(qt_internal_remove_qt_dependency_duplicates out_deps deps)
         if(dep)
             list(FIND ${out_deps} "${dep}" dep_seen)
 
-            # If the library depends on the Private and non-Private targets,
-            # we only need to 'find_dependency' for one of them.
-            if(dep_seen EQUAL -1 AND "${dep}" MATCHES "(.+)Private\;(.+)")
-                list(FIND ${out_deps} "${CMAKE_MATCH_1};${CMAKE_MATCH_2}" dep_seen)
-            endif()
             if(dep_seen EQUAL -1)
                 list(LENGTH dep len)
                 if(NOT (len EQUAL 2))
@@ -209,9 +204,10 @@ function(qt_internal_create_module_depends_file target)
             # Make the ModuleTool package depend on dep's ModuleTool package.
             list(FIND tool_deps_seen ${dep} dep_seen)
             if(dep_seen EQUAL -1 AND ${dep} IN_LIST QT_KNOWN_MODULES_WITH_TOOLS)
+                qt_internal_get_package_version_of_target("${dep}" dep_package_version)
                 list(APPEND tool_deps_seen ${dep})
                 list(APPEND tool_deps
-                            "${INSTALL_CMAKE_NAMESPACE}${dep}Tools\;${PROJECT_VERSION}")
+                            "${INSTALL_CMAKE_NAMESPACE}${dep}Tools\;${dep_package_version}")
             endif()
         endif()
     endforeach()
@@ -220,14 +216,15 @@ function(qt_internal_create_module_depends_file target)
 
     # Add dependency to the main ModuleTool package to ModuleDependencies file.
     if(${target} IN_LIST QT_KNOWN_MODULES_WITH_TOOLS)
+        qt_internal_get_package_version_of_target("${target}" main_module_tool_package_version)
         list(APPEND main_module_tool_deps
-            "${INSTALL_CMAKE_NAMESPACE}${target}Tools\;${PROJECT_VERSION}")
+            "${INSTALL_CMAKE_NAMESPACE}${target}Tools\;${main_module_tool_package_version}")
     endif()
 
     foreach(dep ${target_deps})
         if(NOT dep MATCHES ".+Private$" AND
            dep MATCHES "${INSTALL_CMAKE_NAMESPACE}(.+)")
-            # target_deps cointains elements that are a pair of target name and version,
+            # target_deps contains elements that are a pair of target name and version,
             # e.g. 'Core\;6.2'
             # After the extracting from the target_deps list, the element becomes a list itself,
             # because it loses escape symbol before the semicolon, so ${CMAKE_MATCH_1} is the list:
@@ -259,6 +256,10 @@ function(qt_internal_create_module_depends_file target)
         qt_path_join(config_build_dir ${QT_CONFIG_BUILD_DIR} ${path_suffix})
         qt_path_join(config_install_dir ${QT_CONFIG_INSTALL_DIR} ${path_suffix})
 
+        # All module packages should look for the Qt6 package version that qtbase was originally
+        # built as.
+        qt_internal_get_package_version_of_target(Platform main_qt_package_version)
+
         # Configure and install ModuleDependencies file.
         configure_file(
             "${QT_CMAKE_DIR}/QtModuleDependencies.cmake.in"
@@ -272,6 +273,9 @@ function(qt_internal_create_module_depends_file target)
             COMPONENT Devel
         )
 
+        message(TRACE "Recorded dependencies for module: ${target}\n"
+            "    Qt dependencies: ${target_deps}\n"
+            "    3rd-party dependencies: ${third_party_deps}")
     endif()
     if(tool_deps)
         # The value of the property will be used by qt_export_tools.
@@ -286,6 +290,13 @@ function(qt_internal_create_plugin_depends_file target)
     get_target_property(target_deps "${target}" _qt_target_deps)
     unset(optional_public_depends)
     set(target_deps_seen "")
+
+
+    # Extra 3rd party targets who's packages should be considered dependencies.
+    get_target_property(extra_third_party_deps "${target}" _qt_extra_third_party_dep_targets)
+    if(NOT extra_third_party_deps)
+        set(extra_third_party_deps "")
+    endif()
 
     qt_collect_third_party_deps(${target})
 
@@ -323,6 +334,10 @@ function(qt_internal_create_plugin_depends_file target)
             DESTINATION "${config_install_dir}"
             COMPONENT Devel
         )
+
+        message(TRACE "Recorded dependencies for plugin: ${target}\n"
+            "    Qt dependencies: ${target_deps}\n"
+            "    3rd-party dependencies: ${third_party_deps}")
     endif()
 endfunction()
 
@@ -349,7 +364,17 @@ function(qt_internal_create_qt6_dependencies_file)
 endif()")
     endif()
 
-    if(third_party_deps)
+    _qt_internal_determine_if_host_info_package_needed(platform_requires_host_info_package)
+
+    if(platform_requires_host_info_package)
+        # TODO: Figure out how to make the initial QT_HOST_PATH var relocatable in relation
+        # to the target CMAKE_INSTALL_DIR, if at all possible to do so in a reliable way.
+        get_filename_component(qt_host_path_absolute "${QT_HOST_PATH}" ABSOLUTE)
+        get_filename_component(qt_host_path_cmake_dir_absolute
+            "${Qt${PROJECT_VERSION_MAJOR}HostInfo_DIR}/.." ABSOLUTE)
+    endif()
+
+    if(third_party_deps OR platform_requires_host_info_package)
         # Setup build and install paths.
         set(path_suffix "${INSTALL_CMAKE_NAMESPACE}")
 
@@ -388,14 +413,11 @@ function(qt_internal_create_depends_files)
     endforeach()
 endfunction()
 
-# This function creates the Qt<Module>Plugins.cmake used to list all
-# the plug-in target files.
-function(qt_internal_create_plugins_files)
-    # The plugins cmake configuration is only needed for static builds. Dynamic builds don't need
-    # the application to link against plugins at build time.
-    if(QT_BUILD_SHARED_LIBS)
-        return()
-    endif()
+# This function creates Qt<Module>Plugins.cmake files used to include all
+# the plugin Config files that belong to that module.
+function(qt_internal_create_plugins_auto_inclusion_files)
+    # For static library builds, the plugin targets need to be available for linking.
+    # For shared library builds, the plugin targets are useful for deployment purposes.
     qt_internal_get_qt_repo_known_modules(repo_known_modules)
 
     set(modules_with_plugins "")
@@ -428,9 +450,9 @@ if (__qt_qml_plugins_config_file_list AND NOT QT_SKIP_AUTO_QML_PLUGIN_INCLUSION)
     foreach(__qt_qml_plugin_config_file \${__qt_qml_plugins_config_file_list})
         include(\${__qt_qml_plugin_config_file})
 
-        # Temporarily unset any failure markers.
+        # Temporarily unset any failure markers and mark the Qml package as found.
         unset(\${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE)
-        unset(\${CMAKE_FIND_PACKAGE_NAME}_FOUND)
+        set(\${CMAKE_FIND_PACKAGE_NAME}_FOUND TRUE)
     endforeach()
 
     # For the second round of inclusions, check and bail out early if there are errors.
@@ -597,9 +619,14 @@ endif()\n")
                 "set(QT_UIKIT_SDK \"${QT_UIKIT_SDK}\" CACHE BOOL \"\")\n")
         endif()
 
-        if(CMAKE_CROSSCOMPILING AND QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
+        if(QT_FORCE_FIND_TOOLS)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
-                "set(QT_BUILD_TOOLS_WHEN_CROSSCOMPILING \"TRUE\" CACHE BOOL \"\" FORCE)\n")
+                "set(QT_FORCE_FIND_TOOLS \"TRUE\" CACHE BOOL \"\" FORCE)\n")
+        endif()
+
+        if(QT_FORCE_BUILD_TOOLS)
+            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
+                "set(QT_FORCE_BUILD_TOOLS \"TRUE\" CACHE BOOL \"\" FORCE)\n")
         endif()
 
         if(QT_INTERNAL_EXAMPLES_INSTALL_PREFIX)
@@ -679,18 +706,16 @@ endif()\n")
 
         string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS "${install_prefix_content}")
 
-        if(NOT BUILD_SHARED_LIBS)
-            # The top-level check needs to happen inside QtBuildInternals, because it's possible
-            # to configure a top-level build with a few repos and then configure another repo
-            # using qt-configure-module in a separate build dir, where QT_SUPERBUILD will not
-            # be set anymore.
-            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
-                "
+        # The top-level check needs to happen inside QtBuildInternals, because it's possible
+        # to configure a top-level build with a few repos and then configure another repo
+        # using qt-configure-module in a separate build dir, where QT_SUPERBUILD will not
+        # be set anymore.
+        string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
+            "
 if(DEFINED QT_REPO_MODULE_VERSION AND NOT DEFINED QT_REPO_DEPENDENCIES AND NOT QT_SUPERBUILD)
     qt_internal_read_repo_dependencies(QT_REPO_DEPENDENCIES \"$\{PROJECT_SOURCE_DIR}\")
 endif()
 ")
-        endif()
 
         if(DEFINED OpenGL_GL_PREFERENCE)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
@@ -764,9 +789,13 @@ function(qt_internal_create_config_file_for_standalone_tests)
         return()
     endif()
 
-    # Ceate a Config file that calls find_package on the modules that were built as part
+    # Create a Config file that calls find_package on the modules that were built as part
     # of the current repo. This is used for standalone tests.
     qt_internal_get_standalone_tests_config_file_name(tests_config_file_name)
+
+    # Standalone tests Config files should follow the main versioning scheme.
+    qt_internal_get_package_version_of_target(Platform main_qt_package_version)
+
     configure_file(
         "${QT_CMAKE_DIR}/QtStandaloneTestsConfig.cmake.in"
         "${config_build_dir}/${tests_config_file_name}"

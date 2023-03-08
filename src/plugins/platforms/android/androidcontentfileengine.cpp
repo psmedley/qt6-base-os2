@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 Volker Krause <vkrause@kde.org>
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 Volker Krause <vkrause@kde.org>
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "androidcontentfileengine.h"
 
@@ -47,6 +11,7 @@
 #include <QDebug>
 
 using namespace QNativeInterface;
+using namespace Qt::StringLiterals;
 
 AndroidContentFileEngine::AndroidContentFileEngine(const QString &f)
     : m_file(f)
@@ -60,15 +25,15 @@ bool AndroidContentFileEngine::open(QIODevice::OpenMode openMode,
     Q_UNUSED(permissions);
     QString openModeStr;
     if (openMode & QFileDevice::ReadOnly) {
-        openModeStr += QLatin1Char('r');
+        openModeStr += u'r';
     }
     if (openMode & QFileDevice::WriteOnly) {
-        openModeStr += QLatin1Char('w');
+        openModeStr += u'w';
     }
     if (openMode & QFileDevice::Truncate) {
-        openModeStr += QLatin1Char('t');
+        openModeStr += u't';
     } else if (openMode & QFileDevice::Append) {
-        openModeStr += QLatin1Char('a');
+        openModeStr += u'a';
     }
 
     m_pfd = QJniObject::callStaticObjectMethod("org/qtproject/qt/android/QtNative",
@@ -152,7 +117,7 @@ QString AndroidContentFileEngine::fileName(FileName f) const
             return m_file;
         case BaseName:
         {
-            const int pos = m_file.lastIndexOf(QChar(QLatin1Char('/')));
+            const qsizetype pos = m_file.lastIndexOf(u'/');
             return m_file.mid(pos);
         }
         default:
@@ -175,9 +140,8 @@ AndroidContentFileEngineHandler::~AndroidContentFileEngineHandler() = default;
 
 QAbstractFileEngine* AndroidContentFileEngineHandler::create(const QString &fileName) const
 {
-    if (!fileName.startsWith(QLatin1String("content"))) {
+    if (!fileName.startsWith("content"_L1))
         return nullptr;
-    }
 
     return new AndroidContentFileEngine(fileName);
 }

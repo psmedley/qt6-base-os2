@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2015 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2015 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qmimetype.h"
 
@@ -53,6 +17,8 @@
 #include <memory>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QMimeTypePrivate::QMimeTypePrivate()
     : loaded(false), fromCache(false)
@@ -258,13 +224,13 @@ QString QMimeType::comment() const
     QStringList languageList;
     languageList << QLocale().name();
     languageList << QLocale().uiLanguages();
-    languageList << QLatin1String("default"); // use the default locale if possible.
-    for (const QString &language : qAsConst(languageList)) {
-        const QString lang = language == QLatin1String("C") ? QLatin1String("en_US") : language;
+    languageList << u"default"_s; // use the default locale if possible.
+    for (const QString &language : std::as_const(languageList)) {
+        const QString lang = language == "C"_L1 ? u"en_US"_s : language;
         const QString comm = d->localeComments.value(lang);
         if (!comm.isEmpty())
             return comm;
-        const int pos = lang.indexOf(QLatin1Char('_'));
+        const int pos = lang.indexOf(u'_');
         if (pos != -1) {
             // "pt_BR" not found? try just "pt"
             const QString shortLang = lang.left(pos);
@@ -303,19 +269,19 @@ QString QMimeType::genericIconName() const
         // (i.e. "video-x-generic" in the previous example).
         const QString group = name();
         QStringView groupRef(group);
-        const int slashindex = groupRef.indexOf(QLatin1Char('/'));
+        const int slashindex = groupRef.indexOf(u'/');
         if (slashindex != -1)
             groupRef = groupRef.left(slashindex);
-        return groupRef + QLatin1String("-x-generic");
+        return groupRef + "-x-generic"_L1;
     }
     return d->genericIconName;
 }
 
 static QString make_default_icon_name_from_mimetype_name(QString iconName)
 {
-    const int slashindex = iconName.indexOf(QLatin1Char('/'));
+    const int slashindex = iconName.indexOf(u'/');
     if (slashindex != -1)
-        iconName[slashindex] = QLatin1Char('-');
+        iconName[slashindex] = u'-';
     return iconName;
 }
 
@@ -444,11 +410,11 @@ QStringList QMimeType::suffixes() const
     QMimeDatabasePrivate::instance()->loadMimeTypePrivate(const_cast<QMimeTypePrivate&>(*d));
 
     QStringList result;
-    for (const QString &pattern : qAsConst(d->globPatterns)) {
+    for (const QString &pattern : std::as_const(d->globPatterns)) {
         // Not a simple suffix if it looks like: README or *. or *.* or *.JP*G or *.JP?
-        if (pattern.startsWith(QLatin1String("*.")) &&
-            pattern.length() > 2 &&
-            pattern.indexOf(QLatin1Char('*'), 2) < 0 && pattern.indexOf(QLatin1Char('?'), 2) < 0) {
+        if (pattern.startsWith("*."_L1) &&
+            pattern.size() > 2 &&
+            pattern.indexOf(u'*', 2) < 0 && pattern.indexOf(u'?', 2) < 0) {
             const QString suffix = pattern.mid(2);
             result.append(suffix);
         }
@@ -488,13 +454,13 @@ QString QMimeType::filterString() const
     QString filter;
 
     if (!d->globPatterns.empty()) {
-        filter += comment() + QLatin1String(" (");
+        filter += comment() + " ("_L1;
         for (int i = 0; i < d->globPatterns.size(); ++i) {
             if (i != 0)
-                filter += QLatin1Char(' ');
+                filter += u' ';
             filter += d->globPatterns.at(i);
         }
-        filter +=  QLatin1Char(')');
+        filter +=  u')';
     }
 
     return filter;

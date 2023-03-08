@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QSignalSpy>
@@ -37,6 +12,8 @@
 #include <private/qfont_p.h>
 #include <private/qfontengine_p.h>
 #include <qpa/qplatformfontdatabase.h>
+
+using namespace Qt::StringLiterals;
 
 Q_LOGGING_CATEGORY(lcTests, "qt.text.tests")
 
@@ -263,7 +240,7 @@ void tst_QFontDatabase::addAppFont()
     QCOMPARE(id, -1);
     return;
 #endif
-    QCOMPARE(fontDbChangedSpy.count(), 1);
+    QCOMPARE(fontDbChangedSpy.size(), 1);
     if (id == -1)
         QSKIP("Skip the test since app fonts are not supported on this system");
 
@@ -272,9 +249,9 @@ void tst_QFontDatabase::addAppFont()
 
     const QStringList newFamilies = QFontDatabase::families();
     QVERIFY(!newFamilies.isEmpty());
-    QVERIFY(newFamilies.count() >= oldFamilies.count());
+    QVERIFY(newFamilies.size() >= oldFamilies.size());
 
-    for (int i = 0; i < addedFamilies.count(); ++i) {
+    for (int i = 0; i < addedFamilies.size(); ++i) {
         QString family = addedFamilies.at(i);
         QVERIFY(newFamilies.contains(family));
         QFont qfont(family);
@@ -283,9 +260,9 @@ void tst_QFontDatabase::addAppFont()
     }
 
     QVERIFY(QFontDatabase::removeApplicationFont(id));
-    QCOMPARE(fontDbChangedSpy.count(), 2);
+    QCOMPARE(fontDbChangedSpy.size(), 2);
 
-    QVERIFY(QFontDatabase::families().count() <= oldFamilies.count());
+    QVERIFY(QFontDatabase::families().size() <= oldFamilies.size());
 }
 
 void tst_QFontDatabase::addTwoAppFontsFromFamily()
@@ -508,26 +485,26 @@ void tst_QFontDatabase::registerOpenTypePreferredNamesApplication()
 #ifdef Q_OS_WIN
 void tst_QFontDatabase::findCourier()
 {
-    QFont font = QFontDatabase::font(u"Courier"_qs, u""_qs, 16);
+    QFont font = QFontDatabase::font(u"Courier"_s, u""_s, 16);
     QFontInfo info(font);
-    QCOMPARE(info.family(), u"Courier New"_qs);
+    QCOMPARE(info.family(), u"Courier New"_s);
     QCOMPARE(info.pointSize(), 16);
 
     font = QFontDatabase::font("Courier", "", 64);
     info = font;
-    QCOMPARE(info.family(), u"Courier New"_qs);
+    QCOMPARE(info.family(), u"Courier New"_s);
     QCOMPARE(info.pointSize(), 64);
 
     // By setting "PreferBitmap" we should get Courier itself.
     font.setStyleStrategy(QFont::PreferBitmap);
     info = font;
-    QCOMPARE(info.family(), u"Courier"_qs);
+    QCOMPARE(info.family(), u"Courier"_s);
     // Which has an upper bound on point size
     QCOMPARE(info.pointSize(), 19);
 
     font.setStyleStrategy(QFont::PreferDefault);
     info = font;
-    QCOMPARE(info.family(), u"Courier New"_qs);
+    QCOMPARE(info.family(), u"Courier New"_s);
     QCOMPARE(info.pointSize(), 64);
 }
 #endif

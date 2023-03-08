@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -34,6 +9,8 @@
 #include <qdiriterator.h>
 #include <qfileinfo.h>
 #include <qstringlist.h>
+#include <QSet>
+#include <QString>
 
 #include <QtCore/private/qfsfileengine_p.h>
 
@@ -41,9 +18,7 @@
 #define Q_NO_SYMLINKS
 #endif
 
-#if defined(Q_OS_DOSLIKE)
-#  include "../../../network-settings.h"
-#endif
+#include "../../../../shared/filesystem.h"
 
 #ifdef Q_OS_ANDROID
 #include <QStandardPaths>
@@ -556,7 +531,7 @@ void tst_QDirIterator::longPath()
     QCOMPARE(n, m);
 
     dirName.chop(1);
-    while (dirName.length() > 0 && dir.exists(dirName) && dir.rmdir(dirName)) {
+    while (dirName.size() > 0 && dir.exists(dirName) && dir.rmdir(dirName)) {
         dirName.chop(1);
     }
     dir.cdUp();
@@ -586,11 +561,11 @@ void tst_QDirIterator::uncPaths_data()
 {
     QTest::addColumn<QString>("dirName");
     QTest::newRow("uncserver")
-            <<QString("//" + QtNetworkSettings::winServerName());
+            <<QString("//" + QTest::uncServerName());
     QTest::newRow("uncserver/testshare")
-            <<QString("//" + QtNetworkSettings::winServerName() + "/testshare");
+            <<QString("//" + QTest::uncServerName() + "/testshare");
     QTest::newRow("uncserver/testshare/tmp")
-            <<QString("//" + QtNetworkSettings::winServerName() + "/testshare/tmp");
+            <<QString("//" + QTest::uncServerName() + "/testshare/tmp");
 }
 void tst_QDirIterator::uncPaths()
 {

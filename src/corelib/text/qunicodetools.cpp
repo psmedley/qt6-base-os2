@@ -1,49 +1,16 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qunicodetools_p.h"
 
+#include "qmutex.h"
 #include "qunicodetables_p.h"
 #include "qvarlengtharray.h"
 #if QT_CONFIG(library)
 #include "qlibrary.h"
 #endif
+
+#include <mutex>
 
 #include <limits.h>
 
@@ -51,7 +18,14 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_AUTOTEST_EXPORT int qt_initcharattributes_default_algorithm_only = 0;
+using namespace Qt::StringLiterals;
+
+#ifdef QT_BUILD_INTERNAL
+Q_CONSTINIT Q_AUTOTEST_EXPORT
+#else
+constexpr
+#endif
+int qt_initcharattributes_default_algorithm_only = 0;
 
 namespace QUnicodeTools {
 
@@ -288,7 +262,6 @@ static void getWordBreaks(const char16_t *string, qsizetype len, QCharAttributes
 
         const QUnicodeTables::Properties *prop = QUnicodeTables::properties(ucs4);
         QUnicodeTables::WordBreakClass ncls = (QUnicodeTables::WordBreakClass) prop->wordBreakClass;
-#ifdef QT_BUILD_INTERNAL
         if (qt_initcharattributes_default_algorithm_only) {
             // as of Unicode 5.1, some punctuation marks were mapped to MidLetter and MidNumLet
             // which caused "hi.there" to be treated like if it were just a single word;
@@ -299,7 +272,6 @@ static void getWordBreaks(const char16_t *string, qsizetype len, QCharAttributes
             else if (ucs4 == 0x003A) // COLON
                 ncls = QUnicodeTables::WordBreak_MidLetter;
         }
-#endif
 
         uchar action = WB::breakTable[cls][ncls];
         switch (action) {
@@ -1434,16 +1406,20 @@ typedef int (*th_brk_def) (const unsigned char*, int*, size_t);
 typedef size_t (*th_next_cell_def) (const unsigned char *, size_t, struct thcell_t *, int);
 
 /* libthai related function handles */
-static th_brk_def th_brk = nullptr;
-static th_next_cell_def th_next_cell = nullptr;
+Q_CONSTINIT static th_brk_def th_brk = nullptr;
+Q_CONSTINIT static th_next_cell_def th_next_cell = nullptr;
 
 static int init_libthai() {
 #if QT_CONFIG(library)
-    static bool initialized = false;
-    if (!initialized && (!th_brk || !th_next_cell)) {
-        th_brk = reinterpret_cast<th_brk_def>(QLibrary::resolve(QLatin1String("thai"), static_cast<int>(LIBTHAI_MAJOR), "th_brk"));
-        th_next_cell = (th_next_cell_def)QLibrary::resolve(QLatin1String("thai"), LIBTHAI_MAJOR, "th_next_cell");
-        initialized = true;
+    Q_CONSTINIT static QBasicAtomicInt initialized = Q_BASIC_ATOMIC_INITIALIZER(false);
+    Q_CONSTINIT static QBasicMutex mutex;
+    if (!initialized.loadAcquire()) {
+        const auto locker = std::scoped_lock(mutex);
+        if (!initialized.loadAcquire()) {
+            th_brk = reinterpret_cast<th_brk_def>(QLibrary::resolve("thai"_L1, LIBTHAI_MAJOR, "th_brk"));
+            th_next_cell = (th_next_cell_def)QLibrary::resolve("thai"_L1, LIBTHAI_MAJOR, "th_next_cell");
+            initialized.storeRelease(true);
+        }
     }
     if (th_brk && th_next_cell)
         return 1;

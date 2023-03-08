@@ -1,7 +1,5 @@
 [timeoutConnect:ip]
 windows
-[connectToHostError]
-windows-10 gcc developer-build
 # QTBUG-101274
 [timeoutConnect:WithSocks5Proxy:ip]
 qnx ci

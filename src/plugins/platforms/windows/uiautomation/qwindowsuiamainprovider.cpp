@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtGui/qtguiglobal.h>
 #if QT_CONFIG(accessibility)
@@ -107,10 +71,11 @@ QWindowsUiaMainProvider::~QWindowsUiaMainProvider()
 void QWindowsUiaMainProvider::notifyFocusChange(QAccessibleEvent *event)
 {
     if (QAccessibleInterface *accessible = event->accessibleInterface()) {
-        // If this is a table/tree/list, raise event for the focused cell/item instead.
-        if (accessible->tableInterface())
+        // If this is a complex element, raise event for the focused child instead.
+        if (accessible->childCount()) {
             if (QAccessibleInterface *child = accessible->focusChild())
                 accessible = child;
+        }
         if (QWindowsUiaMainProvider *provider = providerForAccessible(accessible))
             QWindowsUiaWrapper::instance()->raiseAutomationEvent(provider, UIA_AutomationFocusChangedEventId);
     }
@@ -139,6 +104,10 @@ void QWindowsUiaMainProvider::notifyStateChange(QAccessibleStateChangeEvent *eve
                 if (QWindowsUiaMainProvider *provider = providerForAccessible(accessible)) {
                     if (accessible->state().active) {
                         QWindowsUiaWrapper::instance()->raiseAutomationEvent(provider, UIA_Window_WindowOpenedEventId);
+                        if (QAccessibleInterface *focused = accessible->focusChild()) {
+                            if (QWindowsUiaMainProvider *focusedProvider = providerForAccessible(focused))
+                                QWindowsUiaWrapper::instance()->raiseAutomationEvent(focusedProvider, UIA_AutomationFocusChangedEventId);
+                        }
                     } else {
                         QWindowsUiaWrapper::instance()->raiseAutomationEvent(provider, UIA_Window_WindowClosedEventId);
                     }
@@ -425,7 +394,7 @@ HRESULT QWindowsUiaMainProvider::GetPropertyValue(PROPERTYID idProp, VARIANT *pR
     case UIA_ClassNamePropertyId:
         // Class name.
         if (QObject *o = accessible->object()) {
-            QString className = QLatin1String(o->metaObject()->className());
+            QString className = QLatin1StringView(o->metaObject()->className());
             setVariantString(className, pRetVal);
         }
         break;
@@ -735,26 +704,18 @@ HRESULT QWindowsUiaMainProvider::ElementProviderFromPoint(double x, double y, IR
     QPoint point;
     nativeUiaPointToPoint(uiaPoint, window, &point);
 
-    if (auto targetacc = accessible->childAt(point.x(), point.y())) {
-        auto acc = accessible->childAt(point.x(), point.y());
-        // Reject the cases where childAt() returns a different instance in each call for the same
-        // element (e.g., QAccessibleTree), as it causes an endless loop with Youdao Dictionary installed.
-        if (targetacc == acc) {
-            // Controls can be embedded within grouping elements. By default returns the innermost control.
-            while (acc) {
-                targetacc = acc;
-                // For accessibility tools it may be better to return the text element instead of its subcomponents.
-                if (targetacc->textInterface()) break;
-                acc = targetacc->childAt(point.x(), point.y());
-                if (acc != targetacc->childAt(point.x(), point.y())) {
-                    qCDebug(lcQpaUiAutomation) << "Non-unique childAt() for" << targetacc;
-                    break;
-                }
-            }
-            *pRetVal = providerForAccessible(targetacc);
-        } else {
-            qCDebug(lcQpaUiAutomation) << "Non-unique childAt() for" << accessible;
+    QAccessibleInterface *targetacc = accessible->childAt(point.x(), point.y());
+
+    if (targetacc) {
+        QAccessibleInterface *acc = targetacc;
+        // Controls can be embedded within grouping elements. By default returns the innermost control.
+        while (acc) {
+            targetacc = acc;
+            // For accessibility tools it may be better to return the text element instead of its subcomponents.
+            if (targetacc->textInterface()) break;
+            acc = acc->childAt(point.x(), point.y());
         }
+        *pRetVal = providerForAccessible(targetacc);
     }
     return S_OK;
 }

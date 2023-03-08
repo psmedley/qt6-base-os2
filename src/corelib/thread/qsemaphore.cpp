@@ -1,49 +1,16 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Copyright (C) 2018 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2018 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsemaphore.h"
-#include "qmutex.h"
 #include "qfutex_p.h"
-#include "qwaitcondition.h"
 #include "qdeadlinetimer.h"
 #include "qdatetime.h"
+#include "qdebug.h"
+#include "qlocking_p.h"
+#include "qwaitcondition_p.h"
+
+#include <chrono>
 
 QT_BEGIN_NAMESPACE
 
@@ -194,7 +161,7 @@ futexSemaphoreTryAcquire_loop(QBasicAtomicInteger<quintptr> &u, quintptr curValu
             if constexpr (futexHasWaiterCount) {
                 Q_ASSERT(n > 1);
                 ptr = futexHigh32(&u);
-                curValue >>= 32;
+                curValue = quint64(curValue) >> 32;
             }
         }
 
@@ -246,7 +213,8 @@ template <bool IsTimed> bool futexSemaphoreTryAcquire(QBasicAtomicInteger<quintp
     if constexpr (futexHasWaiterCount) {
         // We don't use the fetched value from above so futexWait() fails if
         // it changed after the testAndSetOrdered above.
-        if (((curValue >> 32) & 0x7fffffffU) == 0x7fffffffU) {
+        quint32 waiterCount = (quint64(curValue) >> 32) & 0x7fffffffU;
+        if (waiterCount == 0x7fffffffU) {
             qCritical() << "Waiter count overflow in QSemaphore";
             return false;
         }
@@ -274,10 +242,10 @@ template <bool IsTimed> bool futexSemaphoreTryAcquire(QBasicAtomicInteger<quintp
 
 class QSemaphorePrivate {
 public:
-    inline QSemaphorePrivate(int n) : avail(n) { }
+    explicit QSemaphorePrivate(int n) : avail(n) { }
 
-    QMutex mutex;
-    QWaitCondition cond;
+    QtPrivate::mutex mutex;
+    QtPrivate::condition_variable cond;
 
     int avail;
 };
@@ -329,9 +297,10 @@ void QSemaphore::acquire(int n)
         return;
     }
 
-    QMutexLocker locker(&d->mutex);
-    while (n > d->avail)
-        d->cond.wait(locker.mutex());
+    const auto sufficientResourcesAvailable = [this, n] { return d->avail >= n; };
+
+    auto locker = qt_unique_lock(d->mutex);
+    d->cond.wait(locker, sufficientResourcesAvailable);
     d->avail -= n;
 }
 
@@ -404,9 +373,9 @@ void QSemaphore::release(int n)
         return;
     }
 
-    QMutexLocker locker(&d->mutex);
+    const auto locker = qt_scoped_lock(d->mutex);
     d->avail += n;
-    d->cond.wakeAll();
+    d->cond.notify_all();
 }
 
 /*!
@@ -420,7 +389,7 @@ int QSemaphore::available() const
     if (futexAvailable())
         return futexAvailCounter(u.loadRelaxed());
 
-    QMutexLocker locker(&d->mutex);
+    const auto locker = qt_scoped_lock(d->mutex);
     return d->avail;
 }
 
@@ -442,7 +411,7 @@ bool QSemaphore::tryAcquire(int n)
     if (futexAvailable())
         return futexSemaphoreTryAcquire<false>(u, n, 0);
 
-    QMutexLocker locker(&d->mutex);
+    const auto locker = qt_scoped_lock(d->mutex);
     if (n > d->avail)
         return false;
     d->avail -= n;
@@ -467,22 +436,24 @@ bool QSemaphore::tryAcquire(int n)
 */
 bool QSemaphore::tryAcquire(int n, int timeout)
 {
-    Q_ASSERT_X(n >= 0, "QSemaphore::tryAcquire", "parameter 'n' must be non-negative");
+    if (timeout < 0) {
+        acquire(n);
+        return true;
+    }
 
-    // We're documented to accept any negative value as "forever"
-    // but QDeadlineTimer only accepts -1.
-    timeout = qMax(timeout, -1);
+    if (timeout == 0)
+        return tryAcquire(n);
+
+    Q_ASSERT_X(n >= 0, "QSemaphore::tryAcquire", "parameter 'n' must be non-negative");
 
     if (futexAvailable())
         return futexSemaphoreTryAcquire<true>(u, n, timeout);
 
-    QDeadlineTimer timer(timeout);
-    QMutexLocker locker(&d->mutex);
-    while (n > d->avail && !timer.hasExpired()) {
-        if (!d->cond.wait(locker.mutex(), timer))
-            return false;
-    }
-    if (n > d->avail)
+    using namespace std::chrono;
+    const auto sufficientResourcesAvailable = [this, n] { return d->avail >= n; };
+
+    auto locker = qt_unique_lock(d->mutex);
+    if (!d->cond.wait_for(locker, milliseconds{timeout}, sufficientResourcesAvailable))
         return false;
     d->avail -= n;
     return true;
@@ -514,7 +485,7 @@ bool QSemaphore::tryAcquire(int n, int timeout)
 
     It is equivalent to calling \c{tryAcquire(1, timeout)}, where the call
     times out on the given \a timeout value. The function returns \c true
-    on accquiring the resource successfully.
+    on acquiring the resource successfully.
 
     \sa tryAcquire(), try_acquire(), try_acquire_until()
 */

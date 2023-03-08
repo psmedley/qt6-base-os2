@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -658,7 +633,7 @@ void tst_QStyle::testStyleOptionInit()
     QStringList keys = QStyleFactory::keys();
     keys.prepend(QString()); // QCommonStyle marker
 
-    for (const QString &key : qAsConst(keys)) {
+    for (const QString &key : std::as_const(keys)) {
         QStyle* style = key.isEmpty() ? new QCommonStyle : QStyleFactory::create(key);
         TestStyleOptionInitProxy testStyle;
         testStyle.setBaseStyle(style);
@@ -680,14 +655,17 @@ void tst_QStyle::sliderPositionFromValue_data()
     QTest::addRow("no span inverse") << 12 << 56 << 34 << 0 << true << 0;
 
     QTest::addRow("value too small") << 34 << 56 << 12 << 2000 << false << 0;
+    QTest::addRow("value too small inverse") << 34 << 56 << 12 << 2000 << true << 2000;
 
     QTest::addRow("no-range") << 12 << 12 << 12 << 2000 << false << 0;
     QTest::addRow("no-range-inverse") << 12 << 12 << 12 << 2000 << true << 0;
 
     QTest::addRow("close-to-max") << 12 << 34 << 33 << 2000 << false << 1909;
     QTest::addRow("at-max") << 12 << 34 << 34 << 2000 << false << 2000;
+    QTest::addRow("value too large") << 12 << 34 << 35 << 2000 << false << 2000;
     QTest::addRow("close-to-max-inverse") << 12 << 34 << 33 << 2000 << true << 91;
     QTest::addRow("at-max-inverse") << 12 << 34 << 34 << 2000 << true << 0;
+    QTest::addRow("value too large-inverse") << 12 << 34 << 35 << 2000 << true << 0;
 
     QTest::addRow("big-range") << 100000 << 700000 << 250000 << 2000 << false << 500;
     QTest::addRow("big-range-inverse") << 100000 << 700000 << 250000 << 2000 << true << 1500;

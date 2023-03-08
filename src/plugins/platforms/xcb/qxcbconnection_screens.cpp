@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #include "qxcbconnection.h"
 #include "qxcbscreen.h"
 #include "qxcbintegration.h"
@@ -191,7 +155,7 @@ void QXcbConnection::updateScreens(const xcb_randr_notify_event_t *event)
             }
         }
 
-        qCDebug(lcQpaScreen) << "updateScreens: primary output is" << qAsConst(m_screens).first()->name();
+        qCDebug(lcQpaScreen) << "updateScreens: primary output is" << std::as_const(m_screens).first()->name();
     }
 }
 
@@ -220,7 +184,7 @@ void QXcbConnection::updateScreen(QXcbScreen *screen, const xcb_randr_output_cha
             // If the screen became primary, reshuffle the order in QGuiApplicationPrivate
             const int idx = m_screens.indexOf(screen);
             if (idx > 0) {
-                qAsConst(m_screens).first()->setPrimary(false);
+                std::as_const(m_screens).first()->setPrimary(false);
                 m_screens.swapItemsAt(0, idx);
             }
             screen->virtualDesktop()->setPrimaryScreen(screen);
@@ -240,7 +204,7 @@ QXcbScreen *QXcbConnection::createScreen(QXcbVirtualDesktop *virtualDesktop,
 
     if (screen->isPrimary()) {
         if (!m_screens.isEmpty())
-            qAsConst(m_screens).first()->setPrimary(false);
+            std::as_const(m_screens).first()->setPrimary(false);
 
         m_screens.prepend(screen);
     } else {
@@ -255,7 +219,7 @@ QXcbScreen *QXcbConnection::createScreen(QXcbVirtualDesktop *virtualDesktop,
 void QXcbConnection::destroyScreen(QXcbScreen *screen)
 {
     QXcbVirtualDesktop *virtualDesktop = screen->virtualDesktop();
-    if (virtualDesktop->screens().count() == 1) {
+    if (virtualDesktop->screens().size() == 1) {
         // If there are no other screens on the same virtual desktop,
         // then transform the physical screen into a fake screen.
         const QString nameWas = screen->name();
@@ -289,7 +253,7 @@ void QXcbConnection::updateScreen_monitor(QXcbScreen *screen, xcb_randr_monitor_
     if (screen->isPrimary()) {
         const int idx = m_screens.indexOf(screen);
         if (idx > 0) {
-            qAsConst(m_screens).first()->setPrimary(false);
+            std::as_const(m_screens).first()->setPrimary(false);
             m_screens.swapItemsAt(0, idx);
         }
         screen->virtualDesktop()->setPrimaryScreen(screen);
@@ -304,7 +268,7 @@ QXcbScreen *QXcbConnection::createScreen_monitor(QXcbVirtualDesktop *virtualDesk
 
     if (screen->isPrimary()) {
         if (!m_screens.isEmpty())
-            qAsConst(m_screens).first()->setPrimary(false);
+            std::as_const(m_screens).first()->setPrimary(false);
 
         m_screens.prepend(screen);
     } else {
@@ -362,7 +326,7 @@ void QXcbConnection::initializeScreens(bool initialized)
         ++xcbScreenNumber;
     }
 
-    for (QXcbVirtualDesktop *virtualDesktop : qAsConst(m_virtualDesktops))
+    for (QXcbVirtualDesktop *virtualDesktop : std::as_const(m_virtualDesktops))
         virtualDesktop->subscribeToXFixesSelectionNotify();
 
     if (m_virtualDesktops.isEmpty()) {
@@ -370,7 +334,7 @@ void QXcbConnection::initializeScreens(bool initialized)
     } else {
         // Ensure the primary screen is first on the list
         if (primaryScreen) {
-            if (qAsConst(m_screens).first() != primaryScreen) {
+            if (std::as_const(m_screens).first() != primaryScreen) {
                 m_screens.removeOne(primaryScreen);
                 m_screens.prepend(primaryScreen);
             }
@@ -378,14 +342,14 @@ void QXcbConnection::initializeScreens(bool initialized)
 
         // Push the screens to QGuiApplication
         if (!initialized) {
-            for (QXcbScreen *screen : qAsConst(m_screens)) {
+            for (QXcbScreen *screen : std::as_const(m_screens)) {
                 qCDebug(lcQpaScreen) << "adding" << screen << "(Primary:" << screen->isPrimary() << ")";
                 QWindowSystemInterface::handleScreenAdded(screen, screen->isPrimary());
             }
         }
 
         if (!m_screens.isEmpty())
-            qCDebug(lcQpaScreen) << "initializeScreens: primary output is" << qAsConst(m_screens).first()->name();
+            qCDebug(lcQpaScreen) << "initializeScreens: primary output is" << std::as_const(m_screens).first()->name();
     }
 }
 
@@ -553,7 +517,8 @@ void QXcbConnection::initializeScreensFromMonitor(xcb_screen_iterator_t *it, int
                 old.removeAll(screen);
             }
         }
-        m_screens << screen;
+        if (!m_screens.contains(screen))
+            m_screens << screen;
         siblings << screen;
 
         // similar logic with QXcbConnection::initializeScreensFromOutput()

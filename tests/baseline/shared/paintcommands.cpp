@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include "paintcommands.h"
 
 #include <qdir.h>
@@ -200,6 +175,12 @@ const char *PaintCommands::imageFormatTable[] = {
     "RGBA32FPx4_Premultiplied",
 };
 
+const char *PaintCommands::renderHintTable[] = {
+    "Antialiasing",
+    "SmoothPixmapTransform",
+    "NonCosmeticBrushPatterns"
+};
+
 int PaintCommands::translateEnum(const char *table[], const QString &pattern, int limit)
 {
     QByteArray p = pattern.toLatin1().toLower();
@@ -338,7 +319,7 @@ void PaintCommands::staticInit()
                       "pen_setCosmetic true");
     DECL_PAINTCOMMAND("setRenderHint", command_setRenderHint,
                       "^setRenderHint\\s+([\\w_0-9]*)\\s*(\\w*)$",
-                      "setRenderHint <Antialiasing|SmoothPixmapTransform> <true|false>",
+                      "setRenderHint <hint> <true|false>",
                       "setRenderHint Antialiasing true");
     DECL_PAINTCOMMAND("clearRenderHint", command_clearRenderHint,
                       "^clearRenderHint$",
@@ -690,6 +671,7 @@ void PaintCommands::staticInit()
     ADD_ENUMLIST("image formats", imageFormatTable);
     ADD_ENUMLIST("coordinate modes", coordinateMethodTable);
     ADD_ENUMLIST("size modes", sizeModeTable);
+    ADD_ENUMLIST("render hints", renderHintTable);
 }
 
 #undef DECL_PAINTCOMMAND
@@ -925,7 +907,7 @@ void PaintCommands::command_import(QRegularExpressionMatch re)
 
     if (m_verboseMode) {
         printf(" -(lance) Command buffer now looks like:\n");
-        for (int i = 0; i < m_commands.count(); ++i)
+        for (int i = 0; i < m_commands.size(); ++i)
             printf(" ---> {%s}\n", qPrintable(m_commands.at(i)));
     }
     delete file;
@@ -943,7 +925,7 @@ void PaintCommands::command_begin_block(QRegularExpressionMatch re)
     m_commands[m_currentCommandIndex] = QLatin1String("# begin block (") + blockName + QLatin1Char(')');
     QStringList newBlock;
     int i = m_currentCommandIndex + 1;
-    for (; i < m_commands.count(); ++i) {
+    for (; i < m_commands.size(); ++i) {
         const QString &nextCmd = m_commands.at(i);
         if (nextCmd.startsWith("end_block")) {
             m_commands[i] = QLatin1String("# end block (") + blockName + QLatin1Char(')');
@@ -953,10 +935,10 @@ void PaintCommands::command_begin_block(QRegularExpressionMatch re)
     }
 
     if (m_verboseMode)
-        for (int j = 0; j < newBlock.count(); ++j)
+        for (int j = 0; j < newBlock.size(); ++j)
             printf("      %d: %s\n", j, qPrintable(newBlock.at(j)));
 
-    if (i >= m_commands.count())
+    if (i >= m_commands.size())
         printf(" - Warning! Block doesn't have an 'end_block' marker!\n");
 
     m_blockMap.insert(blockName, newBlock);
@@ -2265,18 +2247,27 @@ void PaintCommands::command_setPen2(QRegularExpressionMatch re)
 void PaintCommands::command_setRenderHint(QRegularExpressionMatch re)
 {
     QString hintString = re.captured(1).toLower();
-    bool on = re.captured(2).isEmpty() || re.captured(2).toLower() == "true";
-    if (hintString.contains("antialiasing")) {
-        if (m_verboseMode)
-            printf(" -(lance) setRenderHint Antialiasing\n");
+    QString setting = re.captured(2).toLower();
 
-        m_painter->setRenderHint(QPainter::Antialiasing, on);
+    bool on = setting.isEmpty() || setting == "true" || setting == "on";
+    QPainter::RenderHint hint;
+    int hintIdx = -1;
+    if (hintString.contains("antialiasing")) {
+        hintIdx = 0;
+        hint = QPainter::Antialiasing;
     } else if (hintString.contains("smoothpixmaptransform")) {
+        hintIdx = 1;
+        hint = QPainter::SmoothPixmapTransform;
+    } else if (hintString.contains("noncosmeticbrushpatterns")) {
+        hintIdx = 2;
+        hint = QPainter::NonCosmeticBrushPatterns;
+    }
+    if (hintIdx >= 0) {
         if (m_verboseMode)
-            printf(" -(lance) setRenderHint SmoothPixmapTransform\n");
-        m_painter->setRenderHint(QPainter::SmoothPixmapTransform, on);
+            printf(" -(lance) setRenderHint %s %s\n", renderHintTable[hintIdx], on ? "true" : "false");
+        m_painter->setRenderHint(hint, on);
     } else {
-        fprintf(stderr, "ERROR(setRenderHint): unknown hint '%s'\n", qPrintable(hintString));
+        fprintf(stderr, "ERROR(setRenderHint): unknown hint '%s'\n", qPrintable(re.captured(1)));
     }
 }
 
@@ -2285,6 +2276,7 @@ void PaintCommands::command_clearRenderHint(QRegularExpressionMatch /*re*/)
 {
     m_painter->setRenderHint(QPainter::Antialiasing, false);
     m_painter->setRenderHint(QPainter::SmoothPixmapTransform, false);
+    m_painter->setRenderHint(QPainter::NonCosmeticBrushPatterns, false);
     if (m_verboseMode)
         printf(" -(lance) clearRenderHint\n");
 }

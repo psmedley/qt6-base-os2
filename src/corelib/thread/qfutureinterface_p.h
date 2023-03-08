@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QFUTUREINTERFACE_P_H
 #define QFUTUREINTERFACE_P_H
@@ -65,9 +29,13 @@ QT_REQUIRE_CONFIG(future);
 
 QT_BEGIN_NAMESPACE
 
-class QFutureCallOutEvent : public QEvent
+// Although QFutureCallOutEvent and QFutureCallOutInterface are private,
+// for historical reasons they were used externally (in QtJambi, see
+// https://github.com/OmixVisualization/qtjambi), so we export them to
+// not break the pre-existing code.
+class Q_CORE_EXPORT QFutureCallOutEvent : public QEvent
 {
-    Q_EVENT_DISABLE_COPY(QFutureCallOutEvent);
+    Q_DECL_EVENT_COMMON(QFutureCallOutEvent)
 public:
     enum CallOutType {
         Started,
@@ -103,23 +71,6 @@ public:
     int index1;
     int index2;
     QString text;
-
-    QEvent *clone() const override
-    {
-        return new QFutureCallOutEvent(callOutType, index1, index2, text);
-    }
-
-private:
-    QFutureCallOutEvent(CallOutType callOutType,
-                        int index1,
-                        int index2,
-                        const QString &text)
-        : QEvent(QEvent::FutureCallOut),
-          callOutType(callOutType),
-          index1(index1),
-          index2(index2),
-          text(text)
-    { }
 };
 
 class Q_CORE_EXPORT QFutureCallOutInterface
@@ -190,7 +141,10 @@ public:
     QThreadPool *m_pool = nullptr;
     // Wrapper for continuation
     std::function<void(const QFutureInterfaceBase &)> continuation;
-    QFutureInterfaceBasePrivate *parentData = nullptr;
+    QFutureInterfaceBasePrivate *continuationData = nullptr;
+
+    enum ContinuationState : quint8 { Default, Canceled, Cleaned };
+    std::atomic<ContinuationState> continuationState { Default };
 
     RefCount refCount = 1;
     QAtomicInt state; // reads and writes can happen unprotected, both must be atomic
