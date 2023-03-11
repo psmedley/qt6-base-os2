@@ -164,7 +164,11 @@
 
 #  ifdef Q_OS_DOSLIKE
 #    define Q_DECL_EXPORT     __declspec(dllexport)
+#ifndef __OS2__
 #    define Q_DECL_IMPORT     __declspec(dllimport)
+#else
+#    define Q_DECL_IMPORT
+#endif
 #  elif defined(QT_VISIBILITY_AVAILABLE)
 #    define Q_DECL_EXPORT_OVERRIDABLE __attribute__((visibility("default"), weak))
 #    ifdef QT_USE_PROTECTED_VISIBILITY

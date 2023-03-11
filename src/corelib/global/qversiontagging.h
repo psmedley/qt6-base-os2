@@ -115,6 +115,10 @@ struct QVersionTag
 #  define QT_VERSION_TAG_SYMBOL(prefix, sym, m, n)      QT_VERSION_TAG_SYMBOL2(prefix, sym, m, n)
 #endif
 
+#ifdef Q_OS_OS2
+#define QT_NO_VERSION_TAGGING
+#endif
+
 #if defined(QT_VERSION_TAG) && !defined(QT_NO_VERSION_TAGGING)
 #  ifndef QT_VERSION_TAG_SECTION
 #    define QT_VERSION_TAG_SECTION          __attribute__((section(".qtversion")))

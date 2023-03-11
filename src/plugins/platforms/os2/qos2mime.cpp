@@ -43,6 +43,8 @@
 
 #include <QtGui/private/qinternalmimedata_p.h>
 
+#include <qmap.h>
+
 QT_BEGIN_NAMESPACE
 
 class QOS2MimeList

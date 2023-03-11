@@ -77,7 +77,7 @@
 # endif
 #include <qt_windows.h> // for Sleep
 #endif
-#ifdef Q_OS_UNIX
+#ifdef Q_OS_UNIXLIKE
 #include <QtCore/private/qcore_unix_p.h>
 
 #include <errno.h>
@@ -123,7 +123,7 @@ using QtMiscUtils::fromHex;
 namespace {
 enum DebuggerProgram { None, Gdb, Lldb };
 
-#if defined(Q_OS_UNIX) && (!defined(Q_OS_WASM) || QT_CONFIG(thread))
+#if defined(Q_OS_UNIXLIKE) && (!defined(Q_OS_WASM) || QT_CONFIG(thread))
 static struct iovec IoVec(struct iovec vec)
 {
     return vec;

@@ -125,7 +125,7 @@ QOperatingSystemVersionBase QOperatingSystemVersionBase::current()
     return v;
 }
 
-#if !defined(Q_OS_DARWIN) && !defined(Q_OS_WIN) && !defined(Q_OS_OS2)
+#if !defined(Q_OS_DARWIN) && !defined(Q_OS_WIN)
 QOperatingSystemVersionBase QOperatingSystemVersionBase::current_impl()
 {
     QOperatingSystemVersionBase version;
