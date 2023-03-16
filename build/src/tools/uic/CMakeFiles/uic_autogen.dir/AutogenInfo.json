@@ -1,0 +1,242 @@
+{
+	"BUILD_DIR" : "/home/psmedley/qt6-base-os2/build/src/tools/uic/uic_autogen",
+	"CMAKE_BINARY_DIR" : "/home/psmedley/qt6-base-os2/build",
+	"CMAKE_CURRENT_BINARY_DIR" : "/home/psmedley/qt6-base-os2/build/src/tools/uic",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/home/psmedley/qt6-base-os2/src/tools/uic",
+	"CMAKE_EXECUTABLE" : "/usr/bin/cmake",
+	"CMAKE_LIST_FILES" : [ "/home/psmedley/qt6-base-os2/src/tools/uic/CMakeLists.txt" ],
+	"CMAKE_SOURCE_DIR" : "/home/psmedley/qt6-base-os2",
+	"DEP_FILE" : "",
+	"DEP_FILE_RULE_NAME" : "",
+	"HEADERS" : 
+	[
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/cpp/cppwritedeclaration.h",
+			"Mu",
+			"SVODSI3R2M/moc_cppwritedeclaration.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/cpp/cppwriteincludes.h",
+			"Mu",
+			"SVODSI3R2M/moc_cppwriteincludes.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/cpp/cppwriteinitialization.h",
+			"Mu",
+			"SVODSI3R2M/moc_cppwriteinitialization.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/customwidgetsinfo.h",
+			"Mu",
+			"EWIEGA46WW/moc_customwidgetsinfo.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/databaseinfo.h",
+			"Mu",
+			"EWIEGA46WW/moc_databaseinfo.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/driver.h",
+			"Mu",
+			"EWIEGA46WW/moc_driver.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/option.h",
+			"Mu",
+			"EWIEGA46WW/moc_option.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/python/pythonwritedeclaration.h",
+			"Mu",
+			"K3GKKSBDS6/moc_pythonwritedeclaration.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/python/pythonwriteimports.h",
+			"Mu",
+			"K3GKKSBDS6/moc_pythonwriteimports.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/shared/language.h",
+			"Mu",
+			"MTKJWXDCAS/moc_language.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/shared/writeincludesbase.h",
+			"Mu",
+			"MTKJWXDCAS/moc_writeincludesbase.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/treewalker.h",
+			"Mu",
+			"EWIEGA46WW/moc_treewalker.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/ui4.h",
+			"Mu",
+			"EWIEGA46WW/moc_ui4.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/uic.h",
+			"Mu",
+			"EWIEGA46WW/moc_uic.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/utils.h",
+			"Mu",
+			"EWIEGA46WW/moc_utils.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/validator.h",
+			"Mu",
+			"EWIEGA46WW/moc_validator.cpp",
+			null
+		]
+	],
+	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
+	"INCLUDE_DIR" : "/home/psmedley/qt6-base-os2/build/src/tools/uic/uic_autogen/include",
+	"MOC_COMPILATION_FILE" : "/home/psmedley/qt6-base-os2/build/src/tools/uic/uic_autogen/mocs_compilation.cpp",
+	"MOC_DEFINITIONS" : 
+	[
+		"QT_CORE_LIB",
+		"QT_LEAN_HEADERS=1",
+		"QT_NO_CAST_FROM_ASCII",
+		"QT_NO_DEBUG",
+		"QT_NO_EXCEPTIONS",
+		"QT_NO_FOREACH",
+		"QT_NO_JAVA_STYLE_ITERATORS",
+		"QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+		"QT_UIC",
+		"QT_USE_QSTRINGBUILDER",
+		"_LARGEFILE64_SOURCE",
+		"_LARGEFILE_SOURCE"
+	],
+	"MOC_DEPEND_FILTERS" : 
+	[
+		[
+			"Q_PLUGIN_METADATA",
+			"[\n][ \t]*Q_PLUGIN_METADATA[ \t]*\\([^\\)]*FILE[ \t]*\"([^\"]+)\""
+		]
+	],
+	"MOC_INCLUDES" : 
+	[
+		"/home/psmedley/qt6-base-os2/src/tools/uic",
+		"/home/psmedley/qt6-base-os2/build/src/tools/uic",
+		"/home/psmedley/qt6-base-os2/src/tools/uic/cpp",
+		"/home/psmedley/qt6-base-os2/src/tools/uic/python",
+		"/home/psmedley/qt6-base-os2/src/tools/uic/shared",
+		"/home/psmedley/qt6-base-os2/build/include",
+		"/home/psmedley/qt6-base-os2/build/include/QtCore",
+		"/home/psmedley/qt6-base-os2/mkspecs/linux-g++",
+		"/usr/include/c++/12",
+		"/usr/include/x86_64-linux-gnu/c++/12",
+		"/usr/include/c++/12/backward",
+		"/usr/lib/gcc/x86_64-linux-gnu/12/include",
+		"/usr/local/include",
+		"/usr/include/x86_64-linux-gnu",
+		"/usr/include"
+	],
+	"MOC_MACRO_NAMES" : 
+	[
+		"Q_OBJECT",
+		"Q_GADGET",
+		"Q_GADGET_EXPORT",
+		"Q_NAMESPACE",
+		"Q_NAMESPACE_EXPORT",
+		"Q_ENUM_NS"
+	],
+	"MOC_OPTIONS" : [],
+	"MOC_PATH_PREFIX" : false,
+	"MOC_PREDEFS_CMD" : 
+	[
+		"/usr/bin/c++",
+		"-dM",
+		"-E",
+		"-c",
+		"/usr/share/cmake-3.25/Modules/CMakeCXXCompilerABI.cpp"
+	],
+	"MOC_PREDEFS_FILE" : "/home/psmedley/qt6-base-os2/build/src/tools/uic/uic_autogen/moc_predefs.h",
+	"MOC_RELAXED_MODE" : false,
+	"MOC_SKIP" : [],
+	"MULTI_CONFIG" : false,
+	"PARALLEL" : 4,
+	"PARSE_CACHE_FILE" : "/home/psmedley/qt6-base-os2/build/src/tools/uic/CMakeFiles/uic_autogen.dir/ParseCache.txt",
+	"QT_MOC_EXECUTABLE" : "/home/psmedley/qt6-base-os2/build/libexec/moc",
+	"QT_UIC_EXECUTABLE" : "",
+	"QT_VERSION_MAJOR" : 6,
+	"QT_VERSION_MINOR" : 4,
+	"SETTINGS_FILE" : "/home/psmedley/qt6-base-os2/build/src/tools/uic/CMakeFiles/uic_autogen.dir/AutogenUsed.txt",
+	"SOURCES" : 
+	[
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/cpp/cppwritedeclaration.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/cpp/cppwriteincludes.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/cpp/cppwriteinitialization.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/customwidgetsinfo.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/databaseinfo.cpp",
+			"Mu",
+			null
+		],
+		[ "/home/psmedley/qt6-base-os2/src/tools/uic/driver.cpp", "Mu", null ],
+		[ "/home/psmedley/qt6-base-os2/src/tools/uic/main.cpp", "Mu", null ],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/python/pythonwritedeclaration.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/python/pythonwriteimports.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/shared/language.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/shared/writeincludesbase.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/uic/treewalker.cpp",
+			"Mu",
+			null
+		],
+		[ "/home/psmedley/qt6-base-os2/src/tools/uic/ui4.cpp", "Mu", null ],
+		[ "/home/psmedley/qt6-base-os2/src/tools/uic/uic.cpp", "Mu", null ],
+		[ "/home/psmedley/qt6-base-os2/src/tools/uic/validator.cpp", "Mu", null ]
+	],
+	"VERBOSITY" : 0
+}

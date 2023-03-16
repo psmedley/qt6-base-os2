@@ -1,0 +1,578 @@
+Performing C++ SOURCE FILE Test TEST_use_lld_linker failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-gZaxSp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_e88cc/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_e88cc.dir/build.make CMakeFiles/cmTC_e88cc.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-gZaxSp'
+Building CXX object CMakeFiles/cmTC_e88cc.dir/src.cxx.o
+/usr/bin/c++ -DTEST_use_lld_linker  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_e88cc.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-gZaxSp/src.cxx
+Linking CXX executable cmTC_e88cc
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_e88cc.dir/link.txt --verbose=1
+/usr/bin/c++ -fuse-ld=lld CMakeFiles/cmTC_e88cc.dir/src.cxx.o -o cmTC_e88cc 
+collect2: fatal error: cannot find ‘ld’
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_e88cc.dir/build.make:99: cmTC_e88cc] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-gZaxSp'
+gmake: *** [Makefile:127: cmTC_e88cc/fast] Error 2
+
+
+Source file was:
+int main() { return 0; }
+
+Performing C++ SOURCE FILE Test TEST_gdb_index failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-yRpOug
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_f2e72/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_f2e72.dir/build.make CMakeFiles/cmTC_f2e72.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-yRpOug'
+Building CXX object CMakeFiles/cmTC_f2e72.dir/src.cxx.o
+/usr/bin/c++ -DTEST_gdb_index  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_f2e72.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-yRpOug/src.cxx
+Linking CXX executable cmTC_f2e72
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_f2e72.dir/link.txt --verbose=1
+/usr/bin/c++ -Wl,--gdb-index CMakeFiles/cmTC_f2e72.dir/src.cxx.o -o cmTC_f2e72 
+/usr/bin/ld: unrecognised option '--gdb-index'
+/usr/bin/ld: use the --help option for usage information
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_f2e72.dir/build.make:99: cmTC_f2e72] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-yRpOug'
+gmake: *** [Makefile:127: cmTC_f2e72/fast] Error 2
+
+
+Source file was:
+int main() { return 0; }
+
+Performing C++ SOURCE FILE Test HAVE_alloca_malloc_h failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-dgRcLl
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_30419/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_30419.dir/build.make CMakeFiles/cmTC_30419.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-dgRcLl'
+Building CXX object CMakeFiles/cmTC_30419.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_alloca_malloc_h  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_30419.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-dgRcLl/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-dgRcLl/src.cxx: In function ‘int main()’:
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-dgRcLl/src.cxx:6:1: error: ‘alloca’ was not declared in this scope; did you mean ‘valloc’?
+    6 | alloca(1);
+      | ^~~~~~
+      | valloc
+gmake[1]: *** [CMakeFiles/cmTC_30419.dir/build.make:78: CMakeFiles/cmTC_30419.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-dgRcLl'
+gmake: *** [Makefile:127: cmTC_30419/fast] Error 2
+
+
+Source file was:
+ #include <malloc.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+alloca(1);
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_pollts failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-ao16xy
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_3a746/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_3a746.dir/build.make CMakeFiles/cmTC_3a746.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-ao16xy'
+Building CXX object CMakeFiles/cmTC_3a746.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_pollts  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_3a746.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-ao16xy/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-ao16xy/src.cxx: In function ‘int main()’:
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-ao16xy/src.cxx:11:1: error: ‘pollts’ was not declared in this scope; did you mean ‘pollfd’?
+   11 | pollts(&pfd, 1, &ts, &sig);
+      | ^~~~~~
+      | pollfd
+gmake[1]: *** [CMakeFiles/cmTC_3a746.dir/build.make:78: CMakeFiles/cmTC_3a746.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-ao16xy'
+gmake: *** [Makefile:127: cmTC_3a746/fast] Error 2
+
+
+Source file was:
+ #include <poll.h>
+#include <signal.h>
+#include <time.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+struct pollfd pfd;
+struct timespec ts;
+sigset_t sig;
+pollts(&pfd, 1, &ts, &sig);
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_cpp_winrt failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-GCAoZw
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_3c1a1/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_3c1a1.dir/build.make CMakeFiles/cmTC_3c1a1.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-GCAoZw'
+Building CXX object CMakeFiles/cmTC_3c1a1.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_cpp_winrt  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_3c1a1.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-GCAoZw/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-GCAoZw/src.cxx:2:13: fatal error: winrt/base.h: No such file or directory
+    2 | #   include <winrt/base.h>
+      |             ^~~~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_3c1a1.dir/build.make:78: CMakeFiles/cmTC_3c1a1.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-GCAoZw'
+gmake: *** [Makefile:127: cmTC_3c1a1/fast] Error 2
+
+
+Source file was:
+ // Including winrt/base.h causes an error in some configurations (Windows 10 SDK + c++20)
+#   include <winrt/base.h>
+
+int main(void)
+{
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_xlocalescanprint failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_39f14/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_39f14.dir/build.make CMakeFiles/cmTC_39f14.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d'
+Building CXX object CMakeFiles/cmTC_39f14.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_xlocalescanprint  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_39f14.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d/src.cxx:10:10: error: #include expects "FILENAME" or <FILENAME>
+   10 | #include QDSP_P_H
+      |          ^~~~~~~~
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d/src.cxx: In function ‘int main()’:
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d/src.cxx:18:1: error: ‘locale_t’ was not declared in this scope
+   18 | locale_t invalidLocale = NULL;
+      | ^~~~~~~~
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d/src.cxx:21:17: error: ‘argv’ was not declared in this scope
+   21 | qDoubleSnprintf(argv[0], 1, invalidLocale, "invalid format", a);
+      |                 ^~~~
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d/src.cxx:21:29: error: ‘invalidLocale’ was not declared in this scope
+   21 | qDoubleSnprintf(argv[0], 1, invalidLocale, "invalid format", a);
+      |                             ^~~~~~~~~~~~~
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d/src.cxx:21:1: error: ‘qDoubleSnprintf’ was not declared in this scope
+   21 | qDoubleSnprintf(argv[0], 1, invalidLocale, "invalid format", a);
+      | ^~~~~~~~~~~~~~~
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d/src.cxx:22:62: error: ‘argc’ was not declared in this scope
+   22 | qDoubleSscanf(argv[0], invalidLocale, "invalid format", &a, &argc);
+      |                                                              ^~~~
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d/src.cxx:22:1: error: ‘qDoubleSscanf’ was not declared in this scope
+   22 | qDoubleSscanf(argv[0], invalidLocale, "invalid format", &a, &argc);
+      | ^~~~~~~~~~~~~
+gmake[1]: *** [CMakeFiles/cmTC_39f14.dir/build.make:78: CMakeFiles/cmTC_39f14.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-JV5Y8d'
+gmake: *** [Makefile:127: cmTC_39f14/fast] Error 2
+
+
+Source file was:
+ #define QT_BEGIN_NAMESPACE
+#define QT_END_NAMESPACE
+
+#ifdef _MSVC_VER
+#define Q_CC_MSVC _MSVC_VER
+#endif
+
+#define QT_NO_DOUBLECONVERSION
+
+#include QDSP_P_H
+
+int main(void)
+{
+    /* BEGIN TEST: */
+#ifdef _MSVC_VER
+_locale_t invalidLocale = NULL;
+#else
+locale_t invalidLocale = NULL;
+#endif
+double a = 3.4;
+qDoubleSnprintf(argv[0], 1, invalidLocale, "invalid format", a);
+qDoubleSscanf(argv[0], invalidLocale, "invalid format", &a, &argc);
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_ifr_index failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-C8DhEI
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_b6b5c/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_b6b5c.dir/build.make CMakeFiles/cmTC_b6b5c.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-C8DhEI'
+Building CXX object CMakeFiles/cmTC_b6b5c.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_ifr_index  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_b6b5c.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-C8DhEI/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-C8DhEI/src.cxx: In function ‘int main()’:
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-C8DhEI/src.cxx:7:5: error: ‘struct ifreq’ has no member named ‘ifr_index’
+    7 | req.ifr_index = 0;
+      |     ^~~~~~~~~
+gmake[1]: *** [CMakeFiles/cmTC_b6b5c.dir/build.make:78: CMakeFiles/cmTC_b6b5c.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-C8DhEI'
+gmake: *** [Makefile:127: cmTC_b6b5c/fast] Error 2
+
+
+Source file was:
+ #include <net/if.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+struct ifreq req;
+req.ifr_index = 0;
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_networklistmanager failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-bJliy1
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_cdc08/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_cdc08.dir/build.make CMakeFiles/cmTC_cdc08.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-bJliy1'
+Building CXX object CMakeFiles/cmTC_cdc08.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_networklistmanager  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_cdc08.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-bJliy1/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-bJliy1/src.cxx:1:11: fatal error: netlistmgr.h: No such file or directory
+    1 |  #include <netlistmgr.h>
+      |           ^~~~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_cdc08.dir/build.make:78: CMakeFiles/cmTC_cdc08.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-bJliy1'
+gmake: *** [Makefile:127: cmTC_cdc08/fast] Error 2
+
+
+Source file was:
+ #include <netlistmgr.h>
+#include <wrl/client.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+using namespace Microsoft::WRL;
+ComPtr<INetworkListManager> networkListManager;
+ComPtr<IConnectionPoint> connectionPoint;
+ComPtr<IConnectionPointContainer> connectionPointContainer;
+networkListManager.As(&connectionPointContainer);
+connectionPointContainer->FindConnectionPoint(IID_INetworkConnectionEvents, &connectionPoint);
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_egl_brcm failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-G4eQCP
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_f32fb/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_f32fb.dir/build.make CMakeFiles/cmTC_f32fb.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-G4eQCP'
+Building CXX object CMakeFiles/cmTC_f32fb.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_egl_brcm  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_f32fb.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-G4eQCP/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-G4eQCP/src.cxx:2:10: fatal error: bcm_host.h: No such file or directory
+    2 | #include <bcm_host.h>
+      |          ^~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_f32fb.dir/build.make:78: CMakeFiles/cmTC_f32fb.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-G4eQCP'
+gmake: *** [Makefile:127: cmTC_f32fb/fast] Error 2
+
+
+Source file was:
+ #include <EGL/egl.h>
+#include <bcm_host.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+vc_dispmanx_display_open(0);
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_egl_mali failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-Nof9lW
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_cd723/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_cd723.dir/build.make CMakeFiles/cmTC_cd723.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-Nof9lW'
+Building CXX object CMakeFiles/cmTC_cd723.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_egl_mali  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_cd723.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-Nof9lW/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-Nof9lW/src.cxx:1:11: fatal error: EGL/fbdev_window.h: No such file or directory
+    1 |  #include <EGL/fbdev_window.h>
+      |           ^~~~~~~~~~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_cd723.dir/build.make:78: CMakeFiles/cmTC_cd723.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-Nof9lW'
+gmake: *** [Makefile:127: cmTC_cd723/fast] Error 2
+
+
+Source file was:
+ #include <EGL/fbdev_window.h>
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+fbdev_window *w = 0;
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_egl_mali_2 failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-PLb9qO
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_ea9e7/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_ea9e7.dir/build.make CMakeFiles/cmTC_ea9e7.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-PLb9qO'
+Building CXX object CMakeFiles/cmTC_ea9e7.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_egl_mali_2  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_ea9e7.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-PLb9qO/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-PLb9qO/src.cxx: In function ‘int main()’:
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-PLb9qO/src.cxx:7:1: error: ‘mali_native_window’ was not declared in this scope
+    7 | mali_native_window *w = 0;
+      | ^~~~~~~~~~~~~~~~~~
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-PLb9qO/src.cxx:7:21: error: ‘w’ was not declared in this scope
+    7 | mali_native_window *w = 0;
+      |                     ^
+gmake[1]: *** [CMakeFiles/cmTC_ea9e7.dir/build.make:78: CMakeFiles/cmTC_ea9e7.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-PLb9qO'
+gmake: *** [Makefile:127: cmTC_ea9e7/fast] Error 2
+
+
+Source file was:
+ #include <EGL/egl.h>
+#include <GLES2/gl2.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+mali_native_window *w = 0;
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_egl_viv failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-P3dBDp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_9bc6a/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_9bc6a.dir/build.make CMakeFiles/cmTC_9bc6a.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-P3dBDp'
+Building CXX object CMakeFiles/cmTC_9bc6a.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_egl_viv  -DEGL_API_FB=1 -fPIE -std=gnu++17 -o CMakeFiles/cmTC_9bc6a.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-P3dBDp/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-P3dBDp/src.cxx:2:10: fatal error: EGL/eglvivante.h: No such file or directory
+    2 | #include <EGL/eglvivante.h>
+      |          ^~~~~~~~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_9bc6a.dir/build.make:78: CMakeFiles/cmTC_9bc6a.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-P3dBDp'
+gmake: *** [Makefile:127: cmTC_9bc6a/fast] Error 2
+
+
+Source file was:
+ #include <EGL/egl.h>
+#include <EGL/eglvivante.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+#ifdef __INTEGRITY
+fbGetDisplay();
+#else
+// Do not rely on fbGetDisplay(), since the signature has changed over time.
+// Stick to fbGetDisplayByIndex().
+fbGetDisplayByIndex(0);
+#endif
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_egl_openwfd failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-s0C44T
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_dba50/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_dba50.dir/build.make CMakeFiles/cmTC_dba50.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-s0C44T'
+Building CXX object CMakeFiles/cmTC_dba50.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_egl_openwfd  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_dba50.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-s0C44T/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-s0C44T/src.cxx:1:11: fatal error: wfd.h: No such file or directory
+    1 |  #include <wfd.h>
+      |           ^~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_dba50.dir/build.make:78: CMakeFiles/cmTC_dba50.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-s0C44T'
+gmake: *** [Makefile:127: cmTC_dba50/fast] Error 2
+
+
+Source file was:
+ #include <wfd.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+wfdEnumerateDevices(nullptr, 0, nullptr);
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_egl_rcar failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-qnK4mb
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_f071d/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_f071d.dir/build.make CMakeFiles/cmTC_f071d.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-qnK4mb'
+Building CXX object CMakeFiles/cmTC_f071d.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_egl_rcar  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_f071d.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-qnK4mb/src.cxx
+Linking CXX executable cmTC_f071d
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_f071d.dir/link.txt --verbose=1
+/usr/bin/c++ CMakeFiles/cmTC_f071d.dir/src.cxx.o -o cmTC_f071d  /usr/lib/x86_64-linux-gnu/libEGL.so /usr/lib/x86_64-linux-gnu/libGLESv2.so /usr/lib/x86_64-linux-gnu/libEGL.so 
+/usr/bin/ld: CMakeFiles/cmTC_f071d.dir/src.cxx.o: in function `main':
+src.cxx:(.text+0x9): undefined reference to `PVRGrfxServerInit'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_f071d.dir/build.make:102: cmTC_f071d] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-qnK4mb'
+gmake: *** [Makefile:127: cmTC_f071d/fast] Error 2
+
+
+Source file was:
+ #include <EGL/egl.h>
+extern "C" {
+extern unsigned long PVRGrfxServerInit(void);
+}
+
+int main(void)
+{
+    /* BEGIN TEST: */
+PVRGrfxServerInit();
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_integrityfb failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-nrgXIM
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_f1784/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_f1784.dir/build.make CMakeFiles/cmTC_f1784.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-nrgXIM'
+Building CXX object CMakeFiles/cmTC_f1784.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_integrityfb  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_f1784.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-nrgXIM/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-nrgXIM/src.cxx:1:11: fatal error: device/fbdriver.h: No such file or directory
+    1 |  #include <device/fbdriver.h>
+      |           ^~~~~~~~~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_f1784.dir/build.make:78: CMakeFiles/cmTC_f1784.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-nrgXIM'
+gmake: *** [Makefile:127: cmTC_f1784/fast] Error 2
+
+
+Source file was:
+ #include <device/fbdriver.h>
+
+int main(void)
+{
+    /* BEGIN TEST: */
+FBDriver *driver = 0;
+    /* END TEST: */
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_directwrite failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-K7KIEB
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_0f4e0/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_0f4e0.dir/build.make CMakeFiles/cmTC_0f4e0.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-K7KIEB'
+Building CXX object CMakeFiles/cmTC_0f4e0.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_directwrite  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_0f4e0.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-K7KIEB/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-K7KIEB/src.cxx:1:11: fatal error: dwrite_2.h: No such file or directory
+    1 |  #include <dwrite_2.h>
+      |           ^~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_0f4e0.dir/build.make:78: CMakeFiles/cmTC_0f4e0.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-K7KIEB'
+gmake: *** [Makefile:127: cmTC_0f4e0/fast] Error 2
+
+
+Source file was:
+ #include <dwrite_2.h>
+int main(int, char **)
+{
+    IUnknown *factory = nullptr;
+    DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory2),
+                        &factory);
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_directwrite3 failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-1jwd16
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_9ee6d/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_9ee6d.dir/build.make CMakeFiles/cmTC_9ee6d.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-1jwd16'
+Building CXX object CMakeFiles/cmTC_9ee6d.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_directwrite3  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_9ee6d.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-1jwd16/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-1jwd16/src.cxx:1:11: fatal error: dwrite_3.h: No such file or directory
+    1 |  #include <dwrite_3.h>
+      |           ^~~~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_9ee6d.dir/build.make:78: CMakeFiles/cmTC_9ee6d.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-1jwd16'
+gmake: *** [Makefile:127: cmTC_9ee6d/fast] Error 2
+
+
+Source file was:
+ #include <dwrite_3.h>
+int main(int, char **)
+{
+    IUnknown *factory = nullptr;
+    DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory3),
+                        &factory);
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_d2d1 failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-VTKULd
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_41134/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_41134.dir/build.make CMakeFiles/cmTC_41134.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-VTKULd'
+Building CXX object CMakeFiles/cmTC_41134.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_d2d1  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_41134.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-VTKULd/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-VTKULd/src.cxx:1:11: fatal error: d2d1.h: No such file or directory
+    1 |  #include <d2d1.h>
+      |           ^~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_41134.dir/build.make:78: CMakeFiles/cmTC_41134.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-VTKULd'
+gmake: *** [Makefile:127: cmTC_41134/fast] Error 2
+
+
+Source file was:
+ #include <d2d1.h>
+int main(int, char **)
+{
+    void *factory = nullptr;
+    D2D1_FACTORY_OPTIONS options;
+    ZeroMemory(&options, sizeof(D2D1_FACTORY_OPTIONS));
+    D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, GUID{}, &options, &factory);
+    return 0;
+}
+
+
+Performing C++ SOURCE FILE Test HAVE_d2d1_1 failed with the following output:
+Change Dir: /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-HHA6To
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_1b27a/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_1b27a.dir/build.make CMakeFiles/cmTC_1b27a.dir/build
+gmake[1]: Entering directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-HHA6To'
+Building CXX object CMakeFiles/cmTC_1b27a.dir/src.cxx.o
+/usr/bin/c++ -DHAVE_d2d1_1  -fPIE -std=gnu++17 -o CMakeFiles/cmTC_1b27a.dir/src.cxx.o -c /home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-HHA6To/src.cxx
+/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-HHA6To/src.cxx:1:11: fatal error: d2d1_1.h: No such file or directory
+    1 |  #include <d2d1_1.h>
+      |           ^~~~~~~~~~
+compilation terminated.
+gmake[1]: *** [CMakeFiles/cmTC_1b27a.dir/build.make:78: CMakeFiles/cmTC_1b27a.dir/src.cxx.o] Error 1
+gmake[1]: Leaving directory '/home/psmedley/qt6-base-os2/build/CMakeFiles/CMakeScratch/TryCompile-HHA6To'
+gmake: *** [Makefile:127: cmTC_1b27a/fast] Error 2
+
+
+Source file was:
+ #include <d2d1_1.h>
+int main(int, char **)
+{
+    ID2D1Factory1 *d2dFactory;
+    D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2dFactory);
+    return 0;
+}
+
+

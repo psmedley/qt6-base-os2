@@ -265,6 +265,11 @@ QDateTime &QFileInfoPrivate::getFileTime(QAbstractFileEngine::FileTime request) 
 
     \snippet ntfsp.cpp 1
 
+    \note Since this is a non-atomic global variable, it is only safe
+    to increment or decrement \c qt_ntfs_permission_lookup before any
+    threads other than the main thread have started or after every thread
+    other than the main thread has ended.
+
     \section1 Performance Issues
 
     Some of QFileInfo's functions query the file system, but for
@@ -284,6 +289,10 @@ QDateTime &QFileInfoPrivate::getFileTime(QAbstractFileEngine::FileTime request) 
     every time you request information from it call setCaching(false).
     If you want to make sure that all information is read from the
     file system, use stat().
+
+    \section1 Platform Specific Issues
+
+    \include android-content-uri-limitations.qdocinc
 
     \sa QDir, QFile
 */
@@ -739,7 +748,9 @@ QString QFileInfo::fileName() const
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
         return ""_L1;
-    return d->fileEntry.fileName();
+    if (!d->fileEngine)
+        return d->fileEntry.fileName();
+    return d->fileEngine->fileName(QAbstractFileEngine::BaseName);
 }
 
 /*!
@@ -783,7 +794,9 @@ QString QFileInfo::baseName() const
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
         return ""_L1;
-    return d->fileEntry.baseName();
+    if (!d->fileEngine)
+        return d->fileEntry.baseName();
+    return QFileSystemEntry(d->fileEngine->fileName(QAbstractFileEngine::BaseName)).baseName();
 }
 
 /*!
@@ -802,7 +815,10 @@ QString QFileInfo::completeBaseName() const
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
         return ""_L1;
-    return d->fileEntry.completeBaseName();
+    if (!d->fileEngine)
+        return d->fileEntry.completeBaseName();
+    const QString fileEngineBaseName = d->fileEngine->fileName(QAbstractFileEngine::BaseName);
+    return QFileSystemEntry(fileEngineBaseName).completeBaseName();
 }
 
 /*!

@@ -7,6 +7,8 @@
 #include <qscopeguard.h>
 #include <qscopedvaluerollback.h>
 
+#include <algorithm>
+#include <q20iterator.h>
 #include <memory>
 
 struct Tracker
@@ -40,12 +42,29 @@ public:
     { return !operator==(lhs, rhs); }
 };
 
+class NonCopyable
+{
+    Q_DISABLE_COPY(NonCopyable)
+    int n;
+public:
+    NonCopyable() : n(0) {}
+    explicit NonCopyable(int n) : n(n) {}
+
+    friend bool operator==(const NonCopyable &lhs, const NonCopyable &rhs) noexcept
+    { return lhs.n == rhs.n; }
+    friend bool operator!=(const NonCopyable &lhs, const NonCopyable &rhs) noexcept
+    { return !operator==(lhs, rhs); }
+};
+
 class tst_QVarLengthArray : public QObject
 {
     Q_OBJECT
 private slots:
     void defaultConstructor_int() { defaultConstructor<int>(); }
     void defaultConstructor_QString() { defaultConstructor<QString>(); }
+    void sizeConstructor_int() { sizeConstructor<int>(); }
+    void sizeConstructor_QString() { sizeConstructor<QString>(); }
+    void sizeConstructor_NonCopyable() { sizeConstructor<NonCopyable>(); }
     void append();
 #if QT_DEPRECATED_SINCE(6, 3)
     void prepend();
@@ -92,9 +111,13 @@ private slots:
     void remove();
     void erase();
 
+    // special cases:
+    void copesWithCopyabilityOfMoveOnlyVector(); // QTBUG-109745
 private:
     template <typename T>
     void defaultConstructor();
+    template <typename T>
+    void sizeConstructor();
     template <qsizetype N, typename T>
     void move(T t1, T t2);
     template <qsizetype N>
@@ -121,6 +144,31 @@ void tst_QVarLengthArray::defaultConstructor()
     {
         QVarLengthArray<T> vla;
         QCOMPARE(vla.capacity(), 256);    // notice, should we change the default
+    }
+}
+
+template <typename T>
+void tst_QVarLengthArray::sizeConstructor()
+{
+    {
+        QVarLengthArray<T, 123> vla(0);
+        QCOMPARE(vla.size(), 0);
+        QVERIFY(vla.empty());
+        QVERIFY(vla.isEmpty());
+        QCOMPARE(vla.begin(), vla.end());
+        QCOMPARE(vla.capacity(), 123);
+    }
+    {
+        QVarLengthArray<T, 124> vla(124);
+        QCOMPARE(vla.size(), 124);
+        QVERIFY(!vla.empty());
+        QCOMPARE(vla.capacity(), 124);
+    }
+    {
+        QVarLengthArray<T, 124> vla(125);
+        QCOMPARE(vla.size(), 125);
+        QVERIFY(!vla.empty());
+        QCOMPARE_GE(vla.capacity(), 125);
     }
 }
 
@@ -384,6 +432,17 @@ void tst_QVarLengthArray::appendCausingRealloc()
     QVarLengthArray<float, 1> d(1);
     for (int i=0; i<30; i++)
         d.append(i);
+
+    // Regression test for QTBUG-110412:
+    constexpr qsizetype InitialCapacity = 10;
+    QVarLengthArray<float, InitialCapacity> d2(InitialCapacity);
+    std::iota(d2.begin(), d2.end(), 0.0f);
+    QCOMPARE_EQ(d2.size(), d2.capacity()); // by construction
+    float floats[1000];
+    std::iota(std::begin(floats), std::end(floats), InitialCapacity + 0.0f);
+    d2.append(floats, q20::ssize(floats));
+    QCOMPARE_EQ(d2.size(), q20::ssize(floats) + InitialCapacity);
+    QCOMPARE_GE(d2.capacity(), d2.size());
 }
 
 void tst_QVarLengthArray::appendIsStronglyExceptionSafe()
@@ -575,6 +634,12 @@ struct MyBase
     bool hasMoved() const { return !wasConstructedAt(this); }
 
 protected:
+    void swap(MyBase &other) {
+        using std::swap;
+        swap(data, other.data);
+        swap(isCopy, other.isCopy);
+    }
+
     MyBase(const MyBase *data, bool isCopy)
             : data(data), isCopy(isCopy) {}
 
@@ -649,6 +714,14 @@ struct MyMovable
         return *this;
     }
 
+    void swap(MyMovable &other) noexcept
+    {
+        MyBase::swap(other);
+        std::swap(i, other.i);
+    }
+
+    friend void swap(MyMovable &lhs, MyMovable &rhs) noexcept { lhs.swap(rhs); }
+
     bool operator==(const MyMovable &other) const
     {
         return i == other.i;
@@ -664,6 +737,15 @@ struct MyComplex
     {
         return i == other.i;
     }
+
+    void swap(MyComplex &other) noexcept
+    {
+        MyBase::swap(other);
+        std::swap(i, other.i);
+    }
+
+    friend void swap(MyComplex &lhs, MyComplex &rhs) noexcept { lhs.swap(rhs); }
+
     char i;
 };
 
@@ -1296,6 +1378,17 @@ void tst_QVarLengthArray::insertMove()
     QCOMPARE(MyBase::copyCount, 0);
 
     {
+        MyMovable m1, m2;
+        QCOMPARE(MyBase::liveCount, 2);
+        QCOMPARE(MyBase::copyCount, 0);
+        using std::swap;
+        swap(m1, m2);
+        QCOMPARE(MyBase::liveCount, 2);
+        QCOMPARE(MyBase::movedCount, 0);
+        QCOMPARE(MyBase::copyCount, 0);
+    }
+
+    {
         QVarLengthArray<MyMovable, 6> vec;
         MyMovable m1;
         MyMovable m2;
@@ -1638,6 +1731,27 @@ void tst_QVarLengthArray::erase()
     it = arr.erase(arr.cend() - 1);
     QCOMPARE(it, arr.cend());
     QCOMPARE(arr, QVarLengthArray<QString>({ "val0" }));
+}
+
+void tst_QVarLengthArray::copesWithCopyabilityOfMoveOnlyVector()
+{
+    // std::vector<move-only-type> is_copyable
+    // (https://quuxplusone.github.io/blog/2020/02/05/vector-is-copyable-except-when-its-not/)
+
+    QVarLengthArray<std::vector<std::unique_ptr<int>>, 2> vla;
+    vla.emplace_back(42);
+    vla.emplace_back(43);
+    vla.emplace_back(44); // goes to the heap
+    QCOMPARE_EQ(vla.size(), 3);
+    QCOMPARE_EQ(vla.front().size(), 42U);
+    QCOMPARE_EQ(vla.front().front(), nullptr);
+    QCOMPARE_EQ(vla.back().size(), 44U);
+
+    auto moved = std::move(vla);
+    QCOMPARE_EQ(moved.size(), 3);
+    QCOMPARE_EQ(moved.front().size(), 42U);
+    QCOMPARE_EQ(moved.front().front(), nullptr);
+    QCOMPARE_EQ(moved.back().size(), 44U);
 }
 
 QTEST_APPLESS_MAIN(tst_QVarLengthArray)

@@ -105,7 +105,11 @@ public:
     [[nodiscard]] inline QString arg(Args &&...args) const;
 
     [[nodiscard]] constexpr QLatin1Char at(qsizetype i) const
-    { return Q_ASSERT(i >= 0), Q_ASSERT(i < size()), QLatin1Char(m_data[i]); }
+    {
+        Q_ASSERT(i >= 0);
+        Q_ASSERT(i < size());
+        return QLatin1Char(m_data[i]);
+    }
     [[nodiscard]] constexpr QLatin1Char operator[](qsizetype i) const { return at(i); }
 
     [[nodiscard]] constexpr QLatin1Char front() const { return at(0); }
@@ -525,14 +529,11 @@ public:
                 QChar fillChar = u' ') const;
 private:
     template <typename T>
-    struct is_convertible_to_view_or_qstring_helper
-        : std::integral_constant<bool,
-            std::is_convertible<T, QString>::value ||
-            std::is_convertible<T, QStringView>::value ||
-            std::is_convertible<T, QLatin1StringView>::value> {};
-    template <typename T>
-    struct is_convertible_to_view_or_qstring
-        : is_convertible_to_view_or_qstring_helper<typename std::decay<T>::type> {};
+    using is_convertible_to_view_or_qstring = std::disjunction<
+            std::is_convertible<T, QString>,
+            std::is_convertible<T, QStringView>,
+            std::is_convertible<T, QLatin1StringView>
+        >;
 public:
     template <typename...Args>
     [[nodiscard]]
@@ -1192,7 +1193,7 @@ QString QLatin1StringView::toString() const { return *this; }
 //
 
 QString QStringView::toString() const
-{ return Q_ASSERT(size() == size()), QString(data(), size()); }
+{ return QString(data(), size()); }
 
 qint64 QStringView::toLongLong(bool *ok, int base) const
 { return QString::toIntegral_helper<qint64>(*this, ok, base); }

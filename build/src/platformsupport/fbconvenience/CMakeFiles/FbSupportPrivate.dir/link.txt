@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../lib/libQt6FbSupport.a CMakeFiles/FbSupportPrivate.dir/FbSupportPrivate_autogen/mocs_compilation.cpp.o CMakeFiles/FbSupportPrivate.dir/qfbbackingstore.cpp.o CMakeFiles/FbSupportPrivate.dir/qfbcursor.cpp.o CMakeFiles/FbSupportPrivate.dir/qfbscreen.cpp.o CMakeFiles/FbSupportPrivate.dir/qfbvthandler.cpp.o CMakeFiles/FbSupportPrivate.dir/qfbwindow.cpp.o
+/usr/bin/ranlib ../../../lib/libQt6FbSupport.a

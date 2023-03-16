@@ -1,0 +1,1 @@
+/usr/bin/c++ -DNDEBUG -O2 -Wl,--enable-new-dtags CMakeFiles/androiddeployqt.dir/androiddeployqt_autogen/mocs_compilation.cpp.o CMakeFiles/androiddeployqt.dir/main.cpp.o -o ../../../bin/androiddeployqt  -Wl,-rpath,/home/psmedley/qt6-base-os2/build/lib: ../../../lib/libQt6Core.so.6.4.2 

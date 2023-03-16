@@ -109,7 +109,7 @@
     thread is the only one that can do anything; the consumer is
     blocked waiting for the \c bufferNotEmpty condition to be
     signalled (\c numUsedBytes is 0). Once the producer has put one
-    byte in the buffer, \c numUsedBytes is \c BufferSize - 1 and the
+    byte in the buffer, \c numUsedBytes is strictly greater than 0, and the
     \c bufferNotEmpty condition is signalled. At that point, two
     things can happen: Either the consumer thread takes over and
     reads that byte, or the producer gets to produce a second byte.

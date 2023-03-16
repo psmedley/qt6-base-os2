@@ -32,6 +32,7 @@
 #if defined(QT_USE_THREAD_PARALLEL_FILLS)
 #include <qsemaphore.h>
 #include <qthreadpool.h>
+#include <private/qthreadpool_p.h>
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -3783,7 +3784,7 @@ static void spanfill_from_first(QRasterBuffer *rasterBuffer, QPixelLayout::BPP b
 #if defined(QT_USE_THREAD_PARALLEL_FILLS)
 #define QT_THREAD_PARALLEL_FILLS(function) \
     const int segments = (count + 32) / 64; \
-    QThreadPool *threadPool = QThreadPool::globalInstance(); \
+    QThreadPool *threadPool = QThreadPoolPrivate::qtGuiInstance(); \
     if (segments > 1 && threadPool && !threadPool->contains(QThread::currentThread())) { \
         QSemaphore semaphore; \
         int c = 0; \
@@ -3792,7 +3793,7 @@ static void spanfill_from_first(QRasterBuffer *rasterBuffer, QPixelLayout::BPP b
             threadPool->start([&, c, cn]() { \
                 function(c, c + cn); \
                 semaphore.release(1); \
-            }); \
+            }, 1); \
             c += cn; \
         } \
         semaphore.acquire(segments); \
@@ -5620,7 +5621,7 @@ static inline void alphargbblend_argb32(quint32 *dst, uint coverage, const QRgba
 static inline void rgbBlendPixel(QRgba64 &dst, int coverage, QRgba64 slinear, const QColorTrcLut *colorProfile)
 {
     // Do a gammacorrected RGB alphablend...
-    const QRgba64 dlinear = colorProfile ? colorProfile->toLinear64(dst) : dst;
+    const QRgba64 dlinear = colorProfile ? colorProfile->toLinear(dst) : dst;
 
     QRgba64 blend = rgbBlend(dlinear, slinear, coverage);
 

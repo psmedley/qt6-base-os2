@@ -4,6 +4,8 @@
 
 #include <qcryptographichash.h>
 #include <qiodevice.h>
+#include <qmutex.h>
+#include <private/qlocking_p.h>
 
 #include "../../3rdparty/sha1/sha1.cpp"
 
@@ -164,7 +166,10 @@ public:
 
     void reset() noexcept;
     void addData(QByteArrayView bytes) noexcept;
-    void finalize() noexcept;
+    // when not called from the static hash() function, this function needs to be
+    // called with finalizeMutex held:
+    void finalizeUnchecked() noexcept;
+    // END functions that need to be called with finalizeMutex held
     QByteArrayView resultView() const noexcept { return result.toByteArrayView(); }
 
     const QCryptographicHash::Algorithm method;
@@ -183,6 +188,7 @@ public:
 #endif
     };
 #ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
+#ifndef USING_OPENSSL30
     enum class Sha3Variant
     {
         Sha3,
@@ -190,13 +196,13 @@ public:
     };
     void sha3Finish(int bitCount, Sha3Variant sha3Variant);
 #endif
+#endif
     class SmallByteArray {
-        std::array<char, MaxHashLength> m_data;
+        std::array<quint8, MaxHashLength> m_data;
         static_assert(MaxHashLength <= std::numeric_limits<std::uint8_t>::max());
-        std::uint8_t m_size;
+        quint8 m_size;
     public:
-        char *data() noexcept { return m_data.data(); }
-        const char *data() const noexcept { return m_data.data(); }
+        quint8 *data() noexcept { return m_data.data(); }
         qsizetype size() const noexcept { return qsizetype{m_size}; }
         bool isEmpty() const noexcept { return size() == 0; }
         void clear() noexcept { m_size = 0; }
@@ -206,8 +212,10 @@ public:
             m_size = std::uint8_t(s);
         }
         QByteArrayView toByteArrayView() const noexcept
-        { return QByteArrayView{data(), size()}; }
+        { return QByteArrayView{m_data.data(), size()}; }
     };
+    // protects result in finalize()
+    QBasicMutex finalizeMutex;
     SmallByteArray result;
 };
 
@@ -248,7 +256,7 @@ void QCryptographicHashPrivate::sha3Finish(int bitCount, Sha3Variant sha3Variant
         break;
     }
 
-    sha3Final(&copy, reinterpret_cast<BitSequence *>(result.data()));
+    sha3Final(&copy, result.data());
 }
 #endif
 
@@ -539,21 +547,31 @@ QByteArray QCryptographicHash::result() const
 */
 QByteArrayView QCryptographicHash::resultView() const noexcept
 {
-    d->finalize();
+    // resultView() is a const function, so concurrent calls are allowed; protect:
+    {
+        const auto lock = qt_scoped_lock(d->finalizeMutex);
+        // check that no other thread already finalizeUnchecked()'ed before us:
+        if (d->result.isEmpty())
+            d->finalizeUnchecked();
+    }
+    // resultView() remains(!) valid even after we dropped the mutex
     return d->resultView();
 }
 
-void QCryptographicHashPrivate::finalize() noexcept
-{
-    if (!result.isEmpty())
-        return;
+/*!
+    \internal
 
+    Must be called with finalizeMutex held (except from static hash() function,
+    where no sharing can take place).
+*/
+void QCryptographicHashPrivate::finalizeUnchecked() noexcept
+{
     switch (method) {
     case QCryptographicHash::Sha1: {
         Sha1State copy = sha1Context;
         result.resizeForOverwrite(20);
         sha1FinalizeState(&copy);
-        sha1ToHash(&copy, (unsigned char *)result.data());
+        sha1ToHash(&copy, result.data());
         break;
     }
 #ifdef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
@@ -565,37 +583,37 @@ void QCryptographicHashPrivate::finalize() noexcept
     case QCryptographicHash::Md4: {
         md4_context copy = md4Context;
         result.resizeForOverwrite(MD4_RESULTLEN);
-        md4_final(&copy, (unsigned char *)result.data());
+        md4_final(&copy, result.data());
         break;
     }
     case QCryptographicHash::Md5: {
         MD5Context copy = md5Context;
         result.resizeForOverwrite(16);
-        MD5Final(&copy, (unsigned char *)result.data());
+        MD5Final(&copy, result.data());
         break;
     }
     case QCryptographicHash::Sha224: {
         SHA224Context copy = sha224Context;
         result.resizeForOverwrite(SHA224HashSize);
-        SHA224Result(&copy, reinterpret_cast<unsigned char *>(result.data()));
+        SHA224Result(&copy, result.data());
         break;
     }
     case QCryptographicHash::Sha256: {
         SHA256Context copy = sha256Context;
         result.resizeForOverwrite(SHA256HashSize);
-        SHA256Result(&copy, reinterpret_cast<unsigned char *>(result.data()));
+        SHA256Result(&copy, result.data());
         break;
     }
     case QCryptographicHash::Sha384: {
         SHA384Context copy = sha384Context;
         result.resizeForOverwrite(SHA384HashSize);
-        SHA384Result(&copy, reinterpret_cast<unsigned char *>(result.data()));
+        SHA384Result(&copy, result.data());
         break;
     }
     case QCryptographicHash::Sha512: {
         SHA512Context copy = sha512Context;
         result.resizeForOverwrite(SHA512HashSize);
-        SHA512Result(&copy, reinterpret_cast<unsigned char *>(result.data()));
+        SHA512Result(&copy, result.data());
         break;
     }
     case QCryptographicHash::RealSha3_224:
@@ -619,7 +637,7 @@ void QCryptographicHashPrivate::finalize() noexcept
         const auto length = hashLengthInternal(method);
         blake2b_state copy = blake2bContext;
         result.resizeForOverwrite(length);
-        blake2b_final(&copy, reinterpret_cast<uint8_t *>(result.data()), length);
+        blake2b_final(&copy, result.data(), length);
         break;
     }
     case QCryptographicHash::Blake2s_128:
@@ -629,7 +647,7 @@ void QCryptographicHashPrivate::finalize() noexcept
         const auto length = hashLengthInternal(method);
         blake2s_state copy = blake2sContext;
         result.resizeForOverwrite(length);
-        blake2s_final(&copy, reinterpret_cast<uint8_t *>(result.data()), length);
+        blake2s_final(&copy, result.data(), length);
         break;
     }
 #endif
@@ -646,7 +664,7 @@ QByteArray QCryptographicHash::hash(QByteArrayView data, Algorithm method)
 {
     QCryptographicHashPrivate hash(method);
     hash.addData(data);
-    hash.finalize();
+    hash.finalizeUnchecked(); // no mutex needed: no-one but us has access to 'hash'
     return hash.resultView().toByteArray();
 }
 

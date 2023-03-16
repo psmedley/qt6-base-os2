@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/no_extern_access_main.dir/other.cpp.o CMakeFiles/no_extern_access_main.dir/main.cpp.o -o no_extern_access_main  -Wl,-rpath,/home/psmedley/qt6-base-os2/build/config.tests/no_direct_extern_access libno_extern_access_lib.so 

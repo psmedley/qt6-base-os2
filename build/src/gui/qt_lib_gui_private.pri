@@ -1,0 +1,11 @@
+QT.gui_private.VERSION = 6.4.2
+QT.gui_private.name = QtGui
+QT.gui_private.module =
+QT.gui_private.libs = $$QT_MODULE_LIB_BASE
+QT.gui_private.includes = $$QT_MODULE_INCLUDE_BASE/QtGui/6.4.2 $$QT_MODULE_INCLUDE_BASE/QtGui/6.4.2/QtGui
+QT.gui_private.frameworks = 
+QT.gui_private.depends = core_private gui
+QT.gui_private.uses = xkbcommon
+QT.gui_private.module_config = v2 internal_module
+QT.gui_private.enabled_features = evdev freetype system-freetype fontconfig harfbuzz system-harfbuzz kms drm_atomic libinput libinput-axis-api libinput-hires-wheel-support linuxfb vnc mtdev vkgen vkkhrdisplay egl_x11 eglfs eglfs_egldevice eglfs_gbm gif ico jpeg system-jpeg png system-png imageio-text-loading tuiotouch xkbcommon xlib multiprocess raster-64bit raster-fp
+QT.gui_private.disabled_features = accessibility-atspi-bridge directfb directwrite directwrite3 direct2d direct2d1_1 qqnx_imf integrityfb integrityhid vsp2 eglfs_brcm eglfs_vsp2 eglfs_mali eglfs_viv eglfs_rcar eglfs_viv_wl eglfs_openwfd eglfs_x11 tslib xcb-glx xcb-egl-plugin xcb-native-painting xrender xcb-xlib xcb-sm system-xcb-xinput xkbcommon-x11

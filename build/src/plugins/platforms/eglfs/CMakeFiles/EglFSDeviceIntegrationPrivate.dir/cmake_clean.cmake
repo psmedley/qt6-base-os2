@@ -1,0 +1,40 @@
+file(REMOVE_RECURSE
+  "../../../../lib/libQt6EglFSDeviceIntegration.pdb"
+  "../../../../lib/libQt6EglFSDeviceIntegration.so"
+  "../../../../lib/libQt6EglFSDeviceIntegration.so.6"
+  "../../../../lib/libQt6EglFSDeviceIntegration.so.6.4.2"
+  ".rcc/qrc_cursor.cpp"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate_autogen.dir/AutogenUsed.txt"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate_autogen.dir/ParseCache.txt"
+  "EglFSDeviceIntegrationPrivate_autogen"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/.rcc/qrc_cursor.cpp.o"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/.rcc/qrc_cursor.cpp.o.d"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/EglFSDeviceIntegrationPrivate_autogen/mocs_compilation.cpp.o"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/EglFSDeviceIntegrationPrivate_autogen/mocs_compilation.cpp.o.d"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfscontext.cpp.o"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfscontext.cpp.o.d"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfscursor.cpp.o"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfscursor.cpp.o.d"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfsdeviceintegration.cpp.o"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfsdeviceintegration.cpp.o.d"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfshooks.cpp.o"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfshooks.cpp.o.d"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfsintegration.cpp.o"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfsintegration.cpp.o.d"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfsoffscreenwindow.cpp.o"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfsoffscreenwindow.cpp.o.d"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfsscreen.cpp.o"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfsscreen.cpp.o.d"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfswindow.cpp.o"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/api/qeglfswindow.cpp.o.d"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/cmake_pch.hxx.gch"
+  "CMakeFiles/EglFSDeviceIntegrationPrivate.dir/cmake_pch.hxx.gch.d"
+  "meta_types/qt6eglfsdeviceintegrationprivate_release_metatypes.json"
+  "meta_types/qt6eglfsdeviceintegrationprivate_release_metatypes.json.gen"
+  "preliminary_prl_for_EglFSDeviceIntegrationPrivate_step2_Release.prl"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/EglFSDeviceIntegrationPrivate.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

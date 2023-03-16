@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/architecture_test.dir/arch.cpp.o -o architecture_test 

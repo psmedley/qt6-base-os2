@@ -1,0 +1,22 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/psmedley/qt6-base-os2/config.tests/arch/arch.cpp
+../../src/corelib/global/archdetect.cpp
+/home/psmedley/qt6-base-os2/src/corelib/global/archdetect.cpp
+stdio.h
+-
+
+/home/psmedley/qt6-base-os2/src/corelib/global/archdetect.cpp
+qprocessordetection.h
+/home/psmedley/qt6-base-os2/src/corelib/global/qprocessordetection.h
+
+/home/psmedley/qt6-base-os2/src/corelib/global/qprocessordetection.h
+QtCore/qglobal.h
+-
+

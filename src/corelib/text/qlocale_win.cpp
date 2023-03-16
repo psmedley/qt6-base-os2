@@ -18,15 +18,8 @@
 #endif
 
 #if QT_CONFIG(cpp_winrt) && !defined(Q_CC_CLANG)
-#   include <winrt/base.h>
-#   include <QtCore/private/qfactorycacheregistration_p.h>
-// Workaround for Windows SDK bug.
-// See https://github.com/microsoft/Windows.UI.Composition-Win32-Samples/issues/47
-namespace winrt::impl
-{
-    template <typename Async>
-    auto wait_for(Async const& async, Windows::Foundation::TimeSpan const& timeout);
-}
+#   include <QtCore/private/qt_winrtbase_p.h>
+
 #   include <winrt/Windows.Foundation.h>
 #   include <winrt/Windows.Foundation.Collections.h>
 #   include <winrt/Windows.System.UserProfile.h>
@@ -486,11 +479,13 @@ QVariant QSystemLocalePrivate::toString(QTime time, QLocale::FormatType type)
 
     DWORD flags = 0;
     // keep the same conditional as timeFormat() above
-    if (type == QLocale::ShortFormat)
-        flags = TIME_NOSECONDS;
+    const QString format = type == QLocale::ShortFormat
+        ? getLocaleInfo(LOCALE_SSHORTTIME).toString()
+        : QString();
+    auto formatStr = reinterpret_cast<const wchar_t *>(format.isEmpty() ? nullptr : format.utf16());
 
     wchar_t buf[255];
-    if (getTimeFormat(flags, &st, NULL, buf, 255)) {
+    if (getTimeFormat(flags, &st, formatStr, buf, int(std::size(buf)))) {
         QString text = QString::fromWCharArray(buf);
         if (substitution() == SAlways)
             text = substituteDigits(std::move(text));

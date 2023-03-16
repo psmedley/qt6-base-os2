@@ -373,6 +373,7 @@ void TlsCryptographSecureTransport::disconnectFromHost()
     if (context) {
         if (!shutdown) {
             SSLClose(context);
+            context.reset(nullptr);
             shutdown = true;
         }
     }
@@ -1126,8 +1127,6 @@ bool TlsCryptographSecureTransport::verifyPeerTrust()
         QCFType<CFDataRef> certData = cert.toDer().toCFData();
         if (QCFType<SecCertificateRef> secRef = SecCertificateCreateWithData(nullptr, certData))
             CFArrayAppendValue(certArray, secRef);
-        else
-            qCWarning(lcSecureTransport, "Failed to create SecCertificate from QSslCertificate");
     }
 
     SecTrustSetAnchorCertificates(trust, certArray);

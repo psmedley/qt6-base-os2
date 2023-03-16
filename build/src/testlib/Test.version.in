@@ -1,0 +1,42 @@
+Qt_6_PRIVATE_API {
+    qt_private_api_tag*;
+    @FILE:qabstracttestlogger_p.h@
+    @FILE:qappletestlogger_p.h@
+    @FILE:qbenchmark_p.h@
+    @FILE:qbenchmarkevent_p.h@
+    @FILE:qbenchmarkmeasurement_p.h@
+    @FILE:qbenchmarkmetric_p.h@
+    @FILE:qbenchmarkperfevents_p.h@
+    @FILE:qbenchmarktimemeasurers_p.h@
+    @FILE:qbenchmarkvalgrind_p.h@
+    @FILE:qcsvbenchmarklogger_p.h@
+    @FILE:qemulationdetector_p.h@
+    @FILE:qjunittestlogger_p.h@
+    @FILE:qplaintestlogger_p.h@
+    @FILE:qpropertytesthelper_p.h@
+    @FILE:qsignaldumper_p.h@
+    @FILE:qtaptestlogger_p.h@
+    @FILE:qteamcitylogger_p.h@
+    @FILE:qtestblacklist_p.h@
+    @FILE:qtestcoreelement_p.h@
+    @FILE:qtestelement_p.h@
+    @FILE:qtestelementattribute_p.h@
+    @FILE:qtesthelpers_p.h@
+    @FILE:qtestjunitstreamer_p.h@
+    @FILE:qtestlog_p.h@
+    @FILE:qtestresult_p.h@
+    @FILE:qtesttable_p.h@
+    @FILE:qtestutil_macos_p.h@
+    @FILE:qxctestlogger_p.h@
+    @FILE:qxmltestlogger_p.h@
+    @FILE:3rdparty/callgrind_p.h@
+    @FILE:3rdparty/cycle_p.h@
+    @FILE:3rdparty/linux_perf_event_p.h@
+    @FILE:3rdparty/valgrind_p.h@
+};
+Qt_6 { *; };
+Qt_6.0 {} Qt_6;
+Qt_6.1 {} Qt_6.0;
+Qt_6.2 {} Qt_6.1;
+Qt_6.3 {} Qt_6.2;
+Qt_6.4 { qt_version_tag; } Qt_6.3;

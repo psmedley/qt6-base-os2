@@ -72,8 +72,8 @@ qt_internal_add_module(Core
         global/qvolatile_p.h
         global/q20algorithm.h
         global/q20functional.h
-        global/q23functional.h
         global/q20iterator.h
+        global/q23functional.h
         global/qxpfunctional.h
         io/qabstractfileengine.cpp io/qabstractfileengine_p.h
         io/qbuffer.cpp io/qbuffer.h
@@ -999,6 +999,7 @@ qt_internal_extend_target(Core CONDITION WIN32
     SOURCES
         platform/windows/qfactorycacheregistration_p.h
         platform/windows/qfactorycacheregistration.cpp
+        platform/windows/qt_winrtbase_p.h
 )
 
 qt_internal_extend_target(Core CONDITION HAIKU AND NOT ANDROID

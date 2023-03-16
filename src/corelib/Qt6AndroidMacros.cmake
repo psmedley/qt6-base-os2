@@ -274,6 +274,12 @@ function(qt6_android_generate_deployment_settings target)
     string(APPEND file_contents
         "   \"extraPrefixDirs\" : [ ${extra_prefix_list} ],\n")
 
+    # Create an empty target for the cases when we need to generate deployment setting but
+    # qt_finalize_project is never called.
+    if(NOT TARGET _qt_internal_apk_dependencies AND NOT QT_NO_COLLECT_BUILD_TREE_APK_DEPS)
+        add_custom_target(_qt_internal_apk_dependencies)
+    endif()
+
     # Extra library paths that could be used as a dependency lookup path by androiddeployqt.
     #
     # Unlike 'extraPrefixDirs', the 'extraLibraryDirs' key doesn't expect the 'lib' subfolder
@@ -434,8 +440,8 @@ function(qt6_android_add_apk_target target)
                 --apk "${apk_final_file_path}"
                 --depfile "${dep_file_path}"
                 --builddir "${relative_to_dir}"
-                ${sign_apk}
                 ${extra_args}
+                ${sign_apk}
             COMMENT "Creating APK for ${target}"
             DEPENDS "${target}" "${deployment_file}" ${extra_deps}
             DEPFILE "${dep_file_path}"
@@ -452,9 +458,10 @@ function(qt6_android_add_apk_target target)
                 --input ${deployment_file}
                 --output ${apk_final_dir}
                 --apk ${apk_final_file_path}
-                ${sign_apk}
                 ${extra_args}
+                ${sign_apk}
             COMMENT "Creating APK for ${target}"
+            VERBATIM
         )
     endif()
 
@@ -996,6 +1003,12 @@ function(_qt_internal_configure_android_multiabi_target target)
             "-DCMAKE_CXX_COMPILER_LAUNCHER=${compiler_launcher}")
     endif()
 
+    unset(user_cmake_args)
+    foreach(var IN LISTS QT_ANDROID_MULTI_ABI_FORWARD_VARS)
+        string(REPLACE ";" "$<SEMICOLON>" var_value "${${var}}")
+        list(APPEND user_cmake_args "-D${var}=${var_value}")
+    endforeach()
+
     set(missing_qt_abi_toolchains "")
     set(previous_copy_apk_dependencies_target ${target})
     # Create external projects for each android ABI except the main one.
@@ -1028,6 +1041,7 @@ function(_qt_internal_configure_android_multiabi_target target)
                     "-DQT_INTERNAL_ANDROID_MULTI_ABI_BINARY_DIR=${CMAKE_BINARY_DIR}"
                     "${config_arg}"
                     "${extra_cmake_args}"
+                    "${user_cmake_args}"
                     "-B" "${android_abi_build_dir}"
                     "-S" "${CMAKE_SOURCE_DIR}"
                 EXCLUDE_FROM_ALL TRUE

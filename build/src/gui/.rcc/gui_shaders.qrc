@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/qt-project.org/gui">
+    <file alias="painting/shaders/backingstorecompose.vert.qsb">/home/psmedley/qt6-base-os2/src/gui/painting/shaders/backingstorecompose.vert.qsb</file>
+    <file alias="painting/shaders/backingstorecompose.frag.qsb">/home/psmedley/qt6-base-os2/src/gui/painting/shaders/backingstorecompose.frag.qsb</file>
+  </qresource>
+</RCC>
+

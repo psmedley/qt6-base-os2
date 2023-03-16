@@ -1,0 +1,14 @@
+prefix=/usr/local/Qt-6.4.2
+exec_prefix=${prefix}
+bindir=${prefix}/bin
+libexecdir=${prefix}/./libexec
+libdir=${prefix}/lib
+includedir=${prefix}/include
+$<$<BOOL:>:mkspecsdir=${prefix}/mkspecs>
+$<1: >
+Name: Qt6 Network
+Description: Qt Network module
+Version: 6.4.2
+Libs: $<$<NOT:$<STREQUAL:$<TARGET_PROPERTY:Qt6::Network,TYPE>,INTERFACE_LIBRARY>>:-L${libdir} -lQt6Network> $<$<BOOL:loose_link_options-NOTFOUND>:$<JOIN:$<REMOVE_DUPLICATES:loose_link_options-NOTFOUND>, >> $<JOIN:$<REMOVE_DUPLICATES:>, >
+Cflags: $<$<BOOL:${includedir}/QtNetwork;${includedir}>:-I$<JOIN:$<REMOVE_DUPLICATES:${includedir}/QtNetwork;${includedir}>, -I>> $<$<BOOL:QT_NETWORK_LIB>:-D$<JOIN:$<REMOVE_DUPLICATES:QT_NETWORK_LIB>, -D>>
+Requires: $<JOIN:$<REMOVE_DUPLICATES:Qt6Core>, >

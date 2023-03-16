@@ -4,6 +4,7 @@
 /*!
 \group cmake-target-properties-qtcore
 \title CMake Target Properties in Qt6 Core
+\brief Lists CMake target properties known to Qt6::Core.
 
 \l{CMake Commands in Qt6 Core}{CMake Commands} know about the following CMake
 target properties:
@@ -162,6 +163,26 @@ then place this directly into the directory specified by this variable.
 \cmakepropertyandroidonly
 
 Specifies the target Android API level for the target.
+
+\sa{qt6_android_generate_deployment_settings}{qt_android_generate_deployment_settings()}
+*/
+
+/*!
+\page cmake-target-property-qt-android-sdk-build-tools-revision.html
+\ingroup cmake-properties-qtcore
+\ingroup cmake-target-properties-qtcore
+
+\title QT_ANDROID_SDK_BUILD_TOOLS_REVISION
+\target cmake-target-property-QT_ANDROID_SDK_BUILD_TOOLS_REVISION
+
+\summary {Revision of Android build tools to use.}
+
+\cmakepropertysince 6.0
+\preliminarycmakeproperty
+\cmakepropertyandroidonly
+
+Specifies the Android SDK build tools revision to use. If this is not set then
+CMake will attempt to use the latest installed version.
 
 \sa{qt6_android_generate_deployment_settings}{qt_android_generate_deployment_settings()}
 */
@@ -375,6 +396,7 @@ resource prefix.
 /*!
 \group cmake-source-file-properties-qtcore
 \title CMake Source File Properties in Qt6 Core
+\brief Lists CMake file properties used in Qt6::Core.
 
 \l{CMake Commands in Qt6 Core}{CMake Commands} know about the following CMake
 source file properties:
