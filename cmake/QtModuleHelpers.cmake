@@ -24,6 +24,7 @@ macro(qt_internal_get_internal_add_module_keywords option_args single_args multi
         CONFIGURE_FILE_PATH
         CPP_EXPORT_HEADER_BASE_NAME
         EXTERNAL_HEADERS_DIR
+        OS2_SHORT_NAME
         ${__default_target_info_args}
     )
     set(${multi_args}
@@ -213,6 +214,14 @@ function(qt_internal_add_module target)
         _qt_config_module_name "${arg_CONFIG_MODULE_NAME}"
         ${property_prefix}QT_QMAKE_MODULE_CONFIG "${arg_QMAKE_MODULE_CONFIG}")
     set_property(TARGET "${target}" APPEND PROPERTY EXPORT_PROPERTIES _qt_config_module_name)
+
+if (OS2)
+    if(arg_OS2_SHORT_NAME)
+       set_target_properties(${target} PROPERTIES
+            TARGET_SHORT ${arg_OS2_SHORT_NAME}
+       )
+    endif()
+endif()
 
     set(is_framework 0)
     if(QT_FEATURE_framework AND NOT ${arg_HEADER_MODULE} AND NOT ${arg_STATIC})
