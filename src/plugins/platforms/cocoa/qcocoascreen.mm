@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <AppKit/AppKit.h>
 
@@ -108,6 +72,18 @@ void QCocoaScreen::initializeScreens()
 */
 void QCocoaScreen::updateScreens()
 {
+    // Adding, updating, or removing a screen below might trigger
+    // Qt or the application to move a window to a different screen,
+    // recursing back here via QCocoaWindow::windowDidChangeScreen.
+    // The update code is not re-entrant, so bail out if we end up
+    // in this situation. The screens will stabilize eventually.
+    static bool updatingScreens = false;
+    if (updatingScreens) {
+        qCInfo(lcQpaScreen) << "Skipping screen update, already updating";
+        return;
+    }
+    QBoolBlocker recursionGuard(updatingScreens);
+
     uint32_t displayCount = 0;
     if (CGGetOnlineDisplayList(0, nullptr, &displayCount) != kCGErrorSuccess)
         qFatal("Failed to get number of online displays");
@@ -269,7 +245,6 @@ void QCocoaScreen::update(CGDirectDisplayID displayId)
 
     const QRect previousGeometry = m_geometry;
     const QRect previousAvailableGeometry = m_availableGeometry;
-    const QDpi previousLogicalDpi = m_logicalDpi;
     const qreal previousRefreshRate = m_refreshRate;
 
     // The reference screen for the geometry is always the primary screen
@@ -283,27 +258,28 @@ void QCocoaScreen::update(CGDirectDisplayID displayId)
     m_depth = NSBitsPerPixelFromDepth(nsScreen.depth);
     m_colorSpace = QColorSpace::fromIccProfile(QByteArray::fromNSData(nsScreen.colorSpace.ICCProfileData));
     if (!m_colorSpace.isValid()) {
-        qWarning() << "macOS generated a color-profile Qt couldn't parse. This shouldn't happen.";
+        qCWarning(lcQpaScreen) << "Failed to parse ICC profile for" << nsScreen.colorSpace
+                               << "with ICC data" << nsScreen.colorSpace.ICCProfileData
+                               << "- Falling back to sRGB";
         m_colorSpace = QColorSpace::SRgb;
     }
 
     CGSize size = CGDisplayScreenSize(m_displayId);
     m_physicalSize = QSizeF(size.width, size.height);
-    m_logicalDpi.first = 72;
-    m_logicalDpi.second = 72;
 
     QCFType<CGDisplayModeRef> displayMode = CGDisplayCopyDisplayMode(m_displayId);
     float refresh = CGDisplayModeGetRefreshRate(displayMode);
     m_refreshRate = refresh > 0 ? refresh : 60.0;
 
-    m_name = displayName(m_displayId);
+    if (@available(macOS 10.15, *))
+        m_name = QString::fromNSString(nsScreen.localizedName);
+    else
+        m_name = displayName(m_displayId);
 
     const bool didChangeGeometry = m_geometry != previousGeometry || m_availableGeometry != previousAvailableGeometry;
 
     if (didChangeGeometry)
         QWindowSystemInterface::handleScreenGeometryChange(screen(), geometry(), availableGeometry());
-    if (m_logicalDpi != previousLogicalDpi)
-        QWindowSystemInterface::handleScreenLogicalDotsPerInchChange(screen(), m_logicalDpi.first, m_logicalDpi.second);
     if (m_refreshRate != previousRefreshRate)
         QWindowSystemInterface::handleScreenRefreshRateChange(screen(), m_refreshRate);
 }
@@ -315,6 +291,11 @@ Q_LOGGING_CATEGORY(lcQpaScreenUpdates, "qt.qpa.screen.updates", QtCriticalMsg);
 void QCocoaScreen::requestUpdate()
 {
     Q_ASSERT(m_displayId);
+
+    if (!isOnline()) {
+        qCDebug(lcQpaScreenUpdates) << this << "is not online. Ignoring update request";
+        return;
+    }
 
     if (!m_displayLink) {
         CVDisplayLinkCreateWithCGDisplay(m_displayId, &m_displayLink);
@@ -812,9 +793,9 @@ QDebug operator<<(QDebug debug, const QCocoaScreen *screen)
 }
 #endif // !QT_NO_DEBUG_STREAM
 
-#include "qcocoascreen.moc"
-
 QT_END_NAMESPACE
+
+#include "qcocoascreen.moc"
 
 @implementation NSScreen (QtExtras)
 

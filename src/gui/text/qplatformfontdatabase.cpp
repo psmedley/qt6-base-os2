@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qplatformfontdatabase.h"
 #include <QtGui/private/qfontengine_p.h>
@@ -52,6 +16,8 @@
 #include <iterator>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 Q_LOGGING_CATEGORY(lcQpaFonts, "qt.qpa.fonts")
 
@@ -162,11 +128,31 @@ QSupportedWritingSystems &QSupportedWritingSystems::operator=(const QSupportedWr
     return *this;
 }
 
+bool operator==(const QSupportedWritingSystems &lhs, const QSupportedWritingSystems &rhs)
+{
+    return !(lhs != rhs);
+}
+
+bool operator!=(const QSupportedWritingSystems &lhs, const QSupportedWritingSystems &rhs)
+{
+    if (lhs.d == rhs.d)
+        return false;
+
+    Q_ASSERT(lhs.d->list.size() == rhs.d->list.size());
+    Q_ASSERT(lhs.d->list.size() == QFontDatabase::WritingSystemsCount);
+    for (int i = 0; i < QFontDatabase::WritingSystemsCount; ++i) {
+        if (lhs.d->list.at(i) != rhs.d->list.at(i))
+            return true;
+    }
+
+    return false;
+}
+
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug debug, const QSupportedWritingSystems &sws)
 {
-    QMetaObject mo = QFontDatabase::staticMetaObject;
-    QMetaEnum me = mo.enumerator(mo.indexOfEnumerator("WritingSystem"));
+    const QMetaObject *mo = &QFontDatabase::staticMetaObject;
+    QMetaEnum me = mo->enumerator(mo->indexOfEnumerator("WritingSystem"));
 
     QDebugStateSaver saver(debug);
     debug.nospace() << "QSupportedWritingSystems(";
@@ -357,7 +343,7 @@ QString QPlatformFontDatabase::fontDir() const
 {
     QString fontpath = QString::fromLocal8Bit(qgetenv("QT_QPA_FONTDIR"));
     if (fontpath.isEmpty())
-        fontpath = QLibraryInfo::path(QLibraryInfo::LibrariesPath) + QLatin1String("/fonts");
+        fontpath = QLibraryInfo::path(QLibraryInfo::LibrariesPath) + "/fonts"_L1;
 
     return fontpath;
 }
@@ -381,7 +367,7 @@ bool QPlatformFontDatabase::isPrivateFontFamily(const QString &family) const
 
 QFont QPlatformFontDatabase::defaultFont() const
 {
-    return QFont(QLatin1String("Helvetica"));
+    return QFont("Helvetica"_L1);
 }
 
 
@@ -611,6 +597,24 @@ QSupportedWritingSystems QPlatformFontDatabase::writingSystemsFromTrueTypeBits(q
 void QPlatformFontDatabase::registerAliasToFontFamily(const QString &familyName, const QString &alias)
 {
     qt_registerAliasToFontFamily(familyName, alias);
+}
+
+/*!
+    Requests that the platform font database should be repopulated.
+
+    This will result in invalidating the entire font database.
+
+    The next time the font database is accessed it will be repopulated
+    via a call to QPlatformFontDatabase::populate().
+
+    Application fonts will not be removed, and will be automatically
+    populated when the font database is repopulated.
+
+    \since 6.4
+*/
+void QPlatformFontDatabase::repopulateFontDatabase()
+{
+    QFontDatabasePrivate::instance()->invalidate();
 }
 
 /*!

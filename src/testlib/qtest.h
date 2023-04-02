@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Copyright (C) 2020 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtTest module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2020 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QTEST_H
 #define QTEST_H
@@ -90,14 +54,14 @@ template<> inline char *toString(const QString &str)
     return toString(QStringView(str));
 }
 
-template<> inline char *toString(const QLatin1String &str)
+template<> inline char *toString(const QLatin1StringView &str)
 {
     return toString(QString(str));
 }
 
 template<> inline char *toString(const QByteArray &ba)
 {
-    return QTest::toPrettyCString(ba.constData(), ba.length());
+    return QTest::toPrettyCString(ba.constData(), ba.size());
 }
 
 template<> inline char *toString(const QBitArray &ba)
@@ -206,7 +170,7 @@ template<> inline char *toString(const QRectF &s)
 template<> inline char *toString(const QUrl &uri)
 {
     if (!uri.isValid())
-        return qstrdup(qPrintable(QLatin1String("Invalid URL: ") + uri.errorString()));
+        return qstrdup(qPrintable(QLatin1StringView("Invalid URL: ") + uri.errorString()));
     return qstrdup(uri.toEncoded().constData());
 }
 
@@ -326,7 +290,7 @@ struct QCborValueFormatter
     {
         QByteArray out(1, '[');
         const char *comma = "";
-        for (const QCborValueRef v : a) {
+        for (QCborValueConstRef v : a) {
             QScopedArrayPointer<char> s(format(v));
             out += comma;
             out += s.get();
@@ -380,7 +344,7 @@ inline char *toString(const std::pair<T1, T2> &pair)
 {
     const QScopedArrayPointer<char> first(toString(pair.first));
     const QScopedArrayPointer<char> second(toString(pair.second));
-    return toString(QString::asprintf("std::pair(%s,%s)", first.data(), second.data()));
+    return formatString("std::pair(", ")", 2, first.data(), second.data());
 }
 
 template <typename Tuple, int... I>
@@ -404,18 +368,18 @@ inline char *toString(const std::tuple<Types...> &tuple)
 
 inline char *toString(std::nullptr_t)
 {
-    return toString(QLatin1String("nullptr"));
+    return toString(QStringLiteral("nullptr"));
 }
 
 template<>
-inline bool qCompare(QString const &t1, QLatin1String const &t2, const char *actual,
-                    const char *expected, const char *file, int line)
+inline bool qCompare(QString const &t1, QLatin1StringView const &t2, const char *actual,
+                     const char *expected, const char *file, int line)
 {
     return qCompare(t1, QString(t2), actual, expected, file, line);
 }
 template<>
-inline bool qCompare(QLatin1String const &t1, QString const &t2, const char *actual,
-                    const char *expected, const char *file, int line)
+inline bool qCompare(QLatin1StringView const &t1, QString const &t2, const char *actual,
+                     const char *expected, const char *file, int line)
 {
     return qCompare(QString(t1), t2, actual, expected, file, line);
 }
@@ -457,7 +421,7 @@ bool _q_compareSequence(ActualIterator actualIt, ActualIterator actualEnd,
             delete [] val2;
         }
     }
-    return compare_helper(isOk, msg, nullptr, nullptr, actual, expected, file, line);
+    return compare_helper(isOk, msg, actual, expected, file, line);
 }
 
 namespace Internal {
@@ -503,14 +467,16 @@ template <typename T>
 inline bool qCompare(QFlags<T> const &t1, T const &t2, const char *actual, const char *expected,
                     const char *file, int line)
 {
-    return qCompare(int(t1), int(t2), actual, expected, file, line);
+    using Int = typename QFlags<T>::Int;
+    return qCompare(Int(t1), Int(t2), actual, expected, file, line);
 }
 
 template <typename T>
 inline bool qCompare(QFlags<T> const &t1, int const &t2, const char *actual, const char *expected,
                     const char *file, int line)
 {
-    return qCompare(int(t1), t2, actual, expected, file, line);
+    using Int = typename QFlags<T>::Int;
+    return qCompare(Int(t1), Int(t2), actual, expected, file, line);
 }
 
 template<>
@@ -612,14 +578,22 @@ struct QtCoverageScanner
 #define TESTLIB_SELFCOVERAGE_START(name)
 #endif
 
-#define QTEST_APPLESS_MAIN(TestObject) \
+// Internal (but used by some testlib selftests to hack argc and argv).
+// Tests should normally implement initMain() if they have set-up to do before
+// instantiating the test class.
+#define QTEST_MAIN_WRAPPER(TestObject, ...) \
 int main(int argc, char *argv[]) \
 { \
-    TESTLIB_SELFCOVERAGE_START(TestObject) \
+    TESTLIB_SELFCOVERAGE_START(#TestObject) \
+    QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
+    __VA_ARGS__ \
     TestObject tc; \
     QTEST_SET_MAIN_SOURCE_PATH \
     return QTest::qExec(&tc, argc, argv); \
 }
+
+// For when you don't even want a QApplication:
+#define QTEST_APPLESS_MAIN(TestObject) QTEST_MAIN_WRAPPER(TestObject)
 
 #include <QtTest/qtestsystem.h>
 
@@ -627,68 +601,34 @@ int main(int argc, char *argv[]) \
 #  include <QtTest/qtest_network.h>
 #endif
 
+// Internal
+#define QTEST_QAPP_SETUP(klaz) \
+    klaz app(argc, argv); \
+    app.setAttribute(Qt::AA_Use96Dpi, true);
+ 
 #if defined(QT_WIDGETS_LIB)
-
-#include <QtTest/qtest_widgets.h>
-
-#ifdef QT_KEYPAD_NAVIGATION
-#  define QTEST_DISABLE_KEYPAD_NAVIGATION QApplication::setNavigationMode(Qt::NavigationModeNone);
-#else
-#  define QTEST_DISABLE_KEYPAD_NAVIGATION
-#endif
-
-#define QTEST_MAIN_IMPL(TestObject) \
-    TESTLIB_SELFCOVERAGE_START(#TestObject) \
-    QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
-    QApplication::setAttribute(Qt::AA_Use96Dpi, true); \
-    QApplication app(argc, argv); \
-    QTEST_DISABLE_KEYPAD_NAVIGATION \
-    TestObject tc; \
-    QTEST_SET_MAIN_SOURCE_PATH \
-    return QTest::qExec(&tc, argc, argv);
-
+#  include <QtTest/qtest_widgets.h>
+#  ifdef QT_KEYPAD_NAVIGATION
+#    define QTEST_DISABLE_KEYPAD_NAVIGATION QApplication::setNavigationMode(Qt::NavigationModeNone);
+#  else
+#    define QTEST_DISABLE_KEYPAD_NAVIGATION
+#  endif
+// Internal
+#  define QTEST_MAIN_SETUP() QTEST_QAPP_SETUP(QApplication) QTEST_DISABLE_KEYPAD_NAVIGATION
 #elif defined(QT_GUI_LIB)
-
-#include <QtTest/qtest_gui.h>
-
-#define QTEST_MAIN_IMPL(TestObject) \
-    TESTLIB_SELFCOVERAGE_START(#TestObject) \
-    QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
-    QGuiApplication::setAttribute(Qt::AA_Use96Dpi, true); \
-    QGuiApplication app(argc, argv); \
-    TestObject tc; \
-    QTEST_SET_MAIN_SOURCE_PATH \
-    return QTest::qExec(&tc, argc, argv);
-
+#  include <QtTest/qtest_gui.h>
+// Internal
+#  define QTEST_MAIN_SETUP() QTEST_QAPP_SETUP(QGuiApplication)
 #else
-
-#define QTEST_MAIN_IMPL(TestObject) \
-    TESTLIB_SELFCOVERAGE_START(#TestObject) \
-    QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
-    QCoreApplication::setAttribute(Qt::AA_Use96Dpi, true); \
-    QCoreApplication app(argc, argv); \
-    TestObject tc; \
-    QTEST_SET_MAIN_SOURCE_PATH \
-    return QTest::qExec(&tc, argc, argv);
-
+// Internal
+#  define QTEST_MAIN_SETUP() QTEST_QAPP_SETUP(QCoreApplication)
 #endif // QT_GUI_LIB
 
-#define QTEST_MAIN(TestObject) \
-int main(int argc, char *argv[]) \
-{ \
-    QTEST_MAIN_IMPL(TestObject) \
-}
-
+// For most tests:
+#define QTEST_MAIN(TestObject) QTEST_MAIN_WRAPPER(TestObject, QTEST_MAIN_SETUP())
+ 
+// For command-line tests
 #define QTEST_GUILESS_MAIN(TestObject) \
-int main(int argc, char *argv[]) \
-{ \
-    TESTLIB_SELFCOVERAGE_START(#TestObject) \
-    QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
-    QCoreApplication::setAttribute(Qt::AA_Use96Dpi, true); \
-    QCoreApplication app(argc, argv); \
-    TestObject tc; \
-    QTEST_SET_MAIN_SOURCE_PATH \
-    return QTest::qExec(&tc, argc, argv); \
-}
+    QTEST_MAIN_WRAPPER(TestObject, QTEST_QAPP_SETUP(QCoreApplication))
 
 #endif

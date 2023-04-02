@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -79,13 +54,8 @@ static void formatWindowFlags(QTextStream &str, Qt::WindowFlags flags)
 
     if (flags & Qt::MSWindowsFixedSizeDialogHint)
         str << "\n| Qt::MSWindowsFixedSizeDialogHint";
-#if QT_VERSION >= 0x050000
     if (flags & Qt::BypassWindowManagerHint)
         str << "\n| Qt::BypassWindowManagerHint";
-#else
-    if (flags & Qt::X11BypassWindowManagerHint)
-        str << "\n| Qt::X11BypassWindowManagerHint";
-#endif
     if (flags & Qt::FramelessWindowHint)
         str << "\n| Qt::FramelessWindowHint";
     if (flags & Qt::WindowTitleHint)
@@ -108,7 +78,6 @@ static void formatWindowFlags(QTextStream &str, Qt::WindowFlags flags)
         str << "\n| Qt::CustomizeWindowHint";
     if (flags & Qt::WindowStaysOnBottomHint)
         str << "\n| Qt::WindowStaysOnBottomHint";
-#if QT_VERSION >= 0x050000
     if (flags & Qt::WindowFullscreenButtonHint)
         str << "\n| Qt::WindowFullscreenButtonHint";
     if (flags & Qt::WindowTransparentForInput)
@@ -121,7 +90,6 @@ static void formatWindowFlags(QTextStream &str, Qt::WindowFlags flags)
         str << "\n| Qt::MaximizeUsingFullscreenGeometryHint";
     if (flags & Qt::NoDropShadowWindowHint)
         str << "\n| Qt::NoDropShadowWindowHint";
-#endif // Qt 5
 }
 
 static void formatWindowStates(QTextStream &str, Qt::WindowStates states)

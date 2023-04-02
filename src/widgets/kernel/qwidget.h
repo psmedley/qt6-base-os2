@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QWIDGET_H
 #define QWIDGET_H
@@ -44,6 +8,7 @@
 #include <QtGui/qwindowdefs.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qmargins.h>
+#include <QtGui/qaction.h>
 #include <QtGui/qpaintdevice.h>
 #include <QtGui/qpalette.h>
 #include <QtGui/qfont.h>
@@ -196,7 +161,7 @@ class Q_WIDGETS_EXPORT QWidget : public QObject, public QPaintDevice
 #if QT_CONFIG(whatsthis)
     Q_PROPERTY(QString whatsThis READ whatsThis WRITE setWhatsThis)
 #endif
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     Q_PROPERTY(QString accessibleName READ accessibleName WRITE setAccessibleName)
     Q_PROPERTY(QString accessibleDescription READ accessibleDescription WRITE setAccessibleDescription)
 #endif
@@ -210,6 +175,28 @@ class Q_WIDGETS_EXPORT QWidget : public QObject, public QPaintDevice
     Q_PROPERTY(QString windowFilePath READ windowFilePath WRITE setWindowFilePath)
     Q_PROPERTY(Qt::InputMethodHints inputMethodHints READ inputMethodHints WRITE setInputMethodHints)
 
+#if 0
+    // ### TODO: make this work (requires SFINAE-friendly connect())
+    template <typename...Args>
+    using compatible_action_slot_args = std::void_t<
+        decltype(QObject::connect(std::declval<QAction*>(), &QAction::triggered,
+                                  std::declval<Args>()...))
+    >;
+#else
+    // good-enough compromise for now
+    template <typename...Args>
+    using compatible_action_slot_args = std::enable_if_t<std::conjunction_v<
+#if QT_CONFIG(shortcut)
+            std::disjunction<
+                std::is_same<Args, Qt::ConnectionType>,
+                std::negation<std::is_convertible<Args, QKeySequence>>
+            >...,
+#endif
+            std::negation<std::is_convertible<Args, QIcon>>...,
+            std::negation<std::is_convertible<Args, const char*>>...,
+            std::negation<std::is_convertible<Args, QString>>...
+        >>;
+#endif
 public:
     enum RenderFlag {
         DrawWindowBackground = 0x1,
@@ -409,7 +396,7 @@ public:
     void setWhatsThis(const QString &);
     QString whatsThis() const;
 #endif
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     QString accessibleName() const;
     void setAccessibleName(const QString &name);
     QString accessibleDescription() const;
@@ -569,7 +556,55 @@ public:
     void insertAction(QAction *before, QAction *action);
     void removeAction(QAction *action);
     QList<QAction*> actions() const;
-#endif
+
+    // convenience action factories
+    QAction *addAction(const QString &text);
+    QAction *addAction(const QIcon &icon, const QString &text);
+    QAction *addAction(const QString &text, const QObject *receiver,
+                       const char *member, Qt::ConnectionType type = Qt::AutoConnection);
+    QAction *addAction(const QIcon &icon, const QString &text, const QObject *receiver,
+                       const char *member, Qt::ConnectionType type = Qt::AutoConnection);
+    template <typename...Args, typename = compatible_action_slot_args<Args...>>
+    QAction *addAction(const QString &text, Args&&...args)
+    {
+        QAction *result = addAction(text);
+        connect(result, &QAction::triggered, std::forward<Args>(args)...);
+        return result;
+    }
+    template <typename...Args, typename = compatible_action_slot_args<Args...>>
+    QAction *addAction(const QIcon &icon, const QString &text, Args&&...args)
+    {
+        QAction *result = addAction(icon, text);
+        connect(result, &QAction::triggered, std::forward<Args>(args)...);
+        return result;
+    }
+
+#if QT_CONFIG(shortcut)
+    QAction *addAction(const QString &text, const QKeySequence &shortcut);
+    QAction *addAction(const QIcon &icon, const QString &text, const QKeySequence &shortcut);
+    QAction *addAction(const QString &text, const QKeySequence &shortcut,
+                       const QObject *receiver, const char *member,
+                       Qt::ConnectionType type = Qt::AutoConnection);
+    QAction *addAction(const QIcon &icon, const QString &text, const QKeySequence &shortcut,
+                       const QObject *receiver, const char *member,
+                       Qt::ConnectionType type = Qt::AutoConnection);
+
+    template <typename...Args, typename = compatible_action_slot_args<Args...>>
+    QAction *addAction(const QString &text, const QKeySequence &shortcut, Args&&...args)
+    {
+        QAction *result = addAction(text, shortcut);
+        connect(result, &QAction::triggered, std::forward<Args>(args)...);
+        return result;
+    }
+    template <typename...Args, typename = compatible_action_slot_args<Args...>>
+    QAction *addAction(const QIcon &icon, const QString &text, const QKeySequence &shortcut, Args&&...args)
+    {
+        QAction *result = addAction(icon, text, shortcut);
+        connect(result, &QAction::triggered, std::forward<Args>(args)...);
+        return result;
+    }
+#endif // QT_CONFIG(shortcut)
+#endif // QT_NO_ACTION
 
     QWidget *parentWidget() const;
 
@@ -761,17 +796,17 @@ inline QWidget *QWidget::childAt(int ax, int ay) const
 { return childAt(QPoint(ax, ay)); }
 
 inline Qt::WindowType QWidget::windowType() const
-{ return static_cast<Qt::WindowType>(int(data->window_flags & Qt::WindowType_Mask)); }
+{ return static_cast<Qt::WindowType>((data->window_flags & Qt::WindowType_Mask).toInt()); }
 inline Qt::WindowFlags QWidget::windowFlags() const
 { return data->window_flags; }
 
 #if QT_DEPRECATED_SINCE(6, 1)
 inline bool QWidget::isTopLevel() const
-{ return (windowType() & Qt::Window); }
+{ return bool(windowType() & Qt::Window); }
 #endif
 
 inline bool QWidget::isWindow() const
-{ return (windowType() & Qt::Window); }
+{ return bool(windowType() & Qt::Window); }
 
 inline bool QWidget::isEnabled() const
 { return !testAttribute(Qt::WA_Disabled); }

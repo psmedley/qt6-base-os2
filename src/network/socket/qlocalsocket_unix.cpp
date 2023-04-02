@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qlocalsocket.h"
 #include "qlocalsocket_p.h"
@@ -51,6 +15,7 @@
 #include <qdir.h>
 #include <qdebug.h>
 #include <qelapsedtimer.h>
+#include <qstringconverter.h>
 
 #ifdef Q_OS_VXWORKS
 #  include <selectLib.h>
@@ -60,6 +25,8 @@
 
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 namespace {
 // determine the full server path
@@ -79,11 +46,11 @@ static QString pathNameForConnection(const QString &connectingName,
     return socketPath + connectingPathName;
 #else
     if (options.testFlag(QLocalSocket::AbstractNamespaceOption)
-        || connectingName.startsWith(QLatin1Char('/'))) {
+        || connectingName.startsWith(u'/')) {
         return connectingName;
     }
 
-    return QDir::tempPath() + QLatin1Char('/') + connectingName;
+    return QDir::tempPath() + u'/' + connectingName;
 #endif
 }
 
@@ -127,7 +94,7 @@ void QLocalSocketPrivate::init()
 void QLocalSocketPrivate::_q_errorOccurred(QAbstractSocket::SocketError socketError)
 {
     Q_Q(QLocalSocket);
-    QString function = QLatin1String("QLocalSocket");
+    QString function = "QLocalSocket"_L1;
     QLocalSocket::LocalSocketError error = (QLocalSocket::LocalSocketError)socketError;
     QString errorString = generateErrorString(error, function);
     q->setErrorString(errorString);
@@ -260,7 +227,7 @@ void QLocalSocket::connectToServer(OpenMode openMode)
 {
     Q_D(QLocalSocket);
     if (state() == ConnectedState || state() == ConnectingState) {
-        QString errorString = d->generateErrorString(QLocalSocket::OperationError, QLatin1String("QLocalSocket::connectToserver"));
+        QString errorString = d->generateErrorString(QLocalSocket::OperationError, "QLocalSocket::connectToserver"_L1);
         setErrorString(errorString);
         emit errorOccurred(QLocalSocket::OperationError);
         return;
@@ -272,15 +239,13 @@ void QLocalSocket::connectToServer(OpenMode openMode)
     emit stateChanged(d->state);
 
     if (d->serverName.isEmpty()) {
-        d->setErrorAndEmit(ServerNotFoundError,
-                           QLatin1String("QLocalSocket::connectToServer"));
+        d->setErrorAndEmit(ServerNotFoundError, "QLocalSocket::connectToServer"_L1);
         return;
     }
 
     // create the socket
     if (-1 == (d->connectingSocket = qt_safe_socket(PF_UNIX, SOCK_STREAM, 0, O_NONBLOCK))) {
-        d->setErrorAndEmit(UnsupportedSocketOperationError,
-                           QLatin1String("QLocalSocket::connectToServer"));
+        d->setErrorAndEmit(UnsupportedSocketOperationError, "QLocalSocket::connectToServer"_L1);
         return;
     }
 
@@ -313,7 +278,7 @@ void QLocalSocketPrivate::_q_connectToSocket()
     constexpr unsigned int extraCharacters = PlatformSupportsAbstractNamespace ? 2 : 1;
 
     if (sizeof(addr.sun_path) < static_cast<size_t>(encodedConnectingPathName.size() + extraCharacters)) {
-        QString function = QLatin1String("QLocalSocket::connectToServer");
+        QString function = "QLocalSocket::connectToServer"_L1;
         setErrorAndEmit(QLocalSocket::ServerNotFoundError, function);
         return;
     }
@@ -328,7 +293,7 @@ void QLocalSocketPrivate::_q_connectToSocket()
                  encodedConnectingPathName.size() + 1);
     }
     if (-1 == qt_safe_connect(connectingSocket, (struct sockaddr *)&addr, addrSize)) {
-        QString function = QLatin1String("QLocalSocket::connectToServer");
+        QString function = "QLocalSocket::connectToServer"_L1;
         switch (errno)
         {
         case EINVAL:
@@ -373,10 +338,10 @@ void QLocalSocketPrivate::_q_connectToSocket()
     fullServerName = connectingPathName;
     if (unixSocket.setSocketDescriptor(connectingSocket,
         QAbstractSocket::ConnectedState, connectingOpenMode)) {
-        q->QIODevice::open(connectingOpenMode | QIODevice::Unbuffered);
+        q->QIODevice::open(connectingOpenMode);
         q->emit connected();
     } else {
-        QString function = QLatin1String("QLocalSocket::connectToServer");
+        QString function = "QLocalSocket::connectToServer"_L1;
         setErrorAndEmit(QLocalSocket::UnknownSocketError, function);
     }
     connectingSocket = -1;
@@ -452,8 +417,8 @@ bool QLocalSocketPrivate::parseSockaddr(const struct ::sockaddr_un &addr,
     if (!name.isEmpty() && !toUtf16.hasError()) {
         //conversion encodes the trailing zeros. So, in case of non-abstract namespace we
         //chop them off as \0 character is not allowed in filenames
-        if (!abstractNamespace && (name.at(name.length() - 1) == QChar::fromLatin1('\0'))) {
-            int truncPos = name.length() - 1;
+        if (!abstractNamespace && (name.at(name.size() - 1) == QChar::fromLatin1('\0'))) {
+            int truncPos = name.size() - 1;
             while (truncPos > 0 && name.at(truncPos - 1) == QChar::fromLatin1('\0'))
                 truncPos--;
             name.truncate(truncPos);
@@ -461,7 +426,7 @@ bool QLocalSocketPrivate::parseSockaddr(const struct ::sockaddr_un &addr,
         fullServerName = name;
         serverName = abstractNamespace
                      ? name
-                     : fullServerName.mid(fullServerName.lastIndexOf(QLatin1Char('/')) + 1);
+                     : fullServerName.mid(fullServerName.lastIndexOf(u'/') + 1);
         if (serverName.isEmpty())
             serverName = fullServerName;
     }
@@ -496,6 +461,16 @@ qint64 QLocalSocket::readData(char *data, qint64 c)
 {
     Q_D(QLocalSocket);
     return d->unixSocket.read(data, c);
+}
+
+qint64 QLocalSocket::readLineData(char *data, qint64 maxSize)
+{
+    if (!maxSize)
+        return 0;
+
+    // QIODevice::readLine() reserves space for the trailing '\0' byte,
+    // so we must read 'maxSize + 1' bytes.
+    return d_func()->unixSocket.readLine(data, maxSize + 1);
 }
 
 qint64 QLocalSocket::skipData(qint64 maxSize)
@@ -637,7 +612,7 @@ bool QLocalSocket::waitForConnected(int msec)
 
         if (result == -1)
             d->setErrorAndEmit(QLocalSocket::UnknownSocketError,
-                               QLatin1String("QLocalSocket::waitForConnected"));
+                               "QLocalSocket::waitForConnected"_L1);
         else if (result > 0)
             d->_q_connectToSocket();
     } while (state() == ConnectingState && !timer.hasExpired(msec));

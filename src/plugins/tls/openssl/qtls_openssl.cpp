@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsslsocket_openssl_symbols_p.h"
 #include "qx509_openssl_p.h"
@@ -60,6 +24,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 namespace  {
 
 QSsl::AlertLevel tlsAlertLevel(int value)
@@ -83,9 +49,9 @@ QSsl::AlertLevel tlsAlertLevel(int value)
 
 QString tlsAlertDescription(int value)
 {
-    QString description = QLatin1String(q_SSL_alert_desc_string_long(value));
+    QString description = QLatin1StringView(q_SSL_alert_desc_string_long(value));
     if (!description.size())
-        description = QLatin1String("no description provided");
+        description = "no description provided"_L1;
     return description;
 }
 
@@ -349,7 +315,7 @@ int qt_OCSP_status_server_callback(SSL *ssl, void *ocspRequest)
         return SSL_TLSEXT_ERR_ALERT_FATAL;
 
     std::copy(response.data(), response.data() + response.size(), derCopy);
-    // We don't check the return value: internally OpenSSL simply assignes the
+    // We don't check the return value: internally OpenSSL simply assigns the
     // pointer (it assumes it now owns this memory btw!) and the length.
     q_SSL_set_tlsext_status_ocsp_resp(ssl, derCopy, response.size());
 
@@ -524,16 +490,16 @@ void TlsCryptographOpenSSL::init(QSslSocket *qObj, QSslSocketPrivate *dObj)
     handshakeInterrupted = false;
 
     fetchAuthorityInformation = false;
-    caToFetch = QSslCertificate{};
+    caToFetch.reset();
 }
 
-void TlsCryptographOpenSSL::checkSettingSslContext(QSharedPointer<QSslContext> tlsContext)
+void TlsCryptographOpenSSL::checkSettingSslContext(std::shared_ptr<QSslContext> tlsContext)
 {
-    if (sslContextPointer.isNull())
-        sslContextPointer = tlsContext;
+    if (!sslContextPointer)
+        sslContextPointer = std::move(tlsContext);
 }
 
-QSharedPointer<QSslContext> TlsCryptographOpenSSL::sslContext() const
+std::shared_ptr<QSslContext> TlsCryptographOpenSSL::sslContext() const
 {
     return sslContextPointer;
 }
@@ -611,7 +577,7 @@ bool TlsCryptographOpenSSL::startHandshake()
     auto configuration = q->sslConfiguration();
     if (!errorsReportedFromCallback) {
         const auto &peerCertificateChain = configuration.peerCertificateChain();
-        for (const auto &currentError : qAsConst(lastErrors)) {
+        for (const auto &currentError : std::as_const(lastErrors)) {
             emit q->peerVerifyError(QTlsPrivate::X509CertificateOpenSSL::openSSLErrorToQSslError(currentError.code,
                                     peerCertificateChain.value(currentError.depth)));
             if (q->state() != QAbstractSocket::ConnectedState)
@@ -731,7 +697,7 @@ bool TlsCryptographOpenSSL::startHandshake()
 
     // Translate errors from the error list into QSslErrors.
     errors.reserve(errors.size() + errorList.size());
-    for (const auto &error : qAsConst(errorList))
+    for (const auto &error : std::as_const(errorList))
         errors << X509CertificateOpenSSL::openSSLErrorToQSslError(error.code, peerCertificateChain.value(error.depth));
 
     if (!errors.isEmpty()) {
@@ -783,7 +749,7 @@ void TlsCryptographOpenSSL::enableHandshakeContinuation()
 void TlsCryptographOpenSSL::cancelCAFetch()
 {
     fetchAuthorityInformation = false;
-    caToFetch = QSslCertificate{};
+    caToFetch.reset();
 }
 
 void TlsCryptographOpenSSL::continueHandshake()
@@ -822,7 +788,7 @@ void TlsCryptographOpenSSL::continueHandshake()
         debugLineClientRandom.append(masterKey.toHex().toUpper());
         debugLineClientRandom.append("\n");
 
-        QString sslKeyFile = QDir::tempPath() + QLatin1String("/qt-ssl-keys");
+        QString sslKeyFile = QDir::tempPath() + "/qt-ssl-keys"_L1;
         QFile file(sslKeyFile);
         if (!file.open(QIODevice::Append))
             qCWarning(lcTlsBackend) << "could not open file" << sslKeyFile << "for appending";
@@ -838,7 +804,7 @@ void TlsCryptographOpenSSL::continueHandshake()
     // Cache this SSL session inside the QSslContext
     if (!(configuration.testSslOption(QSsl::SslOptionDisableSessionSharing))) {
         if (!sslContextPointer->cacheSession(ssl)) {
-            sslContextPointer.clear(); // we could not cache the session
+            sslContextPointer.reset(); // we could not cache the session
         } else {
             // Cache the session for permanent usage as well
             if (!(configuration.testSslOption(QSsl::SslOptionDisableSessionPersistence))) {
@@ -1200,10 +1166,13 @@ QSsl::SslProtocol TlsCryptographOpenSSL::sessionProtocol() const
 
     const int ver = q_SSL_version(ssl);
     switch (ver) {
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
     case 0x301:
         return QSsl::TlsV1_0;
     case 0x302:
         return QSsl::TlsV1_1;
+QT_WARNING_POP
     case 0x303:
         return QSsl::TlsV1_2;
     case 0x304:
@@ -1405,7 +1374,7 @@ bool TlsCryptographOpenSSL::initSslContext()
 
     if (sslContextPointer->error() != QSslError::NoError) {
         setErrorAndEmit(d, QAbstractSocket::SslInvalidUserDataError, sslContextPointer->errorString());
-        sslContextPointer.clear(); // deletes the QSslContext
+        sslContextPointer.reset();
         return false;
     }
 
@@ -1533,7 +1502,7 @@ void TlsCryptographOpenSSL::destroySslContext()
         q_SSL_free(ssl);
         ssl = nullptr;
     }
-    sslContextPointer.clear();
+    sslContextPointer.reset();
 }
 
 void TlsCryptographOpenSSL::storePeerCertificates()
@@ -1757,11 +1726,11 @@ unsigned TlsCryptographOpenSSL::pskClientTlsCallback(const char *hint, char *ide
         return 0;
 
     // Copy data back into OpenSSL
-    const int identityLength = qMin(authenticator.identity().length(), authenticator.maximumIdentityLength());
+    const int identityLength = qMin(authenticator.identity().size(), authenticator.maximumIdentityLength());
     std::memcpy(identity, authenticator.identity().constData(), identityLength);
     identity[identityLength] = 0;
 
-    const int pskLength = qMin(authenticator.preSharedKey().length(), authenticator.maximumPreSharedKeyLength());
+    const int pskLength = qMin(authenticator.preSharedKey().size(), authenticator.maximumPreSharedKeyLength());
     std::memcpy(psk, authenticator.preSharedKey().constData(), pskLength);
     return pskLength;
 }
@@ -1783,7 +1752,7 @@ unsigned TlsCryptographOpenSSL::pskServerTlsCallback(const char *identity, unsig
         return 0;
 
     // Copy data back into OpenSSL
-    const int pskLength = qMin(authenticator.preSharedKey().length(), authenticator.maximumPreSharedKeyLength());
+    const int pskLength = qMin(authenticator.preSharedKey().size(), authenticator.maximumPreSharedKeyLength());
     std::memcpy(psk, authenticator.preSharedKey().constData(), pskLength);
     return pskLength;
 }
@@ -1834,7 +1803,7 @@ void TlsCryptographOpenSSL::caRootLoaded(QSslCertificate cert, QSslCertificate t
     Q_ASSERT(q);
 
     //Done, fetched already:
-    caToFetch = QSslCertificate{};
+    caToFetch.reset();
 
     if (fetchAuthorityInformation) {
         if (!q->sslConfiguration().caCertificates().contains(trustedRoot))

@@ -1,38 +1,6 @@
-/*
-    Copyright (c) 2016, BogDan Vatra <bogdan@kde.org>
-    Contact: http://www.qt-project.org/legal
-
-    Commercial License Usage
-    Licensees holding valid commercial Qt licenses may use this file in
-    accordance with the commercial license agreement provided with the
-    Software or, alternatively, in accordance with the terms contained in
-    a written agreement between you and Digia.  For licensing terms and
-    conditions see http://qt.digia.com/licensing.  For further information
-    use the contact form at http://qt.digia.com/contact-us.
-
-    BSD License Usage
-    Alternatively, this file may be used under the BSD license as follows:
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions
-    are met:
-
-    1. Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer.
-    2. Redistributions in binary form must reproduce the above copyright
-    notice, this list of conditions and the following disclaimer in the
-    documentation and/or other materials provided with the distribution.
-
-    THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-    OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-    IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
-    INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-    NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-    DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-    THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-    THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (c) 2016, BogDan Vatra <bogdan@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 package org.qtproject.qt.android.bindings;
 
@@ -47,6 +15,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.Window;
 
+import org.qtproject.qt.android.QtNative;
 
 import java.lang.reflect.Field;
 
@@ -113,9 +82,20 @@ public class QtActivityLoader extends QtLoader {
         }
 
         m_activity.requestWindowFeature(Window.FEATURE_ACTION_BAR);
+        if (QtNative.isStarted()) {
+            boolean updated = QtNative.activityDelegate().updateActivity(m_activity);
+            if (!updated) {
+                //  could not update the activity so restart the application
+                Intent intent = Intent.makeRestartActivityTask(m_activity.getComponentName());
+                m_activity.startActivity(intent);
+                QtNative.quitApp();
+                Runtime.getRuntime().exit(0);
+            }
 
-        if (QtApplication.m_delegateObject != null && QtApplication.onCreate != null) {
-            QtApplication.invokeDelegateMethod(QtApplication.onCreate, savedInstanceState);
+            // there can only be a valid delegate object if the QtNative was started.
+            if (QtApplication.m_delegateObject != null && QtApplication.onCreate != null)
+                QtApplication.invokeDelegateMethod(QtApplication.onCreate, savedInstanceState);
+
             return;
         }
 
@@ -124,15 +104,14 @@ public class QtActivityLoader extends QtLoader {
         ENVIRONMENT_VARIABLES += "\tQT_ANDROID_THEME=" + QT_ANDROID_DEFAULT_THEME
                 + "/\tQT_ANDROID_THEME_DISPLAY_DPI=" + m_displayDensity + "\t";
 
-        if (null == m_activity.getLastNonConfigurationInstance()) {
-            if (m_contextInfo.metaData.containsKey("android.app.background_running")
-                    && m_contextInfo.metaData.getBoolean("android.app.background_running")) {
-                ENVIRONMENT_VARIABLES += "QT_BLOCK_EVENT_LOOPS_WHEN_SUSPENDED=0\t";
-            } else {
-                ENVIRONMENT_VARIABLES += "QT_BLOCK_EVENT_LOOPS_WHEN_SUSPENDED=1\t";
-            }
-
-            startApp(true);
+        if (m_contextInfo.metaData.containsKey("android.app.background_running")
+                && m_contextInfo.metaData.getBoolean("android.app.background_running")) {
+            ENVIRONMENT_VARIABLES += "QT_BLOCK_EVENT_LOOPS_WHEN_SUSPENDED=0\t";
+        } else {
+            ENVIRONMENT_VARIABLES += "QT_BLOCK_EVENT_LOOPS_WHEN_SUSPENDED=1\t";
         }
+
+        startApp(true);
+
     }
 }

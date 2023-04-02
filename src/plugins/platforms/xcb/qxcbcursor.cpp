@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qxcbcursor.h"
 #include "qxcbconnection.h"
@@ -54,6 +18,8 @@
 #include <xcb/xcb_image.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 typedef int (*PtrXcursorLibraryLoadCursor)(void *, const char *);
 typedef char *(*PtrXcursorLibraryGetTheme)(void *);
@@ -289,10 +255,10 @@ QXcbCursorCacheKey::QXcbCursorCacheKey(const QCursor &c)
         if (pixmapCacheKey) {
             bitmapCacheKey = pixmapCacheKey;
         } else {
-            Q_ASSERT(!c.bitmap(Qt::ReturnByValue).isNull());
-            Q_ASSERT(!c.mask(Qt::ReturnByValue).isNull());
-            bitmapCacheKey = c.bitmap(Qt::ReturnByValue).cacheKey();
-            maskCacheKey = c.mask(Qt::ReturnByValue).cacheKey();
+            Q_ASSERT(!c.bitmap().isNull());
+            Q_ASSERT(!c.mask().isNull());
+            bitmapCacheKey = c.bitmap().cacheKey();
+            maskCacheKey = c.mask().cacheKey();
         }
     }
 }
@@ -317,10 +283,10 @@ QXcbCursor::QXcbCursor(QXcbConnection *conn, QXcbScreen *screen)
 #if QT_CONFIG(xcb_xlib) && QT_CONFIG(library)
     static bool function_ptrs_not_initialized = true;
     if (function_ptrs_not_initialized) {
-        QLibrary xcursorLib(QLatin1String("Xcursor"), 1);
+        QLibrary xcursorLib("Xcursor"_L1, 1);
         bool xcursorFound = xcursorLib.load();
         if (!xcursorFound) { // try without the version number
-            xcursorLib.setFileName(QLatin1String("Xcursor"));
+            xcursorLib.setFileName("Xcursor"_L1);
             xcursorFound = xcursorLib.load();
         }
         if (xcursorFound) {
@@ -351,7 +317,7 @@ QXcbCursor::~QXcbCursor()
         xcb_close_font(conn, cursorFont);
 
 #ifndef QT_NO_CURSOR
-    for (xcb_cursor_t cursor : qAsConst(m_cursorHash))
+    for (xcb_cursor_t cursor : std::as_const(m_cursorHash))
         xcb_free_cursor(conn, cursor);
 #endif
 }
@@ -590,7 +556,7 @@ xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
     // Non-standard X11 cursors are created from bitmaps
     cursor = createNonStandardCursor(cshape);
 
-    // Create a glpyh cursor if everything else failed
+    // Create a glyph cursor if everything else failed
     if (!cursor && cursorId) {
         cursor = xcb_generate_id(conn);
         xcb_create_glyph_cursor(conn, cursor, cursorFont, cursorFont,
@@ -617,8 +583,8 @@ xcb_cursor_t QXcbCursor::createBitmapCursor(QCursor *cursor)
             qCWarning(lcQpaXcb, "xrender >= 0.5 required to create pixmap cursors");
     } else {
         xcb_connection_t *conn = xcb_connection();
-        xcb_pixmap_t cp = qt_xcb_XPixmapFromBitmap(m_screen, cursor->bitmap(Qt::ReturnByValue).toImage());
-        xcb_pixmap_t mp = qt_xcb_XPixmapFromBitmap(m_screen, cursor->mask(Qt::ReturnByValue).toImage());
+        xcb_pixmap_t cp = qt_xcb_XPixmapFromBitmap(m_screen, cursor->bitmap().toImage());
+        xcb_pixmap_t mp = qt_xcb_XPixmapFromBitmap(m_screen, cursor->mask().toImage());
         c = xcb_generate_id(conn);
         xcb_create_cursor(conn, c, cp, mp, 0, 0, 0, 0xFFFF, 0xFFFF, 0xFFFF,
                           spot.x(), spot.y());

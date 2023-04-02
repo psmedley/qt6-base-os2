@@ -1,46 +1,9 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwindowsfontdatabasebase_p.h"
 #include "qwindowsfontdatabase_p.h"
 
-#include <QtCore/private/qsystemlibrary_p.h>
 #include <QtCore/QThreadStorage>
 #include <QtCore/QtEndian>
 
@@ -55,6 +18,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // Helper classes for creating font engines directly from font data
 namespace {
@@ -275,14 +240,11 @@ QString QWindowsFontDatabaseBase::EmbeddedFont::changeFamilyName(const QString &
 
         // nameRecord now points to string data
         quint16 *stringStorage = reinterpret_cast<quint16 *>(nameRecord);
-        const quint16 *sourceString = newFamilyName.utf16();
-        for (int i = 0; i < newFamilyName.size(); ++i)
-            stringStorage[i] = qbswap<quint16>(sourceString[i]);
-        stringStorage += newFamilyName.size();
+        for (QChar ch : newFamilyName)
+            *stringStorage++ = qbswap<quint16>(quint16(ch.unicode()));
 
-        sourceString = regularString.utf16();
-        for (int i = 0; i < regularString.size(); ++i)
-            stringStorage[i] = qbswap<quint16>(sourceString[i]);
+        for (QChar ch : regularString)
+            *stringStorage++ = qbswap<quint16>(quint16(ch.unicode()));
     }
 
     quint32 *p = reinterpret_cast<quint32 *>(newNameTable.data());
@@ -604,16 +566,9 @@ void QWindowsFontDatabaseBase::createDirectWriteFactory(IDWriteFactory **factory
 }
 #endif // directwrite && direct2d
 
-static int s_defaultVerticalDPI = 96; // Native Pixels
-
 int QWindowsFontDatabaseBase::defaultVerticalDPI()
 {
-    return s_defaultVerticalDPI;
-}
-
-void QWindowsFontDatabaseBase::setDefaultVerticalDPI(int d)
-{
-    s_defaultVerticalDPI = d;
+    return 96;
 }
 
 LOGFONT QWindowsFontDatabaseBase::fontDefToLOGFONT(const QFontDef &request, const QString &faceName)
@@ -728,9 +683,9 @@ HFONT QWindowsFontDatabaseBase::systemFont()
 QFont QWindowsFontDatabaseBase::systemDefaultFont()
 {
     // Qt 6: Obtain default GUI font (typically "Segoe UI, 9pt", see QTBUG-58610)
-    NONCLIENTMETRICS ncm;
-    ncm.cbSize = FIELD_OFFSET(NONCLIENTMETRICS, lfMessageFont) + sizeof(LOGFONT);
-    SystemParametersInfo(SPI_GETNONCLIENTMETRICS, ncm.cbSize , &ncm, 0);
+    NONCLIENTMETRICS ncm = {};
+    ncm.cbSize = sizeof(ncm);
+    SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, ncm.cbSize, &ncm, 0, defaultVerticalDPI());
     const QFont systemFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfMessageFont);
     qCDebug(lcQpaFonts) << __FUNCTION__ << systemFont;
     return systemFont;
@@ -788,6 +743,13 @@ IDWriteFontFace *QWindowsFontDatabaseBase::createDirectWriteFace(const QByteArra
     return directWriteFontFace;
 }
 #endif // directwrite && direct2d
+
+QFontEngine *QWindowsFontDatabaseBase::fontEngine(const QFontDef &fontDef, void *handle)
+{
+    // This function was apparently not used before, and probably isn't now either,
+    // call the base implementation which just prints that it's not supported.
+    return QPlatformFontDatabase::fontEngine(fontDef, handle);
+}
 
 QFontEngine *QWindowsFontDatabaseBase::fontEngine(const QByteArray &fontData, qreal pixelSize, QFont::HintingPreference hintingPreference)
 {
@@ -944,7 +906,7 @@ QFontDef QWindowsFontDatabaseBase::sanitizeRequest(QFontDef request) const
     if (fam.isEmpty())
         req.families[0] = QStringLiteral("MS Sans Serif");
 
-    if (fam == QLatin1String("MS Sans Serif")) {
+    if (fam == "MS Sans Serif"_L1) {
         int height = -qRound(request.pixelSize);
         // MS Sans Serif has bearing problems in italic, and does not scale
         if (request.style == QFont::StyleItalic || (height > 18 && height != 24))

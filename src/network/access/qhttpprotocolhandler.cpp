@@ -1,48 +1,14 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2014 BlackBerry Limited. All rights reserved.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <private/qhttpprotocolhandler_p.h>
 #include <private/qnoncontiguousbytedevice_p.h>
 #include <private/qhttpnetworkconnectionchannel_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QHttpProtocolHandler::QHttpProtocolHandler(QHttpNetworkConnectionChannel *channel)
     : QAbstractProtocolHandler(channel)
@@ -107,7 +73,7 @@ void QHttpProtocolHandler::_q_receiveReply()
                 return;
             }
             bytes += statusBytes;
-            m_channel->lastStatus = m_reply->d_func()->statusCode;
+            m_channel->lastStatus = m_reply->statusCode();
             break;
         }
         case QHttpNetworkReplyPrivate::ReadingHeaderState: {
@@ -127,7 +93,7 @@ void QHttpProtocolHandler::_q_receiveReply()
                 } else {
                     replyPrivate->autoDecompress = false;
                 }
-                if (replyPrivate->statusCode == 100) {
+                if (m_reply->statusCode() == 100) {
                     replyPrivate->clearHttpLayerInformation();
                     replyPrivate->state = QHttpNetworkReplyPrivate::ReadingStatusState;
                     break; // ignore
@@ -177,8 +143,7 @@ void QHttpProtocolHandler::_q_receiveReply()
                    m_connection->d_func()->emitReplyError(m_socket, m_reply, QNetworkReply::RemoteHostClosedError);
                    break;
                }
-           } else if (!replyPrivate->isChunked() && !replyPrivate->autoDecompress
-                 && replyPrivate->bodyLength > 0) {
+           } else if (!replyPrivate->isChunked() && replyPrivate->bodyLength > 0) {
                  // bulk files like images should fulfill these properties and
                  // we can therefore save on memory copying
                 qint64 haveRead = replyPrivate->readBodyFast(m_socket, &replyPrivate->responseData);
@@ -274,8 +239,7 @@ bool QHttpProtocolHandler::sendRequest()
             return false;
         }
         QString scheme = m_channel->request.url().scheme();
-        if (scheme == QLatin1String("preconnect-http")
-            || scheme == QLatin1String("preconnect-https")) {
+        if (scheme == "preconnect-http"_L1 || scheme == "preconnect-https"_L1) {
             m_channel->state = QHttpNetworkConnectionChannel::IdleState;
             m_reply->d_func()->state = QHttpNetworkReplyPrivate::AllDoneState;
             m_channel->allDone();
@@ -320,6 +284,7 @@ bool QHttpProtocolHandler::sendRequest()
 #else
         m_header = QHttpNetworkRequestPrivate::header(m_channel->request, false);
 #endif
+
         // flushing is dangerous (QSslSocket calls transmit which might read or error)
 //        m_socket->flush();
         QNonContiguousByteDevice* uploadByteDevice = m_channel->request.uploadByteDevice();
@@ -334,6 +299,7 @@ bool QHttpProtocolHandler::sendRequest()
         } else {
             // no data to send: just send the HTTP headers
             m_socket->write(qExchange(m_header, {}));
+            QMetaObject::invokeMethod(m_reply, "requestSent", Qt::QueuedConnection);
             m_channel->state = QHttpNetworkConnectionChannel::WaitingState; // now wait for response
             sendRequest(); //recurse
         }
@@ -408,6 +374,7 @@ bool QHttpProtocolHandler::sendRequest()
                     currentWriteSize = m_socket->write(qExchange(m_header, {}));
                     if (currentWriteSize != -1)
                         currentWriteSize -= headerSize;
+                    QMetaObject::invokeMethod(m_reply, "requestSent", Qt::QueuedConnection);
                 }
                 if (currentWriteSize == -1 || currentWriteSize != currentReadSize) {
                     // socket broke down

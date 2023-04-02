@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QByteArrayView>
 
@@ -33,6 +8,7 @@
 // for negative testing (can't convert from)
 #include <deque>
 #include <list>
+#include <QVarLengthArray>
 
 template <typename T>
 constexpr bool CanConvert = std::is_convertible_v<T, QByteArrayView>;
@@ -107,6 +83,7 @@ class tst_QByteArrayView : public QObject
 {
     Q_OBJECT
 private slots:
+    // Note: much of the shared API is tested in ../qbytearrayapisymmetry/
     void constExpr() const;
     void basics() const;
     void literals() const;
@@ -268,6 +245,10 @@ void tst_QByteArrayView::constExpr() const
         static_assert(!bv2.empty());
         static_assert(bv2.size() == 5);
     }
+#if !defined(Q_CC_GNU) || defined(Q_CC_CLANG)
+    // Below checks are disabled because of a compilation issue with GCC and
+    // -fsanitize=undefined. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=71962.
+    // Note: Q_CC_GNU is also defined for Clang, so we need to check that too.
     {
         static constexpr char hello[] = "Hello";
         constexpr QByteArrayView bv(hello);
@@ -302,6 +283,7 @@ void tst_QByteArrayView::constExpr() const
         static_assert(bv.back()  == 'o');
         static_assert(bv.last()  == 'o');
     }
+#endif
     {
         constexpr char *null = nullptr;
         constexpr QByteArrayView bv(null);

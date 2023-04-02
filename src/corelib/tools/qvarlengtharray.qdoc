@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
     \class QVarLengthArray
@@ -103,6 +79,18 @@
     a pointer type (e.g., QWidget *), the elements are not
     initialized. For other types, the elements are initialized with a
     \l{default-constructed value}.
+*/
+
+/*!
+    \fn template<class T, qsizetype Prealloc> QVarLengthArray<T, Prealloc>::QVarLengthArray(qsizetype size, const T &v)
+    \since 6.4
+
+    Constructs an array with an initial size of \a size elements filled with
+    copies of \a v.
+
+    \note This constructor is only available when \c T is copy-constructible.
+
+    \sa size(), squeeze()
 */
 
 
@@ -241,6 +229,19 @@
     a pointer type (e.g., QWidget *), new elements are not
     initialized. For other types, the elements are initialized with a
     \l{default-constructed value}.
+
+    \sa size(), squeeze()
+*/
+
+/*!
+    \fn template<class T, qsizetype Prealloc> void QVarLengthArray<T, Prealloc>::resize(qsizetype size, const T &v)
+    \since 6.4
+
+    Sets the size of the array to \a size. If \a size is greater than
+    the current size, copies of \a v are added to the end. If \a size is
+    less than the current size, elements are removed from the end.
+
+    \note This function is only available when \c T is copy-constructible.
 
     \sa size(), squeeze()
 */
@@ -545,6 +546,8 @@
     \fn template<class T, qsizetype Prealloc> void QVarLengthArray<T, Prealloc>::prepend(T &&value)
 
     \since 4.8
+    \deprecated [6.3] This is slow. If you must, use \c{insert(cbegin(), ~~~)} instead.
+
     Inserts \a value at the beginning of the array.
 
 
@@ -567,16 +570,6 @@
     i < size()).
 
     \sa operator[](), remove()
-*/
-
-/*! \fn template<class T, qsizetype Prealloc> void QVarLengthArray<T, Prealloc>::remove(qsizetype i)
-
-    \overload
-    \since 4.8
-
-    Removes the element at index position \a i.
-
-    \sa insert(), replace()
 */
 
 /*! \fn template<class T, qsizetype Prealloc> void QVarLengthArray<T, Prealloc>::remove(qsizetype i, qsizetype count)
@@ -756,6 +749,27 @@
 
     Inserts \a value in front of the item pointed to by the iterator
     \a before. Returns an iterator pointing at the inserted item.
+*/
+
+/*!
+    \fn template <class T, qsizetype Prealloc> template <typename...Args> QVarLengthArray<T, Prealloc>::iterator QVarLengthArray<T, Prealloc>::emplace(const_iterator pos, Args &&...args)
+
+    \since 6.3
+
+    Inserts an item in front of the item pointed to by the iterator
+    \a pos, passing \a args to its constructor.
+
+    Returns an iterator pointing at the emplaced item.
+*/
+
+/*!
+    \fn template <class T, qsizetype Prealloc> template <typename...Args> T &QVarLengthArray<T, Prealloc>::emplace_back(Args &&...args)
+    \since 6.3
+
+    Inserts an item at the back of this QVarLengthArray, passing
+    \a args to its constructor.
+
+    Returns a reference to the emplaced item.
 */
 
 /*! \fn template<class T, qsizetype Prealloc> QVarLengthArray<T, Prealloc>::iterator QVarLengthArray<T, Prealloc>::insert(const_iterator before, qsizetype count, const T &value)

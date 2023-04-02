@@ -1,24 +1,16 @@
-# Generated from securesocketclient.pro.
-
 cmake_minimum_required(VERSION 3.16)
 project(securesocketclient LANGUAGES CXX)
 
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
-
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-  set(INSTALL_EXAMPLESDIR "examples")
+    set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/network/securesocketclient")
 
-find_package(Qt6 COMPONENTS Core)
-find_package(Qt6 COMPONENTS Gui)
-find_package(Qt6 COMPONENTS Network)
-find_package(Qt6 COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Widgets)
 
 qt_add_executable(securesocketclient
     certificateinfo.cpp certificateinfo.h certificateinfo.ui
@@ -26,10 +18,12 @@ qt_add_executable(securesocketclient
     sslclient.cpp sslclient.h sslclient.ui
     sslerrors.ui
 )
+
 set_target_properties(securesocketclient PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
+
 target_link_libraries(securesocketclient PUBLIC
     Qt::Core
     Qt::Gui
@@ -37,13 +31,12 @@ target_link_libraries(securesocketclient PUBLIC
     Qt::Widgets
 )
 
-
 # Resources:
 set(securesocketclient_resource_files
     "encrypted.png"
 )
 
-qt6_add_resources(securesocketclient "securesocketclient"
+qt_add_resources(securesocketclient "securesocketclient"
     PREFIX
         "/"
     FILES

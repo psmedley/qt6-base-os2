@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtSql module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsqlrelationaltablemodel.h"
 
@@ -55,13 +19,15 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 class QSqlRelationalTableModelSql: public QSqlTableModelSql
 {
 public:
-    inline const static QString relTablePrefix(int i) { return QString::number(i).prepend(QLatin1String("relTblAl_")); }
+    inline const static QString relTablePrefix(int i) { return QString::number(i).prepend("relTblAl_"_L1); }
 };
 
-typedef QSqlRelationalTableModelSql Sql;
+using SqlrTm = QSqlRelationalTableModelSql;
 
 /*!
     \class QSqlRelation
@@ -287,7 +253,7 @@ public:
 
 void QSqlRelationalTableModelPrivate::clearChanges()
 {
-    for (int i = 0; i < relations.count(); ++i) {
+    for (int i = 0; i < relations.size(); ++i) {
         QRelation &rel = relations[i];
         rel.clear();
     }
@@ -311,7 +277,7 @@ int QSqlRelationalTableModelPrivate::nameToIndex(const QString &name) const
 
 void QSqlRelationalTableModelPrivate::clearCache()
 {
-    for (int i = 0; i < relations.count(); ++i)
+    for (int i = 0; i < relations.size(); ++i)
         relations[i].clearDictionary();
 
     QSqlTableModelPrivate::clearCache();
@@ -429,7 +395,7 @@ QVariant QSqlRelationalTableModel::data(const QModelIndex &index, int role) cons
 {
     Q_D(const QSqlRelationalTableModel);
 
-    if (role == Qt::DisplayRole && index.column() >= 0 && index.column() < d->relations.count() &&
+    if (role == Qt::DisplayRole && index.column() >= 0 && index.column() < d->relations.size() &&
             d->relations.value(index.column()).isValid()) {
         QRelation &relation = d->relations[index.column()];
         if (!relation.isDictionaryInitialized())
@@ -472,7 +438,7 @@ bool QSqlRelationalTableModel::setData(const QModelIndex &index, const QVariant 
                                        int role)
 {
     Q_D(QSqlRelationalTableModel);
-    if ( role == Qt::EditRole && index.column() > 0 && index.column() < d->relations.count()
+    if ( role == Qt::EditRole && index.column() > 0 && index.column() < d->relations.size()
             && d->relations.value(index.column()).isValid()) {
         QRelation &relation = d->relations[index.column()];
         if (!relation.isDictionaryInitialized())
@@ -528,7 +494,7 @@ QString QSqlRelationalTableModelPrivate::fullyQualifiedFieldName(const QString &
 {
     QString ret;
     ret.reserve(tableName.size() + fieldName.size() + 1);
-    ret.append(tableName).append(QLatin1Char('.')).append(fieldName);
+    ret.append(tableName).append(u'.').append(fieldName);
 
     return ret;
 }
@@ -574,12 +540,12 @@ QString QSqlRelationalTableModel::selectStatement() const
 
     QString fList;
     QString conditions;
-    QString from = Sql::from(tableName());
+    QString from = SqlrTm::from(tableName());
     for (int i = 0; i < d->baseRec.count(); ++i) {
         QSqlRelation relation = d->relations.value(i).rel;
         const QString tableField = d->fullyQualifiedFieldName(tableName(), d->db.driver()->escapeIdentifier(d->baseRec.fieldName(i), QSqlDriver::FieldName));
         if (relation.isValid()) {
-            const QString relTableAlias = Sql::relTablePrefix(i);
+            const QString relTableAlias = SqlrTm::relTablePrefix(i);
             QString displayTableField = d->fullyQualifiedFieldName(relTableAlias, relation.displayColumn());
 
             // Duplicate field names must be aliased
@@ -593,36 +559,36 @@ QString QSqlRelationalTableModel::selectStatement() const
                 QString alias = QString::fromLatin1("%1_%2_%3")
                                       .arg(relTableName, displayColumn, QString::number(fieldNames.value(fieldList[i])));
                 alias.truncate(d->db.driver()->maximumIdentifierLength(QSqlDriver::FieldName));
-                displayTableField = Sql::as(displayTableField, alias);
+                displayTableField = SqlrTm::as(displayTableField, alias);
                 --fieldNames[fieldList[i]];
             }
 
-            fList = Sql::comma(fList, displayTableField);
+            fList = SqlrTm::comma(fList, displayTableField);
 
             // Join related table
-            const QString tblexpr = Sql::concat(relation.tableName(), relTableAlias);
+            const QString tblexpr = SqlrTm::concat(relation.tableName(), relTableAlias);
             const QString relTableField = d->fullyQualifiedFieldName(relTableAlias, relation.indexColumn());
-            const QString cond = Sql::eq(tableField, relTableField);
+            const QString cond = SqlrTm::eq(tableField, relTableField);
             if (d->joinMode == QSqlRelationalTableModel::InnerJoin) {
                 // FIXME: InnerJoin code is known to be broken.
                 // Use LeftJoin mode if you want correct behavior.
-                from = Sql::comma(from, tblexpr);
-                conditions = Sql::et(conditions, cond);
+                from = SqlrTm::comma(from, tblexpr);
+                conditions = SqlrTm::et(conditions, cond);
             } else {
-                from = Sql::concat(from, Sql::leftJoin(tblexpr));
-                from = Sql::concat(from, Sql::on(cond));
+                from = SqlrTm::concat(from, SqlrTm::leftJoin(tblexpr));
+                from = SqlrTm::concat(from, SqlrTm::on(cond));
             }
         } else {
-            fList = Sql::comma(fList, tableField);
+            fList = SqlrTm::comma(fList, tableField);
         }
     }
 
     if (fList.isEmpty())
         return QString();
 
-    const QString stmt = Sql::concat(Sql::select(fList), from);
-    const QString where = Sql::where(Sql::et(Sql::paren(conditions), Sql::paren(filter())));
-    return Sql::concat(Sql::concat(stmt, where), orderByClause());
+    const QString stmt = SqlrTm::concat(SqlrTm::select(fList), from);
+    const QString where = SqlrTm::where(SqlrTm::et(SqlrTm::paren(conditions), SqlrTm::paren(filter())));
+    return SqlrTm::concat(SqlrTm::concat(stmt, where), orderByClause());
 }
 
 /*!
@@ -637,7 +603,7 @@ QString QSqlRelationalTableModel::selectStatement() const
 QSqlTableModel *QSqlRelationalTableModel::relationModel(int column) const
 {
     Q_D(const QSqlRelationalTableModel);
-    if (column < 0 || column >= d->relations.count())
+    if (column < 0 || column >= d->relations.size())
         return nullptr;
 
     QRelation &relation = const_cast<QSqlRelationalTableModelPrivate *>(d)->relations[column];
@@ -766,9 +732,9 @@ QString QSqlRelationalTableModel::orderByClause() const
     if (!rel.isValid())
         return QSqlTableModel::orderByClause();
 
-    QString f = d->fullyQualifiedFieldName(Sql::relTablePrefix(d->sortColumn), rel.displayColumn());
-    f = d->sortOrder == Qt::AscendingOrder ? Sql::asc(f) : Sql::desc(f);
-    return Sql::orderBy(f);
+    QString f = d->fullyQualifiedFieldName(SqlrTm::relTablePrefix(d->sortColumn), rel.displayColumn());
+    f = d->sortOrder == Qt::AscendingOrder ? SqlrTm::asc(f) : SqlrTm::desc(f);
+    return SqlrTm::orderBy(f);
 }
 
 /*!
@@ -783,10 +749,12 @@ bool QSqlRelationalTableModel::removeColumns(int column, int count, const QModel
 
     for (int i = 0; i < count; ++i) {
         d->baseRec.remove(column);
-        if (d->relations.count() > column)
+        if (d->relations.size() > column)
             d->relations.remove(column);
     }
     return QSqlTableModel::removeColumns(column, count, parent);
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qsqlrelationaltablemodel.cpp"

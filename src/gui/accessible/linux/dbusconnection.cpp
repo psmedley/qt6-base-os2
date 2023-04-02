@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 
 
@@ -53,11 +17,13 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 /* note: do not change these to QStringLiteral;
    we are unloaded before QtDBus is done using the strings.
  */
-#define A11Y_SERVICE QLatin1String("org.a11y.Bus")
-#define A11Y_PATH QLatin1String("/org/a11y/bus")
+#define A11Y_SERVICE "org.a11y.Bus"_L1
+#define A11Y_PATH "/org/a11y/bus"_L1
 
 /*!
     \class DBusConnection
@@ -69,6 +35,14 @@ QT_BEGIN_NAMESPACE
 DBusConnection::DBusConnection(QObject *parent)
     : QObject(parent), m_a11yConnection(QString()), m_enabled(false)
 {
+    // If the bus is explicitly set via env var it overrides everything else.
+    QByteArray addressEnv = qgetenv("AT_SPI_BUS_ADDRESS");
+    if (!addressEnv.isEmpty()) {
+        m_enabled = true;
+        connectA11yBus(QString::fromLocal8Bit(addressEnv));
+        return;
+    }
+
     // Start monitoring if "org.a11y.Bus" is registered as DBus service.
     QDBusConnection c = QDBusConnection::sessionBus();
     if (!c.isConnected()) {
@@ -128,9 +102,8 @@ void DBusConnection::serviceRegistered()
             emit enabledChanged(m_enabled);
         } else {
             QDBusConnection c = QDBusConnection::sessionBus();
-            QDBusMessage m = QDBusMessage::createMethodCall(QLatin1String("org.a11y.Bus"),
-                                                            QLatin1String("/org/a11y/bus"),
-                                                            QLatin1String("org.a11y.Bus"), QLatin1String("GetAddress"));
+            QDBusMessage m = QDBusMessage::createMethodCall(A11Y_SERVICE, A11Y_PATH, A11Y_SERVICE,
+                                                            "GetAddress"_L1);
             c.callWithCallback(m, this, SLOT(connectA11yBus(QString)), SLOT(dbusError(QDBusError)));
         }
     }
@@ -149,7 +122,7 @@ void DBusConnection::connectA11yBus(const QString &address)
         qWarning("Could not find Accessibility DBus address.");
         return;
     }
-    m_a11yConnection = QDBusConnection(QDBusConnection::connectToBus(address, QLatin1String("a11y")));
+    m_a11yConnection = QDBusConnection(QDBusConnection::connectToBus(address, "a11y"_L1));
 
     if (m_enabled)
         emit enabledChanged(true);
@@ -170,3 +143,5 @@ QDBusConnection DBusConnection::connection() const
 }
 
 QT_END_NAMESPACE
+
+#include "moc_dbusconnection_p.cpp"

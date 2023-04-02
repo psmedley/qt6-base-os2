@@ -1,31 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2020 Olivier Goffart <ogoffart@woboq.com>
+// Copyright (C) 2021 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 // This test actually wants to practice narrowing conditions, so never define this.
 #ifdef QT_NO_NARROWING_CONVERSIONS_IN_CONNECT
@@ -107,6 +83,7 @@ private slots:
     void deleteSelfInSlot();
     void disconnectSelfInSlotAndDeleteAfterEmit();
     void dumpObjectInfo();
+    void dumpObjectTree();
     void connectToSender();
     void qobjectConstCast();
     void uniqConnection();
@@ -169,6 +146,8 @@ private slots:
     void disconnectDisconnects();
     void singleShotConnection();
     void objectNameBinding();
+    void emitToDestroyedClass();
+    void declarativeData();
 };
 
 struct QObjectCreatedOnShutdown
@@ -761,6 +740,8 @@ void tst_QObject::findChildren()
     op = o.findChild<QObject*>("unnamed", Qt::FindDirectChildrenOnly);
     QCOMPARE(op, static_cast<QObject *>(0));
 
+    l = o.findChildren<QObject*>(Qt::FindDirectChildrenOnly);
+    QCOMPARE(l.size(), 5);
     l = o.findChildren<QObject*>(QString(), Qt::FindDirectChildrenOnly);
     QCOMPARE(l.size(), 5);
     l = o.findChildren<QObject*>("", Qt::FindDirectChildrenOnly);
@@ -979,7 +960,7 @@ void tst_QObject::disconnectNotify_receiverDestroyed()
         QVERIFY(QObject::connect((SenderObject *)&s, SIGNAL(signal1()),
                                  (ReceiverObject *)&r, SLOT(slot1())));
     }
-    QCOMPARE(s.disconnectedSignals.count(), 1);
+    QCOMPARE(s.disconnectedSignals.size(), 1);
     QCOMPARE(s.disconnectedSignals.at(0), QMetaMethod::fromSignal(&SenderObject::signal1));
 
     s.disconnectedSignals.clear();
@@ -990,7 +971,7 @@ void tst_QObject::disconnectNotify_receiverDestroyed()
                                  (ReceiverObject *)&r, SLOT(slot3())));
     }
 
-    QCOMPARE(s.disconnectedSignals.count(), 1);
+    QCOMPARE(s.disconnectedSignals.size(), 1);
     QCOMPARE(s.disconnectedSignals.at(0), QMetaMethod::fromSignal(&SenderObject::signal3));
 
     s.disconnectedSignals.clear();
@@ -1000,7 +981,7 @@ void tst_QObject::disconnectNotify_receiverDestroyed()
         QVERIFY(QObject::connect((SenderObject *)&s, SIGNAL(destroyed()), (ReceiverObject *)&r, SLOT(slot3())));
     }
 
-    QCOMPARE(s.disconnectedSignals.count(), 1);
+    QCOMPARE(s.disconnectedSignals.size(), 1);
     QCOMPARE(s.disconnectedSignals.at(0), QMetaMethod::fromSignal(&QObject::destroyed));
 }
 
@@ -1015,10 +996,10 @@ void tst_QObject::disconnectNotify_metaObjConnection()
         QVERIFY(c);
         QVERIFY(QObject::disconnect(c));
 
-        QCOMPARE(s.disconnectedSignals.count(), 1);
+        QCOMPARE(s.disconnectedSignals.size(), 1);
         QCOMPARE(s.disconnectedSignals.at(0), QMetaMethod::fromSignal(&SenderObject::signal1));
 
-        QCOMPARE(s.disconnectedSignals.count(), 1);
+        QCOMPARE(s.disconnectedSignals.size(), 1);
     }
 }
 
@@ -2144,18 +2125,18 @@ void tst_QObject::metamethod()
     QVERIFY(!(m.attributes() & QMetaMethod::Compatibility));
 
     m = mobj->method(mobj->indexOfMethod("invoke1()"));
-    QCOMPARE(m.parameterNames().count(), 0);
-    QCOMPARE(m.parameterTypes().count(), 0);
+    QCOMPARE(m.parameterNames().size(), 0);
+    QCOMPARE(m.parameterTypes().size(), 0);
 
     m = mobj->method(mobj->indexOfMethod("invoke2(int)"));
-    QCOMPARE(m.parameterNames().count(), 1);
-    QCOMPARE(m.parameterTypes().count(), 1);
+    QCOMPARE(m.parameterNames().size(), 1);
+    QCOMPARE(m.parameterTypes().size(), 1);
     QCOMPARE(m.parameterTypes().at(0), QByteArray("int"));
     QVERIFY(m.parameterNames().at(0).isEmpty());
 
     m = mobj->method(mobj->indexOfMethod("invoke3(int,int)"));
-    QCOMPARE(m.parameterNames().count(), 2);
-    QCOMPARE(m.parameterTypes().count(), 2);
+    QCOMPARE(m.parameterNames().size(), 2);
+    QCOMPARE(m.parameterTypes().size(), 2);
     QCOMPARE(m.parameterTypes().at(0), QByteArray("int"));
     QCOMPARE(m.parameterNames().at(0), QByteArray("hinz"));
     QCOMPARE(m.parameterTypes().at(1), QByteArray("int"));
@@ -2970,22 +2951,22 @@ void tst_QObject::dynamicProperties()
 
     // set a dynamic property
     QVERIFY(!obj.setProperty("myuserproperty", "Hello"));
-    QCOMPARE(obj.changedDynamicProperties.count(), 1);
+    QCOMPARE(obj.changedDynamicProperties.size(), 1);
     QCOMPARE(obj.changedDynamicProperties.first(), QByteArray("myuserproperty"));
     //check if there is no redundant DynamicPropertyChange events
     QVERIFY(!obj.setProperty("myuserproperty", "Hello"));
-    QCOMPARE(obj.changedDynamicProperties.count(), 1);
+    QCOMPARE(obj.changedDynamicProperties.size(), 1);
 
     QCOMPARE(obj.property("myuserproperty").type(), QVariant::String);
     QCOMPARE(obj.property("myuserproperty").toString(), QString("Hello"));
 
-    QCOMPARE(obj.dynamicPropertyNames().count(), 1);
+    QCOMPARE(obj.dynamicPropertyNames().size(), 1);
     QCOMPARE(obj.dynamicPropertyNames().first(), QByteArray("myuserproperty"));
 
     // change type of the dynamic property
     obj.changedDynamicProperties.clear();
     QVERIFY(!obj.setProperty("myuserproperty", QByteArray("Hello")));
-    QCOMPARE(obj.changedDynamicProperties.count(), 1);
+    QCOMPARE(obj.changedDynamicProperties.size(), 1);
     QCOMPARE(obj.changedDynamicProperties.first(), QByteArray("myuserproperty"));
     QCOMPARE(obj.property("myuserproperty").type(), QVariant::ByteArray);
     QCOMPARE(obj.property("myuserproperty").toString(), QByteArray("Hello"));
@@ -2994,7 +2975,7 @@ void tst_QObject::dynamicProperties()
     obj.changedDynamicProperties.clear();
     QVERIFY(!obj.setProperty("myuserproperty", QVariant()));
 
-    QCOMPARE(obj.changedDynamicProperties.count(), 1);
+    QCOMPARE(obj.changedDynamicProperties.size(), 1);
     QCOMPARE(obj.changedDynamicProperties.first(), QByteArray("myuserproperty"));
     obj.changedDynamicProperties.clear();
 
@@ -3409,6 +3390,32 @@ void tst_QObject::dumpObjectInfo()
     a.dumpObjectInfo(); // should not crash
 }
 
+void tst_QObject::dumpObjectTree()
+{
+    QObject a;
+    Q_SET_OBJECT_NAME(a);
+
+    QTimer b(&a);
+    Q_SET_OBJECT_NAME(b);
+
+    QObject c(&b);
+    Q_SET_OBJECT_NAME(c);
+
+    QFile f(&a);
+    Q_SET_OBJECT_NAME(f);
+
+    const char * const output[] = {
+        "QObject::a ",
+        "    QTimer::b ",
+        "        QObject::c ",
+        "    QFile::f ",
+    };
+    for (const char *line : output)
+        QTest::ignoreMessage(QtDebugMsg, line);
+
+    a.dumpObjectTree();
+}
+
 class ConnectToSender : public QObject
 { Q_OBJECT
     public slots:
@@ -3586,8 +3593,6 @@ void tst_QObject::interfaceIid()
              QByteArray(Bleh_iid));
     QCOMPARE(QByteArray(qobject_interface_iid<Foo::Bar *>()),
              QByteArray("com.qtest.foobar"));
-    QCOMPARE(QByteArray(qobject_interface_iid<FooObject *>()),
-             QByteArray());
 }
 
 void tst_QObject::deleteQObjectWhenDeletingEvent()
@@ -4504,6 +4509,17 @@ void tst_QObject::pointerConnect()
     con = connect(&r1, &ReceiverObject::slot4 , &s, &SenderObject::signal4);
     QVERIFY(!con);
     QVERIFY(!QObject::disconnect(con));
+
+    //connect an arbitrary PMF to a slot
+    QTest::ignoreMessage(QtWarningMsg, "QObject::connect: signal not found in ReceiverObject");
+    con = connect(&r1, &ReceiverObject::reset, &r1, &ReceiverObject::slot1);
+    QVERIFY(!con);
+    QVERIFY(!QObject::disconnect(con));
+
+    QTest::ignoreMessage(QtWarningMsg, "QObject::connect: signal not found in ReceiverObject");
+    con = connect(&r1, &ReceiverObject::reset, &r1, [](){});
+    QVERIFY(!con);
+    QVERIFY(!QObject::disconnect(con));
 }
 
 void tst_QObject::pointerDisconnect()
@@ -5225,7 +5241,7 @@ namespace ManyArgumentNamespace {
         }
     };
 
-    struct Funct6 {
+    struct Funct6 final {
         void operator()(const QString &a, const QString &b, const QString &c, const QString&d, const QString&e, const QString&f) {
             MANYARGUMENT_COMPARE(a); MANYARGUMENT_COMPARE(b); MANYARGUMENT_COMPARE(c);
             MANYARGUMENT_COMPARE(d); MANYARGUMENT_COMPARE(e); MANYARGUMENT_COMPARE(f);
@@ -5946,8 +5962,8 @@ public:
 };
 
 class ConnectToPrivateSlotPrivate : public QObjectPrivate {
-    Q_DECLARE_PUBLIC(ConnectToPrivateSlot)
 public:
+    Q_DECLARE_PUBLIC(ConnectToPrivateSlot)
     int receivedCount;
     QVariant receivedValue;
 
@@ -6245,10 +6261,11 @@ void tst_QObject::connectFunctorWithContextUnique()
 
     SenderObject sender;
     ReceiverObject receiver;
-    QObject::connect(&sender, &SenderObject::signal1, &receiver, &ReceiverObject::slot1);
+    QVERIFY(QObject::connect(&sender, &SenderObject::signal1, &receiver, &ReceiverObject::slot1));
     receiver.count_slot1 = 0;
 
-    QObject::connect(&sender, &SenderObject::signal1, &receiver, SlotFunctor(), Qt::UniqueConnection);
+    QTest::ignoreMessage(QtWarningMsg, "QObject::connect(SenderObject, ReceiverObject): unique connections require a pointer to member function of a QObject subclass");
+    QVERIFY(!QObject::connect(&sender, &SenderObject::signal1, &receiver, [&](){ receiver.slot1(); }, Qt::UniqueConnection));
 
     sender.emitSignal1();
     QCOMPARE(receiver.count_slot1, 1);
@@ -7023,7 +7040,7 @@ void tst_QObject::checkArgumentsForNarrowing()
 {
     // Clang and ICC masquerade as GCC, so introduce a more strict define
     // for exactly GCC (to exclude/include it from some tests).
-#if defined(Q_CC_GNU) && !defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
+#if defined(Q_CC_GNU) && !defined(Q_CC_CLANG)
 #define Q_CC_EXACTLY_GCC Q_CC_GNU
 #endif
 
@@ -8139,9 +8156,167 @@ void tst_QObject::objectNameBinding()
                                                                 "objectName");
 }
 
+namespace EmitToDestroyedClass {
+static int assertionCallCount = 0;
+static int wouldHaveAssertedCount = 0;
+struct WouldAssert : std::exception {};
+class Base : public QObject
+{
+    Q_OBJECT
+public:
+    ~Base()
+    {
+        try {
+            emit theSignal();
+        } catch (const WouldAssert &) {
+            ++wouldHaveAssertedCount;
+        }
+    }
+
+signals:
+    void theSignal();
+};
+
+class Derived : public Base
+{
+    Q_OBJECT
+public:
+    ~Derived() { }
+
+public slots:
+    void doNothing() {}
+};
+} // namespace EmitToDestroyedClass
+
+QT_BEGIN_NAMESPACE
+namespace QtPrivate {
+template<> void assertObjectType<EmitToDestroyedClass::Derived>(QObject *o)
+{
+    // override the assertion so we don't assert and so something does happen
+    // when assertions are disabled. By throwing, we also prevent the UB from
+    // happening.
+    using namespace EmitToDestroyedClass;
+    ++assertionCallCount;
+    if (!qobject_cast<Derived *>(o))
+        throw WouldAssert();
+}
+}
+QT_END_NAMESPACE
+
+void tst_QObject::emitToDestroyedClass()
+{
+    using namespace EmitToDestroyedClass;
+    std::unique_ptr ptr = std::make_unique<Derived>();
+    QObject::connect(ptr.get(), &Base::theSignal, ptr.get(), &Derived::doNothing);
+    QCOMPARE(assertionCallCount, 0);
+    QCOMPARE(wouldHaveAssertedCount, 0);
+
+    // confirm our replacement function did get called
+    emit ptr->theSignal();
+    QCOMPARE(assertionCallCount, 1);
+    QCOMPARE(wouldHaveAssertedCount, 0);
+
+    ptr.reset();
+    QCOMPARE(assertionCallCount, 2);
+    QCOMPARE(wouldHaveAssertedCount, 1);
+}
+
 // Test for QtPrivate::HasQ_OBJECT_Macro
 static_assert(QtPrivate::HasQ_OBJECT_Macro<tst_QObject>::Value);
 static_assert(!QtPrivate::HasQ_OBJECT_Macro<SiblingDeleter>::Value);
+
+Q_DECLARE_SMART_POINTER_METATYPE(std::shared_ptr)
+Q_DECLARE_SMART_POINTER_METATYPE(std::unique_ptr)
+
+
+// QTBUG-103741: OK to use smart pointers to const QObject in signals/slots
+class SenderWithSharedPointerConstQObject : public QObject
+{
+    Q_OBJECT
+
+signals:
+    void aSignal1(const QSharedPointer<const QObject> &);
+    void aSignal2(const QWeakPointer<const QObject> &);
+    void aSignal3(const QPointer<const QObject> &);
+    void aSignal4(const std::shared_ptr<const QObject> &);
+    void aSignal5(const std::unique_ptr<const QObject> &);
+};
+
+#ifdef QT_BUILD_INTERNAL
+/*
+    Since QObjectPrivate stores the declarativeData pointer in a union with the pointer
+    to the currently destroyed child, calls to the QtDeclarative handlers need to be
+    correctly guarded. QTBUG-105286
+*/
+namespace QtDeclarative {
+static QAbstractDeclarativeData *theData;
+
+static void destroyed(QAbstractDeclarativeData *data, QObject *)
+{
+    QCOMPARE(data, theData);
+}
+static void signalEmitted(QAbstractDeclarativeData *data, QObject *, int, void **)
+{
+    QCOMPARE(data, theData);
+}
+// we can't use QCOMPARE in the next two functions, as they don't return void
+static int receivers(QAbstractDeclarativeData *data, const QObject *, int)
+{
+    QTest::qCompare(data, theData, "data", "theData", __FILE__, __LINE__);
+    return 0;
+}
+static bool isSignalConnected(QAbstractDeclarativeData *data, const QObject *, int)
+{
+    QTest::qCompare(data, theData, "data", "theData", __FILE__, __LINE__);
+    return true;
+}
+
+class Object : public QObject
+{
+    Q_OBJECT
+public:
+    using QObject::QObject;
+    ~Object()
+    {
+        if (Object *p = static_cast<Object *>(parent()))
+            p->emitSignal();
+    }
+
+    void emitSignal()
+    {
+        emit theSignal();
+    }
+
+signals:
+    void theSignal();
+};
+
+}
+#endif
+
+void tst_QObject::declarativeData()
+{
+#ifdef QT_BUILD_INTERNAL
+    QScopedValueRollback destroyed(QAbstractDeclarativeData::destroyed,
+                                   QtDeclarative::destroyed);
+    QScopedValueRollback signalEmitted(QAbstractDeclarativeData::signalEmitted,
+                                       QtDeclarative::signalEmitted);
+    QScopedValueRollback receivers(QAbstractDeclarativeData::receivers,
+                                   QtDeclarative::receivers);
+    QScopedValueRollback isSignalConnected(QAbstractDeclarativeData::isSignalConnected,
+                                           QtDeclarative::isSignalConnected);
+
+    QtDeclarative::Object p;
+    QObjectPrivate *priv = QObjectPrivate::get(&p);
+    priv->declarativeData = QtDeclarative::theData = new QAbstractDeclarativeData;
+
+    connect(&p, &QtDeclarative::Object::theSignal, &p, []{
+    });
+
+    QtDeclarative::Object *child = new QtDeclarative::Object;
+    child->setParent(&p);
+#endif
+}
 
 QTEST_MAIN(tst_QObject)
 #include "tst_qobject.moc"

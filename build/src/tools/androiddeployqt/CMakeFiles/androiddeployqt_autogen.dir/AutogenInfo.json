@@ -1,0 +1,95 @@
+{
+	"BUILD_DIR" : "/home/psmedley/qt6-base-os2/build/src/tools/androiddeployqt/androiddeployqt_autogen",
+	"CMAKE_BINARY_DIR" : "/home/psmedley/qt6-base-os2/build",
+	"CMAKE_CURRENT_BINARY_DIR" : "/home/psmedley/qt6-base-os2/build/src/tools/androiddeployqt",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/home/psmedley/qt6-base-os2/src/tools/androiddeployqt",
+	"CMAKE_EXECUTABLE" : "/usr/bin/cmake",
+	"CMAKE_LIST_FILES" : 
+	[
+		"/home/psmedley/qt6-base-os2/src/tools/androiddeployqt/CMakeLists.txt"
+	],
+	"CMAKE_SOURCE_DIR" : "/home/psmedley/qt6-base-os2",
+	"DEP_FILE" : "",
+	"DEP_FILE_RULE_NAME" : "",
+	"HEADERS" : [],
+	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
+	"INCLUDE_DIR" : "/home/psmedley/qt6-base-os2/build/src/tools/androiddeployqt/androiddeployqt_autogen/include",
+	"MOC_COMPILATION_FILE" : "/home/psmedley/qt6-base-os2/build/src/tools/androiddeployqt/androiddeployqt_autogen/mocs_compilation.cpp",
+	"MOC_DEFINITIONS" : 
+	[
+		"QT_CORE_LIB",
+		"QT_LEAN_HEADERS=1",
+		"QT_NO_CAST_FROM_ASCII",
+		"QT_NO_CAST_TO_ASCII",
+		"QT_NO_DEBUG",
+		"QT_NO_EXCEPTIONS",
+		"QT_NO_FOREACH",
+		"QT_NO_JAVA_STYLE_ITERATORS",
+		"QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+		"QT_USE_QSTRINGBUILDER",
+		"_LARGEFILE64_SOURCE",
+		"_LARGEFILE_SOURCE"
+	],
+	"MOC_DEPEND_FILTERS" : 
+	[
+		[
+			"Q_PLUGIN_METADATA",
+			"[\n][ \t]*Q_PLUGIN_METADATA[ \t]*\\([^\\)]*FILE[ \t]*\"([^\"]+)\""
+		]
+	],
+	"MOC_INCLUDES" : 
+	[
+		"/home/psmedley/qt6-base-os2/src/tools/androiddeployqt",
+		"/home/psmedley/qt6-base-os2/build/src/tools/androiddeployqt",
+		"/home/psmedley/qt6-base-os2/src/tools/shared",
+		"/home/psmedley/qt6-base-os2/build/include",
+		"/home/psmedley/qt6-base-os2/build/include/QtCore",
+		"/home/psmedley/qt6-base-os2/mkspecs/linux-g++",
+		"/usr/include/c++/12",
+		"/usr/include/x86_64-linux-gnu/c++/12",
+		"/usr/include/c++/12/backward",
+		"/usr/lib/gcc/x86_64-linux-gnu/12/include",
+		"/usr/local/include",
+		"/usr/include/x86_64-linux-gnu",
+		"/usr/include"
+	],
+	"MOC_MACRO_NAMES" : 
+	[
+		"Q_OBJECT",
+		"Q_GADGET",
+		"Q_GADGET_EXPORT",
+		"Q_NAMESPACE",
+		"Q_NAMESPACE_EXPORT",
+		"Q_ENUM_NS"
+	],
+	"MOC_OPTIONS" : [],
+	"MOC_PATH_PREFIX" : false,
+	"MOC_PREDEFS_CMD" : 
+	[
+		"/usr/bin/c++",
+		"-dM",
+		"-E",
+		"-c",
+		"/usr/share/cmake-3.25/Modules/CMakeCXXCompilerABI.cpp"
+	],
+	"MOC_PREDEFS_FILE" : "/home/psmedley/qt6-base-os2/build/src/tools/androiddeployqt/androiddeployqt_autogen/moc_predefs.h",
+	"MOC_RELAXED_MODE" : false,
+	"MOC_SKIP" : [],
+	"MULTI_CONFIG" : false,
+	"PARALLEL" : 4,
+	"PARSE_CACHE_FILE" : "/home/psmedley/qt6-base-os2/build/src/tools/androiddeployqt/CMakeFiles/androiddeployqt_autogen.dir/ParseCache.txt",
+	"QT_MOC_EXECUTABLE" : "/home/psmedley/qt6-base-os2/build/libexec/moc",
+	"QT_UIC_EXECUTABLE" : "",
+	"QT_VERSION_MAJOR" : 6,
+	"QT_VERSION_MINOR" : 4,
+	"SETTINGS_FILE" : "/home/psmedley/qt6-base-os2/build/src/tools/androiddeployqt/CMakeFiles/androiddeployqt_autogen.dir/AutogenUsed.txt",
+	"SOURCES" : 
+	[
+		[
+			"/home/psmedley/qt6-base-os2/src/tools/androiddeployqt/main.cpp",
+			"Mu",
+			null
+		]
+	],
+	"VERBOSITY" : 0
+}

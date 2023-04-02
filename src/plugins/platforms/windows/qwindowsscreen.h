@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QWINDOWSSCREEN_H
 #define QWINDOWSSCREEN_H
@@ -69,6 +33,8 @@ struct QWindowsScreenData
     Qt::ScreenOrientation orientation = Qt::LandscapeOrientation;
     qreal refreshRateHz = 60;
     HMONITOR hMonitor = nullptr;
+    QString deviceName = {};
+    std::optional<int> deviceIndex = std::nullopt;
 };
 
 class QWindowsScreen : public QPlatformScreen
@@ -89,7 +55,7 @@ public:
     QDpi logicalBaseDpi() const override { return QDpi(baseDpi, baseDpi); }
     qreal devicePixelRatio() const override { return 1.0; }
     qreal refreshRate() const override { return m_data.refreshRateHz; }
-    QString name() const override { return m_data.name; }
+    QString name() const override;
     Qt::ScreenOrientation orientation() const override { return m_data.orientation; }
     QList<QPlatformScreen *> virtualSiblings() const override;
     QWindow *topLevelAt(const QPoint &point) const override;
@@ -126,10 +92,13 @@ private:
 
 class QWindowsScreenManager
 {
+    Q_DISABLE_COPY_MOVE(QWindowsScreenManager)
 public:
     using WindowsScreenList = QList<QWindowsScreen *>;
 
     QWindowsScreenManager();
+    void initialize();
+    ~QWindowsScreenManager();
 
     void clearScreens();
 
@@ -144,6 +113,7 @@ public:
 private:
     void removeScreen(int index);
 
+    HWND m_displayChangeObserver = nullptr;
     WindowsScreenList m_screens;
 };
 

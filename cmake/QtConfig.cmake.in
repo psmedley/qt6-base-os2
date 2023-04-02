@@ -23,16 +23,6 @@ else()
                              QT_VERSION_PATCH @PROJECT_VERSION_PATCH@)
 endif()
 
-if(NOT "${QT_HOST_PATH}" STREQUAL "")
-    find_package(Qt@PROJECT_VERSION_MAJOR@HostInfo
-                 CONFIG
-                 REQUIRED
-                 PATHS "${QT_HOST_PATH}"
-                       "${QT_HOST_PATH_CMAKE_DIR}"
-                 NO_CMAKE_FIND_ROOT_PATH
-                 NO_DEFAULT_PATH)
-endif()
-
 get_filename_component(_qt_import_prefix "${CMAKE_CURRENT_LIST_FILE}" PATH)
 get_filename_component(_qt_import_prefix "${_qt_import_prefix}" REALPATH)
 list(APPEND CMAKE_MODULE_PATH "${_qt_import_prefix}")
@@ -48,80 +38,31 @@ elseif(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
     list(APPEND CMAKE_MODULE_PATH "${__qt_internal_cmake_ios_support_files_path}")
 endif()
 
-set(QT_ADDITIONAL_PACKAGES_PREFIX_PATH "" CACHE STRING
-    "Additional directories where find(Qt6 ...) components are searched")
-set(QT_ADDITIONAL_HOST_PACKAGES_PREFIX_PATH "" CACHE STRING
-    "Additional directories where find(Qt6 ...) host Qt components are searched")
-
-# Collect additional package prefix paths to look for Qt packages, both from command line and the
-# env variable ${prefixes_var}. The result is stored in ${out_var} and is a list of paths ending
-# with "/lib/cmake".
-function(__qt_internal_collect_additional_prefix_paths out_var prefixes_var)
-    if(DEFINED "${out_var}")
-        return()
-    endif()
-
-    set(additional_packages_prefix_paths "")
-
-    set(additional_packages_prefixes "")
-    if(${prefixes_var})
-        list(APPEND additional_packages_prefixes ${${prefixes_var}})
-    endif()
-    if(DEFINED ENV{${prefixes_var}}
-        AND NOT "$ENV{${prefixes_var}}" STREQUAL "")
-        list(APPEND additional_packages_prefixes $ENV{${prefixes_var}})
-    endif()
-
-    foreach(additional_path IN LISTS additional_packages_prefixes)
-        file(TO_CMAKE_PATH "${additional_path}" additional_path)
-
-        # The prefix paths need to end with lib/cmake to ensure the packages are found when
-        # cross compiling. Search for REROOT_PATH_ISSUE_MARKER in the qt.toolchain.cmake file for
-        # details.
-        # We must pass the values via the PATHS options because the main find_package call uses
-        # NO_DEFAULT_PATH, and thus CMAKE_PREFIX_PATH values are discarded.
-        # CMAKE_FIND_ROOT_PATH values are not discarded and togegher with the PATHS option, it
-        # ensures packages from additional prefixes are found.
-        if(NOT additional_path MATCHES "/lib/cmake$")
-            string(APPEND additional_path "/lib/cmake")
-        endif()
-        list(APPEND additional_packages_prefix_paths "${additional_path}")
-    endforeach()
-
-    set("${out_var}" "${additional_packages_prefix_paths}" PARENT_SCOPE)
-endfunction()
-
-__qt_internal_collect_additional_prefix_paths(_qt_additional_packages_prefix_paths
-    QT_ADDITIONAL_PACKAGES_PREFIX_PATH)
-__qt_internal_collect_additional_prefix_paths(_qt_additional_host_packages_prefix_paths
-    QT_ADDITIONAL_HOST_PACKAGES_PREFIX_PATH)
-
-# Take a list of prefix paths ending with "/lib/cmake", and return a list of absolute paths with
-# "/lib/cmake" removed.
-function(__qt_internal_prefix_paths_to_roots out_var prefix_paths)
-    set(result "")
-    foreach(path IN LISTS prefix_paths)
-        if(path MATCHES "/lib/cmake$")
-            string(APPEND path "/../..")
-        endif()
-        get_filename_component(path "${path}" ABSOLUTE)
-        list(APPEND result "${path}")
-    endforeach()
-    set("${out_var}" "${result}" PARENT_SCOPE)
-endfunction()
-
-__qt_internal_prefix_paths_to_roots(_qt_additional_host_packages_root_paths
-    "${_qt_additional_host_packages_prefix_paths}")
-
 # Public helpers available to all Qt packages.
 include("${CMAKE_CURRENT_LIST_DIR}/QtFeature.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/QtPublicAppleHelpers.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/QtPublicFinalizerHelpers.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/QtPublicPluginHelpers.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/QtPublicTargetHelpers.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/QtPublicWalkLibsHelpers.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/QtPublicFindPackageHelpers.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/QtPublicDependencyHelpers.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/QtPublicTestHelpers.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/QtPublicToolHelpers.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/QtPublicCMakeHelpers.cmake")
+
+set(QT_ADDITIONAL_PACKAGES_PREFIX_PATH "" CACHE STRING
+    "Additional directories where find(Qt6 ...) components are searched")
+set(QT_ADDITIONAL_HOST_PACKAGES_PREFIX_PATH "" CACHE STRING
+    "Additional directories where find(Qt6 ...) host Qt components are searched")
+
+__qt_internal_collect_additional_prefix_paths(_qt_additional_packages_prefix_paths
+    QT_ADDITIONAL_PACKAGES_PREFIX_PATH)
+__qt_internal_collect_additional_prefix_paths(_qt_additional_host_packages_prefix_paths
+    QT_ADDITIONAL_HOST_PACKAGES_PREFIX_PATH)
+
+__qt_internal_prefix_paths_to_roots(_qt_additional_host_packages_root_paths
+    "${_qt_additional_host_packages_prefix_paths}")
 
 if(NOT DEFINED QT_CMAKE_EXPORT_NAMESPACE)
     set(QT_CMAKE_EXPORT_NAMESPACE @QT_CMAKE_EXPORT_NAMESPACE@)
@@ -145,10 +86,14 @@ set(__qt_sanitizer_options_set TRUE)
 include(CMakeFindDependencyMacro)
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@Dependencies.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@Dependencies.cmake")
-    if(NOT @INSTALL_CMAKE_NAMESPACE@_DEPENDENCIES_FOUND)
-        set(@INSTALL_CMAKE_NAMESPACE@_FOUND FALSE)
-        message(FATAL_ERROR "Failed to find Qt Platform dependency: "
-            "${@INSTALL_CMAKE_NAMESPACE@_DEPENDENCY_NOT_FOUND_MESSAGE}")
+
+    _qt_internal_suggest_dependency_debugging(@INSTALL_CMAKE_NAMESPACE@
+        __qt_@INSTALL_CMAKE_NAMESPACE@_pkg ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE)
+
+    if(NOT @INSTALL_CMAKE_NAMESPACE@_FOUND)
+        # Clear the components, no need to look for them if dependencies were not found, otherwise
+        # you get a wall of recursive error messages.
+        set(@INSTALL_CMAKE_NAMESPACE@_FIND_COMPONENTS "")
     endif()
 endif()
 
@@ -182,17 +127,21 @@ foreach(module ${@INSTALL_CMAKE_NAMESPACE@_FIND_COMPONENTS})
             ${_qt_additional_host_packages_root_paths})
     endif()
 
-    find_package(@INSTALL_CMAKE_NAMESPACE@${module}
-        ${@INSTALL_CMAKE_NAMESPACE@_FIND_VERSION}
-        ${_@INSTALL_CMAKE_NAMESPACE@_FIND_PARTS_QUIET}
-        PATHS
-            ${_qt_cmake_dir}
-            ${_qt_additional_packages_prefix_paths}
-            ${QT_EXAMPLES_CMAKE_PREFIX_PATH}
-            ${__qt_find_package_host_qt_path}
-            ${_qt_additional_host_packages_prefix_paths}
-        ${__qt_use_no_default_path_for_qt_packages}
-    )
+    _qt_internal_save_find_package_context_for_debugging(@INSTALL_CMAKE_NAMESPACE@${module})
+
+    if(NOT @INSTALL_CMAKE_NAMESPACE@${module}_FOUND)
+        find_package(@INSTALL_CMAKE_NAMESPACE@${module}
+            ${@INSTALL_CMAKE_NAMESPACE@_FIND_VERSION}
+            ${_@INSTALL_CMAKE_NAMESPACE@_FIND_PARTS_QUIET}
+            PATHS
+                ${_qt_cmake_dir}
+                ${_qt_additional_packages_prefix_paths}
+                ${QT_EXAMPLES_CMAKE_PREFIX_PATH}
+                ${__qt_find_package_host_qt_path}
+                ${_qt_additional_host_packages_prefix_paths}
+            ${__qt_use_no_default_path_for_qt_packages}
+        )
+    endif()
 
     if(NOT "${__qt_find_package_host_qt_path}" STREQUAL "")
         set(CMAKE_PREFIX_PATH "${__qt_backup_cmake_prefix_path}")
@@ -229,11 +178,17 @@ foreach(module ${@INSTALL_CMAKE_NAMESPACE@_FIND_COMPONENTS})
         endif()
 
         if(@INSTALL_CMAKE_NAMESPACE@_FIND_REQUIRED_${module})
+            set(@INSTALL_CMAKE_NAMESPACE@_FOUND False)
             set(_Qt_NOTFOUND_MESSAGE
-                "${_Qt_NOTFOUND_MESSAGE}Failed to find Qt component \"${module}\". ${_qt_component_not_found_msg}")
+                "${_Qt_NOTFOUND_MESSAGE}Failed to find required Qt component \"${module}\". ${_qt_component_not_found_msg}")
+            set(_qt_full_component_name "@INSTALL_CMAKE_NAMESPACE@${module}")
+            _qt_internal_suggest_dependency_debugging(${_qt_full_component_name}
+                _qt_full_component_name _Qt_NOTFOUND_MESSAGE)
+            unset(_qt_full_component_name)
+            break()
         elseif(NOT @INSTALL_CMAKE_NAMESPACE@_FIND_QUIETLY)
             message(WARNING
-                "Failed to find Qt component \"${module}\". ${_qt_component_not_found_msg}")
+                "Failed to find optional Qt component \"${module}\". ${_qt_component_not_found_msg}")
         endif()
 
         unset(_qt_expected_component_config_path)
@@ -245,8 +200,13 @@ endforeach()
 
 if(@INSTALL_CMAKE_NAMESPACE@_FIND_COMPONENTS AND _Qt_NOTFOUND_MESSAGE)
     set(@INSTALL_CMAKE_NAMESPACE@_NOT_FOUND_MESSAGE "${_Qt_NOTFOUND_MESSAGE}")
-    set(@INSTALL_CMAKE_NAMESPACE@_FOUND False)
     unset(_Qt_NOTFOUND_MESSAGE)
+endif()
+
+if(@INSTALL_CMAKE_NAMESPACE@_FOUND
+    AND COMMAND _qt_internal_override_example_install_dir_to_dot
+    AND NOT _qt_internal_example_dir_set_to_dot)
+    _qt_internal_override_example_install_dir_to_dot()
 endif()
 
 __qt_internal_defer_promote_targets_in_dir_scope_to_global()

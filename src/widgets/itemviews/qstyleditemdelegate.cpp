@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qstyleditemdelegate.h"
 
@@ -66,6 +30,7 @@
 #include <qmetaobject.h>
 #include <qtextlayout.h>
 #include <private/qabstractitemdelegate_p.h>
+#include <private/qabstractitemmodel_p.h>
 #include <private/qtextengine_p.h>
 #include <private/qlayoutengine_p.h>
 #include <qdebug.h>
@@ -150,7 +115,7 @@ public:
     \row    \li \l Qt::AccessibleDescriptionRole \li QString
     \row    \li \l Qt::AccessibleTextRole \li QString
     \endomit
-    \row    \li \l Qt::BackgroundRole \li QBrush (\since 4.2)
+    \row    \li \l Qt::BackgroundRole \li QBrush \since 4.2
     \row    \li \l Qt::CheckStateRole \li Qt::CheckState
     \row    \li \l Qt::DecorationRole \li QIcon, QPixmap, QImage and QColor
     \row    \li \l Qt::DisplayRole \li QString and types with a string representation
@@ -161,7 +126,7 @@ public:
     \row    \li \l Qt::StatusTipRole \li
     \endomit
     \row    \li \l Qt::TextAlignmentRole \li Qt::Alignment
-    \row    \li \l Qt::ForegroundRole \li QBrush (\since 4.2)
+    \row    \li \l Qt::ForegroundRole \li QBrush \since 4.2
     \omit
     \row    \li \l Qt::ToolTipRole
     \row    \li \l Qt::WhatsThisRole
@@ -302,7 +267,7 @@ void QStyledItemDelegate::initStyleOption(QStyleOptionViewItem *option,
 
     value = modelRoleDataSpan.dataForRole(Qt::TextAlignmentRole);
     if (value->isValid() && !value->isNull())
-        option->displayAlignment = Qt::Alignment(value->toInt());
+        option->displayAlignment = QtPrivate::legacyFlagValueFromModelData<Qt::Alignment>(*value);
 
     value = modelRoleDataSpan.dataForRole(Qt::ForegroundRole);
     if (value->canConvert<QBrush>())
@@ -311,7 +276,7 @@ void QStyledItemDelegate::initStyleOption(QStyleOptionViewItem *option,
     value = modelRoleDataSpan.dataForRole(Qt::CheckStateRole);
     if (value->isValid() && !value->isNull()) {
         option->features |= QStyleOptionViewItem::HasCheckIndicator;
-        option->checkState = static_cast<Qt::CheckState>(value->toInt());
+        option->checkState = QtPrivate::legacyEnumValueFromModelData<Qt::CheckState>(*value);
     }
 
     value = modelRoleDataSpan.dataForRole(Qt::DecorationRole);
@@ -343,13 +308,13 @@ void QStyledItemDelegate::initStyleOption(QStyleOptionViewItem *option,
         case QMetaType::QImage: {
             QImage image = qvariant_cast<QImage>(*value);
             option->icon = QIcon(QPixmap::fromImage(image));
-            option->decorationSize = image.size() / image.devicePixelRatio();
+            option->decorationSize = image.deviceIndependentSize().toSize();
             break;
         }
         case QMetaType::QPixmap: {
             QPixmap pixmap = qvariant_cast<QPixmap>(*value);
             option->icon = QIcon(pixmap);
-            option->decorationSize = pixmap.size() / pixmap.devicePixelRatio();
+            option->decorationSize = pixmap.deviceIndependentSize().toSize();
             break;
         }
         default:
@@ -458,10 +423,6 @@ QWidget *QStyledItemDelegate::createEditor(QWidget *parent,
 */
 void QStyledItemDelegate::setEditorData(QWidget *editor, const QModelIndex &index) const
 {
-#ifdef QT_NO_PROPERTIES
-    Q_UNUSED(editor);
-    Q_UNUSED(index);
-#else
     QVariant v = index.data(Qt::EditRole);
     QByteArray n = editor->metaObject()->userProperty().name();
 
@@ -470,7 +431,6 @@ void QStyledItemDelegate::setEditorData(QWidget *editor, const QModelIndex &inde
             v = QVariant(editor->property(n).metaType());
         editor->setProperty(n, v);
     }
-#endif
 }
 
 /*!
@@ -487,11 +447,6 @@ void QStyledItemDelegate::setModelData(QWidget *editor,
                                  QAbstractItemModel *model,
                                  const QModelIndex &index) const
 {
-#ifdef QT_NO_PROPERTIES
-    Q_UNUSED(model);
-    Q_UNUSED(editor);
-    Q_UNUSED(index);
-#else
     Q_D(const QStyledItemDelegate);
     Q_ASSERT(model);
     Q_ASSERT(editor);
@@ -501,7 +456,6 @@ void QStyledItemDelegate::setModelData(QWidget *editor,
             model->data(index, Qt::EditRole).userType());
     if (!n.isEmpty())
         model->setData(index, editor->property(n), Qt::EditRole);
-#endif
 }
 
 /*!
@@ -575,8 +529,9 @@ void QStyledItemDelegate::setItemEditorFactory(QItemEditorFactory *factory)
         \li \uicontrol Esc
     \endlist
 
-    If the \a editor's type is QTextEdit or QPlainTextEdit then \uicontrol Enter and
-    \uicontrol Return keys are \e not handled.
+    If the \a editor's type is QTextEdit or QPlainTextEdit then \uicontrol Tab,
+    \uicontrol Backtab, \uicontrol Enter and \uicontrol Return keys are \e not
+    handled.
 
     In the case of \uicontrol Tab, \uicontrol Backtab, \uicontrol Enter and \uicontrol Return
     key press events, the \a editor's data is committed to the model
@@ -644,7 +599,7 @@ bool QStyledItemDelegate::editorEvent(QEvent *event,
         return false;
     }
 
-    Qt::CheckState state = static_cast<Qt::CheckState>(value.toInt());
+    Qt::CheckState state = QtPrivate::legacyEnumValueFromModelData<Qt::CheckState>(value);
     if (flags & Qt::ItemIsUserTristate)
         state = ((Qt::CheckState)((state + 1) % 3));
     else

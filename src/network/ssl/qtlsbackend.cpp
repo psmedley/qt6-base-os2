@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtlsbackend_p.h"
 
@@ -52,6 +16,7 @@
 
 #include <QtCore/private/qfactoryloader_p.h>
 
+#include "QtCore/qapplicationstatic.h"
 #include <QtCore/qbytearray.h>
 #include <QtCore/qmutex.h>
 
@@ -60,8 +25,10 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
-                          (QTlsBackend_iid, QStringLiteral("/tls")))
+using namespace Qt::StringLiterals;
+
+Q_APPLICATION_STATIC(QFactoryLoader, loader, QTlsBackend_iid,
+                     QStringLiteral("/tls"))
 
 namespace {
 
@@ -90,9 +57,9 @@ public:
         if (!loader())
             return false;
 
-        static QBasicMutex mutex;
+        Q_CONSTINIT static QBasicMutex mutex;
         const QMutexLocker locker(&mutex);
-        if (loaded)
+        if (backends.size())
             return true;
 
 #if QT_CONFIG(library)
@@ -102,7 +69,7 @@ public:
         while (loader->instance(index))
             ++index;
 
-        return loaded = true;
+        return true;
     }
 
     QList<QString> backendNames()
@@ -139,7 +106,6 @@ public:
 private:
     std::vector<QTlsBackend *> backends;
     QMutex collectionMutex;
-    bool loaded = false;
 };
 
 } // Unnamed namespace
@@ -202,6 +168,12 @@ QTlsBackend::QTlsBackend()
 {
     if (backends())
         backends->addBackend(this);
+
+    if (QCoreApplication::instance()) {
+        connect(QCoreApplication::instance(), &QCoreApplication::destroyed, this, [this] {
+            delete this;
+        });
+    }
 }
 
 /*!
@@ -800,30 +772,39 @@ QSslCipher QTlsBackend::createCiphersuite(const QString &descriptionOneLine, int
 {
     QSslCipher ciph;
 
-    const auto descriptionList = QStringView{descriptionOneLine}.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    const auto descriptionList = QStringView{descriptionOneLine}.split(u' ', Qt::SkipEmptyParts);
     if (descriptionList.size() > 5) {
         ciph.d->isNull = false;
         ciph.d->name = descriptionList.at(0).toString();
 
-        QString protoString = descriptionList.at(1).toString();
-        ciph.d->protocolString = protoString;
+        QStringView protoString = descriptionList.at(1);
+        ciph.d->protocolString = protoString.toString();
         ciph.d->protocol = QSsl::UnknownProtocol;
-        if (protoString == QLatin1String("TLSv1"))
-            ciph.d->protocol = QSsl::TlsV1_0;
-        else if (protoString == QLatin1String("TLSv1.1"))
-            ciph.d->protocol = QSsl::TlsV1_1;
-        else if (protoString == QLatin1String("TLSv1.2"))
-            ciph.d->protocol = QSsl::TlsV1_2;
-        else if (protoString == QLatin1String("TLSv1.3"))
-            ciph.d->protocol = QSsl::TlsV1_3;
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
+        if (protoString.startsWith(u"TLSv1")) {
+            QStringView tail = protoString.sliced(5);
+            if (tail.startsWith(u'.')) {
+                tail = tail.sliced(1);
+                if (tail == u"3")
+                    ciph.d->protocol = QSsl::TlsV1_3;
+                else if (tail == u"2")
+                    ciph.d->protocol = QSsl::TlsV1_2;
+                else if (tail == u"1")
+                    ciph.d->protocol = QSsl::TlsV1_1;
+            } else if (tail.isEmpty()) {
+                ciph.d->protocol = QSsl::TlsV1_0;
+            }
+        }
+QT_WARNING_POP
 
-        if (descriptionList.at(2).startsWith(QLatin1String("Kx=")))
+        if (descriptionList.at(2).startsWith("Kx="_L1))
             ciph.d->keyExchangeMethod = descriptionList.at(2).mid(3).toString();
-        if (descriptionList.at(3).startsWith(QLatin1String("Au=")))
+        if (descriptionList.at(3).startsWith("Au="_L1))
             ciph.d->authenticationMethod = descriptionList.at(3).mid(3).toString();
-        if (descriptionList.at(4).startsWith(QLatin1String("Enc=")))
+        if (descriptionList.at(4).startsWith("Enc="_L1))
             ciph.d->encryptionMethod = descriptionList.at(4).mid(4).toString();
-        ciph.d->exportable = (descriptionList.size() > 6 && descriptionList.at(6) == QLatin1String("export"));
+        ciph.d->exportable = (descriptionList.size() > 6 && descriptionList.at(6) == "export"_L1);
 
         ciph.d->bits = bits;
         ciph.d->supportedBits = supportedBits;
@@ -837,7 +818,7 @@ QSslCipher QTlsBackend::createCiphersuite(const QString &descriptionOneLine, int
     Auxiliary function. Creates a new QSslCipher from \a suiteName, \a protocol version and
     \a protocolString. For example:
     \code
-    createCiphersuite(QLatin1String("ECDHE-RSA-AES256-GCM-SHA256"), QSsl::TlsV1_2, QLatin1String("TLSv1.2"));
+    createCiphersuite("ECDHE-RSA-AES256-GCM-SHA256"_L1, QSsl::TlsV1_2, "TLSv1.2"_L1);
     \endcode
 */
 QSslCipher QTlsBackend::createCiphersuite(const QString &suiteName, QSsl::SslProtocol protocol,
@@ -853,52 +834,52 @@ QSslCipher QTlsBackend::createCiphersuite(const QString &suiteName, QSsl::SslPro
     ciph.d->protocol = protocol;
     ciph.d->protocolString = protocolString;
 
-    const auto bits = QStringView{ciph.d->name}.split(QLatin1Char('-'));
+    const auto bits = QStringView{ciph.d->name}.split(u'-');
     if (bits.size() >= 2) {
         if (bits.size() == 2 || bits.size() == 3)
-            ciph.d->keyExchangeMethod = QLatin1String("RSA");
-        else if (bits.front() == QLatin1String("DH") || bits.front() == QLatin1String("DHE"))
-            ciph.d->keyExchangeMethod = QLatin1String("DH");
-        else if (bits.front() == QLatin1String("ECDH") || bits.front() == QLatin1String("ECDHE"))
-            ciph.d->keyExchangeMethod = QLatin1String("ECDH");
+            ciph.d->keyExchangeMethod = "RSA"_L1;
+        else if (bits.front() == "DH"_L1 || bits.front() == "DHE"_L1)
+            ciph.d->keyExchangeMethod = "DH"_L1;
+        else if (bits.front() == "ECDH"_L1 || bits.front() == "ECDHE"_L1)
+            ciph.d->keyExchangeMethod = "ECDH"_L1;
         else
             qCWarning(lcSsl) << "Unknown Kx" << ciph.d->name;
 
         if (bits.size() == 2 || bits.size() == 3)
-            ciph.d->authenticationMethod = QLatin1String("RSA");
-        else if (ciph.d->name.contains(QLatin1String("-ECDSA-")))
-            ciph.d->authenticationMethod = QLatin1String("ECDSA");
-        else if (ciph.d->name.contains(QLatin1String("-RSA-")))
-            ciph.d->authenticationMethod = QLatin1String("RSA");
+            ciph.d->authenticationMethod = "RSA"_L1;
+        else if (ciph.d->name.contains("-ECDSA-"_L1))
+            ciph.d->authenticationMethod = "ECDSA"_L1;
+        else if (ciph.d->name.contains("-RSA-"_L1))
+            ciph.d->authenticationMethod = "RSA"_L1;
         else
             qCWarning(lcSsl) << "Unknown Au" << ciph.d->name;
 
-        if (ciph.d->name.contains(QLatin1String("RC4-"))) {
-            ciph.d->encryptionMethod = QLatin1String("RC4(128)");
+        if (ciph.d->name.contains("RC4-"_L1)) {
+            ciph.d->encryptionMethod = "RC4(128)"_L1;
             ciph.d->bits = 128;
             ciph.d->supportedBits = 128;
-        } else if (ciph.d->name.contains(QLatin1String("DES-CBC3-"))) {
-            ciph.d->encryptionMethod = QLatin1String("3DES(168)");
+        } else if (ciph.d->name.contains("DES-CBC3-"_L1)) {
+            ciph.d->encryptionMethod = "3DES(168)"_L1;
             ciph.d->bits = 168;
             ciph.d->supportedBits = 168;
-        } else if (ciph.d->name.contains(QLatin1String("AES128-"))) {
-            ciph.d->encryptionMethod = QLatin1String("AES(128)");
+        } else if (ciph.d->name.contains("AES128-"_L1)) {
+            ciph.d->encryptionMethod = "AES(128)"_L1;
             ciph.d->bits = 128;
             ciph.d->supportedBits = 128;
-        } else if (ciph.d->name.contains(QLatin1String("AES256-GCM"))) {
-            ciph.d->encryptionMethod = QLatin1String("AESGCM(256)");
+        } else if (ciph.d->name.contains("AES256-GCM"_L1)) {
+            ciph.d->encryptionMethod = "AESGCM(256)"_L1;
             ciph.d->bits = 256;
             ciph.d->supportedBits = 256;
-        } else if (ciph.d->name.contains(QLatin1String("AES256-"))) {
-            ciph.d->encryptionMethod = QLatin1String("AES(256)");
+        } else if (ciph.d->name.contains("AES256-"_L1)) {
+            ciph.d->encryptionMethod = "AES(256)"_L1;
             ciph.d->bits = 256;
             ciph.d->supportedBits = 256;
-        } else if (ciph.d->name.contains(QLatin1String("CHACHA20-"))) {
-            ciph.d->encryptionMethod = QLatin1String("CHACHA20");
+        } else if (ciph.d->name.contains("CHACHA20-"_L1)) {
+            ciph.d->encryptionMethod = "CHACHA20"_L1;
             ciph.d->bits = 256;
             ciph.d->supportedBits = 256;
-        } else if (ciph.d->name.contains(QLatin1String("NULL-"))) {
-            ciph.d->encryptionMethod = QLatin1String("NULL");
+        } else if (ciph.d->name.contains("NULL-"_L1)) {
+            ciph.d->encryptionMethod = "NULL"_L1;
         } else {
             qCWarning(lcSsl) << "Unknown Enc" << ciph.d->name;
         }
@@ -911,7 +892,7 @@ QSslCipher QTlsBackend::createCiphersuite(const QString &suiteName, QSsl::SslPro
     Auxiliary function. Creates a new QSslCipher from \a name (which is an implementation-specific
     string), \a protocol and \a protocolString, e.g.:
     \code
-    createCipher(QStringLiteral("schannel"), QSsl::TlsV1_2, QLatin1String("TLSv1.2"));
+    createCipher(QStringLiteral("schannel"), QSsl::TlsV1_2, "TLSv1.2"_L1);
     \endcode
 */
 QSslCipher QTlsBackend::createCipher(const QString &name, QSsl::SslProtocol protocol,
@@ -1715,7 +1696,7 @@ TlsKey *X509Certificate::publicKey() const
 /*!
     \class TlsCryptograph
     \internal (Network-private)
-    \brief TlsCryptograph is an abstract class, that allows a TLS pluging to implement QSslSocket.
+    \brief TlsCryptograph is an abstract class, that allows a TLS plugin to implement QSslSocket.
 
     This abstract base class provides an interface that must be reimplemented by a TLS plugin,
     that supports QSslSocket. A class, implementing TlsCryptograph's interface, is responsible
@@ -1860,7 +1841,7 @@ TlsCryptograph::~TlsCryptograph() = default;
 
     \sa sslContext()
 */
-void TlsCryptograph::checkSettingSslContext(QSharedPointer<QSslContext> tlsContext)
+void TlsCryptograph::checkSettingSslContext(std::shared_ptr<QSslContext> tlsContext)
 {
     Q_UNUSED(tlsContext);
 }
@@ -1873,7 +1854,7 @@ void TlsCryptograph::checkSettingSslContext(QSharedPointer<QSslContext> tlsConte
 
     \sa checkSettingSslContext()
 */
-QSharedPointer<QSslContext> TlsCryptograph::sslContext() const
+std::shared_ptr<QSslContext> TlsCryptograph::sslContext() const
 {
     return {};
 }
@@ -2366,3 +2347,5 @@ Q_NETWORK_EXPORT void qt_ForceTlsSecurityLevel()
 #endif // QT_CONFIG(ssl)
 
 QT_END_NAMESPACE
+
+#include "moc_qtlsbackend_p.cpp"

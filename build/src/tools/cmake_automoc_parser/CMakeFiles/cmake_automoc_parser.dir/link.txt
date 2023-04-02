@@ -1,0 +1,1 @@
+/usr/bin/c++ -DNDEBUG -O2 -Wl,--gc-sections -Wl,--enable-new-dtags CMakeFiles/cmake_automoc_parser.dir/main.cpp.o -o ../../../libexec/cmake_automoc_parser  -Wl,-rpath,:::::::::::::: ../bootstrap/libBootstrap.a /usr/lib/x86_64-linux-gnu/libpcre2-16.so 

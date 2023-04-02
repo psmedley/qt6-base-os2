@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qnumeric.h"
 #include "qnumeric_p.h"
@@ -256,6 +220,7 @@ Q_CORE_EXPORT quint64 qFloatDistance(double a, double b)
 
 /*!
     \fn template<typename T> bool qAddOverflow(T v1, T v2, T *result)
+    \relates <QtGlobal>
     \since 6.1
 
     Adds two values \a v1 and \a v2, of a numeric type \c T and records the
@@ -287,6 +252,7 @@ Q_CORE_EXPORT quint64 qFloatDistance(double a, double b)
 
 /*!
     \fn template<typename T> bool qSubOverflow(T v1, T v2, T *result)
+    \relates <QtGlobal>
     \since 6.1
 
     Subtracts \a v2 from \a v1 and records the resulting value in \a result. If
@@ -318,6 +284,7 @@ Q_CORE_EXPORT quint64 qFloatDistance(double a, double b)
 
 /*!
     \fn template<typename T> bool qMulOverflow(T v1, T v2, T *result)
+    \relates <QtGlobal>
     \since 6.1
 
     Multiplies \a v1 and \a v2, and records the resulting value in \a result. If
@@ -348,5 +315,36 @@ Q_CORE_EXPORT quint64 qFloatDistance(double a, double b)
     compile time constant \c V2 as second argument, and \a r as third argument.
     This can be faster than calling the version with only variable arguments.
 */
+
+template <typename T> static constexpr T max = std::numeric_limits<T>::max();
+template <typename T> static constexpr T min = std::numeric_limits<T>::min();
+
+static_assert(qt_saturate<short>(max<unsigned>) == max<short>);
+static_assert(qt_saturate<int>(max<unsigned>) == max<int>);
+static_assert(qt_saturate<qint64>(max<unsigned>) == qint64(max<unsigned>));
+
+static_assert(qt_saturate<short>(max<int>) == max<short>);
+static_assert(qt_saturate<unsigned>(max<int>) == unsigned(max<int>));
+static_assert(qt_saturate<qint64>(max<int>) == qint64(max<int>));
+
+static_assert(qt_saturate<short>(max<qint64>) == max<short>);
+static_assert(qt_saturate<int>(max<qint64>) == max<int>);
+static_assert(qt_saturate<unsigned>(max<qint64>) == max<unsigned>);
+static_assert(qt_saturate<quint64>(max<qint64>) == quint64(max<qint64>));
+
+static_assert(qt_saturate<short>(max<quint64>) == max<short>);
+static_assert(qt_saturate<int>(max<quint64>) == max<int>);
+static_assert(qt_saturate<unsigned>(max<quint64>) == max<unsigned>);
+static_assert(qt_saturate<qint64>(max<quint64>) == max<qint64>);
+
+static_assert(qt_saturate<short>(min<int>) == min<short>);
+static_assert(qt_saturate<qint64>(min<int>) == qint64(min<int>));
+static_assert(qt_saturate<unsigned>(min<int>) == 0);
+static_assert(qt_saturate<quint64>(min<int>) == 0);
+
+static_assert(qt_saturate<short>(min<qint64>) == min<short>);
+static_assert(qt_saturate<int>(min<qint64>) == min<int>);
+static_assert(qt_saturate<unsigned>(min<qint64>) == 0);
+static_assert(qt_saturate<quint64>(min<qint64>) == 0);
 
 QT_END_NAMESPACE

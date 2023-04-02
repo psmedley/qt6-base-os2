@@ -15,10 +15,6 @@ qhp.QtNetwork.virtualFolder       = qtnetwork
 qhp.QtNetwork.indexTitle          = Qt Network
 qhp.QtNetwork.indexRoot           =
 
-qhp.QtNetwork.filterAttributes    = qtnetwork $QT_VERSION qtrefdoc
-qhp.QtNetwork.customFilters.Qt.name = QtNetwork $QT_VERSION
-qhp.QtNetwork.customFilters.Qt.filterAttributes = qtnetwork $QT_VERSION
-
 qhp.QtNetwork.subprojects         = classes
 qhp.QtNetwork.subprojects.classes.title = C++ Classes
 qhp.QtNetwork.subprojects.classes.indexTitle = Qt Network C++ Classes
@@ -41,7 +37,8 @@ exampledirs += ../../../examples/network \
 imagedirs   += images \
                ../../../examples/network/doc/images
 
-manifestmeta.highlighted.names      = "QtNetwork/HTTP Example"
-
 navigation.landingpage = "Qt Network"
 navigation.cppclassespage = "Qt Network C++ Classes"
+
+# Fail the documentation build if there are more warnings than the limit
+warninglimit = 0

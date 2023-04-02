@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qfontdatabase.h"
 #include "qfontdatabase_p.h"
@@ -68,6 +32,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 Q_LOGGING_CATEGORY(lcFontDb, "qt.text.font.db")
 Q_LOGGING_CATEGORY(lcFontMatch, "qt.text.font.match")
 
@@ -94,41 +60,40 @@ static int getFontWeight(const QString &weightString)
     //
     // A simple string test is the cheapest, so let's do that first.
     // Test in decreasing order of commonness
-    if (s == QLatin1String("normal") || s == QLatin1String("regular"))
+    if (s == "normal"_L1 || s == "regular"_L1)
         return QFont::Normal;
-    if (s == QLatin1String("bold"))
+    if (s == "bold"_L1)
         return QFont::Bold;
-    if (s == QLatin1String("semibold") || s == QLatin1String("semi bold")
-            || s == QLatin1String("demibold") || s == QLatin1String("demi bold"))
+    if (s == "semibold"_L1 || s == "semi bold"_L1 || s == "demibold"_L1 || s == "demi bold"_L1)
         return QFont::DemiBold;
-    if (s == QLatin1String("medium"))
+    if (s == "medium"_L1)
         return QFont::Medium;
-    if (s == QLatin1String("black"))
+    if (s == "black"_L1)
         return QFont::Black;
-    if (s == QLatin1String("light"))
+    if (s == "light"_L1)
         return QFont::Light;
-    if (s == QLatin1String("thin"))
+    if (s == "thin"_L1)
         return QFont::Thin;
     const QStringView s2 = QStringView{s}.mid(2);
-    if (s.startsWith(QLatin1String("ex")) || s.startsWith(QLatin1String("ul"))) {
-            if (s2 == QLatin1String("tralight") || s == QLatin1String("tra light"))
+    if (s.startsWith("ex"_L1) || s.startsWith("ul"_L1)) {
+            if (s2 == "tralight"_L1 || s == "tra light"_L1)
                 return QFont::ExtraLight;
-            if (s2 == QLatin1String("trabold") || s2 == QLatin1String("tra bold"))
+            if (s2 == "trabold"_L1 || s2 == "tra bold"_L1)
                 return QFont::ExtraBold;
     }
 
     // Next up, let's see if contains() matches: slightly more expensive, but
     // still fast enough.
-    if (s.contains(QLatin1String("bold"))) {
-        if (s.contains(QLatin1String("demi")))
+    if (s.contains("bold"_L1)) {
+        if (s.contains("demi"_L1))
             return QFont::DemiBold;
         return QFont::Bold;
     }
-    if (s.contains(QLatin1String("thin")))
+    if (s.contains("thin"_L1))
         return QFont::Thin;
-    if (s.contains(QLatin1String("light")))
+    if (s.contains("light"_L1))
         return QFont::Light;
-    if (s.contains(QLatin1String("black")))
+    if (s.contains("black"_L1))
         return QFont::Black;
 
     // Now, we perform string translations & comparisons with those.
@@ -185,9 +150,9 @@ QtFontStyle::Key::Key(const QString &styleString)
 
     if (!styleString.isEmpty()) {
         // First the straightforward no-translation checks, these are fast.
-        if (styleString.contains(QLatin1String("Italic")))
+        if (styleString.contains("Italic"_L1))
             style = QFont::StyleItalic;
-        else if (styleString.contains(QLatin1String("Oblique")))
+        else if (styleString.contains("Oblique"_L1))
             style = QFont::StyleOblique;
 
         // Then the translation checks. These aren't as fast.
@@ -298,14 +263,29 @@ void QtFontFamily::ensurePopulated()
     Q_ASSERT_X(populated, Q_FUNC_INFO, qPrintable(name));
 }
 
+void QFontDatabasePrivate::clearFamilies()
+{
+    while (count--)
+        delete families[count];
+    ::free(families);
+    families = nullptr;
+    count = 0;
+
+    for (auto &font : applicationFonts)
+        font.properties.clear(); // Unpopulate
+
+    populated = false;
+    // don't clear the memory fonts!
+}
+
 void QFontDatabasePrivate::invalidate()
 {
     QFontCache::instance()->clear();
 
     fallbacksCache.clear();
-    free();
+    clearFamilies();
     QGuiApplicationPrivate::platformIntegration()->fontDatabase()->invalidate();
-    emit static_cast<QGuiApplication *>(QCoreApplication::instance())->fontDatabaseChanged();
+    emit qGuiApp->fontDatabaseChanged();
 }
 
 QtFontFamily *QFontDatabasePrivate::family(const QString &f, FamilyRequestFlags flags)
@@ -440,11 +420,11 @@ Q_GUI_EXPORT QFontDatabase::WritingSystem qt_writing_system_for_script(int scrip
 */
 static void parseFontName(const QString &name, QString &foundry, QString &family)
 {
-    int i = name.indexOf(QLatin1Char('['));
-    int li = name.lastIndexOf(QLatin1Char(']'));
+    int i = name.indexOf(u'[');
+    int li = name.lastIndexOf(u']');
     if (i >= 0 && li >= 0 && i < li) {
         foundry = name.mid(i + 1, li - i - 1);
-        if (i > 0 && name[i - 1] == QLatin1Char(' '))
+        if (i > 0 && name[i - 1] == u' ')
             i--;
         family = name.left(i);
     } else {
@@ -455,7 +435,7 @@ static void parseFontName(const QString &name, QString &foundry, QString &family
     // capitalize the family/foundry names
     bool space = true;
     QChar *s = family.data();
-    int len = family.length();
+    int len = family.size();
     while(len--) {
         if (space) *s = s->toUpper();
         space = s->isSpace();
@@ -464,7 +444,7 @@ static void parseFontName(const QString &name, QString &foundry, QString &family
 
     space = true;
     s = foundry.data();
-    len = foundry.length();
+    len = foundry.size();
     while(len--) {
         if (space) *s = s->toUpper();
         space = s->isSpace();
@@ -487,7 +467,7 @@ static void initFontDef(const QtFontDesc &desc, const QFontDef &request, QFontDe
     QString family;
     family = desc.family->name;
     if (! desc.foundry->name.isEmpty() && desc.family->count > 1)
-        family += QLatin1String(" [") + desc.foundry->name + QLatin1Char(']');
+        family += " ["_L1 + desc.foundry->name + u']';
     fontDef->families = QStringList(family);
 
     if (desc.style->smoothScalable
@@ -523,17 +503,14 @@ static QStringList familyList(const QFontDef &req)
     return family_list;
 }
 
-Q_GLOBAL_STATIC(QFontDatabasePrivate, privateDb)
 Q_GLOBAL_STATIC(QRecursiveMutex, fontDatabaseMutex)
 
 // used in qguiapplication.cpp
 void qt_cleanupFontDatabase()
 {
-    QFontDatabasePrivate *db = privateDb();
-    if (db) {
-        db->fallbacksCache.clear();
-        db->free();
-    }
+    auto *db = QFontDatabasePrivate::instance();
+    db->fallbacksCache.clear();
+    db->clearFamilies();
 }
 
 // used in qfont.cpp
@@ -544,7 +521,8 @@ QRecursiveMutex *qt_fontdatabase_mutex()
 
 QFontDatabasePrivate *QFontDatabasePrivate::instance()
 {
-    return privateDb();
+    static QFontDatabasePrivate instance;
+    return &instance;
 }
 
 void qt_registerFont(const QString &familyName, const QString &stylename,
@@ -553,7 +531,7 @@ void qt_registerFont(const QString &familyName, const QString &stylename,
                      bool scalable, int pixelSize, bool fixedPitch,
                      const QSupportedWritingSystems &writingSystems, void *handle)
 {
-    QFontDatabasePrivate *d = privateDb();
+    auto *d = QFontDatabasePrivate::instance();
     qCDebug(lcFontDb) << "Adding font: familyName" << familyName << "stylename" << stylename << "weight" << weight
         << "style" << style << "pixelSize" << pixelSize << "antialiased" << antialiased << "fixed" << fixedPitch;
     QtFontStyle::Key styleKey;
@@ -585,7 +563,7 @@ void qt_registerFont(const QString &familyName, const QString &stylename,
 void qt_registerFontFamily(const QString &familyName)
 {
     // Create uninitialized/unpopulated family
-    privateDb()->family(familyName, QFontDatabasePrivate::EnsureCreated);
+    QFontDatabasePrivate::instance()->family(familyName, QFontDatabasePrivate::EnsureCreated);
 }
 
 void qt_registerAliasToFontFamily(const QString &familyName, const QString &alias)
@@ -593,7 +571,7 @@ void qt_registerAliasToFontFamily(const QString &familyName, const QString &alia
     if (alias.isEmpty())
         return;
 
-    QFontDatabasePrivate *d = privateDb();
+    auto *d = QFontDatabasePrivate::instance();
     QtFontFamily *f = d->family(familyName, QFontDatabasePrivate::RequestFamily);
     if (!f)
         return;
@@ -607,7 +585,7 @@ void qt_registerAliasToFontFamily(const QString &familyName, const QString &alia
 QString qt_resolveFontFamilyAlias(const QString &alias)
 {
     if (!alias.isEmpty()) {
-        const QFontDatabasePrivate *d = privateDb();
+        const auto *d = QFontDatabasePrivate::instance();
         for (int i = 0; i < d->count; ++i)
             if (d->families[i]->matchesFamilyName(alias))
                 return d->families[i]->name;
@@ -617,7 +595,7 @@ QString qt_resolveFontFamilyAlias(const QString &alias)
 
 bool qt_isFontFamilyPopulated(const QString &familyName)
 {
-    QFontDatabasePrivate *d = privateDb();
+    auto *d = QFontDatabasePrivate::instance();
     QtFontFamily *f = d->family(familyName, QFontDatabasePrivate::RequestFamily);
     return f != nullptr && f->populated;
 }
@@ -641,7 +619,7 @@ QStringList QPlatformFontDatabase::fallbacksForFamily(const QString &family, QFo
     if (writingSystem >= QFontDatabase::WritingSystemsCount)
         writingSystem = QFontDatabase::Any;
 
-    QFontDatabasePrivate *db = privateDb();
+    auto *db = QFontDatabasePrivate::instance();
     for (int i = 0; i < db->count; ++i) {
         QtFontFamily *f = db->families[i];
 
@@ -656,7 +634,7 @@ QStringList QPlatformFontDatabase::fallbacksForFamily(const QString &family, QFo
             for (int k = 0; k < foundry->count; ++k) {
                 QString name = foundry->name.isEmpty()
                         ? f->name
-                        : f->name + QLatin1String(" [") + foundry->name + QLatin1Char(']');
+                        : f->name + " ["_L1 + foundry->name + u']';
                 if (style == foundry->styles[k]->key.style)
                     preferredFallbacks.append(name);
                 else
@@ -668,13 +646,10 @@ QStringList QPlatformFontDatabase::fallbacksForFamily(const QString &family, QFo
     return preferredFallbacks + otherFallbacks;
 }
 
-static void initializeDb();
-
 static QStringList fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script)
 {
-    QFontDatabasePrivate *db = privateDb();
-    if (!db->count)
-        initializeDb();
+    QMutexLocker locker(fontDatabaseMutex());
+    auto *db = QFontDatabasePrivate::ensureFontDatabase();
 
     const QtFontFallbacksCacheKey cacheKey = { family, style, styleHint, script };
 
@@ -710,31 +685,7 @@ QStringList qt_fallbacksForFamily(const QString &family, QFont::Style style, QFo
     return fallbacksForFamily(family, style, styleHint, script);
 }
 
-static void registerFont(QFontDatabasePrivate::ApplicationFont *fnt);
-
-static void initializeDb()
-{
-    QFontDatabasePrivate *db = privateDb();
-
-    // init by asking for the platformfontdb for the first time or after invalidation
-    if (!db->count) {
-        QGuiApplicationPrivate::platformIntegration()->fontDatabase()->populateFontDatabase();
-        for (int i = 0; i < db->applicationFonts.count(); i++) {
-            if (!db->applicationFonts.at(i).properties.isEmpty())
-                registerFont(&db->applicationFonts[i]);
-        }
-    }
-}
-
-static inline void load(const QString & = QString(), int = -1)
-{
-    // Only initialize the database if it has been cleared or not initialized yet
-    if (!privateDb()->count)
-        initializeDb();
-}
-
-static
-QFontEngine *loadSingleEngine(int script,
+QFontEngine *QFontDatabasePrivate::loadSingleEngine(int script,
                               const QFontDef &request,
                               QtFontFamily *family, QtFontFoundry *foundry,
                               QtFontStyle *style, QtFontSize *size)
@@ -785,7 +736,7 @@ QFontEngine *loadSingleEngine(int script,
         if (style->key.stretch != 0 && request.stretch != 0
             && (request.styleName.isEmpty() || request.styleName != style->styleName)) {
             def.stretch = (request.stretch * 100 + style->key.stretch / 2) / style->key.stretch;
-        } else {
+        } else if (request.stretch == QFont::AnyStretch) {
             def.stretch = 100;
         }
 
@@ -814,8 +765,7 @@ QFontEngine *loadSingleEngine(int script,
     return engine;
 }
 
-static
-QFontEngine *loadEngine(int script, const QFontDef &request,
+QFontEngine *QFontDatabasePrivate::loadEngine(int script, const QFontDef &request,
                         QtFontFamily *family, QtFontFoundry *foundry,
                         QtFontStyle *style, QtFontSize *size)
 {
@@ -861,11 +811,6 @@ QtFontStyle::~QtFontStyle()
    free(pixelSizes);
 }
 
-static void registerFont(QFontDatabasePrivate::ApplicationFont *fnt)
-{
-    QGuiApplicationPrivate::platformIntegration()->fontDatabase()->addApplicationFont(fnt->data, fnt->fileName, fnt);
-}
-
 static QtFontStyle *bestStyle(QtFontFoundry *foundry, const QtFontStyle::Key &styleKey,
                               const QString &styleName = QString())
 {
@@ -906,11 +851,10 @@ static QtFontStyle *bestStyle(QtFontFoundry *foundry, const QtFontStyle::Key &st
 }
 
 
-static
-unsigned int bestFoundry(int script, unsigned int score, int styleStrategy,
+unsigned int QFontDatabasePrivate::bestFoundry(int script, unsigned int score, int styleStrategy,
                          const QtFontFamily *family, const QString &foundry_name,
                          QtFontStyle::Key styleKey, int pixelSize, char pitch,
-                         QtFontDesc *desc, const QString &styleName = QString())
+                         QtFontDesc *desc, const QString &styleName)
 {
     Q_UNUSED(script);
     Q_UNUSED(pitch);
@@ -1053,13 +997,9 @@ static bool matchFamilyName(const QString &familyName, QtFontFamily *f)
 
     Tries to find the best match for a given request and family/foundry
 */
-static int match(int script,
-                 const QFontDef &request,
-                 const QString &family_name,
-                 const QString &foundry_name,
-                 QtFontDesc *desc,
-                 const QList<int> &blacklistedFamilies,
-                 unsigned int *resultingScore = nullptr)
+int QFontDatabasePrivate::match(int script, const QFontDef &request, const QString &family_name,
+                     const QString &foundry_name, QtFontDesc *desc, const QList<int> &blacklistedFamilies,
+                     unsigned int *resultingScore)
 {
     int result = -1;
 
@@ -1071,16 +1011,18 @@ static int match(int script,
     char pitch = request.ignorePitch ? '*' : request.fixedPitch ? 'm' : 'p';
 
 
-    qCDebug(lcFontMatch, "QFontDatabase::match\n"
+    qCDebug(lcFontMatch, "QFontDatabasePrivate::match\n"
              "  request:\n"
              "    family: %s [%s], script: %d\n"
+             "    styleName: %s\n"
              "    weight: %d, style: %d\n"
              "    stretch: %d\n"
              "    pixelSize: %g\n"
              "    pitch: %c",
              family_name.isEmpty() ? "-- first in script --" : family_name.toLatin1().constData(),
-             foundry_name.isEmpty() ? "-- any --" : foundry_name.toLatin1().constData(),
-             script, request.weight, request.style, request.stretch, request.pixelSize, pitch);
+             foundry_name.isEmpty() ? "-- any --" : foundry_name.toLatin1().constData(), script,
+             request.styleName.isEmpty() ? "-- any --" : request.styleName.toLatin1().constData(),
+             request.weight, request.style, request.stretch, request.pixelSize, pitch);
 
     desc->family = nullptr;
     desc->foundry = nullptr;
@@ -1089,13 +1031,14 @@ static int match(int script,
 
     unsigned int score = ~0u;
 
-    load(family_name, script);
+    QMutexLocker locker(fontDatabaseMutex());
+    QFontDatabasePrivate::ensureFontDatabase();
 
     auto writingSystem = qt_writing_system_for_script(script);
     if (writingSystem >= QFontDatabase::WritingSystemsCount)
         writingSystem = QFontDatabase::Any;
 
-    QFontDatabasePrivate *db = privateDb();
+    auto *db = QFontDatabasePrivate::instance();
     for (int x = 0; x < db->count; ++x) {
         if (blacklistedFamilies.contains(x))
             continue;
@@ -1163,9 +1106,9 @@ static QString styleStringHelper(int weight, QFont::Style style)
     }
 
     if (style == QFont::StyleItalic)
-        result += QLatin1Char(' ') + QCoreApplication::translate("QFontDatabase", "Italic");
+        result += u' ' + QCoreApplication::translate("QFontDatabase", "Italic");
     else if (style == QFont::StyleOblique)
-        result += QLatin1Char(' ') + QCoreApplication::translate("QFontDatabase", "Oblique");
+        result += u' ' + QCoreApplication::translate("QFontDatabase", "Oblique");
 
     if (result.isEmpty())
         result = QCoreApplication::translate("QFontDatabase", "Normal", "The Normal or Regular font weight");
@@ -1308,6 +1251,56 @@ QString QFontDatabase::styleString(const QFontInfo &fontInfo)
 */
 
 /*!
+    \class QFontDatabasePrivate
+    \internal
+
+    Singleton implementation of the public QFontDatabase APIs,
+    accessed through QFontDatabasePrivate::instance().
+
+    The database is organized in multiple levels:
+
+      - QFontDatabasePrivate::families
+        - QtFontFamily::foundries
+          - QtFontFoundry::styles
+            - QtFontStyle::sizes
+              - QtFontSize::pixelSize
+
+    The font database is the single source of truth when doing
+    font matching, so the database must be sufficiently filled
+    before attempting a match.
+
+    The database is populated (filled) from two sources:
+
+     1. The system (platform's) view of the available fonts
+
+        Initiated via QFontDatabasePrivate::populateFontDatabase().
+
+        a. Can be registered lazily by family only, by calling
+           QPlatformFontDatabase::registerFontFamily(), and later
+           populated via QPlatformFontDatabase::populateFamily().
+
+        b. Or fully registered with all styles, by calling
+           QPlatformFontDatabase::registerFont().
+
+     2. The fonts registered by the application via Qt APIs
+
+        Initiated via QFontDatabase::addApplicationFont() and
+        QFontDatabase::addApplicationFontFromData().
+
+        Application fonts are always fully registered when added.
+
+    Fonts can be added at any time, so the database may grow even
+    after QFontDatabasePrivate::populateFontDatabase() has been
+    completed.
+
+    The database does not support granular removal of fonts,
+    so if the system fonts change, or an application font is
+    removed, the font database will be cleared and then filled
+    from scratch, via QFontDatabasePrivate:invalidate() and
+    QFontDatabasePrivate::ensureFontDatabase().
+*/
+
+/*!
     \internal
 
     Initializes the font database if necessary and returns its
@@ -1315,12 +1308,28 @@ QString QFontDatabase::styleString(const QFontInfo &fontInfo)
 */
 QFontDatabasePrivate *QFontDatabasePrivate::ensureFontDatabase()
 {
-    QFontDatabasePrivate *d = privateDb();
-    if (d->count == 0) {
+    auto *d = QFontDatabasePrivate::instance();
+    if (!d->populated) {
+        // The font database may have been partially populated, but to ensure
+        // we can answer queries for any platform- or user-provided family we
+        // need to fully populate it now.
+
         if (Q_UNLIKELY(qGuiApp == nullptr || QGuiApplicationPrivate::platformIntegration() == nullptr))
             qFatal("QFontDatabase: Must construct a QGuiApplication before accessing QFontDatabase");
 
-        initializeDb();
+        auto *platformFontDatabase = QGuiApplicationPrivate::platformIntegration()->fontDatabase();
+        platformFontDatabase->populateFontDatabase();
+
+        for (int i = 0; i < d->applicationFonts.size(); i++) {
+            auto *font = &d->applicationFonts[i];
+            if (!font->isNull() && !font->isPopulated())
+                platformFontDatabase->addApplicationFont(font->data, font->fileName, font);
+        }
+
+        // Note: Both application fonts and platform fonts may be added
+        // after this initial population, so the only thing we are tracking
+        // is whether we've done our part in ensuring a filled font database.
+        d->populated = true;
     }
     return d;
 }
@@ -1336,8 +1345,6 @@ QList<QFontDatabase::WritingSystem> QFontDatabase::writingSystems()
 {
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
-
-    QT_PREPEND_NAMESPACE(load)();
 
     quint64 writingSystemsFound = 0;
     static_assert(WritingSystemsCount < 64);
@@ -1381,8 +1388,6 @@ QList<QFontDatabase::WritingSystem> QFontDatabase::writingSystems(const QString 
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
 
-    QT_PREPEND_NAMESPACE(load)();
-
     QList<WritingSystem> list;
     QtFontFamily *f = d->family(familyName);
     if (!f || f->count == 0)
@@ -1412,8 +1417,6 @@ QStringList QFontDatabase::families(WritingSystem writingSystem)
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
 
-    QT_PREPEND_NAMESPACE(load)();
-
     QStringList flist;
     for (int i = 0; i < d->count; i++) {
         QtFontFamily *f = d->families[i];
@@ -1431,9 +1434,9 @@ QStringList QFontDatabase::families(WritingSystem writingSystem)
                 QString str = f->name;
                 QString foundry = f->foundries[j]->name;
                 if (!foundry.isEmpty()) {
-                    str += QLatin1String(" [");
+                    str += " ["_L1;
                     str += foundry;
-                    str += QLatin1Char(']');
+                    str += u']';
                 }
                 flist.append(str);
             }
@@ -1456,8 +1459,6 @@ QStringList QFontDatabase::styles(const QString &family)
 
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
-
-    QT_PREPEND_NAMESPACE(load)(familyName);
 
     QStringList l;
     QtFontFamily *f = d->family(familyName);
@@ -1502,8 +1503,6 @@ bool QFontDatabase::isFixedPitch(const QString &family,
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
 
-    QT_PREPEND_NAMESPACE(load)(familyName);
-
     QtFontFamily *f = d->family(familyName);
     return (f && f->fixedPitch);
 }
@@ -1527,8 +1526,6 @@ bool QFontDatabase::isBitmapScalable(const QString &family,
 
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
-
-    QT_PREPEND_NAMESPACE(load)(familyName);
 
     QtFontFamily *f = d->family(familyName);
     if (!f) return bitmapScalable;
@@ -1568,8 +1565,6 @@ bool QFontDatabase::isSmoothlyScalable(const QString &family, const QString &sty
 
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
-
-    QT_PREPEND_NAMESPACE(load)(familyName);
 
     QtFontFamily *f = d->family(familyName);
     if (!f) {
@@ -1641,8 +1636,6 @@ QList<int> QFontDatabase::pointSizes(const QString &family,
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
 
-    QT_PREPEND_NAMESPACE(load)(familyName);
-
     QList<int> sizes;
 
     QtFontFamily *fam = d->family(familyName);
@@ -1695,8 +1688,6 @@ QFont QFontDatabase::font(const QString &family, const QString &style,
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
 
-    QT_PREPEND_NAMESPACE(load)(familyName);
-
     QtFontFoundry allStyles(foundryName);
     QtFontFamily *f = d->family(familyName);
     if (!f) return QGuiApplication::font();
@@ -1743,8 +1734,6 @@ QList<int> QFontDatabase::smoothSizes(const QString &family,
 
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
-
-    QT_PREPEND_NAMESPACE(load)(familyName);
 
     QList<int> sizes;
 
@@ -1810,8 +1799,6 @@ bool QFontDatabase::italic(const QString &family, const QString &style)
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
 
-    QT_PREPEND_NAMESPACE(load)(familyName);
-
     QtFontFoundry allStyles(foundryName);
     QtFontFamily *f = d->family(familyName);
     if (!f) return false;
@@ -1844,8 +1831,6 @@ bool QFontDatabase::bold(const QString &family,
 
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
-
-    QT_PREPEND_NAMESPACE(load)(familyName);
 
     QtFontFoundry allStyles(foundryName);
     QtFontFamily *f = d->family(familyName);
@@ -1882,8 +1867,6 @@ int QFontDatabase::weight(const QString &family,
     QMutexLocker locker(fontDatabaseMutex());
     QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
 
-    QT_PREPEND_NAMESPACE(load)(familyName);
-
     QtFontFoundry allStyles(foundryName);
     QtFontFamily *f = d->family(familyName);
     if (!f) return -1;
@@ -1909,7 +1892,19 @@ bool QFontDatabase::hasFamily(const QString &family)
     QString parsedFamily, foundry;
     parseFontName(family, foundry, parsedFamily);
     const QString familyAlias = QFontDatabasePrivate::resolveFontFamilyAlias(parsedFamily);
-    return families().contains(familyAlias, Qt::CaseInsensitive);
+
+    QMutexLocker locker(fontDatabaseMutex());
+    QFontDatabasePrivate *d = QFontDatabasePrivate::ensureFontDatabase();
+
+    for (int i = 0; i < d->count; i++) {
+        QtFontFamily *f = d->families[i];
+        if (f->populated && f->count == 0)
+            continue;
+        if (familyAlias.compare(f->name, Qt::CaseInsensitive) == 0)
+            return true;
+    }
+
+    return false;
 }
 
 
@@ -2048,90 +2043,87 @@ QString QFontDatabase::writingSystemName(WritingSystem writingSystem)
     return QCoreApplication::translate("QFontDatabase", name);
 }
 
-static QStringView writing_system_sample(QFontDatabase::WritingSystem writingSystem)
-{
-    switch (writingSystem) {
-    case QFontDatabase::Any:
-    case QFontDatabase::Symbol:
-        // show only ascii characters
-        return u"AaBbzZ";
-    case QFontDatabase::Latin:
-        // This is cheating... we only show latin-1 characters so that we don't
-        // end up loading lots of fonts - at least on X11...
-        return u"Aa\x00C3\x00E1Zz";
-    case QFontDatabase::Greek:
-        return u"\x0393\x03B1\x03A9\x03C9";
-    case QFontDatabase::Cyrillic:
-        return u"\x0414\x0434\x0436\x044f";
-    case QFontDatabase::Armenian:
-        return u"\x053f\x054f\x056f\x057f";
-    case QFontDatabase::Hebrew:
-        return u"\x05D0\x05D1\x05D2\x05D3";
-    case QFontDatabase::Arabic:
-        return u"\x0623\x0628\x062C\x062F\x064A\x0629\x0020\x0639\x0631\x0628\x064A\x0629";
-    case QFontDatabase::Syriac:
-        return u"\x0715\x0725\x0716\x0726";
-    case QFontDatabase::Thaana:
-        return u"\x0784\x0794\x078c\x078d";
-    case QFontDatabase::Devanagari:
-        return u"\x0905\x0915\x0925\x0935";
-    case QFontDatabase::Bengali:
-        return u"\x0986\x0996\x09a6\x09b6";
-    case QFontDatabase::Gurmukhi:
-        return u"\x0a05\x0a15\x0a25\x0a35";
-    case QFontDatabase::Gujarati:
-        return u"\x0a85\x0a95\x0aa5\x0ab5";
-    case QFontDatabase::Oriya:
-        return u"\x0b06\x0b16\x0b2b\x0b36";
-    case QFontDatabase::Tamil:
-        return u"\x0b89\x0b99\x0ba9\x0bb9";
-    case QFontDatabase::Telugu:
-        return u"\x0c05\x0c15\x0c25\x0c35";
-    case QFontDatabase::Kannada:
-        return u"\x0c85\x0c95\x0ca5\x0cb5";
-    case QFontDatabase::Malayalam:
-        return u"\x0d05\x0d15\x0d25\x0d35";
-    case QFontDatabase::Sinhala:
-        return u"\x0d90\x0da0\x0db0\x0dc0";
-    case QFontDatabase::Thai:
-        return u"\x0e02\x0e12\x0e22\x0e32";
-    case QFontDatabase::Lao:
-        return u"\x0e8d\x0e9d\x0ead\x0ebd";
-    case QFontDatabase::Tibetan:
-        return u"\x0f00\x0f01\x0f02\x0f03";
-    case QFontDatabase::Myanmar:
-        return u"\x1000\x1001\x1002\x1003";
-    case QFontDatabase::Georgian:
-        return u"\x10a0\x10b0\x10c0\x10d0";
-    case QFontDatabase::Khmer:
-        return u"\x1780\x1790\x17b0\x17c0";
-    case QFontDatabase::SimplifiedChinese:
-        return u"\x4e2d\x6587\x8303\x4f8b";
-    case QFontDatabase::TraditionalChinese:
-        return u"\x4e2d\x6587\x7bc4\x4f8b";
-    case QFontDatabase::Japanese:
-        return u"\x30b5\x30f3\x30d7\x30eb\x3067\x3059";
-    case QFontDatabase::Korean:
-        return u"\xac00\xac11\xac1a\xac2f";
-    case QFontDatabase::Vietnamese:
-        return u"\x1ED7\x1ED9\x1ED1\x1ED3";
-    case QFontDatabase::Ogham:
-        return u"\x1681\x1682\x1683\x1684";
-    case QFontDatabase::Runic:
-        return u"\x16a0\x16a1\x16a2\x16a3";
-    case QFontDatabase::Nko:
-        return u"\x7ca\x7cb\x7cc\x7cd";
-    default:
-        return nullptr;
-    }
-}
-
 /*!
     Returns a string with sample characters from \a writingSystem.
 */
 QString QFontDatabase::writingSystemSample(WritingSystem writingSystem)
 {
-    return writing_system_sample(writingSystem).toString();
+    return [&]() -> QStringView {
+        switch (writingSystem) {
+        case QFontDatabase::Any:
+        case QFontDatabase::Symbol:
+            // show only ascii characters
+            return u"AaBbzZ";
+        case QFontDatabase::Latin:
+            // This is cheating... we only show latin-1 characters so that we don't
+            // end up loading lots of fonts - at least on X11...
+            return u"Aa\x00C3\x00E1Zz";
+        case QFontDatabase::Greek:
+            return u"\x0393\x03B1\x03A9\x03C9";
+        case QFontDatabase::Cyrillic:
+            return u"\x0414\x0434\x0436\x044f";
+        case QFontDatabase::Armenian:
+            return u"\x053f\x054f\x056f\x057f";
+        case QFontDatabase::Hebrew:
+            return u"\x05D0\x05D1\x05D2\x05D3";
+        case QFontDatabase::Arabic:
+            return u"\x0623\x0628\x062C\x062F\x064A\x0629\x0020\x0639\x0631\x0628\x064A\x0629";
+        case QFontDatabase::Syriac:
+            return u"\x0715\x0725\x0716\x0726";
+        case QFontDatabase::Thaana:
+            return u"\x0784\x0794\x078c\x078d";
+        case QFontDatabase::Devanagari:
+            return u"\x0905\x0915\x0925\x0935";
+        case QFontDatabase::Bengali:
+            return u"\x0986\x0996\x09a6\x09b6";
+        case QFontDatabase::Gurmukhi:
+            return u"\x0a05\x0a15\x0a25\x0a35";
+        case QFontDatabase::Gujarati:
+            return u"\x0a85\x0a95\x0aa5\x0ab5";
+        case QFontDatabase::Oriya:
+            return u"\x0b06\x0b16\x0b2b\x0b36";
+        case QFontDatabase::Tamil:
+            return u"\x0b89\x0b99\x0ba9\x0bb9";
+        case QFontDatabase::Telugu:
+            return u"\x0c05\x0c15\x0c25\x0c35";
+        case QFontDatabase::Kannada:
+            return u"\x0c85\x0c95\x0ca5\x0cb5";
+        case QFontDatabase::Malayalam:
+            return u"\x0d05\x0d15\x0d25\x0d35";
+        case QFontDatabase::Sinhala:
+            return u"\x0d90\x0da0\x0db0\x0dc0";
+        case QFontDatabase::Thai:
+            return u"\x0e02\x0e12\x0e22\x0e32";
+        case QFontDatabase::Lao:
+            return u"\x0e8d\x0e9d\x0ead\x0ebd";
+        case QFontDatabase::Tibetan:
+            return u"\x0f00\x0f01\x0f02\x0f03";
+        case QFontDatabase::Myanmar:
+            return u"\x1000\x1001\x1002\x1003";
+        case QFontDatabase::Georgian:
+            return u"\x10a0\x10b0\x10c0\x10d0";
+        case QFontDatabase::Khmer:
+            return u"\x1780\x1790\x17b0\x17c0";
+        case QFontDatabase::SimplifiedChinese:
+            return u"\x4e2d\x6587\x8303\x4f8b";
+        case QFontDatabase::TraditionalChinese:
+            return u"\x4e2d\x6587\x7bc4\x4f8b";
+        case QFontDatabase::Japanese:
+            return u"\x30b5\x30f3\x30d7\x30eb\x3067\x3059";
+        case QFontDatabase::Korean:
+            return u"\xac00\xac11\xac1a\xac2f";
+        case QFontDatabase::Vietnamese:
+            return u"\x1ED7\x1ED9\x1ED1\x1ED3";
+        case QFontDatabase::Ogham:
+            return u"\x1681\x1682\x1683\x1684";
+        case QFontDatabase::Runic:
+            return u"\x16a0\x16a1\x16a2\x16a3";
+        case QFontDatabase::Nko:
+            return u"\x7ca\x7cb\x7cc\x7cd";
+        default:
+            return nullptr;
+        }
+    }().toString();
 }
 
 void QFontDatabasePrivate::parseFontName(const QString &name, QString &foundry, QString &family)
@@ -2139,14 +2131,11 @@ void QFontDatabasePrivate::parseFontName(const QString &name, QString &foundry, 
     QT_PREPEND_NAMESPACE(parseFontName)(name, foundry, family);
 }
 
-void QFontDatabasePrivate::createDatabase()
-{ initializeDb(); }
-
 // used from qfontengine_ft.cpp
 Q_GUI_EXPORT QByteArray qt_fontdata_from_index(int index)
 {
     QMutexLocker locker(fontDatabaseMutex());
-    return privateDb()->applicationFonts.value(index).data;
+    return QFontDatabasePrivate::instance()->applicationFonts.value(index).data;
 }
 
 int QFontDatabasePrivate::addAppFont(const QByteArray &fontData, const QString &fileName)
@@ -2158,35 +2147,36 @@ int QFontDatabasePrivate::addAppFont(const QByteArray &fontData, const QString &
     Q_TRACE(QFontDatabasePrivate_addAppFont, fileName);
 
     int i;
-    for (i = 0; i < applicationFonts.count(); ++i)
-        if (applicationFonts.at(i).properties.isEmpty())
+    for (i = 0; i < applicationFonts.size(); ++i)
+        if (applicationFonts.at(i).isNull())
             break;
-    if (i >= applicationFonts.count()) {
+    if (i >= applicationFonts.size()) {
         applicationFonts.append(ApplicationFont());
-        i = applicationFonts.count() - 1;
+        i = applicationFonts.size() - 1;
     }
 
     if (font.fileName.isEmpty() && !fontData.isEmpty())
-        font.fileName = QLatin1String(":qmemoryfonts/") + QString::number(i);
+        font.fileName = ":qmemoryfonts/"_L1 + QString::number(i);
 
-    bool wasEmpty = privateDb()->count == 0;
-    registerFont(&font);
+    auto *platformFontDatabase = QGuiApplicationPrivate::platformIntegration()->fontDatabase();
+    platformFontDatabase->addApplicationFont(font.data, font.fileName, &font);
     if (font.properties.isEmpty())
         return -1;
 
     applicationFonts[i] = font;
 
-    // If the cache has not yet been populated, we need to reload the application font later
-    if (wasEmpty)
-        invalidate();
-    else
-        emit qApp->fontDatabaseChanged();
+    // The font cache may have cached lookups for the font that was now
+    // loaded, so it has to be flushed.
+    QFontCache::instance()->clear();
+
+    emit qApp->fontDatabaseChanged();
+
     return i;
 }
 
 bool QFontDatabasePrivate::isApplicationFont(const QString &fileName)
 {
-    for (int i = 0; i < applicationFonts.count(); ++i)
+    for (int i = 0; i < applicationFonts.size(); ++i)
         if (applicationFonts.at(i).fileName == fileName)
             return true;
     return false;
@@ -2222,7 +2212,7 @@ int QFontDatabase::addApplicationFont(const QString &fileName)
         data = f.readAll();
     }
     QMutexLocker locker(fontDatabaseMutex());
-    return privateDb()->addAppFont(data, fileName);
+    return QFontDatabasePrivate::instance()->addAppFont(data, fileName);
 }
 
 /*!
@@ -2240,7 +2230,7 @@ int QFontDatabase::addApplicationFont(const QString &fileName)
 int QFontDatabase::addApplicationFontFromData(const QByteArray &fontData)
 {
     QMutexLocker locker(fontDatabaseMutex());
-    return privateDb()->addAppFont(fontData, QString() /* fileName */);
+    return QFontDatabasePrivate::instance()->addAppFont(fontData, QString() /* fileName */);
 }
 
 /*!
@@ -2254,11 +2244,12 @@ int QFontDatabase::addApplicationFontFromData(const QByteArray &fontData)
 QStringList QFontDatabase::applicationFontFamilies(int id)
 {
     QMutexLocker locker(fontDatabaseMutex());
+    auto *d = QFontDatabasePrivate::instance();
 
     QStringList ret;
-    ret.reserve(privateDb()->applicationFonts.value(id).properties.size());
+    ret.reserve(d->applicationFonts.value(id).properties.size());
 
-    for (const auto &properties : privateDb()->applicationFonts.value(id).properties)
+    for (const auto &properties : d->applicationFonts.value(id).properties)
         ret.append(properties.familyName);
 
     return ret;
@@ -2316,8 +2307,8 @@ bool QFontDatabase::removeApplicationFont(int handle)
 {
     QMutexLocker locker(fontDatabaseMutex());
 
-    QFontDatabasePrivate *db = privateDb();
-    if (handle < 0 || handle >= db->applicationFonts.count())
+    auto *db = QFontDatabasePrivate::instance();
+    if (handle < 0 || handle >= db->applicationFonts.size())
         return false;
 
     db->applicationFonts[handle] = QFontDatabasePrivate::ApplicationFont();
@@ -2342,7 +2333,7 @@ bool QFontDatabase::removeAllApplicationFonts()
 {
     QMutexLocker locker(fontDatabaseMutex());
 
-    QFontDatabasePrivate *db = privateDb();
+    auto *db = QFontDatabasePrivate::instance();
     if (!db || db->applicationFonts.isEmpty())
         return false;
 
@@ -2359,9 +2350,7 @@ QFontEngine *QFontDatabasePrivate::findFont(const QFontDef &req,
                                             bool preferScriptOverFamily)
 {
     QMutexLocker locker(fontDatabaseMutex());
-
-    if (!privateDb()->count)
-        initializeDb();
+    ensureFontDatabase();
 
     QFontEngine *engine;
 
@@ -2375,7 +2364,7 @@ QFontEngine *QFontDatabasePrivate::findFont(const QFontDef &req,
 
 #if defined(QT_BUILD_INTERNAL)
     // For testing purpose only, emulates an exact-matching monospace font
-    if (qt_enable_test_font && request.families.first() == QLatin1String("__Qt__Box__Engine__")) {
+    if (qt_enable_test_font && request.families.first() == "__Qt__Box__Engine__"_L1) {
         engine = new QTestFontEngine(request.pixelSize);
         engine->fontDef = request;
         return engine;
@@ -2459,7 +2448,7 @@ QFontEngine *QFontDatabasePrivate::findFont(const QFontDef &req,
                 if (!engine) {
                     QtFontDesc desc;
                     do {
-                        index = match(multi ? QChar::Script_Common : script, def, def.families.first(), QLatin1String(""), &desc, blackListed);
+                        index = match(multi ? QChar::Script_Common : script, def, def.families.first(), ""_L1, &desc, blackListed);
                         if (index >= 0) {
                             QFontDef loadDef = def;
                             if (loadDef.families.isEmpty())
@@ -2535,9 +2524,12 @@ void QFontDatabasePrivate::load(const QFontPrivate *d, int script)
         family_list << req.families.at(0);
 
         // add the default family
-        QString defaultFamily = QGuiApplication::font().families().first();
-        if (! family_list.contains(defaultFamily))
-            family_list << defaultFamily;
+        auto families = QGuiApplication::font().families();
+        if (!families.isEmpty()) {
+            QString defaultFamily = families.first();
+            if (! family_list.contains(defaultFamily))
+                family_list << defaultFamily;
+        }
 
     }
 
@@ -2591,7 +2583,7 @@ Q_GUI_EXPORT QStringList qt_sort_families_by_writing_system(QChar::Script script
         return families;
     }
 
-    QFontDatabasePrivate *db = privateDb();
+    auto *db = QFontDatabasePrivate::instance();
     QMultiMap<uint, QString> supported;
     for (int i = 0; i < families.size(); ++i) {
         const QString &family = families.at(i);
@@ -2618,4 +2610,6 @@ Q_GUI_EXPORT QStringList qt_sort_families_by_writing_system(QChar::Script script
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qfontdatabase.cpp"
 

@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 Intel Corporation.
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2017 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QTemporaryFile>
@@ -37,11 +12,11 @@
 #include <qdebug.h>
 #include <qdir.h>
 #include <qfileinfo.h>
+#include <qscopedvaluerollback.h>
 #include <qstringlist.h>
 
 #if defined(Q_OS_DOSLIKE)
 #include <QtCore/private/qfsfileengine_p.h>
-#include "../../../network-settings.h"
 #endif
 
 #if defined(Q_OS_WIN) && !defined(_WIN32_WINNT)
@@ -65,6 +40,7 @@
 
 #ifdef Q_OS_DOSLIKE
 #define DRIVE "Q:"
+extern Q_CORE_EXPORT int qt_ntfs_permission_lookup;
 #else
 #define DRIVE
 #endif
@@ -72,6 +48,8 @@
 #ifdef QT_BUILD_INTERNAL
 #include "private/qdir_p.h"
 #endif
+
+using namespace Qt::StringLiterals;
 
 static QByteArray msgDoesNotExist(const QString &name)
 {
@@ -114,6 +92,8 @@ private slots:
     void mkdirRmdir_data();
     void mkdirRmdir();
     void mkdirOnSymlink();
+    void mkdirWithPermissions_data();
+    void mkdirWithPermissions();
 
     void makedirReturnCode();
 
@@ -238,22 +218,21 @@ private:
 Q_DECLARE_METATYPE(tst_QDir::UncHandling)
 
 tst_QDir::tst_QDir()
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     : m_dataPath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
 #elif !defined(BUILTIN_TESTDATA)
     : m_dataPath(QFileInfo(QFINDTESTDATA("testData")).absolutePath())
 #endif
 {
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     QString resourceSourcePath = QStringLiteral(":/android_testdata/");
     QDirIterator it(resourceSourcePath, QDirIterator::Subdirectories);
     while (it.hasNext()) {
-        it.next();
-
-        QFileInfo fileInfo = it.fileInfo();
+        QFileInfo fileInfo = it.nextFileInfo();
 
         if (!fileInfo.isDir()) {
-            QString destination = m_dataPath + QLatin1Char('/') + fileInfo.filePath().mid(resourceSourcePath.length());
+            QString destination = m_dataPath + QLatin1Char('/')
+                                + fileInfo.filePath().mid(resourceSourcePath.length());
             QFileInfo destinationFileInfo(destination);
             if (!destinationFileInfo.exists()) {
                 QDir().mkpath(destinationFileInfo.path());
@@ -455,6 +434,49 @@ void tst_QDir::mkdirOnSymlink()
 #endif
 }
 
+void tst_QDir::mkdirWithPermissions_data()
+{
+    QTest::addColumn<QFile::Permissions>("permissions");
+
+    for (int u = 0; u < 8; ++u) {
+        for (int g = 0; g < 8; ++g) {
+            for (int o = 0; o < 8; ++o) {
+                auto permissions = QFileDevice::Permissions::fromInt((u << 12) | (g << 4) | o);
+                QTest::addRow("%04x", permissions.toInt()) << permissions;
+            }
+        }
+    }
+}
+
+void tst_QDir::mkdirWithPermissions()
+{
+    QFETCH(QFile::Permissions, permissions);
+
+#ifdef Q_OS_WIN
+    QScopedValueRollback<int> ntfsMode(qt_ntfs_permission_lookup);
+    ++qt_ntfs_permission_lookup;
+#endif
+#ifdef Q_OS_UNIX
+    auto restoreMask = qScopeGuard([oldMask = umask(0)] { umask(oldMask); });
+#endif
+
+    const QFile::Permissions setPermissions = {
+        QFile::ReadOther, QFile::WriteOther, QFile::ExeOther,
+        QFile::ReadGroup, QFile::WriteGroup, QFile::ExeGroup,
+        QFile::ReadOwner, QFile::WriteOwner, QFile::ExeOwner
+    };
+
+    const QString path = u"tmpdir"_s;
+    QDir dir;
+    auto deleteDirectory = qScopeGuard([&dir, &path] { dir.rmdir(path); });
+
+    QVERIFY(dir.mkdir(path, permissions));
+    auto actualPermissions = QFileInfo(dir.filePath(path)).permissions();
+    QCOMPARE(actualPermissions & setPermissions, permissions);
+    QVERIFY(dir.rmdir(path));
+    deleteDirectory.dismiss();
+}
+
 void tst_QDir::makedirReturnCode()
 {
     QString dirName = QString::fromLatin1("makedirReturnCode");
@@ -499,12 +521,12 @@ void tst_QDir::removeRecursively_data()
          << tmpdir + "two/three"
          << "relative";
     QDir dir;
-    for (int i = 0; i < dirs.count(); ++i)
+    for (int i = 0; i < dirs.size(); ++i)
         dir.mkpath(dirs.at(i));
     QStringList files;
     files << tmpdir + "one/file";
     files << tmpdir + "two/three/file";
-    for (int i = 0; i < files.count(); ++i) {
+    for (int i = 0; i < files.size(); ++i) {
         QFile file(files.at(i));
         QVERIFY(file.open(QIODevice::WriteOnly));
         file.write("Hello");
@@ -604,7 +626,7 @@ void tst_QDir::exists_data()
     QTest::newRow("simple dir") << (m_dataPath + "/resources") << true;
     QTest::newRow("simple dir with slash") << (m_dataPath + "/resources/") << true;
 #if defined(Q_OS_WIN)
-    const QString uncRoot = QStringLiteral("//") + QtNetworkSettings::winServerName();
+    const QString uncRoot = QStringLiteral("//") + QTest::uncServerName();
     QTest::newRow("unc 1") << uncRoot << true;
     QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
     QTest::newRow("unc 3") << uncRoot + "/testshare" << true;
@@ -1001,7 +1023,7 @@ void tst_QDir::entryListSimple_data()
     QTest::newRow("simple dir with slash") << (m_dataPath + "/resources/") << 2;
 
 #if defined(Q_OS_WIN)
-    const QString uncRoot = QStringLiteral("//") + QtNetworkSettings::winServerName();
+    const QString uncRoot = QStringLiteral("//") + QTest::uncServerName();
     QTest::newRow("unc 1") << uncRoot << 2;
     QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << 2;
     QTest::newRow("unc 3") << uncRoot + "/testshare" << 2;
@@ -1027,7 +1049,7 @@ void tst_QDir::entryListSimple()
 
     QDir dir(dirName);
     QStringList actual = dir.entryList();
-    QVERIFY2(actual.count() >= countMin, msgEntryListFailed(actual.count(), countMin, dirName).constData());
+    QVERIFY2(actual.size() >= countMin, msgEntryListFailed(actual.size(), countMin, dirName).constData());
 }
 
 void tst_QDir::entryListWithSymLinks()
@@ -1236,11 +1258,11 @@ void tst_QDir::setNameFilters()
 
     dir.setNameFilters(nameFilters);
     QStringList actual = dir.entryList();
-    int max = qMin(actual.count(), expected.count());
+    int max = qMin(actual.size(), expected.size());
 
     for (int i=0; i<max; ++i)
         QCOMPARE(actual[i], expected[i]);
-    QCOMPARE(actual.count(), expected.count());
+    QCOMPARE(actual.size(), expected.size());
 }
 
 void
@@ -1290,19 +1312,19 @@ tst_QDir::cleanPath_data()
     QTest::newRow("unc-server-up") << "//server/path/.." << "//server";
     QTest::newRow("unc-server-above-root") << "//server/.." << "//server/..";
 
-    QTest::newRow("longpath") << uR"(\\?\d:\)"_qs << u"d:/"_qs;
-    QTest::newRow("longpath-slash") << u"//?/d:/"_qs << u"d:/"_qs;
-    QTest::newRow("longpath-mixed-slashes") << uR"(//?/d:\)"_qs << u"d:/"_qs;
-    QTest::newRow("longpath-mixed-slashes-2") << uR"(\\?\d:/)"_qs << u"d:/"_qs;
+    QTest::newRow("longpath") << uR"(\\?\d:\)"_s << u"d:/"_s;
+    QTest::newRow("longpath-slash") << u"//?/d:/"_s << u"d:/"_s;
+    QTest::newRow("longpath-mixed-slashes") << uR"(//?/d:\)"_s << u"d:/"_s;
+    QTest::newRow("longpath-mixed-slashes-2") << uR"(\\?\d:/)"_s << u"d:/"_s;
 
-    QTest::newRow("unc-network-share") << uR"(\\?\UNC\localhost\c$\tmp.txt)"_qs
-        << u"//localhost/c$/tmp.txt"_qs;
-    QTest::newRow("unc-network-share-slash") << u"//?/UNC/localhost/c$/tmp.txt"_qs
-        << u"//localhost/c$/tmp.txt"_qs;
-    QTest::newRow("unc-network-share-mixed-slashes") << uR"(//?/UNC/localhost\c$\tmp.txt)"_qs
-        << u"//localhost/c$/tmp.txt"_qs;
-    QTest::newRow("unc-network-share-mixed-slashes-2") << uR"(\\?\UNC\localhost/c$/tmp.txt)"_qs
-        << u"//localhost/c$/tmp.txt"_qs;
+    QTest::newRow("unc-network-share") << uR"(\\?\UNC\localhost\c$\tmp.txt)"_s
+        << u"//localhost/c$/tmp.txt"_s;
+    QTest::newRow("unc-network-share-slash") << u"//?/UNC/localhost/c$/tmp.txt"_s
+        << u"//localhost/c$/tmp.txt"_s;
+    QTest::newRow("unc-network-share-mixed-slashes") << uR"(//?/UNC/localhost\c$\tmp.txt)"_s
+        << u"//localhost/c$/tmp.txt"_s;
+    QTest::newRow("unc-network-share-mixed-slashes-2") << uR"(\\?\UNC\localhost/c$/tmp.txt)"_s
+        << u"//localhost/c$/tmp.txt"_s;
 #else
     QTest::newRow("data15") << "//c:/foo" << "/c:/foo";
 #endif // non-windows
@@ -1701,9 +1723,9 @@ void tst_QDir::dotAndDotDot()
 {
     QDir dir(QString((m_dataPath + "/testdir/")));
     QStringList entryList = dir.entryList(QDir::Dirs);
-    QCOMPARE(entryList, QStringList({ u"."_qs, u".."_qs, u"dir"_qs, u"dir.lnk"_qs, u"spaces"_qs }));
+    QCOMPARE(entryList, QStringList({ u"."_s, u".."_s, u"dir"_s, u"dir.lnk"_s, u"spaces"_s }));
     entryList = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    QCOMPARE(entryList, QStringList({ u"dir"_qs, u"dir.lnk"_qs, u"spaces"_qs }));
+    QCOMPARE(entryList, QStringList({ u"dir"_s, u"dir.lnk"_s, u"spaces"_s }));
 }
 
 void tst_QDir::homePath()
@@ -1716,7 +1738,7 @@ void tst_QDir::homePath()
     QVERIFY(QDir::isAbsolutePath(strHome));
 
 #ifdef Q_OS_UNIX
-    if (strHome.length() > 1)      // root dir = "/"
+    if (strHome.size() > 1)      // root dir = "/"
         QVERIFY(!strHome.endsWith('/'));
 
     QByteArray envHome = qgetenv("HOME");
@@ -1730,7 +1752,7 @@ void tst_QDir::homePath()
 #endif
 
     QStringList entries = homeDir.entryList();
-    for (int i = 0; i < entries.count(); ++i) {
+    for (int i = 0; i < entries.size(); ++i) {
         QFileInfo fi(QDir::homePath() + "/" + entries[i]);
         QCOMPARE(fi.exists(), true);
     }
@@ -1746,7 +1768,7 @@ void tst_QDir::tempPath()
     QVERIFY(QDir::isAbsolutePath(path));
 
 #ifdef Q_OS_UNIX
-    if (path.length() > 1)      // root dir = "/"
+    if (path.size() > 1)      // root dir = "/"
         QVERIFY(!path.endsWith('/'));
 #elif defined(Q_OS_DOSLIKE)
     if (path.length() > 3)      // root dir = "c:/"; "//" is not really valid...
@@ -1778,10 +1800,10 @@ void tst_QDir::nativeSeparators()
     QCOMPARE(QDir::fromNativeSeparators(QLatin1String("/")), QString("/"));
     QCOMPARE(QDir::fromNativeSeparators(QLatin1String("\\")), QString("/"));
     QCOMPARE(QDir::fromNativeSeparators(QLatin1String("\\\\?\\C:\\")), QString("C:/"));
-    QCOMPARE(QDir::fromNativeSeparators(uR"(\\?\UNC\localhost\c$\tmp.txt)"_qs),
-             u"//localhost/c$/tmp.txt"_qs);
-    QCOMPARE(QDir::fromNativeSeparators(uR"(//?/UNC/localhost\c$\tmp.txt)"_qs),
-             u"//localhost/c$/tmp.txt"_qs);
+    QCOMPARE(QDir::fromNativeSeparators(uR"(\\?\UNC\localhost\c$\tmp.txt)"_s),
+             u"//localhost/c$/tmp.txt"_s);
+    QCOMPARE(QDir::fromNativeSeparators(uR"(//?/UNC/localhost\c$\tmp.txt)"_s),
+             u"//localhost/c$/tmp.txt"_s);
 #else
     QCOMPARE(QDir::toNativeSeparators(QLatin1String("/")), QString("/"));
     QCOMPARE(QDir::toNativeSeparators(QLatin1String("\\")), QString("\\"));
@@ -1827,10 +1849,10 @@ void tst_QDir::searchPaths()
     QFETCH(QString, expectedAbsolutePath);
     bool exists = !expectedAbsolutePath.isEmpty();
 
-    for (int i = 0; i < searchPathPrefixList.count(); ++i) {
+    for (int i = 0; i < searchPathPrefixList.size(); ++i) {
         QDir::setSearchPaths(searchPathPrefixList.at(i), searchPathsList.at(i).split(","));
     }
-    for (int i = 0; i < searchPathPrefixList.count(); ++i) {
+    for (int i = 0; i < searchPathPrefixList.size(); ++i) {
         QCOMPARE(QDir::searchPaths(searchPathPrefixList.at(i)), searchPathsList.at(i).split(","));
     }
 
@@ -1841,19 +1863,19 @@ void tst_QDir::searchPaths()
         QCOMPARE(QFileInfo(filename).absoluteFilePath(), expectedAbsolutePath);
     }
 
-    for (int i = 0; i < searchPathPrefixList.count(); ++i) {
+    for (int i = 0; i < searchPathPrefixList.size(); ++i) {
         QDir::setSearchPaths(searchPathPrefixList.at(i), QStringList());
     }
-    for (int i = 0; i < searchPathPrefixList.count(); ++i) {
+    for (int i = 0; i < searchPathPrefixList.size(); ++i) {
         QVERIFY(QDir::searchPaths(searchPathPrefixList.at(i)).isEmpty());
     }
 
-    for (int i = 0; i < searchPathPrefixList.count(); ++i) {
+    for (int i = 0; i < searchPathPrefixList.size(); ++i) {
         foreach (QString path, searchPathsList.at(i).split(",")) {
             QDir::addSearchPath(searchPathPrefixList.at(i), path);
         }
     }
-    for (int i = 0; i < searchPathPrefixList.count(); ++i) {
+    for (int i = 0; i < searchPathPrefixList.size(); ++i) {
         QCOMPARE(QDir::searchPaths(searchPathPrefixList.at(i)), searchPathsList.at(i).split(","));
     }
 
@@ -1864,10 +1886,10 @@ void tst_QDir::searchPaths()
         QCOMPARE(QFileInfo(filename).absoluteFilePath(), expectedAbsolutePath);
     }
 
-    for (int i = 0; i < searchPathPrefixList.count(); ++i) {
+    for (int i = 0; i < searchPathPrefixList.size(); ++i) {
         QDir::setSearchPaths(searchPathPrefixList.at(i), QStringList());
     }
-    for (int i = 0; i < searchPathPrefixList.count(); ++i) {
+    for (int i = 0; i < searchPathPrefixList.size(); ++i) {
         QVERIFY(QDir::searchPaths(searchPathPrefixList.at(i)).isEmpty());
     }
 }
@@ -2194,7 +2216,7 @@ void tst_QDir::drives()
     }
     QCOMPARE(foundsystem, true);
 #else
-    QCOMPARE(list.count(), 1); //root
+    QCOMPARE(list.size(), 1); //root
     QCOMPARE(list.at(0).absolutePath(), QLatin1String("/"));
 #endif
 }
@@ -2206,7 +2228,7 @@ void tst_QDir::arrayOperator()
 
     QStringList entries(dir1.entryList());
     int i = dir2.count();
-    QCOMPARE(i, entries.count());
+    QCOMPARE(i, entries.size());
     --i;
     for (;i>=0;--i) {
         QCOMPARE(dir2[i], entries.at(i));
@@ -2242,7 +2264,7 @@ void tst_QDir::equalityOperator_data()
     QString pathinroot("c:/windows/..");
 #elif defined (Q_OS_OS2)
     QString pathinroot("c:/os2/..");
-#elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#elif defined(Q_OS_ANDROID)
     QString pathinroot("/system/..");
 #elif defined(Q_OS_HAIKU)
     QString pathinroot("/boot/..");
@@ -2376,7 +2398,7 @@ void tst_QDir::cdBelowRoot_data()
     const QString systemRoot = QString::fromLocal8Bit(qgetenv("SystemRoot"));
     QTest::newRow("windows-drive")
         << systemDrive << systemRoot.mid(3) << QDir::cleanPath(systemRoot);
-    const QString uncRoot = QStringLiteral("//") + QtNetworkSettings::winServerName();
+    const QString uncRoot = QStringLiteral("//") + QTest::uncServerName();
     const QString testDirectory = QStringLiteral("testshare");
     QTest::newRow("windows-share")
         << uncRoot << testDirectory << QDir::cleanPath(uncRoot + QLatin1Char('/') + testDirectory);
@@ -2461,7 +2483,7 @@ void tst_QDir::stdfilesystem()
         QCOMPARE(entries, QStringList() << "subdir2" << "subdir1");
         QCOMPARE(filteredDir.sorting(), QDir::SortFlag::Reversed);
         QCOMPARE(filteredDir.filter(), QDir::Filter::Dirs);
-        QCOMPARE(filteredDir.nameFilters().length(), 1);
+        QCOMPARE(filteredDir.nameFilters().size(), 1);
         QCOMPARE(filteredDir.nameFilters().first(), "subdir*");
     }
 #else

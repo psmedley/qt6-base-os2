@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtCore/QCoreApplication>
 
@@ -49,6 +24,8 @@ QT_REQUIRE_CONFIG(process);
 #include <private/cycle_p.h>
 
 #include <QtTest/private/qemulationdetector_p.h>
+
+using namespace Qt::StringLiterals;
 
 struct BenchmarkResult
 {
@@ -313,8 +290,7 @@ bool compareLine(const QString &logger, const QString &subdir,
         return compareBenchmarkResult(actualResult, expectedResult, errorMessage);
     }
 
-    if (actualLine.startsWith(QLatin1String("    <Duration msecs="))
-        || actualLine.startsWith(QLatin1String("<Duration msecs="))) {
+    if (actualLine.contains(QLatin1String("<Duration msecs="))) {
         static QRegularExpression durationRegExp("<Duration msecs=\"[\\d\\.]+\"/>");
         QRegularExpressionMatch match = durationRegExp.match(actualLine);
         if (match.hasMatch())
@@ -456,8 +432,8 @@ BenchmarkResult BenchmarkResult::parse(QString const& line, QString* error)
         // format:
         //  "function","[globaltag:]tag","metric",value_per_iteration,total,iterations
         QStringList split = line.split(',');
-        if (split.count() != 6) {
-            if (error) *error = QString("Wrong number of columns (%1)").arg(split.count());
+        if (split.size() != 6) {
+            if (error) *error = QString("Wrong number of columns (%1)").arg(split.size());
             return out;
         }
 
@@ -660,8 +636,10 @@ bool TestLogger::shouldIgnoreTest(const QString &test) const
         return true;
 #endif
 
-    if (test == "deleteLater" || test == "deleteLater_noApp" || test == "mouse")
-        return true; // Missing expectation files
+    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")) {
+        qDebug() << "TestLogger::shouldIgnoreTest() ignore" << test << "on wayland/xwayland!";
+        return true;
+    }
 
     // These tests are affected by timing and whether the CPU tick counter
     // is monotonically increasing. They won't work on some machines so
@@ -680,7 +658,7 @@ bool TestLogger::shouldIgnoreTest(const QString &test) const
         return true;
 #endif
 
-#if defined(QT_NO_EXCEPTIONS) || defined(Q_CC_INTEL) || defined(Q_OS_WIN)
+#if defined(QT_NO_EXCEPTIONS) || defined(Q_OS_WIN)
     // Disable this test on Windows or for Intel compiler, as the run-times
     // will popup dialogs with warnings that uncaught exceptions were thrown
     if (test == "exceptionthrow")
@@ -694,17 +672,18 @@ bool TestLogger::shouldIgnoreTest(const QString &test) const
 #endif
 
     if (test == "benchlibcallgrind") {
-#if !(defined(__GNUC__) && defined(__i386) && defined(Q_OS_LINUX))
-        // Skip on platforms where callgrind is not available
-        return true;
-#else
+#if defined(__GNUC__) && (defined(__i386) || defined(__x86_64)) && defined(Q_OS_LINUX)
         // Check that it's actually available
         QProcess checkProcess;
-        QStringList args;
-        args << "--version";
+        QStringList args{u"--version"_s};
         checkProcess.start("valgrind", args);
-        if (!checkProcess.waitForFinished(-1))
+        if (!checkProcess.waitForFinished(-1)) {
             WARN("Valgrind broken or not available. Not running benchlibcallgrind test!");
+            return true;
+        }
+#else
+        // Skip on platforms where callgrind is not available
+        return true;
 #endif
     }
 
@@ -721,8 +700,11 @@ bool TestLogger::shouldIgnoreTest(const QString &test) const
             || test == "silent")
             return true;
 
-        // `crashes' will not output valid XML on platforms without a crash handler
-        if (test == "crashes")
+        // These tests produce variable output (callgrind because of #if-ery,
+        // crashes by virtue of platform differences in where the output cuts
+        // off), so only test them for one format, to avoid the need for several
+        // _n variants for each format. Also, crashes can produce invalid XML.
+        if (test == "crashes" || test == "benchlibcallgrind")
             return true;
 
         // this test prints out some floats in the testlog and the formatting is
@@ -730,10 +712,11 @@ bool TestLogger::shouldIgnoreTest(const QString &test) const
         if (test == "float")
             return true;
 
-        // these tests are quite slow, and running them for all the loggers significantly
-        // increases the overall test time.  They do not really relate to logging, so it
-        // should be safe to run them just for the stdout loggers.
-        if (test == "benchlibcallgrind" || test == "sleep")
+        // This test is quite slow, and running it for all the loggers
+        // significantly increases the overall test time.  It does not really
+        // relate to logging, so it should be safe to run it just for the stdout
+        // loggers.
+        if (test == "sleep")
             return true;
     }
 
@@ -741,11 +724,9 @@ bool TestLogger::shouldIgnoreTest(const QString &test) const
             || logger == QTestLog::LightXML || logger == QTestLog::JUnitXML))
         return true;
 
-    if (logger == QTestLog::CSV && !test.startsWith("benchlib"))
+    // Skip benchmark for TeamCity logger, skip everything else for CSV:
+    if (logger == (test.startsWith("benchlib") ? QTestLog::TeamCity : QTestLog::CSV))
         return true;
-
-    if (logger == QTestLog::TeamCity && test.startsWith("benchlib"))
-        return true; // Skip benchmark for TeamCity logger
 
     if (logger != QTestLog::JUnitXML && test == "junit")
         return true;
@@ -1220,6 +1201,58 @@ SCENARIO("Test output of the loggers is as expected")
             AND_GIVEN("The " << test << " subtest") {
                 runTest(test, TestLogger(logger, StdoutOutput));
             }
+        }
+    }
+}
+
+struct TestCase {
+    int expectedExitCode;
+    const char *cmdline;
+};
+
+SCENARIO("Exit code is as expected")
+{
+    // Listing of test command lines and expected exit codes
+    // NOTE: Use at least 2 spaces to separate arguments because some contain a space themselves.
+    const struct TestCase testCases[] = {
+    // 'pass' is a test with no data tags at all
+        { 0, "pass  testNumber1" },
+        { 1, "pass  unknownFunction" },
+        { 1, "pass  testNumber1:blah" },
+        { 1, "pass  testNumber1:blah:blue" },
+    // 'counting' is a test that has only local data tags
+        { 0, "counting  testPassPass" },
+        { 0, "counting  testPassPass:row 1" },
+        { 1, "counting  testPassPass:blah" },
+        { 1, "counting  testPassPass:blah:row 1" },
+        { 1, "counting  testPassPass:blah:blue" },
+    // 'globaldata' is a test with global and local data tags
+        { 0, "globaldata  testGlobal" },
+        { 0, "globaldata  testGlobal:global=true" },
+        { 0, "globaldata  testGlobal:local=true" },
+        { 0, "globaldata  testGlobal:global=true:local=true" },
+        { 1, "globaldata  testGlobal:local=true:global=true" },
+        { 1, "globaldata  testGlobal:global=true:blah" },
+        { 1, "globaldata  testGlobal:blah:local=true" },
+        { 1, "globaldata  testGlobal:blah:global=true" },
+        { 1, "globaldata  testGlobal:blah" },
+        { 1, "globaldata  testGlobal:blah:blue" },
+    // Passing multiple testcase:data on the command line
+        { 0, "globaldata  testGlobal:global=true  skipSingle:global=true:local=true" },
+        { 1, "globaldata  testGlobal:blah         skipSingle:global=true:local=true" },
+        { 1, "globaldata  testGlobal:global=true  skipSingle:blah" },
+        { 2, "globaldata  testGlobal:blah         skipSingle:blue" },
+    };
+
+    size_t n_testCases = sizeof(testCases) / sizeof(*testCases);
+    for (size_t i = 0; i < n_testCases; i++) {
+        GIVEN("The command line: " << testCases[i].cmdline) {
+            const QStringList cmdSplit = QString(testCases[i].cmdline)
+                    .split(QRegularExpression("  +"));    // at least 2 spaces
+            const QString test     = cmdSplit[0];
+            const QStringList args = cmdSplit.sliced(1);
+            auto runResult = runTestProcess(test, args);
+            REQUIRE(runResult.exitCode == testCases[i].expectedExitCode);
         }
     }
 }

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtableview.h"
 
@@ -55,7 +19,7 @@
 #include <private/qtableview_p.h>
 #include <private/qheaderview_p.h>
 #include <private/qscrollbar_p.h>
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 #include <qaccessible.h>
 #endif
 
@@ -918,13 +882,32 @@ void QTableViewPrivate::drawAndClipSpans(const QRegion &area, QPainter *painter,
         visibleSpans = spans.spansInRect(logicalColumn(firstVisualColumn), logicalRow(firstVisualRow),
                                          lastVisualColumn - firstVisualColumn + 1, lastVisualRow - firstVisualRow + 1);
     } else {
-        for(int x = firstVisualColumn; x <= lastVisualColumn; x++)
-            for(int y = firstVisualRow; y <= lastVisualRow; y++)
-                visibleSpans.insert(spans.spanAt(x,y));
-        visibleSpans.remove(nullptr);
+        // Any cell outside the viewport, on the top or left, can still end up visible inside the
+        // viewport if is has a span. Calculating if a spanned cell overlaps with the viewport is
+        // "easy" enough when the columns (or rows) in the view are aligned with the columns
+        // in the model; In that case you know that if a column is outside the viewport on the
+        // right, it cannot affect the drawing of the cells inside the viewport, even with a span.
+        // And under that assumption, the spansInRect() function can be used (which is optimized
+        // to only iterate the spans that are close to the viewport).
+        // But when the view has rearranged the columns (or rows), this is no longer true. In that
+        // case, even if a column, according to the model, is outside the viewport on the right, it
+        // can still overlap with the viewport. This can happen if it was moved to the left of the
+        // viewport and one of its cells has a span. In that case we need to take the theoretically
+        // slower route and iterate through all the spans, and check if any of them overlaps with
+        // the viewport.
+        const auto spanList = spans.spans;
+        for (QSpanCollection::Span *span : spanList) {
+            const int spanVisualLeft = visualColumn(span->left());
+            const int spanVisualTop = visualRow(span->top());
+            const int spanVisualRight = spanVisualLeft + span->width() - 1;
+            const int spanVisualBottom = spanVisualTop + span->height() - 1;
+            if ((spanVisualLeft <= lastVisualColumn && spanVisualRight >= firstVisualColumn)
+                    && (spanVisualTop <= lastVisualRow && spanVisualBottom >= firstVisualRow))
+                visibleSpans.insert(span);
+        }
     }
 
-    for (QSpanCollection::Span *span : qAsConst(visibleSpans)) {
+    for (QSpanCollection::Span *span : std::as_const(visibleSpans)) {
         int row = span->top();
         int col = span->left();
         QModelIndex index = model->index(row, col, root);
@@ -1165,6 +1148,8 @@ int QTableViewPrivate::heightHintForIndex(const QModelIndex &index, int hint, QS
     table can be found by using rowHeight(); similarly, the width of
     columns can be found using columnWidth().  Since both of these are plain
     widgets, you can hide either of them using their hide() functions.
+    Each header is configured with its \l{QHeaderView::}{highlightSections}
+    and \l{QHeaderView::}{sectionsClickable} properties set to \c true.
 
     Rows and columns can be hidden and shown with hideRow(), hideColumn(),
     showRow(), and showColumn(). They can be selected with selectRow()
@@ -1645,6 +1630,28 @@ void QTableView::paintEvent(QPaintEvent *event)
                     colp +=  columnWidth(col) - gridSize;
                 QLineF line(colp, dirtyArea.top(), colp, dirtyArea.bottom());
                 painter.drawLine(line.translated(0.5, 0.5));
+            }
+            const bool drawWhenHidden = style()->styleHint(QStyle::SH_Table_AlwaysDrawLeftTopGridLines,
+                                                           &option, this);
+            if (drawWhenHidden && horizontalHeader->isHidden()) {
+                const int row = verticalHeader->logicalIndex(top);
+                if (!verticalHeader->isSectionHidden(row)) {
+                    const int rowY = rowViewportPosition(row) + offset.y();
+                    if (rowY == dirtyArea.top())
+                        painter.drawLine(dirtyArea.left(), rowY, dirtyArea.right(), rowY);
+                }
+            }
+            if (drawWhenHidden && verticalHeader->isHidden()) {
+                const int col = horizontalHeader->logicalIndex(left);
+                if (!horizontalHeader->isSectionHidden(col)) {
+                    int colX = columnViewportPosition(col) + offset.x();
+                    if (!isLeftToRight())
+                        colX += columnWidth(left) - 1;
+                    if (isLeftToRight() && colX == dirtyArea.left())
+                        painter.drawLine(colX, dirtyArea.top(), colX, dirtyArea.bottom());
+                    if (!isLeftToRight() && colX == dirtyArea.right())
+                        painter.drawLine(colX, dirtyArea.top(), colX, dirtyArea.bottom());
+                }
             }
             painter.setPen(old);
         }
@@ -2190,7 +2197,7 @@ QModelIndexList QTableView::selectedIndexes() const
     QModelIndexList modelSelected;
     if (d->selectionModel)
         modelSelected = d->selectionModel->selectedIndexes();
-    for (int i = 0; i < modelSelected.count(); ++i) {
+    for (int i = 0; i < modelSelected.size(); ++i) {
         QModelIndex index = modelSelected.at(i);
         if (!isIndexHidden(index) && index.parent() == d->root)
             viewSelected.append(index);
@@ -3469,7 +3476,7 @@ void QTableViewPrivate::selectColumn(int column, bool anchor)
  */
 void QTableView::currentChanged(const QModelIndex &current, const QModelIndex &previous)
 {
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     if (QAccessible::isActive()) {
         if (current.isValid()) {
             Q_D(QTableView);
@@ -3491,7 +3498,7 @@ void QTableView::selectionChanged(const QItemSelection &selected,
 {
     Q_D(QTableView);
     Q_UNUSED(d);
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     if (QAccessible::isActive()) {
         // ### does not work properly for selection ranges.
         QModelIndex sel = selected.indexes().value(0);

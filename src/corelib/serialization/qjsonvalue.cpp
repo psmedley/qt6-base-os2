@@ -1,41 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2022 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <qjsonobject.h>
 #include <qjsonvalue.h>
@@ -45,6 +10,8 @@
 #include <quuid.h>
 #include <qvariant.h>
 #include <qstringlist.h>
+#include <qmap.h>
+#include <qhash.h>
 #include <qdebug.h>
 #include "qdatastream.h"
 
@@ -58,11 +25,35 @@
 
 QT_BEGIN_NAMESPACE
 
+static QJsonValue::Type convertFromCborType(QCborValue::Type type) noexcept
+{
+    switch (type) {
+    case QCborValue::Null:
+        return QJsonValue::Null;
+    case QCborValue::True:
+    case QCborValue::False:
+        return QJsonValue::Bool;
+    case QCborValue::Double:
+    case QCborValue::Integer:
+        return QJsonValue::Double;
+    case QCborValue::String:
+        return QJsonValue::String;
+    case QCborValue::Array:
+        return QJsonValue::Array;
+    case QCborValue::Map:
+        return QJsonValue::Object;
+    case QCborValue::Undefined:
+    default:
+        return QJsonValue::Undefined;
+    }
+}
+
 /*!
     \class QJsonValue
     \inmodule QtCore
     \ingroup json
     \ingroup shared
+    \ingroup qtserialization
     \reentrant
     \since 5.0
 
@@ -209,7 +200,7 @@ QJsonValue::QJsonValue(const QString &s)
 /*!
     Creates a value of type String, with value \a s.
  */
-QJsonValue::QJsonValue(QLatin1String s)
+QJsonValue::QJsonValue(QLatin1StringView s)
     : value(s)
 {
 }
@@ -223,10 +214,28 @@ QJsonValue::QJsonValue(const QJsonArray &a)
 }
 
 /*!
+    \overload
+    \since 6.3
+ */
+QJsonValue::QJsonValue(QJsonArray &&a) noexcept
+    : value(QCborArray::fromJsonArray(std::move(a)))
+{
+}
+
+/*!
     Creates a value of type Object, with value \a o.
  */
 QJsonValue::QJsonValue(const QJsonObject &o)
     : value(QCborMap::fromJsonObject(o))
+{
+}
+
+/*!
+    \overload
+    \since 6.3
+ */
+QJsonValue::QJsonValue(QJsonObject &&o) noexcept
+    : value(QCborMap::fromJsonObject(std::move(o)))
 {
 }
 
@@ -589,25 +598,7 @@ QVariant QJsonValue::toVariant() const
  */
 QJsonValue::Type QJsonValue::type() const
 {
-    switch (value.type()) {
-    case QCborValue::Null:
-        return QJsonValue::Null;
-    case QCborValue::True:
-    case QCborValue::False:
-        return QJsonValue::Bool;
-    case QCborValue::Double:
-    case QCborValue::Integer:
-        return QJsonValue::Double;
-    case QCborValue::String:
-        return QJsonValue::String;
-    case QCborValue::Array:
-        return QJsonValue::Array;
-    case QCborValue::Map:
-        return QJsonValue::Object;
-    case QCborValue::Undefined:
-    default:
-        return QJsonValue::Undefined;
-    }
+    return convertFromCborType(value.type());
 }
 
 /*!
@@ -718,11 +709,14 @@ QString QJsonValue::toString() const
  */
 QJsonArray QJsonValue::toArray(const QJsonArray &defaultValue) const
 {
-    const auto dd = QJsonPrivate::Value::container(value);
-    const auto n = QJsonPrivate::Value::valueHelper(value);
-    if (value.type() != QCborValue::Array || n >= 0 || !dd)
+    if (!isArray())
         return defaultValue;
-
+    QCborContainerPrivate *dd = nullptr;
+    const auto n = QJsonPrivate::Value::valueHelper(value);
+    const auto container = QJsonPrivate::Value::container(value);
+    Q_ASSERT(n == -1 || container == nullptr);
+    if (n < 0)
+        dd = container;
     return QJsonArray(dd);
 }
 
@@ -745,11 +739,14 @@ QJsonArray QJsonValue::toArray() const
  */
 QJsonObject QJsonValue::toObject(const QJsonObject &defaultValue) const
 {
-    const auto dd = QJsonPrivate::Value::container(value);
-    const auto n = QJsonPrivate::Value::valueHelper(value);
-    if (value.type() != QCborValue::Map || n >= 0 || !dd)
+    if (!isObject())
         return defaultValue;
-
+    QCborContainerPrivate *dd = nullptr;
+    const auto container = QJsonPrivate::Value::container(value);
+    const auto n = QJsonPrivate::Value::valueHelper(value);
+    Q_ASSERT(n == -1 || container == nullptr);
+    if (n < 0)
+        dd = container;
     return QJsonObject(dd);
 }
 
@@ -765,7 +762,6 @@ QJsonObject QJsonValue::toObject() const
     return toObject(QJsonObject());
 }
 
-#if QT_STRINGVIEW_LEVEL < 2
 /*!
     Returns a QJsonValue representing the value for the key \a key.
 
@@ -782,7 +778,6 @@ const QJsonValue QJsonValue::operator[](const QString &key) const
 {
     return (*this)[QStringView(key)];
 }
-#endif
 
 /*!
     \overload
@@ -800,7 +795,7 @@ const QJsonValue QJsonValue::operator[](QStringView key) const
     \overload
     \since 5.10
 */
-const QJsonValue QJsonValue::operator[](QLatin1String key) const
+const QJsonValue QJsonValue::operator[](QLatin1StringView key) const
 {
     if (!isObject())
         return QJsonValue(QJsonValue::Undefined);
@@ -895,48 +890,198 @@ bool QJsonValue::operator!=(const QJsonValue &other) const
     However, they are not explicitly documented here.
 */
 
+void QJsonValueRef::detach()
+{
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0) && !defined(QT_BOOTSTRAPPED)
+    QCborContainerPrivate *d = QJsonPrivate::Value::container(*this);
+    d = QCborContainerPrivate::detach(d, d->elements.size());
+
+    if (is_object)
+        o->o.reset(d);
+    else
+        a->a.reset(d);
+#else
+    d = QCborContainerPrivate::detach(d, d->elements.size());
+#endif
+}
+
+static QJsonValueRef &assignToRef(QJsonValueRef &ref, const QCborValue &value, bool is_object)
+{
+    QCborContainerPrivate *d = QJsonPrivate::Value::container(ref);
+    qsizetype index = QJsonPrivate::Value::indexHelper(ref);
+    if (is_object && value.isUndefined()) {
+        d->removeAt(index);
+        d->removeAt(index - 1);
+    } else {
+        d->replaceAt(index, value);
+    }
+
+    return ref;
+}
 
 QJsonValueRef &QJsonValueRef::operator =(const QJsonValue &val)
 {
-    if (is_object)
-        o->setValueAt(index, val);
-    else
-        a->replace(index, val);
-
-    return *this;
+    detach();
+    return assignToRef(*this, QCborValue::fromJsonValue(val), is_object);
 }
 
 QJsonValueRef &QJsonValueRef::operator =(const QJsonValueRef &ref)
 {
-    if (is_object)
-        o->setValueAt(index, ref);
-    else
-        a->replace(index, ref);
+    // ### optimize more?
+    const QCborContainerPrivate *d = QJsonPrivate::Value::container(ref);
+    qsizetype index = QJsonPrivate::Value::indexHelper(ref);
 
-    return *this;
+    if (d == QJsonPrivate::Value::container(*this) &&
+            index == QJsonPrivate::Value::indexHelper(*this))
+        return *this;     // self assignment
+
+    detach();
+    return assignToRef(*this, d->valueAt(index), is_object);
 }
 
+QVariant QJsonValueConstRef::toVariant() const
+{
+    return concrete(*this).toVariant();
+}
+
+QJsonArray QJsonValueConstRef::toArray() const
+{
+    return concrete(*this).toArray();
+}
+
+QJsonObject QJsonValueConstRef::toObject() const
+{
+    return concrete(*this).toObject();
+}
+
+QJsonValue::Type QJsonValueConstRef::concreteType(QJsonValueConstRef self) noexcept
+{
+    return convertFromCborType(QJsonPrivate::Value::elementHelper(self).type);
+}
+
+bool QJsonValueConstRef::concreteBool(QJsonValueConstRef self, bool defaultValue) noexcept
+{
+    auto &e = QJsonPrivate::Value::elementHelper(self);
+    if (e.type == QCborValue::False)
+        return false;
+    if (e.type == QCborValue::True)
+        return true;
+    return defaultValue;
+}
+
+qint64 QJsonValueConstRef::concreteInt(QJsonValueConstRef self, qint64 defaultValue, bool clamp) noexcept
+{
+    auto &e = QJsonPrivate::Value::elementHelper(self);
+    qint64 v = defaultValue;
+    if (e.type == QCborValue::Double) {
+        // convertDoubleTo modifies the output even on returning false
+        if (!convertDoubleTo<qint64>(e.fpvalue(), &v))
+            v = defaultValue;
+    } else if (e.type == QCborValue::Integer) {
+        v = e.value;
+    }
+    if (clamp && qint64(int(v)) != v)
+        return defaultValue;
+    return v;
+}
+
+double QJsonValueConstRef::concreteDouble(QJsonValueConstRef self, double defaultValue) noexcept
+{
+    auto &e = QJsonPrivate::Value::elementHelper(self);
+    if (e.type == QCborValue::Double)
+        return e.fpvalue();
+    if (e.type == QCborValue::Integer)
+        return e.value;
+    return defaultValue;
+}
+
+QString QJsonValueConstRef::concreteString(QJsonValueConstRef self, const QString &defaultValue)
+{
+    const QCborContainerPrivate *d = QJsonPrivate::Value::container(self);
+    qsizetype index = QJsonPrivate::Value::indexHelper(self);
+    if (d->elements.at(index).type != QCborValue::String)
+        return defaultValue;
+    return d->stringAt(index);
+}
+
+QJsonValue QJsonValueConstRef::concrete(QJsonValueConstRef self) noexcept
+{
+    const QCborContainerPrivate *d = QJsonPrivate::Value::container(self);
+    qsizetype index = QJsonPrivate::Value::indexHelper(self);
+    return QJsonPrivate::Value::fromTrustedCbor(d->valueAt(index));
+}
+
+QString QJsonValueConstRef::objectKey(QJsonValueConstRef self)
+{
+    Q_ASSERT(self.is_object);
+    Q_ASSUME(self.is_object);
+    const QCborContainerPrivate *d = QJsonPrivate::Value::container(self);
+    qsizetype index = QJsonPrivate::Value::indexHelper(self);
+
+    Q_ASSERT(d);
+    Q_ASSERT(index < d->elements.size());
+    return d->stringAt(index - 1);
+}
+
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0) && !defined(QT_BOOTSTRAPPED)
 QVariant QJsonValueRef::toVariant() const
 {
-    return toValue().toVariant();
+    return QJsonValueConstRef::toVariant();
 }
 
 QJsonArray QJsonValueRef::toArray() const
 {
-    return toValue().toArray();
+    return QJsonValueConstRef::toArray();
 }
 
 QJsonObject QJsonValueRef::toObject() const
 {
-    return toValue().toObject();
+    return QJsonValueConstRef::toObject();
 }
 
 QJsonValue QJsonValueRef::toValue() const
 {
-    if (!is_object)
-        return a->at(index);
-    return o->valueAt(index);
+    return concrete(*this);
 }
+#else
+QJsonValueRef QJsonValueRef::operator[](qsizetype key)
+{
+    if (d->elements.at(index).type != QCborValue::Array)
+        d->replaceAt(index, QCborValue::Array);
+
+    auto &e = d->elements[index];
+    e.container = QCborContainerPrivate::grow(e.container, key);    // detaches
+    e.flags |= QtCbor::Element::IsContainer;
+
+    return QJsonValueRef(e.container, key, false);
+}
+
+QJsonValueRef QJsonValueRef::operator[](QAnyStringView key)
+{
+    // must go through QJsonObject because some of the machinery is non-static
+    // member or file-static in qjsonobject.cpp
+    QJsonObject o = QJsonPrivate::Value::fromTrustedCbor(d->valueAt(index)).toObject();
+    QJsonValueRef ret = key.visit([&](auto v) {
+        if constexpr (std::is_same_v<decltype(v), QUtf8StringView>)
+            return o[QString::fromUtf8(v)];
+        else
+            return o[v];
+    });
+
+    // ### did the QJsonObject::operator[] above detach?
+    QCborContainerPrivate *x = o.o.take();
+    Q_ASSERT(x->ref.loadRelaxed() == 1);
+
+    auto &e = d->elements[index];
+    if (e.flags & QtCbor::Element::IsContainer && e.container != x)
+        o.o.reset(e.container);     // might not an object!
+
+    e.flags |= QtCbor::Element::IsContainer;
+    e.container = x;
+
+    return ret;
+}
+#endif
 
 size_t qHash(const QJsonValue &value, size_t seed)
 {

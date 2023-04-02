@@ -1,0 +1,87 @@
+Qt_6_PRIVATE_API {
+    qt_private_api_tag*;
+    @FILE:access/qabstractnetworkcache_p.h@
+    @FILE:access/qabstractprotocolhandler_p.h@
+    @FILE:access/qdecompresshelper_p.h@
+    @FILE:access/qhsts_p.h@
+    @FILE:access/qhstsstore_p.h@
+    @FILE:access/qhttp2protocolhandler_p.h@
+    @FILE:access/qhttpheaderparser_p.h@
+    @FILE:access/qhttpmultipart_p.h@
+    @FILE:access/qhttpnetworkconnection_p.h@
+    @FILE:access/qhttpnetworkconnectionchannel_p.h@
+    @FILE:access/qhttpnetworkheader_p.h@
+    @FILE:access/qhttpnetworkreply_p.h@
+    @FILE:access/qhttpnetworkrequest_p.h@
+    @FILE:access/qhttpprotocolhandler_p.h@
+    @FILE:access/qhttpthreaddelegate_p.h@
+    @FILE:access/qnetworkaccessauthenticationmanager_p.h@
+    @FILE:access/qnetworkaccessbackend_p.h@
+    @FILE:access/qnetworkaccesscache_p.h@
+    @FILE:access/qnetworkaccesscachebackend_p.h@
+    @FILE:access/qnetworkaccessdebugpipebackend_p.h@
+    @FILE:access/qnetworkaccessfilebackend_p.h@
+    @FILE:access/qnetworkaccessmanager_p.h@
+    @FILE:access/qnetworkcookie_p.h@
+    @FILE:access/qnetworkcookiejar_p.h@
+    @FILE:access/qnetworkdiskcache_p.h@
+    @FILE:access/qnetworkfile_p.h@
+    @FILE:access/qnetworkreply_p.h@
+    @FILE:access/qnetworkreplydataimpl_p.h@
+    @FILE:access/qnetworkreplyfileimpl_p.h@
+    @FILE:access/qnetworkreplyhttpimpl_p.h@
+    @FILE:access/qnetworkreplyimpl_p.h@
+    @FILE:access/qnetworkreplywasmimpl_p.h@
+    @FILE:access/qnetworkrequest_p.h@
+    @FILE:kernel/qauthenticator_p.h@
+    @FILE:kernel/qdnslookup_p.h@
+    @FILE:kernel/qhostaddress_p.h@
+    @FILE:kernel/qhostinfo_p.h@
+    @FILE:kernel/qnetconmonitor_p.h@
+    @FILE:kernel/qnetworkdatagram_p.h@
+    @FILE:kernel/qnetworkinformation_p.h@
+    @FILE:kernel/qnetworkinterface_p.h@
+    @FILE:kernel/qnetworkinterface_uikit_p.h@
+    @FILE:kernel/qnetworkinterface_unix_p.h@
+    @FILE:kernel/qtldurl_p.h@
+    @FILE:kernel/qtnetworkglobal_p.h@
+    @FILE:socket/qabstractsocket_p.h@
+    @FILE:socket/qabstractsocketengine_p.h@
+    @FILE:socket/qhttpsocketengine_p.h@
+    @FILE:socket/qlocalserver_p.h@
+    @FILE:socket/qlocalsocket_p.h@
+    @FILE:socket/qnativesocketengine_p.h@
+    @FILE:socket/qnet_unix_p.h@
+    @FILE:socket/qsctpserver_p.h@
+    @FILE:socket/qsctpsocket_p.h@
+    @FILE:socket/qsocks5socketengine_p.h@
+    @FILE:socket/qtcpserver_p.h@
+    @FILE:socket/qtcpsocket_p.h@
+    @FILE:ssl/qdtls_p.h@
+    @FILE:ssl/qocsp_p.h@
+    @FILE:ssl/qocspresponse_p.h@
+    @FILE:ssl/qssl_p.h@
+    @FILE:ssl/qsslcertificate_p.h@
+    @FILE:ssl/qsslcertificateextension_p.h@
+    @FILE:ssl/qsslcipher_p.h@
+    @FILE:ssl/qsslconfiguration_p.h@
+    @FILE:ssl/qssldiffiehellmanparameters_p.h@
+    @FILE:ssl/qsslkey_p.h@
+    @FILE:ssl/qsslpresharedkeyauthenticator_p.h@
+    @FILE:ssl/qsslserver_p.h@
+    @FILE:ssl/qsslsocket_p.h@
+    @FILE:ssl/qtlsbackend_p.h@
+    @FILE:access/http2/bitstreams_p.h@
+    @FILE:access/http2/hpack_p.h@
+    @FILE:access/http2/hpacktable_p.h@
+    @FILE:access/http2/http2frames_p.h@
+    @FILE:access/http2/http2protocol_p.h@
+    @FILE:access/http2/http2streams_p.h@
+    @FILE:access/http2/huffman_p.h@
+};
+Qt_6 { *; };
+Qt_6.0 {} Qt_6;
+Qt_6.1 {} Qt_6.0;
+Qt_6.2 {} Qt_6.1;
+Qt_6.3 {} Qt_6.2;
+Qt_6.4 { qt_version_tag; } Qt_6.3;

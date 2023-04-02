@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -35,6 +10,9 @@
 #include <QRadioButton>
 #include <QDialog>
 #include <QSignalSpy>
+
+#include <private/qguiapplication_p.h>
+#include <qpa/qplatformtheme.h>
 
 #include "qgroupbox.h"
 
@@ -70,6 +48,7 @@ private slots:
     void propagateFocus();
     void task_QTBUG_19170_ignoreMouseReleaseEvent();
     void task_QTBUG_15519_propagateMouseEvents();
+    void buttonPressKeys();
 
 private:
     bool checked;
@@ -392,8 +371,8 @@ void tst_QGroupBox::clicked()
     else
         QTest::mouseClick(&testWidget, Qt::LeftButton);
 
-    QTEST(int(spy.count()), "clickedCount");
-    if (spy.count() > 0)
+    QTEST(int(spy.size()), "clickedCount");
+    if (spy.size() > 0)
         QTEST(spy.at(0).at(0).toBool(), "finalCheck");
     QTEST(testWidget.isChecked(), "finalCheck");
 }
@@ -407,9 +386,9 @@ void tst_QGroupBox::toggledVsClicked()
     QSignalSpy clickSpy(&groupBox, SIGNAL(clicked(bool)));
 
     groupBox.setChecked(!groupBox.isChecked());
-    QCOMPARE(clickSpy.count(), 0);
-    QCOMPARE(toggleSpy.count(), 1);
-    if (toggleSpy.count() > 0)
+    QCOMPARE(clickSpy.size(), 0);
+    QCOMPARE(toggleSpy.size(), 1);
+    if (toggleSpy.size() > 0)
         QCOMPARE(toggleSpy.at(0).at(0).toBool(), groupBox.isChecked());
 
     connect(&groupBox, SIGNAL(clicked(bool)), this, SLOT(clickTimestampSlot()));
@@ -422,8 +401,8 @@ void tst_QGroupBox::toggledVsClicked()
                                                   QStyle::SC_GroupBoxCheckBox, &groupBox);
 
     QTest::mouseClick(&groupBox, Qt::LeftButton, {}, rect.center());
-    QCOMPARE(clickSpy.count(), 1);
-    QCOMPARE(toggleSpy.count(), 2);
+    QCOMPARE(clickSpy.size(), 1);
+    QCOMPARE(toggleSpy.size(), 2);
     QVERIFY(toggleTimeStamp < clickTimeStamp);
 }
 
@@ -611,10 +590,25 @@ void tst_QGroupBox::task_QTBUG_15519_propagateMouseEvents()
     QCOMPARE(parent.mouseMoved, true);
 }
 
+void tst_QGroupBox::buttonPressKeys()
+{
+    QGroupBox groupBox;
+    groupBox.setCheckable(true);
+    QSignalSpy clickedSpy(&groupBox, &QGroupBox::clicked);
+    const auto buttonPressKeys = QGuiApplicationPrivate::platformTheme()
+                                         ->themeHint(QPlatformTheme::ButtonPressKeys)
+                                         .value<QList<Qt::Key>>();
+    for (int i = 0; i < buttonPressKeys.size(); ++i) {
+        QTest::keyClick(&groupBox, buttonPressKeys[i]);
+        QCOMPARE(clickedSpy.size(), i + 1);
+    }
+}
+
 void tst_QGroupBox::sendMouseMoveEvent(QWidget *widget, const QPoint &localPos)
 {
     // Send a MouseMove event without actually moving the pointer
-    QMouseEvent event(QEvent::MouseMove, localPos, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+    QMouseEvent event(QEvent::MouseMove, localPos, widget->mapToGlobal(localPos),
+                      Qt::NoButton, Qt::NoButton, Qt::NoModifier);
     QApplication::sendEvent(widget, &event);
 }
 

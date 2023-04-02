@@ -1,20 +1,18 @@
 
-function(qt_internal_set_warnings_are_errors_flags target)
+function(qt_internal_set_warnings_are_errors_flags target target_scope)
     set(flags "")
-    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" AND NOT MSVC)
-        # Regular clang 3.0+
-        if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "3.0.0")
-            list(APPEND flags -Werror -Wno-error=\#warnings -Wno-error=deprecated-declarations)
-        endif()
-        if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "10.0.0")
-            # We do mixed enum arithmetic all over the place:
-            list(APPEND flags -Wno-error=deprecated-enum-enum-conversion)
-        endif()
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
-        # using AppleClang
-        # Apple clang 4.0+
-        if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "4.0.0" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS_EQUAL "9.2")
-            list(APPEND flags -Werror -Wno-error=\#warnings -Wno-error=deprecated-declarations)
+    if (CLANG AND NOT MSVC)
+        list(APPEND flags -Werror -Wno-error=\#warnings -Wno-error=deprecated-declarations)
+        if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang") # as in: not AppleClang
+            if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "10.0.0")
+                # We do mixed enum arithmetic all over the place:
+                list(APPEND flags -Wno-error=deprecated-enum-enum-conversion)
+            endif()
+            if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+                # Clang 14 introduced these two but we are not clean for it.
+                list(APPEND flags -Wno-error=deprecated-copy-with-user-provided-copy)
+                list(APPEND flags -Wno-error=unused-but-set-variable)
+            endif()
         endif()
     elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         # using GCC
@@ -60,37 +58,24 @@ function(qt_internal_set_warnings_are_errors_flags target)
         if (ANDROID)
             list(APPEND flags -Wno-error=literal-suffix)
         endif()
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
-        # Intel CC 13.0 +, on Linux only
-        if (LINUX)
-            if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "13.0.0")
-                # 177: function "entity" was declared but never referenced
-                #      (too aggressive; ICC reports even for functions created due to template instantiation)
-                # 1224: #warning directive
-                # 1478: function "entity" (declared at line N) was declared deprecated
-                # 1786: function "entity" (declared at line N of "file") was declared deprecated ("message")
-                # 1881: argument must be a constant null pointer value
-                #      (NULL in C++ is usually a literal 0)
-                list(APPEND flags -Werror -ww177,1224,1478,1786,1881)
-            endif()
-        endif()
     elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
         # Only enable for versions of MSVC that are known to work
-        # 1929 is Visual Studio 2019 version 16.0
-        if(MSVC_VERSION LESS_EQUAL 1929)
+        # 1939 is Visual Studio 2022 version 17.0
+        if(MSVC_VERSION LESS_EQUAL 1939)
             list(APPEND flags /WX)
         endif()
     endif()
     set(warnings_are_errors_enabled_genex
         "$<NOT:$<BOOL:$<TARGET_PROPERTY:QT_SKIP_WARNINGS_ARE_ERRORS>>>")
 
-    # Apprently qmake only adds -Werror to CXX and OBJCXX files, not C files. We have to do the
+    # Apparently qmake only adds -Werror to CXX and OBJCXX files, not C files. We have to do the
     # same otherwise MinGW builds break when building 3rdparty\md4c\md4c.c (and probably on other
     # platforms too).
     set(cxx_only_genex "$<OR:$<COMPILE_LANGUAGE:CXX>,$<COMPILE_LANGUAGE:OBJCXX>>")
     set(final_condition_genex "$<AND:${warnings_are_errors_enabled_genex},${cxx_only_genex}>")
     set(flags_generator_expression "$<${final_condition_genex}:${flags}>")
-    target_compile_options("${target}" INTERFACE "${flags_generator_expression}")
+
+    target_compile_options("${target}" ${target_scope} "${flags_generator_expression}")
 endfunction()
 
 # The function adds a global 'definition' to the platform internal targets and the target
@@ -143,32 +128,32 @@ function(qt_internal_add_global_definition definition)
 endfunction()
 
 add_library(PlatformCommonInternal INTERFACE)
-add_library(Qt::PlatformCommonInternal ALIAS PlatformCommonInternal)
+qt_internal_add_target_aliases(PlatformCommonInternal)
 target_link_libraries(PlatformCommonInternal INTERFACE Platform)
 
 add_library(PlatformModuleInternal INTERFACE)
-add_library(Qt::PlatformModuleInternal ALIAS PlatformModuleInternal)
+qt_internal_add_target_aliases(PlatformModuleInternal)
 target_link_libraries(PlatformModuleInternal INTERFACE PlatformCommonInternal)
 
 add_library(PlatformPluginInternal INTERFACE)
-add_library(Qt::PlatformPluginInternal ALIAS PlatformPluginInternal)
+qt_internal_add_target_aliases(PlatformPluginInternal)
 target_link_libraries(PlatformPluginInternal INTERFACE PlatformCommonInternal)
 
 add_library(PlatformAppInternal INTERFACE)
-add_library(Qt::PlatformAppInternal ALIAS PlatformAppInternal)
+qt_internal_add_target_aliases(PlatformAppInternal)
 target_link_libraries(PlatformAppInternal INTERFACE PlatformCommonInternal)
 
 add_library(PlatformToolInternal INTERFACE)
-add_library(Qt::PlatformToolInternal ALIAS PlatformToolInternal)
+qt_internal_add_target_aliases(PlatformToolInternal)
 target_link_libraries(PlatformToolInternal INTERFACE PlatformAppInternal)
 
 qt_internal_add_global_definition(QT_NO_JAVA_STYLE_ITERATORS)
 qt_internal_add_global_definition(QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
 
 if(WARNINGS_ARE_ERRORS)
-    qt_internal_set_warnings_are_errors_flags(PlatformModuleInternal)
-    qt_internal_set_warnings_are_errors_flags(PlatformPluginInternal)
-    qt_internal_set_warnings_are_errors_flags(PlatformAppInternal)
+    qt_internal_set_warnings_are_errors_flags(PlatformModuleInternal INTERFACE)
+    qt_internal_set_warnings_are_errors_flags(PlatformPluginInternal INTERFACE)
+    qt_internal_set_warnings_are_errors_flags(PlatformAppInternal INTERFACE)
 endif()
 if(WIN32)
     # Needed for M_PI define. Same as mkspecs/features/qt_module.prf.
@@ -187,17 +172,15 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" AND CMAKE_SYSTEM_NAME STREQUAL "
     target_compile_options(PlatformCommonInternal INTERFACE -Wno-ignored-attributes)
 endif()
 
-# We can't use the gold linker on android with the NDK, which is the default
-# linker. To build our own target we will use the lld linker.
-# TODO: Why not?
-# Linking Android libs with lld on Windows sometimes deadlocks. Don't use lld on
-# Windows. qmake doesn't use lld to build Android on any host platform.
-if (ANDROID AND NOT CMAKE_HOST_WIN32)
-    target_link_options(PlatformModuleInternal INTERFACE -fuse-ld=lld)
-endif()
-
 target_compile_definitions(PlatformCommonInternal INTERFACE QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
 target_compile_definitions(PlatformCommonInternal INTERFACE $<$<NOT:$<CONFIG:Debug>>:QT_NO_DEBUG>)
+
+if(FEATURE_developer_build)
+    # This causes an ABI break on Windows, so we cannot unconditionally
+    # enable it. Keep it for developer builds only for now.
+    ### Qt 7: remove the if.
+    target_compile_definitions(PlatformCommonInternal INTERFACE QT_STRICT_QLIST_ITERATORS)
+endif()
 
 function(qt_internal_apply_bitcode_flags target)
     # See mkspecs/features/uikit/bitcode.prf
@@ -240,7 +223,6 @@ if(UIKIT)
         # TODO: Figure out if this ok or not (sounds ok to me).
         target_compile_definitions(PlatformCommonInternal INTERFACE QT_COMPILER_SUPPORTS_SSE2)
     endif()
-    qt_internal_apply_bitcode_flags(PlatformCommonInternal)
 endif()
 
 if(WASM AND QT_FEATURE_sse2)
@@ -283,11 +265,11 @@ if (MSVC)
     )
 
     target_compile_options(PlatformCommonInternal INTERFACE
-        $<$<NOT:$<CONFIG:Debug>>:-guard:cf>
+        $<$<NOT:$<CONFIG:Debug>>:-guard:cf -Gw>
     )
 
     target_link_options(PlatformCommonInternal INTERFACE
-        -DYNAMICBASE -NXCOMPAT
+        -DYNAMICBASE -NXCOMPAT -LARGEADDRESSAWARE
         $<$<NOT:$<CONFIG:Debug>>:-OPT:REF -OPT:ICF -GUARD:CF>
     )
 endif()
@@ -298,6 +280,18 @@ endif()
 
 if (GCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "9.2")
     target_compile_options(PlatformCommonInternal INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wsuggest-override>)
+endif()
+
+if(QT_FEATURE_intelcet)
+    if(MSVC)
+        target_link_options(PlatformCommonInternal INTERFACE
+            -CETCOMPAT
+        )
+    else()
+        target_compile_options(PlatformCommonInternal INTERFACE
+            -fcf-protection
+        )
+    endif()
 endif()
 
 if(QT_FEATURE_force_asserts)
@@ -367,15 +361,7 @@ qt_auto_detect_implicit_sse2()
 function(qt_auto_detect_fpmath)
     # fpmath configuration adjustment in qt_module.prf
     set(fpmath_supported FALSE)
-    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-        if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "3.4")
-            set(fpmath_supported TRUE)
-        endif()
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
-        if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "5.1")
-            set(fpmath_supported TRUE)
-        endif()
-    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang|GNU|IntelLLVM")
         set(fpmath_supported TRUE)
     endif()
     if(fpmath_supported AND TEST_architecture_arch STREQUAL "i386" AND __implicit_sse2_for_qt_modules_enabled)

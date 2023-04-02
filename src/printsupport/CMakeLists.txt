@@ -11,10 +11,10 @@ qt_internal_add_module(PrintSupport
         kernel/qplatformprintdevice.cpp kernel/qplatformprintdevice.h
         kernel/qplatformprintersupport.cpp kernel/qplatformprintersupport.h
         kernel/qplatformprintplugin.cpp kernel/qplatformprintplugin.h
-        kernel/qprint_p.h
+        kernel/qprint.cpp kernel/qprint_p.h
         kernel/qprintdevice.cpp kernel/qprintdevice_p.h
         kernel/qprintengine.h
-        kernel/qprintengine_pdf.cpp
+        kernel/qprintengine_pdf.cpp kernel/qprintengine_pdf_p.h
         kernel/qprinter.cpp kernel/qprinter.h kernel/qprinter_p.h
         kernel/qprinterinfo.cpp kernel/qprinterinfo.h kernel/qprinterinfo_p.h
         kernel/qtprintsupportglobal.h kernel/qtprintsupportglobal_p.h
@@ -36,6 +36,7 @@ qt_internal_add_module(PrintSupport
         Qt::CorePrivate
         Qt::GuiPrivate
         Qt::WidgetsPrivate
+    GENERATE_CPP_EXPORTS
 )
 
 #### Keys ignored in scope 1:.:.:printsupport.pro:<TRUE>:
@@ -180,7 +181,7 @@ qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_printdialog AND (UNI
         dialogs/qprintsettingsoutput.ui
         dialogs/qprintwidget.ui
     INCLUDE_DIRECTORIES
-        ${QT_SOURCE_TREE}/src/plugins/printsupport/cups
+        ${QtBase_SOURCE_DIR}/src/plugins/printsupport/cups
     ENABLE_AUTOGEN_TOOLS
         uic
 )

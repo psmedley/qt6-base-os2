@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwindowsfontdatabase_ft_p.h"
 #include "qwindowsfontdatabase_p.h"
@@ -51,12 +15,16 @@
 #if QT_CONFIG(regularexpression)
 #include <QtCore/QRegularExpression>
 #endif
+#include <QtCore/private/qduplicatetracker_p.h>
+
 #include <QtGui/QGuiApplication>
 #include <QtGui/QFontDatabase>
 
 #include <wchar.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 static inline QFontDatabase::WritingSystem writingSystemFromCharSet(uchar charSet)
 {
@@ -138,7 +106,7 @@ static FontKeys &fontKeys()
 #if QT_CONFIG(regularexpression)
                 realKey.remove(sizeListMatch);
 #endif
-                const auto fontNames = QStringView(realKey).trimmed().split(QLatin1Char('&'));
+                const auto fontNames = QStringView(realKey).trimmed().split(u'&');
                 fontKey.fontNames.reserve(fontNames.size());
                 for (const auto &fontName : fontNames)
                     fontKey.fontNames.append(fontName.trimmed().toString());
@@ -174,7 +142,7 @@ static bool addFontToDatabase(QString familyName,
                               int type)
 {
     // the "@family" fonts are just the same as "family". Ignore them.
-    if (familyName.isEmpty() || familyName.at(0) == QLatin1Char('@') || familyName.startsWith(QLatin1String("WST_")))
+    if (familyName.isEmpty() || familyName.at(0) == u'@' || familyName.startsWith("WST_"_L1))
         return false;
 
     uchar charSet = logFont.lfCharSet;
@@ -240,8 +208,7 @@ static bool addFontToDatabase(QString familyName,
         // Since it's the default UI font on this platform, most widgets will be unable to
         // display Thai text by default. As a temporary work around, we special case Segoe UI
         // and remove the Thai script from its list of supported writing systems.
-        if (writingSystems.supported(QFontDatabase::Thai) &&
-                faceName == QLatin1String("Segoe UI"))
+        if (writingSystems.supported(QFontDatabase::Thai) && faceName == "Segoe UI"_L1)
             writingSystems.setSupported(QFontDatabase::Thai, false);
     } else {
         const QFontDatabase::WritingSystem ws = writingSystemFromCharSet(charSet);
@@ -257,8 +224,8 @@ static bool addFontToDatabase(QString familyName,
         QLocale systemLocale = QLocale::system();
         if (systemLocale.language() != QLocale::C
                 && systemLocale.language() != QLocale::English
-                && styleName != QLatin1String("Italic")
-                && styleName != QLatin1String("Bold")) {
+                && styleName != "Italic"_L1
+                && styleName != "Bold"_L1) {
             key = findFontKey(qt_getEnglishName(fullName, true), &index);
         }
         if (!key)
@@ -318,11 +285,9 @@ static int QT_WIN_CALLBACK storeFont(const LOGFONT *logFont, const TEXTMETRIC *t
         signature = &reinterpret_cast<const NEWTEXTMETRICEX *>(textmetric)->ntmFontSig;
         // We get a callback for each script-type supported, but we register them all
         // at once using the signature, so we only need one call to addFontToDatabase().
-        QSet<FontAndStyle> *foundFontAndStyles = reinterpret_cast<QSet<FontAndStyle> *>(lparam);
-        FontAndStyle fontAndStyle = {faceName, styleName};
-        if (foundFontAndStyles->contains(fontAndStyle))
+        auto foundFontAndStyles = reinterpret_cast<QDuplicateTracker<FontAndStyle> *>(lparam);
+        if (foundFontAndStyles->hasSeen({faceName, styleName}))
             return 1;
-        foundFontAndStyles->insert(fontAndStyle);
     }
     addFontToDatabase(faceName, styleName, fullName, *logFont, textmetric, signature, type);
 
@@ -352,7 +317,7 @@ void QWindowsFontDatabaseFT::populateFamily(const QString &familyName)
     lf.lfFaceName[familyName.size()] = 0;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfPitchAndFamily = 0;
-    QSet<FontAndStyle> foundFontAndStyles;
+    QDuplicateTracker<FontAndStyle> foundFontAndStyles;
     EnumFontFamiliesEx(dummy, &lf, storeFont, reinterpret_cast<intptr_t>(&foundFontAndStyles), 0);
     ReleaseDC(0, dummy);
 }
@@ -431,7 +396,7 @@ QStringList QWindowsFontDatabaseFT::fallbacksForFamily(const QString &family, QF
 }
 QString QWindowsFontDatabaseFT::fontDir() const
 {
-    const QString result = QLatin1String(qgetenv("windir")) + QLatin1String("/Fonts");//QPlatformFontDatabase::fontDir();
+    const QString result = QLatin1StringView(qgetenv("windir")) + "/Fonts"_L1;//QPlatformFontDatabase::fontDir();
     qCDebug(lcQpaFonts) << __FUNCTION__ << result;
     return result;
 }

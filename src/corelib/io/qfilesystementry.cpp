@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qfilesystementry_p.h"
 
@@ -48,14 +12,16 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 #ifdef Q_OS_DOSLIKE
 static bool isUncRoot(const QString &server)
 {
     QString localPath = QDir::toNativeSeparators(server);
-    if (!localPath.startsWith(QLatin1String("\\\\")))
+    if (!localPath.startsWith("\\\\"_L1))
         return false;
 
-    int idx = localPath.indexOf(QLatin1Char('\\'), 2);
+    int idx = localPath.indexOf(u'\\', 2);
     if (idx == -1 || idx + 1 == localPath.length())
         return true;
 
@@ -65,8 +31,8 @@ static bool isUncRoot(const QString &server)
 static inline QString fixIfRelativeUncPath(const QString &path)
 {
     QString currentPath = QDir::currentPath();
-    if (currentPath.startsWith(QLatin1String("//")))
-        return currentPath % QChar(QLatin1Char('/')) % path;
+    if (currentPath.startsWith("//"_L1))
+        return currentPath % QChar(u'/') % path;
     return path;
 }
 #endif
@@ -170,7 +136,7 @@ QString QFileSystemEntry::fileName() const
 {
     findLastSeparator();
 #if defined(Q_OS_DOSLIKE)
-    if (m_lastSeparator == -1 && m_filePath.length() >= 2 && m_filePath.at(1) == QLatin1Char(':'))
+    if (m_lastSeparator == -1 && m_filePath.length() >= 2 && m_filePath.at(1) == u':')
         return m_filePath.mid(2);
 #endif
     return m_filePath.mid(m_lastSeparator + 1);
@@ -181,15 +147,15 @@ QString QFileSystemEntry::path() const
     findLastSeparator();
     if (m_lastSeparator == -1) {
 #if defined(Q_OS_DOSLIKE)
-        if (m_filePath.length() >= 2 && m_filePath.at(1) == QLatin1Char(':'))
+        if (m_filePath.length() >= 2 && m_filePath.at(1) == u':')
             return m_filePath.left(2);
 #endif
-        return QString(QLatin1Char('.'));
+        return QString(u'.');
     }
     if (m_lastSeparator == 0)
-        return QString(QLatin1Char('/'));
+        return QString(u'/');
 #if defined(Q_OS_DOSLIKE)
-    if (m_lastSeparator == 2 && m_filePath.at(1) == QLatin1Char(':'))
+    if (m_lastSeparator == 2 && m_filePath.at(1) == u':')
         return m_filePath.left(m_lastSeparator + 1);
 #endif
     return m_filePath.left(m_lastSeparator);
@@ -205,7 +171,7 @@ QString QFileSystemEntry::baseName() const
             length--;
     }
 #if defined(Q_OS_DOSLIKE)
-    if (m_lastSeparator == -1 && m_filePath.length() >= 2 && m_filePath.at(1) == QLatin1Char(':'))
+    if (m_lastSeparator == -1 && m_filePath.length() >= 2 && m_filePath.at(1) == u':')
         return m_filePath.mid(2, length - 2);
 #endif
     return m_filePath.mid(m_lastSeparator + 1, length);
@@ -221,7 +187,7 @@ QString QFileSystemEntry::completeBaseName() const
             length--;
     }
 #if defined(Q_OS_DOSLIKE)
-    if (m_lastSeparator == -1 && m_filePath.length() >= 2 && m_filePath.at(1) == QLatin1Char(':'))
+    if (m_lastSeparator == -1 && m_filePath.length() >= 2 && m_filePath.at(1) == u':')
         return m_filePath.mid(2, length - 2);
 #endif
     return m_filePath.mid(m_lastSeparator + 1, length);
@@ -263,8 +229,8 @@ bool QFileSystemEntry::isAbsolute() const
              && m_filePath.at(1).unicode() == ':'
              && m_filePath.at(2).unicode() == '/')
          || (m_filePath.length() >= 2
-             && m_filePath.at(0) == QLatin1Char('/')
-             && m_filePath.at(1) == QLatin1Char('/')));
+             && m_filePath.at(0) == u'/'
+             && m_filePath.at(1) == u'/'));
 }
 #else
 bool QFileSystemEntry::isRelative() const
@@ -289,8 +255,8 @@ bool QFileSystemEntry::isDriveRoot() const
 bool QFileSystemEntry::isDriveRootPath(const QString &path)
 {
     return (path.length() == 3
-           && path.at(0).isLetter() && path.at(1) == QLatin1Char(':')
-           && path.at(2) == QLatin1Char('/'));
+           && path.at(0).isLetter() && path.at(1) == u':'
+           && path.at(2) == u'/');
 }
 
 QString QFileSystemEntry::removeUncOrLongPathPrefix(QString path)
@@ -324,7 +290,7 @@ QString QFileSystemEntry::removeUncOrLongPathPrefix(QString path)
 
 bool QFileSystemEntry::isRootPath(const QString &path)
 {
-    if (path == QLatin1String("/")
+    if (path == "/"_L1
 #if defined(Q_OS_DOSLIKE)
             || isDriveRootPath(path)
             || isUncRoot(path)
@@ -347,7 +313,7 @@ void QFileSystemEntry::findLastSeparator() const
 {
     if (m_lastSeparator == -2) {
         resolveFilePath();
-        m_lastSeparator = m_filePath.lastIndexOf(QLatin1Char('/'));
+        m_lastSeparator = m_filePath.lastIndexOf(u'/');
     }
 }
 
@@ -406,7 +372,7 @@ bool QFileSystemEntry::isClean() const
     bool dotok = true; // checking for ".." or "." starts to relative paths
     bool slashok = true;
     for (QString::const_iterator iter = m_filePath.constBegin(); iter != m_filePath.constEnd(); ++iter) {
-        if (*iter == QLatin1Char('/')) {
+        if (*iter == u'/') {
             if (dots == 1 || dots == 2)
                 return false; // path contains "./" or "../"
             if (!slashok)
@@ -416,7 +382,7 @@ bool QFileSystemEntry::isClean() const
             slashok = false;
         } else if (dotok) {
             slashok = true;
-            if (*iter == QLatin1Char('.')) {
+            if (*iter == u'.') {
                 dots++;
                 if (dots > 2)
                     dotok = false;

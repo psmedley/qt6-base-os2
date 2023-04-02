@@ -3,11 +3,13 @@ The following table describes the mapping of configure options to CMake argument
 | configure                             | cmake                                             | Notes                                                           |
 |---------------------------------------|---------------------------------------------------|-----------------------------------------------------------------|
 | -prefix /opt/qt6                      | -DCMAKE_INSTALL_PREFIX=/opt/qta6                  |                                                                 |
+| -no-prefix (only available in Qt6)    | -DCMAKE_INSTALL_PREFIX=$PWD (with bash)           | In Qt5 this was done by specifying -prefix $PWD                 |
+|                                         or -DFEATURE_no_prefix=ON                         |                                                                 |
 | -extprefix /opt/qt6                   | -DCMAKE_STAGING_PREFIX=/opt/qt6                   |                                                                 |
 | -bindir <dir>                         | -DINSTALL_BINDIR=<dir>                            | similar for -headerdir -libdir and so on                        |
 | -hostdatadir <dir>                    | -DINSTALL_MKSPECSDIR=<dir>                        |                                                                 |
 | -help                                 | n/a                                               | Handled by configure[.bat].                                     |
-| -verbose                              |                                                   |                                                                 |
+| -verbose                              | --log-level=STATUS                                | Sets the CMake log level to STATUS. The default one is NOTICE.  |
 | -continue                             |                                                   |                                                                 |
 | -redo                                 | n/a                                               | Handled by configure[.bat].                                     |
 | -recheck [test,...]                   |                                                   |                                                                 |
@@ -65,7 +67,7 @@ The following table describes the mapping of configure options to CMake argument
 | -pch                                  | -DBUILD_WITH_PCH=ON                               |                                                                 |
 | -ltcg                                 | -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON or        |                                                                 |
 |                                       | -DCMAKE_INTERPROCEDURAL_OPTIMIZATION_<CONFIG>=ON  |                                                                 |
-| -linker [bfd,gold,lld]                | -DINPUT_linker=<name> or                          |                                                                 |
+| -linker [bfd,gold,lld,mold]           | -DINPUT_linker=<name> or                          |                                                                 |
 |                                       | -DFEATURE_use_<name>_linker=ON                    |                                                                 |
 | -incredibuild-xge                     | n/a                                               | This option enables remote distribution of Visual Studio        |
 |                                       |                                                   | custom build steps for moc, uic, and rcc.                       |
@@ -89,8 +91,8 @@ The following table describes the mapping of configure options to CMake argument
 |                                       |                                                   | If no value is provided, a simulator_and_device build is        |
 |                                       |                                                   | assumed.                                                        |
 | -android-sdk <path>                   | -DANDROID_SDK_ROOT=<path>                         |                                                                 |
-| -android-ndk <path>                   | -DCMAKE_TOOLCHAIN_PATH=<toolchain file in NDK>    |                                                                 |
-| -android-ndk-platform android-23      | -DCMAKE_ANDROID_NATIVE_API_LEVEL=23               |                                                                 |
+| -android-ndk <path>                   | -DCMAKE_TOOLCHAIN_FILE=<toolchain file in NDK>    |                                                                 |
+| -android-ndk-platform android-23      | -DANDROID_PLATFORM=android-23                     |                                                                 |
 | -android-abis <abi_1>,...,<abi_n>     | -DANDROID_ABI=<abi_1>                             | only one ABI can be specified                                   |
 | -android-style-assets                 | -DFEATURE_android_style_assets=ON                 |                                                                 |
 | -android-javac-source                 | -DQT_ANDROID_JAVAC_SOURCE=7                       | Set the javac build source version.                             |
@@ -103,7 +105,7 @@ The following table describes the mapping of configure options to CMake argument
 |                                       |                                                   | -DQT_BUILD_EXAMPLES_BY_DEFAULT=OFF. Note that if you entirely   |
 |                                       |                                                   | disable tests/examples at configure time (by using              |
 |                                       |                                                   | -DQT_BUILD_TESTS=OFF or -DQT_BUILD_EXAMPLES=OFF) you can't then |
-|                                       |                                                   | build them separately, after configuration.                     | 
+|                                       |                                                   | build them separately, after configuration.                     |
 | -nomake <part>                        | -DQT_BUILD_TESTS=OFF                              | A way to turn off tools explicitly is missing.                  |
 |                                       | -DQT_BUILD_EXAMPLES=OFF                           |                                                                 |
 | -no-gui                               | -DFEATURE_gui=OFF                                 |                                                                 |

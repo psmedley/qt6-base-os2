@@ -1,0 +1,28 @@
+Qt_6_PRIVATE_API {
+    qt_private_api_tag*;
+    @FILE:dbus_minimal_p.h@
+    @FILE:qdbus_symbols_p.h@
+    @FILE:qdbusabstractadaptor_p.h@
+    @FILE:qdbusabstractinterface_p.h@
+    @FILE:qdbusargument_p.h@
+    @FILE:qdbusconnection_p.h@
+    @FILE:qdbusconnectionmanager_p.h@
+    @FILE:qdbuscontext_p.h@
+    @FILE:qdbusintegrator_p.h@
+    @FILE:qdbusinterface_p.h@
+    @FILE:qdbusintrospection_p.h@
+    @FILE:qdbusmessage_p.h@
+    @FILE:qdbusmetaobject_p.h@
+    @FILE:qdbusmetatype_p.h@
+    @FILE:qdbuspendingcall_p.h@
+    @FILE:qdbusthreaddebug_p.h@
+    @FILE:qdbusutil_p.h@
+    @FILE:qdbusxmlparser_p.h@
+    @FILE:qtdbusglobal_p.h@
+};
+Qt_6 { *; };
+Qt_6.0 {} Qt_6;
+Qt_6.1 {} Qt_6.0;
+Qt_6.2 {} Qt_6.1;
+Qt_6.3 {} Qt_6.2;
+Qt_6.4 { qt_version_tag; } Qt_6.3;

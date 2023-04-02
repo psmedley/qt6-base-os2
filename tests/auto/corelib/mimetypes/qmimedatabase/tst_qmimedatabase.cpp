@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <qmimedatabase.h>
 
@@ -49,6 +24,8 @@
 #if QT_CONFIG(process)
 #include <QProcess>
 #endif
+
+using namespace Qt::StringLiterals;
 
 static const char *const additionalMimeFiles[] = {
     "yast2-metapackage-handler-mimetypes.xml",
@@ -78,12 +55,12 @@ static inline QString testSuiteWarning()
     str << "\nCannot find the shared-mime-info test suite\nin the parent of: "
         << QDir::toNativeSeparators(QDir::currentPath()) << "\n"
            "cd " << QDir::toNativeSeparators(QStringLiteral("tests/auto/corelib/mimetypes/qmimedatabase")) << "\n"
-           "wget https://gitlab.freedesktop.org/xdg/shared-mime-info/-/archive/2.1/shared-mime-info-2.1.zip\n"
-           "unzip shared-mime-info-2.1.zip\n";
+           "wget https://gitlab.freedesktop.org/xdg/shared-mime-info/-/archive/2.2/shared-mime-info-2.2.zip\n"
+           "unzip shared-mime-info-2.2.zip\n";
 #ifdef Q_OS_WIN
-    str << "mkdir testfiles\nxcopy /s shared-mime-info-2.1 s-m-i\n";
+    str << "mkdir testfiles\nxcopy /s shared-mime-info-2.2 s-m-i\n";
 #else
-    str << "ln -s shared-mime-info-2.1 s-m-i\n";
+    str << "ln -s shared-mime-info-2.2 s-m-i\n";
 #endif
     return result;
 }
@@ -270,6 +247,7 @@ void tst_QMimeDatabase::mimeTypeForFileName_data()
     // fdo bug 15436, needs shared-mime-info >= 0.40 (and this tests the globs2-parsing code).
     QTest::newRow("glob that ends with *, also matches *.pdf. *.pdf has higher weight") << "README.pdf" << "application/pdf";
     QTest::newRow("directory") << "/" << "inode/directory";
+    QTest::newRow("resource-directory") << ":/files/" << "inode/directory";
     QTest::newRow("doesn't exist, no extension") << "IDontExist" << "application/octet-stream";
     QTest::newRow("doesn't exist but has known extension") << "IDontExist.txt" << "text/plain";
     QTest::newRow("empty") << "" << "application/octet-stream";
@@ -302,7 +280,7 @@ void tst_QMimeDatabase::mimeTypeForFileName()
         QVERIFY(mimes.isEmpty());
     } else {
         QVERIFY2(!mimes.isEmpty(), msgMimeTypeForFileNameFailed(mimes, expectedMimeType).constData());
-        QVERIFY2(mimes.count() == 1, msgMimeTypeForFileNameFailed(mimes, expectedMimeType).constData());
+        QVERIFY2(mimes.size() == 1, msgMimeTypeForFileNameFailed(mimes, expectedMimeType).constData());
         QCOMPARE(mimes.first().name(), expectedMimeType);
     }
 }
@@ -353,7 +331,7 @@ void tst_QMimeDatabase::inheritance()
 
     const QMimeType directory = db.mimeTypeForName(QString::fromLatin1("inode/directory"));
     QVERIFY(directory.isValid());
-    QCOMPARE(directory.parentMimeTypes().count(), 0);
+    QCOMPARE(directory.parentMimeTypes().size(), 0);
     QVERIFY(!directory.inherits(QLatin1String("application/octet-stream")));
 
     // Check that text/x-patch knows that it inherits from text/plain (it says so explicitly)
@@ -374,7 +352,7 @@ void tst_QMimeDatabase::inheritance()
     const QStringList shellParents = shellscript.parentMimeTypes();
     QVERIFY(shellParents.contains(QLatin1String("text/plain")));
     QVERIFY(shellParents.contains(QLatin1String("application/x-executable")));
-    QCOMPARE(shellParents.count(), 2); // only the above two
+    QCOMPARE(shellParents.size(), 2); // only the above two
     const QStringList allShellAncestors = shellscript.allAncestors();
     QVERIFY(allShellAncestors.contains(QLatin1String("text/plain")));
     QVERIFY(allShellAncestors.contains(QLatin1String("application/x-executable")));
@@ -522,6 +500,42 @@ void tst_QMimeDatabase::mimeTypeForFileWithContent()
         QCOMPARE(mime.name(), QString::fromLatin1("application/smil+xml"));
     }
 
+    // Test what happens with Qt resources (file engines in general)
+    {
+        QFile rccFile(":/files/test.txt");
+
+        mime = db.mimeTypeForFile(rccFile.fileName());
+        QCOMPARE(mime.name(), "text/plain"_L1);
+
+        QVERIFY(rccFile.open(QIODevice::ReadOnly));
+        mime = db.mimeTypeForData(&rccFile);
+        QCOMPARE(mime.name(), "text/x-qml"_L1);
+        QVERIFY(rccFile.isOpen());
+
+        mime = db.mimeTypeForFile(rccFile.fileName(), QMimeDatabase::MatchContent);
+        QCOMPARE(mime.name(), "text/x-qml"_L1);
+    }
+
+    // Directories
+    {
+        mime = db.mimeTypeForFile("/");
+        QCOMPARE(mime.name(), "inode/directory"_L1);
+
+        QString dirName = QDir::tempPath();
+        if (!dirName.endsWith(u'/'))
+            dirName += u'/';
+        mime = db.mimeTypeForFile(dirName);
+        QCOMPARE(mime.name(), "inode/directory"_L1);
+
+        while (dirName.endsWith(u'/'))
+            dirName.chop(1);
+        mime = db.mimeTypeForFile(dirName);
+        QCOMPARE(mime.name(), "inode/directory"_L1);
+
+        mime = db.mimeTypeForFile(":/files");
+        QCOMPARE(mime.name(), "inode/directory"_L1);
+    }
+
     // Test what happens with an incorrect path
     mime = db.mimeTypeForFile(QString::fromLatin1("file:///etc/passwd" /* incorrect code, use a path instead */));
     QVERIFY(mime.isDefault());
@@ -616,7 +630,7 @@ void tst_QMimeDatabase::allMimeTypes()
     QVERIFY(!lst.isEmpty());
 
     // Hardcoding this is the only way to check both providers find the same number of mimetypes.
-    QCOMPARE(lst.count(), 811);
+    QCOMPARE(lst.size(), 851);
 
     foreach (const QMimeType &mime, lst) {
         const QString name = mime.name();
@@ -766,7 +780,7 @@ void tst_QMimeDatabase::findByFileName()
     //qDebug() << Q_FUNC_INFO << "mimeTypeForFile() returned" << resultMimeTypeName;
 
     const bool failed = resultMimeTypeName != mimeTypeName;
-    const bool shouldFail = (xFail.length() >= 1 && xFail.at(0) == QLatin1Char('x'));
+    const bool shouldFail = (xFail.size() >= 1 && xFail.at(0) == QLatin1Char('x'));
     if (shouldFail != failed) {
         // Results are ambiguous when multiple MIME types have the same glob
         // -> accept the current result if the found MIME type actually
@@ -813,7 +827,7 @@ void tst_QMimeDatabase::findByData()
     QByteArray data = f.read(16384);
 
     const QString resultMimeTypeName = database.mimeTypeForData(data).name();
-    if (xFail.length() >= 2 && xFail.at(1) == QLatin1Char('x')) {
+    if (xFail.size() >= 2 && xFail.at(1) == QLatin1Char('x')) {
         // Expected to fail
         QVERIFY2(resultMimeTypeName != mimeTypeName, qPrintable(resultMimeTypeName));
     } else {
@@ -844,7 +858,7 @@ void tst_QMimeDatabase::findByFile()
     QMimeDatabase database;
     const QString resultMimeTypeName = database.mimeTypeForFile(filePath).name();
     //qDebug() << Q_FUNC_INFO << filePath << "->" << resultMimeTypeName;
-    if (xFail.length() >= 3 && xFail.at(2) == QLatin1Char('x')) {
+    if (xFail.size() >= 3 && xFail.at(2) == QLatin1Char('x')) {
         // Expected to fail
         QVERIFY2(resultMimeTypeName != mimeTypeName, qPrintable(resultMimeTypeName));
     } else {

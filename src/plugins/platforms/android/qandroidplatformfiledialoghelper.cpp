@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 Klaralvdalens Datakonsult AB (KDAB)
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 Klaralvdalens Datakonsult AB (KDAB)
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qandroidplatformfiledialoghelper.h"
 
@@ -49,6 +13,8 @@
 #include <QUrl>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 namespace QtAndroidFileDialogHelper {
 
@@ -80,6 +46,7 @@ bool QAndroidPlatformFileDialogHelper::handleActivityResult(jint requestCode, ji
         takePersistableUriPermission(uri);
         m_selectedFile.append(QUrl(uri.toString()));
         Q_EMIT fileSelected(m_selectedFile.first());
+        Q_EMIT currentChanged(m_selectedFile.first());
         Q_EMIT accept();
 
         return true;
@@ -98,6 +65,7 @@ bool QAndroidPlatformFileDialogHelper::handleActivityResult(jint requestCode, ji
             m_selectedFile.append(itemUri.toString());
         }
         Q_EMIT filesSelected(m_selectedFile);
+        Q_EMIT currentChanged(m_selectedFile.first());
         Q_EMIT accept();
     }
 
@@ -127,6 +95,22 @@ void QAndroidPlatformFileDialogHelper::setInitialFileName(const QString &title)
     m_intent.callObjectMethod("putExtra",
                               "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;",
                               extraTitle.object(), QJniObject::fromString(title).object());
+}
+
+void QAndroidPlatformFileDialogHelper::setInitialDirectoryUri(const QString &directory)
+{
+    if (directory.isEmpty())
+        return;
+
+    if (QNativeInterface::QAndroidApplication::sdkVersion() < 26)
+        return;
+
+    const auto extraInitialUri = QJniObject::getStaticObjectField(
+            "android/provider/DocumentsContract", "EXTRA_INITIAL_URI", "Ljava/lang/String;");
+    m_intent.callObjectMethod("putExtra",
+                              "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;",
+                              extraInitialUri.object(),
+                              QJniObject::fromString(directory).object());
 }
 
 void QAndroidPlatformFileDialogHelper::setOpenableCategory()
@@ -170,7 +154,7 @@ void QAndroidPlatformFileDialogHelper::setMimeTypes()
             mimeTypes.append(db.mimeTypeForFile(filter, QMimeDatabase::MatchExtension).name());
     }
 
-    const QString initialType = mimeTypes.size() == 1 ? mimeTypes.at(0) : QLatin1String("*/*");
+    const QString initialType = mimeTypes.size() == 1 ? mimeTypes.at(0) : "*/*"_L1;
     m_intent.callObjectMethod("setType", "(Ljava/lang/String;)Landroid/content/Intent;",
                               QJniObject::fromString(initialType).object());
 
@@ -211,11 +195,8 @@ bool QAndroidPlatformFileDialogHelper::show(Qt::WindowFlags windowFlags, Qt::Win
     if (options()->acceptMode() == QFileDialogOptions::AcceptSave) {
         m_intent = getFileDialogIntent("ACTION_CREATE_DOCUMENT");
         const QList<QUrl> selectedFiles = options()->initiallySelectedFiles();
-        if (selectedFiles.size() > 0) {
-            // TODO: The initial folder to show at the start should be handled by EXTRA_INITIAL_URI
-            // Take only the file name.
+        if (selectedFiles.size() > 0)
             setInitialFileName(selectedFiles.first().fileName());
-        }
     } else if (options()->acceptMode() == QFileDialogOptions::AcceptOpen) {
         switch (options()->fileMode()) {
         case QFileDialogOptions::FileMode::DirectoryOnly:
@@ -239,6 +220,8 @@ bool QAndroidPlatformFileDialogHelper::show(Qt::WindowFlags windowFlags, Qt::Win
         setMimeTypes();
     }
 
+    setInitialDirectoryUri(m_directory.toString());
+
     QtAndroidPrivate::registerActivityResultListener(this);
     m_activity.callMethod<void>("startActivityForResult", "(Landroid/content/Intent;I)V",
                               m_intent.object(), REQUEST_CODE);
@@ -250,6 +233,11 @@ void QAndroidPlatformFileDialogHelper::hide()
     if (m_eventLoop.isRunning())
         m_eventLoop.exit();
     QtAndroidPrivate::unregisterActivityResultListener(this);
+}
+
+void QAndroidPlatformFileDialogHelper::setDirectory(const QUrl &directory)
+{
+    m_directory = directory;
 }
 
 void QAndroidPlatformFileDialogHelper::exec()

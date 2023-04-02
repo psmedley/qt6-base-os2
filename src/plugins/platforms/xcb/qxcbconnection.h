@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QXCBCONNECTION_H
 #define QXCBCONNECTION_H
@@ -191,8 +155,8 @@ public:
     inline void setNetWmUserTime(xcb_timestamp_t t) { if (timeGreaterThan(t, m_netWmUserTime)) m_netWmUserTime = t; }
 
     xcb_timestamp_t getTimestamp();
-    xcb_window_t getSelectionOwner(xcb_atom_t atom) const;
-    xcb_window_t getQtSelectionOwner();
+    xcb_window_t selectionOwner(xcb_atom_t atom) const;
+    xcb_window_t qtSelectionOwner();
 
     void setButtonState(Qt::MouseButton button, bool down);
     Qt::MouseButtons buttonState() const { return m_buttonState; }
@@ -206,15 +170,13 @@ public:
     QXcbWindow *mousePressWindow() const { return m_mousePressWindow; }
     void setMousePressWindow(QXcbWindow *);
 
-    QByteArray startupId() const { return m_startupId; }
-    void setStartupId(const QByteArray &nextId) { m_startupId = nextId; }
-    void clearStartupId() { m_startupId.clear(); }
+    QByteArray startupId() const;
+    void setStartupId(const QByteArray &nextId);
 
     void grabServer();
     void ungrabServer();
 
-    bool isUnity() const { return m_xdgCurrentDesktop == "unity"; }
-    bool isGnome() const { return m_xdgCurrentDesktop == "gnome"; }
+    QString windowManagerName() const;
 
     QXcbNativeInterface *nativeInterface() const { return m_nativeInterface; }
 
@@ -231,9 +193,12 @@ public:
 
     Qt::MouseButton xiToQtMouseButton(uint32_t b);
     void xi2UpdateScrollingDevices();
-    bool startSystemMoveResizeForTouch(xcb_window_t window, int edges);
-    void abortSystemMoveResizeForTouch();
     bool isTouchScreen(int id);
+
+    bool startSystemMoveResizeForTouch(xcb_window_t window, int edges);
+    void abortSystemMoveResize(xcb_window_t window);
+    bool isDuringSystemMoveResize() const;
+    void setDuringSystemMoveResize(bool during);
 
     bool canGrab() const { return m_canGrabServer; }
 
@@ -259,7 +224,17 @@ private:
                              const xcb_randr_output_change_t &outputChange,
                              xcb_randr_get_output_info_reply_t *outputInfo);
     void destroyScreen(QXcbScreen *screen);
-    void initializeScreens();
+    void initializeScreens(bool initialized);
+    void initializeScreensWithoutXRandR(xcb_screen_iterator_t *it, int screenNumber, QXcbScreen **primaryScreen);
+    void initializeScreensFromOutput(xcb_screen_iterator_t *it, int screenNumber, QXcbScreen **primaryScreen);
+
+    void updateScreen_monitor(QXcbScreen *screen, xcb_randr_monitor_info_t *monitorInfo, xcb_timestamp_t timestamp = XCB_NONE);
+    QXcbScreen *createScreen_monitor(QXcbVirtualDesktop *virtualDesktop,
+                                     xcb_randr_monitor_info_t *monitorInfo, xcb_timestamp_t timestamp = XCB_NONE);
+    QXcbVirtualDesktop* virtualDesktopForNumber(int n) const;
+    QXcbScreen* findScreenForMonitorInfo(const QList<QPlatformScreen *> &screens, xcb_randr_monitor_info_t *monitorInfo);
+    void initializeScreensFromMonitor(xcb_screen_iterator_t *it, int screenNumber, QXcbScreen **primaryScreen, bool initialized);
+
     bool compressEvent(xcb_generic_event_t *event) const;
     inline bool timeGreaterThan(xcb_timestamp_t a, xcb_timestamp_t b) const
     { return static_cast<int32_t>(a - b) > 0 || b == XCB_CURRENT_TIME; }
@@ -285,9 +260,11 @@ private:
         QSizeF size;                         // device size in mm
         bool providesTouchOrientation = false;
     };
-    TouchDeviceData *populateTouchDevices(void *info, QXcbScrollingDevicePrivate *scrollingDeviceP);
+    TouchDeviceData *populateTouchDevices(void *info, QXcbScrollingDevicePrivate *scrollingDeviceP, bool *used = nullptr);
     TouchDeviceData *touchDeviceForId(int id);
     void xi2HandleEvent(xcb_ge_event_t *event);
+    void xi2HandleGesturePinchEvent(void *event);
+    void xi2HandleGestureSwipeEvent(void *event);
     void xi2HandleHierarchyEvent(void *event);
     void xi2HandleDeviceChangedEvent(void *event);
     void xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindow);
@@ -323,12 +300,14 @@ private:
     static bool xi2GetValuatorValueIfSet(const void *event, int valuatorNum, double *value);
 
     QHash<int, TouchDeviceData> m_touchDevices;
+
     struct StartSystemMoveResizeInfo {
         xcb_window_t window = XCB_NONE;
         uint16_t deviceid;
         uint32_t pointid;
         int edges;
     } m_startSystemMoveResizeInfo;
+    bool m_duringSystemMoveResize;
 
     const bool m_canGrabServer;
     const xcb_visualid_t m_defaultVisualId;
@@ -360,6 +339,10 @@ private:
     QXcbWindow *m_mouseGrabber = nullptr;
     QXcbWindow *m_mousePressWindow = nullptr;
 
+#if QT_CONFIG(gestures)
+    qreal m_lastPinchScale = 0;
+#endif
+
     xcb_window_t m_clientLeader = 0;
     QByteArray m_startupId;
     QXcbSystemTrayTracker *m_systemTrayTracker = nullptr;
@@ -367,12 +350,12 @@ private:
     mutable bool m_glIntegrationInitialized = false;
     bool m_xiGrab = false;
     QList<int> m_xiMasterPointerIds;
+    QList<int> m_xiSlavePointerIds;
 
     xcb_window_t m_qtSelectionOwner = 0;
 
     friend class QXcbEventQueue;
 
-    QByteArray m_xdgCurrentDesktop;
     QTimer m_focusInTimer;
 
 };

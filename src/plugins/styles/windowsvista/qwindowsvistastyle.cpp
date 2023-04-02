@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwindowsvistastyle_p.h"
 #include "qwindowsvistastyle_p_p.h"
@@ -77,6 +41,14 @@ static const int windowsRightBorder      = 15; // right border on windows
 #  define CMDLGS_DISABLED 4
 #endif
 
+namespace QOSWorkaround {
+    // Due to a mingw bug being confused by static constexpr variables in an exported class,
+    // we cannot use QOperatingSystemVersion::Windows11 in libraries outside of QtCore.
+    // ### TODO Remove this when that problem is fixed.
+    static constexpr QOperatingSystemVersionBase Windows11 { QOperatingSystemVersionBase::Windows,
+                                                             10, 0, 22000 };
+}
+
 /* \internal
     Checks if we should use Vista style , or if we should
     fall back to Windows style.
@@ -84,6 +56,22 @@ static const int windowsRightBorder      = 15; // right border on windows
 bool QWindowsVistaStylePrivate::useVista()
 {
     return QWindowsVistaStylePrivate::useXP();
+}
+
+/*!
+    \internal
+
+    Animations are started at a frame that is based on the current time,
+    which makes it impossible to run baseline tests with this style. Allow
+    overriding through a dynamic property.
+*/
+QTime QWindowsVistaStylePrivate::animationTime() const
+{
+    Q_Q(const QWindowsVistaStyle);
+    static bool animationTimeOverride = q->dynamicPropertyNames().contains("_qt_animation_time");
+    if (animationTimeOverride)
+        return q->property("_qt_animation_time").toTime();
+    return QTime::currentTime();
 }
 
 /* \internal
@@ -391,7 +379,7 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
                                                                 TMT_TRANSITIONDURATIONS, &duration))) {
                         t->setDuration(int(duration));
                     }
-                    t->setStartTime(QTime::currentTime());
+                    t->setStartTime(d->animationTime());
 
                     deleteClonedAnimationStyleOption(styleOption);
                     d->startAnimation(t);
@@ -486,7 +474,7 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
         }
         break;
     case PE_Frame: {
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
         if (QStyleHelper::isInstanceOf(option->styleObject, QAccessible::EditableText)
                 || QStyleHelper::isInstanceOf(option->styleObject, QAccessible::StaticText) ||
 #else
@@ -659,7 +647,7 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
                 newStyle = !qobject_cast<const QTableView*>(view);
                 selectionBehavior = view->selectionBehavior();
                 selectionMode = view->selectionMode();
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
             } else if (!widget) {
                 newStyle = !QStyleHelper::hasAncestor(option->styleObject, QAccessible::MenuItem) ;
 #endif
@@ -899,7 +887,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                     t->setDuration(int(duration));
                 else
                     t->setDuration(0);
-                t->setStartTime(QTime::currentTime());
+                t->setStartTime(d->animationTime());
                 styleObject->setProperty("_q_no_animation", false);
 
                 deleteClonedAnimationStyleOption(styleOption);
@@ -961,7 +949,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                         d->drawBackground(theme);
                         pulse->setStartImage(startImage);
                         pulse->setEndImage(alternateImage);
-                        pulse->setStartTime(QTime::currentTime());
+                        pulse->setStartTime(d->animationTime());
                         pulse->setDuration(2000);
                         d->startAnimation(pulse);
                         anim = pulse;
@@ -1022,7 +1010,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                               vertical ? PP_FILLVERT : PP_FILL);
             theme.rect = option->rect;
             bool reverse = (bar->direction == Qt::LeftToRight && inverted) || (bar->direction == Qt::RightToLeft && !inverted);
-            QTime current = QTime::currentTime();
+            QTime current = d->animationTime();
 
             if (isIndeterminate) {
                 if (QProgressStyleAnimation *a = qobject_cast<QProgressStyleAnimation *>(d->animation(styleObject(option)))) {
@@ -1030,7 +1018,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                     int animationWidth = glowSize * 2 + (vertical ? theme.rect.height() : theme.rect.width());
                     int animOffset = a->startTime().msecsTo(current) / 4;
                     if (animOffset > animationWidth)
-                        a->setStartTime(QTime::currentTime());
+                        a->setStartTime(d->animationTime());
                     painter->save();
                     painter->setClipRect(theme.rect);
                     QRect animRect;
@@ -1102,7 +1090,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                     theme.partId = vertical ? PP_MOVEOVERLAYVERT : PP_MOVEOVERLAY;
                     if (animOffset > animationWidth) {
                         if (bar->progress < bar->maximum)
-                            a->setStartTime(QTime::currentTime());
+                            a->setStartTime(d->animationTime());
                         else
                             d->stopAnimation(styleObject(option)); //we stop the glow motion only after it has
                                                                    //moved out of view
@@ -1261,6 +1249,9 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                     else
                         theme.stateId = bullet ? MC_BULLETNORMAL: MC_CHECKMARKNORMAL;
                     d->drawBackground(theme);
+                } else if (QOperatingSystemVersion::current() >= QOSWorkaround::Windows11
+                           && !act) {
+                    painter->fillRect(checkRect, menuitem->palette.highlight().color().lighter(200));
                 }
             }
 
@@ -1268,14 +1259,11 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                 QIcon::Mode mode = dis ? QIcon::Disabled : QIcon::Normal;
                 if (act && !dis)
                     mode = QIcon::Active;
-                QPixmap pixmap;
-                if (checked)
-                    pixmap = menuitem->icon.pixmap(proxy()->pixelMetric(PM_SmallIconSize, option, widget), mode, QIcon::On);
-                else
-                    pixmap = menuitem->icon.pixmap(proxy()->pixelMetric(PM_SmallIconSize, option, widget), mode);
-                const int pixw = pixmap.width() / pixmap.devicePixelRatio();
-                const int pixh = pixmap.height() / pixmap.devicePixelRatio();
-                QRect pmr(0, 0, pixw, pixh);
+                const auto size = proxy()->pixelMetric(PM_SmallIconSize, option, widget);
+                const auto dpr = painter->device()->devicePixelRatio();
+                const auto pixmap = menuitem->icon.pixmap({size, size}, dpr, mode,
+                                                          checked ? QIcon::On : QIcon::Off);
+                QRect pmr(QPoint(0, 0), pixmap.deviceIndependentSize().toSize());
                 pmr.moveCenter(vCheckRect.center());
                 painter->setPen(menuitem->palette.text().color());
                 painter->drawPixmap(pmr.topLeft(), pixmap);
@@ -1579,7 +1567,7 @@ void QWindowsVistaStyle::drawComplexControl(ComplexControl control, const QStyle
                 styleObject->setProperty("_q_no_animation", false);
 
                 t->setEndImage(endImage);
-                t->setStartTime(QTime::currentTime());
+                t->setStartTime(d->animationTime());
 
                 if (option->state & State_MouseOver || option->state & State_Sunken)
                     t->setDuration(150);
@@ -2285,9 +2273,14 @@ void QWindowsVistaStyle::polish(QWidget *widget)
         widget->setAttribute(Qt::WA_Hover);
 #if QT_CONFIG(commandlinkbutton)
     else if (qobject_cast<QCommandLinkButton*>(widget)) {
+        widget->setProperty("_qt_usingVistaStyle", true);
         QFont buttonFont = widget->font();
         buttonFont.setFamilies(QStringList{QLatin1String("Segoe UI")});
         widget->setFont(buttonFont);
+        QPalette pal = widget->palette();
+        pal.setColor(QPalette::ButtonText, QColor(21, 28, 85));
+        pal.setColor(QPalette::BrightText, QColor(7, 64, 229));
+        widget->setPalette(pal);
     }
 #endif // QT_CONFIG(commandlinkbutton)
     else if (widget->inherits("QTipLabel")){

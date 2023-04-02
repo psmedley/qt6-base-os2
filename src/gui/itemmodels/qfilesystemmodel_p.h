@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QFILESYSTEMMODEL_P_H
 #define QFILESYSTEMMODEL_P_H
@@ -86,7 +50,10 @@ public:
 
 Q_DECLARE_TYPEINFO(QFileSystemModelNodePathKey, Q_RELOCATABLE_TYPE);
 
-inline size_t qHash(const QFileSystemModelNodePathKey &key) { return qHash(key.toCaseFolded()); }
+inline size_t qHash(const QFileSystemModelNodePathKey &key, size_t seed = 0)
+{
+    return qHash(key.toCaseFolded(), seed);
+}
 #else // Q_OS_DOSLIKE
 typedef QString QFileSystemModelNodePathKey;
 #endif
@@ -116,7 +83,7 @@ public:
 #endif
 
         inline qint64 size() const { if (info && !info->isDir()) return info->size(); return 0; }
-        inline QString type() const { if (info) return info->displayType; return QLatin1String(""); }
+        inline QString type() const { if (info) return info->displayType; return QLatin1StringView(""); }
         inline QDateTime lastModified() const { if (info) return info->lastModified(); return QDateTime(); }
         inline QFile::Permissions permissions() const { if (info) return info->permissions(); return { }; }
         inline bool isReadable() const { return ((permissions() & QFile::ReadUser) != 0); }
@@ -125,7 +92,7 @@ public:
         inline bool isDir() const {
             if (info)
                 return info->isDir();
-            if (children.count() > 0)
+            if (children.size() > 0)
                 return true;
             return false;
         }
@@ -179,13 +146,13 @@ public:
         void updateIcon(QAbstractFileIconProvider *iconProvider, const QString &path) {
             if (info)
                 info->icon = iconProvider->icon(QFileInfo(path));
-            for (QFileSystemNode *child : qAsConst(children)) {
+            for (QFileSystemNode *child : std::as_const(children)) {
                 //On windows the root (My computer) has no path so we don't want to add a / for nothing (e.g. /C:/)
                 if (!path.isEmpty()) {
-                    if (path.endsWith(QLatin1Char('/')))
+                    if (path.endsWith(u'/'))
                         child->updateIcon(iconProvider, path + child->fileName);
                     else
-                        child->updateIcon(iconProvider, path + QLatin1Char('/') + child->fileName);
+                        child->updateIcon(iconProvider, path + u'/' + child->fileName);
                 } else
                     child->updateIcon(iconProvider, child->fileName);
             }
@@ -194,13 +161,13 @@ public:
         void retranslateStrings(QAbstractFileIconProvider *iconProvider, const QString &path) {
             if (info)
                 info->displayType = iconProvider->type(QFileInfo(path));
-            for (QFileSystemNode *child : qAsConst(children)) {
+            for (QFileSystemNode *child : std::as_const(children)) {
                 //On windows the root (My computer) has no path so we don't want to add a / for nothing (e.g. /C:/)
                 if (!path.isEmpty()) {
-                    if (path.endsWith(QLatin1Char('/')))
+                    if (path.endsWith(u'/'))
                         child->retranslateStrings(iconProvider, path + child->fileName);
                     else
-                        child->retranslateStrings(iconProvider, path + QLatin1Char('/') + child->fileName);
+                        child->retranslateStrings(iconProvider, path + u'/' + child->fileName);
                 } else
                     child->retranslateStrings(iconProvider, child->fileName);
             }
@@ -215,7 +182,8 @@ public:
         bool isVisible = false;
     };
 
-    QFileSystemModelPrivate() = default;
+    QFileSystemModelPrivate();
+    ~QFileSystemModelPrivate();
     void init();
     /*
       \internal
@@ -241,7 +209,7 @@ public:
     inline int translateVisibleLocation(QFileSystemNode *parent, int row) const {
         if (sortOrder != Qt::AscendingOrder) {
             if (parent->dirtyChildrenIndex == -1)
-                return parent->visibleChildren.count() - row - 1;
+                return parent->visibleChildren.size() - row - 1;
 
             if (row < parent->dirtyChildrenIndex)
                 return parent->dirtyChildrenIndex - row - 1;

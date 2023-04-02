@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -43,6 +18,7 @@ private slots:
     void same();
     void metrics();
     void boundingRect();
+    void boundingRect2();
     void elidedText_data();
     void elidedText();
     void veryNarrowElidedText();
@@ -149,6 +125,21 @@ void tst_QFontMetrics::boundingRect()
     QVERIFY(r.top() < 0);
     r = fm.boundingRect(QString("Y"));
     QVERIFY(r.top() < 0);
+}
+
+void tst_QFontMetrics::boundingRect2()
+{
+    QFont f;
+    f.setPixelSize(16);
+    QFontMetricsF fm(f);
+    QString str("AVAVAVA vvvvvvvvvv fffffffff file");
+    QRectF br = fm.boundingRect(str);
+    QRectF tbr = fm.tightBoundingRect(str);
+    qreal advance = fm.horizontalAdvance(str);
+    // Bounding rect plus bearings should be similar to advance
+    qreal bearings = fm.leftBearing(QChar('A')) + fm.rightBearing(QChar('e'));
+    QVERIFY(qAbs(br.width() + bearings - advance) < fm.averageCharWidth()/2.0);
+    QVERIFY(qAbs(tbr.width() + bearings - advance) < fm.averageCharWidth()/2.0);
 }
 
 void tst_QFontMetrics::elidedText_data()
@@ -376,6 +367,8 @@ void tst_QFontMetrics::zeroWidthMetrics()
     QCOMPARE(fm.horizontalAdvance(string3), fm.horizontalAdvance(string4));
     QCOMPARE(fm.boundingRect(string1).width(), fm.boundingRect(string2).width());
     QCOMPARE(fm.boundingRect(string3).width(), fm.boundingRect(string4).width());
+    QCOMPARE(fm.tightBoundingRect(string1).width(), fm.tightBoundingRect(string2).width());
+    QCOMPARE(fm.tightBoundingRect(string3).width(), fm.tightBoundingRect(string4).width());
 }
 
 void tst_QFontMetrics::verticalMetrics_data()

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef WINVER
 #  define WINVER 0x0A00 // Enable pointer functions for MinGW
@@ -59,7 +23,6 @@
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtCore/qvarlengtharray.h>
 #include <QtCore/qloggingcategory.h>
-#include <QtCore/qoperatingsystemversion.h>
 #include <QtCore/qqueue.h>
 
 #include <algorithm>
@@ -87,7 +50,7 @@ bool QWindowsPointerHandler::translatePointerEvent(QWindow *window, HWND hwnd, Q
     *result = 0;
     const quint32 pointerId = GET_POINTERID_WPARAM(msg.wParam);
 
-    if (!QWindowsContext::user32dll.getPointerType(pointerId, &m_pointerType)) {
+    if (!GetPointerType(pointerId, &m_pointerType)) {
         qWarning() << "GetPointerType() failed:" << qt_error_string();
         return false;
     }
@@ -101,12 +64,12 @@ bool QWindowsPointerHandler::translatePointerEvent(QWindow *window, HWND hwnd, Q
     }
     case QT_PT_TOUCH: {
         quint32 pointerCount = 0;
-        if (!QWindowsContext::user32dll.getPointerFrameTouchInfo(pointerId, &pointerCount, nullptr)) {
+        if (!GetPointerFrameTouchInfo(pointerId, &pointerCount, nullptr)) {
             qWarning() << "GetPointerFrameTouchInfo() failed:" << qt_error_string();
             return false;
         }
         QVarLengthArray<POINTER_TOUCH_INFO, 10> touchInfo(pointerCount);
-        if (!QWindowsContext::user32dll.getPointerFrameTouchInfo(pointerId, &pointerCount, touchInfo.data())) {
+        if (!GetPointerFrameTouchInfo(pointerId, &pointerCount, touchInfo.data())) {
             qWarning() << "GetPointerFrameTouchInfo() failed:" << qt_error_string();
             return false;
         }
@@ -119,10 +82,10 @@ bool QWindowsPointerHandler::translatePointerEvent(QWindow *window, HWND hwnd, Q
         // dispatch any skipped frames if event compression is disabled by the app
         if (historyCount > 1 && !QCoreApplication::testAttribute(Qt::AA_CompressHighFrequencyEvents)) {
             touchInfo.resize(pointerCount * historyCount);
-            if (!QWindowsContext::user32dll.getPointerFrameTouchInfoHistory(pointerId,
-                                                                            &historyCount,
-                                                                            &pointerCount,
-                                                                            touchInfo.data())) {
+            if (!GetPointerFrameTouchInfoHistory(pointerId,
+                                                 &historyCount,
+                                                 &pointerCount,
+                                                 touchInfo.data())) {
                 qWarning() << "GetPointerFrameTouchInfoHistory() failed:" << qt_error_string();
                 return false;
             }
@@ -140,7 +103,7 @@ bool QWindowsPointerHandler::translatePointerEvent(QWindow *window, HWND hwnd, Q
     }
     case QT_PT_PEN: {
         POINTER_PEN_INFO penInfo;
-        if (!QWindowsContext::user32dll.getPointerPenInfo(pointerId, &penInfo)) {
+        if (!GetPointerPenInfo(pointerId, &penInfo)) {
             qWarning() << "GetPointerPenInfo() failed:" << qt_error_string();
             return false;
         }
@@ -152,9 +115,7 @@ bool QWindowsPointerHandler::translatePointerEvent(QWindow *window, HWND hwnd, Q
                 || !QCoreApplication::testAttribute(Qt::AA_CompressTabletEvents))) {
             QVarLengthArray<POINTER_PEN_INFO, 10> penInfoHistory(historyCount);
 
-            if (!QWindowsContext::user32dll.getPointerPenInfoHistory(pointerId,
-                                                                     &historyCount,
-                                                                     penInfoHistory.data())) {
+            if (!GetPointerPenInfoHistory(pointerId, &historyCount, penInfoHistory.data())) {
                 qWarning() << "GetPointerPenInfoHistory() failed:" << qt_error_string();
                 return false;
             }
@@ -558,12 +519,12 @@ bool QWindowsPointerHandler::translateTouchEvent(QWindow *window, HWND hwnd,
         inputIds.insert(touchPoint.id);
 
         // Avoid getting repeated messages for this frame if there are multiple pointerIds
-        QWindowsContext::user32dll.skipPointerFrameMessages(touchInfo[i].pointerInfo.pointerId);
+        SkipPointerFrameMessages(touchInfo[i].pointerInfo.pointerId);
     }
 
     // Some devices send touches for each finger in a different message/frame, instead of consolidating
     // them in the same frame as we were expecting. We account for missing unreleased touches here.
-    for (auto tp : qAsConst(m_lastTouchPoints)) {
+    for (auto tp : std::as_const(m_lastTouchPoints)) {
         if (!inputIds.contains(tp.id)) {
             tp.state = QEventPoint::State::Stationary;
             allStates |= tp.state;
@@ -604,7 +565,7 @@ bool QWindowsPointerHandler::translatePenEvent(QWindow *window, HWND hwnd, QtWin
     auto *penInfo = static_cast<POINTER_PEN_INFO *>(vPenInfo);
 
     RECT pRect, dRect;
-    if (!QWindowsContext::user32dll.getPointerDeviceRects(penInfo->pointerInfo.sourceDevice, &pRect, &dRect))
+    if (!GetPointerDeviceRects(penInfo->pointerInfo.sourceDevice, &pRect, &dRect))
         return false;
 
     const auto systemId = (qint64)penInfo->pointerInfo.sourceDevice;
@@ -837,8 +798,8 @@ bool QWindowsPointerHandler::translateMouseEvent(QWindow *window,
             break;
         case QT_PT_PEN:
 #if QT_CONFIG(tabletevent)
-            if (!m_activeTabletDevice.isNull())
-                device = m_activeTabletDevice.data();
+            qCDebug(lcQpaTablet) << "ignoring synth-mouse event for tablet event from" << device;
+            return false;
 #endif
             break;
         }

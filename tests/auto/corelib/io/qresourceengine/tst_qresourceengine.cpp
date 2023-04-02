@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2019 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2019 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QResource>
@@ -40,8 +15,10 @@ class tst_QResourceEngine: public QObject
 
 public:
     tst_QResourceEngine()
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
-        : m_runtimeResourceRcc(QFileInfo(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/runtime_resource.rcc")).absoluteFilePath())
+#ifdef Q_OS_ANDROID
+        : m_runtimeResourceRcc(
+            QFileInfo(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                      + QStringLiteral("/runtime_resource.rcc")).absoluteFilePath())
 #else
         : m_runtimeResourceRcc(QFINDTESTDATA("runtime_resource.rcc"))
 #endif
@@ -60,6 +37,7 @@ private slots:
     void searchPath_data();
     void searchPath();
     void doubleSlashInRoot();
+    void setLocale_data();
     void setLocale();
     void lastModified();
     void resourcesInStaticPlugins();
@@ -71,17 +49,16 @@ private:
 
 void tst_QResourceEngine::initTestCase()
 {
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     QString sourcePath(QStringLiteral(":/android_testdata/"));
     QString dataPath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
 
     QDirIterator it(sourcePath, QDirIterator::Subdirectories);
     while (it.hasNext()) {
-        it.next();
-
-        QFileInfo fileInfo = it.fileInfo();
+        QFileInfo fileInfo = it.nextFileInfo();
         if (!fileInfo.isDir()) {
-            QString destination(dataPath + QLatin1Char('/') + fileInfo.filePath().mid(sourcePath.length()));
+            QString destination(dataPath + QLatin1Char('/')
+                                + fileInfo.filePath().mid(sourcePath.length()));
             QFileInfo destinationFileInfo(destination);
             if (!destinationFileInfo.exists()) {
                 QVERIFY(QDir().mkpath(destinationFileInfo.path()));
@@ -188,7 +165,7 @@ void tst_QResourceEngine::checkStructure_data()
 
     QStringList rootContents;
     rootContents << QLatin1String("aliasdir")
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
                  << QLatin1String("android_testdata")
 #endif
                  << QLatin1String("otherdir")
@@ -490,7 +467,7 @@ void tst_QResourceEngine::checkStructure()
 
 void tst_QResourceEngine::searchPath_data()
 {
-    auto searchPath = QFileInfo(QT_TESTCASE_SOURCEDIR "/testqrc").canonicalFilePath();
+    auto searchPath = QFileInfo(QFINDTESTDATA("testqrc/test.qrc")).canonicalPath();
 
     QTest::addColumn<QString>("searchPathPrefix");
     QTest::addColumn<QString>("searchPath");
@@ -580,13 +557,22 @@ void tst_QResourceEngine::doubleSlashInRoot()
     QVERIFY(QFile::exists("://secondary_root/runtime_resource/search_file.txt"));
 }
 
+void tst_QResourceEngine::setLocale_data()
+{
+    QTest::addColumn<QString>("prefix");
+    QTest::newRow("built-in") << QString();
+    QTest::newRow("runtime") << "/runtime_resource/";
+}
+
 void tst_QResourceEngine::setLocale()
 {
+    QFETCH(QString, prefix);
     QLocale::setDefault(QLocale::c());
 
     // default constructed QResource gets the default locale
     QResource resource;
-    resource.setFileName("aliasdir/aliasdir.txt");
+    resource.setFileName(prefix + "aliasdir/aliasdir.txt");
+    QVERIFY(resource.isValid());
     QCOMPARE(resource.compressionAlgorithm(), QResource::NoCompression);
 
     // change the default locale and make sure it doesn't affect the resource

@@ -1,43 +1,11 @@
-/*
-    Copyright (C) 2021 The Qt Company Ltd.
-    Copyright (c) 2019, BogDan Vatra <bogdan@kde.org>
-    Contact: http://www.qt.io/licensing/
-
-    Commercial License Usage
-    Licensees holding valid commercial Qt licenses may use this file in
-    accordance with the commercial license agreement provided with the
-    Software or, alternatively, in accordance with the terms contained in
-    a written agreement between you and The Qt Company. For licensing terms
-    and conditions see http://www.qt.io/terms-conditions. For further
-    information use the contact form at http://www.qt.io/contact-us.
-
-    BSD License Usage
-    Alternatively, this file may be used under the BSD license as follows:
-    Redistribution and use in source and binary forms, with or without
-    modification, are permitted provided that the following conditions
-    are met:
-
-    1. Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer.
-    2. Redistributions in binary form must reproduce the above copyright
-    notice, this list of conditions and the following disclaimer in the
-    documentation and/or other materials provided with the distribution.
-
-    THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
-    IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-    OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-    IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
-    INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-    NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-    DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-    THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-    THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (c) 2019, BogDan Vatra <bogdan@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 package org.qtproject.qt.android.bindings;
 
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.DialogInterface;
@@ -76,7 +44,6 @@ public abstract class QtLoader {
 
     // These parameters matter in case of deploying application as system (embedded into firmware)
     public static final String SYSTEM_LIB_PATH = "/system/lib/";
-    public String[] SYSTEM_APP_PATHS = {"/system/priv-app/", "/system/app/"};
 
     public String APPLICATION_PARAMETERS = null; // use this variable to pass any parameters to your application,
     // the parameters must not contain any white spaces
@@ -180,7 +147,8 @@ public abstract class QtLoader {
                 // fatal error, show the error and quit
                 AlertDialog errorDialog = new AlertDialog.Builder(m_context).create();
                 errorDialog.setMessage(loaderParams.getString(ERROR_MESSAGE_KEY));
-                errorDialog.setButton(resources.getString(android.R.string.ok),
+                errorDialog.setButton(Dialog.BUTTON_POSITIVE,
+                        resources.getString(android.R.string.ok),
                         new DialogInterface.OnClickListener() {
                             @Override
                             public void onClick(DialogInterface dialog, int which) {
@@ -231,7 +199,8 @@ public abstract class QtLoader {
             int id = resources.getIdentifier("fatal_error_msg", "string",
                     packageName);
             errorDialog.setMessage(resources.getString(id));
-            errorDialog.setButton(resources.getString(android.R.string.ok),
+            errorDialog.setButton(Dialog.BUTTON_POSITIVE,
+                    resources.getString(android.R.string.ok),
                     new DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
@@ -255,33 +224,40 @@ public abstract class QtLoader {
 
             if (useLocalLibs == 1) {
                 ArrayList<String> libraryList = new ArrayList<>();
-
-                boolean apkDeployFromSystem = false;
-                String apkPath = m_context.getApplicationInfo().publicSourceDir;
-                File apkFile = new File(apkPath);
-                if (apkFile.exists()) {
-                    for (String systemAppPath : SYSTEM_APP_PATHS) {
-                        apkDeployFromSystem = apkFile.getAbsolutePath().startsWith(systemAppPath);
-                        if (apkDeployFromSystem)
-                            break;
-                    }
-                }
-
                 String libsDir = null;
                 String bundledLibsDir = null;
-                if (apkDeployFromSystem) {
-                    String systemLibsPrefix = SYSTEM_LIB_PATH;
-                    if (m_contextInfo.metaData.containsKey("android.app.system_libs_prefix")) {
-                        systemLibsPrefix = m_contextInfo.metaData.getString("android.app.system_libs_prefix");
+
+                id = resources.getIdentifier("bundle_local_qt_libs", "string", packageName);
+                final int bundleLocalLibs = Integer.parseInt(resources.getString(id));
+                if (bundleLocalLibs == 0) {
+                    String systemLibsPrefix;
+                    final String systemLibsKey = "android.app.system_libs_prefix";
+                    // First check if user has provided system libs prefix in AndroidManifest
+                    if (m_contextInfo.applicationInfo.metaData != null &&
+                            m_contextInfo.applicationInfo.metaData.containsKey(systemLibsKey)) {
+                        systemLibsPrefix = m_contextInfo.applicationInfo.metaData.getString(systemLibsKey);
                     } else {
-                        Log.e(QtApplication.QtTAG, "It looks like app deployed as system app. "
-                            + "It may be necessary to specify path to system lib directory using "
-                            + "android.app.system_libs_prefix metadata variable in your AndroidManifest.xml");
+                        // If not, check if it's provided by androiddeployqt in libs.xml
+                        id = resources.getIdentifier("system_libs_prefix","string",
+                                packageName);
+                        systemLibsPrefix = resources.getString(id);
+                    }
+                    if (systemLibsPrefix.isEmpty()) {
+                        systemLibsPrefix = SYSTEM_LIB_PATH;
+                        Log.e(QtApplication.QtTAG, "It looks like app deployed using Unbundled "
+                                + "deployment. It may be necessary to specify path to directory "
+                                + "where Qt libraries are installed using either "
+                                + "android.app.system_libs_prefix metadata variable in your "
+                                + "AndroidManifest.xml or QT_ANDROID_SYSTEM_LIBS_PATH in your "
+                                + "CMakeLists.txt");
                         Log.e(QtApplication.QtTAG, "Using " + SYSTEM_LIB_PATH + " as default path");
                     }
+
                     File systemLibraryDir = new File(systemLibsPrefix);
-                    if (systemLibraryDir.exists() && systemLibraryDir.isDirectory() && systemLibraryDir.list().length > 0) {
+                    if (systemLibraryDir.exists() && systemLibraryDir.isDirectory()
+                            && systemLibraryDir.list().length > 0) {
                         libsDir = systemLibsPrefix;
+                        bundledLibsDir = systemLibsPrefix;
                     } else {
                         Log.e(QtApplication.QtTAG,
                               "System library directory " + systemLibsPrefix
@@ -300,7 +276,7 @@ public abstract class QtLoader {
                     }
                 }
 
-                if (apkDeployFromSystem && libsDir == null)
+                if (libsDir == null)
                     throw new Exception("");
 
 
@@ -310,20 +286,17 @@ public abstract class QtLoader {
                         libraryList.add(libPrefix + lib + ".so");
                 }
 
-                id = resources.getIdentifier("bundle_local_qt_libs", "string", packageName);
-                final int bundleLocalLibs = Integer.parseInt(resources.getString(id));
-
-                if (bundleLocalLibs == 1) {
-                    id = resources.getIdentifier("load_local_libs", "array", packageName);
-                    ArrayList<String> localLibs = prefferedAbiLibs(resources.getStringArray(id));
-                    for (String libs : localLibs) {
-                        for (String lib : libs.split(":")) {
-                            if (!lib.isEmpty())
-                                libraryList.add(libsDir + lib);
-                        }
+                id = resources.getIdentifier("load_local_libs", "array", packageName);
+                ArrayList<String> localLibs = prefferedAbiLibs(resources.getStringArray(id));
+                for (String libs : localLibs) {
+                    for (String lib : libs.split(":")) {
+                        if (!lib.isEmpty())
+                            libraryList.add(libsDir + lib);
                     }
-                    if (bundledLibsDir != null)
-                        ENVIRONMENT_VARIABLES += "\tQT_BUNDLED_LIBS_PATH=" + bundledLibsDir;
+                }
+                if (bundledLibsDir != null) {
+                    ENVIRONMENT_VARIABLES += "\tQT_PLUGIN_PATH=" + bundledLibsDir;
+                    ENVIRONMENT_VARIABLES += "\tQML_PLUGIN_PATH=" + bundledLibsDir;
                 }
 
                 Bundle loaderParams = new Bundle();
@@ -361,7 +334,7 @@ public abstract class QtLoader {
                     }
                 }
 
-                if (!(new File(stylePath)).exists() && !extractOption.equals("none")) {
+                if (!extractOption.equals("none")) {
                     loaderParams.putString(EXTRACT_STYLE_KEY, stylePath);
                     loaderParams.putBoolean(EXTRACT_STYLE_MINIMAL_KEY, extractOption.equals("minimal"));
                 }
@@ -396,7 +369,7 @@ public abstract class QtLoader {
                 }
 
                 if (appParams != null)
-                    loaderParams.putString(APPLICATION_PARAMETERS_KEY, appParams.replace(' ', '\t').trim());
+                    loaderParams.putString(APPLICATION_PARAMETERS_KEY, appParams);
 
                 loadApplication(loaderParams);
                 return;

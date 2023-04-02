@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtNetwork/QtNetwork>
 #include <QTest>
@@ -303,17 +278,17 @@ void tst_QNetworkDiskCache::clear()
     QVERIFY(cache.cacheSize() > qint64(0));
 
     QString cacheDirectory = cache.cacheDirectory();
-    QCOMPARE(countFiles(cacheDirectory).count(), NUM_SUBDIRECTORIES + 3);
+    QCOMPARE(countFiles(cacheDirectory).size(), NUM_SUBDIRECTORIES + 3);
     cache.clear();
-    QCOMPARE(countFiles(cacheDirectory).count(), NUM_SUBDIRECTORIES + 2);
+    QCOMPARE(countFiles(cacheDirectory).size(), NUM_SUBDIRECTORIES + 2);
 
     // don't delete files that it didn't create
     QTemporaryFile file(cacheDirectory + "/XXXXXX");
     if (file.open()) {
         file.fileName();    // make sure it exists with a name
-        QCOMPARE(countFiles(cacheDirectory).count(), NUM_SUBDIRECTORIES + 3);
+        QCOMPARE(countFiles(cacheDirectory).size(), NUM_SUBDIRECTORIES + 3);
         cache.clear();
-        QCOMPARE(countFiles(cacheDirectory).count(), NUM_SUBDIRECTORIES + 3);
+        QCOMPARE(countFiles(cacheDirectory).size(), NUM_SUBDIRECTORIES + 3);
     }
 }
 
@@ -380,9 +355,9 @@ void tst_QNetworkDiskCache::remove()
     QUrl url(EXAMPLE_URL);
     cache.setupWithOne(tempDir.path(), url);
     QString cacheDirectory = cache.cacheDirectory();
-    QCOMPARE(countFiles(cacheDirectory).count(), NUM_SUBDIRECTORIES + 3);
+    QCOMPARE(countFiles(cacheDirectory).size(), NUM_SUBDIRECTORIES + 3);
     cache.remove(url);
-    QCOMPARE(countFiles(cacheDirectory).count(), NUM_SUBDIRECTORIES + 2);
+    QCOMPARE(countFiles(cacheDirectory).size(), NUM_SUBDIRECTORIES + 2);
 }
 
 void tst_QNetworkDiskCache::accessAfterRemove() // QTBUG-17400
@@ -502,7 +477,7 @@ void tst_QNetworkDiskCache::fileMetaData()
 
     QString cacheDirectory = cache.cacheDirectory();
     QStringList list = countFiles(cacheDirectory);
-    QCOMPARE(list.count(), NUM_SUBDIRECTORIES + 3);
+    QCOMPARE(list.size(), NUM_SUBDIRECTORIES + 3);
     foreach(QString fileName, list) {
         QFileInfo info(fileName);
         if (info.isFile()) {
@@ -556,7 +531,7 @@ void tst_QNetworkDiskCache::expire()
         }
     }
     std::sort(cacheList.begin(), cacheList.end());
-    for (int i = 0; i < cacheList.count(); ++i) {
+    for (int i = 0; i < cacheList.size(); ++i) {
         QString fileName = cacheList[i];
         QCOMPARE(fileName, QLatin1String("http://localhost:4/") + QString::number(i + 6));
     }
@@ -595,7 +570,7 @@ void tst_QNetworkDiskCache::oldCacheVersionFile()
         QVERIFY(!QFile::exists(name));
     } else {
         QStringList files = countFiles(cache.cacheDirectory());
-        QCOMPARE(files.count(), NUM_SUBDIRECTORIES + 3);
+        QCOMPARE(files.size(), NUM_SUBDIRECTORIES + 3);
         // find the file
         QString cacheFile;
         foreach (QString file, files) {
@@ -761,7 +736,7 @@ public:
                 if (d) {
                     QByteArray x = d->readAll();
                     if (x != longString && x != longString2) {
-                        qDebug() << x.length() << QString(x);
+                        qDebug() << x.size() << QString(x);
                         gotMetaData = cache.metaData(url);
                         qDebug() << (gotMetaData.url().toString())
                          << gotMetaData.lastModified()

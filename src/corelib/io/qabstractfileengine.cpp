@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "private/qabstractfileengine_p.h"
 #include "private/qfsfileengine_p.h"
@@ -101,14 +65,14 @@ QT_BEGIN_NAMESPACE
     \sa QAbstractFileEngine, QAbstractFileEngine::create()
 */
 
-static QBasicAtomicInt qt_file_engine_handlers_in_use = Q_BASIC_ATOMIC_INITIALIZER(false);
+Q_CONSTINIT static QBasicAtomicInt qt_file_engine_handlers_in_use = Q_BASIC_ATOMIC_INITIALIZER(false);
 
 /*
     All application-wide handlers are stored in this list. The mutex must be
     acquired to ensure thread safety.
  */
-Q_GLOBAL_STATIC_WITH_ARGS(QReadWriteLock, fileEngineHandlerMutex, (QReadWriteLock::Recursive))
-static bool qt_abstractfileenginehandlerlist_shutDown = false;
+Q_GLOBAL_STATIC(QReadWriteLock, fileEngineHandlerMutex, QReadWriteLock::Recursive)
+Q_CONSTINIT static bool qt_abstractfileenginehandlerlist_shutDown = false;
 class QAbstractFileEngineHandlerList : public QList<QAbstractFileEngineHandler *>
 {
 public:
@@ -159,20 +123,17 @@ QAbstractFileEngineHandler::~QAbstractFileEngineHandler()
 */
 QAbstractFileEngine *qt_custom_file_engine_handler_create(const QString &path)
 {
-    QAbstractFileEngine *engine = nullptr;
-
     if (qt_file_engine_handlers_in_use.loadRelaxed()) {
         QReadLocker locker(fileEngineHandlerMutex());
 
         // check for registered handlers that can load the file
-        QAbstractFileEngineHandlerList *handlers = fileEngineHandlers();
-        for (int i = 0; i < handlers->size(); i++) {
-            if ((engine = handlers->at(i)->create(path)))
-                break;
+        for (QAbstractFileEngineHandler *handler : std::as_const(*fileEngineHandlers())) {
+            if (QAbstractFileEngine *engine = handler->create(path))
+                return engine;
         }
     }
 
-    return engine;
+    return nullptr;
 }
 
 /*!
@@ -262,9 +223,9 @@ QAbstractFileEngine *QAbstractFileEngine::create(const QString &fileName)
     the base name).
     \value AbsolutePathName The absolute path to the file (excluding
     the base name).
-    \value LinkName The full file name of the file that this file is a
+    \value AbsoluteLinkTarget The full file name of the file that this file is a
     link to. (This will be empty if this file is not a link.)
-    \value CanonicalName Often very similar to LinkName. Will return the true path to the file.
+    \value CanonicalName Often very similar to AbsoluteLinkTarget. Will return the true path to the file.
     \value CanonicalPathName Same as CanonicalName, excluding the base name.
     \value BundleName Returns the name of the bundle implies BundleType is set.
     \value JunctionName The full name of the directory that this NTFS junction
@@ -383,10 +344,16 @@ QAbstractFileEngine::~QAbstractFileEngine()
 
     The \a mode is an OR combination of QIODevice::OpenMode and
     QIODevice::HandlingMode values.
+
+    If the file is created as a result of this call, its permissions are
+    set according to \a permissision. Null value means an implementation-
+    specific default.
 */
-bool QAbstractFileEngine::open(QIODevice::OpenMode openMode)
+bool QAbstractFileEngine::open(QIODevice::OpenMode openMode,
+                               std::optional<QFile::Permissions> permissions)
 {
     Q_UNUSED(openMode);
+    Q_UNUSED(permissions);
     return false;
 }
 
@@ -475,8 +442,6 @@ bool QAbstractFileEngine::isSequential() const
     Requests that the file is deleted from the file system. If the
     operation succeeds return true; otherwise return false.
 
-    This virtual function must be reimplemented by all subclasses.
-
     \sa setFileName(), rmdir()
  */
 bool QAbstractFileEngine::remove()
@@ -499,8 +464,6 @@ bool QAbstractFileEngine::copy(const QString &newName)
     system. If the operation succeeds return true; otherwise return
     false.
 
-    This virtual function must be reimplemented by all subclasses.
-
     \sa setFileName()
  */
 bool QAbstractFileEngine::rename(const QString &newName)
@@ -516,8 +479,6 @@ bool QAbstractFileEngine::rename(const QString &newName)
     system. If the new name already exists, it must be overwritten.
     If the operation succeeds, returns \c true; otherwise returns
     false.
-
-    This virtual function must be reimplemented by all subclasses.
 
     \sa setFileName()
  */
@@ -540,21 +501,24 @@ bool QAbstractFileEngine::link(const QString &newName)
 }
 
 /*!
-    Requests that the directory \a dirName be created. If
-    \a createParentDirectories is true, then any sub-directories in \a dirName
+    Requests that the directory \a dirName be created with the specified \a permissions.
+    If \a createParentDirectories is true, then any sub-directories in \a dirName
     that don't exist must be created. If \a createParentDirectories is false then
     any sub-directories in \a dirName must already exist for the function to
     succeed. If the operation succeeds return true; otherwise return
     false.
 
-    This virtual function must be reimplemented by all subclasses.
+    If \a permissions is null then implementation-specific default permissions are
+    used.
 
     \sa setFileName(), rmdir(), isRelativePath()
  */
-bool QAbstractFileEngine::mkdir(const QString &dirName, bool createParentDirectories) const
+bool QAbstractFileEngine::mkdir(const QString &dirName, bool createParentDirectories,
+                                std::optional<QFile::Permissions> permissions) const
 {
     Q_UNUSED(dirName);
     Q_UNUSED(createParentDirectories);
+    Q_UNUSED(permissions);
     return false;
 }
 
@@ -566,8 +530,6 @@ bool QAbstractFileEngine::mkdir(const QString &dirName, bool createParentDirecto
     should be deleted. In most file systems a directory cannot be deleted
     using this function if it is non-empty. If the operation succeeds
     return true; otherwise return false.
-
-    This virtual function must be reimplemented by all subclasses.
 
     \sa setFileName(), remove(), mkdir(), isRelativePath()
  */
@@ -584,8 +546,6 @@ bool QAbstractFileEngine::rmdir(const QString &dirName, bool recurseParentDirect
     simply truncated. If the operations succceeds return true; otherwise
     return false;
 
-    This virtual function must be reimplemented by all subclasses.
-
     \sa size()
 */
 bool QAbstractFileEngine::setSize(qint64 size)
@@ -597,8 +557,6 @@ bool QAbstractFileEngine::setSize(qint64 size)
 /*!
     Should return true if the underlying file system is case-sensitive;
     otherwise return false.
-
-    This virtual function must be reimplemented by all subclasses.
  */
 bool QAbstractFileEngine::caseSensitive() const
 {
@@ -608,8 +566,6 @@ bool QAbstractFileEngine::caseSensitive() const
 /*!
     Return true if the file referred to by this file engine has a
     relative path; otherwise return false.
-
-    This virtual function must be reimplemented by all subclasses.
 
     \sa setFileName()
  */
@@ -626,8 +582,6 @@ bool QAbstractFileEngine::isRelativePath() const
     Should return an empty list if the file engine refers to a file
     rather than a directory, or if the directory is unreadable or does
     not exist or if nothing matches the specifications.
-
-    This virtual function must be reimplemented by all subclasses.
 
     \sa setFileName()
  */
@@ -653,8 +607,6 @@ QStringList QAbstractFileEngine::entryList(QDir::Filters filters, const QStringL
     ignore any members not mentioned in \a type, thus avoiding some
     potentially expensive lookups or system calls.
 
-    This virtual function must be reimplemented by all subclasses.
-
     \sa setFileName()
 */
 QAbstractFileEngine::FileFlags QAbstractFileEngine::fileFlags(FileFlags type) const
@@ -669,8 +621,6 @@ QAbstractFileEngine::FileFlags QAbstractFileEngine::fileFlags(FileFlags type) co
     QAbstractFileEngine::FileInfo, with only the QAbstractFileEngine::PermsMask being
     honored. If the operations succceeds return true; otherwise return
     false;
-
-    This virtual function must be reimplemented by all subclasses.
 
     \sa size()
 */
@@ -699,8 +649,6 @@ QByteArray QAbstractFileEngine::id() const
     file name set in setFileName() when an unhandled format is
     requested.
 
-    This virtual function must be reimplemented by all subclasses.
-
     \sa setFileName(), FileName
  */
 QString QAbstractFileEngine::fileName(FileName file) const
@@ -713,8 +661,6 @@ QString QAbstractFileEngine::fileName(FileName file) const
     If \a owner is \c OwnerUser return the ID of the user who owns
     the file. If \a owner is \c OwnerGroup return the ID of the group
     that own the file. If you can't determine the owner return -2.
-
-    This virtual function must be reimplemented by all subclasses.
 
     \sa owner(), setFileName(), FileOwner
  */
@@ -730,8 +676,6 @@ uint QAbstractFileEngine::ownerId(FileOwner owner) const
     that own the file. If you can't determine the owner return
     QString().
 
-    This virtual function must be reimplemented by all subclasses.
-
     \sa ownerId(), setFileName(), FileOwner
  */
 QString QAbstractFileEngine::owner(FileOwner owner) const
@@ -746,8 +690,6 @@ QString QAbstractFileEngine::owner(FileOwner owner) const
 
     Sets the file \a time to \a newDate, returning true if successful;
     otherwise returns false.
-
-    This virtual function must be reimplemented by all subclasses.
 
     \sa fileTime()
 */
@@ -766,8 +708,6 @@ bool QAbstractFileEngine::setFileTime(const QDateTime &newDate, FileTime time)
     most recently accessed (e.g. read or written). If the time cannot be
     determined return QDateTime() (an invalid date time).
 
-    This virtual function must be reimplemented by all subclasses.
-
     \sa setFileName(), QDateTime, QDateTime::isValid(), FileTime
  */
 QDateTime QAbstractFileEngine::fileTime(FileTime time) const
@@ -779,8 +719,6 @@ QDateTime QAbstractFileEngine::fileTime(FileTime time) const
 /*!
     Sets the file engine's file name to \a file. This file name is the
     file that the rest of the virtual functions will operate on.
-
-    This virtual function must be reimplemented by all subclasses.
 
     \sa rename()
  */
@@ -1040,8 +978,8 @@ QString QAbstractFileEngineIterator::currentFilePath() const
     if (!name.isNull()) {
         QString tmp = path();
         if (!tmp.isEmpty()) {
-            if (!tmp.endsWith(QLatin1Char('/')))
-                tmp.append(QLatin1Char('/'));
+            if (!tmp.endsWith(u'/'))
+                tmp.append(u'/');
             name.prepend(tmp);
         }
     }

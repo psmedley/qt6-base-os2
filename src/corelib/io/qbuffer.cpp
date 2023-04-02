@@ -1,45 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qbuffer.h"
 #include <QtCore/qmetaobject.h>
 #include "private/qiodevice_p.h"
+
+#include <limits>
 
 QT_BEGIN_NAMESPACE
 
@@ -49,15 +15,9 @@ class QBufferPrivate : public QIODevicePrivate
     Q_DECLARE_PUBLIC(QBuffer)
 
 public:
-    QBufferPrivate()
-        : buf(nullptr)
-#ifndef QT_NO_QOBJECT
-        , writtenSinceLastEmit(0), signalConnectionCount(0), signalsEmitted(false)
-#endif
-    { }
-    ~QBufferPrivate() { }
+    QBufferPrivate() = default;
 
-    QByteArray *buf;
+    QByteArray *buf = nullptr;
     QByteArray defaultBuf;
 
     qint64 peek(char *data, qint64 maxSize) override;
@@ -67,9 +27,9 @@ public:
     // private slots
     void _q_emitSignals();
 
-    qint64 writtenSinceLastEmit;
-    int signalConnectionCount;
-    bool signalsEmitted;
+    qint64 writtenSinceLastEmit = 0;
+    int signalConnectionCount = 0;
+    bool signalsEmitted = false;
 #endif
 };
 
@@ -212,7 +172,7 @@ QBuffer::~QBuffer()
 }
 
 /*!
-    Makes QBuffer uses the QByteArray pointed to by \a
+    Makes QBuffer use the QByteArray pointed to by \a
     byteArray as its internal buffer. The caller is responsible for
     ensuring that \a byteArray remains valid until the QBuffer is
     destroyed, or until setBuffer() is called to change the buffer.
@@ -317,6 +277,10 @@ void QBuffer::setData(const QByteArray &data)
 
 /*!
    \reimp
+
+   Unlike QFile, opening a QBuffer QIODevice::WriteOnly does not truncate it.
+   However, pos() is set to 0. Use QIODevice::Append or QIODevice::Truncate to
+   change either behavior.
 */
 bool QBuffer::open(OpenMode flags)
 {
@@ -366,18 +330,19 @@ qint64 QBuffer::size() const
 bool QBuffer::seek(qint64 pos)
 {
     Q_D(QBuffer);
-    if (pos > d->buf->size() && isWritable()) {
-        if (seek(d->buf->size())) {
-            const qint64 gapSize = pos - d->buf->size();
-            if (write(QByteArray(gapSize, 0)) != gapSize) {
-                qWarning("QBuffer::seek: Unable to fill gap");
-                return false;
-            }
-        } else {
+    const auto oldBufSize = d->buf->size();
+    constexpr qint64 MaxSeekPos = (std::numeric_limits<decltype(oldBufSize)>::max)();
+    if (pos <= MaxSeekPos && pos > oldBufSize && isWritable()) {
+        QT_TRY {
+            d->buf->resize(qsizetype(pos), '\0');
+        } QT_CATCH(const std::bad_alloc &) {} // swallow, failure case is handled below
+        if (d->buf->size() != pos) {
+            qWarning("QBuffer::seek: Unable to fill gap");
             return false;
         }
-    } else if (pos > d->buf->size() || pos < 0) {
-        qWarning("QBuffer::seek: Invalid pos: %d", int(pos));
+    }
+    if (pos > d->buf->size() || pos < 0) {
+        qWarning("QBuffer::seek: Invalid pos: %lld", pos);
         return false;
     }
     return QIODevice::seek(pos);
@@ -421,17 +386,19 @@ qint64 QBuffer::readData(char *data, qint64 len)
 qint64 QBuffer::writeData(const char *data, qint64 len)
 {
     Q_D(QBuffer);
-    int extraBytes = pos() + len - d->buf->size();
-    if (extraBytes > 0) { // overflow
-        int newSize = d->buf->size() + extraBytes;
-        d->buf->resize(newSize);
-        if (d->buf->size() != newSize) { // could not resize
+    const quint64 required = quint64(pos()) + quint64(len); // cannot overflow (pos() ≥ 0, len ≥ 0)
+
+    if (required > quint64(d->buf->size())) { // capacity exceeded
+        // The following must hold, since qsizetype covers half the virtual address space:
+        Q_ASSUME(required <= quint64((std::numeric_limits<qsizetype>::max)()));
+        d->buf->resize(qsizetype(required));
+        if (quint64(d->buf->size()) != required) { // could not resize
             qWarning("QBuffer::writeData: Memory allocation error");
             return -1;
         }
     }
 
-    memcpy(d->buf->data() + pos(), data, int(len));
+    memcpy(d->buf->data() + pos(), data, size_t(len));
 
 #ifndef QT_NO_QOBJECT
     d->writtenSinceLastEmit += len;
@@ -444,15 +411,22 @@ qint64 QBuffer::writeData(const char *data, qint64 len)
 }
 
 #ifndef QT_NO_QOBJECT
+static bool is_tracked_signal(const QMetaMethod &signal)
+{
+    // dynamic initialization: minimize the number of guard variables:
+    static const struct {
+        QMetaMethod readyReadSignal = QMetaMethod::fromSignal(&QBuffer::readyRead);
+        QMetaMethod bytesWrittenSignal = QMetaMethod::fromSignal(&QBuffer::bytesWritten);
+    } sigs;
+    return signal == sigs.readyReadSignal || signal == sigs.bytesWrittenSignal;
+}
 /*!
     \reimp
     \internal
 */
 void QBuffer::connectNotify(const QMetaMethod &signal)
 {
-    static const QMetaMethod readyReadSignal = QMetaMethod::fromSignal(&QBuffer::readyRead);
-    static const QMetaMethod bytesWrittenSignal = QMetaMethod::fromSignal(&QBuffer::bytesWritten);
-    if (signal == readyReadSignal || signal == bytesWrittenSignal)
+    if (is_tracked_signal(signal))
         d_func()->signalConnectionCount++;
 }
 
@@ -463,9 +437,7 @@ void QBuffer::connectNotify(const QMetaMethod &signal)
 void QBuffer::disconnectNotify(const QMetaMethod &signal)
 {
     if (signal.isValid()) {
-        static const QMetaMethod readyReadSignal = QMetaMethod::fromSignal(&QBuffer::readyRead);
-        static const QMetaMethod bytesWrittenSignal = QMetaMethod::fromSignal(&QBuffer::bytesWritten);
-        if (signal == readyReadSignal || signal == bytesWrittenSignal)
+        if (is_tracked_signal(signal))
             d_func()->signalConnectionCount--;
     } else {
         d_func()->signalConnectionCount = 0;

@@ -1,35 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the $MODULE$ of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtGui>
 #include <QtWidgets>
 #include <QTest>
 #include <QtGui/private/qevent_p.h>
+#include <QtGui/private/qeventpoint_p.h>
 #include <qpa/qwindowsysteminterface.h>
 
 // #include <QDebug>
@@ -127,6 +103,7 @@ private slots:
     void scroll();
     void overshoot();
     void multipleWindows();
+    void mouseEventTimestamp();
 
 private:
     QPointingDevice *m_touchScreen = QTest::createTouchDevice();
@@ -147,11 +124,11 @@ void tst_QScroller::kineticScroll(tst_QScrollerWidget *sw, QPointF from, QPoint 
     QScrollerProperties sp1 = QScroller::scroller(sw)->scrollerProperties();
 
     // send the touch begin event
-    QMutableEventPoint touchPoint(0);
-    touchPoint.setState(QEventPoint::State::Pressed);
-    touchPoint.setPosition(touchStart);
-    touchPoint.setScenePosition(touchStart);
-    touchPoint.setGlobalPosition(touchStart);
+    QEventPoint touchPoint(0);
+    QMutableEventPoint::setState(touchPoint, QEventPoint::State::Pressed);
+    QMutableEventPoint::setPosition(touchPoint, touchStart);
+    QMutableEventPoint::setScenePosition(touchPoint, touchStart);
+    QMutableEventPoint::setGlobalPosition(touchPoint, touchStart);
 
     QTouchEvent touchEvent1(QEvent::TouchBegin,
                             m_touchScreen,
@@ -164,10 +141,10 @@ void tst_QScroller::kineticScroll(tst_QScrollerWidget *sw, QPointF from, QPoint 
 
     // send the touch update far enough to trigger a scroll
     QTest::qWait(200); // we need to wait a little or else the speed would be infinite. now we have around 500 pixel per second.
-    touchPoint.setPosition(touchUpdate);
-    touchPoint.setScenePosition(touchUpdate);
-    touchPoint.setGlobalPosition(touchUpdate);
-    touchPoint.setState(QEventPoint::State::Updated);
+    QMutableEventPoint::setPosition(touchPoint, touchUpdate);
+    QMutableEventPoint::setScenePosition(touchPoint, touchUpdate);
+    QMutableEventPoint::setGlobalPosition(touchPoint, touchUpdate);
+    QMutableEventPoint::setState(touchPoint, QEventPoint::State::Updated);
     QTouchEvent touchEvent2(QEvent::TouchUpdate,
                             m_touchScreen,
                             Qt::NoModifier,
@@ -188,10 +165,10 @@ void tst_QScroller::kineticScroll(tst_QScrollerWidget *sw, QPointF from, QPoint 
     QVERIFY(qAbs(sw->currentPos.y() - calculatedPos.y()) < 1.0);
 
     // send the touch end
-    touchPoint.setPosition(touchEnd);
-    touchPoint.setScenePosition(touchEnd);
-    touchPoint.setGlobalPosition(touchEnd);
-    touchPoint.setState(QEventPoint::State::Released);
+    QMutableEventPoint::setPosition(touchPoint, touchEnd);
+    QMutableEventPoint::setScenePosition(touchPoint, touchEnd);
+    QMutableEventPoint::setGlobalPosition(touchPoint, touchEnd);
+    QMutableEventPoint::setState(touchPoint, QEventPoint::State::Released);
     QTouchEvent touchEvent5(QEvent::TouchEnd,
                             m_touchScreen,
                             Qt::NoModifier,
@@ -215,11 +192,11 @@ void tst_QScroller::kineticScrollNoTest(tst_QScrollerWidget *sw, QPointF from, Q
     int fps = 60;
 
     // send the touch begin event
-    QMutableEventPoint touchPoint(0);
-    touchPoint.setState(QEventPoint::State::Pressed);
-    touchPoint.setPosition(touchStart);
-    touchPoint.setScenePosition(touchStart);
-    touchPoint.setGlobalPosition(touchStart);
+    QEventPoint touchPoint(0);
+    QMutableEventPoint::setState(touchPoint, QEventPoint::State::Pressed);
+    QMutableEventPoint::setPosition(touchPoint, touchStart);
+    QMutableEventPoint::setScenePosition(touchPoint, touchStart);
+    QMutableEventPoint::setGlobalPosition(touchPoint, touchStart);
     QTouchEvent touchEvent1(QEvent::TouchBegin,
                             m_touchScreen,
                             Qt::NoModifier,
@@ -228,10 +205,10 @@ void tst_QScroller::kineticScrollNoTest(tst_QScrollerWidget *sw, QPointF from, Q
 
     // send the touch update far enough to trigger a scroll
     QTest::qWait(200); // we need to wait a little or else the speed would be infinite. now we have around 500 pixel per second.
-    touchPoint.setState(QEventPoint::State::Updated);
-    touchPoint.setPosition(touchUpdate);
-    touchPoint.setScenePosition(touchUpdate);
-    touchPoint.setGlobalPosition(touchUpdate);
+    QMutableEventPoint::setState(touchPoint, QEventPoint::State::Updated);
+    QMutableEventPoint::setPosition(touchPoint, touchUpdate);
+    QMutableEventPoint::setScenePosition(touchPoint, touchUpdate);
+    QMutableEventPoint::setGlobalPosition(touchPoint, touchUpdate);
     QTouchEvent touchEvent2(QEvent::TouchUpdate,
                             m_touchScreen,
                             Qt::NoModifier,
@@ -241,10 +218,10 @@ void tst_QScroller::kineticScrollNoTest(tst_QScrollerWidget *sw, QPointF from, Q
     QTest::qWait(1000 / fps * 2); // wait until the first scroll move
 
     // send the touch end
-    touchPoint.setState(QEventPoint::State::Released);
-    touchPoint.setPosition(touchEnd);
-    touchPoint.setScenePosition(touchEnd);
-    touchPoint.setGlobalPosition(touchEnd);
+    QMutableEventPoint::setState(touchPoint, QEventPoint::State::Released);
+    QMutableEventPoint::setPosition(touchPoint, touchEnd);
+    QMutableEventPoint::setScenePosition(touchPoint, touchEnd);
+    QMutableEventPoint::setGlobalPosition(touchPoint, touchEnd);
     QTouchEvent touchEvent5(QEvent::TouchEnd,
                             m_touchScreen,
                             Qt::NoModifier,
@@ -537,6 +514,67 @@ void tst_QScroller::multipleWindows()
     sw2->reset(); // reset the other scroller's internal state
     // make sure we can still scroll the remaining one without crashing (QTBUG-71232)
     kineticScroll(sw2.data(), QPointF(500, 500), QPoint(0, 0), QPoint(100, 100), QPoint(200, 200));
+#endif
+}
+
+/*!
+    This test verifies that mouse events arrive at the target widget
+    with valid timestamp, even if there is a gesture filtering (and then
+    replaying a copy of) the event. QTBUG-102010
+
+    We cannot truly simulate the double click here, as simulated events don't
+    go through the exact same event machinery as real events, so double clicks
+    don't get generated by Qt here. But we can verify that the timestamps of
+    the eventually delivered events are maintained.
+*/
+void tst_QScroller::mouseEventTimestamp()
+{
+#if QT_CONFIG(gestures) && QT_CONFIG(scroller)
+    QScopedPointer<tst_QScrollerWidget> sw(new tst_QScrollerWidget());
+    sw->scrollArea = QRectF(0, 0, 1000, 1000);
+    QScroller::grabGesture(sw.data(), QScroller::LeftMouseButtonGesture);
+    sw->setGeometry(100, 100, 400, 300);
+    sw->show();
+    QApplication::setActiveWindow(sw.data());
+    if (!QTest::qWaitForWindowExposed(sw.data()) || !QTest::qWaitForWindowActive(sw.data()))
+        QSKIP("Failed to show and activate window");
+
+    QScroller *s1 = QScroller::scroller(sw.data());
+
+    struct EventFilter : QObject
+    {
+        QList<int> timestamps;
+    protected:
+        bool eventFilter(QObject *o, QEvent *e) override
+        {
+            if (e->isInputEvent())
+                timestamps << static_cast<QInputEvent *>(e)->timestamp();
+            return QObject::eventFilter(o, e);
+        }
+
+    } eventFilter;
+    sw->installEventFilter(&eventFilter);
+
+    const int interval = QGuiApplication::styleHints()->mouseDoubleClickInterval() / 10;
+    const QPoint point = sw->geometry().center();
+    // Simulate double by pressing twice within the double click interval.
+    // Presses are filtered and then delayed by the scroller/gesture machinery,
+    // so we first record all events, and then make sure that the relative timestamps
+    // are maintained also for the replayed or synthesized events.
+    QTest::mousePress(sw->windowHandle(), Qt::LeftButton, {}, point);
+    QCOMPARE(s1->state(), QScroller::Pressed);
+    QTest::mouseRelease(sw->windowHandle(), Qt::LeftButton, {}, point, interval);
+    QCOMPARE(s1->state(), QScroller::Inactive);
+    QTest::mousePress(sw->windowHandle(), Qt::LeftButton, {}, point, interval);
+    QCOMPARE(s1->state(), QScroller::Pressed);
+    // also filtered and delayed by the scroller
+    QTest::mouseRelease(sw->windowHandle(), Qt::LeftButton, {}, point, interval);
+    QCOMPARE(s1->state(), QScroller::Inactive);
+    int lastTimestamp = -1;
+    for (int timestamp : std::as_const(eventFilter.timestamps)) {
+        QCOMPARE_GE(timestamp, lastTimestamp);
+        lastTimestamp = timestamp + interval;
+    }
 #endif
 }
 

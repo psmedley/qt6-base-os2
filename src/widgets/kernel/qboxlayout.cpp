@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qapplication.h"
 #include "qboxlayout.h"
@@ -124,6 +88,7 @@ public:
 
     void effectiveMargins(int *left, int *top, int *right, int *bottom) const;
     QLayoutItem* replaceAt(int index, QLayoutItem*) override;
+    int validateIndex(int index) const;
 };
 
 QBoxLayoutPrivate::~QBoxLayoutPrivate()
@@ -268,7 +233,7 @@ void QBoxLayoutPrivate::setupGeom()
 
     hasHfw = false;
 
-    int n = list.count();
+    int n = list.size();
     geomArray.clear();
     QList<QLayoutStruct> a(n);
 
@@ -400,7 +365,7 @@ void QBoxLayoutPrivate::setupGeom()
 void QBoxLayoutPrivate::calcHfw(int w)
 {
     QList<QLayoutStruct> &a = geomArray;
-    int n = a.count();
+    int n = a.size();
     int h = 0;
     int mh = 0;
 
@@ -443,6 +408,14 @@ QLayoutItem* QBoxLayoutPrivate::replaceAt(int index, QLayoutItem *item)
     return r;
 }
 
+int QBoxLayoutPrivate::validateIndex(int index) const
+{
+    if (index < 0)
+        return list.size(); // append
+
+    Q_ASSERT_X(index >= 0 && index <= list.size(), "QBoxLayout::insert", "index out of range");
+    return index;
+}
 
 /*!
     \class QBoxLayout
@@ -707,7 +680,7 @@ void QBoxLayout::invalidate()
 int QBoxLayout::count() const
 {
     Q_D(const QBoxLayout);
-    return d->list.count();
+    return d->list.size();
 }
 
 /*!
@@ -716,7 +689,7 @@ int QBoxLayout::count() const
 QLayoutItem *QBoxLayout::itemAt(int index) const
 {
     Q_D(const QBoxLayout);
-    return index >= 0 && index < d->list.count() ? d->list.at(index)->item : nullptr;
+    return index >= 0 && index < d->list.size() ? d->list.at(index)->item : nullptr;
 }
 
 /*!
@@ -725,7 +698,7 @@ QLayoutItem *QBoxLayout::itemAt(int index) const
 QLayoutItem *QBoxLayout::takeAt(int index)
 {
     Q_D(QBoxLayout);
-    if (index < 0 || index >= d->list.count())
+    if (index < 0 || index >= d->list.size())
         return nullptr;
     QBoxLayoutItem *b = d->list.takeAt(index);
     QLayoutItem *item = b->item;
@@ -776,7 +749,7 @@ void QBoxLayout::setGeometry(const QRect &r)
         QList<QLayoutStruct> a = d->geomArray;
         int pos = horz(d->dir) ? s.x() : s.y();
         int space = horz(d->dir) ? s.width() : s.height();
-        int n = a.count();
+        int n = a.size();
         if (d->hasHfw && !horz(d->dir)) {
             for (int i = 0; i < n; i++) {
                 QBoxLayoutItem *box = d->list.at(i);
@@ -847,9 +820,7 @@ void QBoxLayout::addItem(QLayoutItem *item)
 void QBoxLayout::insertItem(int index, QLayoutItem *item)
 {
     Q_D(QBoxLayout);
-    if (index < 0)                                // append
-        index = d->list.count();
-
+    index = d->validateIndex(index);
     QBoxLayoutItem *it = new QBoxLayoutItem(item);
     d->list.insert(index, it);
     invalidate();
@@ -867,9 +838,7 @@ void QBoxLayout::insertItem(int index, QLayoutItem *item)
 void QBoxLayout::insertSpacing(int index, int size)
 {
     Q_D(QBoxLayout);
-    if (index < 0)                                // append
-        index = d->list.count();
-
+    index = d->validateIndex(index);
     QLayoutItem *b;
     if (horz(d->dir))
         b = QLayoutPrivate::createSpacerItem(this, size, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
@@ -892,9 +861,7 @@ void QBoxLayout::insertSpacing(int index, int size)
 void QBoxLayout::insertStretch(int index, int stretch)
 {
     Q_D(QBoxLayout);
-    if (index < 0)                                // append
-        index = d->list.count();
-
+    index = d->validateIndex(index);
     QLayoutItem *b;
     if (horz(d->dir))
         b = QLayoutPrivate::createSpacerItem(this, 0, 0, QSizePolicy::Expanding, QSizePolicy::Minimum);
@@ -919,9 +886,7 @@ void QBoxLayout::insertStretch(int index, int stretch)
 void QBoxLayout::insertSpacerItem(int index, QSpacerItem *spacerItem)
 {
     Q_D(QBoxLayout);
-    if (index < 0)                                // append
-        index = d->list.count();
-
+    index = d->validateIndex(index);
     QBoxLayoutItem *it = new QBoxLayoutItem(spacerItem);
     it->magic = true;
     d->list.insert(index, it);
@@ -943,8 +908,7 @@ void QBoxLayout::insertLayout(int index, QLayout *layout, int stretch)
         return;
     if (!adoptLayout(layout))
         return;
-    if (index < 0)                                // append
-        index = d->list.count();
+    index = d->validateIndex(index);
     QBoxLayoutItem *it = new QBoxLayoutItem(layout, stretch);
     d->list.insert(index, it);
     invalidate();
@@ -977,8 +941,7 @@ void QBoxLayout::insertWidget(int index, QWidget *widget, int stretch,
     if (!d->checkWidget(widget))
          return;
     addChildWidget(widget);
-    if (index < 0)                                // append
-        index = d->list.count();
+    index = d->validateIndex(index);
     QWidgetItem *b = QLayoutPrivate::createWidgetItem(this, widget);
     b->setAlignment(alignment);
 

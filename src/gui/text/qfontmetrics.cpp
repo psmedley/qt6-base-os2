@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qfont.h"
 #include "qpaintdevice.h"
@@ -509,6 +473,8 @@ int QFontMetrics::rightBearing(QChar ch) const
     return qRound(rb);
 }
 
+static constexpr QLatin1Char s_variableLengthStringSeparator('\x9c');
+
 /*!
     Returns the horizontal advance in pixels of the first \a len characters of \a
     text. If \a len is negative (the default), the entire string is
@@ -523,16 +489,45 @@ int QFontMetrics::rightBearing(QChar ch) const
 */
 int QFontMetrics::horizontalAdvance(const QString &text, int len) const
 {
-    int pos = text.indexOf(QLatin1Char('\x9c'));
+    int pos = (len >= 0)
+            ? QStringView(text).left(len).indexOf(s_variableLengthStringSeparator)
+            : text.indexOf(s_variableLengthStringSeparator);
     if (pos != -1) {
-        len = (len < 0) ? pos : qMin(pos, len);
+        len = pos;
     } else if (len < 0) {
-        len = text.length();
+        len = text.size();
     }
     if (len == 0)
         return 0;
 
     QStackTextEngine layout(text, QFont(d.data()));
+    return qRound(layout.width(0, len));
+}
+
+/*!
+    Returns the horizontal advance in pixels of \a text laid out using \a option.
+
+    The advance is the distance appropriate for drawing a subsequent
+    character after \a text.
+
+    \since 6.3
+
+    \sa boundingRect()
+*/
+int QFontMetrics::horizontalAdvance(const QString &text, const QTextOption &option) const
+{
+    int pos = text.indexOf(s_variableLengthStringSeparator);
+    int len = -1;
+    if (pos != -1) {
+        len = pos;
+    } else {
+        len = text.size();
+    }
+    if (len == 0)
+        return 0;
+
+    QStackTextEngine layout(text, QFont(d.data()));
+    layout.option = option;
     return qRound(layout.width(0, len));
 }
 
@@ -613,12 +608,48 @@ int QFontMetrics::horizontalAdvance(QChar ch) const
 */
 QRect QFontMetrics::boundingRect(const QString &text) const
 {
-    if (text.length() == 0)
+    if (text.size() == 0)
         return QRect();
 
     QStackTextEngine layout(text, QFont(d.data()));
     layout.itemize();
-    glyph_metrics_t gm = layout.boundingBox(0, text.length());
+    glyph_metrics_t gm = layout.boundingBox(0, text.size());
+    return QRect(qRound(gm.x), qRound(gm.y), qRound(gm.width), qRound(gm.height));
+}
+
+/*!
+    Returns the bounding rectangle of the characters in the string
+    specified by \a text laid out using \a option. The bounding rectangle always
+    covers at least the set of pixels the text would cover if drawn at (0, 0).
+
+    Note that the bounding rectangle may extend to the left of (0, 0),
+    e.g. for italicized fonts, and that the width of the returned
+    rectangle might be different than what the horizontalAdvance() method
+    returns.
+
+    If you want to know the advance width of the string (to lay out
+    a set of strings next to each other), use horizontalAdvance() instead.
+
+    Newline characters are processed as normal characters, \e not as
+    linebreaks.
+
+    The height of the bounding rectangle is at least as large as the
+    value returned by height().
+
+    \since 6.3
+
+    \sa horizontalAdvance(), height(), QPainter::boundingRect(),
+        tightBoundingRect()
+*/
+QRect QFontMetrics::boundingRect(const QString &text, const QTextOption &option) const
+{
+    if (text.size() == 0)
+        return QRect();
+
+    QStackTextEngine layout(text, QFont(d.data()));
+    layout.option = option;
+    layout.itemize();
+    glyph_metrics_t gm = layout.boundingBox(0, text.size());
     return QRect(qRound(gm.x), qRound(gm.y), qRound(gm.width), qRound(gm.height));
 }
 
@@ -758,8 +789,6 @@ QSize QFontMetrics::size(int flags, const QString &text, int tabStops, int *tabA
 }
 
 /*!
-  \since 4.3
-
     Returns a tight bounding rectangle around the characters in the
     string specified by \a text. The bounding rectangle always covers
     at least the set of pixels the text would cover if drawn at (0,
@@ -776,21 +805,53 @@ QSize QFontMetrics::size(int flags, const QString &text, int tabStops, int *tabA
     Newline characters are processed as normal characters, \e not as
     linebreaks.
 
-    \warning Calling this method is very slow on Windows.
+    \since 4.3
 
     \sa horizontalAdvance(), height(), boundingRect()
 */
 QRect QFontMetrics::tightBoundingRect(const QString &text) const
 {
-    if (text.length() == 0)
+    if (text.size() == 0)
         return QRect();
 
     QStackTextEngine layout(text, QFont(d.data()));
     layout.itemize();
-    glyph_metrics_t gm = layout.tightBoundingBox(0, text.length());
+    glyph_metrics_t gm = layout.tightBoundingBox(0, text.size());
     return QRect(qRound(gm.x), qRound(gm.y), qRound(gm.width), qRound(gm.height));
 }
 
+/*!
+    Returns a tight bounding rectangle around the characters in the
+    string specified by \a text laid out using \a option. The bounding
+    rectangle always covers at least the set of pixels the text would
+    cover if drawn at (0, 0).
+
+    Note that the bounding rectangle may extend to the left of (0, 0),
+    e.g. for italicized fonts, and that the width of the returned
+    rectangle might be different than what the horizontalAdvance() method
+    returns.
+
+    If you want to know the advance width of the string (to lay out
+    a set of strings next to each other), use horizontalAdvance() instead.
+
+    Newline characters are processed as normal characters, \e not as
+    linebreaks.
+
+    \since 6.3
+
+    \sa horizontalAdvance(), height(), boundingRect()
+*/
+QRect QFontMetrics::tightBoundingRect(const QString &text, const QTextOption &option) const
+{
+    if (text.size() == 0)
+        return QRect();
+
+    QStackTextEngine layout(text, QFont(d.data()));
+    layout.option = option;
+    layout.itemize();
+    glyph_metrics_t gm = layout.tightBoundingBox(0, text.size());
+    return QRect(qRound(gm.x), qRound(gm.y), qRound(gm.width), qRound(gm.height));
+}
 
 /*!
     \since 4.2
@@ -819,13 +880,13 @@ QString QFontMetrics::elidedText(const QString &text, Qt::TextElideMode mode, in
     QString _text = text;
     if (!(flags & Qt::TextLongestVariant)) {
         int posA = 0;
-        int posB = _text.indexOf(QLatin1Char('\x9c'));
+        int posB = _text.indexOf(s_variableLengthStringSeparator);
         while (posB >= 0) {
             QString portion = _text.mid(posA, posB - posA);
             if (size(flags, portion).width() <= width)
                 return portion;
             posA = posB + 1;
-            posB = _text.indexOf(QLatin1Char('\x9c'), posA);
+            posB = _text.indexOf(s_variableLengthStringSeparator, posA);
         }
         _text = _text.mid(posA);
     }
@@ -1341,16 +1402,46 @@ qreal QFontMetricsF::rightBearing(QChar ch) const
 */
 qreal QFontMetricsF::horizontalAdvance(const QString &text, int length) const
 {
-    int pos = text.indexOf(QLatin1Char('\x9c'));
+    int pos = (length >= 0)
+            ? QStringView(text).left(length).indexOf(s_variableLengthStringSeparator)
+            : text.indexOf(s_variableLengthStringSeparator);
     if (pos != -1)
-        length = (length < 0) ? pos : qMin(pos, length);
+        length = pos;
     else if (length < 0)
-        length = text.length();
+        length = text.size();
 
     if (length == 0)
         return 0;
 
     QStackTextEngine layout(text, QFont(d.data()));
+    layout.itemize();
+    return layout.width(0, length).toReal();
+}
+
+/*!
+    Returns the horizontal advance in pixels of \a text laid out using \a option.
+
+    The advance is the distance appropriate for drawing a subsequent
+    character after \a text.
+
+    \since 6.3
+
+    \sa boundingRect()
+*/
+qreal QFontMetricsF::horizontalAdvance(const QString &text, const QTextOption &option) const
+{
+    int pos = text.indexOf(s_variableLengthStringSeparator);
+    int length = -1;
+    if (pos != -1)
+        length = pos;
+    else
+        length = text.size();
+
+    if (length == 0)
+        return 0;
+
+    QStackTextEngine layout(text, QFont(d.data()));
+    layout.option = option;
     layout.itemize();
     return layout.width(0, length).toReal();
 }
@@ -1431,7 +1522,7 @@ qreal QFontMetricsF::horizontalAdvance(QChar ch) const
 */
 QRectF QFontMetricsF::boundingRect(const QString &text) const
 {
-    int len = text.length();
+    int len = text.size();
     if (len == 0)
         return QRectF();
 
@@ -1441,6 +1532,42 @@ QRectF QFontMetricsF::boundingRect(const QString &text) const
     return QRectF(gm.x.toReal(), gm.y.toReal(),
                   gm.width.toReal(), gm.height.toReal());
 }
+
+/*!
+    Returns the bounding rectangle of the characters in the string
+    specified by \a text laid out using \a option. The bounding
+    rectangle always covers at least the set of pixels the text
+    would cover if drawn at (0, 0).
+
+    Note that the bounding rectangle may extend to the left of (0, 0),
+    e.g. for italicized fonts, and that the width of the returned
+    rectangle might be different than what the horizontalAdvance() method returns.
+
+    If you want to know the advance width of the string (to lay out
+    a set of strings next to each other), use horizontalAdvance() instead.
+
+    Newline characters are processed as normal characters, \e not as
+    linebreaks.
+
+    The height of the bounding rectangle is at least as large as the
+    value returned height().
+
+    \since 6.3
+    \sa horizontalAdvance(), height(), QPainter::boundingRect()
+*/
+QRectF QFontMetricsF::boundingRect(const QString &text, const QTextOption &option) const
+{
+    if (text.size() == 0)
+        return QRectF();
+
+    QStackTextEngine layout(text, QFont(d.data()));
+    layout.option = option;
+    layout.itemize();
+    glyph_metrics_t gm = layout.boundingBox(0, text.size());
+    return QRectF(gm.x.toReal(), gm.y.toReal(),
+                  gm.width.toReal(), gm.height.toReal());
+}
+
 
 /*!
     Returns the bounding rectangle of the character \a ch relative to
@@ -1600,18 +1727,49 @@ QSizeF QFontMetricsF::size(int flags, const QString &text, int tabStops, int *ta
     Newline characters are processed as normal characters, \e not as
     linebreaks.
 
-    \warning Calling this method is very slow on Windows.
-
     \sa horizontalAdvance(), height(), boundingRect()
 */
 QRectF QFontMetricsF::tightBoundingRect(const QString &text) const
 {
-    if (text.length() == 0)
-        return QRect();
+    if (text.size() == 0)
+        return QRectF();
 
     QStackTextEngine layout(text, QFont(d.data()));
     layout.itemize();
-    glyph_metrics_t gm = layout.tightBoundingBox(0, text.length());
+    glyph_metrics_t gm = layout.tightBoundingBox(0, text.size());
+    return QRectF(gm.x.toReal(), gm.y.toReal(), gm.width.toReal(), gm.height.toReal());
+}
+
+/*!
+    Returns a tight bounding rectangle around the characters in the
+    string specified by \a text laid out using \a option. The bounding
+    rectangle always covers at least the set of pixels the text would
+    cover if drawn at (0,0).
+
+    Note that the bounding rectangle may extend to the left of (0, 0),
+    e.g. for italicized fonts, and that the width of the returned
+    rectangle might be different than what the horizontalAdvance() method
+    returns.
+
+    If you want to know the advance width of the string (to lay out
+    a set of strings next to each other), use horizontalAdvance() instead.
+
+    Newline characters are processed as normal characters, \e not as
+    linebreaks.
+
+    \since 6.3
+
+    \sa horizontalAdvance(), height(), boundingRect()
+*/
+QRectF QFontMetricsF::tightBoundingRect(const QString &text, const QTextOption &option) const
+{
+    if (text.size() == 0)
+        return QRectF();
+
+    QStackTextEngine layout(text, QFont(d.data()));
+    layout.option = option;
+    layout.itemize();
+    glyph_metrics_t gm = layout.tightBoundingBox(0, text.size());
     return QRectF(gm.x.toReal(), gm.y.toReal(), gm.width.toReal(), gm.height.toReal());
 }
 
@@ -1641,13 +1799,13 @@ QString QFontMetricsF::elidedText(const QString &text, Qt::TextElideMode mode, q
     QString _text = text;
     if (!(flags & Qt::TextLongestVariant)) {
         int posA = 0;
-        int posB = _text.indexOf(QLatin1Char('\x9c'));
+        int posB = _text.indexOf(s_variableLengthStringSeparator);
         while (posB >= 0) {
             QString portion = _text.mid(posA, posB - posA);
             if (size(flags, portion).width() <= width)
                 return portion;
             posA = posB + 1;
-            posB = _text.indexOf(QLatin1Char('\x9c'), posA);
+            posB = _text.indexOf(s_variableLengthStringSeparator, posA);
         }
         _text = _text.mid(posA);
     }

@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 /*!
     \class QMap
@@ -123,24 +87,14 @@
 
     The items are traversed in ascending key order.
 
-    Normally, a QMap allows only one value per key. If you call
+    A QMap allows only one value per key. If you call
     insert() with a key that already exists in the QMap, the
     previous value will be erased. For example:
 
     \snippet code/src_corelib_tools_qmap.cpp 9
 
     However, you can store multiple values per key by using
-    QMultiMap. If you want
-    to retrieve all the values for a single key, you can use
-    values(const Key &key), which returns a QList<T>:
-
-    \snippet code/src_corelib_tools_qmap.cpp 10
-
-    Another approach is to call
-    find() to get the STL-style iterator for the first item with a
-    key and iterate from there:
-
-    \snippet code/src_corelib_tools_qmap.cpp 11
+    QMultiMap.
 
     If you only need to extract the values from a map (not the keys),
     you can also use \l{foreach}:
@@ -243,9 +197,18 @@
     \sa toStdMap()
 */
 
-/*! \fn template <class Key, class T> std::map<Key, T> QMap<Key, T>::toStdMap() const
+/*! \fn template <class Key, class T> std::map<Key, T> QMap<Key, T>::toStdMap() const &
 
     Returns an STL map equivalent to this QMap.
+*/
+
+/*! \fn template <class Key, class T> std::map<Key, T> QMap<Key, T>::toStdMap() &&
+
+    \overload
+    \since 6.0
+
+    \note Calling this function will leave this QMap in the partially-formed state, in which
+    the only valid operations are destruction or assignment of a new value.
 */
 
 /*! \fn template <class Key, class T> bool QMap<Key, T>::operator==(const QMap<Key, T> &lhs, const QMap<Key, T> &rhs)
@@ -354,9 +317,7 @@
     the value associated with it.
 
     If the item does not exist in the map, the function simply
-    returns a \l{default-constructed value}. If there are multiple
-    items for \a key in the map, only the most recently inserted one
-    is removed and returned.
+    returns a \l{default-constructed value}.
 
     If you don't use the return value, remove() is more efficient.
 
@@ -406,9 +367,7 @@
 
     If the map contains no item with key \a key, the function inserts
     a \l{default-constructed value} into the map with key \a key, and
-    returns a reference to it. If the map contains multiple items
-    with key \a key, this function returns a reference to the most
-    recently inserted value.
+    returns a reference to it.
 
     \sa insert(), value()
 */
@@ -449,9 +408,7 @@
 /*! \fn template <class Key, class T> QList<T> QMap<Key, T>::values() const
 
     Returns a list containing all the values in the map, in ascending
-    order of their keys. If a key is associated with multiple values,
-    all of its values will be in the list, and not just the most
-    recently inserted one.
+    order of their keys.
 
     This function creates a new list, in \l {linear time}. The time and memory
     use that entails can be avoided by iterating from \l keyValueBegin() to
@@ -663,6 +620,25 @@
     \sa constKeyValueBegin()
 */
 
+/*! \fn template <class Key, class T> auto QMap<Key, T>::asKeyValueRange() &
+    \fn template <class Key, class T> auto QMap<Key, T>::asKeyValueRange() const &
+    \fn template <class Key, class T> auto QMap<Key, T>::asKeyValueRange() &&
+    \fn template <class Key, class T> auto QMap<Key, T>::asKeyValueRange() const &&
+    \since 6.4
+
+    Returns a range object that allows iteration over this map as
+    key/value pairs. For instance, this range object can be used in a
+    range-based for loop, in combination with a structured binding declaration:
+
+    \snippet code/src_corelib_tools_qmap.cpp 28
+
+    Note that both the key and the value obtained this way are
+    references to the ones in the map. Specifically, mutating the value
+    will modify the map itself.
+
+    \sa QKeyValueIterator
+*/
+
 /*! \fn template <class Key, class T> QMap<Key, T>::iterator QMap<Key, T>::erase(const_iterator pos)
 
     Removes the (key, value) pair pointed to by the iterator \a pos
@@ -790,9 +766,6 @@
 
     If a key is common to both maps, its value will be replaced with
     the value stored in \a map.
-
-    \note If \a map contains multiple entries with the same key then the
-    final value of the key is undefined.
 
     \sa QMultiMap::insert()
 */

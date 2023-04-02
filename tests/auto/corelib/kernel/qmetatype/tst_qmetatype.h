@@ -1,32 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
-#include <QtCore>
 #include <QTest>
 #include "tst_qmetatype_common.h"
 #include "tst_qvariant_common.h"
@@ -95,8 +69,6 @@ private slots:
     void alignOf();
     void flags_data();
     void flags();
-    void flagsStaticLess_data();
-    void flagsStaticLess();
     void flagsBinaryCompatibility6_0_data();
     void flagsBinaryCompatibility6_0();
     void construct_data();
@@ -104,14 +76,18 @@ private slots:
     void typedConstruct();
     void constructCopy_data();
     void constructCopy();
+    void selfCompare_data();
+    void selfCompare();
     void typedefs();
     void registerType();
     void isRegistered_data();
     void isRegistered();
     void isRegisteredStaticLess_data();
     void isRegisteredStaticLess();
+    void isNotRegistered();
     void isEnum();
-    void automaticTemplateRegistration();
+    void automaticTemplateRegistration_1();
+    void automaticTemplateRegistration_2(); // defined in tst_qmetatype3.cpp
     void saveAndLoadBuiltin_data();
     void saveAndLoadBuiltin();
     void saveAndLoadCustom();
@@ -130,6 +106,10 @@ private slots:
     void fromType();
     void operatorEq_data();
     void operatorEq();
+    void operatorEq2_data();
+    void operatorEq2();
+    void operatorEqAcrossLibs_data();
+    void operatorEqAcrossLibs();
     void typesWithInaccessibleDTors();
     void voidIsNotUnknown();
     void typeNameNormalization();
@@ -216,6 +196,22 @@ struct CustomEqualsOnlyType
 static_assert(QTypeTraits::has_operator_equal_v<CustomEqualsOnlyType>);
 static_assert(!QTypeTraits::has_operator_less_than_v<CustomEqualsOnlyType>);
 
+struct BaseGadgetType
+{
+    Q_GADGET
+public:
+    explicit BaseGadgetType(QVariant foo = QVariant()) : m_foo(std::move(foo)) {}
+    QVariant m_foo;
+};
+
+struct DerivedGadgetType : public BaseGadgetType
+{
+    Q_GADGET
+public:
+    explicit DerivedGadgetType(QVariant foo = QVariant()) : BaseGadgetType(std::move(foo)) {}
+    int bar = 25;
+};
+
 Q_DECLARE_METATYPE(CustomConvertibleType);
 Q_DECLARE_METATYPE(CustomConvertibleType2);
 Q_DECLARE_METATYPE(CustomDebugStreamableType);
@@ -236,3 +232,79 @@ QT_END_NAMESPACE
 #endif
 
 Q_DECLARE_METATYPE(CustomMovable);
+
+#define FOR_EACH_STATIC_PRIMITIVE_TYPE(F) \
+    F(bool) \
+    F(int) \
+    F(qulonglong) \
+    F(double) \
+    F(short) \
+    F(char) \
+    F(ulong) \
+    F(uchar) \
+    F(float) \
+    F(QObject*) \
+    F(QString) \
+    F(CustomMovable)
+
+#define FOR_EACH_STATIC_PRIMITIVE_TYPE2(F, SecondaryRealName) \
+    F(uint, SecondaryRealName) \
+    F(qlonglong, SecondaryRealName) \
+    F(char, SecondaryRealName) \
+    F(uchar, SecondaryRealName) \
+    F(QObject*, SecondaryRealName)
+
+#define CREATE_AND_VERIFY_CONTAINER(CONTAINER, ...) \
+    { \
+        CONTAINER< __VA_ARGS__ > t; \
+        const QVariant v = QVariant::fromValue(t); \
+        QByteArray tn = createTypeName(#CONTAINER "<", #__VA_ARGS__); \
+        const int expectedType = ::qMetaTypeId<CONTAINER< __VA_ARGS__ > >(); \
+        const int type = QMetaType::type(tn); \
+        QCOMPARE(type, expectedType); \
+        QCOMPARE((QMetaType::fromType<CONTAINER< __VA_ARGS__ >>().id()), expectedType); \
+    }
+
+#define FOR_EACH_1ARG_TEMPLATE_TYPE(F, TYPE) \
+    F(QList, TYPE) \
+    F(QQueue, TYPE) \
+    F(QStack, TYPE) \
+    F(QSet, TYPE)
+
+#define PRINT_1ARG_TEMPLATE(RealName) \
+    FOR_EACH_1ARG_TEMPLATE_TYPE(CREATE_AND_VERIFY_CONTAINER, RealName)
+
+#define FOR_EACH_2ARG_TEMPLATE_TYPE(F, RealName1, RealName2) \
+    F(QHash, RealName1, RealName2) \
+    F(QMap, RealName1, RealName2) \
+    F(std::pair, RealName1, RealName2)
+
+#define PRINT_2ARG_TEMPLATE_INTERNAL(RealName1, RealName2) \
+    FOR_EACH_2ARG_TEMPLATE_TYPE(CREATE_AND_VERIFY_CONTAINER, RealName1, RealName2)
+
+#define PRINT_2ARG_TEMPLATE(RealName) \
+    FOR_EACH_STATIC_PRIMITIVE_TYPE2(PRINT_2ARG_TEMPLATE_INTERNAL, RealName)
+
+#define REGISTER_TYPEDEF(TYPE, ARG1, ARG2) \
+  qRegisterMetaType<TYPE <ARG1, ARG2>>(#TYPE "<" #ARG1 "," #ARG2 ">");
+
+static inline QByteArray createTypeName(const char *begin, const char *va)
+{
+    QByteArray tn(begin);
+    const QList<QByteArray> args = QByteArray(va).split(',');
+    tn += args.first().trimmed();
+    if (args.size() > 1) {
+        QList<QByteArray>::const_iterator it = args.constBegin() + 1;
+        const QList<QByteArray>::const_iterator end = args.constEnd();
+        for (; it != end; ++it) {
+            tn += ",";
+            tn += it->trimmed();
+        }
+    }
+    if (tn.endsWith('>'))
+        tn += ' ';
+    tn += '>';
+    return tn;
+}
+
+Q_DECLARE_METATYPE(const void*)

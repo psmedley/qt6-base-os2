@@ -1,0 +1,29 @@
+Qt_6_PRIVATE_API {
+    qt_private_api_tag*;
+    @FILE:qopengl2pexvertexarray_p.h@
+    @FILE:qopenglcompositor_p.h@
+    @FILE:qopenglcompositorbackingstore_p.h@
+    @FILE:qopenglcustomshaderstage_p.h@
+    @FILE:qopenglengineshadermanager_p.h@
+    @FILE:qopenglengineshadersource_p.h@
+    @FILE:qopenglframebufferobject_p.h@
+    @FILE:qopenglgradientcache_p.h@
+    @FILE:qopenglpaintdevice_p.h@
+    @FILE:qopenglpaintengine_p.h@
+    @FILE:qopenglqueryhelper_p.h@
+    @FILE:qopenglshadercache_p.h@
+    @FILE:qopengltexture_p.h@
+    @FILE:qopengltexturecache_p.h@
+    @FILE:qopengltextureglyphcache_p.h@
+    @FILE:qopengltexturehelper_p.h@
+    @FILE:qopengltextureuploader_p.h@
+    @FILE:qopenglversionfunctions_p.h@
+    @FILE:qopenglvertexarrayobject_p.h@
+    @FILE:qvkconvenience_p.h@
+};
+Qt_6 { *; };
+Qt_6.0 {} Qt_6;
+Qt_6.1 {} Qt_6.0;
+Qt_6.2 {} Qt_6.1;
+Qt_6.3 {} Qt_6.2;
+Qt_6.4 { qt_version_tag; } Qt_6.3;

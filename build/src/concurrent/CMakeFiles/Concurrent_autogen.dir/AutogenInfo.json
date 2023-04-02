@@ -1,0 +1,247 @@
+{
+	"BUILD_DIR" : "/home/psmedley/qt6-base-os2/build/src/concurrent/Concurrent_autogen",
+	"CMAKE_BINARY_DIR" : "/home/psmedley/qt6-base-os2/build",
+	"CMAKE_CURRENT_BINARY_DIR" : "/home/psmedley/qt6-base-os2/build/src/concurrent",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/home/psmedley/qt6-base-os2/src/concurrent",
+	"CMAKE_EXECUTABLE" : "/usr/bin/cmake",
+	"CMAKE_LIST_FILES" : 
+	[
+		"/home/psmedley/qt6-base-os2/src/concurrent/CMakeLists.txt",
+		"/home/psmedley/qt6-base-os2/cmake/modulecppexports.h.in",
+		"/home/psmedley/qt6-base-os2/cmake/QtModuleConfig.cmake.in",
+		"/usr/share/cmake-3.25/Modules/BasicConfigVersion-AnyNewerVersion.cmake.in",
+		"/home/psmedley/qt6-base-os2/cmake/QtCMakePackageVersionFile.cmake.in",
+		"/home/psmedley/qt6-base-os2/cmake/ModuleDescription.json.in",
+		"/home/psmedley/qt6-base-os2/cmake/QtFileConfigure.txt.in",
+		"/home/psmedley/qt6-base-os2/cmake/PkgConfigLibrary.pc.in"
+	],
+	"CMAKE_SOURCE_DIR" : "/home/psmedley/qt6-base-os2",
+	"DEP_FILE" : "",
+	"DEP_FILE_RULE_NAME" : "",
+	"HEADERS" : 
+	[
+		[
+			"/home/psmedley/qt6-base-os2/build/include/QtConcurrent/qtconcurrentexports.h",
+			"Mu",
+			"6MUDTMG2GQ/moc_qtconcurrentexports.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/build/src/concurrent/CMakeFiles/Concurrent.dir/cmake_pch.hxx",
+			"Mu",
+			"56HULWNMMA/moc_cmake_pch.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtaskbuilder.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtaskbuilder.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrent_global.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrent_global.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentcompilertest.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentcompilertest.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentfilter.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentfilter.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentfilterkernel.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentfilterkernel.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentfunctionwrappers.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentfunctionwrappers.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentiteratekernel.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentiteratekernel.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentmap.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentmap.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentmapkernel.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentmapkernel.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentmedian.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentmedian.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentreducekernel.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentreducekernel.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentrun.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentrun.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentrunbase.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentrunbase.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentstoredfunctioncall.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentstoredfunctioncall.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrenttask.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrenttask.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentthreadengine.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtconcurrentthreadengine.cpp",
+			null
+		]
+	],
+	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
+	"INCLUDE_DIR" : "/home/psmedley/qt6-base-os2/build/src/concurrent/Concurrent_autogen/include",
+	"MOC_COMPILATION_FILE" : "/home/psmedley/qt6-base-os2/build/src/concurrent/Concurrent_autogen/mocs_compilation.cpp",
+	"MOC_DEFINITIONS" : 
+	[
+		"Concurrent_EXPORTS",
+		"QT_ASCII_CAST_WARNINGS",
+		"QT_BUILDING_QT",
+		"QT_BUILD_CONCURRENT_LIB",
+		"QT_CORE_LIB",
+		"QT_DEPRECATED_WARNINGS",
+		"QT_DEPRECATED_WARNINGS_SINCE=0x070000",
+		"QT_DISABLE_DEPRECATED_BEFORE=0x050000",
+		"QT_LEAN_HEADERS=1",
+		"QT_MOC_COMPAT",
+		"QT_NO_CAST_TO_ASCII",
+		"QT_NO_DEBUG",
+		"QT_NO_FOREACH",
+		"QT_NO_JAVA_STYLE_ITERATORS",
+		"QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+		"QT_NO_USING_NAMESPACE",
+		"QT_USE_QSTRINGBUILDER",
+		"_LARGEFILE64_SOURCE",
+		"_LARGEFILE_SOURCE"
+	],
+	"MOC_DEPEND_FILTERS" : 
+	[
+		[
+			"Q_PLUGIN_METADATA",
+			"[\n][ \t]*Q_PLUGIN_METADATA[ \t]*\\([^\\)]*FILE[ \t]*\"([^\"]+)\""
+		]
+	],
+	"MOC_INCLUDES" : 
+	[
+		"/home/psmedley/qt6-base-os2/build/include",
+		"/home/psmedley/qt6-base-os2/build/include/QtConcurrent",
+		"/home/psmedley/qt6-base-os2/src/concurrent",
+		"/home/psmedley/qt6-base-os2/build/src/concurrent",
+		"/home/psmedley/qt6-base-os2/build/include/QtCore",
+		"/home/psmedley/qt6-base-os2/mkspecs/linux-g++",
+		"/home/psmedley/qt6-base-os2/build/src/corelib",
+		"/home/psmedley/qt6-base-os2/build/include/QtCore/6.4.2",
+		"/home/psmedley/qt6-base-os2/build/include/QtCore/6.4.2/QtCore",
+		"/usr/include/c++/12",
+		"/usr/include/x86_64-linux-gnu/c++/12",
+		"/usr/include/c++/12/backward",
+		"/usr/lib/gcc/x86_64-linux-gnu/12/include",
+		"/usr/local/include",
+		"/usr/include/x86_64-linux-gnu",
+		"/usr/include"
+	],
+	"MOC_MACRO_NAMES" : 
+	[
+		"Q_OBJECT",
+		"Q_GADGET",
+		"Q_GADGET_EXPORT",
+		"Q_NAMESPACE",
+		"Q_NAMESPACE_EXPORT",
+		"Q_ENUM_NS"
+	],
+	"MOC_OPTIONS" : [ "--output-json" ],
+	"MOC_PATH_PREFIX" : false,
+	"MOC_PREDEFS_CMD" : 
+	[
+		"/usr/bin/c++",
+		"-dM",
+		"-E",
+		"-c",
+		"/usr/share/cmake-3.25/Modules/CMakeCXXCompilerABI.cpp"
+	],
+	"MOC_PREDEFS_FILE" : "/home/psmedley/qt6-base-os2/build/src/concurrent/Concurrent_autogen/moc_predefs.h",
+	"MOC_RELAXED_MODE" : false,
+	"MOC_SKIP" : [],
+	"MULTI_CONFIG" : false,
+	"PARALLEL" : 4,
+	"PARSE_CACHE_FILE" : "/home/psmedley/qt6-base-os2/build/src/concurrent/CMakeFiles/Concurrent_autogen.dir/ParseCache.txt",
+	"QT_MOC_EXECUTABLE" : "/home/psmedley/qt6-base-os2/build/libexec/moc",
+	"QT_UIC_EXECUTABLE" : "",
+	"QT_VERSION_MAJOR" : 6,
+	"QT_VERSION_MINOR" : 4,
+	"SETTINGS_FILE" : "/home/psmedley/qt6-base-os2/build/src/concurrent/CMakeFiles/Concurrent_autogen.dir/AutogenUsed.txt",
+	"SOURCES" : 
+	[
+		[
+			"/home/psmedley/qt6-base-os2/build/src/concurrent/CMakeFiles/Concurrent.dir/cmake_pch.hxx.cxx",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentfilter.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentiteratekernel.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentmap.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentrun.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/concurrent/qtconcurrentthreadengine.cpp",
+			"Mu",
+			null
+		]
+	],
+	"VERBOSITY" : 0
+}

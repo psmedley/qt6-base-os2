@@ -1,36 +1,14 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QTestEventLoop>
+#include <QSignalSpy>
 #include <QSemaphore>
 #include <QAbstractEventDispatcher>
+#if defined(Q_OS_WIN32)
 #include <QWinEventNotifier>
+#endif
 
 #include <qcoreapplication.h>
 #include <qelapsedtimer.h>
@@ -41,12 +19,14 @@
 #include <qdebug.h>
 #include <qmetaobject.h>
 #include <qscopeguard.h>
+#include <private/qobject_p.h>
+#include <private/qthread_p.h>
 
 #ifdef Q_OS_UNIX
 #include <pthread.h>
 #endif
 #if defined(Q_OS_WIN)
-#include <windows.h>
+#include <qt_windows.h>
 #if defined(Q_OS_WIN32)
 #include <process.h>
 #endif
@@ -93,6 +73,7 @@ private slots:
     void adoptedThreadExecFinished();
     void adoptMultipleThreads();
     void adoptMultipleThreadsOverlap();
+    void adoptedThreadBindingStatus();
 
     void exitAndStart();
     void exitAndExec();
@@ -114,7 +95,13 @@ private slots:
     void quitLock();
 
     void create();
+    void createDestruction();
     void threadIdReuse();
+
+    void terminateAndPrematureDestruction();
+    void terminateAndDoubleDestruction();
+
+    void bindingListCleanupAfterDelete();
 };
 
 enum { one_minute = 60 * 1000, five_minutes = 5 * one_minute };
@@ -483,6 +470,10 @@ void tst_QThread::terminate()
 #if defined(Q_OS_ANDROID)
     QSKIP("Thread termination is not supported on Android.");
 #endif
+#if defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer)
+    QSKIP("Thread termination might result in stack underflow address sanitizer errors.")
+#endif
+
     Terminate_Thread thread;
     {
         QMutexLocker locker(&thread.mutex);
@@ -549,6 +540,10 @@ void tst_QThread::terminated()
 #if defined(Q_OS_ANDROID)
     QSKIP("Thread termination is not supported on Android.");
 #endif
+#if defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer)
+    QSKIP("Thread termination might result in stack underflow address sanitizer errors.")
+#endif
+
     SignalRecorder recorder;
     Terminate_Thread thread;
     connect(&thread, SIGNAL(finished()), &recorder, SLOT(slot()), Qt::DirectConnection);
@@ -967,6 +962,20 @@ void tst_QThread::adoptMultipleThreadsOverlap()
     QCOMPARE(recorder.activationCount.loadRelaxed(), numThreads);
 }
 
+void tst_QThread::adoptedThreadBindingStatus()
+{
+    NativeThreadWrapper nativeThread;
+    nativeThread.setWaitForStop();
+
+    nativeThread.startAndWait();
+    QVERIFY(nativeThread.qthread);
+    auto privThread = static_cast<QThreadPrivate *>(QObjectPrivate::get(nativeThread.qthread));
+    QVERIFY(privThread->m_statusOrPendingObjects.bindingStatus());
+
+    nativeThread.stop();
+    nativeThread.join();
+}
+
 // Disconnects on WinCE
 void tst_QThread::stressTest()
 {
@@ -1231,10 +1240,6 @@ void tst_QThread::isRunningInFinished()
         QVERIFY(inThreadObject.ok);
     }
 }
-
-QT_BEGIN_NAMESPACE
-Q_CORE_EXPORT uint qGlobalPostedEventsCount();
-QT_END_NAMESPACE
 
 class DummyEventDispatcher : public QAbstractEventDispatcher {
 public:
@@ -1600,11 +1605,71 @@ void tst_QThread::create()
         const auto &function = [](const ThrowWhenCopying &){};
         QScopedPointer<QThread> thread;
         ThrowWhenCopying t;
-        QVERIFY_EXCEPTION_THROWN(thread.reset(QThread::create(function, t)), ThreadException);
+        QVERIFY_THROWS_EXCEPTION(ThreadException, thread.reset(QThread::create(function, t)));
         QVERIFY(!thread);
     }
 #endif // QT_NO_EXCEPTIONS
 #endif // QT_CONFIG(cxx11_future)
+}
+
+void tst_QThread::createDestruction()
+{
+    for (int delay : {0, 10, 20}) {
+        auto checkForInterruptions = []() {
+            for (;;) {
+                if (QThread::currentThread()->isInterruptionRequested())
+                    return;
+                QThread::msleep(1);
+            }
+        };
+
+        QScopedPointer<QThread> thread(QThread::create(checkForInterruptions));
+        QSignalSpy finishedSpy(thread.get(), &QThread::finished);
+        QVERIFY(finishedSpy.isValid());
+
+        thread->start();
+        if (delay)
+            QThread::msleep(delay);
+        thread.reset();
+
+        QCOMPARE(finishedSpy.size(), 1);
+    }
+
+    for (int delay : {0, 10, 20}) {
+        auto runEventLoop = []() {
+            QEventLoop loop;
+            loop.exec();
+        };
+
+        QScopedPointer<QThread> thread(QThread::create(runEventLoop));
+        QSignalSpy finishedSpy(thread.get(), &QThread::finished);
+        QVERIFY(finishedSpy.isValid());
+
+        thread->start();
+        if (delay)
+            QThread::msleep(delay);
+        thread.reset();
+
+        QCOMPARE(finishedSpy.size(), 1);
+    }
+
+    for (int delay : {0, 10, 20}) {
+        auto runEventLoop = [delay]() {
+            if (delay)
+                QThread::msleep(delay);
+            QEventLoop loop;
+            loop.exec();
+        };
+
+        QScopedPointer<QThread> thread(QThread::create(runEventLoop));
+        QSignalSpy finishedSpy(thread.get(), &QThread::finished);
+        QVERIFY(finishedSpy.isValid());
+
+        thread->start();
+        thread.reset();
+
+        QCOMPARE(finishedSpy.size(), 1);
+    }
 }
 
 class StopableJob : public QObject
@@ -1698,6 +1763,101 @@ void tst_QThread::threadIdReuse()
     if (!threadIdReused) {
         QSKIP("Thread ID was not reused");
     }
+}
+
+class WaitToRun_Thread : public QThread
+{
+    Q_OBJECT
+public:
+    void run() override
+    {
+        emit running();
+        QThread::exec();
+    }
+
+Q_SIGNALS:
+    void running();
+};
+
+
+void tst_QThread::terminateAndPrematureDestruction()
+{
+#if defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer)
+    QSKIP("Thread termination might result in stack underflow address sanitizer errors.")
+#endif
+
+    WaitToRun_Thread thread;
+    QSignalSpy spy(&thread, &WaitToRun_Thread::running);
+    thread.start();
+    QVERIFY(spy.wait(500));
+
+    QScopedPointer<QObject> obj(new QObject);
+    QPointer<QObject> pObj(obj.data());
+    obj->deleteLater();
+
+    thread.terminate();
+    QVERIFY2(pObj, "object was deleted prematurely!");
+    thread.wait(500);
+}
+
+void tst_QThread::terminateAndDoubleDestruction()
+{
+#if defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer)
+    QSKIP("Thread termination might result in stack underflow address sanitizer errors.")
+#endif
+
+    class ChildObject : public QObject
+    {
+    public:
+        ChildObject(QObject *parent)
+            : QObject(parent)
+        {
+            QSignalSpy spy(&thread, &WaitToRun_Thread::running);
+            thread.start();
+            spy.wait(500);
+        }
+
+        ~ChildObject()
+        {
+            QVERIFY2(!inDestruction, "Double object destruction!");
+            inDestruction = true;
+            thread.terminate();
+            thread.wait(500);
+        }
+
+        bool inDestruction = false;
+        WaitToRun_Thread thread;
+    };
+
+    class TestObject : public QObject
+    {
+    public:
+        TestObject()
+            : child(new ChildObject(this))
+        {
+        }
+
+        ~TestObject()
+        {
+            child->deleteLater();
+        }
+
+        ChildObject *child = nullptr;
+    };
+
+    TestObject obj;
+}
+
+void tst_QThread::bindingListCleanupAfterDelete()
+{
+    QThread t;
+    auto optr = std::make_unique<QObject>();
+    optr->moveToThread(&t);
+    auto threadPriv =  static_cast<QThreadPrivate *>(QObjectPrivate::get(&t));
+    auto list = threadPriv->m_statusOrPendingObjects.list();
+    QVERIFY(list);
+    optr.reset();
+    QVERIFY(list->empty());
 }
 
 QTEST_MAIN(tst_QThread)

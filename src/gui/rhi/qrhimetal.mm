@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Gui module
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qrhimetal_p_p.h"
 #include <QGuiApplication>
@@ -168,7 +132,9 @@ struct QRhiMetalData
             RenderBuffer,
             Texture,
             Sampler,
-            StagingBuffer
+            StagingBuffer,
+            GraphicsPipeline,
+            ComputePipeline
         };
         Type type;
         int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
@@ -190,6 +156,13 @@ struct QRhiMetalData
             struct {
                 id<MTLBuffer> buffer;
             } stagingBuffer;
+            struct {
+                id<MTLRenderPipelineState> pipelineState;
+                id<MTLDepthStencilState> depthStencilState;
+            } graphicsPipeline;
+            struct {
+                id<MTLComputePipelineState> pipelineState;
+            } computePipeline;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;
@@ -296,6 +269,8 @@ struct QMetalRenderTargetData
         bool hasStencil = false;
         bool depthNeedsStore = false;
     } fb;
+
+    QRhiRenderTargetAttachmentTracker::ResIdList currentResIdList;
 };
 
 struct QMetalGraphicsPipelineData
@@ -305,6 +280,7 @@ struct QMetalGraphicsPipelineData
     MTLPrimitiveType primitiveType;
     MTLWinding winding;
     MTLCullMode cullMode;
+    MTLTriangleFillMode triangleFillMode;
     float depthBias;
     float slopeScaledDepthBias;
     QMetalShader vs;
@@ -358,6 +334,17 @@ template <class Int>
 inline Int aligned(Int v, Int byteAlign)
 {
     return (v + byteAlign - 1) & ~(byteAlign - 1);
+}
+
+bool QRhiMetal::probe(QRhiMetalInitParams *params)
+{
+    Q_UNUSED(params);
+    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();
+    if (dev) {
+        [dev release];
+        return true;
+    }
+    return false;
 }
 
 bool QRhiMetal::create(QRhi::Flags flags)
@@ -415,12 +402,16 @@ bool QRhiMetal::create(QRhi::Flags flags)
 #if defined(Q_OS_MACOS)
     caps.maxTextureSize = 16384;
     caps.baseVertexAndInstance = true;
+    if (@available(macOS 10.15, *))
+        caps.isAppleGPU = [d->dev supportsFamily:MTLGPUFamilyApple7];
+    caps.maxThreadGroupSize = 1024;
 #elif defined(Q_OS_TVOS)
     if ([d->dev supportsFeatureSet: MTLFeatureSet(30003)]) // MTLFeatureSet_tvOS_GPUFamily2_v1
         caps.maxTextureSize = 16384;
     else
         caps.maxTextureSize = 8192;
     caps.baseVertexAndInstance = false;
+    caps.isAppleGPU = true;
 #elif defined(Q_OS_IOS)
     // welcome to feature set hell
     if ([d->dev supportsFeatureSet: MTLFeatureSet(16)] // MTLFeatureSet_iOS_GPUFamily5_v1
@@ -437,6 +428,11 @@ bool QRhiMetal::create(QRhi::Flags flags)
     } else {
         caps.maxTextureSize = 4096;
         caps.baseVertexAndInstance = false;
+    }
+    caps.isAppleGPU = true;
+    if (@available(iOS 13, *)) {
+        if ([d->dev supportsFamily:MTLGPUFamilyApple4])
+            caps.maxThreadGroupSize = 1024;
     }
 #endif
 
@@ -537,15 +533,31 @@ bool QRhiMetal::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture
 {
     Q_UNUSED(flags);
 
+    bool supportsFamilyMac2 = false; // needed for BC* formats
+    bool supportsFamilyApple3 = false;
+
 #ifdef Q_OS_MACOS
-    if (format >= QRhiTexture::ETC2_RGB8 && format <= QRhiTexture::ETC2_RGBA8)
-        return false;
-    if (format >= QRhiTexture::ASTC_4x4 && format <= QRhiTexture::ASTC_12x12)
-        return false;
+    supportsFamilyMac2 = true;
+    if (caps.isAppleGPU)
+        supportsFamilyApple3 = true;
 #else
-    if (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
-        return false;
+    supportsFamilyApple3 = true;
 #endif
+
+    // BC5 is not available for any Apple hardare
+    if (format == QRhiTexture::BC5)
+        return false;
+
+    if (!supportsFamilyApple3) {
+        if (format >= QRhiTexture::ETC2_RGB8 && format <= QRhiTexture::ETC2_RGBA8)
+            return false;
+        if (format >= QRhiTexture::ASTC_4x4 && format <= QRhiTexture::ASTC_12x12)
+            return false;
+    }
+
+    if (!supportsFamilyMac2)
+        if (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
+            return false;
 
     return true;
 }
@@ -613,6 +625,16 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::RenderTo3DTextureSlice:
         return true;
+    case QRhi::TextureArrays:
+        return true;
+    case QRhi::Tessellation:
+        return false;
+    case QRhi::GeometryShader:
+        return false;
+    case QRhi::TextureArrayRange:
+        return false;
+    case QRhi::NonFillPolygonMode:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;
@@ -641,13 +663,15 @@ int QRhiMetal::resourceLimit(QRhi::ResourceLimit limit) const
     case QRhi::MaxThreadGroupY:
         Q_FALLTHROUGH();
     case QRhi::MaxThreadGroupZ:
-#if defined(Q_OS_MACOS)
-        return 1024;
-#else
-        return 512;
-#endif
+        return caps.maxThreadGroupSize;
+    case QRhi::TextureArraySizeMax:
+        return 2048;
     case QRhi::MaxUniformBufferRange:
         return 65536;
+    case QRhi::MaxVertexInputs:
+        return 31;
+    case QRhi::MaxVertexOutputs:
+        return 15; // use the minimum from MTLGPUFamily1/2/3
     default:
         Q_UNREACHABLE();
         return 0;
@@ -664,9 +688,9 @@ QRhiDriverInfo QRhiMetal::driverInfo() const
     return driverInfoStruct;
 }
 
-void QRhiMetal::sendVMemStatsToProfiler()
+QRhiMemAllocStats QRhiMetal::graphicsMemoryAllocationStatistics()
 {
-    // nothing to do here
+    return {};
 }
 
 bool QRhiMetal::makeThreadLocalNativeContextCurrent()
@@ -706,10 +730,10 @@ QRhiRenderBuffer *QRhiMetal::createRenderBuffer(QRhiRenderBuffer::Type type, con
 }
 
 QRhiTexture *QRhiMetal::createTexture(QRhiTexture::Format format,
-                                      const QSize &pixelSize, int depth,
+                                      const QSize &pixelSize, int depth, int arraySize,
                                       int sampleCount, QRhiTexture::Flags flags)
 {
-    return new QMetalTexture(this, format, pixelSize, depth, sampleCount, flags);
+    return new QMetalTexture(this, format, pixelSize, depth, arraySize, sampleCount, flags);
 }
 
 QRhiSampler *QRhiMetal::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
@@ -796,7 +820,7 @@ void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD
     } res[SUPPORTED_STAGES];
     enum { VERTEX = 0, FRAGMENT = 1, COMPUTE = 2 };
 
-    for (const QRhiShaderResourceBinding &binding : qAsConst(srbD->sortedBindings)) {
+    for (const QRhiShaderResourceBinding &binding : std::as_const(srbD->sortedBindings)) {
         const QRhiShaderResourceBinding::Data *b = binding.data();
         switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
@@ -829,34 +853,43 @@ void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD
         }
             break;
         case QRhiShaderResourceBinding::SampledTexture:
+        case QRhiShaderResourceBinding::Texture:
+        case QRhiShaderResourceBinding::Sampler:
         {
-            const QRhiShaderResourceBinding::Data::SampledTextureData *data = &b->u.stex;
+            const QRhiShaderResourceBinding::Data::TextureAndOrSamplerData *data = &b->u.stex;
             for (int elem = 0; elem < data->count; ++elem) {
                 QMetalTexture *texD = QRHI_RES(QMetalTexture, b->u.stex.texSamplers[elem].tex);
                 QMetalSampler *samplerD = QRHI_RES(QMetalSampler, b->u.stex.texSamplers[elem].sampler);
                 if (b->stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
-                    const int nativeBindingTexture = mapBinding(b->binding, VERTEX, nativeResourceBindingMaps, BindingType::Texture);
-                    const int nativeBindingSampler = mapBinding(b->binding, VERTEX, nativeResourceBindingMaps, BindingType::Sampler);
-                    if (nativeBindingTexture >= 0 && nativeBindingSampler >= 0) {
-                        res[VERTEX].textures.append({ nativeBindingTexture + elem, texD->d->tex });
-                        res[VERTEX].samplers.append({ nativeBindingSampler + elem, samplerD->d->samplerState });
-                    }
+                    // Must handle all three cases (combined, separate, separate):
+                    //   first = texture binding, second = sampler binding
+                    //   first = texture binding
+                    //   first = sampler binding (i.e. BindingType::Texture...)
+                    const int textureBinding = mapBinding(b->binding, VERTEX, nativeResourceBindingMaps, BindingType::Texture);
+                    const int samplerBinding = texD && samplerD ? mapBinding(b->binding, VERTEX, nativeResourceBindingMaps, BindingType::Sampler)
+                                                                : (samplerD ? mapBinding(b->binding, VERTEX, nativeResourceBindingMaps, BindingType::Texture) : -1);
+                    if (textureBinding >= 0 && texD)
+                        res[VERTEX].textures.append({ textureBinding + elem, texD->d->tex });
+                    if (samplerBinding >= 0)
+                        res[VERTEX].samplers.append({ samplerBinding + elem, samplerD->d->samplerState });
                 }
                 if (b->stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
-                    const int nativeBindingTexture = mapBinding(b->binding, FRAGMENT, nativeResourceBindingMaps, BindingType::Texture);
-                    const int nativeBindingSampler = mapBinding(b->binding, FRAGMENT, nativeResourceBindingMaps, BindingType::Sampler);
-                    if (nativeBindingTexture >= 0 && nativeBindingSampler >= 0) {
-                        res[FRAGMENT].textures.append({ nativeBindingTexture + elem, texD->d->tex });
-                        res[FRAGMENT].samplers.append({ nativeBindingSampler + elem, samplerD->d->samplerState });
-                    }
+                    const int textureBinding = mapBinding(b->binding, FRAGMENT, nativeResourceBindingMaps, BindingType::Texture);
+                    const int samplerBinding = texD && samplerD ? mapBinding(b->binding, FRAGMENT, nativeResourceBindingMaps, BindingType::Sampler)
+                                                                : (samplerD ? mapBinding(b->binding, FRAGMENT, nativeResourceBindingMaps, BindingType::Texture) : -1);
+                    if (textureBinding >= 0 && texD)
+                        res[FRAGMENT].textures.append({ textureBinding + elem, texD->d->tex });
+                    if (samplerBinding >= 0)
+                        res[FRAGMENT].samplers.append({ samplerBinding + elem, samplerD->d->samplerState });
                 }
                 if (b->stage.testFlag(QRhiShaderResourceBinding::ComputeStage)) {
-                    const int nativeBindingTexture = mapBinding(b->binding, COMPUTE, nativeResourceBindingMaps, BindingType::Texture);
-                    const int nativeBindingSampler = mapBinding(b->binding, COMPUTE, nativeResourceBindingMaps, BindingType::Sampler);
-                    if (nativeBindingTexture >= 0 && nativeBindingSampler >= 0) {
-                        res[COMPUTE].textures.append({ nativeBindingTexture + elem, texD->d->tex });
-                        res[COMPUTE].samplers.append({ nativeBindingSampler + elem, samplerD->d->samplerState });
-                    }
+                    const int textureBinding = mapBinding(b->binding, COMPUTE, nativeResourceBindingMaps, BindingType::Texture);
+                    const int samplerBinding = texD && samplerD ? mapBinding(b->binding, COMPUTE, nativeResourceBindingMaps, BindingType::Sampler)
+                                                                : (samplerD ? mapBinding(b->binding, COMPUTE, nativeResourceBindingMaps, BindingType::Texture) : -1);
+                    if (textureBinding >= 0 && texD)
+                        res[COMPUTE].textures.append({ textureBinding + elem, texD->d->tex });
+                    if (samplerBinding >= 0)
+                        res[COMPUTE].samplers.append({ samplerBinding + elem, samplerD->d->samplerState });
                 }
             }
         }
@@ -929,7 +962,7 @@ void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD
             return a.nativeBinding < b.nativeBinding;
         });
 
-        for (const Stage::Buffer &buf : qAsConst(res[stage].buffers)) {
+        for (const Stage::Buffer &buf : std::as_const(res[stage].buffers)) {
             res[stage].bufferBatches.feed(buf.nativeBinding, buf.mtlbuf);
             res[stage].bufferOffsetBatches.feed(buf.nativeBinding, buf.offset);
         }
@@ -973,10 +1006,10 @@ void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD
             return a.nativeBinding < b.nativeBinding;
         });
 
-        for (const Stage::Texture &t : qAsConst(res[stage].textures))
+        for (const Stage::Texture &t : std::as_const(res[stage].textures))
             res[stage].textureBatches.feed(t.nativeBinding, t.mtltex);
 
-        for (const Stage::Sampler &s : qAsConst(res[stage].samplers))
+        for (const Stage::Sampler &s : std::as_const(res[stage].samplers))
             res[stage].samplerBatches.feed(s.nativeBinding, s.mtlsampler);
 
         res[stage].textureBatches.finish();
@@ -1043,6 +1076,10 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
             [cbD->d->currentRenderPassEncoder setCullMode: psD->d->cullMode];
             cbD->currentCullMode = int(psD->d->cullMode);
         }
+        if (cbD->currentTriangleFillMode == -1 || psD->d->triangleFillMode != uint(cbD->currentTriangleFillMode)) {
+            [cbD->d->currentRenderPassEncoder setTriangleFillMode: psD->d->triangleFillMode];
+            cbD->currentTriangleFillMode = int(psD->d->triangleFillMode);
+        }
         if (cbD->currentFrontFaceWinding == -1 || psD->d->winding != uint(cbD->currentFrontFaceWinding)) {
             [cbD->d->currentRenderPassEncoder setFrontFacingWinding: psD->d->winding];
             cbD->currentFrontFaceWinding = int(psD->d->winding);
@@ -1104,8 +1141,10 @@ void QRhiMetal::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
         }
             break;
         case QRhiShaderResourceBinding::SampledTexture:
+        case QRhiShaderResourceBinding::Texture:
+        case QRhiShaderResourceBinding::Sampler:
         {
-            const QRhiShaderResourceBinding::Data::SampledTextureData *data = &b->u.stex;
+            const QRhiShaderResourceBinding::Data::TextureAndOrSamplerData *data = &b->u.stex;
             if (bd.stex.count != data->count) {
                 bd.stex.count = data->count;
                 resNeedsRebind = true;
@@ -1113,19 +1152,26 @@ void QRhiMetal::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
             for (int elem = 0; elem < data->count; ++elem) {
                 QMetalTexture *texD = QRHI_RES(QMetalTexture, data->texSamplers[elem].tex);
                 QMetalSampler *samplerD = QRHI_RES(QMetalSampler, data->texSamplers[elem].sampler);
-                if (texD->generation != bd.stex.d[elem].texGeneration
-                        || texD->m_id != bd.stex.d[elem].texId
-                        || samplerD->generation != bd.stex.d[elem].samplerGeneration
-                        || samplerD->m_id != bd.stex.d[elem].samplerId)
+                Q_ASSERT(texD || samplerD);
+                const quint64 texId = texD ? texD->m_id : 0;
+                const uint texGen = texD ? texD->generation : 0;
+                const quint64 samplerId = samplerD ? samplerD->m_id : 0;
+                const uint samplerGen = samplerD ? samplerD->generation : 0;
+                if (texGen != bd.stex.d[elem].texGeneration
+                        || texId != bd.stex.d[elem].texId
+                        || samplerGen != bd.stex.d[elem].samplerGeneration
+                        || samplerId != bd.stex.d[elem].samplerId)
                 {
                     resNeedsRebind = true;
-                    bd.stex.d[elem].texId = texD->m_id;
-                    bd.stex.d[elem].texGeneration = texD->generation;
-                    bd.stex.d[elem].samplerId = samplerD->m_id;
-                    bd.stex.d[elem].samplerGeneration = samplerD->generation;
+                    bd.stex.d[elem].texId = texId;
+                    bd.stex.d[elem].texGeneration = texGen;
+                    bd.stex.d[elem].samplerId = samplerId;
+                    bd.stex.d[elem].samplerGeneration = samplerGen;
                 }
-                texD->lastActiveFrameSlot = currentFrameSlot;
-                samplerD->lastActiveFrameSlot = currentFrameSlot;
+                if (texD)
+                    texD->lastActiveFrameSlot = currentFrameSlot;
+                if (samplerD)
+                    samplerD->lastActiveFrameSlot = currentFrameSlot;
             }
         }
             break;
@@ -1259,7 +1305,7 @@ void QRhiMetal::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
 
     // x,y is top-left in MTLViewportRect but bottom-left in QRhiViewport
     float x, y, w, h;
-    if (!qrhi_toTopLeftRenderTargetRect(outputSize, viewport.viewport(), &x, &y, &w, &h))
+    if (!qrhi_toTopLeftRenderTargetRect<UnBounded>(outputSize, viewport.viewport(), &x, &y, &w, &h))
         return;
 
     MTLViewport vp;
@@ -1274,6 +1320,7 @@ void QRhiMetal::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
 
     if (!QRHI_RES(QMetalGraphicsPipeline, cbD->currentGraphicsPipeline)->m_flags.testFlag(QRhiGraphicsPipeline::UsesScissor)) {
         MTLScissorRect s;
+        qrhi_toTopLeftRenderTargetRect<Bounded>(outputSize, viewport.viewport(), &x, &y, &w, &h);
         s.x = NSUInteger(x);
         s.y = NSUInteger(y);
         s.width = NSUInteger(w);
@@ -1291,7 +1338,7 @@ void QRhiMetal::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
 
     // x,y is top-left in MTLScissorRect but bottom-left in QRhiScissor
     int x, y, w, h;
-    if (!qrhi_toTopLeftRenderTargetRect(outputSize, scissor.scissor(), &x, &y, &w, &h))
+    if (!qrhi_toTopLeftRenderTargetRect<Bounded>(outputSize, scissor.scissor(), &x, &y, &w, &h))
         return;
 
     MTLScissorRect s;
@@ -1432,7 +1479,7 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain, QRhi::BeginF
     // commands+present to complete, while for others just for the commands
     // (for this same frame slot) but not sure how to do that in a sane way so
     // wait for full cb completion for now.
-    for (QMetalSwapChain *sc : qAsConst(swapchains)) {
+    for (QMetalSwapChain *sc : std::as_const(swapchains)) {
         dispatch_semaphore_t sem = sc->d->sem[swapChainD->currentFrameSlot];
         dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
         if (sc != swapChainD)
@@ -1464,9 +1511,6 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain, QRhi::BeginF
     swapChainD->rtWrapper.d->fb.hasStencil = swapChainD->ds ? true : false;
     swapChainD->rtWrapper.d->fb.depthNeedsStore = false;
 
-    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
-    QRHI_PROF_F(beginSwapChainFrame(swapChain));
-
     executeDeferredReleases();
     swapChainD->cbWrapper.resetState();
     finishActiveReadbacks();
@@ -1481,10 +1525,25 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrame
 
     const bool needsPresent = !flags.testFlag(QRhi::SkipPresent);
     if (needsPresent) {
-        auto drawable = swapChainD->d->curDrawable;
-        [swapChainD->cbWrapper.d->cb addScheduledHandler:^(id<MTLCommandBuffer>) {
-            [drawable present];
-        }];
+        // beginFrame-endFrame without a render pass inbetween means there is no
+        // drawable, handle this gracefully because presentDrawable does not like
+        // null arguments.
+        if (id<CAMetalDrawable> drawable = swapChainD->d->curDrawable) {
+            // QTBUG-103415: while the docs suggest the following two approaches are
+            // equivalent, there is a difference in case a frame is recorded earlier than
+            // (i.e. not in response to) the next CVDisplayLink callback. Therefore, stick
+            // with presentDrawable, which gives results identical to OpenGL, and all other
+            // platforms, i.e. throttles to vsync as expected, meaning constant 15-17 ms with
+            // a 60 Hz screen, no jumps with smaller intervals, regardless of when the frame
+            // is submitted by the app)
+#if 1
+            [swapChainD->cbWrapper.d->cb presentDrawable: drawable];
+#else
+            [swapChainD->cbWrapper.d->cb addScheduledHandler:^(id<MTLCommandBuffer>) {
+                [drawable present];
+            }];
+#endif
+        }
     }
 
     // Must not hold on to the drawable, regardless of needsPresent
@@ -1497,9 +1556,6 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrame
     }];
 
     [swapChainD->cbWrapper.d->cb commit];
-
-    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
-    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount + 1));
 
     [d->captureScope endScope];
 
@@ -1517,7 +1573,7 @@ QRhi::FrameOpResult QRhiMetal::beginOffscreenFrame(QRhiCommandBuffer **cb, QRhi:
 
     currentFrameSlot = (currentFrameSlot + 1) % QMTL_FRAMES_IN_FLIGHT;
     if (swapchains.count() > 1) {
-        for (QMetalSwapChain *sc : qAsConst(swapchains)) {
+        for (QMetalSwapChain *sc : std::as_const(swapchains)) {
             // wait+signal is the general pattern to ensure the commands for a
             // given frame slot have completed (if sem is 1, we go 0 then 1; if
             // sem is 0 we go -1, block, completion increments to 0, then us to 1)
@@ -1571,7 +1627,7 @@ QRhi::FrameOpResult QRhiMetal::finish()
         }
     }
 
-    for (QMetalSwapChain *sc : qAsConst(swapchains)) {
+    for (QMetalSwapChain *sc : std::as_const(swapchains)) {
         for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
             if (currentSwapChain && sc == currentSwapChain && i == currentFrameSlot) {
                 // no wait as this is the thing we're going to be commit below and
@@ -1770,7 +1826,6 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 {
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
-    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
 
     for (int opIdx = 0; opIdx < ud->activeBufferOpCount; ++opIdx) {
         const QRhiResourceUpdateBatchPrivate::BufferOp &u(ud->bufferOps[opIdx]);
@@ -1820,7 +1875,7 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             qsizetype stagingSize = 0;
             for (int layer = 0, maxLayer = u.subresDesc.count(); layer < maxLayer; ++layer) {
                 for (int level = 0; level < QRhi::MAX_MIP_LEVELS; ++level) {
-                    for (const QRhiTextureSubresourceUploadDescription &subresDesc : qAsConst(u.subresDesc[layer][level]))
+                    for (const QRhiTextureSubresourceUploadDescription &subresDesc : std::as_const(u.subresDesc[layer][level]))
                         stagingSize += subresUploadByteSize(subresDesc);
                 }
             }
@@ -1829,13 +1884,12 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             Q_ASSERT(!utexD->d->stagingBuf[currentFrameSlot]);
             utexD->d->stagingBuf[currentFrameSlot] = [d->dev newBufferWithLength: NSUInteger(stagingSize)
                         options: MTLResourceStorageModeShared];
-            QRHI_PROF_F(newTextureStagingArea(utexD, currentFrameSlot, quint32(stagingSize)));
 
             void *mp = [utexD->d->stagingBuf[currentFrameSlot] contents];
             qsizetype curOfs = 0;
             for (int layer = 0, maxLayer = u.subresDesc.count(); layer < maxLayer; ++layer) {
                 for (int level = 0; level < QRhi::MAX_MIP_LEVELS; ++level) {
-                    for (const QRhiTextureSubresourceUploadDescription &subresDesc : qAsConst(u.subresDesc[layer][level]))
+                    for (const QRhiTextureSubresourceUploadDescription &subresDesc : std::as_const(u.subresDesc[layer][level]))
                         enqueueSubresUpload(utexD, mp, blitEnc, layer, level, subresDesc, &curOfs);
                 }
             }
@@ -1848,7 +1902,6 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             e.stagingBuffer.buffer = utexD->d->stagingBuf[currentFrameSlot];
             utexD->d->stagingBuf[currentFrameSlot] = nil;
             d->releaseQueue.append(e);
-            QRHI_PROF_F(releaseTextureStagingArea(utexD, currentFrameSlot));
         } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::Copy) {
             Q_ASSERT(u.src && u.dst);
             QMetalTexture *srcD = QRHI_RES(QMetalTexture, u.src);
@@ -1910,10 +1963,6 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             textureFormatInfo(readback.format, readback.pixelSize, &bpl, &readback.bufSize, nullptr);
             readback.buf = [d->dev newBufferWithLength: readback.bufSize options: MTLResourceStorageModeShared];
 
-            QRHI_PROF_F(newReadbackBuffer(qint64(qintptr(readback.buf)),
-                                          texD ? static_cast<QRhiResource *>(texD) : static_cast<QRhiResource *>(swapChainD),
-                                          readback.bufSize));
-
             ensureBlit();
             [blitEnc copyFromTexture: src
                                       sourceSlice: NSUInteger(is3D ? 0 : u.rb.layer())
@@ -1953,7 +2002,7 @@ void QRhiMetal::executeBufferHostWritesForSlot(QMetalBuffer *bufD, int slot)
     void *p = [bufD->d->buf[slot] contents];
     int changeBegin = -1;
     int changeEnd = -1;
-    for (const QMetalBufferData::BufferUpdate &u : qAsConst(bufD->d->pendingUpdates[slot])) {
+    for (const QMetalBufferData::BufferUpdate &u : std::as_const(bufD->d->pendingUpdates[slot])) {
         memcpy(static_cast<char *>(p) + u.offset, u.data.constData(), size_t(u.data.size()));
         if (changeBegin == -1 || u.offset < changeBegin)
             changeBegin = u.offset;
@@ -1995,8 +2044,8 @@ void QRhiMetal::beginPass(QRhiCommandBuffer *cb,
 
     QMetalRenderTargetData *rtD = nullptr;
     switch (rt->resourceType()) {
-    case QRhiResource::RenderTarget:
-        rtD = QRHI_RES(QMetalReferenceRenderTarget, rt)->d;
+    case QRhiResource::SwapChainRenderTarget:
+        rtD = QRHI_RES(QMetalSwapChainRenderTarget, rt)->d;
         cbD->d->currentPassRpDesc = d->createDefaultRenderPass(rtD->dsAttCount, colorClearValue, depthStencilClearValue, rtD->colorAttCount);
         if (rtD->colorAttCount) {
             QMetalRenderTargetData::ColorAtt &color0(rtD->fb.colorAtt[0]);
@@ -2026,6 +2075,8 @@ void QRhiMetal::beginPass(QRhiCommandBuffer *cb,
     {
         QMetalTextureRenderTarget *rtTex = QRHI_RES(QMetalTextureRenderTarget, rt);
         rtD = rtTex->d;
+        if (!QRhiRenderTargetAttachmentTracker::isUpToDate<QMetalTexture, QMetalRenderBuffer>(rtTex->description(), rtD->currentResIdList))
+            rtTex->create();
         cbD->d->currentPassRpDesc = d->createDefaultRenderPass(rtD->dsAttCount, colorClearValue, depthStencilClearValue, rtD->colorAttCount);
         if (rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents)) {
             for (uint i = 0; i < uint(rtD->colorAttCount); ++i)
@@ -2199,6 +2250,13 @@ void QRhiMetal::executeDeferredReleases(bool forced)
             case QRhiMetalData::DeferredReleaseEntry::StagingBuffer:
                 [e.stagingBuffer.buffer release];
                 break;
+            case QRhiMetalData::DeferredReleaseEntry::GraphicsPipeline:
+                [e.graphicsPipeline.depthStencilState release];
+                [e.graphicsPipeline.pipelineState release];
+                break;
+            case QRhiMetalData::DeferredReleaseEntry::ComputePipeline:
+                [e.computePipeline.pipelineState release];
+                break;
             default:
                 break;
             }
@@ -2210,7 +2268,6 @@ void QRhiMetal::executeDeferredReleases(bool forced)
 void QRhiMetal::finishActiveReadbacks(bool forced)
 {
     QVarLengthArray<std::function<void()>, 4> completedCallbacks;
-    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
 
     for (int i = d->activeTextureReadbacks.count() - 1; i >= 0; --i) {
         const QRhiMetalData::TextureReadback &readback(d->activeTextureReadbacks[i]);
@@ -2221,8 +2278,6 @@ void QRhiMetal::finishActiveReadbacks(bool forced)
             void *p = [readback.buf contents];
             memcpy(readback.result->data.data(), p, readback.bufSize);
             [readback.buf release];
-
-            QRHI_PROF_F(releaseReadbackBuffer(qint64(qintptr(readback.buf))));
 
             if (readback.result->completed)
                 completedCallbacks.append(readback.result->completed);
@@ -2267,8 +2322,6 @@ void QMetalBuffer::destroy()
     QRHI_RES_RHI(QRhiMetal);
     if (rhiD) {
         rhiD->d->releaseQueue.append(e);
-        QRHI_PROF;
-        QRHI_PROF_F(releaseBuffer(this));
         rhiD->unregisterResource(this);
     }
 }
@@ -2288,8 +2341,10 @@ bool QMetalBuffer::create()
 
     d->managed = false;
     MTLResourceOptions opts = MTLResourceStorageModeShared;
+
+    QRHI_RES_RHI(QRhiMetal);
 #ifdef Q_OS_MACOS
-    if (m_type != Dynamic) {
+    if (!rhiD->caps.isAppleGPU && m_type != Dynamic) {
         opts = MTLResourceStorageModeManaged;
         d->managed = true;
     }
@@ -2301,7 +2356,6 @@ bool QMetalBuffer::create()
     // same buffer is still in flight.
     d->slotted = !m_usage.testFlag(QRhiBuffer::StorageBuffer); // except for SSBOs written in the shader
 
-    QRHI_RES_RHI(QRhiMetal);
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
         if (i == 0 || d->slotted) {
             d->buf[i] = [rhiD->d->dev newBufferWithLength: roundedSize options: opts];
@@ -2315,9 +2369,6 @@ bool QMetalBuffer::create()
             }
         }
     }
-
-    QRHI_PROF;
-    QRHI_PROF_F(newBuffer(this, roundedSize, d->slotted ? QMTL_FRAMES_IN_FLIGHT : 1, 0));
 
     lastActiveFrameSlot = -1;
     generation += 1;
@@ -2367,11 +2418,12 @@ void QMetalBuffer::endFullDynamicBufferUpdateForCurrentFrame()
 #endif
 }
 
-static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags, const QRhiMetalData *d)
+static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags, const QRhiMetal *d)
 {
 #ifndef Q_OS_MACOS
     Q_UNUSED(d);
 #endif
+
     const bool srgb = flags.testFlag(QRhiTexture::sRGB);
     switch (format) {
     case QRhiTexture::RGBA8:
@@ -2406,13 +2458,16 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
     case QRhiTexture::R32F:
         return MTLPixelFormatR32Float;
 
+    case QRhiTexture::RGB10A2:
+        return MTLPixelFormatRGB10A2Unorm;
+
 #ifdef Q_OS_MACOS
     case QRhiTexture::D16:
         return MTLPixelFormatDepth16Unorm;
     case QRhiTexture::D24:
-        return [d->dev isDepth24Stencil8PixelFormatSupported] ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float;
+        return [d->d->dev isDepth24Stencil8PixelFormatSupported] ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float;
     case QRhiTexture::D24S8:
-        return [d->dev isDepth24Stencil8PixelFormatSupported] ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float_Stencil8;
+        return [d->d->dev isDepth24Stencil8PixelFormatSupported] ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float_Stencil8;
 #else
     case QRhiTexture::D16:
         return MTLPixelFormatDepth32Float;
@@ -2435,7 +2490,7 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
         return MTLPixelFormatBC4_RUnorm;
     case QRhiTexture::BC5:
         qWarning("QRhiMetal does not support BC5");
-        return MTLPixelFormatRGBA8Unorm;
+        return MTLPixelFormatInvalid;
     case QRhiTexture::BC6H:
         return MTLPixelFormatBC6H_RGBUfloat;
     case QRhiTexture::BC7:
@@ -2449,7 +2504,7 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
     case QRhiTexture::BC6H:
     case QRhiTexture::BC7:
         qWarning("QRhiMetal: BCx compression not supported on this platform");
-        return MTLPixelFormatRGBA8Unorm;
+        return MTLPixelFormatInvalid;
 #endif
 
 #ifndef Q_OS_MACOS
@@ -2490,32 +2545,129 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
         return srgb ? MTLPixelFormatASTC_12x12_sRGB : MTLPixelFormatASTC_12x12_LDR;
 #else
     case QRhiTexture::ETC2_RGB8:
-    case QRhiTexture::ETC2_RGB8A1:
-    case QRhiTexture::ETC2_RGBA8:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatETC2_RGB8_sRGB : MTLPixelFormatETC2_RGB8;
+        }
         qWarning("QRhiMetal: ETC2 compression not supported on this platform");
-        return MTLPixelFormatRGBA8Unorm;
-
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ETC2_RGB8A1:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatETC2_RGB8A1_sRGB : MTLPixelFormatETC2_RGB8A1;
+        }
+        qWarning("QRhiMetal: ETC2 compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ETC2_RGBA8:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatEAC_RGBA8_sRGB : MTLPixelFormatEAC_RGBA8;
+        }
+        qWarning("QRhiMetal: ETC2 compression not supported on this platform");
+        return MTLPixelFormatInvalid;
     case QRhiTexture::ASTC_4x4:
-    case QRhiTexture::ASTC_5x4:
-    case QRhiTexture::ASTC_5x5:
-    case QRhiTexture::ASTC_6x5:
-    case QRhiTexture::ASTC_6x6:
-    case QRhiTexture::ASTC_8x5:
-    case QRhiTexture::ASTC_8x6:
-    case QRhiTexture::ASTC_8x8:
-    case QRhiTexture::ASTC_10x5:
-    case QRhiTexture::ASTC_10x6:
-    case QRhiTexture::ASTC_10x8:
-    case QRhiTexture::ASTC_10x10:
-    case QRhiTexture::ASTC_12x10:
-    case QRhiTexture::ASTC_12x12:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_4x4_sRGB : MTLPixelFormatASTC_4x4_LDR;
+        }
         qWarning("QRhiMetal: ASTC compression not supported on this platform");
-        return MTLPixelFormatRGBA8Unorm;
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_5x4:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_5x4_sRGB : MTLPixelFormatASTC_5x4_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_5x5:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_5x5_sRGB : MTLPixelFormatASTC_5x5_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_6x5:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_6x5_sRGB : MTLPixelFormatASTC_6x5_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_6x6:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_6x6_sRGB : MTLPixelFormatASTC_6x6_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_8x5:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_8x5_sRGB : MTLPixelFormatASTC_8x5_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_8x6:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_8x6_sRGB : MTLPixelFormatASTC_8x6_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_8x8:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_8x8_sRGB : MTLPixelFormatASTC_8x8_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_10x5:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_10x5_sRGB : MTLPixelFormatASTC_10x5_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_10x6:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_10x6_sRGB : MTLPixelFormatASTC_10x6_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_10x8:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_10x8_sRGB : MTLPixelFormatASTC_10x8_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_10x10:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_10x10_sRGB : MTLPixelFormatASTC_10x10_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_12x10:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_12x10_sRGB : MTLPixelFormatASTC_12x10_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
+    case QRhiTexture::ASTC_12x12:
+        if (d->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *))
+                return srgb ? MTLPixelFormatASTC_12x12_sRGB : MTLPixelFormatASTC_12x12_LDR;
+        }
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatInvalid;
 #endif
 
     default:
         Q_UNREACHABLE();
-        return MTLPixelFormatRGBA8Unorm;
+        return MTLPixelFormatInvalid;
     }
 }
 
@@ -2548,8 +2700,6 @@ void QMetalRenderBuffer::destroy()
     QRHI_RES_RHI(QRhiMetal);
     if (rhiD) {
         rhiD->d->releaseQueue.append(e);
-        QRHI_PROF;
-        QRHI_PROF_F(releaseRenderBuffer(this));
         rhiD->unregisterResource(this);
     }
 }
@@ -2574,16 +2724,23 @@ bool QMetalRenderBuffer::create()
     desc.resourceOptions = MTLResourceStorageModePrivate;
     desc.usage = MTLTextureUsageRenderTarget;
 
-    bool transientBacking = false;
     switch (m_type) {
     case DepthStencil:
 #ifdef Q_OS_MACOS
-        desc.storageMode = MTLStorageModePrivate;
-        d->format = rhiD->d->dev.depth24Stencil8PixelFormatSupported
-                ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float_Stencil8;
+        if (rhiD->caps.isAppleGPU) {
+            if (@available(macOS 11.0, *)) {
+                desc.storageMode = MTLStorageModeMemoryless;
+                d->format = MTLPixelFormatDepth32Float_Stencil8;
+            } else {
+                Q_UNREACHABLE();
+            }
+        } else {
+            desc.storageMode = MTLStorageModePrivate;
+            d->format = rhiD->d->dev.depth24Stencil8PixelFormatSupported
+                    ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float_Stencil8;
+        }
 #else
         desc.storageMode = MTLStorageModeMemoryless;
-        transientBacking = true;
         d->format = MTLPixelFormatDepth32Float_Stencil8;
 #endif
         desc.pixelFormat = d->format;
@@ -2591,7 +2748,7 @@ bool QMetalRenderBuffer::create()
     case Color:
         desc.storageMode = MTLStorageModePrivate;
         if (m_backingFormatHint != QRhiTexture::UnknownFormat)
-            d->format = toMetalTextureFormat(m_backingFormatHint, {}, rhiD->d);
+            d->format = toMetalTextureFormat(m_backingFormatHint, {}, rhiD);
         else
             d->format = MTLPixelFormatRGBA8Unorm;
         desc.pixelFormat = d->format;
@@ -2606,9 +2763,6 @@ bool QMetalRenderBuffer::create()
 
     if (!m_objectName.isEmpty())
         d->tex.label = [NSString stringWithUTF8String: m_objectName.constData()];
-
-    QRHI_PROF;
-    QRHI_PROF_F(newRenderBuffer(this, transientBacking, false, samples));
 
     lastActiveFrameSlot = -1;
     generation += 1;
@@ -2625,8 +2779,8 @@ QRhiTexture::Format QMetalRenderBuffer::backingFormat() const
 }
 
 QMetalTexture::QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, int depth,
-                             int sampleCount, Flags flags)
-    : QRhiTexture(rhi, format, pixelSize, depth, sampleCount, flags),
+                             int arraySize, int sampleCount, Flags flags)
+    : QRhiTexture(rhi, format, pixelSize, depth, arraySize, sampleCount, flags),
       d(new QMetalTextureData(this))
 {
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
@@ -2667,8 +2821,6 @@ void QMetalTexture::destroy()
     QRHI_RES_RHI(QRhiMetal);
     if (rhiD) {
         rhiD->d->releaseQueue.append(e);
-        QRHI_PROF;
-        QRHI_PROF_F(releaseTexture(this));
         rhiD->unregisterResource(this);
     }
 }
@@ -2681,10 +2833,11 @@ bool QMetalTexture::prepareCreate(QSize *adjustedSize)
     const QSize size = m_pixelSize.isEmpty() ? QSize(1, 1) : m_pixelSize;
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool is3D = m_flags.testFlag(ThreeDimensional);
+    const bool isArray = m_flags.testFlag(TextureArray);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
     QRHI_RES_RHI(QRhiMetal);
-    d->format = toMetalTextureFormat(m_format, m_flags, rhiD->d);
+    d->format = toMetalTextureFormat(m_format, m_flags, rhiD);
     mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
     samples = rhiD->effectiveSampleCount(m_sampleCount);
     if (samples > 1) {
@@ -2705,9 +2858,22 @@ bool QMetalTexture::prepareCreate(QSize *adjustedSize)
         qWarning("Texture cannot be both cube and 3D");
         return false;
     }
+    if (isArray && is3D) {
+        qWarning("Texture cannot be both array and 3D");
+        return false;
+    }
     m_depth = qMax(1, m_depth);
     if (m_depth > 1 && !is3D) {
         qWarning("Texture cannot have a depth of %d when it is not 3D", m_depth);
+        return false;
+    }
+    m_arraySize = qMax(0, m_arraySize);
+    if (m_arraySize > 0 && !isArray) {
+        qWarning("Texture cannot have an array size of %d when it is not an array", m_arraySize);
+        return false;
+    }
+    if (m_arraySize < 1 && isArray) {
+        qWarning("Texture is an array but array size is %d", m_arraySize);
         return false;
     }
 
@@ -2727,12 +2893,24 @@ bool QMetalTexture::create()
 
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool is3D = m_flags.testFlag(ThreeDimensional);
-    if (isCube)
+    const bool isArray = m_flags.testFlag(TextureArray);
+    if (isCube) {
         desc.textureType = MTLTextureTypeCube;
-    else if (is3D)
+    } else if (is3D) {
         desc.textureType = MTLTextureType3D;
-    else
+    } else if (isArray) {
+#ifdef Q_OS_IOS
+        if (samples > 1) {
+            // would be available on iOS 14.0+ but cannot test for that with a 13 SDK
+            qWarning("Multisample 2D texture array is not supported on iOS");
+        }
+        desc.textureType = MTLTextureType2DArray;
+#else
+        desc.textureType = samples > 1 ? MTLTextureType2DMultisampleArray : MTLTextureType2DArray;
+#endif
+    } else {
         desc.textureType = samples > 1 ? MTLTextureType2DMultisample : MTLTextureType2D;
+    }
     desc.pixelFormat = d->format;
     desc.width = NSUInteger(size.width());
     desc.height = NSUInteger(size.height());
@@ -2740,6 +2918,8 @@ bool QMetalTexture::create()
     desc.mipmapLevelCount = NSUInteger(mipLevelCount);
     if (samples > 1)
         desc.sampleCount = NSUInteger(samples);
+    if (isArray)
+        desc.arrayLength = NSUInteger(m_arraySize);
     desc.resourceOptions = MTLResourceStorageModePrivate;
     desc.storageMode = MTLStorageModePrivate;
     desc.usage = MTLTextureUsageShaderRead;
@@ -2756,9 +2936,6 @@ bool QMetalTexture::create()
         d->tex.label = [NSString stringWithUTF8String: m_objectName.constData()];
 
     d->owns = true;
-
-    QRHI_PROF;
-    QRHI_PROF_F(newTexture(this, true, mipLevelCount, isCube ? 6 : 1, samples));
 
     lastActiveFrameSlot = -1;
     generation += 1;
@@ -2778,9 +2955,6 @@ bool QMetalTexture::createFrom(QRhiTexture::NativeTexture src)
     d->tex = tex;
 
     d->owns = false;
-
-    QRHI_PROF;
-    QRHI_PROF_F(newTexture(this, false, mipLevelCount, m_flags.testFlag(CubeMap) ? 6 : 1, samples));
 
     lastActiveFrameSlot = -1;
     generation += 1;
@@ -2802,8 +2976,9 @@ id<MTLTexture> QMetalTextureData::viewForLevel(int level)
 
     const MTLTextureType type = [tex textureType];
     const bool isCube = q->m_flags.testFlag(QRhiTexture::CubeMap);
+    const bool isArray = q->m_flags.testFlag(QRhiTexture::TextureArray);
     id<MTLTexture> view = [tex newTextureViewWithPixelFormat: format textureType: type
-            levels: NSMakeRange(NSUInteger(level), 1) slices: NSMakeRange(0, isCube ? 6 : 1)];
+            levels: NSMakeRange(NSUInteger(level), 1) slices: NSMakeRange(0, isCube ? 6 : (isArray ? q->m_arraySize : 1))];
 
     perLevelViews[level] = view;
     return view;
@@ -3005,34 +3180,34 @@ QVector<quint32> QMetalRenderPassDescriptor::serializedFormat() const
     return serializedFormatData;
 }
 
-QMetalReferenceRenderTarget::QMetalReferenceRenderTarget(QRhiImplementation *rhi)
-    : QRhiRenderTarget(rhi),
+QMetalSwapChainRenderTarget::QMetalSwapChainRenderTarget(QRhiImplementation *rhi, QRhiSwapChain *swapchain)
+    : QRhiSwapChainRenderTarget(rhi, swapchain),
       d(new QMetalRenderTargetData)
 {
 }
 
-QMetalReferenceRenderTarget::~QMetalReferenceRenderTarget()
+QMetalSwapChainRenderTarget::~QMetalSwapChainRenderTarget()
 {
     destroy();
     delete d;
 }
 
-void QMetalReferenceRenderTarget::destroy()
+void QMetalSwapChainRenderTarget::destroy()
 {
     // nothing to do here
 }
 
-QSize QMetalReferenceRenderTarget::pixelSize() const
+QSize QMetalSwapChainRenderTarget::pixelSize() const
 {
     return d->pixelSize;
 }
 
-float QMetalReferenceRenderTarget::devicePixelRatio() const
+float QMetalSwapChainRenderTarget::devicePixelRatio() const
 {
     return d->dpr;
 }
 
-int QMetalReferenceRenderTarget::sampleCount() const
+int QMetalSwapChainRenderTarget::sampleCount() const
 {
     return d->sampleCount;
 }
@@ -3148,11 +3323,16 @@ bool QMetalTextureRenderTarget::create()
         d->dsAttCount = 0;
     }
 
+    QRhiRenderTargetAttachmentTracker::updateResIdList<QMetalTexture, QMetalRenderBuffer>(m_desc, &d->currentResIdList);
+
     return true;
 }
 
 QSize QMetalTextureRenderTarget::pixelSize() const
 {
+    if (!QRhiRenderTargetAttachmentTracker::isUpToDate<QMetalTexture, QMetalRenderBuffer>(m_desc, d->currentResIdList))
+        const_cast<QMetalTextureRenderTarget *>(this)->create();
+
     return d->pixelSize;
 }
 
@@ -3248,18 +3428,22 @@ void QMetalGraphicsPipeline::destroy()
     d->vs.destroy();
     d->fs.destroy();
 
-    [d->ds release];
-    d->ds = nil;
-
     if (!d->ps)
         return;
 
-    [d->ps release];
+    QRhiMetalData::DeferredReleaseEntry e;
+    e.type = QRhiMetalData::DeferredReleaseEntry::GraphicsPipeline;
+    e.lastActiveFrameSlot = lastActiveFrameSlot;
+    e.graphicsPipeline.depthStencilState = d->ds;
+    e.graphicsPipeline.pipelineState = d->ps;
+    d->ds = nil;
     d->ps = nil;
 
     QRHI_RES_RHI(QRhiMetal);
-    if (rhiD)
+    if (rhiD) {
+        rhiD->d->releaseQueue.append(e);
         rhiD->unregisterResource(this);
+    }
 }
 
 static inline MTLVertexFormat toMetalAttributeFormat(QRhiVertexInputAttribute::Format format)
@@ -3465,6 +3649,19 @@ static inline MTLCullMode toMetalCullMode(QRhiGraphicsPipeline::CullMode c)
     }
 }
 
+static inline MTLTriangleFillMode toMetalTriangleFillMode(QRhiGraphicsPipeline::PolygonMode mode)
+{
+    switch (mode) {
+    case QRhiGraphicsPipeline::Fill:
+        return MTLTriangleFillModeFill;
+    case QRhiGraphicsPipeline::Line:
+        return MTLTriangleFillModeLines;
+    default:
+        Q_UNREACHABLE();
+        return MTLTriangleFillModeFill;
+    }
+}
+
 id<MTLLibrary> QRhiMetalData::createMetalLib(const QShader &shader, QShader::Variant shaderVariant,
                                              QString *error, QByteArray *entryPoint, QShaderKey *activeKey)
 {
@@ -3527,10 +3724,7 @@ id<MTLLibrary> QRhiMetalData::createMetalLib(const QShader &shader, QShader::Var
 
 id<MTLFunction> QRhiMetalData::createMSLShaderFunction(id<MTLLibrary> lib, const QByteArray &entryPoint)
 {
-    NSString *name = [NSString stringWithUTF8String: entryPoint.constData()];
-    id<MTLFunction> f = [lib newFunctionWithName: name];
-    [name release];
-    return f;
+    return [lib newFunctionWithName:[NSString stringWithUTF8String:entryPoint.constData()]];
 }
 
 bool QMetalGraphicsPipeline::create()
@@ -3575,7 +3769,7 @@ bool QMetalGraphicsPipeline::create()
     // descriptor for each buffer combination as this depends on the actual
     // buffers not just the resource binding layout) so leave it at the default
 
-    for (const QRhiShaderStage &shaderStage : qAsConst(m_shaderStages)) {
+    for (const QRhiShaderStage &shaderStage : std::as_const(m_shaderStages)) {
         auto cacheIt = rhiD->d->shaderCache.constFind(shaderStage);
         if (cacheIt != rhiD->d->shaderCache.constEnd()) {
             switch (shaderStage.type()) {
@@ -3621,8 +3815,7 @@ bool QMetalGraphicsPipeline::create()
             case QRhiShaderStage::Vertex:
                 d->vs.lib = lib;
                 d->vs.func = func;
-                if (const QShader::NativeResourceBindingMap *map = shader.nativeResourceBindingMap(activeKey))
-                    d->vs.nativeResourceBindingMap = *map;
+                d->vs.nativeResourceBindingMap = shader.nativeResourceBindingMap(activeKey);
                 rhiD->d->shaderCache.insert(shaderStage, d->vs);
                 [d->vs.lib retain];
                 [d->vs.func retain];
@@ -3631,8 +3824,7 @@ bool QMetalGraphicsPipeline::create()
             case QRhiShaderStage::Fragment:
                 d->fs.lib = lib;
                 d->fs.func = func;
-                if (const QShader::NativeResourceBindingMap *map = shader.nativeResourceBindingMap(activeKey))
-                    d->fs.nativeResourceBindingMap = *map;
+                d->fs.nativeResourceBindingMap = shader.nativeResourceBindingMap(activeKey);
                 rhiD->d->shaderCache.insert(shaderStage, d->fs);
                 [d->fs.lib retain];
                 [d->fs.func retain];
@@ -3676,7 +3868,7 @@ bool QMetalGraphicsPipeline::create()
         // validation blows up otherwise.
         MTLPixelFormat fmt = MTLPixelFormat(rpD->dsFormat);
         rpDesc.depthAttachmentPixelFormat = fmt;
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS)
         if (fmt != MTLPixelFormatDepth16Unorm && fmt != MTLPixelFormatDepth32Float)
 #else
         if (fmt != MTLPixelFormatDepth32Float)
@@ -3723,6 +3915,7 @@ bool QMetalGraphicsPipeline::create()
     d->primitiveType = toMetalPrimitiveType(m_topology);
     d->winding = m_frontFace == CCW ? MTLWindingCounterClockwise : MTLWindingClockwise;
     d->cullMode = toMetalCullMode(m_cullMode);
+    d->triangleFillMode = toMetalTriangleFillMode(m_polygonMode);
     d->depthBias = float(m_depthBias);
     d->slopeScaledDepthBias = m_slopeScaledDepthBias;
 
@@ -3751,12 +3944,17 @@ void QMetalComputePipeline::destroy()
     if (!d->ps)
         return;
 
-    [d->ps release];
+    QRhiMetalData::DeferredReleaseEntry e;
+    e.type = QRhiMetalData::DeferredReleaseEntry::ComputePipeline;
+    e.lastActiveFrameSlot = lastActiveFrameSlot;
+    e.computePipeline.pipelineState = d->ps;
     d->ps = nil;
 
     QRHI_RES_RHI(QRhiMetal);
-    if (rhiD)
+    if (rhiD) {
+        rhiD->d->releaseQueue.append(e);
         rhiD->unregisterResource(this);
+    }
 }
 
 bool QMetalComputePipeline::create()
@@ -3789,8 +3987,7 @@ bool QMetalComputePipeline::create()
         d->cs.lib = lib;
         d->cs.func = func;
         d->cs.localSize = shader.description().computeShaderLocalSize();
-        if (const QShader::NativeResourceBindingMap *map = shader.nativeResourceBindingMap(activeKey))
-            d->cs.nativeResourceBindingMap = *map;
+        d->cs.nativeResourceBindingMap = shader.nativeResourceBindingMap(activeKey);
 
         if (rhiD->d->shaderCache.count() >= QRhiMetal::MAX_SHADER_CACHE_ENTRIES) {
             for (QMetalShader &s : rhiD->d->shaderCache)
@@ -3872,6 +4069,7 @@ void QMetalCommandBuffer::resetPerPassCachedState()
     currentIndexOffset = 0;
     currentIndexFormat = QRhiCommandBuffer::IndexUInt16;
     currentCullMode = -1;
+    currentTriangleFillMode = -1;
     currentFrontFaceWinding = -1;
     currentDepthBiasValues = { 0.0f, 0.0f };
 
@@ -3882,7 +4080,7 @@ void QMetalCommandBuffer::resetPerPassCachedState()
 
 QMetalSwapChain::QMetalSwapChain(QRhiImplementation *rhi)
     : QRhiSwapChain(rhi),
-      rtWrapper(rhi),
+      rtWrapper(rhi, this),
       cbWrapper(rhi),
       d(new QMetalSwapChainData)
 {
@@ -3927,8 +4125,6 @@ void QMetalSwapChain::destroy()
     QRHI_RES_RHI(QRhiMetal);
     if (rhiD) {
         rhiD->swapchains.remove(this);
-        QRHI_PROF;
-        QRHI_PROF_F(releaseSwapChain(this));
         rhiD->unregisterResource(this);
     }
 }
@@ -3968,6 +4164,14 @@ QSize QMetalSwapChain::surfacePixelSize()
     return QSizeF::fromCGSize(layerSize).toSize();
 }
 
+bool QMetalSwapChain::isFormatSupported(Format f)
+{
+#ifdef Q_OS_MACOS
+    return f == SDR || f == HDRExtendedSrgbLinear;
+#endif
+    return f == SDR;
+}
+
 QRhiRenderPassDescriptor *QMetalSwapChain::newCompatibleRenderPassDescriptor()
 {
     chooseFormats(); // ensure colorFormat and similar are filled out
@@ -3996,6 +4200,11 @@ void QMetalSwapChain::chooseFormats()
     QRHI_RES_RHI(QRhiMetal);
     samples = rhiD->effectiveSampleCount(m_sampleCount);
     // pick a format that is allowed for CAMetalLayer.pixelFormat
+    if (m_format == HDRExtendedSrgbLinear) {
+        d->colorFormat = MTLPixelFormatRGBA16Float;
+        d->rhiColorFormat = QRhiTexture::RGBA16F;
+        return;
+    }
     d->colorFormat = m_flags.testFlag(sRGB) ? MTLPixelFormatBGRA8Unorm_sRGB : MTLPixelFormatBGRA8Unorm;
     d->rhiColorFormat = QRhiTexture::BGRA8;
 }
@@ -4027,6 +4236,13 @@ bool QMetalSwapChain::createOrResize()
     chooseFormats();
     if (d->colorFormat != d->layer.pixelFormat)
         d->layer.pixelFormat = d->colorFormat;
+#ifdef Q_OS_MACOS
+    // Can't enable this on iOS until wantsExtendedDynamicRangeContent is available
+    if (m_format == HDRExtendedSrgbLinear) {
+        d->layer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearSRGB);
+        d->layer.wantsExtendedDynamicRangeContent = YES;
+    }
+#endif
 
     if (m_flags.testFlag(UsedAsTransferSource))
         d->layer.framebufferOnly = NO;
@@ -4090,6 +4306,7 @@ bool QMetalSwapChain::createOrResize()
         }
     }
 
+    rtWrapper.setRenderPassDescriptor(m_renderPassDesc); // for the public getter in QRhiRenderTarget
     rtWrapper.d->pixelSize = pixelSize;
     rtWrapper.d->dpr = float(window->devicePixelRatio());
     rtWrapper.d->sampleCount = samples;
@@ -4115,13 +4332,32 @@ bool QMetalSwapChain::createOrResize()
         [desc release];
     }
 
-    QRHI_PROF;
-    QRHI_PROF_F(resizeSwapChain(this, QMTL_FRAMES_IN_FLIGHT, samples > 1 ? QMTL_FRAMES_IN_FLIGHT : 0, samples));
-
     if (needsRegistration)
         rhiD->registerResource(this);
 
     return true;
+}
+
+QRhiSwapChainHdrInfo QMetalSwapChain::hdrInfo()
+{
+    QRhiSwapChainHdrInfo info;
+    info.limitsType = QRhiSwapChainHdrInfo::ColorComponentValue;
+    if (m_format == SDR) {
+        info.limits.colorComponentValue.maxColorComponentValue = 1;
+        return info;
+    }
+
+#ifdef Q_OS_MACOS
+    info.isHardCodedDefaults = false;
+    NSView *view = reinterpret_cast<NSView *>(window->winId());
+    info.limits.colorComponentValue.maxColorComponentValue = view.window.screen.maximumExtendedDynamicRangeColorComponentValue;
+#else
+    // ### Fixme: Maybe retrieve the brightness from the screen and if we're not at full brightness we might be able to do more.
+    // For now, assume 2, in line with iPhone 12 specs that claim 625 nits max brightness and 1200 nits max HDR brightness.
+    info.isHardCodedDefaults = true;
+    info.limits.colorComponentValue.maxColorComponentValue = 2;
+#endif
+    return info;
 }
 
 QT_END_NAMESPACE

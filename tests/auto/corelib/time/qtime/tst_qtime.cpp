@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <private/qglobal_p.h>
 #include <QTest>
@@ -553,11 +528,18 @@ void tst_QTime::fromStringFormat_data()
     QTest::newRow("data7") << QString("25") << QString("hh") << invalidTime();
     QTest::newRow("data8") << QString("22pm") << QString("Hap") << QTime(22, 0, 0);
     QTest::newRow("data9") << QString("2221") << QString("hhhh") << invalidTime();
-    QTest::newRow("data10") << QString("02:23PM") << QString("hh:mmAP") << QTime(14,23,0,0);
-    QTest::newRow("data11") << QString("02:23pm") << QString("hh:mmap") << QTime(14,23,0,0);
-    QTest::newRow("short-msecs-lt100") << QString("10:12:34:045") << QString("hh:m:ss:z") << QTime(10,12,34,45);
-    QTest::newRow("short-msecs-gt100") << QString("10:12:34:45") << QString("hh:m:ss:z") << QTime(10,12,34,450);
-    QTest::newRow("late") << QString("23:59:59.999") << QString("hh:mm:ss.z") << QTime(23, 59, 59, 999);
+    // Parsing of am/pm indicators is case-insensitive
+    QTest::newRow("pm-upper") << QString("02:23PM") << QString("hh:mmAp") << QTime(14, 23);
+    QTest::newRow("pm-lower") << QString("02:23pm") << QString("hh:mmaP") << QTime(14, 23);
+    QTest::newRow("pm-as-upper") << QString("02:23Pm") << QString("hh:mmAP") << QTime(14, 23);
+    QTest::newRow("pm-as-lower") << QString("02:23pM") << QString("hh:mmap") << QTime(14, 23);
+    // Millisecond parsing must interpolate 0s only at the end and notice them at the start.
+    QTest::newRow("short-msecs-lt100")
+        << QString("10:12:34:045") << QString("hh:m:ss:z") << QTime(10, 12, 34, 45);
+    QTest::newRow("short-msecs-gt100")
+        << QString("10:12:34:45") << QString("hh:m:ss:z") << QTime(10, 12, 34, 450);
+    QTest::newRow("late")
+        << QString("23:59:59.999") << QString("hh:mm:ss.z") << QTime(23, 59, 59, 999);
 
     // Test unicode handling.
     QTest::newRow("emoji in format string 1")

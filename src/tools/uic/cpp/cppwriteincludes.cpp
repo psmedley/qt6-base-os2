@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "cppwriteincludes.h"
 #include "driver.h"
@@ -40,6 +15,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 enum { debugWriteIncludes = 0 };
 enum { warnHeaderGeneration = 0 };
 
@@ -47,7 +24,7 @@ enum { warnHeaderGeneration = 0 };
 static inline QString moduleHeader(const QString &module, const QString &header)
 {
     QString rc = module;
-    rc += QLatin1Char('/');
+    rc += u'/';
     rc += header;
     return rc;
 }
@@ -60,11 +37,11 @@ WriteIncludes::WriteIncludes(Uic *uic) : WriteIncludesBase(uic),
     // When possible (no namespace) use the "QtModule/QClass" convention
     // and create a re-mapping of the old header "qclass.h" to it. Do not do this
     // for the "Phonon::Someclass" classes, however.
-    const QString namespaceDelimiter = QLatin1String("::");
+    const QString namespaceDelimiter = "::"_L1;
     for (const auto &e : classInfoEntries()) {
-        const QString klass = QLatin1String(e.klass);
-        const QString module = QLatin1String(e.module);
-        QLatin1String header = QLatin1String(e.header);
+        const QString klass = QLatin1StringView(e.klass);
+        const QString module = QLatin1StringView(e.module);
+        QLatin1StringView header = QLatin1StringView(e.header);
         if (klass.contains(namespaceDelimiter)) {
             m_classToHeader.insert(klass, moduleHeader(module, header));
         } else {
@@ -113,7 +90,7 @@ void WriteIncludes::insertIncludeForClass(const QString &className, QString head
         // Quick check by class name to detect includehints provided for custom widgets.
         // Remove namespaces
         QString lowerClassName = className.toLower();
-        static const QString namespaceSeparator = QLatin1String("::");
+        static const QString namespaceSeparator = "::"_L1;
         const int namespaceIndex = lowerClassName.lastIndexOf(namespaceSeparator);
         if (namespaceIndex != -1)
             lowerClassName.remove(0, namespaceIndex + namespaceSeparator.size());
@@ -126,7 +103,7 @@ void WriteIncludes::insertIncludeForClass(const QString &className, QString head
         if (!uic()->option().implicitIncludes)
             break;
         header = lowerClassName;
-        header += QLatin1String(".h");
+        header += ".h"_L1;
         if (warnHeaderGeneration) {
             qWarning("%s: Warning: generated header '%s' for class '%s'.",
                      qPrintable(uic()->option().messagePrefix()),
@@ -157,7 +134,7 @@ void WriteIncludes::addCppCustomWidget(const QString &className, const DomCustom
         QString header;
         bool global = false;
         if (!m_classToHeader.contains(className)) {
-            global = domHeader->attributeLocation().toLower() == QLatin1String("global");
+            global = domHeader->attributeLocation().toLower() == "global"_L1;
             header = domHeader->text();
         }
         insertIncludeForClass(className, header, global);
@@ -169,7 +146,7 @@ void WriteIncludes::acceptInclude(DomInclude *node)
 {
     bool global = true;
     if (node->hasAttributeLocation())
-        global = node->attributeLocation() == QLatin1String("global");
+        global = node->attributeLocation() == "global"_L1;
     insertInclude(node->text(), global);
 }
 
@@ -190,8 +167,8 @@ void WriteIncludes::insertInclude(const QString &header, bool global)
 
 void WriteIncludes::writeHeaders(const OrderedSet &headers, bool global)
 {
-    const QChar openingQuote = global ? QLatin1Char('<') : QLatin1Char('"');
-    const QChar closingQuote = global ? QLatin1Char('>') : QLatin1Char('"');
+    const QChar openingQuote = global ? u'<' : u'"';
+    const QChar closingQuote = global ? u'>' : u'"';
 
     // Check for the old headers 'qslider.h' and replace by 'QtGui/QSlider'
     for (const QString &header : headers) {

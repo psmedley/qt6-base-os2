@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -63,6 +38,8 @@
 #include <QSignalSpy>
 #include <QTimer>
 
+#include <QtGui/private/qeventpoint_p.h>
+
 using AbstractGraphicsShapeItemPtr = QSharedPointer<QAbstractGraphicsShapeItem>;
 using GraphicsItems = QList<QGraphicsItem *>;
 using GraphicsItemsList = QList<QGraphicsItem *>;
@@ -74,7 +51,7 @@ Q_DECLARE_METATYPE(QSizeF)
 Q_DECLARE_METATYPE(QTransform)
 
 #if defined(Q_OS_WIN)
-#include <windows.h>
+#include <qt_windows.h>
 #define Q_CHECK_PAINTEVENTS \
     if (::SwitchDesktop(::GetThreadDesktop(::GetCurrentThreadId())) == 0) \
         QSKIP("The Graphics View doesn't get the paint events");
@@ -2229,7 +2206,7 @@ void tst_QGraphicsItem::setTransform()
     scene.update(scene.sceneRect());
     QCoreApplication::processEvents();
 
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     item.setTransform(QTransform().rotate(qreal(12.34)));
     QRectF rotatedRect = scene.sceneRect();
@@ -2237,14 +2214,14 @@ void tst_QGraphicsItem::setTransform()
     scene.update(scene.sceneRect());
     QCoreApplication::processEvents();
 
-    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.size(), 2);
 
     item.setTransform(QTransform());
 
     scene.update(scene.sceneRect());
     QCoreApplication::processEvents();
 
-    QCOMPARE(spy.count(), 3);
+    QCOMPARE(spy.size(), 3);
     QList<QRectF> rlist = qvariant_cast<QList<QRectF> >(spy.last().at(0));
 
     QCOMPARE(rlist.size(), 2);
@@ -3624,7 +3601,7 @@ void tst_QGraphicsItem::group()
 
     view.fitInView(scene.itemsBoundingRect());
 
-    for (QGraphicsItem *item : qAsConst(newItems)) {
+    for (QGraphicsItem *item : std::as_const(newItems)) {
         group->addToGroup(item);
         QCOMPARE(item->group(), group);
     }
@@ -5360,8 +5337,9 @@ void tst_QGraphicsItem::deleteItemInEventHandlers()
 
 #ifndef QT_NO_CONTEXTMENU
         if (!HarakiriItem::dead) {
-            QContextMenuEvent event(QContextMenuEvent::Other,
-                                    view.mapFromScene(item->scenePos()));
+            auto viewPos = view.mapFromScene(item->scenePos());
+            QContextMenuEvent event(QContextMenuEvent::Other, viewPos,
+                                    view.mapToGlobal(viewPos));
             QCoreApplication::sendEvent(view.viewport(), &event);
         }
 #endif // QT_NO_CONTEXTMENU
@@ -5703,7 +5681,7 @@ void tst_QGraphicsItem::itemClipsChildrenToShape5()
     }
 
     const QList<QGraphicsItem *> children = parent->childItems();
-    const int childrenCount = children.count();
+    const int childrenCount = children.size();
 
     for (int i = 0; i < 5; ++i) {
         QString clipString;
@@ -8243,7 +8221,7 @@ void tst_QGraphicsItem::sorting()
         QVERIFY(QTest::qWaitForWindowActive(&view));
     }
     QVERIFY(QTest::qWaitForWindowExposed(&view));
-    QTRY_VERIFY(_paintedItems.count() > 0);
+    QTRY_VERIFY(_paintedItems.size() > 0);
 
     _paintedItems.clear();
 
@@ -11017,13 +10995,13 @@ static QList<QEventPoint>
                       QEventPoint::State state = QEventPoint::State::Pressed)
 {
     const QPointF screenPos = view.viewport()->mapToGlobal(view.mapFromScene(scenePos));
-    QMutableEventPoint tp(0, state, scenePos, screenPos);
-    tp.setState(state);
-    tp.setScenePosition(scenePos);
-    tp.setGlobalPosition(screenPos);
-    tp.setGlobalPressPosition(screenPos);
-    tp.setGlobalLastPosition(screenPos);
-    tp.setEllipseDiameters(ellipseDiameters);
+    QEventPoint tp(0, state, scenePos, screenPos);
+    QMutableEventPoint::setState(tp, state);
+    QMutableEventPoint::setScenePosition(tp, scenePos);
+    QMutableEventPoint::setGlobalPosition(tp, screenPos);
+    QMutableEventPoint::setGlobalPressPosition(tp, screenPos);
+    QMutableEventPoint::setGlobalLastPosition(tp, screenPos);
+    QMutableEventPoint::setEllipseDiameters(tp, ellipseDiameters);
     return QList<QEventPoint>() << tp;
 }
 
@@ -11708,7 +11686,7 @@ public:
         QLatin1String wiseWords("AZ BUKI VEDI");
         QString sentence(wiseWords);
         QStringList words = sentence.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-        for (int i = 0; i < words.count(); ++i) {
+        for (int i = 0; i < words.size(); ++i) {
             QGraphicsProxyWidget *proxy = new QGraphicsProxyWidget(this);
             QLabel *label = new QLabel(words.at(i));
             proxy->setWidget(label);

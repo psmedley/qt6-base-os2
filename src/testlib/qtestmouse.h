@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtTest module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QTESTMOUSE_H
 #define QTESTMOUSE_H
@@ -103,8 +67,8 @@ namespace QTest
         // pos is in window local coordinates
         const QSize windowSize = window->geometry().size();
         if (windowSize.width() <= pos.x() || windowSize.height() <= pos.y()) {
-            QTest::qWarn(qPrintable(QString::fromLatin1("Mouse event at %1, %2 occurs outside of target window (%3x%4).")
-                .arg(pos.x()).arg(pos.y()).arg(windowSize.width()).arg(windowSize.height())));
+            qWarning("Mouse event at %d, %d occurs outside target window (%dx%d).",
+                     pos.x(), pos.y(), windowSize.width(), windowSize.height());
         }
 
         if (delay == -1 || delay < defaultMouseDelay())
@@ -114,9 +78,9 @@ namespace QTest
         if (pos.isNull())
             pos = QPoint(window->width() / 2, window->height() / 2);
 
-        QTEST_ASSERT(uint(stateKey) == 0 || stateKey & Qt::KeyboardModifierMask);
+        QTEST_ASSERT(!stateKey || stateKey & Qt::KeyboardModifierMask);
 
-        stateKey &= static_cast<unsigned int>(Qt::KeyboardModifierMask);
+        stateKey &= Qt::KeyboardModifierMask;
 
         QPointF global = window->mapToGlobal(pos);
         QPointer<QWindow> w(window);
@@ -201,34 +165,41 @@ namespace QTest
             return;
         }
 
-        QTEST_ASSERT(stateKey == 0 || stateKey & Qt::KeyboardModifierMask);
+        QTEST_ASSERT(!stateKey || stateKey & Qt::KeyboardModifierMask);
 
-        stateKey &= static_cast<unsigned int>(Qt::KeyboardModifierMask);
+        stateKey &= Qt::KeyboardModifierMask;
 
         QEvent::Type meType;
-        Qt::MouseButton meButton;
+        using namespace QTestPrivate;
         switch (action)
         {
             case MousePress:
+                qtestMouseButtons.setFlag(button, true);
                 meType = QEvent::MouseButtonPress;
-                meButton = button;
                 break;
             case MouseRelease:
+                qtestMouseButtons.setFlag(button, false);
                 meType = QEvent::MouseButtonRelease;
-                meButton = Qt::MouseButton();
                 break;
             case MouseDClick:
+                qtestMouseButtons.setFlag(button, true);
                 meType = QEvent::MouseButtonDblClick;
-                meButton = button;
                 break;
             case MouseMove:
-                QCursor::setPos(widget->mapToGlobal(pos));
-                qApp->processEvents();
-                return;
+                // ### Qt 7: compatibility with < Qt 6.3, we should not rely on QCursor::setPos
+                // for generating mouse move events, and code that depends on QCursor::pos should
+                // be tested using QCursor::setPos explicitly.
+                if (qtestMouseButtons == Qt::NoButton) {
+                    QCursor::setPos(widget->mapToGlobal(pos));
+                    qApp->processEvents();
+                    return;
+                }
+                meType = QEvent::MouseMove;
+                break;
             default:
                 QTEST_ASSERT(false);
         }
-        QMouseEvent me(meType, pos, widget->mapToGlobal(pos), button, meButton, stateKey, QPointingDevice::primaryPointingDevice());
+        QMouseEvent me(meType, pos, widget->mapToGlobal(pos), button, qtestMouseButtons, stateKey, QPointingDevice::primaryPointingDevice());
         me.setTimestamp(lastMouseTimestamp);
         if (action == MouseRelease) // avoid double clicks being generated
             lastMouseTimestamp += mouseDoubleClickInterval;
@@ -237,8 +208,8 @@ namespace QTest
         if (!qApp->notify(widget, &me)) {
             static const char *const mouseActionNames[] =
                 { "MousePress", "MouseRelease", "MouseClick", "MouseDClick", "MouseMove" };
-            QString warning = QString::fromLatin1("Mouse event \"%1\" not accepted by receiving widget");
-            QTest::qWarn(warning.arg(QString::fromLatin1(mouseActionNames[static_cast<int>(action)])).toLatin1().data());
+            qWarning("Mouse event \"%s\" not accepted by receiving widget",
+                     mouseActionNames[static_cast<int>(action)]);
         }
 #endif
     }

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QDebug>
 
@@ -278,9 +242,9 @@ QGLXContext::QGLXContext(Display *display, QXcbScreen *screen, const QSurfaceFor
             // Robustness must match that of the shared context.
             if (share && share->format().testOption(QSurfaceFormat::ResetNotification))
                 m_format.setOption(QSurfaceFormat::ResetNotification);
-            Q_ASSERT(glVersions.count() > 0);
+            Q_ASSERT(glVersions.size() > 0);
 
-            for (int i = 0; !m_context && i < glVersions.count(); i++) {
+            for (int i = 0; !m_context && i < glVersions.size(); i++) {
                 const int version = glVersions[i];
                 if (version > requestedVersion)
                     continue;
@@ -431,14 +395,19 @@ QGLXContext::QGLXContext(Display *display, GLXContext context, void *visualInfo,
         int numConfigs = 0;
         static const int attribs[] = { GLX_FBCONFIG_ID, configId, None };
         configs = glXChooseFBConfig(m_display, screenNumber, attribs, &numConfigs);
-        if (!configs || numConfigs < 1) {
+        if (!configs) {
+            qWarning("QGLXContext: Failed to find config(invalid arguments for glXChooseFBConfig)");
+            return;
+        } else if (numConfigs < 1) {
             qWarning("QGLXContext: Failed to find config");
+            XFree(configs);
             return;
         }
         if (configs && numConfigs > 1) // this is suspicious so warn but let it continue
             qWarning("QGLXContext: Multiple configs for FBConfig ID %d", configId);
 
         m_config = configs[0];
+        XFree(configs);
     }
 
     Q_ASSERT(vinfo || m_config);

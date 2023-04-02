@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QScopedValueRollback>
@@ -211,7 +186,7 @@ static void doTestData(const QString &testString, const QList<int> &expectedBrea
     QVERIFY(boundaryFinder.boundaryReasons() == QTextBoundaryFinder::NotAtBoundary);
 
     // test boundaryReasons()
-    for (int i = 0; i <= testString.length(); ++i) {
+    for (int i = 0; i <= testString.size(); ++i) {
         boundaryFinder.setPosition(i);
         QCOMPARE(!!(boundaryFinder.boundaryReasons() & reasons), expectedBreakPositions.contains(i));
     }
@@ -445,9 +420,9 @@ void tst_QTextBoundaryFinder::wordBoundaries_manual_data()
     {
         QString testString(QString::fromUtf8("This is     a sample buffer.Please test me .     He's don't Le'Clerk."));
         QList<int> expectedBreakPositions, expectedStartPositions, expectedEndPositions;
-        expectedBreakPositions << 0 << 4 << 5 << 7 << 8 << 9 << 10 << 11 << 12 << 13 << 14 << 20 << 21 << 27
-                               << 28 << 34 << 35 << 39 << 40 << 42 << 43 << 44 << 45 << 46 << 47 << 48
-                               << 49 << 53 << 54 << 59 << 60 << 68 << 69;
+        expectedBreakPositions << 0 << 4 << 5 << 7 << 12 << 13 << 14 << 20 << 21 << 27 << 28 << 34
+                               << 35 << 39 << 40 << 42 << 43 << 44 << 49 << 53 << 54 << 59 << 60
+                               << 68 << 69;
         expectedStartPositions << 0 << 5 << 12 << 14 << 21 << 28 << 35 << 40 << 49 << 54 << 60;
         expectedEndPositions   << 4 << 7 << 13 << 20 << 27 << 34 << 39 << 42 << 53 << 59 << 68;
 
@@ -793,7 +768,7 @@ void tst_QTextBoundaryFinder::emptyText()
 void tst_QTextBoundaryFinder::fastConstructor()
 {
     QString text("Hello World");
-    QTextBoundaryFinder finder(QTextBoundaryFinder::Word, text.constData(), text.length(), /*buffer*/0, /*buffer size*/0);
+    QTextBoundaryFinder finder(QTextBoundaryFinder::Word, text.constData(), text.size(), /*buffer*/0, /*buffer size*/0);
 
     QCOMPARE(finder.position(), 0);
     QVERIFY(finder.boundaryReasons() & QTextBoundaryFinder::StartOfItem);
@@ -807,7 +782,7 @@ void tst_QTextBoundaryFinder::fastConstructor()
     QVERIFY(finder.boundaryReasons() & QTextBoundaryFinder::StartOfItem);
 
     finder.toNextBoundary();
-    QCOMPARE(finder.position(), text.length());
+    QCOMPARE(finder.position(), text.size());
     QVERIFY(finder.boundaryReasons() & QTextBoundaryFinder::EndOfItem);
 
     finder.toNextBoundary();

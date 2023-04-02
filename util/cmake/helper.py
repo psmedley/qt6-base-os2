@@ -1,30 +1,5 @@
-#############################################################################
-##
-## Copyright (C) 2018 The Qt Company Ltd.
-## Contact: https://www.qt.io/licensing/
-##
-## This file is part of the plugins of the Qt Toolkit.
-##
-## $QT_BEGIN_LICENSE:GPL-EXCEPT$
-## Commercial License Usage
-## Licensees holding valid commercial Qt licenses may use this file in
-## accordance with the commercial license agreement provided with the
-## Software or, alternatively, in accordance with the terms contained in
-## a written agreement between you and The Qt Company. For licensing terms
-## and conditions see https://www.qt.io/terms-conditions. For further
-## information use the contact form at https://www.qt.io/contact-us.
-##
-## GNU General Public License Usage
-## Alternatively, this file may be used under the terms of the GNU
-## General Public License version 3 as published by the Free Software
-## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-## included in the packaging of this file. Please review the following
-## information to ensure the GNU General Public License requirements will
-## be met: https://www.gnu.org/licenses/gpl-3.0.html.
-##
-## $QT_END_LICENSE$
-##
-#############################################################################
+# Copyright (C) 2021 The Qt Company Ltd.
+# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 import re
 import typing
@@ -39,6 +14,7 @@ class LibraryMapping:
         *,
         resultVariable: typing.Optional[str] = None,
         extra: typing.List[str] = [],
+        components: typing.Optional[typing.List[str]] = None,
         appendFoundSuffix: bool = True,
         emit_if: str = "",
         is_bundled_with_qt: bool = False,
@@ -52,6 +28,7 @@ class LibraryMapping:
         self.appendFoundSuffix = appendFoundSuffix
         # Allows passing addiitonal arguments to the generated find_package call.
         self.extra = extra
+        self.components = components
         self.targetName = targetName
 
         # True if qt bundles the library sources as part of Qt.
@@ -77,343 +54,300 @@ class LibraryMapping:
 
 _qt_library_map = [
     # Qt:
+    LibraryMapping("androidextras", "Qt6", "Qt::AndroidExtras", components=["AndroidExtras"]),
+    LibraryMapping("3danimation", "Qt6", "Qt::3DAnimation", components=["3DAnimation"]),
+    LibraryMapping("3dcore", "Qt6", "Qt::3DCore", components=["3DCore"]),
+    LibraryMapping("3dcoretest", "Qt6", "Qt::3DCoreTest", components=["3DCoreTest"]),
+    LibraryMapping("3dextras", "Qt6", "Qt::3DExtras", components=["3DExtras"]),
+    LibraryMapping("3dinput", "Qt6", "Qt::3DInput", components=["3DInput"]),
+    LibraryMapping("3dlogic", "Qt6", "Qt::3DLogic", components=["3DLogic"]),
+    LibraryMapping("3dquick", "Qt6", "Qt::3DQuick", components=["3DQuick"]),
+    LibraryMapping("3dquickextras", "Qt6", "Qt::3DQuickExtras", components=["3DQuickExtras"]),
+    LibraryMapping("3dquickinput", "Qt6", "Qt::3DQuickInput", components=["3DQuickInput"]),
+    LibraryMapping("3dquickrender", "Qt6", "Qt::3DQuickRender", components=["3DQuickRender"]),
+    LibraryMapping("3drender", "Qt6", "Qt::3DRender", components=["3DRender"]),
     LibraryMapping(
-        "androidextras", "Qt6", "Qt::AndroidExtras", extra=["COMPONENTS", "AndroidExtras"]
+        "application-lib", "Qt6", "Qt::AppManApplication", components=["AppManApplication"]
     ),
-    LibraryMapping("3danimation", "Qt6", "Qt::3DAnimation", extra=["COMPONENTS", "3DAnimation"]),
-    LibraryMapping("3dcore", "Qt6", "Qt::3DCore", extra=["COMPONENTS", "3DCore"]),
-    LibraryMapping("3dcoretest", "Qt6", "Qt::3DCoreTest", extra=["COMPONENTS", "3DCoreTest"]),
-    LibraryMapping("3dextras", "Qt6", "Qt::3DExtras", extra=["COMPONENTS", "3DExtras"]),
-    LibraryMapping("3dinput", "Qt6", "Qt::3DInput", extra=["COMPONENTS", "3DInput"]),
-    LibraryMapping("3dlogic", "Qt6", "Qt::3DLogic", extra=["COMPONENTS", "3DLogic"]),
-    LibraryMapping("3dquick", "Qt6", "Qt::3DQuick", extra=["COMPONENTS", "3DQuick"]),
-    LibraryMapping(
-        "3dquickextras", "Qt6", "Qt::3DQuickExtras", extra=["COMPONENTS", "3DQuickExtras"]
-    ),
-    LibraryMapping("3dquickinput", "Qt6", "Qt::3DQuickInput", extra=["COMPONENTS", "3DQuickInput"]),
-    LibraryMapping(
-        "3dquickrender", "Qt6", "Qt::3DQuickRender", extra=["COMPONENTS", "3DQuickRender"]
-    ),
-    LibraryMapping("3drender", "Qt6", "Qt::3DRender", extra=["COMPONENTS", "3DRender"]),
-    LibraryMapping(
-        "application-lib", "Qt6", "Qt::AppManApplication", extra=["COMPONENTS", "AppManApplication"]
-    ),
-    LibraryMapping("axbase", "Qt6", "Qt::AxBase", extra=["COMPONENTS", "AxBase"]),
-    LibraryMapping("axcontainer", "Qt6", "Qt::AxContainer", extra=["COMPONENTS", "AxContainer"]),
-    LibraryMapping("axserver", "Qt6", "Qt::AxServer", extra=["COMPONENTS", "AxServer"]),
-    LibraryMapping("bluetooth", "Qt6", "Qt::Bluetooth", extra=["COMPONENTS", "Bluetooth"]),
-    LibraryMapping("bootstrap", "Qt6", "Qt::Bootstrap", extra=["COMPONENTS", "Bootstrap"]),
+    LibraryMapping("axbase", "Qt6", "Qt::AxBasePrivate", components=["AxBasePrivate"]),
+    LibraryMapping("axcontainer", "Qt6", "Qt::AxContainer", components=["AxContainer"]),
+    LibraryMapping("axserver", "Qt6", "Qt::AxServer", components=["AxServer"]),
+    LibraryMapping("bluetooth", "Qt6", "Qt::Bluetooth", components=["Bluetooth"]),
+    LibraryMapping("bootstrap", "Qt6", "Qt::Bootstrap", components=["Bootstrap"]),
     # bootstrap-dbus: Not needed in Qt6!
-    LibraryMapping("client", "Qt6", "Qt::WaylandClient", extra=["COMPONENTS", "WaylandClient"]),
-    LibraryMapping("coap", "Qt6", "Qt::Coap", extra=["COMPONENTS", "Coap"]),
-    LibraryMapping("common-lib", "Qt6", "Qt::AppManCommon", extra=["COMPONENTS", "AppManCommon"]),
-    LibraryMapping(
-        "compositor", "Qt6", "Qt::WaylandCompositor", extra=["COMPONENTS", "WaylandCompositor"]
-    ),
-    LibraryMapping("concurrent", "Qt6", "Qt::Concurrent", extra=["COMPONENTS", "Concurrent"]),
-    LibraryMapping("container", "Qt6", "Qt::AxContainer", extra=["COMPONENTS", "AxContainer"]),
-    LibraryMapping("control", "Qt6", "Qt::AxServer", extra=["COMPONENTS", "AxServer"]),
-    LibraryMapping(
-        "core_headers", "Qt6", "Qt::WebEngineCore", extra=["COMPONENTS", "WebEngineCore"]
-    ),
-    LibraryMapping("core", "Qt6", "Qt::Core", extra=["COMPONENTS", "Core"]),
-    LibraryMapping("crypto-lib", "Qt6", "Qt::AppManCrypto", extra=["COMPONENTS", "AppManCrypto"]),
-    LibraryMapping("dbus", "Qt6", "Qt::DBus", extra=["COMPONENTS", "DBus"]),
-    LibraryMapping("designer", "Qt6", "Qt::Designer", extra=["COMPONENTS", "Designer"]),
+    LibraryMapping("client", "Qt6", "Qt::WaylandClient", components=["WaylandClient"]),
+    LibraryMapping("coap", "Qt6", "Qt::Coap", components=["Coap"]),
+    LibraryMapping("common-lib", "Qt6", "Qt::AppManCommon", components=["AppManCommon"]),
+    LibraryMapping("compositor", "Qt6", "Qt::WaylandCompositor", components=["WaylandCompositor"]),
+    LibraryMapping("concurrent", "Qt6", "Qt::Concurrent", components=["Concurrent"]),
+    LibraryMapping("container", "Qt6", "Qt::AxContainer", components=["AxContainer"]),
+    LibraryMapping("control", "Qt6", "Qt::AxServer", components=["AxServer"]),
+    LibraryMapping("core_headers", "Qt6", "Qt::WebEngineCore", components=["WebEngineCore"]),
+    LibraryMapping("core", "Qt6", "Qt::Core", components=["Core"]),
+    LibraryMapping("crypto-lib", "Qt6", "Qt::AppManCrypto", components=["AppManCrypto"]),
+    LibraryMapping("dbus", "Qt6", "Qt::DBus", components=["DBus"]),
+    LibraryMapping("designer", "Qt6", "Qt::Designer", components=["Designer"]),
     LibraryMapping(
         "designercomponents",
         "Qt6",
-        "Qt::DesignerComponents",
-        extra=["COMPONENTS", "DesignerComponents"],
+        "Qt::DesignerComponentsPrivate",
+        components=["DesignerComponentsPrivate"],
     ),
     LibraryMapping(
         "devicediscovery",
         "Qt6",
         "Qt::DeviceDiscoverySupportPrivate",
-        extra=["COMPONENTS", "DeviceDiscoverySupportPrivate"],
+        components=["DeviceDiscoverySupportPrivate"],
     ),
     LibraryMapping(
         "devicediscovery_support",
         "Qt6",
         "Qt::DeviceDiscoverySupportPrivate",
-        extra=["COMPONENTS", "DeviceDiscoverySupportPrivate"],
+        components=["DeviceDiscoverySupportPrivate"],
     ),
-    LibraryMapping("edid", "Qt6", "Qt::EdidSupport", extra=["COMPONENTS", "EdidSupport"]),
-    LibraryMapping("edid_support", "Qt6", "Qt::EdidSupport", extra=["COMPONENTS", "EdidSupport"]),
-    LibraryMapping("eglconvenience", "Qt6", "Qt::EglSupport", extra=["COMPONENTS", "EglSupport"]),
+    LibraryMapping("edid", "Qt6", "Qt::EdidSupport", components=["EdidSupport"]),
+    LibraryMapping("edid_support", "Qt6", "Qt::EdidSupport", components=["EdidSupport"]),
+    LibraryMapping("eglconvenience", "Qt6", "Qt::EglSupport", components=["EglSupport"]),
     LibraryMapping(
         "eglfsdeviceintegration",
         "Qt6",
         "Qt::EglFSDeviceIntegrationPrivate",
-        extra=["COMPONENTS", "EglFSDeviceIntegrationPrivate"],
+        components=["EglFSDeviceIntegrationPrivate"],
     ),
     LibraryMapping(
         "eglfs_kms_support",
         "Qt6",
         "Qt::EglFsKmsSupportPrivate",
-        extra=["COMPONENTS", "EglFsKmsSupportPrivate"],
+        components=["EglFsKmsSupportPrivate"],
     ),
     LibraryMapping(
         "eglfs_kms_gbm_support",
         "Qt6",
         "Qt::EglFsKmsGbmSupportPrivate",
-        extra=["COMPONENTS", "EglFsKmsGbmSupportPrivate"],
+        components=["EglFsKmsGbmSupportPrivate"],
     ),
-    LibraryMapping("egl_support", "Qt6", "Qt::EglSupport", extra=["COMPONENTS", "EglSupport"]),
+    LibraryMapping("egl_support", "Qt6", "Qt::EglSupport", components=["EglSupport"]),
     # enginio: Not needed in Qt6!
     LibraryMapping(
         "eventdispatchers",
         "Qt6",
         "Qt::EventDispatcherSupport",
-        extra=["COMPONENTS", "EventDispatcherSupport"],
+        components=["EventDispatcherSupport"],
     ),
     LibraryMapping(
         "eventdispatcher_support",
         "Qt6",
         "Qt::EventDispatcherSupport",
-        extra=["COMPONENTS", "EventDispatcherSupport"],
+        components=["EventDispatcherSupport"],
     ),
-    LibraryMapping(
-        "fbconvenience", "Qt6", "Qt::FbSupportPrivate", extra=["COMPONENTS", "FbSupportPrivate"]
-    ),
-    LibraryMapping(
-        "fb_support", "Qt6", "Qt::FbSupportPrivate", extra=["COMPONENTS", "FbSupportPrivate"]
-    ),
+    LibraryMapping("fbconvenience", "Qt6", "Qt::FbSupportPrivate", components=["FbSupportPrivate"]),
+    LibraryMapping("fb_support", "Qt6", "Qt::FbSupportPrivate", components=["FbSupportPrivate"]),
     LibraryMapping(
         "fontdatabase_support",
         "Qt6",
         "Qt::FontDatabaseSupport",
-        extra=["COMPONENTS", "FontDatabaseSupport"],
+        components=["FontDatabaseSupport"],
     ),
-    LibraryMapping("gamepad", "Qt6", "Qt::Gamepad", extra=["COMPONENTS", "Gamepad"]),
-    LibraryMapping("geniviextras", "Qt6", "Qt::GeniviExtras", extra=["COMPONENTS", "GeniviExtras"]),
-    LibraryMapping(
-        "global", "Qt6", "Qt::Core", extra=["COMPONENTS", "Core"]
-    ),  # manually added special case
-    LibraryMapping("glx_support", "Qt6", "Qt::GlxSupport", extra=["COMPONENTS", "GlxSupport"]),
-    LibraryMapping(
-        "gsttools", "Qt6", "Qt::MultimediaGstTools", extra=["COMPONENTS", "MultimediaGstTools"]
-    ),
-    LibraryMapping("gui", "Qt6", "Qt::Gui", extra=["COMPONENTS", "Gui"]),
-    LibraryMapping("help", "Qt6", "Qt::Help", extra=["COMPONENTS", "Help"]),
+    LibraryMapping("gamepad", "Qt6", "Qt::Gamepad", components=["Gamepad"]),
+    LibraryMapping("geniviextras", "Qt6", "Qt::GeniviExtras", components=["GeniviExtras"]),
+    LibraryMapping("global", "Qt6", "Qt::Core", components=["Core"]),  # manually added special case
+    LibraryMapping("glx_support", "Qt6", "Qt::GlxSupport", components=["GlxSupport"]),
+    LibraryMapping("gsttools", "Qt6", "Qt::MultimediaGstTools", components=["MultimediaGstTools"]),
+    LibraryMapping("gui", "Qt6", "Qt::Gui", components=["Gui"]),
+    LibraryMapping("help", "Qt6", "Qt::Help", components=["Help"]),
     LibraryMapping(
         "hunspellinputmethod",
         "Qt6",
-        "Qt::HunspellInputMethod",
-        extra=["COMPONENTS", "HunspellInputMethod"],
+        "Qt::HunspellInputMethodPrivate",
+        components=["HunspellInputMethodPrivate"],
     ),
-    LibraryMapping(
-        "input", "Qt6", "Qt::InputSupportPrivate", extra=["COMPONENTS", "InputSupportPrivate"]
-    ),
+    LibraryMapping("input", "Qt6", "Qt::InputSupportPrivate", components=["InputSupportPrivate"]),
     LibraryMapping(
         "input_support",
         "Qt6",
         "Qt::InputSupportPrivate",
-        extra=["COMPONENTS", "InputSupportPrivate"],
+        components=["InputSupportPrivate"],
     ),
+    LibraryMapping("installer-lib", "Qt6", "Qt::AppManInstaller", components=["AppManInstaller"]),
+    LibraryMapping("ivi", "Qt6", "Qt::Ivi", components=["Ivi"]),
+    LibraryMapping("ivicore", "Qt6", "Qt::IviCore", components=["IviCore"]),
+    LibraryMapping("ivimedia", "Qt6", "Qt::IviMedia", components=["IviMedia"]),
+    LibraryMapping("knx", "Qt6", "Qt::Knx", components=["Knx"]),
     LibraryMapping(
-        "installer-lib", "Qt6", "Qt::AppManInstaller", extra=["COMPONENTS", "AppManInstaller"]
+        "kmsconvenience", "Qt6", "Qt::KmsSupportPrivate", components=["KmsSupportPrivate"]
     ),
-    LibraryMapping("ivi", "Qt6", "Qt::Ivi", extra=["COMPONENTS", "Ivi"]),
-    LibraryMapping("ivicore", "Qt6", "Qt::IviCore", extra=["COMPONENTS", "IviCore"]),
-    LibraryMapping("ivimedia", "Qt6", "Qt::IviMedia", extra=["COMPONENTS", "IviMedia"]),
-    LibraryMapping("knx", "Qt6", "Qt::Knx", extra=["COMPONENTS", "Knx"]),
-    LibraryMapping(
-        "kmsconvenience", "Qt6", "Qt::KmsSupportPrivate", extra=["COMPONENTS", "KmsSupportPrivate"]
-    ),
-    LibraryMapping(
-        "kms_support", "Qt6", "Qt::KmsSupportPrivate", extra=["COMPONENTS", "KmsSupportPrivate"]
-    ),
-    LibraryMapping(
-        "launcher-lib", "Qt6", "Qt::AppManLauncher", extra=["COMPONENTS", "AppManLauncher"]
-    ),
-    LibraryMapping("lib", "Qt6", "Qt::Designer", extra=["COMPONENTS", "Designer"]),
+    LibraryMapping("kms_support", "Qt6", "Qt::KmsSupportPrivate", components=["KmsSupportPrivate"]),
+    LibraryMapping("launcher-lib", "Qt6", "Qt::AppManLauncher", components=["AppManLauncher"]),
+    LibraryMapping("lib", "Qt6", "Qt::Designer", components=["Designer"]),
     LibraryMapping(
         "linuxaccessibility_support",
         "Qt6",
         "Qt::LinuxAccessibilitySupport",
-        extra=["COMPONENTS", "LinuxAccessibilitySupport"],
+        components=["LinuxAccessibilitySupport"],
     ),
-    LibraryMapping("location", "Qt6", "Qt::Location", extra=["COMPONENTS", "Location"]),
-    LibraryMapping("macextras", "Qt6", "Qt::MacExtras", extra=["COMPONENTS", "MacExtras"]),
-    LibraryMapping("main-lib", "Qt6", "Qt::AppManMain", extra=["COMPONENTS", "AppManMain"]),
-    LibraryMapping(
-        "manager-lib", "Qt6", "Qt::AppManManager", extra=["COMPONENTS", "AppManManager"]
-    ),
-    LibraryMapping(
-        "monitor-lib", "Qt6", "Qt::AppManMonitor", extra=["COMPONENTS", "AppManMonitor"]
-    ),
-    LibraryMapping("mqtt", "Qt6", "Qt::Mqtt", extra=["COMPONENTS", "Mqtt"]),
-    LibraryMapping("multimedia", "Qt6", "Qt::Multimedia", extra=["COMPONENTS", "Multimedia"]),
+    LibraryMapping("location", "Qt6", "Qt::Location", components=["Location"]),
+    LibraryMapping("macextras", "Qt6", "Qt::MacExtras", components=["MacExtras"]),
+    LibraryMapping("main-lib", "Qt6", "Qt::AppManMain", components=["AppManMain"]),
+    LibraryMapping("manager-lib", "Qt6", "Qt::AppManManager", components=["AppManManager"]),
+    LibraryMapping("monitor-lib", "Qt6", "Qt::AppManMonitor", components=["AppManMonitor"]),
+    LibraryMapping("mqtt", "Qt6", "Qt::Mqtt", components=["Mqtt"]),
+    LibraryMapping("multimedia", "Qt6", "Qt::Multimedia", components=["Multimedia"]),
     LibraryMapping(
         "multimediawidgets",
         "Qt6",
         "Qt::MultimediaWidgets",
-        extra=["COMPONENTS", "MultimediaWidgets"],
+        components=["MultimediaWidgets"],
     ),
-    LibraryMapping("network", "Qt6", "Qt::Network", extra=["COMPONENTS", "Network"]),
-    LibraryMapping("networkauth", "Qt6", "Qt::NetworkAuth", extra=["COMPONENTS", "NetworkAuth"]),
-    LibraryMapping("nfc", "Qt6", "Qt::Nfc", extra=["COMPONENTS", "Nfc"]),
-    LibraryMapping("oauth", "Qt6", "Qt::NetworkAuth", extra=["COMPONENTS", "NetworkAuth"]),
-    LibraryMapping("opcua", "Qt6", "Qt::OpcUa", extra=["COMPONENTS", "OpcUa"]),
+    LibraryMapping("network", "Qt6", "Qt::Network", components=["Network"]),
+    LibraryMapping("networkauth", "Qt6", "Qt::NetworkAuth", components=["NetworkAuth"]),
+    LibraryMapping("nfc", "Qt6", "Qt::Nfc", components=["Nfc"]),
+    LibraryMapping("oauth", "Qt6", "Qt::NetworkAuth", components=["NetworkAuth"]),
+    LibraryMapping("opcua", "Qt6", "Qt::OpcUa", components=["OpcUa"]),
+    LibraryMapping("opcua_private", "Qt6", "Qt::OpcUaPrivate", components=["OpcUaPrivate"]),
+    LibraryMapping("opengl", "Qt6", "Qt::OpenGL", components=["OpenGL"]),
+    LibraryMapping("openglwidgets", "Qt6", "Qt::OpenGLWidgets", components=["OpenGLWidgets"]),
+    LibraryMapping("package-lib", "Qt6", "Qt::AppManPackage", components=["AppManPackage"]),
     LibraryMapping(
-        "opcua_private", "Qt6", "Qt::OpcUaPrivate", extra=["COMPONENTS", "OpcUaPrivate"]
-    ),
-    LibraryMapping("opengl", "Qt6", "Qt::OpenGL", extra=["COMPONENTS", "OpenGL"]),
-    LibraryMapping(
-        "openglwidgets", "Qt6", "Qt::OpenGLWidgets", extra=["COMPONENTS", "OpenGLWidgets"]
-    ),
-    LibraryMapping(
-        "package-lib", "Qt6", "Qt::AppManPackage", extra=["COMPONENTS", "AppManPackage"]
-    ),
-    LibraryMapping(
-        "packetprotocol", "Qt6", "Qt::PacketProtocol", extra=["COMPONENTS", "PacketProtocol"]
+        "packetprotocol",
+        "Qt6",
+        "Qt::PacketProtocolPrivate",
+        components=["PacketProtocolPrivate"],
     ),
     LibraryMapping(
-        "particles", "Qt6", "Qt::QuickParticles", extra=["COMPONENTS", "QuickParticles"]
+        "particles",
+        "Qt6",
+        "Qt::QuickParticlesPrivate",
+        components=["QuickParticlesPrivate"],
     ),
     LibraryMapping(
         "plugin-interfaces",
         "Qt6",
         "Qt::AppManPluginInterfaces",
-        extra=["COMPONENTS", "AppManPluginInterfaces"],
+        components=["AppManPluginInterfaces"],
     ),
-    LibraryMapping("positioning", "Qt6", "Qt::Positioning", extra=["COMPONENTS", "Positioning"]),
+    LibraryMapping("positioning", "Qt6", "Qt::Positioning", components=["Positioning"]),
     LibraryMapping(
-        "positioningquick", "Qt6", "Qt::PositioningQuick", extra=["COMPONENTS", "PositioningQuick"]
+        "positioningquick", "Qt6", "Qt::PositioningQuick", components=["PositioningQuick"]
     ),
-    LibraryMapping("printsupport", "Qt6", "Qt::PrintSupport", extra=["COMPONENTS", "PrintSupport"]),
-    LibraryMapping("purchasing", "Qt6", "Qt::Purchasing", extra=["COMPONENTS", "Purchasing"]),
-    LibraryMapping("qmldebug", "Qt6", "Qt::QmlDebug", extra=["COMPONENTS", "QmlDebug"]),
-    LibraryMapping("qmldevtools", "Qt6", "Qt::QmlDevTools", extra=["COMPONENTS", "QmlDevTools"]),
-    LibraryMapping("qmlcompiler", "Qt6", "Qt::QmlCompiler", extra=["COMPONENTS", "QmlCompiler"]),
-    LibraryMapping("qml", "Qt6", "Qt::Qml", extra=["COMPONENTS", "Qml"]),
-    LibraryMapping("qmldom", "Qt6", "Qt::QmlDom", extra=["COMPONENTS", "QmlDom"]),
-    LibraryMapping("qmlmodels", "Qt6", "Qt::QmlModels", extra=["COMPONENTS", "QmlModels"]),
-    LibraryMapping("qmltest", "Qt6", "Qt::QuickTest", extra=["COMPONENTS", "QuickTest"]),
+    LibraryMapping("printsupport", "Qt6", "Qt::PrintSupport", components=["PrintSupport"]),
+    LibraryMapping("purchasing", "Qt6", "Qt::Purchasing", components=["Purchasing"]),
+    LibraryMapping("qmldebug", "Qt6", "Qt::QmlDebugPrivate", components=["QmlDebugPrivate"]),
+    LibraryMapping(
+        "qmldevtools", "Qt6", "Qt::QmlDevToolsPrivate", components=["QmlDevToolsPrivate"]
+    ),
+    LibraryMapping(
+        "qmlcompiler", "Qt6", "Qt::QmlCompilerPrivate", components=["QmlCompilerPrivate"]
+    ),
+    LibraryMapping("qml", "Qt6", "Qt::Qml", components=["Qml"]),
+    LibraryMapping("qmldom", "Qt6", "Qt::QmlDomPrivate", components=["QmlDomPrivate"]),
+    LibraryMapping("qmlmodels", "Qt6", "Qt::QmlModels", components=["QmlModels"]),
+    LibraryMapping("qmltest", "Qt6", "Qt::QuickTest", components=["QuickTest"]),
     LibraryMapping(
         "qtmultimediaquicktools",
         "Qt6",
         "Qt::MultimediaQuickPrivate",
-        extra=["COMPONENTS", "MultimediaQuickPrivate"],
+        components=["MultimediaQuickPrivate"],
     ),
     LibraryMapping(
         "quick3dassetimport",
         "Qt6",
         "Qt::Quick3DAssetImport",
-        extra=["COMPONENTS", "Quick3DAssetImport"],
+        components=["Quick3DAssetImport"],
     ),
-    LibraryMapping("core5compat", "Qt6", "Qt::Core5Compat", extra=["COMPONENTS", "Core5Compat"]),
-    LibraryMapping("quick3d", "Qt6", "Qt::Quick3D", extra=["COMPONENTS", "Quick3D"]),
-    LibraryMapping(
-        "quick3drender", "Qt6", "Qt::Quick3DRender", extra=["COMPONENTS", "Quick3DRender"]
-    ),
+    LibraryMapping("core5compat", "Qt6", "Qt::Core5Compat", components=["Core5Compat"]),
+    LibraryMapping("quick3d", "Qt6", "Qt::Quick3D", components=["Quick3D"]),
+    LibraryMapping("quick3drender", "Qt6", "Qt::Quick3DRender", components=["Quick3DRender"]),
     LibraryMapping(
         "quick3druntimerender",
         "Qt6",
         "Qt::Quick3DRuntimeRender",
-        extra=["COMPONENTS", "Quick3DRuntimeRender"],
+        components=["Quick3DRuntimeRender"],
     ),
-    LibraryMapping("quick3dutils", "Qt6", "Qt::Quick3DUtils", extra=["COMPONENTS", "Quick3DUtils"]),
-    LibraryMapping(
-        "quickcontrols2", "Qt6", "Qt::QuickControls2", extra=["COMPONENTS", "QuickControls2"]
-    ),
+    LibraryMapping("quick3dutils", "Qt6", "Qt::Quick3DUtils", components=["Quick3DUtils"]),
+    LibraryMapping("quickcontrols2", "Qt6", "Qt::QuickControls2", components=["QuickControls2"]),
     LibraryMapping(
         "quickcontrols2impl",
         "Qt6",
         "Qt::QuickControls2Impl",
-        extra=["COMPONENTS", "QuickControls2Impl"],
+        components=["QuickControls2Impl"],
     ),
-    LibraryMapping("quick", "Qt6", "Qt::Quick", extra=["COMPONENTS", "Quick"]),
-    LibraryMapping("quickshapes", "Qt6", "Qt::QuickShapes", extra=["COMPONENTS", "QuickShapes"]),
+    LibraryMapping("quick", "Qt6", "Qt::Quick", components=["Quick"]),
     LibraryMapping(
-        "quicktemplates2", "Qt6", "Qt::QuickTemplates2", extra=["COMPONENTS", "QuickTemplates2"]
+        "quickshapes", "Qt6", "Qt::QuickShapesPrivate", components=["QuickShapesPrivate"]
     ),
-    LibraryMapping("quickwidgets", "Qt6", "Qt::QuickWidgets", extra=["COMPONENTS", "QuickWidgets"]),
-    LibraryMapping(
-        "remoteobjects", "Qt6", "Qt::RemoteObjects", extra=["COMPONENTS", "RemoteObjects"]
-    ),
-    LibraryMapping("script", "Qt6", "Qt::Script", extra=["COMPONENTS", "Script"]),
-    LibraryMapping("scripttools", "Qt6", "Qt::ScriptTools", extra=["COMPONENTS", "ScriptTools"]),
-    LibraryMapping("scxml", "Qt6", "Qt::Scxml", extra=["COMPONENTS", "Scxml"]),
-    LibraryMapping("sensors", "Qt6", "Qt::Sensors", extra=["COMPONENTS", "Sensors"]),
-    LibraryMapping("serialport", "Qt6", "Qt::SerialPort", extra=["COMPONENTS", "SerialPort"]),
-    LibraryMapping("serialbus", "Qt6", "Qt::SerialBus", extra=["COMPONENTS", "SerialBus"]),
-    LibraryMapping("services", "Qt6", "Qt::ServiceSupport", extra=["COMPONENTS", "ServiceSupport"]),
-    LibraryMapping(
-        "service_support", "Qt6", "Qt::ServiceSupport", extra=["COMPONENTS", "ServiceSupport"]
-    ),
-    LibraryMapping("shadertools", "Qt6", "Qt::ShaderTools", extra=["COMPONENTS", "ShaderTools"]),
-    LibraryMapping("statemachine", "Qt6", "Qt::StateMachine", extra=["COMPONENTS", "StateMachine"]),
-    LibraryMapping("sql", "Qt6", "Qt::Sql", extra=["COMPONENTS", "Sql"]),
-    LibraryMapping("svg", "Qt6", "Qt::Svg", extra=["COMPONENTS", "Svg"]),
-    LibraryMapping("svgwidgets", "Qt6", "Qt::SvgWidgets", extra=["COMPONENTS", "SvgWidgets"]),
-    LibraryMapping("charts", "Qt6", "Qt::Charts", extra=["COMPONENTS", "Charts"]),
-    LibraryMapping("testlib", "Qt6", "Qt::Test", extra=["COMPONENTS", "Test"]),
-    LibraryMapping("texttospeech", "Qt6", "Qt::TextToSpeech", extra=["COMPONENTS", "TextToSpeech"]),
-    LibraryMapping(
-        "theme_support", "Qt6", "Qt::ThemeSupport", extra=["COMPONENTS", "ThemeSupport"]
-    ),
-    LibraryMapping("tts", "Qt6", "Qt::TextToSpeech", extra=["COMPONENTS", "TextToSpeech"]),
-    LibraryMapping("uiplugin", "Qt6", "Qt::UiPlugin", extra=["COMPONENTS", "UiPlugin"]),
-    LibraryMapping("uitools", "Qt6", "Qt::UiTools", extra=["COMPONENTS", "UiTools"]),
-    LibraryMapping(
-        "virtualkeyboard", "Qt6", "Qt::VirtualKeyboard", extra=["COMPONENTS", "VirtualKeyboard"]
-    ),
-    LibraryMapping(
-        "waylandclient", "Qt6", "Qt::WaylandClient", extra=["COMPONENTS", "WaylandClient"]
-    ),
+    LibraryMapping("quicktemplates2", "Qt6", "Qt::QuickTemplates2", components=["QuickTemplates2"]),
+    LibraryMapping("quickwidgets", "Qt6", "Qt::QuickWidgets", components=["QuickWidgets"]),
+    LibraryMapping("remoteobjects", "Qt6", "Qt::RemoteObjects", components=["RemoteObjects"]),
+    LibraryMapping("script", "Qt6", "Qt::Script", components=["Script"]),
+    LibraryMapping("scripttools", "Qt6", "Qt::ScriptTools", components=["ScriptTools"]),
+    LibraryMapping("scxml", "Qt6", "Qt::Scxml", components=["Scxml"]),
+    LibraryMapping("sensors", "Qt6", "Qt::Sensors", components=["Sensors"]),
+    LibraryMapping("serialport", "Qt6", "Qt::SerialPort", components=["SerialPort"]),
+    LibraryMapping("serialbus", "Qt6", "Qt::SerialBus", components=["SerialBus"]),
+    LibraryMapping("services", "Qt6", "Qt::ServiceSupport", components=["ServiceSupport"]),
+    LibraryMapping("service_support", "Qt6", "Qt::ServiceSupport", components=["ServiceSupport"]),
+    LibraryMapping("shadertools", "Qt6", "Qt::ShaderTools", components=["ShaderTools"]),
+    LibraryMapping("statemachine", "Qt6", "Qt::StateMachine", components=["StateMachine"]),
+    LibraryMapping("sql", "Qt6", "Qt::Sql", components=["Sql"]),
+    LibraryMapping("svg", "Qt6", "Qt::Svg", components=["Svg"]),
+    LibraryMapping("svgwidgets", "Qt6", "Qt::SvgWidgets", components=["SvgWidgets"]),
+    LibraryMapping("charts", "Qt6", "Qt::Charts", components=["Charts"]),
+    LibraryMapping("testlib", "Qt6", "Qt::Test", components=["Test"]),
+    LibraryMapping("texttospeech", "Qt6", "Qt::TextToSpeech", components=["TextToSpeech"]),
+    LibraryMapping("theme_support", "Qt6", "Qt::ThemeSupport", components=["ThemeSupport"]),
+    LibraryMapping("tts", "Qt6", "Qt::TextToSpeech", components=["TextToSpeech"]),
+    LibraryMapping("uiplugin", "Qt6", "Qt::UiPlugin", components=["UiPlugin"]),
+    LibraryMapping("uitools", "Qt6", "Qt::UiTools", components=["UiTools"]),
+    LibraryMapping("virtualkeyboard", "Qt6", "Qt::VirtualKeyboard", components=["VirtualKeyboard"]),
+    LibraryMapping("waylandclient", "Qt6", "Qt::WaylandClient", components=["WaylandClient"]),
     LibraryMapping(
         "waylandcompositor",
         "Qt6",
         "Qt::WaylandCompositor",
-        extra=["COMPONENTS", "WaylandCompositor"],
+        components=["WaylandCompositor"],
     ),
-    LibraryMapping("webchannel", "Qt6", "Qt::WebChannel", extra=["COMPONENTS", "WebChannel"]),
-    LibraryMapping("webengine", "Qt6", "Qt::WebEngine", extra=["COMPONENTS", "WebEngine"]),
+    LibraryMapping("webchannel", "Qt6", "Qt::WebChannel", components=["WebChannel"]),
+    LibraryMapping("webengine", "Qt6", "Qt::WebEngine", components=["WebEngine"]),
     LibraryMapping(
-        "webenginewidgets", "Qt6", "Qt::WebEngineWidgets", extra=["COMPONENTS", "WebEngineWidgets"]
+        "webenginewidgets", "Qt6", "Qt::WebEngineWidgets", components=["WebEngineWidgets"]
     ),
-    LibraryMapping("websockets", "Qt6", "Qt::WebSockets", extra=["COMPONENTS", "WebSockets"]),
-    LibraryMapping("webview", "Qt6", "Qt::WebView", extra=["COMPONENTS", "WebView"]),
-    LibraryMapping("widgets", "Qt6", "Qt::Widgets", extra=["COMPONENTS", "Widgets"]),
-    LibraryMapping("window-lib", "Qt6", "Qt::AppManWindow", extra=["COMPONENTS", "AppManWindow"]),
-    LibraryMapping("winextras", "Qt6", "Qt::WinExtras", extra=["COMPONENTS", "WinExtras"]),
-    LibraryMapping("x11extras", "Qt6", "Qt::X11Extras", extra=["COMPONENTS", "X11Extras"]),
+    LibraryMapping("websockets", "Qt6", "Qt::WebSockets", components=["WebSockets"]),
+    LibraryMapping("webview", "Qt6", "Qt::WebView", components=["WebView"]),
+    LibraryMapping("widgets", "Qt6", "Qt::Widgets", components=["Widgets"]),
+    LibraryMapping("window-lib", "Qt6", "Qt::AppManWindow", components=["AppManWindow"]),
+    LibraryMapping("winextras", "Qt6", "Qt::WinExtras", components=["WinExtras"]),
+    LibraryMapping("x11extras", "Qt6", "Qt::X11Extras", components=["X11Extras"]),
+    LibraryMapping("xcb_qpa_lib", "Qt6", "Qt::XcbQpaPrivate", components=["XcbQpaPrivate"]),
     LibraryMapping(
-        "xcb_qpa_lib", "Qt6", "Qt::XcbQpaPrivate", extra=["COMPONENTS", "XcbQpaPrivate"]
+        "xkbcommon_support", "Qt6", "Qt::XkbCommonSupport", components=["XkbCommonSupport"]
     ),
+    LibraryMapping("xmlpatterns", "Qt6", "Qt::XmlPatterns", components=["XmlPatterns"]),
+    LibraryMapping("xml", "Qt6", "Qt::Xml", components=["Xml"]),
+    LibraryMapping("qmlworkerscript", "Qt6", "Qt::QmlWorkerScript", components=["QmlWorkerScript"]),
     LibraryMapping(
-        "xkbcommon_support", "Qt6", "Qt::XkbCommonSupport", extra=["COMPONENTS", "XkbCommonSupport"]
-    ),
-    LibraryMapping("xmlpatterns", "Qt6", "Qt::XmlPatterns", extra=["COMPONENTS", "XmlPatterns"]),
-    LibraryMapping("xml", "Qt6", "Qt::Xml", extra=["COMPONENTS", "Xml"]),
-    LibraryMapping(
-        "qmlworkerscript", "Qt6", "Qt::QmlWorkerScript", extra=["COMPONENTS", "QmlWorkerScript"]
-    ),
-    LibraryMapping(
-        "quickparticles", "Qt6", "Qt::QuickParticles", extra=["COMPONENTS", "QuickParticles"]
+        "quickparticles",
+        "Qt6",
+        "Qt::QuickParticlesPrivate",
+        components=["QuickParticlesPrivate"],
     ),
     LibraryMapping(
         "linuxofono_support",
         "Qt6",
         "Qt::LinuxOfonoSupport",
-        extra=["COMPONENTS", "LinuxOfonoSupport"],
+        components=["LinuxOfonoSupport"],
     ),
     LibraryMapping(
         "linuxofono_support_private",
         "Qt6",
         "Qt::LinuxOfonoSupportPrivate",
-        extra=["COMPONENTS", "LinuxOfonoSupportPrivate"],
+        components=["LinuxOfonoSupportPrivate"],
     ),
-    LibraryMapping("tools", "Qt6", "Qt::Tools", extra=["COMPONENTS", "Tools"]),
-    LibraryMapping("axcontainer", "Qt6", "Qt::AxContainer", extra=["COMPONENTS", "AxContainer"]),
-    LibraryMapping(
-        "webkitwidgets", "Qt6", "Qt::WebKitWidgets", extra=["COMPONENTS", "WebKitWidgets"]
-    ),
-    LibraryMapping("zlib", "Qt6", "Qt::Zlib", extra=["COMPONENTS", "Zlib"]),
-    LibraryMapping("httpserver", "Qt6", "Qt::HttpServer", extra=["COMPONENTS", "HttpServer"]),
-    LibraryMapping("sslserver", "Qt6", "Qt::SslServer", extra=["COMPONENTS", "HttpServer"]),
+    LibraryMapping("tools", "Qt6", "Qt::Tools", components=["Tools"]),
+    LibraryMapping("axcontainer", "Qt6", "Qt::AxContainer", components=["AxContainer"]),
+    LibraryMapping("webkitwidgets", "Qt6", "Qt::WebKitWidgets", components=["WebKitWidgets"]),
+    LibraryMapping("zlib", "Qt6", "Qt::Zlib", components=["Zlib"]),
+    LibraryMapping("httpserver", "Qt6", "Qt::HttpServer", components=["HttpServer"]),
+    LibraryMapping("sslserver", "Qt6", "Qt::SslServer", components=["HttpServer"]),
 ]
 
 # Note that the library map is adjusted dynamically further down.
@@ -431,7 +365,8 @@ _library_map = [
     LibraryMapping("db2", "DB2", "DB2::DB2"),
     LibraryMapping("dbus", "WrapDBus1", "dbus-1", resultVariable="DBus1", extra=["1.2"]),
     LibraryMapping(
-        "doubleconversion", "WrapDoubleConversion", "WrapDoubleConversion::WrapDoubleConversion"
+        "doubleconversion", "WrapSystemDoubleConversion",
+        "WrapSystemDoubleConversion::WrapSystemDoubleConversion"
     ),
     LibraryMapping("dlt", "DLT", "DLT::DLT"),
     LibraryMapping("drm", "Libdrm", "Libdrm::Libdrm"),
@@ -461,9 +396,7 @@ _library_map = [
         extra=["2.6.0"],
     ),
     LibraryMapping("host_dbus", None, None),
-    LibraryMapping(
-        "icu", "ICU", "ICU::i18n ICU::uc ICU::data", extra=["COMPONENTS", "i18n", "uc", "data"]
-    ),
+    LibraryMapping("icu", "ICU", "ICU::i18n ICU::uc ICU::data", components=["i18n", "uc", "data"]),
     LibraryMapping("journald", "Libsystemd", "PkgConfig::Libsystemd"),
     LibraryMapping("jpeg", "JPEG", "JPEG::JPEG"),  # see also libjpeg
     LibraryMapping("libatomic", "WrapAtomic", "WrapAtomic::WrapAtomic"),
@@ -541,61 +474,59 @@ _library_map = [
         resultVariable="TARGET XCB::XCB",
         appendFoundSuffix=False,
     ),
-    LibraryMapping(
-        "xcb_glx", "XCB", "XCB::GLX", extra=["COMPONENTS", "GLX"], resultVariable="XCB_GLX"
-    ),
+    LibraryMapping("xcb_glx", "XCB", "XCB::GLX", components=["GLX"], resultVariable="XCB_GLX"),
     LibraryMapping(
         "xcb_icccm",
         "XCB",
         "XCB::ICCCM",
-        extra=["0.3.9", "COMPONENTS", "ICCCM"],
+        extra=["0.3.9"],
+        components=["ICCCM"],
         resultVariable="XCB_ICCCM",
     ),
     LibraryMapping(
         "xcb_image",
         "XCB",
         "XCB::IMAGE",
-        extra=["0.3.9", "COMPONENTS", "IMAGE"],
+        extra=["0.3.9"],
+        components=["IMAGE"],
         resultVariable="XCB_IMAGE",
     ),
     LibraryMapping(
         "xcb_keysyms",
         "XCB",
         "XCB::KEYSYMS",
-        extra=["0.3.9", "COMPONENTS", "KEYSYMS"],
+        extra=["0.3.9"],
+        components=["KEYSYMS"],
         resultVariable="XCB_KEYSYMS",
     ),
     LibraryMapping(
-        "xcb_randr", "XCB", "XCB::RANDR", extra=["COMPONENTS", "RANDR"], resultVariable="XCB_RANDR"
+        "xcb_randr", "XCB", "XCB::RANDR", components=["RANDR"], resultVariable="XCB_RANDR"
     ),
     LibraryMapping(
         "xcb_render",
         "XCB",
         "XCB::RENDER",
-        extra=["COMPONENTS", "RENDER"],
+        components=["RENDER"],
         resultVariable="XCB_RENDER",
     ),
     LibraryMapping(
         "xcb_renderutil",
         "XCB",
         "XCB::RENDERUTIL",
-        extra=["0.3.9", "COMPONENTS", "RENDERUTIL"],
+        extra=["0.3.9"],
+        components=["RENDERUTIL"],
         resultVariable="XCB_RENDERUTIL",
     ),
     LibraryMapping(
-        "xcb_shape", "XCB", "XCB::SHAPE", extra=["COMPONENTS", "SHAPE"], resultVariable="XCB_SHAPE"
+        "xcb_shape", "XCB", "XCB::SHAPE", components=["SHAPE"], resultVariable="XCB_SHAPE"
     ),
-    LibraryMapping(
-        "xcb_shm", "XCB", "XCB::SHM", extra=["COMPONENTS", "SHM"], resultVariable="XCB_SHM"
-    ),
-    LibraryMapping(
-        "xcb_sync", "XCB", "XCB::SYNC", extra=["COMPONENTS", "SYNC"], resultVariable="XCB_SYNC"
-    ),
+    LibraryMapping("xcb_shm", "XCB", "XCB::SHM", components=["SHM"], resultVariable="XCB_SHM"),
+    LibraryMapping("xcb_sync", "XCB", "XCB::SYNC", components=["SYNC"], resultVariable="XCB_SYNC"),
     LibraryMapping(
         "xcb_xfixes",
         "XCB",
         "XCB::XFIXES",
-        extra=["COMPONENTS", "XFIXES"],
+        components=["XFIXES"],
         resultVariable="TARGET XCB::XFIXES",
         appendFoundSuffix=False,
     ),
@@ -603,7 +534,7 @@ _library_map = [
         "xcb-xfixes",
         "XCB",
         "XCB::XFIXES",
-        extra=["COMPONENTS", "XFIXES"],
+        components=["XFIXES"],
         resultVariable="TARGET XCB::XFIXES",
         appendFoundSuffix=False,
     ),
@@ -611,12 +542,11 @@ _library_map = [
         "xcb_xinput",
         "XCB",
         "XCB::XINPUT",
-        extra=["1.12", "COMPONENTS", "XINPUT"],
+        extra=["1.12"],
+        components=["XINPUT"],
         resultVariable="XCB_XINPUT",
     ),
-    LibraryMapping(
-        "xcb_xkb", "XCB", "XCB::XKB", extra=["COMPONENTS", "XKB"], resultVariable="XCB_XKB"
-    ),
+    LibraryMapping("xcb_xkb", "XCB", "XCB::XKB", components=["XKB"], resultVariable="XCB_XKB"),
     LibraryMapping("xcb_xlib", "X11_XCB", "X11::XCB"),
     LibraryMapping("xcomposite", "XComposite", "PkgConfig::XComposite"),
     LibraryMapping("xkbcommon_evdev", "XKB", "XKB::XKB", extra=["0.5.0"]),  # see also xkbcommon
@@ -625,7 +555,7 @@ _library_map = [
     LibraryMapping("xlib", "X11", "X11::X11"),
     LibraryMapping("xrender", "XRender", "PkgConfig::XRender", extra=["0.6"]),
     LibraryMapping("zlib", "WrapZLIB", "WrapZLIB::WrapZLIB", extra=["1.0.8"]),
-    LibraryMapping("zstd", "ZSTD", "ZSTD::ZSTD", extra=["1.3"]),
+    LibraryMapping("zstd", "WrapZSTD", "WrapZSTD::WrapZSTD", extra=["1.3"]),
     LibraryMapping("tiff", "TIFF", "TIFF::TIFF"),
     LibraryMapping("webp", "WrapWebP", "WrapWebP::WrapWebP"),
     LibraryMapping("jasper", "WrapJasper", "WrapJasper::WrapJasper"),
@@ -744,7 +674,6 @@ platform_mapping = {
     "hpux": "HPUX",
     "nacl": "NACL",
     "android": "ANDROID",
-    "android-embedded": "ANDROID_EMBEDDED",
     "uikit": "UIKIT",
     "tvos": "TVOS",
     "watchos": "WATCHOS",
@@ -771,7 +700,7 @@ platform_mapping = {
 
 
 def map_platform(platform: str) -> str:
-    """ Return the qmake platform as cmake platform or the unchanged string. """
+    """Return the qmake platform as cmake platform or the unchanged string."""
     return platform_mapping.get(platform, platform)
 
 
@@ -833,15 +762,21 @@ def generate_find_package_info(
     indent: int = 0,
     emit_if: str = "",
     use_system_package_name: bool = False,
+    remove_REQUIRED_from_extra: bool = True,
+    components_required: bool = True,
     module: str = "",
 ) -> str:
     isRequired = False
 
     extra = lib.extra.copy()
+    if lib.components:
+        extra.append("COMPONENTS" if components_required else "OPTIONAL_COMPONENTS")
+        extra += lib.components
 
     if "REQUIRED" in extra and use_qt_find_package:
         isRequired = True
-        extra.remove("REQUIRED")
+        if remove_REQUIRED_from_extra:
+            extra.remove("REQUIRED")
 
     cmake_target_name = lib.targetName
     assert cmake_target_name
@@ -913,6 +848,15 @@ def _set_up_py_parsing_nicer_debug_output(pp):
 
         return wrapper_function
 
-    pp._defaultStartDebugAction = increase_indent(pp._defaultStartDebugAction)
-    pp._defaultSuccessDebugAction = decrease_indent(pp._defaultSuccessDebugAction)
-    pp._defaultExceptionDebugAction = decrease_indent(pp._defaultExceptionDebugAction)
+    if hasattr(pp, "_defaultStartDebugAction"):
+        pp._defaultStartDebugAction = increase_indent(pp._defaultStartDebugAction)
+        pp._defaultSuccessDebugAction = decrease_indent(pp._defaultSuccessDebugAction)
+        pp._defaultExceptionDebugAction = decrease_indent(pp._defaultExceptionDebugAction)
+    elif hasattr(pp.core, "_default_start_debug_action"):
+        pp.core._default_start_debug_action = increase_indent(pp.core._default_start_debug_action)
+        pp.core._default_success_debug_action = decrease_indent(
+            pp.core._default_success_debug_action
+        )
+        pp.core._default_exception_debug_action = decrease_indent(
+            pp.core._default_exception_debug_action
+        )

@@ -1,45 +1,10 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtConcurrent module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 /*!
     \page qtconcurrentrun.html
     \title Concurrent Run
+    \brief A simple way to run a task in a separate thread.
     \ingroup thread
 
     The QtConcurrent::run() function runs a function in a separate thread.
@@ -167,18 +132,17 @@
 
     \section2 The mandatory QPromise argument
 
-    The function passed to QtConcurrent::run() in \e {Run With Promise} mode is expected
-    to have an additional argument of \c {QPromise<T> &} type, where
-    T is the type of the computation result (it should match the type T
-    of QFuture<T> returned by the QtConcurrent::runWithPromise()), like e.g.:
+    The function passed to QtConcurrent::run() in \e {Run With Promise} mode
+    is expected to have an additional argument of \c {QPromise<T> &} type, where
+    \c T is the type of the computation result (it should match the type \c T
+    of QFuture<T> returned by QtConcurrent::run()), like e.g.:
 
     \snippet code/src_concurrent_qtconcurrentrun.cpp 9
 
-    The \c promise argument is instantiated inside the
-    QtConcurrent::run() function, and its reference
-    is passed to the invoked \c aFunction, so the user
-    doesn't need to instantiate it by himself, nor pass it explicitly
-    when calling QtConcurrent::runWithPromise().
+    The \c promise argument is instantiated inside the QtConcurrent::run()
+    function, and its reference is passed to the invoked \c aFunction, so the
+    user doesn't need to instantiate it, nor pass it explicitly
+    when calling QtConcurrent::run() in this mode.
 
     The additional argument of QPromise type always needs to appear
     as a first argument on function's arguments list, like:

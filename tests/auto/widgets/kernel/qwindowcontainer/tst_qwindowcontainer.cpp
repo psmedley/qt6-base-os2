@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -75,6 +50,7 @@ private slots:
     void testOwnership();
     void testBehindTheScenesDeletion();
     void testUnparenting();
+    void testReparenting();
     void testUnparentReparent();
     void testActivation();
     void testAncestorChange();
@@ -231,12 +207,12 @@ void tst_QWindowContainer::testActivation()
 
 void tst_QWindowContainer::testUnparenting()
 {
-    QWindow *window = new QWindow();
+    QPointer<QWindow> window(new QWindow());
     QScopedPointer<QWidget> container(QWidget::createWindowContainer(window));
     container->setWindowTitle(QTest::currentTestFunction());
     container->setGeometry(m_availableGeometry.x() + 100, m_availableGeometry.y() + 100, 200, 100);
 
-    window->setParent(0);
+    window->setParent(nullptr);
 
     container->show();
 
@@ -244,6 +220,26 @@ void tst_QWindowContainer::testUnparenting()
 
     // Window should not be made visible by container..
     QVERIFY(!window->isVisible());
+
+    container.reset();
+    QVERIFY(window);
+    delete window;
+}
+
+void tst_QWindowContainer::testReparenting()
+{
+    QPointer<QWindow> window1(new QWindow());
+    QScopedPointer<QWindow> window2(new QWindow());
+    QScopedPointer<QWidget> container(QWidget::createWindowContainer(window1));
+
+    window1->setParent(window2.data());
+
+    // Not deleted with container
+    container.reset();
+    QVERIFY(window1);
+    // but deleted with new parent
+    window2.reset();
+    QVERIFY(!window1);
 }
 
 void tst_QWindowContainer::testUnparentReparent()

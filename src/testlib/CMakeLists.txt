@@ -13,6 +13,7 @@ qt_internal_add_module(Test
     QMAKE_MODULE_CONFIG console testlib_defines
     EXCEPTIONS
     SOURCES
+        3rdparty/cycle_p.h
         qabstracttestlogger.cpp qabstracttestlogger_p.h
         qasciikey.cpp
         qbenchmark.cpp qbenchmark.h qbenchmark_p.h
@@ -69,6 +70,7 @@ qt_internal_add_module(Test
         Qt::Core
     PRIVATE_MODULE_INTERFACE
         Qt::CorePrivate
+    GENERATE_CPP_EXPORTS
 )
 
 #### Keys ignored in scope 1:.:.:testlib.pro:<TRUE>:
@@ -87,6 +89,8 @@ qt_internal_extend_target(Test CONDITION QT_FEATURE_itemmodeltester
 
 qt_internal_extend_target(Test CONDITION QT_FEATURE_valgrind
     SOURCES
+        3rdparty/callgrind_p.h
+        3rdparty/valgrind_p.h
         qbenchmarkvalgrind.cpp qbenchmarkvalgrind_p.h
 )
 

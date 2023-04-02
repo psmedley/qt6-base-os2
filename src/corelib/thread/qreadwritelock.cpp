@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qplatformdefs.h"
 #include "qreadwritelock.h"
@@ -49,6 +13,8 @@
 #include "qelapsedtimer.h"
 #include "private/qfreelist_p.h"
 #include "private/qlocking_p.h"
+
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -65,6 +31,9 @@ QT_BEGIN_NAMESPACE
  */
 
 namespace {
+
+using ms = std::chrono::milliseconds;
+
 enum {
     StateMask = 0x3,
     StateLockedForRead = 0x1,
@@ -155,7 +124,7 @@ QReadWriteLock::QReadWriteLock(RecursionMode recursionMode)
 */
 QReadWriteLock::~QReadWriteLock()
 {
-    auto d = d_ptr.loadRelaxed();
+    auto d = d_ptr.loadAcquire();
     if (isUncontendedLocked(d)) {
         qWarning("QReadWriteLock: destroying locked QReadWriteLock");
         return;
@@ -274,7 +243,7 @@ bool QReadWriteLock::tryLockForRead(int timeout)
             d = d_ptr.loadAcquire();
             continue;
         }
-        return d->lockForRead(timeout);
+        return d->lockForRead(lock, timeout);
     }
 }
 
@@ -378,7 +347,7 @@ bool QReadWriteLock::tryLockForWrite(int timeout)
             d = d_ptr.loadAcquire();
             continue;
         }
-        return d->lockForWrite(timeout);
+        return d->lockForWrite(lock, timeout);
     }
 }
 
@@ -445,7 +414,7 @@ void QReadWriteLock::unlock()
 /*! \internal  Helper for QWaitCondition::wait */
 QReadWriteLock::StateForWaitCondition QReadWriteLock::stateForWaitCondition() const
 {
-    QReadWriteLockPrivate *d = d_ptr.loadRelaxed();
+    QReadWriteLockPrivate *d = d_ptr.loadAcquire();
     switch (quintptr(d) & StateMask) {
     case StateLockedForRead: return LockedForRead;
     case StateLockedForWrite: return LockedForWrite;
@@ -453,6 +422,7 @@ QReadWriteLock::StateForWaitCondition QReadWriteLock::stateForWaitCondition() co
 
     if (!d)
         return Unlocked;
+    const auto lock = qt_scoped_lock(d->mutex);
     if (d->writerCount > 1)
         return RecursivelyLocked;
     else if (d->writerCount == 1)
@@ -461,9 +431,9 @@ QReadWriteLock::StateForWaitCondition QReadWriteLock::stateForWaitCondition() co
 
 }
 
-bool QReadWriteLockPrivate::lockForRead(int timeout)
+bool QReadWriteLockPrivate::lockForRead(std::unique_lock<QtPrivate::mutex> &lock, int timeout)
 {
-    Q_ASSERT(!mutex.tryLock()); // mutex must be locked when entering this function
+    Q_ASSERT(!mutex.try_lock()); // mutex must be locked when entering this function
 
     QElapsedTimer t;
     if (timeout > 0)
@@ -477,10 +447,10 @@ bool QReadWriteLockPrivate::lockForRead(int timeout)
             if (elapsed > timeout)
                 return false;
             waitingReaders++;
-            readerCond.wait(&mutex, QDeadlineTimer(timeout - elapsed));
+            readerCond.wait_for(lock, ms{timeout - elapsed});
         } else {
             waitingReaders++;
-            readerCond.wait(&mutex);
+            readerCond.wait(lock);
         }
         waitingReaders--;
     }
@@ -489,9 +459,9 @@ bool QReadWriteLockPrivate::lockForRead(int timeout)
     return true;
 }
 
-bool QReadWriteLockPrivate::lockForWrite(int timeout)
+bool QReadWriteLockPrivate::lockForWrite(std::unique_lock<QtPrivate::mutex> &lock, int timeout)
 {
-    Q_ASSERT(!mutex.tryLock()); // mutex must be locked when entering this function
+    Q_ASSERT(!mutex.try_lock()); // mutex must be locked when entering this function
 
     QElapsedTimer t;
     if (timeout > 0)
@@ -506,15 +476,15 @@ bool QReadWriteLockPrivate::lockForWrite(int timeout)
                 if (waitingReaders && !waitingWriters && !writerCount) {
                     // We timed out and now there is no more writers or waiting writers, but some
                     // readers were queued (probably because of us). Wake the waiting readers.
-                    readerCond.wakeAll();
+                    readerCond.notify_all();
                 }
                 return false;
             }
             waitingWriters++;
-            writerCond.wait(&mutex, QDeadlineTimer(timeout - elapsed));
+            writerCond.wait_for(lock, ms{timeout - elapsed});
         } else {
             waitingWriters++;
-            writerCond.wait(&mutex);
+            writerCond.wait(lock);
         }
         waitingWriters--;
     }
@@ -527,11 +497,16 @@ bool QReadWriteLockPrivate::lockForWrite(int timeout)
 
 void QReadWriteLockPrivate::unlock()
 {
-    Q_ASSERT(!mutex.tryLock()); // mutex must be locked when entering this function
+    Q_ASSERT(!mutex.try_lock()); // mutex must be locked when entering this function
     if (waitingWriters)
-        writerCond.wakeOne();
+        writerCond.notify_one();
     else if (waitingReaders)
-        readerCond.wakeAll();
+        readerCond.notify_all();
+}
+
+static auto handleEquals(Qt::HANDLE handle)
+{
+    return [handle](QReadWriteLockPrivate::Reader reader) { return reader.handle == handle; };
 }
 
 bool QReadWriteLockPrivate::recursiveLockForRead(int timeout)
@@ -541,16 +516,18 @@ bool QReadWriteLockPrivate::recursiveLockForRead(int timeout)
 
     Qt::HANDLE self = QThread::currentThreadId();
 
-    auto it = currentReaders.find(self);
+    auto it = std::find_if(currentReaders.begin(), currentReaders.end(),
+                           handleEquals(self));
     if (it != currentReaders.end()) {
-        ++it.value();
+        ++it->recursionLevel;
         return true;
     }
 
-    if (!lockForRead(timeout))
+    if (!lockForRead(lock, timeout))
         return false;
 
-    currentReaders.insert(self, 1);
+    Reader r = {self, 1};
+    currentReaders.append(std::move(r));
     return true;
 }
 
@@ -565,7 +542,7 @@ bool QReadWriteLockPrivate::recursiveLockForWrite(int timeout)
         return true;
     }
 
-    if (!lockForWrite(timeout))
+    if (!lockForWrite(lock, timeout))
         return false;
 
     currentWriter = self;
@@ -583,12 +560,13 @@ void QReadWriteLockPrivate::recursiveUnlock()
             return;
         currentWriter = nullptr;
     } else {
-        auto it = currentReaders.find(self);
+        auto it = std::find_if(currentReaders.begin(), currentReaders.end(),
+                               handleEquals(self));
         if (it == currentReaders.end()) {
             qWarning("QReadWriteLock::unlock: unlocking from a thread that did not lock");
             return;
         } else {
-            if (--it.value() <= 0) {
+            if (--it->recursionLevel <= 0) {
                 currentReaders.erase(it);
                 readerCount--;
             }
@@ -606,7 +584,7 @@ struct FreeListConstants : QFreeListDefaultConstants {
     enum { BlockCount = 4, MaxIndex=0xffff };
     static const int Sizes[BlockCount];
 };
-const int FreeListConstants::Sizes[FreeListConstants::BlockCount] = {
+Q_CONSTINIT const int FreeListConstants::Sizes[FreeListConstants::BlockCount] = {
     16,
     128,
     1024,

@@ -83,6 +83,8 @@ qt_internal_extend_target(XcbQpaPrivate CONDITION QT_FEATURE_draganddrop
 )
 
 qt_internal_extend_target(XcbQpaPrivate CONDITION QT_FEATURE_xcb_xlib
+    SOURCES
+        qt_xlib_wrapper.c qt_xlib_wrapper.h
     PUBLIC_LIBRARIES
         X11::XCB
         # special case begin
@@ -97,7 +99,8 @@ qt_internal_extend_target(XcbQpaPrivate CONDITION QT_FEATURE_xcb_sm
     SOURCES
         qxcbsessionmanager.cpp qxcbsessionmanager.h
     PUBLIC_LIBRARIES
-        ${X11_SM_LIB} ${X11_ICE_LIB}
+        X11::SM
+        X11::ICE
 )
 
 qt_internal_extend_target(XcbQpaPrivate CONDITION QT_FEATURE_vulkan
@@ -111,7 +114,7 @@ qt_internal_extend_target(XcbQpaPrivate CONDITION QT_FEATURE_dlopen
         ${CMAKE_DL_LIBS}
 )
 
-qt_internal_extend_target(XcbQpaPrivate CONDITION CLANG AND NOT ICC
+qt_internal_extend_target(XcbQpaPrivate CONDITION CLANG
     COMPILE_OPTIONS
         -ftemplate-depth=1024
 )

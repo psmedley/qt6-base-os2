@@ -1,5 +1,5 @@
 QT LICENSE AGREEMENT
-Agreement version 4.4
+Agreement version 4.4.1
 
 This Qt License Agreement ("Agreement") is a legal agreement for the licensing
 of Licensed Software (as defined below) between The Qt Company (as defined
@@ -233,7 +233,7 @@ Appendix 9 hereto.
         United States or a legal entity incorporated outside of the United
         States or having its registered office outside of the United States,
         The Qt Company Ltd., a Finnish company with its registered office at
-        Bertel Jungin aukio D3A, 02600 Espoo, Finland.
+        Miestentie 7, 02150 Espoo, Finland.
 
 "Third-Party Software" shall have the meaning set forth in Section 4.
 
@@ -1054,13 +1054,14 @@ The Agreement includes following Appendices 1-10, as applicable.
 - Appendix 1: Licensed Software details
 - Appendix 2: Pricing
 - Appendix 3: Add-on Software details (optional)
-- Appendix 4: Non-commercial and educational Licenses (optional)
-- Appendix 5: Small business and startup Licenses (optional)
+- Appendix 4: Small business and startup Licenses (optional)
+- Appendix 5: Non-commercial and educational Licenses (optional)
 - Appendix 6: License Reporting (optional)
 - Appendix 7: Marketing Rights (optional)
 - Appendix 8: Intentionally left blank (optional)
 - Appendix 9: Support Terms
 - Appendix 10: Conversion from legacy Licenses to Subscription (optional)
+- Appendix 11: TERMS OF USE - QT INSIGHT TRACKER LIBRARY
 
 
 APPENDIX 1: LICENSED SOFTWARE
@@ -1975,3 +1976,46 @@ remain outstanding on the Current Licenses under the applicable terms Licensee
 will continue to make such payments in accordance with the applicable order
 documentation, notwithstanding the fact that the Current Licenses are being
 converted to Development Licenses pursuant to this Appendix.
+
+APPENDIX 11: TERMS OF USE - QT INSIGHT TRACKER LIBRARY
+Version 1.0
+
+Qt Insight Tracker Library ("Tracker Library") is a software module used to
+collect end user data from Customer's Application and Devices relating to The
+Qt Company's Qt Insight online service the Customer is ordering from The Qt
+Company under a separate service agreement ("Service Agreement").
+
+Unless otherwise set forth herein, definitions written in capital letters used
+herein shall have the meaning set forth in the Service Agreement.
+
+Subject to these terms The Qt Company grants to Customer a worldwide,
+non-exclusive, non-transferable, royalty-free, revocable (for cause) right and
+license, valid for the term of the Service Agreement, to
+    (i)  use, copy and modify Tracker Library for the purpose of including it
+         into the Devices and Applications and solely for the purpose of being
+         used only in conjunction with Insight Cloud or Insight Private Cloud,
+         and
+    (ii) distribute, by itself or through its Contractors, Tracker Library as
+         installed, incorporated, or integrated into Applications and/or
+         Devices.
+
+Use of Tracker Library in a way or for the purpose other than the above is
+strictly prohibited. Tracker Library is licensed to the Customer in all
+respects "as is".
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE QT COMPANY ON BEHALF OF
+ITSELF AND ITS LICENSORS, SUPPLIERS AND AFFILIATES, DISCLAIMS ALL OTHER
+WARRANTIES, EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND
+NON-INFRINGEMENT WITH REGARD TO THE TRACKER LIBRARY. THE QT COMPANY DOES NOT
+WARRANT THAT THE TRACKER LIBRARY WILL SATISFY CUSTOMER'S REQUIREMENTS OR THAT
+IT WILL OPERATE WITHOUT DEFECT OR ERROR OR THAT THE OPERATION THEREOF WILL BE
+UNINTERRUPTED.
+IN NO EVENT SHALL THE QT COMPANY BE LIABLE TO THE CUSTOMER FOR ANY LOSS OF
+PROFIT, LOSS OF DATA, LOSS OF BUSINESS OR GOODWILL OR ANY OTHER INDIRECT,
+SPECIAL, CONSEQUENTIAL, INCIDENTAL OR PUNITIVE COST, DAMAGES OR EXPENSE OF ANY
+KIND, HOWSOEVER ARISING UNDER OR IN CONNECTION WITH THE USE OF THE TRACKER
+LIBRARY.
+
+THE TOTAL MAXIMUM LIABILITY OF THE QT COMPANY UNDER THESE TERMS SHALL IN NO
+EVENT EXCEED 10,000 EUROS.

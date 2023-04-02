@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QMAP_H
 #define QMAP_H
@@ -359,6 +323,7 @@ public:
         if (!d)
             return T();
 
+        const auto copy = d.isShared() ? *this : QMap(); // keep `key` alive across the detach
         // TODO: improve. There is no need of copying all the
         // elements (the one to be removed can be skipped).
         detach();
@@ -400,6 +365,7 @@ public:
 
     T &operator[](const Key &key)
     {
+        const auto copy = d.isShared() ? *this : QMap(); // keep `key` alive across the detach
         detach();
         auto i = d->m.find(key);
         if (i == d->m.end())
@@ -644,6 +610,10 @@ public:
     const_key_value_iterator constKeyValueBegin() const { return const_key_value_iterator(begin()); }
     const_key_value_iterator keyValueEnd() const { return const_key_value_iterator(end()); }
     const_key_value_iterator constKeyValueEnd() const { return const_key_value_iterator(end()); }
+    auto asKeyValueRange() & { return QtPrivate::QKeyValueRange(*this); }
+    auto asKeyValueRange() const & { return QtPrivate::QKeyValueRange(*this); }
+    auto asKeyValueRange() && { return QtPrivate::QKeyValueRange(std::move(*this)); }
+    auto asKeyValueRange() const && { return QtPrivate::QKeyValueRange(std::move(*this)); }
 
     iterator erase(const_iterator it)
     {
@@ -669,6 +639,7 @@ public:
 
     iterator find(const Key &key)
     {
+        const auto copy = d.isShared() ? *this : QMap(); // keep `key` alive across the detach
         detach();
         return iterator(d->m.find(key));
     }
@@ -687,6 +658,7 @@ public:
 
     iterator lowerBound(const Key &key)
     {
+        const auto copy = d.isShared() ? *this : QMap(); // keep `key` alive across the detach
         detach();
         return iterator(d->m.lower_bound(key));
     }
@@ -700,6 +672,7 @@ public:
 
     iterator upperBound(const Key &key)
     {
+        const auto copy = d.isShared() ? *this : QMap(); // keep `key` alive across the detach
         detach();
         return iterator(d->m.upper_bound(key));
     }
@@ -713,6 +686,7 @@ public:
 
     iterator insert(const Key &key, const T &value)
     {
+        const auto copy = d.isShared() ? *this : QMap(); // keep `key` alive across the detach
         // TODO: improve. In case of assignment, why copying first?
         detach();
         return iterator(d->m.insert_or_assign(key, value).first);
@@ -722,6 +696,7 @@ public:
     {
         // TODO: improve. In case of assignment, why copying first?
         typename Map::const_iterator dpos;
+        const auto copy = d.isShared() ? *this : QMap(); // keep `key`/`value` alive across the detach
         if (!d || d.isShared()) {
             auto posDistance = d ? std::distance(d->m.cbegin(), pos.i) : 0;
             detach();
@@ -789,6 +764,7 @@ public:
 
     QPair<iterator, iterator> equal_range(const Key &akey)
     {
+        const auto copy = d.isShared() ? *this : QMap(); // keep `key` alive across the detach
         detach();
         auto result = d->m.equal_range(akey);
         return {iterator(result.first), iterator(result.second)};
@@ -986,14 +962,14 @@ public:
         if (!d)
             return 0;
 
-        // TODO: improve. Copy over only the elements not to be removed.
-        detach();
-
         // key and value may belong to this map. As such, we need to copy
         // them to ensure they stay valid throughout the iteration below
         // (which may destroy them)
         const Key keyCopy = key;
         const T valueCopy = value;
+
+        // TODO: improve. Copy over only the elements not to be removed.
+        detach();
 
         size_type result = 0;
         const auto &keyCompare = d->m.key_comp();
@@ -1023,6 +999,8 @@ public:
     {
         if (!d)
             return T();
+
+        const auto copy = d.isShared() ? *this : QMultiMap(); // keep `key` alive across the detach
 
         // TODO: improve. There is no need of copying all the
         // elements (the one to be removed can be skipped).
@@ -1331,6 +1309,10 @@ public:
     const_key_value_iterator constKeyValueBegin() const { return const_key_value_iterator(begin()); }
     const_key_value_iterator keyValueEnd() const { return const_key_value_iterator(end()); }
     const_key_value_iterator constKeyValueEnd() const { return const_key_value_iterator(end()); }
+    auto asKeyValueRange() & { return QtPrivate::QKeyValueRange(*this); }
+    auto asKeyValueRange() const & { return QtPrivate::QKeyValueRange(*this); }
+    auto asKeyValueRange() && { return QtPrivate::QKeyValueRange(std::move(*this)); }
+    auto asKeyValueRange() const && { return QtPrivate::QKeyValueRange(std::move(*this)); }
 
     iterator erase(const_iterator it)
     {
@@ -1361,6 +1343,7 @@ public:
 
     iterator find(const Key &key)
     {
+        const auto copy = d.isShared() ? *this : QMultiMap(); // keep `key` alive across the detach
         detach();
         return iterator(d->m.find(key));
     }
@@ -1379,6 +1362,8 @@ public:
 
     iterator find(const Key &key, const T &value)
     {
+        const auto copy = d.isShared() ? *this : QMultiMap(); // keep `key`/`value` alive across the detach
+
         detach();
 
         auto range = d->m.equal_range(key);
@@ -1411,6 +1396,7 @@ public:
 
     iterator lowerBound(const Key &key)
     {
+        const auto copy = d.isShared() ? *this : QMultiMap(); // keep `key` alive across the detach
         detach();
         return iterator(d->m.lower_bound(key));
     }
@@ -1424,6 +1410,7 @@ public:
 
     iterator upperBound(const Key &key)
     {
+        const auto copy = d.isShared() ? *this : QMultiMap(); // keep `key` alive across the detach
         detach();
         return iterator(d->m.upper_bound(key));
     }
@@ -1437,6 +1424,7 @@ public:
 
     iterator insert(const Key &key, const T &value)
     {
+        const auto copy = d.isShared() ? *this : QMultiMap(); // keep `key`/`value` alive across the detach
         detach();
         // note that std::multimap inserts at the end of an equal_range for a key,
         // QMultiMap at the beginning.
@@ -1446,6 +1434,7 @@ public:
 
     iterator insert(const_iterator pos, const Key &key, const T &value)
     {
+        const auto copy = d.isShared() ? *this : QMultiMap(); // keep `key`/`value` alive across the detach
         typename Map::const_iterator dpos;
         if (!d || d.isShared()) {
             auto posDistance = d ? std::distance(d->m.cbegin(), pos.i) : 0;
@@ -1484,6 +1473,8 @@ public:
 
     iterator replace(const Key &key, const T &value)
     {
+        const auto copy = d.isShared() ? *this : QMultiMap(); // keep `key`/`value` alive across the detach
+
         // TODO: improve. No need of copying and then overwriting.
         detach();
 
@@ -1503,6 +1494,7 @@ public:
 
     QPair<iterator, iterator> equal_range(const Key &akey)
     {
+        const auto copy = d.isShared() ? *this : QMultiMap(); // keep `key` alive across the detach
         detach();
         auto result = d->m.equal_range(akey);
         return {iterator(result.first), iterator(result.second)};

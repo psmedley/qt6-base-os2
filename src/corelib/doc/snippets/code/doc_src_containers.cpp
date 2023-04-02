@@ -1,52 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:BSD$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** BSD License Usage
-** Alternatively, you may use this file under the terms of the BSD license
-** as follows:
-**
-** "Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions are
-** met:
-**   * Redistributions of source code must retain the above copyright
-**     notice, this list of conditions and the following disclaimer.
-**   * Redistributions in binary form must reproduce the above copyright
-**     notice, this list of conditions and the following disclaimer in
-**     the documentation and/or other materials provided with the
-**     distribution.
-**   * Neither the name of The Qt Company Ltd nor the names of its
-**     contributors may be used to endorse or promote products derived
-**     from this software without specific prior written permission.
-**
-**
-** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 //! [0]
 class Employee
@@ -63,10 +16,30 @@ private:
 };
 //! [0]
 
+//! [range_for]
+QList<QString> list = {"A", "B", "C", "D"};
+for (const auto &item : list) {
+   ...
+}
+//! [range_for]
+
+//! [range_for_as_const]
+QList<QString> list = {"A", "B", "C", "D"};
+for (const auto &item : std::as_const(list)) {
+    ...
+}
+//! [range_for_as_const]
+
+//! [index]
+QList<QString> list = {"A", "B", "C", "D"};
+for (qsizetype i = 0; i < list.size(); ++i) {
+    const auto &item = list.at(i);
+    ...
+}
+//! [index]
 
 //! [1]
-QList<QString> list;
-list << "A" << "B" << "C" << "D";
+QList<QString> list = {"A", "B", "C", "D"};
 
 QListIterator<QString> i(list);
 while (i.hasNext())
@@ -118,11 +91,12 @@ while (i.hasNext())
 
 
 //! [7]
-QMap<QString, QString> map;
-map.insert("Paris", "France");
-map.insert("Guatemala City", "Guatemala");
-map.insert("Mexico City", "Mexico");
-map.insert("Moscow", "Russia");
+QMap<QString, QString> map = {
+    {"Paris", "France"},
+    {"Guatemala City", "Guatemala"},
+    {"Mexico City", "Mexico"},
+    {"Moscow", "Russia"}
+};
 ...
 
 QMutableMapIterator<QString, QString> i(map);
@@ -153,28 +127,23 @@ while (i.findNext(widget))
 
 
 //! [10]
-QList<QString> list;
-list << "A" << "B" << "C" << "D";
+QList<QString> list = {"A", "B", "C", "D"};
 
-QList<QString>::iterator i;
-for (i = list.begin(); i != list.end(); ++i)
+for (auto i = list.begin(), end = list.end(); i != end; ++i)
     *i = (*i).toLower();
 //! [10]
 
 
 //! [11]
-QList<QString> list;
-list << "A" << "B" << "C" << "D";
+QList<QString> list = {"A", "B", "C", "D"};
 
-QList<QString>::reverse_iterator i;
-for (i = list.rbegin(); i != list.rend(); ++i)
+for (auto i = list.rbegin(), rend = list.rend(); i != rend; ++i)
     *i = i->toLower();
 //! [11]
 
 
 //! [12]
-QList<QString>::const_iterator i;
-for (i = list.constBegin(); i != list.constEnd(); ++i)
+for (auto i = list.cbegin(), end = list.cend(); i != end; ++i)
     qDebug() << *i;
 //! [12]
 
@@ -182,8 +151,7 @@ for (i = list.constBegin(); i != list.constEnd(); ++i)
 //! [13]
 QMap<int, int> map;
 ...
-QMap<int, int>::const_iterator i;
-for (i = map.constBegin(); i != map.constEnd(); ++i)
+for (auto i = map.cbegin(), end = map.cend(); i != end; ++i)
     qDebug() << i.key() << ':' << i.value();
 //! [13]
 
@@ -191,13 +159,11 @@ for (i = map.constBegin(); i != map.constEnd(); ++i)
 //! [14]
 // RIGHT
 const QList<int> sizes = splitter->sizes();
-QList<int>::const_iterator i;
-for (i = sizes.begin(); i != sizes.end(); ++i)
+for (auto i = sizes.begin(), end = sizes.end(); i != end; ++i)
     ...
 
 // WRONG
-QList<int>::const_iterator i;
-for (i = splitter->sizes().begin();
+for (auto i = splitter->sizes().begin();
         i != splitter->sizes().end(); ++i)
     ...
 //! [14]
@@ -272,13 +238,18 @@ CONFIG += no_keywords
 //! [22]
 
 
+//! [cmake_no_keywords]
+target_compile_definitions(my_app PRIVATE QT_NO_KEYWORDS)
+//! [cmake_no_keywords]
+
+
 //! [23]
 QString onlyLetters(const QString &in)
 {
     QString out;
-    for (int j = 0; j < in.size(); ++j) {
-        if (in[j].isLetter())
-            out += in[j];
+    for (qsizetype j = 0; j < in.size(); ++j) {
+        if (in.at(j).isLetter())
+            out += in.at(j);
     }
     return out;
 }
@@ -315,15 +286,15 @@ int j = *i; // Undefined behavior!
 //! [24]
 
 //! [25]
-QList<int> list { 1, 2, 3, 4, 4, 5 };
-QSet<int> set(list.begin(), list.end());
+QList<int> list = {1, 2, 3, 4, 4, 5};
+QSet<int> set(list.cbegin(), list.cend());
 /*
     Will generate a QSet containing 1, 2, 3, 4, 5.
 */
 //! [25]
 
 //! [26]
-QList<int> list { 2, 3, 1 };
+QList<int> list = {2, 3, 1};
 
 std::sort(list.begin(), list.end());
 /*

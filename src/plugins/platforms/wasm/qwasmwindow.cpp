@@ -1,31 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 or (at your option) any later version
-** approved by the KDE Free Qt Foundation. The licenses are as published by
-** the Free Software Foundation and appearing in the file LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <qpa/qwindowsysteminterface.h>
 #include <private/qguiapplication_p.h>
@@ -40,9 +14,10 @@
 
 #include <iostream>
 
-Q_GUI_EXPORT int qt_defaultDpiX();
 
 QT_BEGIN_NAMESPACE
+
+Q_GUI_EXPORT int qt_defaultDpiX();
 
 QWasmWindow::QWasmWindow(QWindow *w, QWasmCompositor *compositor, QWasmBackingStore *backingStore)
     : QPlatformWindow(w),
@@ -63,6 +38,8 @@ QWasmWindow::QWasmWindow(QWindow *w, QWasmCompositor *compositor, QWasmBackingSt
 QWasmWindow::~QWasmWindow()
 {
     m_compositor->removeWindow(this);
+    if (m_requestAnimationFrameId > -1)
+        emscripten_cancel_animation_frame(m_requestAnimationFrameId);
 }
 
 void QWasmWindow::destroy()
@@ -107,33 +84,30 @@ void QWasmWindow::setGeometry(const QRect &rect)
         if (r.y() < yMin)
             r.moveTop(yMin);
     }
-    QWindowSystemInterface::handleGeometryChange(window(), r);
+    bool shouldInvalidate = true;
+    if (!m_windowState.testFlag(Qt::WindowFullScreen)
+        && !m_windowState.testFlag(Qt::WindowMaximized)) {
+        shouldInvalidate = m_normalGeometry.size() != r.size();
+        m_normalGeometry = r;
+    }
     QPlatformWindow::setGeometry(r);
-
-    QWindowSystemInterface::flushWindowSystemEvents();
-    invalidate();
+    QWindowSystemInterface::handleGeometryChange(window(), r);
+    if (shouldInvalidate)
+        invalidate();
+    else
+        m_compositor->requestUpdate();
 }
 
 void QWasmWindow::setVisible(bool visible)
 {
-    QRect newGeom;
-
-    if (visible) {
-        const bool forceFullScreen = !m_needsCompositor;//make gl apps fullscreen for now
-
-        if (forceFullScreen || (m_windowState & Qt::WindowFullScreen))
-            newGeom = platformScreen()->geometry();
-        else if (m_windowState & Qt::WindowMaximized)
-            newGeom = platformScreen()->availableGeometry();
-    }
-    QPlatformWindow::setVisible(visible);
-
+    if (visible)
+        applyWindowState();
     m_compositor->setVisible(this, visible);
+}
 
-    if (!newGeom.isEmpty())
-        setGeometry(newGeom); // may or may not generate an expose
-
-    invalidate();
+bool QWasmWindow::isVisible()
+{
+    return window()->isVisible();
 }
 
 QMargins QWasmWindow::frameMargins() const
@@ -153,14 +127,16 @@ QMargins QWasmWindow::frameMargins() const
 void QWasmWindow::raise()
 {
     m_compositor->raise(this);
-    QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), geometry().size()));
+    if (window()->isVisible())
+        QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), geometry().size()));
     invalidate();
 }
 
 void QWasmWindow::lower()
 {
     m_compositor->lower(this);
-    QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), geometry().size()));
+    if (window()->isVisible())
+        QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), geometry().size()));
     invalidate();
 }
 
@@ -216,12 +192,10 @@ void QWasmWindow::injectMouseReleased(const QPoint &local, const QPoint &global,
 
     if (maxButtonRect().contains(global) && m_activeControl == QWasmCompositor::SC_TitleBarMaxButton) {
         window()->setWindowState(Qt::WindowMaximized);
-        platformScreen()->resizeMaximizedWindows();
     }
 
     if (normButtonRect().contains(global) && m_activeControl == QWasmCompositor::SC_TitleBarNormalButton) {
         window()->setWindowState(Qt::WindowNoState);
-        setGeometry(normalGeometry());
     }
 
     m_activeControl = QWasmCompositor::SC_None;
@@ -264,18 +238,20 @@ QRegion QWasmWindow::resizeRegion() const
 
 bool QWasmWindow::isPointOnTitle(QPoint point) const
 {
-    bool ok = titleGeometry().contains(point);
-    return ok;
+    return hasTitleBar() ? titleGeometry().contains(point) : false;
 }
 
 bool QWasmWindow::isPointOnResizeRegion(QPoint point) const
 {
-    if (window()->flags().testFlag(Qt::Popup))
+    // Certain windows, like undocked dock widgets, are both popups and dialogs. Those should be
+    // resizable.
+    if (windowIsPopupType(window()->flags()))
         return false;
-    return resizeRegion().contains(point);
+    return (window()->maximumSize().isEmpty() || window()->minimumSize() != window()->maximumSize())
+            && resizeRegion().contains(point);
 }
 
-QWasmWindow::ResizeMode QWasmWindow::resizeModeAtPoint(QPoint point) const
+QWasmCompositor::ResizeMode QWasmWindow::resizeModeAtPoint(QPoint point) const
 {
     QPoint p1 = window()->frameGeometry().topLeft() - QPoint(5, 5);
     QPoint p2 = window()->frameGeometry().bottomRight() + QPoint(5, 5);
@@ -292,28 +268,28 @@ QWasmWindow::ResizeMode QWasmWindow::resizeModeAtPoint(QPoint point) const
     if (top.contains(point)) {
         // Top
         if (left.contains(point))
-            return ResizeTopLeft;
+            return QWasmCompositor::ResizeTopLeft;
         if (center.contains(point))
-            return ResizeTop;
+            return QWasmCompositor::ResizeTop;
         if (right.contains(point))
-            return ResizeTopRight;
+            return QWasmCompositor::ResizeTopRight;
     } else if (middle.contains(point)) {
         // Middle
         if (left.contains(point))
-            return ResizeLeft;
+            return QWasmCompositor::ResizeLeft;
         if (right.contains(point))
-            return ResizeRight;
+            return QWasmCompositor::ResizeRight;
     } else if (bottom.contains(point)) {
         // Bottom
         if (left.contains(point))
-            return ResizeBottomLeft;
+            return QWasmCompositor::ResizeBottomLeft;
         if (center.contains(point))
-            return ResizeBottom;
+            return QWasmCompositor::ResizeBottom;
         if (right.contains(point))
-            return ResizeBottomRight;
+            return QWasmCompositor::ResizeBottomRight;
     }
 
-    return ResizeNone;
+    return QWasmCompositor::ResizeNone;
 }
 
 QRect getSubControlRect(const QWasmWindow *window, QWasmCompositor::SubControls subControl)
@@ -364,7 +340,7 @@ QRegion QWasmWindow::titleControlRegion() const
 
 void QWasmWindow::invalidate()
 {
-    m_compositor->requestRedraw();
+    m_compositor->requestUpdateWindow(this);
 }
 
 QWasmCompositor::SubControls QWasmWindow::activeSubControl() const
@@ -372,15 +348,49 @@ QWasmCompositor::SubControls QWasmWindow::activeSubControl() const
     return m_activeControl;
 }
 
-void QWasmWindow::setWindowState(Qt::WindowStates states)
+void QWasmWindow::setWindowState(Qt::WindowStates newState)
 {
-    m_windowState = Qt::WindowNoState;
-    if (states & Qt::WindowMinimized)
-        m_windowState = Qt::WindowMinimized;
-    else if (states & Qt::WindowFullScreen)
-        m_windowState = Qt::WindowFullScreen;
-    else if (states & Qt::WindowMaximized)
-        m_windowState = Qt::WindowMaximized;
+    const Qt::WindowStates oldState = m_windowState;
+    bool isActive = oldState.testFlag(Qt::WindowActive);
+
+    if (newState.testFlag(Qt::WindowMinimized)) {
+        newState.setFlag(Qt::WindowMinimized, false);
+        qWarning("Qt::WindowMinimized is not implemented in wasm");
+    }
+
+    // Always keep OpenGL apps fullscreen
+    if (!m_needsCompositor && !newState.testFlag(Qt::WindowFullScreen)) {
+        newState.setFlag(Qt::WindowFullScreen, true);
+        qWarning("Qt::WindowFullScreen must be set for OpenGL surfaces");
+    }
+
+    // Ignore WindowActive flag in comparison, as we want to preserve it either way
+    if ((newState & ~Qt::WindowActive) == (oldState & ~Qt::WindowActive))
+        return;
+
+    newState.setFlag(Qt::WindowActive, isActive);
+
+    m_previousWindowState = oldState;
+    m_windowState = newState;
+
+    if (isVisible()) {
+        applyWindowState();
+    }
+}
+
+void QWasmWindow::applyWindowState()
+{
+    QRect newGeom;
+
+    if (m_windowState.testFlag(Qt::WindowFullScreen))
+        newGeom = platformScreen()->geometry();
+    else if (m_windowState.testFlag(Qt::WindowMaximized))
+        newGeom = platformScreen()->availableGeometry();
+    else
+        newGeom = normalGeometry();
+
+    QWindowSystemInterface::handleWindowStateChanged(window(), m_windowState, m_previousWindowState);
+    setGeometry(newGeom);
 }
 
 QRect QWasmWindow::normalGeometry() const
@@ -395,16 +405,19 @@ qreal QWasmWindow::devicePixelRatio() const
 
 void QWasmWindow::requestUpdate()
 {
-    QPointer<QWindow> windowPointer(window());
-    bool registered = QWasmEventDispatcher::registerRequestUpdateCallback([=](){
-        if (windowPointer.isNull())
-            return;
+    if (m_compositor) {
+        m_compositor->requestUpdateWindow(this, QWasmCompositor::UpdateRequestDelivery);
+        return;
+    }
 
-        deliverUpdateRequest();
-    });
-
-    if (!registered)
-        QPlatformWindow::requestUpdate();
+    static auto frame = [](double time, void *context) -> int {
+        Q_UNUSED(time);
+        QWasmWindow *window = static_cast<QWasmWindow *>(context);
+        window->m_requestAnimationFrameId = -1;
+        window->deliverUpdateRequest();
+        return 0;
+    };
+    m_requestAnimationFrameId = emscripten_request_animation_frame(frame, this);
 }
 
 bool QWasmWindow::hasTitleBar() const
@@ -429,6 +442,15 @@ void QWasmWindow::requestActivateWindow()
     if (window()->isTopLevel())
         raise();
     QPlatformWindow::requestActivateWindow();
+}
+
+bool QWasmWindow::setMouseGrabEnabled(bool grab)
+{
+    if (grab)
+        m_compositor->setCapture(this);
+    else
+        m_compositor->releaseCapture();
+    return true;
 }
 
 QT_END_NAMESPACE

@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 BogDan Vatra <bogdan@kde.org>
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QCoreApplication>
 #include <QDir>
@@ -39,6 +14,8 @@
 #include <functional>
 #include <thread>
 
+#include <shellquote_shared.h>
+
 #ifdef Q_CC_MSVC
 #define popen _popen
 #define QT_POPEN_READ "rb"
@@ -47,24 +24,98 @@
 #define QT_POPEN_READ "r"
 #endif
 
-static auto junitChecker = [](const QByteArray &data) -> bool {
+using namespace Qt::StringLiterals;
+
+static bool checkJunit(const QByteArray &data) {
     QXmlStreamReader reader{data};
     while (!reader.atEnd()) {
         reader.readNext();
-        if (reader.isStartElement() && reader.name() == QStringLiteral("testcase") &&
-                reader.attributes().value(QStringLiteral("result")).toString() == QStringLiteral("fail")) {
+
+        if (!reader.isStartElement())
+            continue;
+
+        if (reader.name() == QStringLiteral("error"))
             return false;
+
+        const QString type = reader.attributes().value(QStringLiteral("type")).toString();
+        if (reader.name() == QStringLiteral("failure")) {
+            if (type == QStringLiteral("fail") || type == QStringLiteral("xpass"))
+                return false;
         }
     }
+
+    // Fail if there's an error after reading through all the xml output
+    return !reader.hasError();
+}
+
+static bool checkTxt(const QByteArray &data) {
+    if (data.indexOf("\nFAIL!  : "_L1) >= 0)
+        return false;
+    if (data.indexOf("\nXPASS  : "_L1) >= 0)
+        return false;
+    // Look for "********* Finished testing of tst_QTestName *********"
+    static const QRegularExpression testTail("\\*+ +Finished testing of .+ +\\*+"_L1);
+    return testTail.match(QLatin1StringView(data)).hasMatch();
+}
+
+static bool checkCsv(const QByteArray &data) {
+    // The csv format is only suitable for benchmarks,
+    // so this is not much useful to determine test failure/success.
+    // FIXME: warn the user early on about this.
+    Q_UNUSED(data);
     return true;
-};
+}
+
+static bool checkXml(const QByteArray &data) {
+    QXmlStreamReader reader{data};
+    while (!reader.atEnd()) {
+        reader.readNext();
+        const QString type = reader.attributes().value(QStringLiteral("type")).toString();
+        const bool isIncident = (reader.name() == QStringLiteral("Incident"));
+        if (reader.isStartElement() && isIncident) {
+            if (type == QStringLiteral("fail") || type == QStringLiteral("xpass"))
+                return false;
+        }
+    }
+
+    // Fail if there's an error after reading through all the xml output
+    return !reader.hasError();
+}
+
+static bool checkLightxml(const QByteArray &data) {
+    // lightxml intentionally skips the root element, which technically makes it
+    // not valid XML. We'll add that ourselves for the purpose of validation.
+    QByteArray newData = data;
+    newData.prepend("<root>");
+    newData.append("</root>");
+    return checkXml(newData);
+}
+
+static bool checkTeamcity(const QByteArray &data) {
+    if (data.indexOf("' message='Failure! |[Loc: ") >= 0)
+        return false;
+    const QList<QByteArray> lines = data.trimmed().split('\n');
+    if (lines.isEmpty())
+        return false;
+    return lines.last().startsWith("##teamcity[testSuiteFinished "_L1);
+}
+
+static bool checkTap(const QByteArray &data) {
+    // This will still report blacklisted fails because QTest with TAP
+    // is not putting any data about that.
+    if (data.indexOf("\nnot ok ") >= 0)
+        return false;
+
+    static const QRegularExpression testTail("ok [0-9]* - cleanupTestCase\\(\\)"_L1);
+    return testTail.match(QLatin1StringView(data)).hasMatch();
+}
 
 struct Options
 {
     bool helpRequested = false;
     bool verbose = false;
     bool skipAddInstallRoot = false;
-    std::chrono::seconds timeout{300}; // 5minutes
+    std::chrono::seconds timeout{480}; // 8 minutes
     QString buildPath;
     QString adbCommand{QStringLiteral("adb")};
     QString makeCommand;
@@ -74,36 +125,18 @@ struct Options
     QHash<QString, QString> outFiles;
     QString testArgs;
     QString apkPath;
-    QHash<QString, std::function<bool(const QByteArray &)>> checkFiles = {
-    {QStringLiteral("txt"), [](const QByteArray &data) -> bool {
-        return data.indexOf("\nFAIL!  : ") < 0;
-    }},
-    {QStringLiteral("csv"), [](const QByteArray &/*data*/) -> bool {
-        // It seems csv is broken
-        return true;
-    }},
-    {QStringLiteral("xml"), [](const QByteArray &data) -> bool {
-        QXmlStreamReader reader{data};
-        while (!reader.atEnd()) {
-            reader.readNext();
-            if (reader.isStartElement() && reader.name() == QStringLiteral("Incident") &&
-                    reader.attributes().value(QStringLiteral("type")).toString() == QStringLiteral("fail")) {
-                return false;
-            }
-        }
-        return true;
-    }},
-    {QStringLiteral("lightxml"), [](const QByteArray &data) -> bool {
-        return data.indexOf("\n<Incident type=\"fail\" ") < 0;
-    }},
-    {QStringLiteral("xunitxml"), junitChecker},
-    {QStringLiteral("junitxml"), junitChecker},
-    {QStringLiteral("teamcity"), [](const QByteArray &data) -> bool {
-        return data.indexOf("' message='Failure! |[Loc: ") < 0;
-    }},
-    {QStringLiteral("tap"), [](const QByteArray &data) -> bool {
-        return data.indexOf("\nnot ok ") < 0;
-    }},
+    int sdkVersion = -1;
+    int pid = -1;
+    bool showLogcatOutput = false;
+    const QHash<QString, std::function<bool(const QByteArray &)>> checkFiles = {
+        {QStringLiteral("txt"), checkTxt},
+        {QStringLiteral("csv"), checkCsv},
+        {QStringLiteral("xml"), checkXml},
+        {QStringLiteral("lightxml"), checkLightxml},
+        {QStringLiteral("xunitxml"), checkJunit},
+        {QStringLiteral("junitxml"), checkJunit},
+        {QStringLiteral("teamcity"), checkTeamcity},
+        {QStringLiteral("tap"), checkTap},
     };
 };
 
@@ -126,78 +159,11 @@ static bool execCommand(const QString &command, QByteArray *output = nullptr, bo
         if (verbose)
             fprintf(stdout, "%s", buffer);
     }
+
+    fflush(stdout);
+    fflush(stderr);
+
     return pclose(process) == 0;
-}
-
-// Copy-pasted from qmake/library/ioutil.cpp
-inline static bool hasSpecialChars(const QString &arg, const uchar (&iqm)[16])
-{
-    for (int x = arg.length() - 1; x >= 0; --x) {
-        ushort c = arg.unicode()[x].unicode();
-        if ((c < sizeof(iqm) * 8) && (iqm[c / 8] & (1 << (c & 7))))
-            return true;
-    }
-    return false;
-}
-
-static QString shellQuoteUnix(const QString &arg)
-{
-    // Chars that should be quoted (TM). This includes:
-    static const uchar iqm[] = {
-        0xff, 0xff, 0xff, 0xff, 0xdf, 0x07, 0x00, 0xd8,
-        0x00, 0x00, 0x00, 0x38, 0x01, 0x00, 0x00, 0x78
-    }; // 0-32 \'"$`<>|;&(){}*?#!~[]
-
-    if (!arg.length())
-        return QStringLiteral("\"\"");
-
-    QString ret(arg);
-    if (hasSpecialChars(ret, iqm)) {
-        ret.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
-        ret.prepend(QLatin1Char('\''));
-        ret.append(QLatin1Char('\''));
-    }
-    return ret;
-}
-
-static QString shellQuoteWin(const QString &arg)
-{
-    // Chars that should be quoted (TM). This includes:
-    // - control chars & space
-    // - the shell meta chars "&()<>^|
-    // - the potential separators ,;=
-    static const uchar iqm[] = {
-        0xff, 0xff, 0xff, 0xff, 0x45, 0x13, 0x00, 0x78,
-        0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x10
-    };
-
-    if (!arg.length())
-        return QStringLiteral("\"\"");
-
-    QString ret(arg);
-    if (hasSpecialChars(ret, iqm)) {
-        // Quotes are escaped and their preceding backslashes are doubled.
-        // It's impossible to escape anything inside a quoted string on cmd
-        // level, so the outer quoting must be "suspended".
-        ret.replace(QRegularExpression(QStringLiteral("(\\\\*)\"")), QStringLiteral("\"\\1\\1\\^\"\""));
-        // The argument must not end with a \ since this would be interpreted
-        // as escaping the quote -- rather put the \ behind the quote: e.g.
-        // rather use "foo"\ than "foo\"
-        int i = ret.length();
-        while (i > 0 && ret.at(i - 1) == QLatin1Char('\\'))
-            --i;
-        ret.insert(i, QLatin1Char('"'));
-        ret.prepend(QLatin1Char('"'));
-    }
-    return ret;
-}
-
-static QString shellQuote(const QString &arg)
-{
-    if (QDir::separator() == QLatin1Char('\\'))
-        return shellQuoteWin(arg);
-    else
-        return shellQuoteUnix(arg);
 }
 
 static bool parseOptions()
@@ -233,6 +199,8 @@ static bool parseOptions()
                 g_options.activity = arguments.at(++i);
         } else if (argument.compare(QStringLiteral("--skip-install-root"), Qt::CaseInsensitive) == 0) {
             g_options.skipAddInstallRoot = true;
+        } else if (argument.compare(QStringLiteral("--show-logcat"), Qt::CaseInsensitive) == 0) {
+            g_options.showLogcatOutput = true;
         } else if (argument.compare(QStringLiteral("--timeout"), Qt::CaseInsensitive) == 0) {
             if (i + 1 == arguments.size())
                 g_options.helpRequested = true;
@@ -262,7 +230,7 @@ static bool parseOptions()
 }
 
 static void printHelp()
-{//                 "012345678901234567890123456789012345678901234567890123456789012345678901"
+{
     fprintf(stderr, "Syntax: %s <options> -- [TESTARGS] \n"
                     "\n"
                     "  Creates an Android package in a temp directory <destination> and\n"
@@ -288,6 +256,8 @@ static void printHelp()
                     "    --timeout <seconds>: Timeout to run the test. Default is 5 minutes.\n"
                     "\n"
                     "    --skip-install-root: Do not append INSTALL_ROOT=... to the make command.\n"
+                    "\n"
+                    "    --show-logcat: Print Logcat output to stdout.\n"
                     "\n"
                     "    -- Arguments that will be passed to the test application.\n"
                     "\n"
@@ -343,7 +313,7 @@ static bool parseTestArgs()
 
     QString file;
     QString logType;
-    QString unhandledArgs;
+    QStringList unhandledArgs;
     for (int i = 0; i < g_options.testArgsList.size(); ++i) {
         const QString &arg = g_options.testArgsList[i].trimmed();
         if (arg == QStringLiteral("--"))
@@ -365,7 +335,7 @@ static bool parseTestArgs()
             if (match.hasMatch()) {
                 logType = match.capturedTexts().at(1);
             } else {
-                unhandledArgs += QStringLiteral(" %1").arg(arg);
+                unhandledArgs << QStringLiteral(" \\\"%1\\\"").arg(arg);
             }
         }
     }
@@ -375,10 +345,13 @@ static bool parseTestArgs()
     for (const auto &format : g_options.outFiles.keys())
         g_options.testArgs += QStringLiteral(" -o output.%1,%1").arg(format);
 
-    g_options.testArgs += unhandledArgs;
-    g_options.testArgs = QStringLiteral("shell am start -e applicationArguments \\\"%1\\\" -n %2/%3").arg(shellQuote(g_options.testArgs.trimmed()),
-                                                                                                      g_options.package,
-                                                                                                      g_options.activity);
+    g_options.testArgs += unhandledArgs.join(u' ');
+
+    g_options.testArgs = QStringLiteral("shell am start -e applicationArguments \"%1\" -n %2/%3")
+            .arg(shellQuote(g_options.testArgs.trimmed()))
+            .arg(g_options.package)
+            .arg(g_options.activity);
+
     return true;
 }
 
@@ -389,7 +362,7 @@ static bool isRunning() {
 
         return false;
     }
-    return output.indexOf(QLatin1String(" " + g_options.package.toUtf8())) > -1;
+    return output.indexOf(QLatin1StringView(" " + g_options.package.toUtf8())) > -1;
 }
 
 static bool waitToFinish()
@@ -403,6 +376,24 @@ static bool waitToFinish()
             return false;
     }
 
+    if (g_options.sdkVersion > 23) { // pidof is broken in SDK 23, non-existent before
+        QByteArray output;
+        const QString command(QStringLiteral("%1 shell pidof -s %2")
+                                      .arg(g_options.adbCommand, shellQuote(g_options.package)));
+        execCommand(command, &output, g_options.verbose);
+        bool ok = false;
+        int pid = output.toInt(&ok); // If we got more than one pid, fail.
+        if (ok) {
+            g_options.pid = pid;
+        } else {
+            fprintf(stderr,
+                    "Unable to obtain the PID of the running unit test. Command \"%s\" "
+                    "returned \"%s\"\n",
+                    command.toUtf8().constData(), output.constData());
+            fflush(stderr);
+        }
+    }
+
     // Wait to finish
     while (isRunning()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
@@ -412,25 +403,55 @@ static bool waitToFinish()
     return true;
 }
 
+static void obtainSDKVersion()
+{
+    // SDK version is necessary, as in SDK 23 pidof is broken, so we cannot obtain the pid.
+    // Also, Logcat cannot filter by pid in SDK 23, so we don't offer the --show-logcat option.
+    QByteArray output;
+    const QString command(
+            QStringLiteral("%1 shell getprop ro.build.version.sdk").arg(g_options.adbCommand));
+    execCommand(command, &output, g_options.verbose);
+    bool ok = false;
+    int sdkVersion = output.toInt(&ok);
+    if (ok) {
+        g_options.sdkVersion = sdkVersion;
+    } else {
+        fprintf(stderr,
+                "Unable to obtain the SDK version of the target. Command \"%s\" "
+                "returned \"%s\"\n",
+                command.toUtf8().constData(), output.constData());
+        fflush(stderr);
+    }
+}
 
 static bool pullFiles()
 {
     bool ret = true;
     for (auto it = g_options.outFiles.constBegin(); it != g_options.outFiles.end(); ++it) {
+        // Get only stdout from cat and get rid of stderr and fail later if the output is empty
+        const QString catCmd = QStringLiteral("cat files/output.%1 2> /dev/null").arg(it.key());
+
         QByteArray output;
-        if (!execCommand(QStringLiteral("%1 shell run-as %2 cat files/output.%3")
-                         .arg(g_options.adbCommand, g_options.package, it.key()), &output)) {
+        if (!execCommand(QStringLiteral("%1 shell 'run-as %2 %3'")
+                         .arg(g_options.adbCommand, g_options.package, catCmd), &output)) {
             // Cannot find output file. Check in path related to current user
             QByteArray userId;
             execCommand(QStringLiteral("%1 shell cmd activity get-current-user")
                         .arg(g_options.adbCommand), &userId);
             const QString userIdSimplified(QString::fromUtf8(userId).simplified());
-            if (!execCommand(QStringLiteral("%1 shell run-as %2 --user %3 cat files/output.%4")
-                        .arg(g_options.adbCommand, g_options.package, userIdSimplified, it.key()),
+            if (!execCommand(QStringLiteral("%1 shell 'run-as %2 --user %3 %4'")
+                        .arg(g_options.adbCommand, g_options.package, userIdSimplified, catCmd),
                          &output)) {
                 return false;
             }
         }
+
+        if (output.isEmpty()) {
+            fprintf(stderr, "Failed to get the test output from the target. Either the output "
+                            "is empty or androidtestrunner failed to retrieve it.\n");
+            return false;
+        }
+
         auto checkerIt = g_options.checkFiles.find(it.key());
         ret = ret && checkerIt != g_options.checkFiles.end() && checkerIt.value()(output);
         if (it.value() == QStringLiteral("-")){
@@ -496,6 +517,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    obtainSDKVersion();
+
     RunnerLocker lock; // do not install or run packages while another test is running
     if (!execCommand(QStringLiteral("%1 install -r -g %2")
                         .arg(g_options.adbCommand, g_options.apkPath), nullptr, g_options.verbose)) {
@@ -513,7 +536,24 @@ int main(int argc, char *argv[])
 
     // start the tests
     bool res = execCommand(QStringLiteral("%1 %2").arg(g_options.adbCommand, g_options.testArgs),
-                           nullptr, g_options.verbose) && waitToFinish();
+                           nullptr, g_options.verbose)
+            && waitToFinish();
+
+    // get logcat output
+    if (res && g_options.showLogcatOutput) {
+        if (g_options.sdkVersion <= 23) {
+            fprintf(stderr, "Cannot show logcat output on Android 23 and below.\n");
+            fflush(stderr);
+        } else if (g_options.pid > 0) {
+            fprintf(stdout, "Logcat output:\n");
+            res &= execCommand(QStringLiteral("%1 logcat -d --pid=%2")
+                                       .arg(g_options.adbCommand)
+                                       .arg(g_options.pid),
+                               nullptr, true);
+            fprintf(stdout, "End Logcat output.\n");
+        }
+    }
+
     if (res)
         res &= pullFiles();
     res &= execCommand(QStringLiteral("%1 uninstall %2").arg(g_options.adbCommand, g_options.package),

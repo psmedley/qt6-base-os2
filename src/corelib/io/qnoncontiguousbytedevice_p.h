@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QNONCONTIGUOUSBYTEDEVICE_P_H
 #define QNONCONTIGUOUSBYTEDEVICE_P_H
@@ -55,8 +19,9 @@
 #include <QtCore/qbytearray.h>
 #include <QtCore/qbuffer.h>
 #include <QtCore/qiodevice.h>
-#include <QtCore/QSharedPointer>
 #include "private/qringbuffer_p.h"
+
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 
@@ -85,13 +50,13 @@ class Q_CORE_EXPORT QNonContiguousByteDeviceFactory
 {
 public:
     static QNonContiguousByteDevice *create(QIODevice *device);
-    static QSharedPointer<QNonContiguousByteDevice> createShared(QIODevice *device);
+    static std::shared_ptr<QNonContiguousByteDevice> createShared(QIODevice *device);
 
     static QNonContiguousByteDevice *create(QByteArray *byteArray);
-    static QSharedPointer<QNonContiguousByteDevice> createShared(QByteArray *byteArray);
+    static std::shared_ptr<QNonContiguousByteDevice> createShared(QByteArray *byteArray);
 
-    static QNonContiguousByteDevice *create(QSharedPointer<QRingBuffer> ringBuffer);
-    static QSharedPointer<QNonContiguousByteDevice> createShared(QSharedPointer<QRingBuffer> ringBuffer);
+    static QNonContiguousByteDevice *create(std::shared_ptr<QRingBuffer> ringBuffer);
+    static std::shared_ptr<QNonContiguousByteDevice> createShared(std::shared_ptr<QRingBuffer> ringBuffer);
 
     static QIODevice *wrap(QNonContiguousByteDevice *byteDevice);
 };
@@ -102,7 +67,7 @@ public:
 class QNonContiguousByteDeviceByteArrayImpl : public QNonContiguousByteDevice
 {
 public:
-    QNonContiguousByteDeviceByteArrayImpl(QByteArray *ba);
+    explicit QNonContiguousByteDeviceByteArrayImpl(QByteArray *ba);
     ~QNonContiguousByteDeviceByteArrayImpl();
     const char *readPointer(qint64 maximumLength, qint64 &len) override;
     bool advanceReadPointer(qint64 amount) override;
@@ -119,7 +84,7 @@ protected:
 class QNonContiguousByteDeviceRingBufferImpl : public QNonContiguousByteDevice
 {
 public:
-    QNonContiguousByteDeviceRingBufferImpl(QSharedPointer<QRingBuffer> rb);
+    explicit QNonContiguousByteDeviceRingBufferImpl(std::shared_ptr<QRingBuffer> rb);
     ~QNonContiguousByteDeviceRingBufferImpl();
     const char *readPointer(qint64 maximumLength, qint64 &len) override;
     bool advanceReadPointer(qint64 amount) override;
@@ -129,15 +94,15 @@ public:
     qint64 pos() const override;
 
 protected:
-    QSharedPointer<QRingBuffer> ringBuffer;
-    qint64 currentPosition;
+    std::shared_ptr<QRingBuffer> ringBuffer;
+    qint64 currentPosition = 0;
 };
 
 class QNonContiguousByteDeviceIoDeviceImpl : public QNonContiguousByteDevice
 {
     Q_OBJECT
 public:
-    QNonContiguousByteDeviceIoDeviceImpl(QIODevice *d);
+    explicit QNonContiguousByteDeviceIoDeviceImpl(QIODevice *d);
     ~QNonContiguousByteDeviceIoDeviceImpl();
     const char *readPointer(qint64 maximumLength, qint64 &len) override;
     bool advanceReadPointer(qint64 amount) override;
@@ -161,7 +126,7 @@ class QNonContiguousByteDeviceBufferImpl : public QNonContiguousByteDevice
 {
     Q_OBJECT
 public:
-    QNonContiguousByteDeviceBufferImpl(QBuffer *b);
+    explicit QNonContiguousByteDeviceBufferImpl(QBuffer *b);
     ~QNonContiguousByteDeviceBufferImpl();
     const char *readPointer(qint64 maximumLength, qint64 &len) override;
     bool advanceReadPointer(qint64 amount) override;
@@ -179,7 +144,7 @@ protected:
 class QByteDeviceWrappingIoDevice : public QIODevice
 {
 public:
-    QByteDeviceWrappingIoDevice(QNonContiguousByteDevice *bd);
+    explicit QByteDeviceWrappingIoDevice(QNonContiguousByteDevice *bd);
     ~QByteDeviceWrappingIoDevice();
     bool isSequential() const override;
     bool atEnd() const override;

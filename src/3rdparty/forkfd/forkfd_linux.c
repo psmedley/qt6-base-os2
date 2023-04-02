@@ -51,6 +51,8 @@
 #  define P_PIDFD       3
 #endif
 
+#define SYSTEM_FORKFD_CAN_VFORK
+
 // in forkfd.c
 static int convertForkfdWaitFlagsToWaitFlags(int ffdoptions);
 static void convertStatusToForkfdInfo(int status, struct forkfd_info *info);
@@ -82,7 +84,8 @@ static int sys_clone(unsigned long cloneflags, int *ptid)
     return syscall(__NR_clone, cloneflags, child_stack, stack_size, ptid, newtls, ctid);
 #elif defined(__arc__) || defined(__arm__) || defined(__aarch64__) || defined(__mips__) || \
     defined(__nds32__) || defined(__hppa__) || defined(__powerpc__) || defined(__i386__) || \
-    defined(__x86_64__) || defined(__xtensa__) || defined(__alpha__) || defined(__riscv)
+    defined(__x86_64__) || defined(__xtensa__) || defined(__alpha__) || defined(__riscv) || \
+    defined(__loongarch__)
     /* ctid and newtls are inverted on CONFIG_CLONE_BACKWARDS architectures,
      * but since both values are 0, there's no harm. */
     return syscall(__NR_clone, cloneflags, child_stack, ptid, ctid, newtls);
@@ -131,16 +134,55 @@ int system_has_forkfd()
     return ffd_atomic_load(&system_forkfd_state, FFD_ATOMIC_RELAXED) > 0;
 }
 
-int system_forkfd(int flags, pid_t *ppid, int *system)
+static int system_forkfd_availability(void)
 {
-    pid_t pid;
-    int pidfd;
-
     int state = ffd_atomic_load(&system_forkfd_state, FFD_ATOMIC_RELAXED);
     if (state == 0) {
         state = detect_clone_pidfd_support();
         ffd_atomic_store(&system_forkfd_state, state, FFD_ATOMIC_RELAXED);
     }
+    return state;
+}
+
+static int system_forkfd_pidfd_set_flags(int pidfd, int flags)
+{
+    if ((flags & FFD_CLOEXEC) == 0) {
+        /* pidfd defaults to O_CLOEXEC */
+        fcntl(pidfd, F_SETFD, 0);
+    }
+    if (flags & FFD_NONBLOCK)
+        fcntl(pidfd, F_SETFL, fcntl(pidfd, F_GETFL) | O_NONBLOCK);
+    return pidfd;
+}
+
+int system_vforkfd(int flags, pid_t *ppid, int (*childFn)(void *), void *token, int *system)
+{
+    __attribute__((aligned(64))) char childStack[4096];
+    pid_t pid;
+    int pidfd;
+    unsigned long cloneflags = CLONE_PIDFD | CLONE_VFORK | CLONE_VM | SIGCHLD;
+
+    int state = system_forkfd_availability();
+    if (state < 0) {
+        *system = 0;
+        return state;
+    }
+    *system = 1;
+
+    pid = clone(childFn, childStack + sizeof(childStack), cloneflags, token, &pidfd, NULL, NULL);
+    if (pid < 0)
+        return pid;
+    if (ppid)
+        *ppid = pid;
+    return system_forkfd_pidfd_set_flags(pidfd, flags);
+}
+
+int system_forkfd(int flags, pid_t *ppid, int *system)
+{
+    pid_t pid;
+    int pidfd;
+
+    int state = system_forkfd_availability();
     if (state < 0) {
         *system = 0;
         return state;
@@ -160,13 +202,7 @@ int system_forkfd(int flags, pid_t *ppid, int *system)
     }
 
     /* parent process */
-    if ((flags & FFD_CLOEXEC) == 0) {
-        /* pidfd defaults to O_CLOEXEC */
-        fcntl(pidfd, F_SETFD, 0);
-    }
-    if (flags & FFD_NONBLOCK)
-        fcntl(pidfd, F_SETFL, fcntl(pidfd, F_GETFL) | O_NONBLOCK);
-    return pidfd;
+    return system_forkfd_pidfd_set_flags(pidfd, flags);
 }
 
 int system_forkfd_wait(int ffd, struct forkfd_info *info, int ffdoptions, struct rusage *rusage)
@@ -184,10 +220,9 @@ int system_forkfd_wait(int ffd, struct forkfd_info *info, int ffdoptions, struct
             options |= WNOHANG;
     }
 
+    si.si_status = si.si_code = 0;
     ret = sys_waitid(P_PIDFD, ffd, &si, options, rusage);
-    if (ret == -1 && errno == ECHILD) {
-        errno = EWOULDBLOCK;
-    } else if (ret == 0 && info) {
+    if (info) {
         info->code = si.si_code;
         info->status = si.si_status;
     }

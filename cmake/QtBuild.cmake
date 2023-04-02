@@ -140,7 +140,7 @@ qt_configure_process_path(INSTALL_DESCRIPTIONSDIR
                          "${INSTALL_DATADIR}/modules"
                           "Module description files directory")
 
-if(CMAKE_CROSSCOMPILING AND NOT "${CMAKE_STAGING_PREFIX}" STREQUAL "")
+if(NOT "${CMAKE_STAGING_PREFIX}" STREQUAL "")
     set(QT_STAGING_PREFIX "${CMAKE_STAGING_PREFIX}")
 else()
     set(QT_STAGING_PREFIX "${CMAKE_INSTALL_PREFIX}")
@@ -159,7 +159,7 @@ function(qt_internal_set_up_global_paths)
     #
     # These values should be prepended to file paths in commands or properties,
     # in order to correctly place generated Config files, generated Targets files,
-    # excutables / libraries, when copying / installing files, etc.
+    # executables / libraries, when copying / installing files, etc.
     #
     # The build dir variables will always be absolute paths.
     # The QT_INSTALL_DIR variable will have a relative path in a prefix build,
@@ -238,18 +238,21 @@ endif("${isSystemDir}" STREQUAL "-1")
 # Bottom line: No need to pass anything to CMAKE_INSTALL_RPATH.
 set(CMAKE_INSTALL_RPATH "" CACHE STRING "RPATH for installed binaries")
 
-# add the automatically determined parts of the RPATH
-# which point to directories outside the build tree to the install RPATH
+# By default, don't embed auto-determined RPATHs pointing to directories
+# outside of the build tree, into the installed binaries.
+# This ended up adding rpaths like ${CMAKE_INSTALL_PREFIX}/lib (or /Users/qt/work/install/lib into
+# the official libraries created by the CI) into the non-qtbase libraries, plugins, etc.
 #
-# TODO: Do we really want to use this option for official packages? Perhaps make it configurable
-# or remove it? This causes final installed binaries to contain an absolute path RPATH pointing
-# to ${CMAKE_INSTALL_PREFIX}/lib, which on the CI would be something like
-# /Users/qt/work/install/lib.
-# It doesn't seem necessary to me, given that qt_apply_rpaths already applies $ORIGIN-style
-# relocatable paths, but maybe i'm missing something, because the original commit that added the
-# option mentions it's needed in some cross-compilation scenario for program binaries that
-# link against QtCore.
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+# It should not be necessary, given that qt_apply_rpaths() already adds the necessary rpaths, either
+# relocatable ones or absolute ones, depending on what the platform supports.
+if(NOT QT_NO_DISABLE_CMAKE_INSTALL_RPATH_USE_LINK_PATH)
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+endif()
+
+# Ensure that GNUInstallDirs's CMAKE_INSTALL_LIBDIR points to the same lib dir that Qt was
+# configured with. Currently this is important for QML plugins, which embed an rpath based
+# on that value.
+set(CMAKE_INSTALL_LIBDIR "${INSTALL_LIBDIR}")
 
 function(qt_setup_tool_path_command)
     if(NOT CMAKE_HOST_WIN32)
@@ -260,27 +263,10 @@ function(qt_setup_tool_path_command)
     list(APPEND command COMMAND)
     list(APPEND command set PATH=${bindir}$<SEMICOLON>%PATH%)
     set(QT_TOOL_PATH_SETUP_COMMAND "${command}" CACHE INTERNAL "internal command prefix for tool invocations" FORCE)
-    # QT_TOOL_PATH_SETUP_COMMAND is deprecated. Please use _qt_internal_wrap_tool_command
+    # QT_TOOL_PATH_SETUP_COMMAND is deprecated. Please use _qt_internal_get_wrap_tool_script_path
     # instead.
 endfunction()
 qt_setup_tool_path_command()
-
-function(qt_internal_generate_tool_command_wrapper)
-    get_property(is_called GLOBAL PROPERTY _qt_internal_generate_tool_command_wrapper_called)
-    if(NOT CMAKE_HOST_WIN32 OR is_called)
-        return()
-    endif()
-    set(bindir "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_BINDIR}")
-    file(TO_NATIVE_PATH "${bindir}" bindir)
-    set(tool_command_wrapper_path "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/qt_setup_tool_path.bat")
-    file(WRITE "${tool_command_wrapper_path}" "@echo off
-set PATH=${bindir};%PATH%
-%*")
-    set(QT_TOOL_COMMAND_WRAPPER_PATH "${tool_command_wrapper_path}"
-        CACHE INTERNAL "Path to the wrapper of the tool commands")
-    set_property(GLOBAL PROPERTY _qt_internal_generate_tool_command_wrapper_called TRUE)
-endfunction()
-qt_internal_generate_tool_command_wrapper()
 
 # Platform define path, etc.
 if(WIN32)
@@ -310,8 +296,6 @@ elseif(LINUX)
         set(QT_DEFAULT_MKSPEC linux-g++)
     elseif(CLANG)
         set(QT_DEFAULT_MKSPEC linux-clang)
-    elseif(ICC)
-        set(QT_DEFAULT_MKSPEC linux-icc-64)
     endif()
 elseif(ANDROID)
     if(GCC)
@@ -366,6 +350,8 @@ elseif(SOLARIS)
              set(QT_DEFAULT_MKSPEC solaris-cc)
         endif()
     endif()
+elseif(HURD)
+    set(QT_DEFAULT_MKSPEC hurd-g++)
 endif()
 
 if(NOT QT_QMAKE_TARGET_MKSPEC)
@@ -378,29 +364,16 @@ else()
     set(QT_QMAKE_HOST_MKSPEC "${QT_QMAKE_TARGET_MKSPEC}")
 endif()
 
-# Used by consumers of prefix builds via INSTALL_INTERFACE (relative path).
-set(QT_DEFAULT_PLATFORM_DEFINITION_DIR "${INSTALL_MKSPECSDIR}/${QT_QMAKE_TARGET_MKSPEC}")
-
-# Used by qtbase in prefix builds via BUILD_INTERFACE
-set(QT_PLATFORM_DEFINITION_BUILD_INTERFACE_BASE_DIR
-    "${CMAKE_CURRENT_LIST_DIR}/../mkspecs/"
-)
-
-# Used by qtbase and consumers in non-prefix builds via BUILD_INTERFACE
-if(NOT QT_WILL_INSTALL)
-    set(QT_PLATFORM_DEFINITION_BUILD_INTERFACE_BASE_DIR
-        "${QT_BUILD_DIR}/${INSTALL_MKSPECSDIR}"
+if(NOT EXISTS "${QT_MKSPECS_DIR}/${QT_QMAKE_TARGET_MKSPEC}")
+    file(GLOB known_platforms
+        LIST_DIRECTORIES true
+        RELATIVE "${QT_MKSPECS_DIR}"
+        "${QT_MKSPECS_DIR}/*"
     )
+    list(JOIN known_platforms "\n    " known_platforms)
+    message(FATAL_ERROR "Unknown platform ${QT_QMAKE_TARGET_MKSPEC}\n\
+Known platforms:\n    ${known_platforms}")
 endif()
-
-get_filename_component(QT_PLATFORM_DEFINITION_BUILD_INTERFACE_DIR
-    "${QT_PLATFORM_DEFINITION_BUILD_INTERFACE_BASE_DIR}/${QT_QMAKE_TARGET_MKSPEC}"
-    ABSOLUTE
-)
-set(QT_PLATFORM_DEFINITION_BUILD_INTERFACE_DIR
-    "${QT_PLATFORM_DEFINITION_BUILD_INTERFACE_DIR}"
-    CACHE INTERNAL "Path to directory that contains qplatformdefs.h"
-)
 
 if(NOT DEFINED QT_DEFAULT_PLATFORM_DEFINITIONS)
     set(QT_DEFAULT_PLATFORM_DEFINITIONS "")
@@ -408,8 +381,6 @@ endif()
 
 set(QT_PLATFORM_DEFINITIONS ${QT_DEFAULT_PLATFORM_DEFINITIONS}
     CACHE STRING "Qt platform specific pre-processor defines")
-set(QT_PLATFORM_DEFINITION_DIR "${QT_DEFAULT_PLATFORM_DEFINITION_DIR}"
-    CACHE PATH "Path to directory that contains qplatformdefs.h")
 
 set(QT_NAMESPACE "" CACHE STRING "Qt Namespace")
 
@@ -498,7 +469,6 @@ set(__default_target_info_args
 # and qt_internal_add_test_helper.
 set(__qt_internal_add_executable_optional_args
     GUI
-    BOOTSTRAP
     NO_INSTALL
     EXCEPTIONS
     DELAY_RC
@@ -506,6 +476,7 @@ set(__qt_internal_add_executable_optional_args
     QT_APP
 )
 set(__qt_internal_add_executable_single_args
+    CORE_LIBRARY
     OUTPUT_DIRECTORY
     INSTALL_DIRECTORY
     VERSION
@@ -557,13 +528,29 @@ if(ANDROID)
     include(QtAndroidHelpers)
 endif()
 
+if(WASM)
+    include(QtWasmHelpers)
+endif()
+
 # Helpers that are available in public projects and while building Qt itself.
+include(QtPublicAppleHelpers)
 include(QtPublicCMakeHelpers)
 include(QtPublicPluginHelpers)
 include(QtPublicTargetHelpers)
 include(QtPublicWalkLibsHelpers)
 include(QtPublicFindPackageHelpers)
 include(QtPublicDependencyHelpers)
+include(QtPublicTestHelpers)
+include(QtPublicToolHelpers)
+
+if(CMAKE_CROSSCOMPILING)
+    if(NOT IS_DIRECTORY "${QT_HOST_PATH}")
+        message(FATAL_ERROR "You need to set QT_HOST_PATH to cross compile Qt.")
+    endif()
+endif()
+
+_qt_internal_determine_if_host_info_package_needed(__qt_build_requires_host_info_package)
+_qt_internal_find_host_info_package("${__qt_build_requires_host_info_package}")
 
 # TODO: This block provides support for old variables. It should be removed once
 #       we remove all references to these variables in other Qt module repos.
@@ -601,6 +588,11 @@ if(COMMAND _qt_internal_get_add_plugin_keywords)
     unset(__qt_internal_add_plugin_single_args)
     unset(__qt_internal_add_plugin_multi_args)
 endif()
+
+# Create tool script wrapper if necessary.
+# TODO: Remove once all direct usages of QT_TOOL_COMMAND_WRAPPER_PATH are replaced with function
+# calls.
+_qt_internal_generate_tool_command_wrapper()
 
 # This sets up the poor man's scope finalizer mechanism.
 # For newer CMake versions, we use cmake_language(DEFER CALL) instead.

@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
+// Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <android/log.h>
 
@@ -629,14 +593,25 @@ void QAndroidInputContext::updateSelectionHandles()
 
     if (cpos == anchor || im->anchorRectangle().isNull()) {
         auto curRect = cursorRectangle();
-        QPoint cursorPoint = qPlatformWindow->mapToGlobal(QPoint(curRect.x() + (curRect.width() / 2), curRect.y() + curRect.height()));
-        QPoint editMenuPoint(cursorPoint.x(), cursorPoint.y());
+        QPoint cursorPointGlobal = qPlatformWindow->mapToGlobal(
+                    QPoint(curRect.x() + (curRect.width() / 2), curRect.y() + curRect.height()));
+        QPoint cursorPoint(curRect.center().x(), curRect.bottom());
+        int x = curRect.x();
+        int y = curRect.y();
+
+        // Use x and y for the editMenuPoint from the cursorPointGlobal when the cursor is in the Dialog
+        if (cursorPointGlobal != cursorPoint) {
+            x = cursorPointGlobal.x();
+            y = cursorPointGlobal.y();
+        }
+
+        QPoint editMenuPoint(x, y);
         m_handleMode &= ShowEditPopup;
         m_handleMode |= ShowCursor;
         uint32_t buttons = readOnly ? 0 : EditContext::PasteButton;
         if (!query.value(Qt::ImSurroundingText).toString().isEmpty())
             buttons |= EditContext::SelectAllButton;
-        QtAndroidInput::updateHandles(m_handleMode, editMenuPoint, buttons, cursorPoint);
+        QtAndroidInput::updateHandles(m_handleMode, editMenuPoint, buttons, cursorPointGlobal);
         // The VK is hidden, reset the timer
         if (m_hideCursorHandleTimer.isActive())
             m_hideCursorHandleTimer.start();
@@ -654,22 +629,26 @@ void QAndroidInputContext::updateSelectionHandles()
     QPoint leftPoint(qPlatformWindow->mapToGlobal(leftRect.bottomLeft().toPoint()));
     QPoint rightPoint(qPlatformWindow->mapToGlobal(rightRect.bottomRight().toPoint()));
 
-    if (m_selectHandleWidth == 0)
-            m_selectHandleWidth = QtAndroidInput::getSelectHandleWidth() / 2;
-    int rightSideOfScreen = QtAndroid::androidPlatformIntegration()->screen()->availableGeometry().right();
-    if (leftPoint.x() < m_selectHandleWidth)
-        leftPoint.setX(m_selectHandleWidth);
+    QAndroidPlatformIntegration *platformIntegration = QtAndroid::androidPlatformIntegration();
+    if (platformIntegration) {
+        if (m_selectHandleWidth == 0)
+                m_selectHandleWidth = QtAndroidInput::getSelectHandleWidth() / 2;
 
-    if (rightPoint.x() > rightSideOfScreen - m_selectHandleWidth)
-        rightPoint.setX(rightSideOfScreen - m_selectHandleWidth);
+        int rightSideOfScreen = platformIntegration->screen()->availableGeometry().right();
+        if (leftPoint.x() < m_selectHandleWidth)
+            leftPoint.setX(m_selectHandleWidth);
 
-    QPoint editPoint(qPlatformWindow->mapToGlobal(leftRect.united(rightRect).topLeft().toPoint()));
-    uint32_t buttons = readOnly ? EditContext::CopyButton | EditContext::SelectAllButton
-                                : EditContext::AllButtons;
+        if (rightPoint.x() > rightSideOfScreen - m_selectHandleWidth)
+            rightPoint.setX(rightSideOfScreen - m_selectHandleWidth);
 
-    QtAndroidInput::updateHandles(m_handleMode, editPoint, buttons, leftPoint, rightPoint,
-                                  query.value(Qt::ImCurrentSelection).toString().isRightToLeft());
-    m_hideCursorHandleTimer.stop();
+        QPoint editPoint(qPlatformWindow->mapToGlobal(leftRect.united(rightRect).topLeft().toPoint()));
+        uint32_t buttons = readOnly ? EditContext::CopyButton | EditContext::SelectAllButton
+                                    : EditContext::AllButtons;
+
+        QtAndroidInput::updateHandles(m_handleMode, editPoint, buttons, leftPoint, rightPoint,
+                                      query.value(Qt::ImCurrentSelection).toString().isRightToLeft());
+        m_hideCursorHandleTimer.stop();
+    }
 }
 
 /*
@@ -975,7 +954,6 @@ void QAndroidInputContext::setFocusObject(QObject *object)
         m_focusObject = object;
         reset();
     }
-    QPlatformInputContext::setFocusObject(object);
     updateSelectionHandles();
 }
 
@@ -1029,7 +1007,7 @@ jboolean QAndroidInputContext::deleteSurroundingText(jint leftLength, jint right
       absolutely not what Android's native EditText does. It deletes leftLength characters before
       min(selection start, composing region start) and rightLength characters after max(selection
       end, composing region end). There are no known keyboards that depend on this behavior, but
-      it is better to be consistent with EditText behavior, because there definetly should be no
+      it is better to be consistent with EditText behavior, because there definitely should be no
       keyboards that depend on documented behavior.
      */
     const int leftEnd =
@@ -1143,7 +1121,7 @@ void QAndroidInputContext::focusObjectStartComposing()
         return;
 
     // Composing strings containing newline characters are rare and may cause problems
-    if (m_composingText.contains(QLatin1Char('\n')))
+    if (m_composingText.contains(u'\n'))
         return;
 
     QSharedPointer<QInputMethodQueryEvent> query = focusObjectInputMethodQuery();
@@ -1226,7 +1204,7 @@ jint QAndroidInputContext::getCursorCapsMode(jint /*reqModes*/)
         if (focusObjectIsComposing())
             surroundingText += QStringView{m_composingText}.left(m_composingCursor - m_composingTextStart);
         // Add a character to see if it is at the end of the sentence or not
-        QTextBoundaryFinder finder(QTextBoundaryFinder::Sentence, surroundingText + QLatin1Char('A'));
+        QTextBoundaryFinder finder(QTextBoundaryFinder::Sentence, surroundingText + u'A');
         finder.setPosition(surroundingText.length());
         if (finder.isAtBoundary())
             atWordBoundary = finder.isAtBoundary();
@@ -1446,7 +1424,7 @@ jboolean QAndroidInputContext::setComposingText(const QString &text, jint newCur
     const bool focusObjectWasComposing = focusObjectIsComposing();
 
     // Same checks as in focusObjectStartComposing()
-    if (!m_composingText.isEmpty() && !m_composingText.contains(QLatin1Char('\n'))
+    if (!m_composingText.isEmpty() && !m_composingText.contains(u'\n')
             && newAbsoluteCursorPos >= m_composingTextStart
             && newAbsoluteCursorPos <= m_composingTextStart + m_composingText.length())
         m_composingCursor = newAbsoluteCursorPos;

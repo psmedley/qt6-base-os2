@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qcborvalue.h"
 #include "qcborvalue_p.h"
@@ -47,6 +11,9 @@
 #include "qjsonobject.h"
 #include "qjsondocument.h"
 #include "qjson_p.h"
+
+#include <qmap.h>
+#include <qhash.h>
 
 #include <private/qnumeric_p.h>
 #include <quuid.h>
@@ -98,7 +65,6 @@ static QString maybeEncodeTag(const QCborContainerPrivate *d)
 {
     qint64 tag = d->elements.at(0).value;
     const Element &e = d->elements.at(1);
-    const ByteData *b = d->byteData(e);
 
     switch (tag) {
     case qint64(QCborKnownTags::DateTimeString):
@@ -115,8 +81,12 @@ static QString maybeEncodeTag(const QCborContainerPrivate *d)
         break;
 
     case qint64(QCborKnownTags::Uuid):
-        if (e.type == QCborValue::ByteArray && b->len == sizeof(QUuid))
+#ifndef QT_BOOTSTRAPPED
+        if (const ByteData *b = d->byteData(e); e.type == QCborValue::ByteArray && b
+                && b->len == sizeof(QUuid))
             return QUuid::fromRfc4122(b->asByteArrayView()).toString(QUuid::WithoutBraces);
+#endif
+        break;
     }
 
     // don't know what to do, bail out
@@ -205,10 +175,14 @@ static QJsonValue convertExtendedTypeToJson(QCborContainerPrivate *d)
 
     switch (tag) {
     case qint64(QCborKnownTags::Url):
-        // use the fullly-encoded URL form
+#ifdef QT_BOOTSTRAPPED
+        break;
+#else
+        // use the fully-encoded URL form
         if (d->elements.at(1).type == QCborValue::String)
             return QUrl::fromEncoded(d->byteData(1)->asByteArrayView()).toString(QUrl::FullyEncoded);
         Q_FALLTHROUGH();
+#endif
 
     case qint64(QCborKnownTags::DateTimeString):
     case qint64(QCborKnownTags::ExpectedBase64url):
@@ -424,10 +398,12 @@ QJsonValue QCborValue::toJsonValue() const
     return QJsonPrivate::Value::fromTrustedCbor(simpleTypeString(type()));
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0) && !defined(QT_BOOTSTRAPPED)
 QJsonValue QCborValueRef::toJsonValue() const
 {
     return qt_convertToJson(d, i);
 }
+#endif
 
 /*!
     Recursively converts every \l QCborValue element in this array to JSON
@@ -580,15 +556,15 @@ QVariant QCborValue::toVariant() const
 #ifndef QT_BOOTSTRAPPED
     case Url:
         return toUrl();
-#endif
 
-#if QT_CONFIG(regularexpression)
+#  if QT_CONFIG(regularexpression)
     case RegularExpression:
         return toRegularExpression();
-#endif
+#  endif
 
     case Uuid:
         return toUuid();
+#endif
 
     case Invalid:
         return QVariant();
@@ -757,9 +733,9 @@ QCborValue QCborValue::fromVariant(const QVariant &variant)
 #ifndef QT_BOOTSTRAPPED
     case QMetaType::QUrl:
         return QCborValue(variant.toUrl());
-#endif
     case QMetaType::QUuid:
         return QCborValue(variant.toUuid());
+#endif
     case QMetaType::QVariantList:
         return QCborArray::fromVariantList(variant.toList());
     case QMetaType::QVariantMap:
@@ -876,6 +852,18 @@ QCborArray QCborArray::fromJsonArray(const QJsonArray &array)
 }
 
 /*!
+    \overload
+    \since 6.3
+ */
+QCborArray QCborArray::fromJsonArray(QJsonArray &&array) noexcept
+{
+    QCborArray result;
+    result.d = std::exchange(array.a, {});
+    return result;
+
+}
+
+/*!
     Converts the CBOR values to QVariant using QCborValue::toVariant() and
     "stringifies" all the CBOR keys in this map, returning the QVariantMap that
     results from that association list.
@@ -986,6 +974,17 @@ QCborMap QCborMap::fromJsonObject(const QJsonObject &obj)
 {
     QCborMap result;
     result.d = obj.o;
+    return result;
+}
+
+/*!
+    \overload
+    \since 6.3
+ */
+QCborMap QCborMap::fromJsonObject(QJsonObject &&obj) noexcept
+{
+    QCborMap result;
+    result.d = std::exchange(obj.o, {});
     return result;
 }
 

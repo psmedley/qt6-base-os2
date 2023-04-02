@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qjpeghandler_p.h"
 
@@ -86,9 +50,6 @@ extern "C" {
 static void my_error_exit (j_common_ptr cinfo)
 {
     my_error_mgr* myerr = (my_error_mgr*) cinfo->err;
-    char buffer[JMSG_LENGTH_MAX];
-    (*cinfo->err->format_message)(cinfo, buffer);
-    qCWarning(lcJpeg, "%s", buffer);
     longjmp(myerr->setjmp_buffer, 1);
 }
 
@@ -353,7 +314,7 @@ static bool read_jpeg_image(QImage *outImage,
 
         // Allocate memory for the clipped QImage.
         if (!ensureValidImage(outImage, info, clip.size()))
-            longjmp(err->setjmp_buffer, 1);
+            return false;
 
         // Avoid memcpy() overhead if grayscale with no clipping.
         bool quickGray = (info->output_components == 1 &&
@@ -429,8 +390,10 @@ static bool read_jpeg_image(QImage *outImage,
             *outImage = outImage->copy(scaledClipRect);
         return !outImage->isNull();
     }
-    else
+    else {
+        my_output_message(j_common_ptr(info));
         return false;
+    }
 }
 
 struct my_jpeg_destination_mgr : public jpeg_destination_mgr {
@@ -495,7 +458,7 @@ static inline void set_text(const QImage &image, j_compress_ptr cinfo, const QSt
         if (!comment.isEmpty())
             comment += ": ";
         comment += it.value().toUtf8();
-        if (comment.length() > maxMarkerSize)
+        if (comment.size() > maxMarkerSize)
             comment.truncate(maxMarkerSize);
         jpeg_write_marker(cinfo, JPEG_COM, (const JOCTET *)comment.constData(), comment.size());
     }
@@ -704,6 +667,7 @@ static bool do_write_jpeg_image(struct jpeg_compress_struct &cinfo,
         jpeg_destroy_compress(&cinfo);
         success = true;
     } else {
+        my_output_message(j_common_ptr(&cinfo));
         jpeg_destroy_compress(&cinfo);
         success = false;
     }
@@ -986,8 +950,8 @@ bool QJpegHandlerPrivate::readJpegHeader(QIODevice *device)
             state = ReadHeader;
             return true;
         }
-        else
-        {
+        else {
+            my_output_message(j_common_ptr(&info));
             return false;
         }
     }

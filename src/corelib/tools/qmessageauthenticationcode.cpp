@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2013 Ruslan Nigmatullin <euroelessar@yandex.ru>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2013 Ruslan Nigmatullin <euroelessar@yandex.ru>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qmessageauthenticationcode.h"
 #include "qvarlengtharray.h"
@@ -122,10 +86,7 @@ void QMessageAuthenticationCodePrivate::initMessageHash()
     const int blockSize = qt_hash_block_size(method);
 
     if (key.size() > blockSize) {
-        QCryptographicHash hash(method);
-        hash.addData(key);
-        key = hash.result();
-        hash.reset();
+        key = QCryptographicHash::hash(key, method);
     }
 
     if (key.size() < blockSize) {
@@ -140,7 +101,7 @@ void QMessageAuthenticationCodePrivate::initMessageHash()
     for (int i = 0; i < blockSize; ++i)
         iKeyPad[i] = keyData[i] ^ 0x36;
 
-    messageHash.addData(iKeyPad.data(), iKeyPad.size());
+    messageHash.addData(iKeyPad);
 }
 
 /*!
@@ -216,7 +177,7 @@ void QMessageAuthenticationCode::setKey(const QByteArray &key)
 void QMessageAuthenticationCode::addData(const char *data, qsizetype length)
 {
     d->initMessageHash();
-    d->messageHash.addData(data, length);
+    d->messageHash.addData({data, length});
 }
 
 /*!
@@ -254,7 +215,7 @@ QByteArray QMessageAuthenticationCode::result() const
 
     const int blockSize = qt_hash_block_size(d->method);
 
-    QByteArray hashedMessage = d->messageHash.result();
+    QByteArrayView hashedMessage = d->messageHash.resultView();
 
     QVarLengthArray<char> oKeyPad(blockSize);
     const char * const keyData = d->key.constData();
@@ -263,7 +224,7 @@ QByteArray QMessageAuthenticationCode::result() const
         oKeyPad[i] = keyData[i] ^ 0x5c;
 
     QCryptographicHash hash(d->method);
-    hash.addData(oKeyPad.data(), oKeyPad.size());
+    hash.addData(oKeyPad);
     hash.addData(hashedMessage);
 
     d->result = hash.result();

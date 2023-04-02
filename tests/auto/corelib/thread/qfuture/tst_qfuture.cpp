@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #define QFUTURE_TEST
 
 #include <QCoreApplication>
@@ -33,6 +8,9 @@
 #include <QTestEventLoop>
 #include <QTimer>
 #include <QSignalSpy>
+#include <QVarLengthArray>
+#include <QSet>
+#include <QList>
 
 #include <QTest>
 #include <qfuture.h>
@@ -52,10 +30,7 @@
 #  undef interface
 #endif
 
-struct ResultStoreInt : QtPrivate::ResultStoreBase
-{
-    ~ResultStoreInt() { clear<int>(); }
-};
+using namespace Qt::StringLiterals;
 
 class SenderObject : public QObject
 {
@@ -170,6 +145,7 @@ private slots:
     void futureInterface();
     void refcounting();
     void cancel();
+    void cancelAndFinish();
     void statePropagation();
     void multipleResults();
     void indexedResults();
@@ -227,7 +203,28 @@ private slots:
     void rejectPendingResultOverwrite();
 
     void createReadyFutures();
+
+    void getFutureInterface();
+    void convertQMetaType();
+
+    void whenAllIterators();
+    void whenAllIteratorsWithCanceled();
+    void whenAllIteratorsWithFailed();
+    void whenAllDifferentTypes();
+    void whenAllDifferentTypesWithCanceled();
+    void whenAllDifferentTypesWithFailed();
+    void whenAnyIterators();
+    void whenAnyIteratorsWithCanceled();
+    void whenAnyIteratorsWithFailed();
+    void whenAnyDifferentTypes();
+    void whenAnyDifferentTypesWithCanceled();
+    void whenAnyDifferentTypesWithFailed();
+
     void continuationsDontLeak();
+    void cancelAfterFinishWithContinuations();
+
+    void unwrap();
+
 private:
     using size_type = std::vector<int>::size_type;
 
@@ -241,6 +238,16 @@ private:
     static  void testTakeResults(QFuture<T> future, size_type resultCount);
 };
 
+class IntResultsCleaner
+{
+public:
+    IntResultsCleaner(QtPrivate::ResultStoreBase &s) : store(s) { }
+    ~IntResultsCleaner() { store.clear<int>(); }
+
+private:
+    QtPrivate::ResultStoreBase &store;
+};
+
 void tst_QFuture::resultStore()
 {
     int int0 = 0;
@@ -248,7 +255,9 @@ void tst_QFuture::resultStore()
     int int2 = 2;
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         QCOMPARE(store.begin(), store.end());
         QCOMPARE(store.resultAt(0), store.end());
         QCOMPARE(store.resultAt(1), store.end());
@@ -256,7 +265,9 @@ void tst_QFuture::resultStore()
 
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResult(-1, &int0);
         store.addResult(1, &int1);
         QtPrivate::ResultIteratorBase it = store.begin();
@@ -278,7 +289,9 @@ void tst_QFuture::resultStore()
     QList<int> vec1 = QList<int>() << 4 << 5;
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResults(-1, &vec0, 2);
         store.addResults(-1, &vec1, 2);
         QtPrivate::ResultIteratorBase it = store.begin();
@@ -301,7 +314,9 @@ void tst_QFuture::resultStore()
         QCOMPARE(it, store.end());
     }
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResult(-1, &int0);
         store.addResults(-1, &vec1, 2);
         store.addResult(-1, &int1);
@@ -332,7 +347,9 @@ void tst_QFuture::resultStore()
         QCOMPARE(store.resultAt(4), store.end());
     }
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResult(-1, &int0);
         store.addResults(-1, &vec0);
         store.addResult(-1, &int1);
@@ -362,7 +379,9 @@ void tst_QFuture::resultStore()
         QCOMPARE(store.resultAt(3).value<int>(), int1);
     }
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResult(-1, &int0);
         store.addResults(-1, &vec0);
         store.addResult(200, &int1);
@@ -374,7 +393,9 @@ void tst_QFuture::resultStore()
     }
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResult(1, &int1);
         store.addResult(0, &int0);
         store.addResult(-1, &int2);
@@ -385,7 +406,9 @@ void tst_QFuture::resultStore()
     }
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         QCOMPARE(store.contains(0), false);
         QCOMPARE(store.contains(1), false);
         QCOMPARE(store.contains(INT_MAX), false);
@@ -393,7 +416,9 @@ void tst_QFuture::resultStore()
 
     {
         // Test filter mode, where "gaps" in the result array aren't allowed.
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.setFilterMode(true);
 
         store.addResult(0, &int0);
@@ -427,7 +452,9 @@ void tst_QFuture::resultStore()
 
     {
         // test canceled results
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.setFilterMode(true);
 
         store.addResult(0, &int0);
@@ -464,7 +491,9 @@ void tst_QFuture::resultStore()
 
     {
         // test addResult return value
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.setFilterMode(true);
 
         store.addResult(0, &int0);
@@ -510,7 +539,9 @@ void tst_QFuture::resultStore()
     {
         // test resultCount in non-filtered mode. It should always be possible
         // to iterate through the results 0 to resultCount.
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResult(0, &int0);
 
         QCOMPARE(store.count(), 1);
@@ -524,7 +555,9 @@ void tst_QFuture::resultStore()
     }
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResult(2, &int0);
         QCOMPARE(store.count(), 0);
 
@@ -536,7 +569,9 @@ void tst_QFuture::resultStore()
     }
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResults(2, &vec1);
         QCOMPARE(store.count(), 0);
 
@@ -548,7 +583,9 @@ void tst_QFuture::resultStore()
     }
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResults(2, &vec1);
         QCOMPARE(store.count(), 0);
 
@@ -556,7 +593,9 @@ void tst_QFuture::resultStore()
         QCOMPARE(store.count(), 4);
     }
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResults(3, &vec1);
         QCOMPARE(store.count(), 0);
 
@@ -568,7 +607,9 @@ void tst_QFuture::resultStore()
     }
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.setFilterMode(true);
         store.addResults(3, &vec1);
         QCOMPARE(store.count(), 0);
@@ -581,7 +622,9 @@ void tst_QFuture::resultStore()
     }
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.setFilterMode(true);
         store.addResults(3, &vec1);
         QCOMPARE(store.count(), 0);
@@ -591,7 +634,9 @@ void tst_QFuture::resultStore()
     }
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.setFilterMode(true);
         store.addResults(3, &vec1);
         QCOMPARE(store.count(), 0);
@@ -604,7 +649,9 @@ void tst_QFuture::resultStore()
     }
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.addResult(1, &int0);
         store.addResult(3, &int0);
         store.addResults(6, &vec0);
@@ -619,7 +666,9 @@ void tst_QFuture::resultStore()
     }
 
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.setFilterMode(true);
         store.addResult(1, &int0);
         store.addResult(3, &int0);
@@ -647,7 +696,9 @@ void tst_QFuture::resultStore()
         QCOMPARE(store.contains(7), false);
     }
     {
-        ResultStoreInt store;
+        QtPrivate::ResultStoreBase store;
+        IntResultsCleaner cleanGuard(store);
+
         store.setFilterMode(true);
         store.addCanceledResult(0);
         QCOMPARE(store.contains(0), false);
@@ -927,6 +978,39 @@ void tst_QFuture::cancel()
     }
 }
 
+void tst_QFuture::cancelAndFinish()
+{
+    {
+        QFutureInterface<void> fi;
+
+        fi.reportStarted();
+        fi.cancelAndFinish();
+
+        QVERIFY(fi.isStarted());
+        QVERIFY(!fi.isRunning());
+        QVERIFY(!fi.isSuspended());
+        QVERIFY(!fi.isSuspending());
+        QVERIFY(fi.isCanceled());
+        QVERIFY(fi.isFinished());
+    }
+
+    // The same with suspended state
+    {
+        QFutureInterface<void> fi;
+
+        fi.reportStarted();
+        fi.setSuspended(true);
+        fi.cancelAndFinish();
+
+        QVERIFY(fi.isStarted());
+        QVERIFY(!fi.isRunning());
+        QVERIFY(!fi.isSuspended());
+        QVERIFY(!fi.isSuspending());
+        QVERIFY(fi.isCanceled());
+        QVERIFY(fi.isFinished());
+    }
+}
+
 void tst_QFuture::statePropagation()
 {
     QFuture<void> f1;
@@ -993,13 +1077,13 @@ void tst_QFuture::multipleResults()
     QList<int> fasit = QList<int>() << 1 << 2 << 3 << 4;
     {
         QList<int> results;
-        for (int result : qAsConst(f))
+        for (int result : std::as_const(f))
             results.append(result);
         QCOMPARE(results, fasit);
     }
     {
         QList<int> results;
-        for (int result : qAsConst(copy))
+        for (int result : std::as_const(copy))
             results.append(result);
         QCOMPARE(results, fasit);
     }
@@ -2157,6 +2241,26 @@ void tst_QFuture::then()
         QVERIFY(threadId1 != QThread::currentThreadId());
         QVERIFY(threadId2 != QThread::currentThreadId());
     }
+
+    // QTBUG-106083 & QTBUG-105182
+    {
+        QThread thread;
+        thread.start();
+
+        QObject context;
+        context.moveToThread(&thread);
+
+        auto future = QtConcurrent::run([] {
+            return 42;
+        }).then([] (int result) {
+            return result + 1;
+        }).then(&context, [] (int result) {
+            return result + 1;
+        });
+        QCOMPARE(future.result(), 44);
+        thread.quit();
+        thread.wait();
+    }
 }
 
 template<class Type, class Callable>
@@ -2996,7 +3100,7 @@ void tst_QFuture::cancelContinuations()
 
 #ifndef QT_NO_EXCEPTIONS
     // The chain is cancelled in the middle of execution of continuations,
-    // while there's an exception in the chain, which is handeled inside
+    // while there's an exception in the chain, which is handled inside
     // the continuations.
     {
         QPromise<int> promise;
@@ -3033,6 +3137,66 @@ void tst_QFuture::cancelContinuations()
         QCOMPARE(checkpoint, 3);
     }
 #endif // QT_NO_EXCEPTIONS
+
+    // Check notifications from QFutureWatcher
+    {
+        QPromise<void> p;
+        auto f = p.future();
+
+        auto f1 = f.then([] {});
+        auto f2 = f1.then([] {});
+
+        QFutureWatcher<void> watcher1, watcher2;
+        int state = 0;
+        QObject::connect(&watcher1, &QFutureWatcher<void>::started, [&] {
+            QCOMPARE(state, 0);
+            ++state;
+        });
+        QObject::connect(&watcher1, &QFutureWatcher<void>::canceled, [&] {
+            QCOMPARE(state, 1);
+            ++state;
+        });
+        QObject::connect(&watcher1, &QFutureWatcher<void>::finished, [&] {
+            QCOMPARE(state, 2);
+            ++state;
+        });
+        QObject::connect(&watcher2, &QFutureWatcher<void>::started, [&] {
+            QCOMPARE(state, 3);
+            ++state;
+        });
+        QObject::connect(&watcher2, &QFutureWatcher<void>::canceled, [&] {
+            QCOMPARE(state, 4);
+            ++state;
+        });
+        QObject::connect(&watcher2, &QFutureWatcher<int>::finished, [&] {
+            QCOMPARE(state, 5);
+            ++state;
+        });
+
+        watcher1.setFuture(f1);
+        watcher2.setFuture(f2);
+
+        p.start();
+        f.cancel();
+        p.finish();
+
+        qApp->processEvents();
+
+        QCOMPARE(state, 6);
+        QVERIFY(watcher1.isFinished());
+        QVERIFY(watcher1.isCanceled());
+        QVERIFY(watcher2.isFinished());
+        QVERIFY(watcher2.isCanceled());
+    }
+
+    // Cancel continuations with context (QTBUG-108790)
+    {
+        // This test should pass with ASan
+        auto future = QtConcurrent::run([] {});
+        future.then(this, [] {});
+        future.waitForFinished();
+        future.cancel();
+    }
 }
 
 void tst_QFuture::continuationsWithContext()
@@ -3667,6 +3831,36 @@ void tst_QFuture::signalConnect()
         QVERIFY(!future.isCanceled());
         QVERIFY(future.isValid());
     }
+
+    // Connect to nullptr
+    {
+        SenderObject *sender = nullptr;
+        auto future = QtFuture::connect(sender, &SenderObject::intArgSignal);
+        QVERIFY(future.isFinished());
+        QVERIFY(future.isCanceled());
+        QVERIFY(!future.isValid());
+    }
+
+    // Connect to non-signal
+    {
+        SenderObject sender;
+
+#if defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
+#define EXPECT_FUTURE_CONNECT_FAIL() QEXPECT_FAIL("", "QTBUG-101761, test fails on Windows/MSVC", Continue)
+#else
+        QTest::ignoreMessage(QtWarningMsg, "QObject::connect: signal not found in SenderObject");
+#define EXPECT_FUTURE_CONNECT_FAIL()
+#endif
+
+        auto future = QtFuture::connect(&sender, &SenderObject::emitNoArg);
+        EXPECT_FUTURE_CONNECT_FAIL();
+        QVERIFY(future.isFinished());
+        EXPECT_FUTURE_CONNECT_FAIL();
+        QVERIFY(future.isCanceled());
+        EXPECT_FUTURE_CONNECT_FAIL();
+        QVERIFY(!future.isValid());
+#undef EXPECT_FUTURE_CONNECT_FAIL
+    }
 }
 
 void tst_QFuture::waitForFinished()
@@ -3941,6 +4135,533 @@ void tst_QFuture::createReadyFutures()
 #endif
 }
 
+void tst_QFuture::getFutureInterface()
+{
+    const int val = 42;
+    QFuture<int> f = QtFuture::makeReadyFuture(val);
+
+    auto interface = QFutureInterfaceBase::get(f);
+    QCOMPARE(interface.resultCount(), 1);
+}
+
+void tst_QFuture::convertQMetaType()
+{
+    const auto intType = QMetaType::fromType<QFuture<int>>();
+    const auto voidType = QMetaType::fromType<QFuture<void>>();
+
+    QVERIFY(QMetaType::canConvert(intType, voidType));
+
+    const int val = 42;
+    QFuture<int> f = QtFuture::makeReadyFuture(val);
+    auto variant = QVariant::fromValue(f);
+    QVERIFY(variant.convert(voidType));
+
+    const auto voidFuture = variant.value<QFuture<void>>();
+    QVERIFY(voidFuture.isValid());
+    QVERIFY(voidFuture.isFinished());
+}
+
+template<class OutputContainer>
+void testWhenAllIterators()
+{
+    QPromise<int> p0;
+    QPromise<int> p1;
+    QPromise<int> p2;
+    QList<QFuture<int>> futures = { p0.future(), p1.future(), p2.future() };
+
+    bool finished = false;
+    QFuture<OutputContainer> whenAll;
+    if constexpr (std::is_same_v<QList<QFuture<int>>, OutputContainer>)
+        whenAll = QtFuture::whenAll(futures.begin(), futures.end());
+    else
+        whenAll = QtFuture::whenAll<OutputContainer>(futures.begin(), futures.end());
+    whenAll.then([&](const OutputContainer &output) {
+        QCOMPARE(output.size(), 3u);
+        QCOMPARE(output[0].result(), 0);
+        QCOMPARE(output[1].result(), 1);
+        QCOMPARE(output[2].result(), 2);
+        finished = true;
+    });
+    QVERIFY(whenAll.isRunning());
+
+    p0.start();
+    p0.addResult(0);
+    p0.finish();
+    QVERIFY(whenAll.isRunning());
+
+    p2.start();
+    p2.addResult(2);
+    p2.finish();
+    QVERIFY(whenAll.isRunning());
+
+    p1.start();
+    p1.addResult(1);
+    p1.finish();
+    QVERIFY(!whenAll.isRunning());
+    QVERIFY(finished);
+
+    // Try with empty sequence
+    QFuture<OutputContainer> whenAllEmpty;
+    if constexpr (std::is_same_v<QList<QFuture<int>>, OutputContainer>)
+        whenAllEmpty = QtFuture::whenAll(futures.end(), futures.end());
+    else
+        whenAllEmpty = QtFuture::whenAll<OutputContainer>(futures.end(), futures.end());
+    QVERIFY(whenAllEmpty.isStarted());
+    QVERIFY(whenAllEmpty.isFinished());
+    QVERIFY(whenAllEmpty.result().empty());
+}
+
+void tst_QFuture::whenAllIterators()
+{
+    // Try with different output containers
+    testWhenAllIterators<QList<QFuture<int>>>();
+    if (QTest::currentTestFailed())
+        QSKIP("testWhenAllIterators() with QList failed!");
+
+    testWhenAllIterators<std::vector<QFuture<int>>>();
+    if (QTest::currentTestFailed())
+        QSKIP("testWhenAllIterators() with std::vector failed!");
+
+    testWhenAllIterators<QVarLengthArray<QFuture<int>>>();
+    if (QTest::currentTestFailed())
+        QSKIP("testWhenAllIterators() with QVarLengthArray failed!");
+}
+
+void tst_QFuture::whenAllIteratorsWithCanceled()
+{
+    QPromise<int> p0;
+    QPromise<int> p1;
+    QList<QFuture<int>> futures = { p0.future(), p1.future() };
+    bool finished = false;
+    auto whenAll = QtFuture::whenAll(futures.begin(), futures.end())
+                           .then([&](const QList<QFuture<int>> &results) {
+                               QCOMPARE(results.size(), 2);
+                               QVERIFY(results[0].isCanceled());
+                               QVERIFY(!results[1].isCanceled());
+                               QCOMPARE(results[1].result(), 1);
+                               finished = true;
+                           });
+
+    p0.start();
+    p0.future().cancel();
+    p0.finish();
+    QVERIFY(!finished);
+
+    p1.start();
+    p1.addResult(1);
+    p1.finish();
+    QVERIFY(finished);
+}
+
+void tst_QFuture::whenAllIteratorsWithFailed()
+{
+#ifndef QT_NO_EXCEPTIONS
+    QPromise<int> p0;
+    QPromise<int> p1;
+    QList<QFuture<int>> futures = { p0.future(), p1.future() };
+    bool finished = false;
+    auto whenAll = QtFuture::whenAll(futures.begin(), futures.end())
+                           .then([&](QList<QFuture<int>> results) {
+                               QCOMPARE(results.size(), 2);
+                               QCOMPARE(results[1].result(), 1);
+                               // A shorter way of handling the exception
+                               results[0].onFailed([&](const QException &) {
+                                   finished = true;
+                                   return 0;
+                               });
+                           });
+
+    p0.start();
+    p0.setException(QException());
+    p0.finish();
+    QVERIFY(!finished);
+
+    p1.start();
+    p1.addResult(1);
+    p1.finish();
+    QVERIFY(finished);
+#else
+    QSKIP("Exceptions are disabled, skipping the test")
+#endif
+}
+
+// A helper for std::visit, see https://en.cppreference.com/w/cpp/utility/variant/visit
+template<class... Ts>
+struct overloaded : public Ts...
+{
+    using Ts::operator()...;
+};
+
+// explicit deduction guide
+template<class... Ts>
+overloaded(Ts...)->overloaded<Ts...>;
+
+template<class OutputContainer>
+void testWhenAllDifferentTypes()
+{
+    QPromise<int> pInt1;
+    QPromise<int> pInt2;
+    QPromise<void> pVoid;
+
+    using Futures = std::variant<QFuture<int>, QFuture<int>, QFuture<void>>;
+
+    QFuture<OutputContainer> whenAll;
+    if constexpr (std::is_same_v<QList<Futures>, OutputContainer>) {
+        whenAll = QtFuture::whenAll(pInt1.future(), pInt2.future(), pVoid.future());
+    } else {
+        whenAll =
+                QtFuture::whenAll<OutputContainer>(pInt1.future(), pInt2.future(), pVoid.future());
+    }
+
+    int sumOfInts = 0;
+    whenAll.then([&](const OutputContainer &results) {
+        for (auto future : results) {
+            std::visit(overloaded {
+                               [&](const QFuture<int> &f) {
+                                   QVERIFY(f.isFinished());
+                                   sumOfInts += f.result();
+                               },
+                               [](const QFuture<void> &f) { QVERIFY(f.isFinished()); },
+                       },
+                       future);
+        }
+    });
+
+    pVoid.start();
+    pVoid.finish();
+    QVERIFY(whenAll.isRunning());
+
+    pInt2.start();
+    pInt2.addResult(2);
+    pInt2.finish();
+    QVERIFY(whenAll.isRunning());
+    QCOMPARE(sumOfInts, 0);
+
+    pInt1.start();
+    pInt1.addResult(1);
+    pInt1.finish();
+    QVERIFY(!whenAll.isRunning());
+    QCOMPARE(sumOfInts, 3);
+}
+
+void tst_QFuture::whenAllDifferentTypes()
+{
+    using Futures = std::variant<QFuture<int>, QFuture<int>, QFuture<void>>;
+    testWhenAllDifferentTypes<QList<Futures>>();
+    if (QTest::currentTestFailed())
+        QSKIP("testWhenAllDifferentTypes() with QList failed!");
+
+    testWhenAllDifferentTypes<std::vector<Futures>>();
+    if (QTest::currentTestFailed())
+        QSKIP("testWhenAllDifferentTypes() with std::vector failed!");
+
+    testWhenAllDifferentTypes<QVarLengthArray<Futures>>();
+    if (QTest::currentTestFailed())
+        QSKIP("testWhenAllDifferentTypes() with QVarLengthArray failed!");
+}
+
+void tst_QFuture::whenAllDifferentTypesWithCanceled()
+{
+    QPromise<int> pInt;
+    QPromise<QString> pString;
+
+    const QString someValue = u"some value"_s;
+
+    bool finished = false;
+    using Futures = std::variant<QFuture<int>, QFuture<QString>>;
+    auto whenAll = QtFuture::whenAll(pInt.future(), pString.future())
+                           .then([&](const QList<Futures> &results) {
+                               finished = true;
+                               for (auto future : results) {
+                                   std::visit(overloaded {
+                                                      [](const QFuture<int> &f) {
+                                                          QVERIFY(f.isFinished());
+                                                          QVERIFY(f.isCanceled());
+                                                      },
+                                                      [&](const QFuture<QString> &f) {
+                                                          QVERIFY(f.isFinished());
+                                                          QCOMPARE(f.result(), someValue);
+                                                      },
+                                              },
+                                              future);
+                               }
+                           });
+
+    pString.start();
+    pString.addResult(someValue);
+    pString.finish();
+    QVERIFY(!finished);
+
+    pInt.start();
+    pInt.future().cancel();
+    pInt.finish();
+    QVERIFY(finished);
+}
+
+void tst_QFuture::whenAllDifferentTypesWithFailed()
+{
+#ifndef QT_NO_EXCEPTIONS
+    QPromise<int> pInt;
+    QPromise<QString> pString;
+
+    const QString someValue = u"some value"_s;
+
+    bool finished = false;
+    using Futures = std::variant<QFuture<int>, QFuture<QString>>;
+    auto whenAll = QtFuture::whenAll(pInt.future(), pString.future())
+                           .then([&](const QList<Futures> &results) {
+                               finished = true;
+                               for (auto future : results) {
+                                   std::visit(overloaded {
+                                                      [](QFuture<int> f) {
+                                                          QVERIFY(f.isFinished());
+                                                          bool failed = false;
+                                                          // A shorter way of handling the exception
+                                                          f.onFailed([&](const QException &) {
+                                                              failed = true;
+                                                              return -1;
+                                                          });
+                                                          QVERIFY(failed);
+                                                      },
+                                                      [&](const QFuture<QString> &f) {
+                                                          QVERIFY(f.isFinished());
+                                                          QCOMPARE(f.result(), someValue);
+                                                      },
+                                              },
+                                              future);
+                               }
+                           });
+
+    pInt.start();
+    pInt.setException(QException());
+    pInt.finish();
+    QVERIFY(!finished);
+
+    pString.start();
+    pString.addResult(someValue);
+    pString.finish();
+    QVERIFY(finished);
+#else
+    QSKIP("Exceptions are disabled, skipping the test")
+#endif
+}
+
+void tst_QFuture::whenAnyIterators()
+{
+    QPromise<int> p0;
+    QPromise<int> p1;
+    QPromise<int> p2;
+    QList<QFuture<int>> futures = { p0.future(), p1.future(), p2.future() };
+
+    auto whenAny = QtFuture::whenAny(futures.begin(), futures.end());
+    int count = 0;
+    whenAny.then([&](const QtFuture::WhenAnyResult<int> &result) {
+        QCOMPARE(result.index, 1);
+        QCOMPARE(result.future.result(), 1);
+        QVERIFY(!futures[0].isFinished());
+        QVERIFY(futures[1].isFinished());
+        QVERIFY(!futures[2].isFinished());
+        ++count;
+    });
+
+    p0.start();
+    p1.start();
+    p2.start();
+    p0.addResult(0);
+    p1.addResult(1);
+    p2.addResult(2);
+    QVERIFY(!whenAny.isFinished());
+    QCOMPARE(count, 0);
+
+    p1.finish();
+    QVERIFY(whenAny.isFinished());
+    QCOMPARE(count, 1);
+
+    p0.finish();
+    QCOMPARE(count, 1);
+
+    p2.finish();
+    QCOMPARE(count, 1);
+
+    auto whenAnyEmpty = QtFuture::whenAny(futures.end(), futures.end());
+    QVERIFY(whenAnyEmpty.isStarted());
+    QVERIFY(whenAnyEmpty.isFinished());
+    QCOMPARE(whenAnyEmpty.result().index, -1);
+    auto whenAnyEmptyResult = whenAnyEmpty.result().future;
+    QVERIFY(whenAnyEmptyResult.isStarted());
+    QVERIFY(whenAnyEmptyResult.isFinished());
+    QVERIFY(whenAnyEmptyResult.isCanceled());
+}
+
+void tst_QFuture::whenAnyIteratorsWithCanceled()
+{
+    QPromise<int> p0;
+    QPromise<int> p1;
+    QList<QFuture<int>> futures = { p0.future(), p1.future() };
+    int count = 0;
+    auto whenAny = QtFuture::whenAny(futures.begin(), futures.end())
+                           .then([&](const QtFuture::WhenAnyResult<int> &result) {
+                               QCOMPARE(result.index, 1);
+                               QVERIFY(result.future.isCanceled());
+                               QVERIFY(!futures[0].isFinished());
+                               QVERIFY(futures[1].isFinished());
+                               ++count;
+                           });
+
+    p1.start();
+    p1.future().cancel();
+    p1.finish();
+    QVERIFY(whenAny.isFinished());
+    QCOMPARE(count, 1);
+
+    p0.start();
+    p0.addResult(0);
+    p0.finish();
+    QCOMPARE(count, 1);
+}
+
+void tst_QFuture::whenAnyIteratorsWithFailed()
+{
+#ifndef QT_NO_EXCEPTIONS
+    QPromise<int> p0;
+    QPromise<int> p1;
+    QList<QFuture<int>> futures = { p0.future(), p1.future() };
+    int count = 0;
+    auto whenAny = QtFuture::whenAny(futures.begin(), futures.end())
+                           .then([&](QtFuture::WhenAnyResult<int> result) {
+                               QCOMPARE(result.index, 1);
+                               QVERIFY(p1.future().isFinished());
+                               QVERIFY(!p0.future().isFinished());
+                               // A shorter way of handling the exception
+                               result.future.onFailed([&](const QException &) {
+                                   ++count;
+                                   return 0;
+                               });
+                           });
+
+    p1.start();
+    p1.setException(QException());
+    p1.finish();
+    QCOMPARE(count, 1);
+
+    p0.start();
+    p0.addResult(0);
+    p0.finish();
+    QCOMPARE(count, 1);
+#else
+    QSKIP("Exceptions are disabled, skipping the test")
+#endif
+}
+
+void tst_QFuture::whenAnyDifferentTypes()
+{
+    QPromise<int> pInt1;
+    QPromise<int> pInt2;
+    QPromise<void> pVoid;
+
+    auto whenAny = QtFuture::whenAny(pInt1.future(), pInt2.future(), pVoid.future());
+    int count = 0;
+    whenAny.then([&](const std::variant<QFuture<int>, QFuture<int>, QFuture<void>> &result) {
+        QCOMPARE(result.index(), 1u);
+        std::visit(overloaded { [&](const QFuture<int> &future) {
+                                    QVERIFY(future.isFinished());
+                                    QCOMPARE(future.result(), 2);
+                                    ++count;
+                                },
+                                [](auto) { QFAIL("The wrong future completed."); }
+                   },
+                   result);
+    });
+
+    pInt2.start();
+    pInt1.start();
+    pVoid.start();
+    pInt1.addResult(1);
+    pInt2.addResult(2);
+
+    QVERIFY(!whenAny.isFinished());
+    QCOMPARE(count, 0);
+
+    pInt2.finish();
+    QVERIFY(whenAny.isFinished());
+    QCOMPARE(count, 1);
+
+    pInt1.finish();
+    QCOMPARE(count, 1);
+
+    pVoid.finish();
+    QCOMPARE(count, 1);
+}
+
+void tst_QFuture::whenAnyDifferentTypesWithCanceled()
+{
+    QPromise<int> pInt;
+    QPromise<void> pVoid;
+
+    int count = 0;
+    auto whenAny = QtFuture::whenAny(pInt.future(), pVoid.future())
+                           .then([&](const std::variant<QFuture<int>, QFuture<void>> &result) {
+                               QCOMPARE(result.index(), 0u);
+                               std::visit(overloaded { [&](const QFuture<int> &future) {
+                                                          QVERIFY(future.isFinished());
+                                                          QVERIFY(future.isCanceled());
+                                                          ++count;
+                                                       },
+                                                       [](auto) {
+                                                           QFAIL("The wrong future completed.");
+                                                       }
+                                          },
+                                          result);
+                           });
+
+    pInt.start();
+    pInt.future().cancel();
+    pInt.finish();
+    QCOMPARE(count, 1);
+
+    pVoid.start();
+    pVoid.finish();
+    QCOMPARE(count, 1);
+}
+
+void tst_QFuture::whenAnyDifferentTypesWithFailed()
+{
+#ifndef QT_NO_EXCEPTIONS
+    QPromise<int> pInt;
+    QPromise<void> pVoid;
+
+    int count = 0;
+    auto whenAny = QtFuture::whenAny(pInt.future(), pVoid.future())
+                           .then([&](const std::variant<QFuture<int>, QFuture<void>> &result) {
+                               QCOMPARE(result.index(), 0u);
+                               std::visit(overloaded { [&](QFuture<int> future) {
+                                                          QVERIFY(future.isFinished());
+                                                          // A shorter way of handling the exception
+                                                          future.onFailed([&](const QException &) {
+                                                              ++count;
+                                                              return -1;
+                                                          });
+                                                       },
+                                                       [](auto) {
+                                                           QFAIL("The wrong future completed.");
+                                                       }
+                                          },
+                                          result);
+                           });
+
+    pInt.start();
+    pInt.setException(QException());
+    pInt.finish();
+    QCOMPARE(count, 1);
+
+    pVoid.start();
+    pVoid.finish();
+    QCOMPARE(count, 1);
+#else
+    QSKIP("Exceptions are disabled, skipping the test")
+#endif
+}
+
 struct InstanceCounter
 {
     InstanceCounter() { ++count; }
@@ -3999,6 +4720,296 @@ void tst_QFuture::continuationsDontLeak()
         QVERIFY(continuationIsRun);
     }
     QCOMPARE(InstanceCounter::count, 0);
+}
+
+// This test checks that we do not get use-after-free
+void tst_QFuture::cancelAfterFinishWithContinuations()
+{
+    QFuture<void> future;
+    bool continuationIsRun = false;
+    bool cancelCalled = false;
+    {
+        QPromise<void> promise;
+        future = promise.future();
+
+        future.then([&continuationIsRun]() {
+            continuationIsRun = true;
+        }).onCanceled([&cancelCalled]() {
+            cancelCalled = true;
+        });
+
+        promise.start();
+        promise.finish();
+    }
+
+    QVERIFY(continuationIsRun);
+    future.cancel();
+    QVERIFY(!cancelCalled);
+}
+
+void tst_QFuture::unwrap()
+{
+    // The nested future succeeds
+    {
+        QPromise<int> p;
+        QFuture<QFuture<int>> f = p.future().then([] (int value) {
+            QFuture<int> nested = QtConcurrent::run([value] {
+                return value + 1;
+            });
+            return nested;
+        });
+
+        QFuture<int> unwrapped = f.unwrap();
+        QVERIFY(!unwrapped.isStarted());
+        QVERIFY(!unwrapped.isFinished());
+
+        p.start();
+        p.addResult(42);
+        p.finish();
+
+        unwrapped.waitForFinished();
+
+        QVERIFY(unwrapped.isStarted());
+        QVERIFY(unwrapped.isFinished());
+        QCOMPARE(unwrapped.result(), 43);
+    }
+
+    // The nested future succeeds with multiple results
+    {
+        QPromise<int> p;
+        QFuture<QFuture<int>> f = p.future().then([] (int value) {
+            QPromise<int> nested;
+            nested.start();
+            nested.addResult(++value);
+            nested.addResult(++value);
+            nested.addResult(++value);
+            nested.finish();
+            return nested.future();
+        });
+
+        QFuture<int> unwrapped = f.unwrap();
+        QVERIFY(!unwrapped.isStarted());
+        QVERIFY(!unwrapped.isFinished());
+
+        p.start();
+        p.addResult(42);
+        p.finish();
+
+        f.waitForFinished();
+
+        QVERIFY(unwrapped.isStarted());
+        QVERIFY(unwrapped.isFinished());
+        QCOMPARE(unwrapped.results(), QList<int>() << 43 << 44 << 45);
+    }
+
+    // The chain is canceled, check that unwrap() propagates the cancellation.
+    {
+        QPromise<int> p;
+        QFuture<int> f = p.future().then([] (int value) {
+            QFuture<int> nested = QtConcurrent::run([value] {
+                return value + 1;
+            });
+            return nested;
+        }).unwrap().then([] (int result) {
+            return result;
+        }).onCanceled([] {
+            return -1;
+        });
+
+        p.start();
+        p.future().cancel();
+        p.finish();
+
+        f.waitForFinished();
+
+        QVERIFY(f.isStarted());
+        QVERIFY(f.isFinished());
+        QCOMPARE(f.result(), -1);
+    }
+
+#ifndef QT_NO_EXCEPTIONS
+    // The chain has an exception, check that unwrap() propagates it.
+    {
+        QPromise<int> p;
+        QFuture<int> f = p.future().then([] (int value) {
+            QFuture<int> nested = QtConcurrent::run([value] {
+                return value + 1;
+            });
+            return nested;
+        }).unwrap().then([] (int result) {
+            return result;
+        }).onFailed([] (QException &) {
+            return -1;
+        });
+
+        p.start();
+        p.setException(QException());
+        p.finish();
+
+        f.waitForFinished();
+
+        QVERIFY(f.isStarted());
+        QVERIFY(f.isFinished());
+        QCOMPARE(f.result(), -1);
+    }
+
+#endif // QT_NO_EXCEPTIONS
+
+    // The nested future is canceled
+    {
+        QPromise<int> p;
+        QFuture<int> f = p.future().then([] (int value) {
+            QFuture<int> nested = QtConcurrent::run([value] {
+                return value + 1;
+            });
+            nested.cancel();
+            return nested;
+        }).unwrap().then([] (int result) {
+            return result;
+        }).onCanceled([] {
+            return -1;
+        });
+
+        p.start();
+        p.addResult(42);
+        p.finish();
+
+        f.waitForFinished();
+
+        QVERIFY(f.isStarted());
+        QVERIFY(f.isFinished());
+        QCOMPARE(f.result(), -1);
+    }
+
+#ifndef QT_NO_EXCEPTIONS
+    // The nested future fails with an exception
+    {
+        QPromise<int> p;
+        QFuture<int> f = p.future().then([] (int value) {
+            QFuture<int> nested = QtConcurrent::run([value] {
+                throw QException();
+                return value + 1;
+            });
+            return nested;
+        }).unwrap().then([] (int result) {
+            return result;
+        }).onFailed([] (QException &) {
+            return -1;
+        });
+
+        p.start();
+        p.addResult(42);
+        p.finish();
+
+        f.waitForFinished();
+
+        QVERIFY(f.isStarted());
+        QVERIFY(f.isFinished());
+        QCOMPARE(f.result(), -1);
+    }
+#endif // QT_NO_EXCEPTIONS
+
+    // Check that continuations are called in the right order
+    {
+        QPromise<void> p;
+
+        std::atomic<bool> firstThenInvoked = false;
+        std::atomic<bool> secondThenInvoked = false;
+        std::atomic<bool> nestedThenInvoked = false;
+        auto f = p.future().then([&] {
+            if (!firstThenInvoked && !secondThenInvoked && !nestedThenInvoked)
+                firstThenInvoked = true;
+            QFuture<void> nested = QtConcurrent::run([&] {
+                QVERIFY(firstThenInvoked);
+                QVERIFY(!nestedThenInvoked);
+                QVERIFY(!secondThenInvoked);
+                nestedThenInvoked = true;
+            });
+            return nested;
+        }).unwrap().then([&] {
+            QVERIFY(firstThenInvoked);
+            QVERIFY(nestedThenInvoked);
+            QVERIFY(!secondThenInvoked);
+            secondThenInvoked = true;
+        });
+
+        QVERIFY(!firstThenInvoked);
+        QVERIFY(!nestedThenInvoked);
+        QVERIFY(!secondThenInvoked);
+
+        p.start();
+        p.finish();
+
+        f.waitForFinished();
+
+        if (QTest::currentTestFailed())
+            return;
+
+        QVERIFY(firstThenInvoked);
+        QVERIFY(nestedThenInvoked);
+        QVERIFY(secondThenInvoked);
+    }
+
+    // Unwrap multiple nested futures
+    {
+        QPromise<int> p;
+        QFuture<QFuture<QFuture<int>>> f = p.future().then([] (int value) {
+            QFuture<QFuture<int>> nested = QtConcurrent::run([value] {
+                QFuture<int> doubleNested = QtConcurrent::run([value] {
+                    return value + 1;
+                });
+                return doubleNested;
+            });
+            return nested;
+        });
+
+        QFuture<int> unwrapped = f.unwrap();
+        QVERIFY(!unwrapped.isStarted());
+        QVERIFY(!unwrapped.isFinished());
+
+        p.start();
+        p.addResult(42);
+        p.finish();
+
+        unwrapped.waitForFinished();
+
+        QVERIFY(unwrapped.isStarted());
+        QVERIFY(unwrapped.isFinished());
+        QCOMPARE(unwrapped.result(), 43);
+    }
+
+    // Unwrap multiple nested void futures
+    {
+        QPromise<void> p;
+        std::atomic<bool> nestedInvoked = false;
+        std::atomic<bool> doubleNestedInvoked = false;
+        QFuture<QFuture<QFuture<void>>> f = p.future().then([&] {
+            QFuture<QFuture<void>> nested = QtConcurrent::run([&] {
+                QFuture<void> doubleNested = QtConcurrent::run([&] {
+                    doubleNestedInvoked = true;
+                });
+                nestedInvoked = true;
+                return doubleNested;
+            });
+            return nested;
+        });
+
+        QFuture<void> unwrapped = f.unwrap();
+        QVERIFY(!nestedInvoked);
+        QVERIFY(!doubleNestedInvoked);
+        QVERIFY(!unwrapped.isStarted());
+        QVERIFY(!unwrapped.isFinished());
+
+        p.start();
+        p.finish();
+
+        unwrapped.waitForFinished();
+
+        QVERIFY(unwrapped.isStarted());
+        QVERIFY(unwrapped.isFinished());
+        QVERIFY(nestedInvoked);
+        QVERIFY(doubleNestedInvoked);
+    }
 }
 
 QTEST_MAIN(tst_QFuture)

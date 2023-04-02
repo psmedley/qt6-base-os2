@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QStringView>
 #include <QStringTokenizer>
@@ -552,13 +527,11 @@ void tst_QStringView::tokenize() const
     QFETCH(const QStringList, result);
 
     // lvalue QString
-#ifdef __cpp_deduction_guides
     {
         auto rit = result.cbegin();
         for (auto sv : QStringTokenizer{str, sep})
             QCOMPARE(sv, *rit++);
     }
-#endif
     {
         auto rit = result.cbegin();
         for (auto sv : QStringView{str}.tokenize(sep))
@@ -566,13 +539,11 @@ void tst_QStringView::tokenize() const
     }
 
     // rvalue QString
-#ifdef __cpp_deduction_guides
     {
         auto rit = result.cbegin();
         for (auto sv : QStringTokenizer{str, QString{sep}})
             QCOMPARE(sv, *rit++);
     }
-#endif
     {
         auto rit = result.cbegin();
         for (auto sv : QStringView{str}.tokenize(QString{sep}))
@@ -580,13 +551,11 @@ void tst_QStringView::tokenize() const
     }
 
     // (rvalue) QChar
-#ifdef __cpp_deduction_guides
     if (sep.size() == 1) {
         auto rit = result.cbegin();
         for (auto sv : QStringTokenizer{str, sep.front()})
             QCOMPARE(sv, *rit++);
     }
-#endif
     if (sep.size() == 1) {
         auto rit = result.cbegin();
         for (auto sv : QStringView{str}.tokenize(sep.front()))
@@ -594,13 +563,11 @@ void tst_QStringView::tokenize() const
     }
 
     // (rvalue) char16_t
-#ifdef __cpp_deduction_guides
     if (sep.size() == 1) {
         auto rit = result.cbegin();
         for (auto sv : QStringTokenizer{str, *qToStringViewIgnoringNull(sep).utf16()})
             QCOMPARE(sv, *rit++);
     }
-#endif
     if (sep.size() == 1) {
         auto rit = result.cbegin();
         for (auto sv : QStringView{str}.tokenize(*qToStringViewIgnoringNull(sep).utf16()))
@@ -615,20 +582,17 @@ void tst_QStringView::tokenize() const
         return literal;
     };
     const std::unique_ptr<const char16_t[]> literal = make_literal(sep);
-#ifdef __cpp_deduction_guides
     {
         auto rit = result.cbegin();
         for (auto sv : QStringTokenizer{str, literal.get()})
             QCOMPARE(sv, *rit++);
     }
-#endif
     {
         auto rit = result.cbegin();
         for (auto sv : QStringView{str}.tokenize(literal.get()))
             QCOMPARE(sv, *rit++);
     }
 
-#ifdef __cpp_deduction_guides
 #ifdef __cpp_lib_ranges
     // lvalue QString
     {
@@ -657,7 +621,6 @@ void tst_QStringView::tokenize() const
         QCOMPARE(result, actual);
     }
 #endif // __cpp_lib_ranges
-#endif // __cpp_deduction_guides
 }
 
 template <typename Char>
@@ -891,7 +854,7 @@ void tst_QStringView::overloadResolution()
     {
         std::u16string string;
         QStringViewOverloadResolution::test(string);
-        QStringViewOverloadResolution::test(qAsConst(string));
+        QStringViewOverloadResolution::test(std::as_const(string));
         QStringViewOverloadResolution::test(std::move(string));
     }
 }

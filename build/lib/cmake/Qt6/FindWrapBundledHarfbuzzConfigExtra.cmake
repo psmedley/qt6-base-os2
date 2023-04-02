@@ -1,0 +1,1 @@
+set(QT_USE_BUNDLED_BundledHarfbuzz OFF CACHE INTERNAL "")

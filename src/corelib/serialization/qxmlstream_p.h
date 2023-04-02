@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 //
 //  W A R N I N G
@@ -52,6 +16,9 @@
 #include <qstringconverter.h>
 #include <qxmlstream.h>
 #include "qxmlstreamgrammar_p.h"
+#include <QtCore/qhash.h>
+#include <QCoreApplication> // Q_DECLARE_TR_FUNCTIONS
+
 
 #include <memory>
 
@@ -70,12 +37,12 @@ public:
     qsizetype m_size = 0;
 
     constexpr XmlStringRef() = default;
-    constexpr inline XmlStringRef(const QString *string, int pos, int length)
+    constexpr inline XmlStringRef(const QString *string, qsizetype pos, qsizetype length)
         : m_string(string), m_pos(pos), m_size(length)
     {
     }
     XmlStringRef(const QString *string)
-        : XmlStringRef(string, 0, string->length())
+        : XmlStringRef(string, 0, string->size())
     {
     }
 
@@ -124,6 +91,8 @@ using namespace QtPrivate;
 
 template <typename T> class QXmlStreamSimpleStack
 {
+    Q_DISABLE_COPY_MOVE(QXmlStreamSimpleStack)
+
     T *data;
     qsizetype tos, cap;
 public:
@@ -170,7 +139,6 @@ public:
     const T *cend() const { return end(); }
 };
 
-
 class QXmlStream
 {
     Q_DECLARE_TR_FUNCTIONS(QXmlStream)
@@ -189,7 +157,7 @@ public:
         XmlStringRef name;
         XmlStringRef qualifiedName;
         NamespaceDeclaration namespaceDeclaration;
-        int tagStackStringStorageSize;
+        qsizetype tagStackStringStorageSize;
         qsizetype namespaceDeclarationsSize;
     };
 
@@ -197,14 +165,14 @@ public:
     QXmlStreamPrivateTagStack();
     QXmlStreamSimpleStack<NamespaceDeclaration> namespaceDeclarations;
     QString tagStackStringStorage;
-    int tagStackStringStorageSize;
-    int initialTagStackStringStorageSize;
+    qsizetype tagStackStringStorageSize;
+    qsizetype initialTagStackStringStorageSize;
     bool tagsDone;
 
     XmlStringRef addToStringStorage(QStringView s)
     {
-        int pos = tagStackStringStorageSize;
-        int sz = s.size();
+        qsizetype pos = tagStackStringStorageSize;
+        qsizetype sz = s.size();
         if (pos != tagStackStringStorage.size())
             tagStackStringStorage.resize(pos);
         tagStackStringStorage.append(s.data(), sz);
@@ -246,14 +214,14 @@ public:
     uchar firstByte;
     qint64 nbytesread;
     QString readBuffer;
-    int readBufferPos;
+    qsizetype readBufferPos;
     QXmlStreamSimpleStack<uint> putStack;
     struct Entity {
         Entity() = default;
         Entity(const QString &name, const QString &value)
           :  name(name), value(value), external(false), unparsed(false), literal(false),
              hasBeenParsed(false), isCurrentlyReferenced(false){}
-        static inline Entity createLiteral(QLatin1String name, QLatin1String value)
+        static inline Entity createLiteral(QLatin1StringView name, QLatin1StringView value)
             { Entity result(name, value); result.literal = result.hasBeenParsed = true; return result; }
         QString name, value;
         uint external : 1;
@@ -405,9 +373,9 @@ public:
     int tos;
     int stack_size;
     struct Value {
-        int pos;
-        int len;
-        int prefix;
+        qsizetype pos;  // offset into textBuffer
+        qsizetype len;  // length incl. prefix (if any)
+        qint16 prefix;  // prefix of a name (as in "prefix:name") limited to 4k in fastScanName()
         ushort c;
     };
 
@@ -500,11 +468,11 @@ public:
 
     // scan optimization functions. Not strictly necessary but LALR is
     // not very well suited for scanning fast
-    int fastScanLiteralContent();
-    int fastScanSpace();
-    int fastScanContentCharList();
-    int fastScanName(int *prefix = nullptr);
-    inline int fastScanNMTOKEN();
+    qsizetype fastScanLiteralContent();
+    qsizetype fastScanSpace();
+    qsizetype fastScanContentCharList();
+    qsizetype fastScanName(qint16 *prefix = nullptr);
+    inline qsizetype fastScanNMTOKEN();
 
 
     bool parse();

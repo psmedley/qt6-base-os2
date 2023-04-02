@@ -1,44 +1,9 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qplatformdefs.h"
 #include "private/qabstractfileengine_p.h"
+#include "private/qfiledevice_p.h"
 #include "private/qfsfileengine_p.h"
 #include "qfilesystemengine_p.h"
 #include <qdebug.h>
@@ -68,11 +33,13 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 static inline bool isUncPath(const QString &path)
 {
     // Starts with \\, but not \\.
-    return (path.startsWith(QLatin1String("\\\\"))
-            && path.size() > 2 && path.at(2) != QLatin1Char('.'));
+    return (path.startsWith("\\\\"_L1)
+            && path.size() > 2 && path.at(2) != u'.');
 }
 
 /*!
@@ -80,13 +47,13 @@ static inline bool isUncPath(const QString &path)
 */
 QString QFSFileEnginePrivate::longFileName(const QString &path)
 {
-    if (path.startsWith(QLatin1String("\\\\.\\")))
+    if (path.startsWith("\\\\.\\"_L1))
         return path;
 
     QString absPath = QFileSystemEngine::nativeAbsoluteFilePath(path);
-    QString prefix = QLatin1String("\\\\?\\");
+    QString prefix = "\\\\?\\"_L1;
     if (isUncPath(absPath)) {
-        prefix.append(QLatin1String("UNC\\")); // "\\\\?\\UNC\\"
+        prefix.append("UNC\\"_L1); // "\\\\?\\UNC\\"
         absPath.remove(0, 2);
     }
     return prefix + absPath;
@@ -95,7 +62,8 @@ QString QFSFileEnginePrivate::longFileName(const QString &path)
 /*
     \internal
 */
-bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode)
+bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode,
+                                      std::optional<QFile::Permissions> permissions)
 {
     Q_Q(QFSFileEngine);
 
@@ -115,11 +83,14 @@ bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode)
                                 ? OPEN_ALWAYS
                                 : OPEN_EXISTING;
     // Create the file handle.
-    SECURITY_ATTRIBUTES securityAtts = { sizeof(SECURITY_ATTRIBUTES), NULL, FALSE };
+    QNativeFilePermissions nativePermissions(permissions, false);
+    if (!nativePermissions.isOk())
+        return false;
+
     fileHandle = CreateFile((const wchar_t*)fileEntry.nativeFilePath().utf16(),
                             accessRights,
                             shareMode,
-                            &securityAtts,
+                            nativePermissions.securityAttributes(),
                             creationDisp,
                             FILE_ATTRIBUTE_NORMAL,
                             NULL);
@@ -433,7 +404,7 @@ QString QFSFileEngine::currentPath(const QString &fileName)
     QString ret;
     //if filename is a drive: then get the pwd of that drive
     if (fileName.length() >= 2 &&
-        fileName.at(0).isLetter() && fileName.at(1) == QLatin1Char(':')) {
+        fileName.at(0).isLetter() && fileName.at(1) == u':') {
         int drv = fileName.toUpper().at(0).toLatin1() - 'A' + 1;
         if (_getdrive() != drv) {
             wchar_t buf[PATH_MAX];
@@ -445,7 +416,7 @@ QString QFSFileEngine::currentPath(const QString &fileName)
         //just the pwd
         ret = QFileSystemEngine::currentPath().filePath();
     }
-    if (ret.length() >= 2 && ret[1] == QLatin1Char(':'))
+    if (ret.length() >= 2 && ret[1] == u':')
         ret[0] = ret.at(0).toUpper(); // Force uppercase drive letters.
     return ret;
 }
@@ -646,7 +617,7 @@ QString QFSFileEngine::fileName(FileName file) const
             return entry.path();
         return entry.filePath();
     }
-    case LinkName:
+    case AbsoluteLinkTarget:
         return QFileSystemEngine::getLinkTarget(d->fileEntry, d->metaData).filePath();
     case BundleName:
         return QString();
@@ -684,6 +655,10 @@ bool QFSFileEngine::setPermissions(uint perms)
 {
     Q_D(QFSFileEngine);
     QSystemError error;
+
+    // clear cached state (if any)
+    d->metaData.clearFlags(QFileSystemMetaData::Permissions);
+
     bool ret = QFileSystemEngine::setPermissions(d->fileEntry, QFile::Permissions(perms), error);
     if (!ret)
         setError(QFile::PermissionsError, error.toString());
@@ -871,17 +846,18 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size,
 bool QFSFileEnginePrivate::unmap(uchar *ptr)
 {
     Q_Q(QFSFileEngine);
-    if (!maps.contains(ptr)) {
+    const auto it = std::as_const(maps).find(ptr);
+    if (it == maps.cend()) {
         q->setError(QFile::PermissionsError, qt_error_string(ERROR_ACCESS_DENIED));
         return false;
     }
-    uchar *start = ptr - maps[ptr];
+    uchar *start = ptr - *it;
     if (!UnmapViewOfFile(start)) {
         q->setError(QFile::PermissionsError, qt_error_string());
         return false;
     }
 
-    maps.remove(ptr);
+    maps.erase(it);
     if (maps.isEmpty()) {
         ::CloseHandle(mapHandle);
         mapHandle = NULL;

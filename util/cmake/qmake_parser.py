@@ -1,31 +1,6 @@
 #!/usr/bin/env python3
-#############################################################################
-##
-## Copyright (C) 2018 The Qt Company Ltd.
-## Contact: https://www.qt.io/licensing/
-##
-## This file is part of the plugins of the Qt Toolkit.
-##
-## $QT_BEGIN_LICENSE:GPL-EXCEPT$
-## Commercial License Usage
-## Licensees holding valid commercial Qt licenses may use this file in
-## accordance with the commercial license agreement provided with the
-## Software or, alternatively, in accordance with the terms contained in
-## a written agreement between you and The Qt Company. For licensing terms
-## and conditions see https://www.qt.io/terms-conditions. For further
-## information use the contact form at https://www.qt.io/contact-us.
-##
-## GNU General Public License Usage
-## Alternatively, this file may be used under the terms of the GNU
-## General Public License version 3 as published by the Free Software
-## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-## included in the packaging of this file. Please review the following
-## information to ensure the GNU General Public License requirements will
-## be met: https://www.gnu.org/licenses/gpl-3.0.html.
-##
-## $QT_END_LICENSE$
-##
-#############################################################################
+# Copyright (C) 2018 The Qt Company Ltd.
+# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 import collections
 import os
@@ -73,7 +48,7 @@ def fixup_comments(contents: str) -> str:
 
 
 def flatten_list(input_list):
-    """ Flattens an irregular nested list into a simple list."""
+    """Flattens an irregular nested list into a simple list."""
     for el in input_list:
         if isinstance(el, collections.abc.Iterable) and not isinstance(el, (str, bytes)):
             yield from flatten_list(el)
@@ -333,12 +308,61 @@ class QmakeParser:
             "ConditionWhiteSpace", pp.Suppress(pp.Optional(pp.White(" ")))
         )
 
+        # Unfortunately qmake condition operators have no precedence,
+        # and are simply evaluated left to right. To emulate that, wrap
+        # each condition sub-expression in parentheses.
+        # So c1|c2:c3 is evaluated by qmake as (c1|c2):c3.
+        # The following variable keeps count on how many parentheses
+        # should be added to the beginning of the condition. Each
+        # condition sub-expression always gets an ")", and in the
+        # end the whole condition gets many "(". Note that instead
+        # inserting the actual parentheses, we insert special markers
+        # which get replaced in the end.
+        condition_parts_count = 0
+        # Whitespace in the markers is important. Assumes the markers
+        # never appear in .pro files.
+        l_paren_marker = "_(_ "
+        r_paren_marker = " _)_"
+
+        def handle_condition_part(condition_part_parse_result: pp.ParseResults) -> str:
+            condition_part_list = [*condition_part_parse_result]
+            nonlocal condition_parts_count
+            condition_parts_count += 1
+            condition_part_joined = "".join(condition_part_list)
+            # Add ending parenthesis marker. The counterpart is added
+            # in handle_condition.
+            return f"{condition_part_joined}{r_paren_marker}"
+
+        ConditionPart.setParseAction(handle_condition_part)
         ConditionRepeated = add_element(
             "ConditionRepeated", pp.ZeroOrMore(ConditionOp + ConditionWhiteSpace + ConditionPart)
         )
 
+        def handle_condition(condition_parse_results: pp.ParseResults) -> str:
+            nonlocal condition_parts_count
+            prepended_parentheses = l_paren_marker * condition_parts_count
+            result = prepended_parentheses + " ".join(condition_parse_results).strip().replace(
+                ":", " && "
+            ).strip(" && ")
+            # If there are only 2 condition sub-expressions, there is no
+            # need for parentheses.
+            if condition_parts_count < 3:
+                result = result.replace(l_paren_marker, "")
+                result = result.replace(r_paren_marker, "")
+                result = result.strip(" ")
+            else:
+                result = result.replace(l_paren_marker, "( ")
+                result = result.replace(r_paren_marker, " )")
+                # Strip parentheses and spaces around the final
+                # condition.
+                result = result[1:-1]
+                result = result.strip(" ")
+            # Reset the parenthesis count for the next condition.
+            condition_parts_count = 0
+            return result
+
         Condition = add_element("Condition", pp.Combine(ConditionPart + ConditionRepeated))
-        Condition.setParseAction(lambda x: " ".join(x).strip().replace(":", " && ").strip(" && "))
+        Condition.setParseAction(handle_condition)
 
         # Weird thing like write_file(a)|error() where error() is the alternative condition
         # which happens to be a function call. In this case there is no scope, but our code expects

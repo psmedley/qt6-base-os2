@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -77,6 +52,7 @@ private slots:
     void quitOnLastWindowClosed();
     void quitOnLastWindowClosedMulti();
     void dontQuitOnLastWindowClosed();
+    void quitOnLastWindowClosedWithEventLoopLocker();
     void genericPluginsAndWindowSystemEvents();
     void layoutDirection();
     void globalShareContext();
@@ -122,20 +98,20 @@ void tst_QGuiApplication::displayName()
     QGuiApplication::setApplicationName("The Core Application");
     QCOMPARE(QGuiApplication::applicationName(), QString::fromLatin1("The Core Application"));
     QCOMPARE(QGuiApplication::applicationDisplayName(), QString::fromLatin1("The Core Application"));
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     QGuiApplication::setApplicationDisplayName("The GUI Application");
     QCOMPARE(QGuiApplication::applicationDisplayName(), QString::fromLatin1("The GUI Application"));
-    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.size(), 2);
 
     QGuiApplication::setApplicationName("The Core Application 2");
     QCOMPARE(QGuiApplication::applicationName(), QString::fromLatin1("The Core Application 2"));
     QCOMPARE(QGuiApplication::applicationDisplayName(), QString::fromLatin1("The GUI Application"));
-    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.size(), 2);
 
     QGuiApplication::setApplicationDisplayName("The GUI Application 2");
     QCOMPARE(QGuiApplication::applicationDisplayName(), QString::fromLatin1("The GUI Application 2"));
-    QCOMPARE(spy.count(), 3);
+    QCOMPARE(spy.size(), 3);
 }
 
 void tst_QGuiApplication::desktopFileName()
@@ -246,12 +222,12 @@ void tst_QGuiApplication::focusObject()
 
     window1.setFocusObject(&obj1);
     QCOMPARE(app.focusObject(), &obj1);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     spy.clear();
     window1.setFocusObject(&obj2);
     QCOMPARE(app.focusObject(), &obj2);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     spy.clear();
     window2.setFocusObject(&obj3);
@@ -260,12 +236,12 @@ void tst_QGuiApplication::focusObject()
     QVERIFY(QTest::qWaitForWindowExposed(&window2));
     QTRY_COMPARE(app.focusWindow(), &window2);
     QCOMPARE(app.focusObject(), &obj3);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     // focus change on unfocused window does not show
     spy.clear();
     window1.setFocusObject(&obj1);
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
     QCOMPARE(app.focusObject(), &obj3);
 }
 
@@ -277,13 +253,13 @@ void tst_QGuiApplication::allWindows()
     QWindow *window2 = new QWindow(window1);
     QVERIFY(app.allWindows().contains(window1));
     QVERIFY(app.allWindows().contains(window2));
-    QCOMPARE(app.allWindows().count(), 2);
+    QCOMPARE(app.allWindows().size(), 2);
     delete window1;
     window1 = nullptr;
     window2 = nullptr;
     QVERIFY(!app.allWindows().contains(window2));
     QVERIFY(!app.allWindows().contains(window1));
-    QCOMPARE(app.allWindows().count(), 0);
+    QCOMPARE(app.allWindows().size(), 0);
 }
 
 void tst_QGuiApplication::topLevelWindows()
@@ -294,13 +270,13 @@ void tst_QGuiApplication::topLevelWindows()
     QWindow *window2 = new QWindow(window1);
     QVERIFY(app.topLevelWindows().contains(window1));
     QVERIFY(!app.topLevelWindows().contains(window2));
-    QCOMPARE(app.topLevelWindows().count(), 1);
+    QCOMPARE(app.topLevelWindows().size(), 1);
     delete window1;
     window1 = nullptr;
     window2 = nullptr;
     QVERIFY(!app.topLevelWindows().contains(window2));
     QVERIFY(!app.topLevelWindows().contains(window1));
-    QCOMPARE(app.topLevelWindows().count(), 0);
+    QCOMPARE(app.topLevelWindows().size(), 0);
 }
 
 class ShowCloseShowWindow : public QWindow
@@ -544,26 +520,35 @@ void tst_QGuiApplication::palette()
     // The default application palette is not resolved
     QVERIFY(!QGuiApplication::palette().resolveMask());
 
+    // TODO: add event processing instead of the signal
+#if QT_DEPRECATED_SINCE(6, 0)
     QSignalSpy signalSpy(&app, SIGNAL(paletteChanged(QPalette)));
+#endif
 
     QPalette oldPalette = QGuiApplication::palette();
     QPalette newPalette = QPalette(Qt::red);
 
     QGuiApplication::setPalette(newPalette);
     QVERIFY(palettesMatch(QGuiApplication::palette(), newPalette));
-    QCOMPARE(signalSpy.count(), 1);
+#if QT_DEPRECATED_SINCE(6, 0)
+    QCOMPARE(signalSpy.size(), 1);
+#endif
     QVERIFY(palettesMatch(signalSpy.at(0).at(0).value<QPalette>(), newPalette));
     QCOMPARE(QGuiApplication::palette(), QPalette());
 
     QGuiApplication::setPalette(oldPalette);
     QVERIFY(palettesMatch(QGuiApplication::palette(), oldPalette));
-    QCOMPARE(signalSpy.count(), 2);
+#if QT_DEPRECATED_SINCE(6, 0)
+    QCOMPARE(signalSpy.size(), 2);
+#endif
     QVERIFY(palettesMatch(signalSpy.at(1).at(0).value<QPalette>(), oldPalette));
     QCOMPARE(QGuiApplication::palette(), QPalette());
 
     QGuiApplication::setPalette(oldPalette);
     QVERIFY(palettesMatch(QGuiApplication::palette(), oldPalette));
-    QCOMPARE(signalSpy.count(), 2);
+#if QT_DEPRECATED_SINCE(6, 0)
+    QCOMPARE(signalSpy.size(), 2);
+#endif
     QCOMPARE(QGuiApplication::palette(), QPalette());
 }
 
@@ -579,17 +564,17 @@ void tst_QGuiApplication::font()
 
     QGuiApplication::setFont(newFont);
     QCOMPARE(QGuiApplication::font(), newFont);
-    QCOMPARE(signalSpy.count(), 1);
+    QCOMPARE(signalSpy.size(), 1);
     QCOMPARE(signalSpy.at(0).at(0), QVariant(newFont));
 
     QGuiApplication::setFont(oldFont);
     QCOMPARE(QGuiApplication::font(), oldFont);
-    QCOMPARE(signalSpy.count(), 2);
+    QCOMPARE(signalSpy.size(), 2);
     QCOMPARE(signalSpy.at(1).at(0), QVariant(oldFont));
 
     QGuiApplication::setFont(oldFont);
     QCOMPARE(QGuiApplication::font(), oldFont);
-    QCOMPARE(signalSpy.count(), 2);
+    QCOMPARE(signalSpy.size(), 2);
 }
 
 class BlockableWindow : public QWindow
@@ -894,9 +879,9 @@ void tst_QGuiApplication::quitOnLastWindowClosed()
 
     app.exec();
 
-    QCOMPARE(spyAboutToQuit.count(), 1);
+    QCOMPARE(spyAboutToQuit.size(), 1);
     // Should be around 10 if closing caused the quit
-    QVERIFY2(spyTimeout.count() < 15, QByteArray::number(spyTimeout.count()).constData());
+    QVERIFY2(spyTimeout.size() < 15, QByteArray::number(spyTimeout.size()).constData());
 }
 
 void tst_QGuiApplication::quitOnLastWindowClosedMulti()
@@ -905,11 +890,7 @@ void tst_QGuiApplication::quitOnLastWindowClosedMulti()
     QGuiApplication app(argc, nullptr);
     const QRect screenGeometry = QGuiApplication::primaryScreen()->availableVirtualGeometry();
 
-    QTimer timer;
-    timer.setInterval(100);
-
     QSignalSpy spyAboutToQuit(&app, &QCoreApplication::aboutToQuit);
-    QSignalSpy spyTimeout(&timer, &QTimer::timeout);
 
     QWindow mainWindow;
     mainWindow.setTitle(QStringLiteral("quitOnLastWindowClosedMultiMainWindow"));
@@ -928,15 +909,20 @@ void tst_QGuiApplication::quitOnLastWindowClosedMulti()
     dialog.show();
     QVERIFY(QTest::qWaitForWindowExposed(&dialog));
 
-    timer.start();
-    QTimer::singleShot(1000, &mainWindow, &QWindow::close); // This should not quit the application
-    QTimer::singleShot(2000, &app, &QCoreApplication::quit);
+    bool prematureQuit = true;
+    QTimer::singleShot(100, &mainWindow, [&]{
+        prematureQuit = true; // this should be reset by the other timer
+        mainWindow.close();
+    });
+    QTimer::singleShot(500, &mainWindow, [&]{
+        prematureQuit = false; // if we don't get here, then the app quit prematurely
+        dialog.close();
+    });
 
     app.exec();
 
-    QCOMPARE(spyAboutToQuit.count(), 1);
-    // Should be around 20 if closing did not cause the quit
-    QVERIFY2(spyTimeout.count() > 15, QByteArray::number(spyTimeout.count()).constData());
+    QVERIFY(!prematureQuit);
+    QCOMPARE(spyAboutToQuit.size(), 1); // fired only once
 }
 
 void tst_QGuiApplication::dontQuitOnLastWindowClosed()
@@ -964,8 +950,123 @@ void tst_QGuiApplication::dontQuitOnLastWindowClosed()
 
     app.setQuitOnLastWindowClosed(true); // restore underlying static to default value
 
-    QCOMPARE(spyTimeout.count(), 1); // quit timer fired
-    QCOMPARE(spyLastWindowClosed.count(), 1); // lastWindowClosed emitted
+    QCOMPARE(spyTimeout.size(), 1); // quit timer fired
+    QCOMPARE(spyLastWindowClosed.size(), 1); // lastWindowClosed emitted
+}
+
+class QuitSpy : public QObject
+{
+    Q_OBJECT
+public:
+    QuitSpy()
+    {
+        qGuiApp->installEventFilter(this);
+    }
+    bool eventFilter(QObject *o, QEvent *e) override
+    {
+        Q_UNUSED(o);
+        if (e->type() == QEvent::Quit)
+            ++quits;
+
+        return false;
+    }
+
+    int quits = 0;
+};
+
+void tst_QGuiApplication::quitOnLastWindowClosedWithEventLoopLocker()
+{
+    int argc = 0;
+    QGuiApplication app(argc, nullptr);
+
+    QVERIFY(app.quitOnLastWindowClosed());
+    QVERIFY(app.isQuitLockEnabled());
+
+    auto defaultRestorer = qScopeGuard([&]{
+        app.setQuitLockEnabled(true);
+        app.setQuitOnLastWindowClosed(true);
+    });
+
+    {
+        // Disabling QEventLoopLocker support should not affect
+        // quitting when last window is closed.
+        app.setQuitLockEnabled(false);
+
+        QuitSpy quitSpy;
+        QWindow window;
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTimer::singleShot(0, &window, &QWindow::close);
+        QTimer::singleShot(200, &app, []{ QCoreApplication::exit(0); });
+        app.exec();
+        QCOMPARE(quitSpy.quits, 1);
+    }
+
+    {
+        // Disabling quitOnLastWindowClosed support should not affect
+        // quitting when last QEventLoopLocker goes out of scope.
+        app.setQuitLockEnabled(true);
+        app.setQuitOnLastWindowClosed(false);
+
+        QuitSpy quitSpy;
+        QScopedPointer<QEventLoopLocker> locker(new QEventLoopLocker);
+        QWindow window;
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTimer::singleShot(0, [&]{ locker.reset(nullptr); });
+        QTimer::singleShot(200, &app, []{ QCoreApplication::exit(0); });
+        app.exec();
+        QCOMPARE(quitSpy.quits, 1);
+    }
+
+    {
+        // With both properties enabled we need to get rid of both
+        // the window and locker to trigger a quit.
+        app.setQuitLockEnabled(true);
+        app.setQuitOnLastWindowClosed(true);
+
+        QuitSpy quitSpy;
+        QScopedPointer<QEventLoopLocker> locker(new QEventLoopLocker);
+        QWindow window;
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTimer::singleShot(0, &window, &QWindow::close);
+        QTimer::singleShot(200, &app, []{ QCoreApplication::exit(0); });
+        app.exec();
+        QCOMPARE(quitSpy.quits, 0);
+
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTimer::singleShot(0, [&]{ locker.reset(nullptr); });
+        QTimer::singleShot(200, &app, []{ QCoreApplication::exit(0); });
+        app.exec();
+        QCOMPARE(quitSpy.quits, 0);
+
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTimer::singleShot(0, [&]{ locker.reset(nullptr); });
+        QTimer::singleShot(0, &window, &QWindow::close);
+        QTimer::singleShot(200, &app, []{ QCoreApplication::exit(0); });
+        app.exec();
+        QCOMPARE(quitSpy.quits, 1);
+    }
+
+    {
+        // With neither properties enabled we don't get automatic quit.
+        app.setQuitLockEnabled(false);
+        app.setQuitOnLastWindowClosed(false);
+
+        QuitSpy quitSpy;
+        QScopedPointer<QEventLoopLocker> locker(new QEventLoopLocker);
+        QWindow window;
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTimer::singleShot(0, [&]{ locker.reset(nullptr); });
+        QTimer::singleShot(0, &window, &QWindow::close);
+        QTimer::singleShot(200, &app, []{ QCoreApplication::exit(0); });
+        app.exec();
+        QCOMPARE(quitSpy.quits, 0);
+    }
 }
 
 static Qt::ScreenOrientation testOrientationToSend = Qt::PrimaryOrientation;
@@ -1020,7 +1121,7 @@ void tst_QGuiApplication::genericPluginsAndWindowSystemEvents()
     QCoreApplication::postEvent(&testReceiver, new QEvent(QEvent::User));
     QCOMPARE(testReceiver.customEvents, 0);
 
-    QStaticPlugin testPluginInfo(qt_plugin_instance, qt_plugin_query_metadata);
+    QStaticPlugin testPluginInfo(qt_plugin_instance, qt_plugin_query_metadata_v2);
     qRegisterStaticPluginFunction(testPluginInfo);
     int argc = 3;
     char *argv[] = { const_cast<char*>(QTest::currentAppName()), const_cast<char*>("-plugin"), const_cast<char*>("testplugin") };
@@ -1029,8 +1130,6 @@ void tst_QGuiApplication::genericPluginsAndWindowSystemEvents()
     QVERIFY(QGuiApplication::primaryScreen());
     QCOMPARE(QGuiApplication::primaryScreen()->orientation(), testOrientationToSend);
 
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QEXPECT_FAIL("", "Wayland: This fails. See QTBUG-100891.", Abort);
     QCOMPARE(testReceiver.customEvents, 0);
     QCoreApplication::sendPostedEvents(&testReceiver);
     QCOMPARE(testReceiver.customEvents, 1);
@@ -1041,8 +1140,8 @@ void tst_QGuiApplication::layoutDirection()
 {
     qRegisterMetaType<Qt::LayoutDirection>();
 
-    Qt::LayoutDirection oldDirection = QGuiApplication::layoutDirection();
-    Qt::LayoutDirection newDirection = oldDirection == Qt::LeftToRight ? Qt::RightToLeft : Qt::LeftToRight;
+    const Qt::LayoutDirection oldDirection = QGuiApplication::layoutDirection();
+    const Qt::LayoutDirection newDirection = oldDirection == Qt::LeftToRight ? Qt::RightToLeft : Qt::LeftToRight;
 
     QGuiApplication::setLayoutDirection(newDirection);
     QCOMPARE(QGuiApplication::layoutDirection(), newDirection);
@@ -1054,13 +1153,69 @@ void tst_QGuiApplication::layoutDirection()
 
     QGuiApplication::setLayoutDirection(oldDirection);
     QCOMPARE(QGuiApplication::layoutDirection(), oldDirection);
-    QCOMPARE(signalSpy.count(), 1);
+    QCOMPARE(signalSpy.size(), 1);
     QCOMPARE(signalSpy.at(0).at(0).toInt(), static_cast<int>(oldDirection));
 
     QGuiApplication::setLayoutDirection(oldDirection);
     QCOMPARE(QGuiApplication::layoutDirection(), oldDirection);
-    QCOMPARE(signalSpy.count(), 1);
+    QCOMPARE(signalSpy.size(), 1);
+
+    // with QGuiApplication instantiated, install a translator that gives us control
+    class LayoutDirectionTranslator : public QTranslator
+    {
+    public:
+        LayoutDirectionTranslator(Qt::LayoutDirection direction)
+        : direction(direction)
+        {}
+
+        bool isEmpty() const override { return false; }
+        QString translate(const char *context, const char *sourceText, const char *disambiguation, int n) const override
+        {
+            if (QByteArrayView(sourceText) == "QT_LAYOUT_DIRECTION")
+                return direction == Qt::LeftToRight ? QLatin1String("LTR") : QLatin1String("RTL");
+            return QTranslator::translate(context, sourceText, disambiguation, n);
+        }
+
+        const Qt::LayoutDirection direction;
+    };
+
+    int layoutDirectionChangedCount = 0;
+    // reset to auto-detection, should be back to oldDirection now
+    QGuiApplication::setLayoutDirection(Qt::LayoutDirectionAuto);
+    QCOMPARE(QGuiApplication::layoutDirection(), oldDirection);
+    signalSpy.clear();
+    {
+        // this translator doesn't change the direction
+        LayoutDirectionTranslator translator(oldDirection);
+        QGuiApplication::installTranslator(&translator);
+        QCOMPARE(QGuiApplication::layoutDirection(), translator.direction);
+        QCOMPARE(signalSpy.size(), layoutDirectionChangedCount);
+    }
+    QCOMPARE(signalSpy.size(), layoutDirectionChangedCount); // ltrTranslator removed, no change
+
+    // install a new translator that changes the direction
+    {
+        LayoutDirectionTranslator translator(newDirection);
+        QGuiApplication::installTranslator(&translator);
+        QCOMPARE(QGuiApplication::layoutDirection(), translator.direction);
+        QCOMPARE(signalSpy.size(), ++layoutDirectionChangedCount);
+    }
+    // rtlTranslator removed
+    QCOMPARE(signalSpy.size(), ++layoutDirectionChangedCount);
+
+    // override translation
+    QGuiApplication::setLayoutDirection(newDirection);
+    QCOMPARE(signalSpy.size(), ++layoutDirectionChangedCount);
+    {
+        // this translator will be ignored
+        LayoutDirectionTranslator translator(oldDirection);
+        QGuiApplication::installTranslator(&translator);
+        QCOMPARE(QGuiApplication::layoutDirection(), newDirection);
+        QCOMPARE(signalSpy.size(), layoutDirectionChangedCount);
+    }
+    QCOMPARE(signalSpy.size(), layoutDirectionChangedCount);
 }
+
 
 void tst_QGuiApplication::globalShareContext()
 {

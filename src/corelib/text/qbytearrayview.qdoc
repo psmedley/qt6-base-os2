@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
     \class QByteArrayView
@@ -79,6 +55,12 @@
     around longer than the function promises to keep the referenced data alive.
     If in doubt, obtain a strong reference to the data by calling toByteArray() to convert
     the QByteArrayView into a QByteArray.
+
+    The methods supported by QByteArrayView reflect those of \l QByteArray. In
+    particular, to the limited degree that it ascribes semantics (such as
+    character case, spacing, digits of numbers) to the character data viewed, it
+    uses the C locale and ASCII encoding. See \l {C locale and ASCII functions}
+    for details and the limitations on these methods.
 
     \section1 Compatible Byte Types
 
@@ -323,16 +305,12 @@
 
     The return value will be a null QByteArray if and only if this byte array
     view is null.
-
-    \warning QByteArrayView can store data with more than 2\sup{31} bytes while
-    QByteArray cannot. Calling this function on a byte array view for which size()
-    returns a value greater than \c{INT_MAX / 2} constitutes undefined behavior.
 */
 
 /*!
     \fn const char *QByteArrayView::data() const
 
-    Returns a const \c char pointer to the first byte in the byte array.
+    Returns a const \c char pointer to the first byte in the byte array view.
 
     \note The character array represented by the return value is \e not guaranteed
     to be null-terminated. The returned pointer is only safe to use for accessing
@@ -344,7 +322,7 @@
 /*!
     \fn const char *QByteArrayView::constData() const
 
-    Returns a const \c char pointer to the first byte in the byte array.
+    Returns a const \c char pointer to the first byte in the byte array view.
 
     \note The character array represented by the return value is \e not guaranteed
     to be null-terminated. The returned pointer is only safe to use for accessing
@@ -377,10 +355,19 @@
 */
 
 /*!
+    \fn QByteArrayView::isValidUtf8() const
+
+    Returns \c true if this byte array view contains valid UTF-8 encoded data,
+    or \c false otherwise.
+
+    \since 6.3
+*/
+
+/*!
     \fn QByteArrayView::const_iterator QByteArrayView::begin() const
 
     Returns a const \l{STL-style iterators}{STL-style iterator} pointing to the
-    first byte in the byte array.
+    first byte in the byte array view.
 
     This function is provided for STL compatibility.
 
@@ -401,7 +388,7 @@
     \fn QByteArrayView::const_iterator QByteArrayView::end() const
 
     Returns a const \l{STL-style iterators}{STL-style iterator} pointing
-    just after the last byte in the byte array.
+    just after the last byte in the byte array view.
 
     This function is provided for STL compatibility.
 
@@ -421,7 +408,7 @@
     \fn QByteArrayView::const_reverse_iterator QByteArrayView::rbegin() const
 
     Returns a const \l{STL-style iterators}{STL-style} reverse iterator pointing
-    to the first byte in the byte array, in reverse order.
+    to the first byte in the byte array view, in reverse order.
 
     This function is provided for STL compatibility.
 
@@ -442,7 +429,7 @@
     \fn QByteArrayView::const_reverse_iterator QByteArrayView::rend() const
 
     Returns a \l{STL-style iterators}{STL-style} reverse iterator pointing to one past
-    the last byte in the byte array, in reverse order.
+    the last byte in the byte array view, in reverse order.
 
     This function is provided for STL compatibility.
 
@@ -494,7 +481,7 @@
 */
 
 /*!
-    \fn int QByteArrayView::length() const
+    \fn QByteArrayView::length() const
 
     Same as size().
 
@@ -524,7 +511,7 @@
 /*!
     \fn char QByteArrayView::front() const
 
-    Returns the first byte in the byte array.
+    Returns the first byte in the byte array view.
 
     This function is provided for STL compatibility.
 
@@ -537,7 +524,7 @@
 /*!
     \fn char QByteArrayView::back() const
 
-    Returns the last byte in the byte array.
+    Returns the last byte in the byte array view.
 
     This function is provided for STL compatibility.
 
@@ -628,6 +615,261 @@
     \note The behavior is undefined when \a length < 0 or \a length > size().
 
     \sa sliced(), first(), last(), chopped(), truncate()
+*/
+
+/*!
+    \fn QByteArrayView QByteArrayView::trimmed() const noexcept
+    \since 6.3
+
+    Returns a copy of this byte array view with spacing characters
+    removed from the start and end.
+
+    The spacing characters are those for which the standard C++ \c isspace()
+    function returns \c true in the C locale; these are the ASCII characters
+    tabulation '\\t', line feed '\\n', carriage return '\\r', vertical
+    tabulation '\\v', form feed '\\f', and space ' '.
+
+    \sa QChar::SpecialCharacter, {QByteArray#Spacing Characters}{Spacing Characters}
+*/
+
+/*!
+    \fn qlonglong QByteArrayView::toLongLong(bool *ok, int base) const
+    \since 6.3
+
+    Returns this byte array view converted to a \c {long long} using base \a
+    base, which is ten by default. Bases 0 and 2 through 36 are supported, using
+    letters for digits beyond 9; A is ten, B is eleven and so on.
+
+    If \a base is 0, the base is determined automatically using the following
+    rules: if the byte array view begins with "0x", the rest of it is read as
+    hexadecimal (base 16); otherwise, if it begins with "0", the rest of it is
+    read as octal (base 8); otherwise it is read as decimal.
+
+    Returns 0 if the conversion fails.
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    \note The conversion of the number is performed in the default C locale,
+    regardless of the user's locale. Use QLocale to perform locale-aware
+    conversions between numbers and strings.
+*/
+
+/*!
+    \fn qulonglong QByteArrayView::toULongLong(bool *ok, int base) const
+    \since 6.3
+
+    Returns this byte array view converted to an \c {unsigned long long} using
+    base \a base, which is ten by default. Bases 0 and 2 through 36 are
+    supported, using letters for digits beyond 9; A is ten, B is eleven and so
+    on.
+
+    If \a base is 0, the base is determined automatically using the following
+    rules: if the byte array view begins with "0x", the rest of it is read as
+    hexadecimal (base 16); otherwise, if it begins with "0", the rest of it is
+    read as octal (base 8); otherwise it is read as decimal.
+
+    Returns 0 if the conversion fails.
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    \note The conversion of the number is performed in the default C locale,
+    regardless of the user's locale. Use QLocale to perform locale-aware
+    conversions between numbers and strings.
+*/
+
+/*!
+    \fn int QByteArrayView::toInt(bool *ok, int base) const
+    \since 6.3
+
+    Returns this byte array view converted to an \c int using base \a base,
+    which is ten by default. Bases 0 and 2 through 36 are supported, using
+    letters for digits beyond 9; A is ten, B is eleven and so on.
+
+    If \a base is 0, the base is determined automatically using the following
+    rules: if the byte array view begins with "0x", the rest of it is read as
+    hexadecimal (base 16); otherwise, if it begins with "0", the rest of it is
+    read as octal (base 8); otherwise it is read as decimal.
+
+    Returns 0 if the conversion fails.
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    \snippet code/src_corelib_text_qbytearrayview.cpp 2
+
+    \note The conversion of the number is performed in the default C locale,
+    regardless of the user's locale. Use QLocale to perform locale-aware
+    conversions between numbers and strings.
+*/
+
+/*!
+    \fn uint QByteArrayView::toUInt(bool *ok, int base) const
+    \since 6.3
+
+    Returns this byte array view converted to an \c {unsigned int} using base \a
+    base, which is ten by default. Bases 0 and 2 through 36 are supported, using
+    letters for digits beyond 9; A is ten, B is eleven and so on.
+
+    If \a base is 0, the base is determined automatically using the following
+    rules: if the byte array view begins with "0x", the rest of it is read as
+    hexadecimal (base 16); otherwise, if it begins with "0", the rest of it is
+    read as octal (base 8); otherwise it is read as decimal.
+
+    Returns 0 if the conversion fails.
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    \note The conversion of the number is performed in the default C locale,
+    regardless of the user's locale. Use QLocale to perform locale-aware
+    conversions between numbers and strings.
+*/
+
+/*!
+    \fn long QByteArrayView::toLong(bool *ok, int base) const
+    \since 6.3
+
+    Returns this byte array view converted to a \c long int using base \a base,
+    which is ten by default. Bases 0 and 2 through 36 are supported, using
+    letters for digits beyond 9; A is ten, B is eleven and so on.
+
+    If \a base is 0, the base is determined automatically using the following
+    rules: if the byte array view begins with "0x", the rest of it is read as
+    hexadecimal (base 16); otherwise, if it begins with "0", the rest of it is
+    read as octal (base 8); otherwise it is read as decimal.
+
+    Returns 0 if the conversion fails.
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    \snippet code/src_corelib_text_qbytearrayview.cpp 3
+
+    \note The conversion of the number is performed in the default C locale,
+    regardless of the user's locale. Use QLocale to perform locale-aware
+    conversions between numbers and strings.
+*/
+
+/*!
+    \fn ulong QByteArrayView::toULong(bool *ok, int base) const
+    \since 6.3
+
+    Returns this byte array view converted to an \c {unsigned long int} using
+    base \a base, which is ten by default. Bases 0 and 2 through 36 are
+    supported, using letters for digits beyond 9; A is ten, B is eleven and so
+    on.
+
+    If \a base is 0, the base is determined automatically using the following
+    rules: if the byte array view begins with "0x", the rest of it is read as
+    hexadecimal (base 16); otherwise, if it begins with "0", the rest of it is
+    read as octal (base 8); otherwise it is read as decimal.
+
+    Returns 0 if the conversion fails.
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    \note The conversion of the number is performed in the default C locale,
+    regardless of the user's locale. Use QLocale to perform locale-aware
+    conversions between numbers and strings.
+*/
+
+/*!
+    \fn short QByteArrayView::toShort(bool *ok, int base) const
+    \since 6.3
+
+    Returns this byte array view converted to a \c short using base \a base,
+    which is ten by default. Bases 0 and 2 through 36 are supported, using
+    letters for digits beyond 9; A is ten, B is eleven and so on.
+
+    If \a base is 0, the base is determined automatically using the following
+    rules: if the byte array view begins with "0x", the rest of it is read as
+    hexadecimal (base 16); otherwise, if it begins with "0", the rest of it is
+    read as octal (base 8); otherwise it is read as decimal.
+
+    Returns 0 if the conversion fails.
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    \note The conversion of the number is performed in the default C locale,
+    regardless of the user's locale. Use QLocale to perform locale-aware
+    conversions between numbers and strings.
+*/
+
+/*!
+    \fn ushort QByteArrayView::toUShort(bool *ok, int base) const
+    \since 6.3
+
+    Returns this byte array view converted to an \c {unsigned short} using base
+    \a base, which is ten by default. Bases 0 and 2 through 36 are supported,
+    using letters for digits beyond 9; A is ten, B is eleven and so on.
+
+    If \a base is 0, the base is determined automatically using the following
+    rules: if the byte array view begins with "0x", the rest of it is read as
+    hexadecimal (base 16); otherwise, if it begins with "0", the rest of it is
+    read as octal (base 8); otherwise it is read as decimal.
+
+    Returns 0 if the conversion fails.
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    \note The conversion of the number is performed in the default C locale,
+    regardless of the user's locale. Use QLocale to perform locale-aware
+    conversions between numbers and strings.
+*/
+
+/*!
+    \fn double QByteArrayView::toDouble(bool *ok) const
+    \since 6.3
+
+    Returns this byte array view converted to a \c double value.
+
+    Returns an infinity if the conversion overflows or 0.0 if the
+    conversion fails for other reasons (e.g. underflow).
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    \warning The QByteArrayView content may only contain valid numerical
+    characters which includes the plus/minus sign, the character e used in
+    scientific notation, and the decimal point. Including the unit or additional
+    characters leads to a conversion error.
+
+    \note The conversion of the number is performed in the default C locale,
+    regardless of the user's locale. Use QLocale to perform locale-aware
+    conversions between numbers and strings.
+
+    This function ignores leading and trailing spacing characters.
+*/
+
+/*!
+    \fn float QByteArrayView::toFloat(bool *ok) const
+    \since 6.3
+
+    Returns this byte array view converted to a \c float value.
+
+    Returns an infinity if the conversion overflows or 0.0 if the
+    conversion fails for other reasons (e.g. underflow).
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    \snippet code/src_corelib_text_qbytearrayview.cpp 4
+
+    \warning The QByteArrayView content may only contain valid numerical
+    characters which includes the plus/minus sign, the character e used in
+    scientific notation, and the decimal point. Including the unit or additional
+    characters leads to a conversion error.
+
+    \note The conversion of the number is performed in the default C locale,
+    regardless of the user's locale. Use QLocale to perform locale-aware
+    conversions between numbers and strings.
+
+    This function ignores leading and trailing whitespace.
 */
 
 /*!

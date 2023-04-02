@@ -1,35 +1,27 @@
-# Generated from cube.pro.
-
 cmake_minimum_required(VERSION 3.16)
 project(cube LANGUAGES CXX)
 
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
-
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-  set(INSTALL_EXAMPLESDIR "examples")
+    set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/opengl/cube")
 
-find_package(Qt6 COMPONENTS Core)
-find_package(Qt6 COMPONENTS Gui)
-find_package(Qt6 COMPONENTS Widgets)
-find_package(Qt6 COMPONENTS OpenGL)
-find_package(Qt6 COMPONENTS OpenGLWidgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui OpenGL OpenGLWidgets Widgets)
 
 qt_add_executable(cube
     geometryengine.cpp geometryengine.h
     main.cpp
     mainwidget.cpp mainwidget.h
 )
+
 set_target_properties(cube PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
+
 target_link_libraries(cube PUBLIC
     Qt::Core
     Qt::Gui
@@ -37,7 +29,6 @@ target_link_libraries(cube PUBLIC
     Qt::OpenGLWidgets
     Qt::Widgets
 )
-
 
 # Resources:
 set(shaders_resource_files
@@ -51,6 +42,7 @@ qt6_add_resources(cube "shaders"
     FILES
         ${shaders_resource_files}
 )
+
 set(textures_resource_files
     "cube.png"
 )

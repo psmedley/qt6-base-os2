@@ -1,41 +1,5 @@
-/***************************************************************************
-**
-** Copyright (C) 2013 BlackBerry Limited. All rights reserved.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2013 BlackBerry Limited. All rights reserved.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqnxglobal.h"
 
@@ -136,6 +100,8 @@ static void finishCloseEvent(screen_event_t event)
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 QQnxScreenEventHandler::QQnxScreenEventHandler(QQnxIntegration *integration)
     : m_qnxIntegration(integration)
     , m_lastButtonState(Qt::NoButton)
@@ -147,7 +113,7 @@ QQnxScreenEventHandler::QQnxScreenEventHandler(QQnxIntegration *integration)
 {
     // Create a touch device
     m_touchDevice = new QPointingDevice(
-            QLatin1String("touchscreen"), 1, QInputDevice::DeviceType::TouchScreen,
+            "touchscreen"_L1, 1, QInputDevice::DeviceType::TouchScreen,
             QPointingDevice::PointerType::Finger,
             QPointingDevice::Capability::Position | QPointingDevice::Capability::Area
                     | QPointingDevice::Capability::Pressure
@@ -155,7 +121,7 @@ QQnxScreenEventHandler::QQnxScreenEventHandler(QQnxIntegration *integration)
             MaximumTouchPoints, 8);
     QWindowSystemInterface::registerInputDevice(m_touchDevice);
 
-    m_mouseDevice = new QPointingDevice(QLatin1String("mouse"), 2, QInputDevice::DeviceType::Mouse,
+    m_mouseDevice = new QPointingDevice("mouse"_L1, 2, QInputDevice::DeviceType::Mouse,
                                         QPointingDevice::PointerType::Generic,
                                         QPointingDevice::Capability::Position, 1, 8);
     QWindowSystemInterface::registerInputDevice(m_mouseDevice);
@@ -577,7 +543,7 @@ void QQnxScreenEventHandler::handleTouchEvent(screen_event_t event, int qnxType)
                 parent = parent->parent();
             }
 
-            //Qt expects the pressure between 0 and 1. There is however no definit upper limit for
+            //Qt expects the pressure between 0 and 1. There is however no definite upper limit for
             //the integer value of touch event pressure. The 200 was determined by experiment, it
             //usually does not get higher than that.
             m_touchPoints[touchId].pressure = static_cast<qreal>(touchPressure)/200.0;
@@ -780,6 +746,6 @@ void QQnxScreenEventHandler::timerEvent(QTimerEvent *event)
     }
 }
 
-#include "moc_qqnxscreeneventhandler.cpp"
-
 QT_END_NAMESPACE
+
+#include "moc_qqnxscreeneventhandler.cpp"

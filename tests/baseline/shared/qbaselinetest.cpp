@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qbaselinetest.h"
 #include "baselineprotocol.h"
@@ -50,9 +25,6 @@ static bool abortIfUnstable = true;
 static QByteArray curFunction;
 static ImageItemList itemList;
 static bool gotBaselines;
-
-static QString definedTestProject;
-static QString definedTestCase;
 
 
 void handleCmdLineArgs(int *argcp, char ***argvp)
@@ -167,7 +139,7 @@ void fetchCustomClientProperties()
             key = line.left(colonPos).simplified().replace(' ', '_');
             val = line.mid(colonPos+1).trimmed();
         }
-        if (!key.isEmpty() && key.length() < 64 && val.length() < 256)  // ###TBD: maximum 256 chars in value?
+        if (!key.isEmpty() && key.size() < 64 && val.size() < 256)  // ###TBD: maximum 256 chars in value?
             addClientProperty(key, val);
         else
             qDebug() << "Unparseable script output ignored:" << line;
@@ -200,10 +172,7 @@ bool connect(QByteArray *msg, bool *error)
     if (!customAutoModeSet)
         clientInfo.setAdHocRun(defaultInfo.isAdHocRun());
 
-    if (!definedTestProject.isEmpty())
-        clientInfo.insert(PI_Project, definedTestProject);
-
-    QString testCase = definedTestCase;
+    QString testCase = clientInfo.value(PI_TestCase);
     if (testCase.isEmpty() && QTest::testObject() && QTest::testObject()->metaObject()) {
         //qDebug() << "Trying to Read TestCaseName from Testlib!";
         testCase = QTest::testObject()->metaObject()->className();
@@ -233,16 +202,10 @@ bool disconnectFromBaselineServer()
     return false;
 }
 
-bool connectToBaselineServer(QByteArray *msg, const QString &testProject, const QString &testCase)
+bool connectToBaselineServer(QByteArray *msg)
 {
     bool dummy;
     QByteArray dummyMsg;
-
-    if (!testProject.isEmpty())
-        definedTestProject = testProject;
-    if (!testCase.isEmpty())
-        definedTestCase = testCase;
-
     return connect(msg ? msg : &dummyMsg, &dummy);
 }
 
@@ -259,7 +222,7 @@ void setSimFail(bool fail)
 
 void setProject(const QString &projectName)
 {
-    definedTestProject = projectName;
+    addClientProperty(PI_Project, projectName);
 }
 
 void setProjectImageKeys(const QStringList &keys)

@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qicon.h"
 #include "qicon_p.h"
@@ -65,6 +29,8 @@
 
 #ifndef QT_NO_ICON
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 /*!
     \enum QIcon::Mode
@@ -226,7 +192,7 @@ static QPixmapIconEngineEntry *bestSizeScaleMatch(const QSize &size, qreal scale
 QPixmapIconEngineEntry *QPixmapIconEngine::tryMatch(const QSize &size, qreal scale, QIcon::Mode mode, QIcon::State state)
 {
     QPixmapIconEngineEntry *pe = nullptr;
-    for (int i = 0; i < pixmaps.count(); ++i)
+    for (int i = 0; i < pixmaps.size(); ++i)
         if (pixmaps.at(i).mode == mode && pixmaps.at(i).state == state) {
             if (pe)
                 pe = bestSizeScaleMatch(size, scale, &pixmaps[i], pe);
@@ -303,7 +269,7 @@ QPixmap QPixmapIconEngine::scaledPixmap(const QSize &size, QIcon::Mode mode, QIc
         pm = pe->pixmap;
 
     if (pm.isNull()) {
-        int idx = pixmaps.count();
+        int idx = pixmaps.size();
         while (--idx >= 0) {
             if (pe == &pixmaps.at(idx)) {
                 pixmaps.remove(idx);
@@ -320,7 +286,7 @@ QPixmap QPixmapIconEngine::scaledPixmap(const QSize &size, QIcon::Mode mode, QIc
     if (!actualSize.isNull() && (actualSize.width() > size.width() || actualSize.height() > size.height()))
         actualSize.scale(size, Qt::KeepAspectRatio);
 
-    QString key = QLatin1String("qt_")
+    QString key = "qt_"_L1
                   % HexString<quint64>(pm.cacheKey())
                   % HexString<uint>(pe ? pe->mode : QIcon::Normal)
                   % HexString<quint64>(QGuiApplication::palette().cacheKey())
@@ -450,7 +416,7 @@ void QPixmapIconEngine::addFile(const QString &fileName, const QSize &size, QIco
 {
     if (fileName.isEmpty())
         return;
-    const QString abs = fileName.startsWith(QLatin1Char(':')) ? fileName : QFileInfo(fileName).absoluteFilePath();
+    const QString abs = fileName.startsWith(u':') ? fileName : QFileInfo(fileName).absoluteFilePath();
     const bool ignoreSize = !size.isValid();
     ImageReader imageReader(abs);
     const QByteArray format = imageReader.format();
@@ -485,7 +451,7 @@ void QPixmapIconEngine::addFile(const QString &fileName, const QSize &size, QIco
             }
         }
     }
-    for (const QImage &i : qAsConst(icoImages))
+    for (const QImage &i : std::as_const(icoImages))
         pixmaps += QPixmapIconEngineEntry(abs, i, mode, state);
     if (icoImages.isEmpty() && !ignoreSize) // Add placeholder with the filename and empty pixmap for the size.
         pixmaps += QPixmapIconEngineEntry(abs, size, mode, state);
@@ -493,7 +459,7 @@ void QPixmapIconEngine::addFile(const QString &fileName, const QSize &size, QIco
 
 QString QPixmapIconEngine::key() const
 {
-    return QLatin1String("QPixmapIconEngine");
+    return "QPixmapIconEngine"_L1;
 }
 
 QIconEngine *QPixmapIconEngine::clone() const
@@ -550,7 +516,7 @@ bool QPixmapIconEngine::write(QDataStream &out) const
 }
 
 Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
-    (QIconEngineFactoryInterface_iid, QLatin1String("/iconengines"), Qt::CaseInsensitive))
+    (QIconEngineFactoryInterface_iid, "/iconengines"_L1, Qt::CaseInsensitive))
 
 QFactoryLoader *qt_iconEngineFactoryLoader()
 {
@@ -667,7 +633,7 @@ QFactoryLoader *qt_iconEngineFactoryLoader()
     └── index.theme
   \endcode
 
-  \sa {fowler}{GUI Design Handbook: Iconic Label}, {Icons Example}
+  \sa {Icons Example}
 */
 
 
@@ -1137,10 +1103,9 @@ QList<QSize> QIcon::availableSizes(Mode mode, State state) const
     Returns the name used to create the icon, if available.
 
     Depending on the way the icon was created, it may have an associated
-    name. This is the case for icons created with fromTheme() or icons
-    using a QIconEngine which supports the QIconEngine::IconNameHook.
+    name. This is the case for icons created with fromTheme().
 
-    \sa fromTheme(), QIconEngine
+    \sa fromTheme(), QIconEngine::iconName()
 */
 QString QIcon::name() const
 {
@@ -1311,11 +1276,15 @@ void QIcon::setFallbackThemeName(const QString &name)
 */
 QIcon QIcon::fromTheme(const QString &name)
 {
-    QIcon icon;
 
-    if (qtIconCache()->contains(name)) {
-        icon = *qtIconCache()->object(name);
-    } else if (QDir::isAbsolutePath(name)) {
+    if (QIcon *cachedIcon = qtIconCache()->object(name)) {
+        if (!cachedIcon->isNull())
+            return *cachedIcon;
+        qtIconCache()->remove(name);
+    }
+
+    QIcon icon;
+    if (QDir::isAbsolutePath(name)) {
         return QIcon(name);
     } else {
         QPlatformTheme * const platformTheme = QGuiApplicationPrivate::platformTheme();
@@ -1458,10 +1427,10 @@ QDataStream &operator>>(QDataStream &s, QIcon &icon)
         icon = QIcon();
         QString key;
         s >> key;
-        if (key == QLatin1String("QPixmapIconEngine")) {
+        if (key == "QPixmapIconEngine"_L1) {
             icon.d = new QIconPrivate(new QPixmapIconEngine);
             icon.d->engine->read(s);
-        } else if (key == QLatin1String("QIconLoaderEngine")) {
+        } else if (key == "QIconLoaderEngine"_L1) {
             icon.d = new QIconPrivate(new QIconLoaderEngine());
             icon.d->engine->read(s);
         } else {
@@ -1558,17 +1527,17 @@ QString qt_findAtNxFile(const QString &baseFileName, qreal targetDevicePixelRati
     if (disableNxImageLoading)
         return baseFileName;
 
-    int dotIndex = baseFileName.lastIndexOf(QLatin1Char('.'));
+    int dotIndex = baseFileName.lastIndexOf(u'.');
     if (dotIndex == -1) { /* no dot */
         dotIndex = baseFileName.size(); /* append */
-    } else if (dotIndex >= 2 && baseFileName[dotIndex - 1] == QLatin1Char('9')
-        && baseFileName[dotIndex - 2] == QLatin1Char('.')) {
+    } else if (dotIndex >= 2 && baseFileName[dotIndex - 1] == u'9'
+        && baseFileName[dotIndex - 2] == u'.') {
         // If the file has a .9.* (9-patch image) extension, we must ensure that the @nx goes before it.
         dotIndex -= 2;
     }
 
     QString atNxfileName = baseFileName;
-    atNxfileName.insert(dotIndex, QLatin1String("@2x"));
+    atNxfileName.insert(dotIndex, "@2x"_L1);
     // Check for @Nx, ..., @3x, @2x file versions,
     for (int n = qMin(qCeil(targetDevicePixelRatio), 9); n > 1; --n) {
         atNxfileName[dotIndex + 1] = QLatin1Char('0' + n);

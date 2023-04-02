@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtTest/QTest>
 #include <QtTest/QSignalSpy>
@@ -334,8 +309,8 @@ void tst_QSocketNotifier::posixSockets()
         passive->waitForBytesWritten(5000);
 
         QTestEventLoop::instance().enterLoop(3);
-        QCOMPARE(readSpy.count(), 1);
-        QCOMPARE(errorSpy.count(), 0);
+        QCOMPARE(readSpy.size(), 1);
+        QCOMPARE(errorSpy.size(), 0);
 
         char buffer[100];
         int r = qt_safe_read(posixSocket, buffer, 100);
@@ -349,9 +324,9 @@ void tst_QSocketNotifier::posixSockets()
         qt_safe_write(posixSocket, "goodbye", 8);
 
         QTestEventLoop::instance().enterLoop(3);
-        QCOMPARE(readSpy.count(), 1);
-        QCOMPARE(writeSpy.count(), 1);
-        QCOMPARE(errorSpy.count(), 0);
+        QCOMPARE(readSpy.size(), 1);
+        QCOMPARE(writeSpy.size(), 1);
+        QCOMPARE(errorSpy.size(), 0);
 
         // Write notifier may have fired before the read notifier inside
         // QTcpSocket, give QTcpSocket a chance to see the incoming data
@@ -412,7 +387,7 @@ void tst_QSocketNotifier::asyncMultipleDatagram()
 
     QTestEventLoop::instance().enterLoop(1);
     QVERIFY(!QTestEventLoop::instance().timeout());
-    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.size(), 2);
 
     delete m_asyncSender;
     delete m_asyncReceiver;

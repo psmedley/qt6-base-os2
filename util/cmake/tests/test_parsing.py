@@ -1,34 +1,11 @@
 #!/usr/bin/env python3
-#############################################################################
-##
-## Copyright (C) 2018 The Qt Company Ltd.
-## Contact: https://www.qt.io/licensing/
-##
-## This file is part of the plugins of the Qt Toolkit.
-##
-## $QT_BEGIN_LICENSE:GPL-EXCEPT$
-## Commercial License Usage
-## Licensees holding valid commercial Qt licenses may use this file in
-## accordance with the commercial license agreement provided with the
-## Software or, alternatively, in accordance with the terms contained in
-## a written agreement between you and The Qt Company. For licensing terms
-## and conditions see https://www.qt.io/terms-conditions. For further
-## information use the contact form at https://www.qt.io/contact-us.
-##
-## GNU General Public License Usage
-## Alternatively, this file may be used under the terms of the GNU
-## General Public License version 3 as published by the Free Software
-## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-## included in the packaging of this file. Please review the following
-## information to ensure the GNU General Public License requirements will
-## be met: https://www.gnu.org/licenses/gpl-3.0.html.
-##
-## $QT_END_LICENSE$
-##
-#############################################################################
+# Copyright (C) 2018 The Qt Company Ltd.
+# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 import os
+from pro2cmake import map_condition
 from qmake_parser import QmakeParser
+from condition_simplifier import simplify_condition
 
 
 _tests_path = os.path.dirname(os.path.abspath(__file__))
@@ -239,7 +216,7 @@ def test_realworld_standardpaths():
 
     # android / else:
     (cond4, if_branch4, else_branch4) = evaluate_condition(else_branch3[0])
-    assert cond4 == 'android && !android-embedded'
+    assert cond4 == 'android'
     assert len(if_branch4) == 1
     validate_op('SOURCES', '+=', ['io/qstandardpaths_android.cpp'], if_branch4[0])
     assert len(else_branch4) == 1
@@ -259,7 +236,7 @@ def test_realworld_comment_scope():
     (cond, if_branch, else_branch) = evaluate_condition(result[0])
     assert cond == 'freebsd|openbsd'
     assert len(if_branch) == 1
-    validate_op('QMAKE_LFLAGS_NOUNDEF', '=', None, if_branch[0])
+    validate_op('QMAKE_LFLAGS_NOUNDEF', '=', [], if_branch[0])
 
     assert 'included' in result[1]
     assert result[1]['included'].get('value', '') == 'animation/animation.pri'
@@ -352,3 +329,15 @@ def test_value_function():
     assert target == 'Dummy'
     value = result[1]['value']
     assert value[0] == '$$TARGET'
+
+
+def test_condition_operator_precedence():
+    result = parse_file(_tests_path + '/data/condition_operator_precedence.pro')
+
+    def validate_simplify(input_str: str, expected: str) -> None:
+        output = simplify_condition(map_condition(input_str))
+        assert output == expected
+
+    validate_simplify(result[0]["condition"], "a1 OR a2")
+    validate_simplify(result[1]["condition"], "b3 AND (b1 OR b2)")
+    validate_simplify(result[2]["condition"], "c4 OR (c1 AND c3) OR (c2 AND c3)")

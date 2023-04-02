@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
     \page containers.html
@@ -63,7 +39,8 @@
 
     \note Since Qt 5.14, range constructors are available for most of the
     container classes. QMultiMap is a notable exception. Their use is
-    encouraged in place of the various from/to methods. For example:
+    encouraged to replace of the various deprecated from/to methods of Qt 5.
+    For example:
 
     \snippet code/doc_src_containers.cpp 25
 
@@ -215,7 +192,30 @@
     the C++ language doesn't specify any initialization; in those
     cases, Qt's containers automatically initialize the value to 0.
 
-    \section1 The Iterator Classes
+    \section1 Iterating over Containers
+
+    \section2 Range-based for
+
+    Range-based \c for should preferably be used for containers:
+
+    \snippet code/doc_src_containers.cpp range_for
+
+    Note that when using a Qt container in a non-const context,
+    \l{implicit sharing} may perform an undesired detach of the container.
+    To prevent this, use \c std::as_const():
+
+    \snippet code/doc_src_containers.cpp range_for_as_const
+
+    For associative containers, this will loop over the values.
+
+    \section2 Index-based
+
+    For sequential containers that store their items contiguously in memory
+    (for example, QList), index-based iteration can be used:
+
+    \snippet code/doc_src_containers.cpp index
+
+    \section2 The Iterator Classes
 
     Iterators provide a uniform means to access items in a container.
     Qt's container classes provide two types of iterators: STL-style
@@ -224,7 +224,7 @@
     from \l{Implicit Sharing}{implicitly shared copies} due to a call
     to a non-const member function.
 
-    \section2 STL-Style Iterators
+    \section3 STL-Style Iterators
 
     STL-style iterators have been available since the release of Qt
     2.0. They are compatible with Qt's and STL's \l{generic
@@ -286,12 +286,10 @@
 
     In the code snippets so far, we used the unary \c * operator to
     retrieve the item (of type QString) stored at a certain iterator
-    position, and we then called QString::toLower() on it. Most C++
-    compilers also allow us to write \c{i->toLower()}, but some
-    don't.
+    position, and we then called QString::toLower() on it.
 
-    For read-only access, you can use const_iterator, \l{QList::constBegin}{constBegin()},
-    and \l{QList::constEnd()}{constEnd()}. For example:
+    For read-only access, you can use const_iterator, \l{QList::cbegin}{cbegin()},
+    and \l{QList::cend()}{cend()}. For example:
 
     \snippet code/doc_src_containers.cpp 12
 
@@ -339,7 +337,7 @@
     This problem doesn't occur with functions that return a const or
     non-const reference to a container.
 
-    \section3 Implicit sharing iterator problem
+    \section4 Implicit sharing iterator problem
 
     \l{Implicit sharing} has another consequence on STL-style
     iterators: you should avoid copying a container while
@@ -352,32 +350,10 @@
      The above example only shows a problem with QList, but
      the problem exists for all the implicitly shared Qt containers.
 
-    \section2 Java-Style Iterators
+    \section3 Java-Style Iterators
     \l{java-style-iterators}{Java-Style iterators} were introduced in Qt 4. Their API is modelled
     on Java's iterator classes.
     New code should should prefer \l{STL-Style Iterators}.
-
-    \section1 Container keywords
-
-    \target foreach
-    \section2 The foreach Keyword
-    \l{foreach-keyword}{The foreach keyword} is discouraged, new code should
-    prefer C++11 range-based loops.
-
-    \target forever
-    \section2 The forever keyword.
-    In addition to \c foreach, Qt also provides a \c forever
-    pseudo-keyword for infinite loops:
-
-    \snippet code/doc_src_containers.cpp 21
-
-    If you're worried about namespace pollution, you can disable
-    these macros by adding the following line to your \c .pro file:
-
-    \snippet code/doc_src_containers.cpp 22
-
-    \note The alternative macros Q_FOREACH and Q_FOREVER remain defined
-    regardless.
 
     \section1 Qt containers compared with std containers
 
@@ -407,7 +383,7 @@
     \li Similar to std::queue<T>, inherits from \l{QList}.
 
     \row \li \l{QSet}<T>
-    \li Similar to std::set<T>. Internally, \l{QSet} is implemented with a
+    \li Similar to std::unordered_set<T>. Internally, \l{QSet} is implemented with a
     \l{QHash}.
 
     \row \li \l{QMap}<Key, T>
@@ -417,16 +393,16 @@
     \li Similar to std::multimap<T>.
 
     \row \li \l{QHash}<Key, T>
-    \li Most similar to std::map<T>.
+    \li Most similar to std::unordered_map<T>.
 
     \row \li \l{QMultiHash}<Key, T>
-    \li Most similar to std::multimap<T>.
+    \li Most similar to std::unordered_multimap<T>.
 
     \endtable
 
     \section1 Qt containers and std algorithms
 
-    You can used Qt containers with functions from \c{#include <algorithm>}.
+    You can use Qt containers with functions from \c{#include <algorithm>}.
 
     \snippet code/doc_src_containers.cpp 26
 
@@ -434,7 +410,7 @@
 
     Qt includes other template classes that resemble containers in
     some respects. These classes don't provide iterators and cannot
-    be used with the \c foreach keyword.
+    be used with the \l foreach keyword.
 
     \list
     \li QCache<Key, T> provides a cache to store objects of a certain

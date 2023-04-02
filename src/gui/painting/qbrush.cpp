@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2019 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2019 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qbrush.h"
 #include "qpixmap.h"
@@ -54,8 +18,11 @@
 #include <QtCore/qnumeric.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qmutex.h>
+#include <QtCore/private/qoffsetstringarray_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 #if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
 // Avoid an ABI break due to the QScopedPointer->std::unique_ptr change
@@ -114,7 +81,7 @@ Q_GUI_EXPORT QPixmap qt_pixmapForBrush(int brushStyle, bool invert)
 {
 
     QPixmap pm;
-    QString key = QLatin1String("$qt-brush$")
+    QString key = "$qt-brush$"_L1
                   % HexString<uint>(brushStyle)
                   % QLatin1Char(invert ? '1' : '0');
     if (!QPixmapCache::find(key, &pm)) {
@@ -862,7 +829,7 @@ Q_GUI_EXPORT bool qt_isExtendedRadialGradient(const QBrush &brush)
 
 bool QBrush::isOpaque() const
 {
-    bool opaqueColor = d->color.alpha() == 255;
+    bool opaqueColor = d->color.alphaF() >= 1.0f;
 
     // Test awfully simple case first
     if (d->style == Qt::SolidPattern)
@@ -876,7 +843,7 @@ bool QBrush::isOpaque() const
         || d->style == Qt::ConicalGradientPattern) {
         QGradientStops stops = gradient()->stops();
         for (int i=0; i<stops.size(); ++i)
-            if (stops.at(i).second.alpha() != 255)
+            if (stops.at(i).second.alphaF() < 1.0f)
                 return false;
         return true;
     } else if (d->style == Qt::TexturePattern) {
@@ -985,7 +952,7 @@ bool QBrush::operator==(const QBrush &b) const
 */
 QDebug operator<<(QDebug dbg, const QBrush &b)
 {
-    static const char BRUSH_STYLES[][24] = {
+    static constexpr auto BRUSH_STYLES = qOffsetStringArray(
      "NoBrush",
      "SolidPattern",
      "Dense1Pattern",
@@ -1006,7 +973,7 @@ QDebug operator<<(QDebug dbg, const QBrush &b)
      "ConicalGradientPattern",
      "", "", "", "", "", "",
      "TexturePattern" // 24
-    };
+    );
 
     QDebugStateSaver saver(dbg);
     dbg.nospace() << "QBrush(" << b.color() << ',' << BRUSH_STYLES[b.style()] << ')';
@@ -1664,9 +1631,10 @@ void QGradient::setStops(const QGradientStops &stops)
 QGradientStops QGradient::stops() const
 {
     if (m_stops.isEmpty()) {
-        QGradientStops tmp;
-        tmp << QGradientStop(0, Qt::black) << QGradientStop(1, Qt::white);
-        return tmp;
+        static constexpr QGradientStop blackAndWhite[] = {
+            {0, QColorConstants::Black}, {1, QColorConstants::White},
+        };
+        return QGradientStops::fromReadOnlyData(blackAndWhite);
     }
     return m_stops;
 }
@@ -2544,3 +2512,5 @@ void QConicalGradient::setAngle(qreal angle)
 */
 
 QT_END_NAMESPACE
+
+#include "moc_qbrush.cpp"

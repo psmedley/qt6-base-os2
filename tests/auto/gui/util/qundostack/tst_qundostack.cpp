@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -122,7 +97,7 @@ InsertCommand::InsertCommand(QString *str, int idx, const QString &text,
                             QUndoCommand *parent)
     : QUndoCommand(parent)
 {
-    QVERIFY(str->length() >= idx);
+    QVERIFY(str->size() >= idx);
 
     setText("insert");
 
@@ -133,22 +108,22 @@ InsertCommand::InsertCommand(QString *str, int idx, const QString &text,
 
 void InsertCommand::redo()
 {
-    QVERIFY(m_str->length() >= m_idx);
+    QVERIFY(m_str->size() >= m_idx);
 
     m_str->insert(m_idx, m_text);
 }
 
 void InsertCommand::undo()
 {
-    QCOMPARE(m_str->mid(m_idx, m_text.length()), m_text);
+    QCOMPARE(m_str->mid(m_idx, m_text.size()), m_text);
 
-    m_str->remove(m_idx, m_text.length());
+    m_str->remove(m_idx, m_text.size());
 }
 
 RemoveCommand::RemoveCommand(QString *str, int idx, int len, QUndoCommand *parent)
     : QUndoCommand(parent)
 {
-    QVERIFY(str->length() >= idx + len);
+    QVERIFY(str->size() >= idx + len);
 
     setText("remove");
 
@@ -159,14 +134,14 @@ RemoveCommand::RemoveCommand(QString *str, int idx, int len, QUndoCommand *paren
 
 void RemoveCommand::redo()
 {
-    QCOMPARE(m_str->mid(m_idx, m_text.length()), m_text);
+    QCOMPARE(m_str->mid(m_idx, m_text.size()), m_text);
 
-    m_str->remove(m_idx, m_text.length());
+    m_str->remove(m_idx, m_text.size());
 }
 
 void RemoveCommand::undo()
 {
-    QVERIFY(m_str->length() >= m_idx);
+    QVERIFY(m_str->size() >= m_idx);
 
     m_str->insert(m_idx, m_text);
 }
@@ -197,9 +172,9 @@ void AppendCommand::redo()
 
 void AppendCommand::undo()
 {
-    QCOMPARE(m_str->mid(m_str->length() - m_text.length()), m_text);
+    QCOMPARE(m_str->mid(m_str->size() - m_text.size()), m_text);
 
-    m_str->truncate(m_str->length() - m_text.length());
+    m_str->truncate(m_str->size() - m_text.size());
 }
 
 int AppendCommand::id() const
@@ -349,44 +324,44 @@ static void checkState(QSignalSpy &redoTextChangedSpy,
     QCOMPARE(stack.canRedo(), _canRedo);
     QCOMPARE(stack.redoText(), QString(_redoText));
     if (_indexChanged) {
-        QCOMPARE(indexChangedSpy.count(), 1);
+        QCOMPARE(indexChangedSpy.size(), 1);
         QCOMPARE(indexChangedSpy.at(0).at(0).toInt(), _index);
         indexChangedSpy.clear();
     } else {
-        QCOMPARE(indexChangedSpy.count(), 0);
+        QCOMPARE(indexChangedSpy.size(), 0);
     }
     if (_cleanChanged) {
-        QCOMPARE(cleanChangedSpy.count(), 1);
+        QCOMPARE(cleanChangedSpy.size(), 1);
         QCOMPARE(cleanChangedSpy.at(0).at(0).toBool(), _clean);
         cleanChangedSpy.clear();
     } else {
-        QCOMPARE(cleanChangedSpy.count(), 0);
+        QCOMPARE(cleanChangedSpy.size(), 0);
     }
     if (_undoChanged) {
-        QCOMPARE(canUndoChangedSpy.count(), 1);
+        QCOMPARE(canUndoChangedSpy.size(), 1);
         QCOMPARE(canUndoChangedSpy.at(0).at(0).toBool(), _canUndo);
         QCOMPARE(undoAction->isEnabled(), _canUndo);
-        QCOMPARE(undoTextChangedSpy.count(), 1);
+        QCOMPARE(undoTextChangedSpy.size(), 1);
         QCOMPARE(undoTextChangedSpy.at(0).at(0).toString(), QString(_undoText));
         QCOMPARE(undoAction->text(), glue("foo", _undoText));
         canUndoChangedSpy.clear();
         undoTextChangedSpy.clear();
     } else {
-        QCOMPARE(canUndoChangedSpy.count(), 0);
-        QCOMPARE(undoTextChangedSpy.count(), 0);
+        QCOMPARE(canUndoChangedSpy.size(), 0);
+        QCOMPARE(undoTextChangedSpy.size(), 0);
     }
     if (_redoChanged) {
-        QCOMPARE(canRedoChangedSpy.count(), 1);
+        QCOMPARE(canRedoChangedSpy.size(), 1);
         QCOMPARE(canRedoChangedSpy.at(0).at(0).toBool(), _canRedo);
         QCOMPARE(redoAction->isEnabled(), _canRedo);
-        QCOMPARE(redoTextChangedSpy.count(), 1);
+        QCOMPARE(redoTextChangedSpy.size(), 1);
         QCOMPARE(redoTextChangedSpy.at(0).at(0).toString(), QString(_redoText));
         QCOMPARE(redoAction->text(), glue("bar", _redoText));
         canRedoChangedSpy.clear();
         redoTextChangedSpy.clear();
     } else {
-        QCOMPARE(canRedoChangedSpy.count(), 0);
-        QCOMPARE(redoTextChangedSpy.count(), 0);
+        QCOMPARE(canRedoChangedSpy.size(), 0);
+        QCOMPARE(redoTextChangedSpy.size(), 0);
     }
 }
 

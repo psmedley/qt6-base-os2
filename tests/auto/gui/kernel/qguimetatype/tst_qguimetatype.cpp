@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QtCore>
@@ -318,6 +293,15 @@ struct TypeAlignment
     enum { Value = alignof(T) };
 };
 
+template <typename T> void addFlagsRow(const char *name, int id = qMetaTypeId<T>())
+{
+    QTest::newRow(name)
+            << id
+            << bool(QTypeInfo<T>::isRelocatable)
+            << bool(QTypeInfo<T>::isComplex);
+}
+
+
 void tst_QGuiMetaType::flags_data()
 {
     QTest::addColumn<int>("type");
@@ -325,7 +309,7 @@ void tst_QGuiMetaType::flags_data()
     QTest::addColumn<bool>("isComplex");
 
 #define ADD_METATYPE_TEST_ROW(MetaTypeName, MetaTypeId, RealType) \
-    QTest::newRow(#RealType) << MetaTypeId << bool(QTypeInfo<RealType>::isRelocatable) << bool(QTypeInfo<RealType>::isComplex);
+    addFlagsRow<RealType>(#RealType, MetaTypeId);
 QT_FOR_EACH_STATIC_GUI_CLASS(ADD_METATYPE_TEST_ROW)
 #undef ADD_METATYPE_TEST_ROW
 }

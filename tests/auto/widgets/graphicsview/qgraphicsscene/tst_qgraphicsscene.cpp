@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDial>
@@ -278,6 +253,7 @@ private slots:
     void focusItemChangedSignal();
     void minimumRenderSize();
     void focusOnTouch();
+    void clearSelection();
 
     // task specific tests below me
     void task139710_bspTreeCrash();
@@ -293,6 +269,8 @@ private slots:
     void taskQTBUG_16401_focusItem();
     void taskQTBUG_42915_focusNextPrevChild();
     void taskQTBUG_85088_previewTextfailWhenLostFocus();
+
+    void deleteItemsOnChange();
 
 private:
     QRect m_availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
@@ -341,27 +319,27 @@ void tst_QGraphicsScene::sceneRect()
     QGraphicsScene scene;
     QSignalSpy sceneRectChanged(&scene, &QGraphicsScene::sceneRectChanged);
     QCOMPARE(scene.sceneRect(), QRectF());
-    QCOMPARE(sceneRectChanged.count(), 0);
+    QCOMPARE(sceneRectChanged.size(), 0);
 
     QGraphicsRectItem *item = scene.addRect(QRectF(0, 0, 10, 10));
     item->setPen(QPen(Qt::black, 0));
     item->setPos(-5, -5);
-    QCOMPARE(sceneRectChanged.count(), 0);
+    QCOMPARE(sceneRectChanged.size(), 0);
 
     QCOMPARE(itemAt(scene, 0, 0), item);
     QVERIFY(scene.items(QPointF(10, 10)).isEmpty());
-    QCOMPARE(sceneRectChanged.count(), 0);
+    QCOMPARE(sceneRectChanged.size(), 0);
     QCOMPARE(scene.sceneRect(), QRectF(-5, -5, 10, 10));
-    QCOMPARE(sceneRectChanged.count(), 1);
+    QCOMPARE(sceneRectChanged.size(), 1);
     QCOMPARE(sceneRectChanged.last().at(0).toRectF(), scene.sceneRect());
 
     item->setPos(0, 0);
     QCOMPARE(scene.sceneRect(), QRectF(-5, -5, 15, 15));
-    QCOMPARE(sceneRectChanged.count(), 2);
+    QCOMPARE(sceneRectChanged.size(), 2);
     QCOMPARE(sceneRectChanged.last().at(0).toRectF(), scene.sceneRect());
 
     scene.setSceneRect(-100, -100, 10, 10);
-    QCOMPARE(sceneRectChanged.count(), 3);
+    QCOMPARE(sceneRectChanged.size(), 3);
     QCOMPARE(sceneRectChanged.last().at(0).toRectF(), scene.sceneRect());
 
     QCOMPARE(itemAt(scene, 0, 0), item);
@@ -369,16 +347,16 @@ void tst_QGraphicsScene::sceneRect()
     QCOMPARE(scene.sceneRect(), QRectF(-100, -100, 10, 10));
     item->setPos(10, 10);
     QCOMPARE(scene.sceneRect(), QRectF(-100, -100, 10, 10));
-    QCOMPARE(sceneRectChanged.count(), 3);
+    QCOMPARE(sceneRectChanged.size(), 3);
     QCOMPARE(sceneRectChanged.last().at(0).toRectF(), scene.sceneRect());
 
     scene.setSceneRect(QRectF());
 
     QCOMPARE(itemAt(scene, 10, 10), item);
     QVERIFY(scene.items(QPointF(20, 20)).isEmpty());
-    QCOMPARE(sceneRectChanged.count(), 4);
+    QCOMPARE(sceneRectChanged.size(), 4);
     QCOMPARE(scene.sceneRect(), QRectF(-5, -5, 25, 25));
-    QCOMPARE(sceneRectChanged.count(), 5);
+    QCOMPARE(sceneRectChanged.size(), 5);
     QCOMPARE(sceneRectChanged.last().at(0).toRectF(), scene.sceneRect());
 }
 
@@ -554,7 +532,7 @@ void tst_QGraphicsScene::itemsBoundingRect()
 
     QGraphicsScene scene;
 
-    for (const auto &rect : qAsConst(rects)) {
+    for (const auto &rect : std::as_const(rects)) {
         QPainterPath path;
         path.addRect(rect);
         QGraphicsPathItem *item = scene.addPath(path);
@@ -619,7 +597,7 @@ void tst_QGraphicsScene::items_QPointF()
 
     int n = 0;
     QList<QGraphicsItem *> addedItems;
-    for (const auto &rect : qAsConst(items)) {
+    for (const auto &rect : std::as_const(items)) {
         QPainterPath path;
         path.addRect(0, 0, rect.width(), rect.height());
 
@@ -966,32 +944,32 @@ void tst_QGraphicsScene::selectionChanged()
 {
     QGraphicsScene scene(0, 0, 1000, 1000);
     QSignalSpy spy(&scene, &QGraphicsScene::selectionChanged);
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
 
     QPainterPath path;
     path.addRect(scene.sceneRect());
     QCOMPARE(scene.selectionArea(), QPainterPath());
     scene.setSelectionArea(path);
     QCOMPARE(scene.selectionArea(), path);
-    QCOMPARE(spy.count(), 0); // selection didn't change
+    QCOMPARE(spy.size(), 0); // selection didn't change
     QVERIFY(scene.selectedItems().isEmpty());
 
     QGraphicsItem *rect = scene.addRect(QRectF(0, 0, 100, 100));
-    QCOMPARE(spy.count(), 0); // selection didn't change
+    QCOMPARE(spy.size(), 0); // selection didn't change
 
     rect->setSelected(true);
     QVERIFY(!rect->isSelected());
-    QCOMPARE(spy.count(), 0); // selection didn't change, item isn't selectable
+    QCOMPARE(spy.size(), 0); // selection didn't change, item isn't selectable
 
     rect->setFlag(QGraphicsItem::ItemIsSelectable);
     rect->setSelected(true);
     QVERIFY(rect->isSelected());
-    QCOMPARE(spy.count(), 1); // selection changed
+    QCOMPARE(spy.size(), 1); // selection changed
     QCOMPARE(scene.selectedItems(), {rect});
 
     rect->setSelected(false);
     QVERIFY(!rect->isSelected());
-    QCOMPARE(spy.count(), 2); // selection changed
+    QCOMPARE(spy.size(), 2); // selection changed
     QVERIFY(scene.selectedItems().isEmpty());
 
     QGraphicsEllipseItem *parentItem = new QGraphicsEllipseItem(QRectF(0, 0, 100, 100));
@@ -1003,33 +981,33 @@ void tst_QGraphicsScene::selectionChanged()
     grandChildItem->setSelected(true);
     scene.addItem(parentItem);
 
-    QCOMPARE(spy.count(), 3); // the grandchild was added, so the selection changed once
+    QCOMPARE(spy.size(), 3); // the grandchild was added, so the selection changed once
 
     scene.removeItem(parentItem);
-    QCOMPARE(spy.count(), 4); // the grandchild was removed, so the selection changed
+    QCOMPARE(spy.size(), 4); // the grandchild was removed, so the selection changed
 
     rect->setSelected(true);
-    QCOMPARE(spy.count(), 5); // the rect was reselected, so the selection changed
+    QCOMPARE(spy.size(), 5); // the rect was reselected, so the selection changed
 
     scene.clearSelection();
-    QCOMPARE(spy.count(), 6); // the scene selection was cleared
+    QCOMPARE(spy.size(), 6); // the scene selection was cleared
 
     rect->setSelected(true);
-    QCOMPARE(spy.count(), 7); // the rect was reselected, so the selection changed
+    QCOMPARE(spy.size(), 7); // the rect was reselected, so the selection changed
 
     rect->setFlag(QGraphicsItem::ItemIsSelectable, false);
-    QCOMPARE(spy.count(), 8); // the rect was unselected, so the selection changed
+    QCOMPARE(spy.size(), 8); // the rect was unselected, so the selection changed
 
     rect->setSelected(true);
-    QCOMPARE(spy.count(), 8); // the rect is not longer selectable, so the selection does not change
+    QCOMPARE(spy.size(), 8); // the rect is not longer selectable, so the selection does not change
 
 
     rect->setFlag(QGraphicsItem::ItemIsSelectable, true);
     rect->setSelected(true);
-    QCOMPARE(spy.count(), 9); // the rect is again selectable, so the selection changed
+    QCOMPARE(spy.size(), 9); // the rect is again selectable, so the selection changed
 
     delete rect;
-    QCOMPARE(spy.count(), 10); // a selected item was deleted; selection changed
+    QCOMPARE(spy.size(), 10); // a selected item was deleted; selection changed
 }
 
 void tst_QGraphicsScene::selectionChanged2()
@@ -1042,7 +1020,7 @@ void tst_QGraphicsScene::selectionChanged2()
     item1->setFlag(QGraphicsItem::ItemIsSelectable);
     item2->setFlag(QGraphicsItem::ItemIsSelectable);
 
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
     {
         QGraphicsSceneMouseEvent event(QEvent::GraphicsSceneMousePress);
         event.setScenePos(QPointF(50, 50));
@@ -1057,7 +1035,7 @@ void tst_QGraphicsScene::selectionChanged2()
     }
     QVERIFY(item1->isSelected());
     QVERIFY(!item2->isSelected());
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     {
         QGraphicsSceneMouseEvent event(QEvent::GraphicsSceneMousePress);
         event.setScenePos(QPointF(150, 150));
@@ -1072,7 +1050,7 @@ void tst_QGraphicsScene::selectionChanged2()
     }
     QVERIFY(!item1->isSelected());
     QVERIFY(item2->isSelected());
-    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.size(), 2);
     {
         QGraphicsSceneMouseEvent event(QEvent::GraphicsSceneMousePress);
         event.setScenePos(QPointF(50, 50));
@@ -1082,7 +1060,7 @@ void tst_QGraphicsScene::selectionChanged2()
     }
     QVERIFY(!item1->isSelected());
     QVERIFY(item2->isSelected());
-    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.size(), 2);
     {
         QGraphicsSceneMouseEvent event(QEvent::GraphicsSceneMouseRelease);
         event.setScenePos(QPointF(50, 50));
@@ -1091,7 +1069,7 @@ void tst_QGraphicsScene::selectionChanged2()
     }
     QVERIFY(item1->isSelected());
     QVERIFY(!item2->isSelected());
-    QCOMPARE(spy.count(), 3);
+    QCOMPARE(spy.size(), 3);
 }
 
 void tst_QGraphicsScene::addItem()
@@ -1754,7 +1732,7 @@ void tst_QGraphicsScene::createItemGroup()
 
     // All items in children1 are children of parent1
     QGraphicsItem *parent1 = scene.addRect(QRectF(-10, -10, 20, 20));
-    for (QGraphicsItem *item : qAsConst(children1))
+    for (QGraphicsItem *item : std::as_const(children1))
         item->setParentItem(parent1);
 
     QGraphicsItemGroup *group = scene.createItemGroup(children1);
@@ -1770,7 +1748,7 @@ void tst_QGraphicsScene::createItemGroup()
 
     // All items in children2 are children of parent2
     QGraphicsItem *parent2 = scene.addRect(QRectF(-10, -10, 20, 20));
-    for (QGraphicsItem *item : qAsConst(children2))
+    for (QGraphicsItem *item : std::as_const(children2))
         item->setParentItem(parent2);
 
     // Now make parent2 a child of parent1, so all children2 are also children
@@ -1794,7 +1772,7 @@ void tst_QGraphicsScene::createItemGroup()
     QCOMPARE(children2.first()->parentItem(), parent1);
 
     // Fixup the parent-child chain
-    for (QGraphicsItem *item : qAsConst(children2))
+    for (QGraphicsItem *item : std::as_const(children2))
         item->setParentItem(parent2);
 
     // These share no common parent
@@ -1804,7 +1782,7 @@ void tst_QGraphicsScene::createItemGroup()
 
     // Make children3 children of parent3
     QGraphicsItem *parent3 = scene.addRect(QRectF(-10, -10, 20, 20));
-    for (QGraphicsItem *item : qAsConst(children3))
+    for (QGraphicsItem *item : std::as_const(children3))
         item->setParentItem(parent3);
 
     // These should have parent3 as a parent
@@ -2697,7 +2675,7 @@ void tst_QGraphicsScene::render()
 
 void tst_QGraphicsScene::renderItemsWithNegativeWidthOrHeight()
 {
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     QSKIP("Test only works on platforms with resizable windows");
 #endif
     QGraphicsScene scene(0, 0, m_testSize.width(), m_testSize.height());
@@ -2777,7 +2755,7 @@ protected:
 
 void tst_QGraphicsScene::contextMenuEvent_ItemIgnoresTransformations()
 {
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     QSKIP("Test fails on some Android devices (QTBUG-44430)");
 #endif
 
@@ -2854,7 +2832,7 @@ void tst_QGraphicsScene::update()
     QCoreApplication::processEvents();
 
     // Check that the update region is correct
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QRectF region;
     const auto &rects = qvariant_cast<QList<QRectF> >(spy.at(0).at(0));
     for (const auto &rectF : rects)
@@ -3553,7 +3531,7 @@ void tst_QGraphicsScene::task160653_selectionChanged()
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QTest::mouseClick(
                 view.viewport(), Qt::LeftButton, {}, view.mapFromScene(scene.items().first()->scenePos()));
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 }
 
 void tst_QGraphicsScene::task250680_childClip()
@@ -3684,8 +3662,8 @@ void tst_QGraphicsScene::insertionOrder()
 
     {
         QList<QGraphicsItem*> itemList = scene.items();
-        QCOMPARE(itemList.count(), numItems);
-        for (int i = 0; i < itemList.count(); ++i) {
+        QCOMPARE(itemList.size(), numItems);
+        for (int i = 0; i < itemList.size(); ++i) {
             QCOMPARE(numItems-1-i, itemList.at(i)->data(0).toInt());
         }
     }
@@ -3698,8 +3676,8 @@ void tst_QGraphicsScene::insertionOrder()
 
     {
         QList<QGraphicsItem*> itemList = scene.items();
-        QCOMPARE(itemList.count(), numItems);
-        for (int i = 0; i < itemList.count(); ++i) {
+        QCOMPARE(itemList.size(), numItems);
+        for (int i = 0; i < itemList.size(); ++i) {
             QCOMPARE(numItems-1-i, itemList.at(i)->data(0).toInt());
         }
     }
@@ -4047,7 +4025,7 @@ void tst_QGraphicsScene::polishItems2()
     // added 10 new children. These should be polished in the next
     // event loop iteration.
     const QList<QGraphicsItem *> children = item->childItems();
-    QCOMPARE(children.count(), 10);
+    QCOMPARE(children.size(), 10);
     for (QGraphicsItem *child : children)
         QVERIFY(!static_cast<PolishItem *>(child)->polished);
 
@@ -4058,12 +4036,11 @@ void tst_QGraphicsScene::polishItems2()
 
 void tst_QGraphicsScene::isActive()
 {
-    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
-        QSKIP("Window activation is not supported");
-
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     QSKIP("Fails on Android (QTBUG-44430)");
 #endif
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("Window activation is not supported");
 
     QGraphicsScene scene1;
     QVERIFY(!scene1.isActive());
@@ -4627,13 +4604,13 @@ void tst_QGraphicsScene::zeroScale()
     rect1->setScale(0.00000001);
 
     QApplication::processEvents();
-    QTRY_COMPARE(cl.changes.count(), 1);
+    QTRY_COMPARE(cl.changes.size(), 1);
     QGraphicsRectItem *rect2 = new QGraphicsRectItem(-0.0000001, -0.0000001, 0.0000001, 0.0000001);
     rect2->setScale(0.00000001);
     scene.addItem(rect2);
     rect1->setPos(20,20);
     QApplication::processEvents();
-    QTRY_COMPARE(cl.changes.count(), 2);
+    QTRY_COMPARE(cl.changes.size(), 2);
 }
 
 void tst_QGraphicsScene::focusItemChangedSignal()
@@ -4644,17 +4621,17 @@ void tst_QGraphicsScene::focusItemChangedSignal()
     QGraphicsScene scene;
     QSignalSpy spy(&scene, &QGraphicsScene::focusItemChanged);
     QVERIFY(spy.isValid());
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
     scene.setFocus();
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
     QEvent activateEvent(QEvent::WindowActivate);
     QCoreApplication::sendEvent(&scene, &activateEvent);
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
 
     QGraphicsRectItem *topLevelItem1 = new QGraphicsRectItem;
     topLevelItem1->setFlag(QGraphicsItem::ItemIsFocusable);
     scene.addItem(topLevelItem1);
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
     QVERIFY(!topLevelItem1->hasFocus());
 
     QGraphicsRectItem *topLevelItem2 = new QGraphicsRectItem;
@@ -4662,7 +4639,7 @@ void tst_QGraphicsScene::focusItemChangedSignal()
     topLevelItem2->setFocus();
     QVERIFY(!topLevelItem2->hasFocus());
     scene.addItem(topLevelItem2);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QList<QVariant> arguments = spy.takeFirst();
     QCOMPARE(arguments.size(), 3);
     QCOMPARE(qvariant_cast<QGraphicsItem *>(arguments.at(0)), topLevelItem2);
@@ -4671,7 +4648,7 @@ void tst_QGraphicsScene::focusItemChangedSignal()
     QVERIFY(topLevelItem2->hasFocus());
 
     scene.clearFocus();
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     arguments = spy.takeFirst();
     QCOMPARE(arguments.size(), 3);
     QCOMPARE(qvariant_cast<QGraphicsItem *>(arguments.at(0)), nullptr);
@@ -4679,7 +4656,7 @@ void tst_QGraphicsScene::focusItemChangedSignal()
     QCOMPARE(qvariant_cast<Qt::FocusReason>(arguments.at(2)), Qt::OtherFocusReason);
 
     scene.setFocus(Qt::MenuBarFocusReason);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     arguments = spy.takeFirst();
     QCOMPARE(arguments.size(), 3);
     QCOMPARE(qvariant_cast<QGraphicsItem *>(arguments.at(0)), topLevelItem2);
@@ -4708,16 +4685,16 @@ void tst_QGraphicsScene::focusItemChangedSignal()
     QEvent deactivateEvent(QEvent::WindowDeactivate);
     QCoreApplication::sendEvent(&scene, &deactivateEvent);
     QEXPECT_FAIL("", "QTBUG-28346", Continue);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QCoreApplication::sendEvent(&scene, &activateEvent);
     QEXPECT_FAIL("", "QTBUG-28346", Continue);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
 
     QGraphicsRectItem *panel1 = new QGraphicsRectItem;
     panel1->setFlags(QGraphicsItem::ItemIsPanel | QGraphicsItem::ItemIsFocusable);
     panel1->setFocus();
     scene.addItem(panel1);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     arguments = spy.takeFirst();
     QCOMPARE(arguments.size(), 3);
     QCOMPARE(qvariant_cast<QGraphicsItem *>(arguments.at(0)), panel1);
@@ -4727,11 +4704,11 @@ void tst_QGraphicsScene::focusItemChangedSignal()
     QGraphicsRectItem *panel2 = new QGraphicsRectItem;
     panel2->setFlags(QGraphicsItem::ItemIsPanel | QGraphicsItem::ItemIsFocusable);
     scene.addItem(panel2);
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
 
     for (int i = 0; i < 3; ++i) {
         scene.setActivePanel(panel2);
-        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.size(), 1);
         arguments = spy.takeFirst();
         QCOMPARE(arguments.size(), 3);
         QCOMPARE(qvariant_cast<QGraphicsItem *>(arguments.at(0)), panel2);
@@ -4739,7 +4716,7 @@ void tst_QGraphicsScene::focusItemChangedSignal()
         QCOMPARE(qvariant_cast<Qt::FocusReason>(arguments.at(2)), Qt::ActiveWindowFocusReason);
 
         scene.setActivePanel(panel1);
-        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.size(), 1);
         arguments = spy.takeFirst();
         QCOMPARE(arguments.size(), 3);
         QCOMPARE(qvariant_cast<QGraphicsItem *>(arguments.at(0)), panel1);
@@ -4858,6 +4835,53 @@ void tst_QGraphicsScene::focusOnTouch()
     QVERIFY(rect->hasFocus());
 }
 
+void tst_QGraphicsScene::clearSelection()
+{
+    class AlwaysSelectedItem : public QGraphicsRectItem
+    {
+    public:
+        using QGraphicsRectItem::QGraphicsRectItem;
+    protected:
+        QVariant itemChange(GraphicsItemChange change, const QVariant& value) override
+        {
+            if (change == ItemSelectedChange)
+                return true;
+            return QGraphicsRectItem::itemChange(change, value);
+        }
+    };
+    QGraphicsScene scene;
+    QSignalSpy spy(&scene, &QGraphicsScene::selectionChanged);
+
+    QGraphicsRectItem *regularRect = new QGraphicsRectItem;
+    regularRect->setFlag(QGraphicsItem::ItemIsSelectable);
+    regularRect->setRect(0, 0, 50, 50);
+    regularRect->setSelected(true);
+    AlwaysSelectedItem *selectedRect = new AlwaysSelectedItem;
+    selectedRect->setFlag(QGraphicsItem::ItemIsSelectable);
+    selectedRect->setRect(50, 50, 50, 50);
+    selectedRect->setSelected(true);
+    scene.addItem(regularRect);
+    scene.addItem(selectedRect);
+
+    QCOMPARE(spy.size(), 2);
+
+    QCOMPARE(scene.selectedItems().size(), 2);
+    scene.clearSelection();
+    QVERIFY(!regularRect->isSelected());
+    QVERIFY(selectedRect->isSelected());
+    QCOMPARE(scene.selectedItems().size(), 1);
+    QCOMPARE(spy.size(), 3);
+
+    delete regularRect;
+    QCOMPARE(spy.size(), 3);
+
+    scene.clearSelection();
+    QCOMPARE(spy.size(), 3);
+
+    delete selectedRect;
+    QCOMPARE(spy.size(), 4);
+}
+
 void tst_QGraphicsScene::taskQTBUG_15977_renderWithDeviceCoordinateCache()
 {
     QGraphicsScene scene;
@@ -4961,6 +4985,7 @@ void tst_QGraphicsScene::taskQTBUG_85088_previewTextfailWhenLostFocus()
 
     // focusItem will lose focus
     QMouseEvent pressEvent(QEvent::MouseButtonPress, QPointF(0, 0),
+                           view.viewport()->mapToGlobal(QPointF()),
                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
     QApplication::sendEvent(view.viewport(), &pressEvent);
 
@@ -4968,6 +4993,73 @@ void tst_QGraphicsScene::taskQTBUG_85088_previewTextfailWhenLostFocus()
     inputEvent.setCommitString(str);
     QApplication::sendEvent(&scene, &inputEvent);
     QCOMPARE(simpleTextItem->toPlainText(), str + str);
+}
+
+void tst_QGraphicsScene::deleteItemsOnChange()
+{
+    QGraphicsScene scene;
+
+    class SelectionItem : public QGraphicsRectItem {
+    public:
+        QRectF boundingRect() const override { return QRectF(); }
+    };
+
+    class ChangeItem : public QGraphicsItem
+    {
+    public:
+        ChangeItem()
+        {
+            setFlag(QGraphicsItem::ItemIsSelectable, true);
+            setFlag(QGraphicsItem::ItemIsMovable, true);
+        }
+        QRectF boundingRect() const override
+        {
+            return QRectF(0,0,100,100);
+        }
+
+    protected:
+        void paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *) override
+        {
+            painter->fillRect(boundingRect().toRect(), isSelected() ? Qt::yellow : Qt::cyan);
+        }
+
+        QVariant itemChange(GraphicsItemChange change, const QVariant &value) override
+        {
+            if (change != QGraphicsItem::ItemSelectedHasChanged)
+                return QGraphicsItem::itemChange(change, value);
+            if (value.toBool()) {
+                selectionRect = new SelectionItem;
+                scene()->addItem(selectionRect);
+            } else {
+                // this recreates the selectedItems QSet inside of QGraphicsScene,
+                // invalidating iterators. See QTBUG-101651.
+                scene()->selectedItems();
+                delete selectionRect;
+                selectionRect = nullptr;
+            }
+            return QGraphicsItem::itemChange(change, value);
+        }
+    private:
+        SelectionItem *selectionRect = nullptr;
+    };
+
+    ChangeItem item1;
+    item1.setPos(0, 0);
+    ChangeItem item2;
+    item1.setPos(50, 50);
+
+    scene.addItem(&item1);
+    scene.addItem(&item2);
+
+    QGraphicsView view;
+    view.setScene(&scene);
+    view.show();
+
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // this should not crash - see QTBUG-101651
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, {}, QPoint(120, 120));
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, {}, QPoint(25, 25));
 }
 
 QTEST_MAIN(tst_QGraphicsScene)

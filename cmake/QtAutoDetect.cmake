@@ -139,8 +139,10 @@ function(qt_auto_detect_android)
 
         if(android_detected)
             message(STATUS "Android build detected, checking configuration defaults...")
-            if(NOT DEFINED ANDROID_NATIVE_API_LEVEL)
-                message(STATUS "ANDROID_NATIVE_API_LEVEL was not specified, using API level 23 as default")
+            # ANDROID_NATIVE_API_LEVEL is an just an alias to ANDROID_PLATFORM, check for both
+            if(NOT DEFINED ANDROID_PLATFORM AND NOT DEFINED ANDROID_NATIVE_API_LEVEL)
+                message(STATUS "Neither ANDROID_PLATFORM nor ANDROID_NATIVE_API_LEVEL were specified, using API level 23 as default")
+                set(ANDROID_PLATFORM "android-23" CACHE STRING "")
                 set(ANDROID_NATIVE_API_LEVEL 23 CACHE STRING "")
             endif()
             if(NOT DEFINED ANDROID_STL)
@@ -180,9 +182,7 @@ function(qt_auto_detect_vcpkg)
 endfunction()
 
 function(qt_auto_detect_ios)
-    if(CMAKE_SYSTEM_NAME STREQUAL iOS
-            OR CMAKE_SYSTEM_NAME STREQUAL watchOS
-            OR CMAKE_SYSTEM_NAME STREQUAL tvOS)
+    if(CMAKE_SYSTEM_NAME STREQUAL iOS)
         message(STATUS "Using internal CMake ${CMAKE_SYSTEM_NAME} toolchain file.")
 
         # The QT_UIKIT_SDK check simulates the input.sdk condition for simulator_and_device in
@@ -199,55 +199,21 @@ function(qt_auto_detect_ios)
         message(STATUS "simulator_and_device set to: \"${simulator_and_device}\".")
 
         # Choose relevant architectures.
-        # Using a non xcode generator requires explicit setting of the
+        # Using a non Xcode generator requires explicit setting of the
         # architectures, otherwise compilation fails with unknown defines.
-        if(CMAKE_SYSTEM_NAME STREQUAL iOS)
-            if(simulator_and_device)
-                set(osx_architectures "arm64;x86_64")
-            elseif(QT_UIKIT_SDK STREQUAL "iphoneos")
-                set(osx_architectures "arm64")
-            elseif(QT_UIKIT_SDK STREQUAL "iphonesimulator")
-                set(osx_architectures "x86_64")
+        if(simulator_and_device)
+            set(osx_architectures "arm64;x86_64")
+        elseif(QT_UIKIT_SDK STREQUAL "iphoneos")
+            set(osx_architectures "arm64")
+        elseif(QT_UIKIT_SDK STREQUAL "iphonesimulator")
+            set(osx_architectures "x86_64")
+        else()
+            if(NOT DEFINED QT_UIKIT_SDK)
+                message(FATAL_ERROR "Please provide a value for -DQT_UIKIT_SDK."
+                    " Possible values: iphoneos, iphonesimulator.")
             else()
-                if(NOT DEFINED QT_UIKIT_SDK)
-                    message(FATAL_ERROR "Please proviude a value for -DQT_UIKIT_SDK."
-                        " Possible values: iphoneos, iphonesimulator.")
-                else()
-                    message(FATAL_ERROR
-                            "Unknown SDK argument given to QT_UIKIT_SDK: ${QT_UIKIT_SDK}.")
-                endif()
-            endif()
-        elseif(CMAKE_SYSTEM_NAME STREQUAL tvOS)
-            if(simulator_and_device)
-                set(osx_architectures "arm64;x86_64")
-            elseif(QT_UIKIT_SDK STREQUAL "appletvos")
-                set(osx_architectures "arm64")
-            elseif(QT_UIKIT_SDK STREQUAL "appletvsimulator")
-                set(osx_architectures "x86_64")
-            else()
-                if(NOT DEFINED QT_UIKIT_SDK)
-                    message(FATAL_ERROR "Please proviude a value for -DQT_UIKIT_SDK."
-                        " Possible values: appletvos, appletvsimulator.")
-                else()
-                    message(FATAL_ERROR
-                            "Unknown SDK argument given to QT_UIKIT_SDK: ${QT_UIKIT_SDK}.")
-                endif()
-            endif()
-        elseif(CMAKE_SYSTEM_NAME STREQUAL watchOS)
-            if(simulator_and_device)
-                set(osx_architectures "armv7k;i386")
-            elseif(QT_UIKIT_SDK STREQUAL "watchos")
-                set(osx_architectures "armv7k")
-            elseif(QT_UIKIT_SDK STREQUAL "watchsimulator")
-                set(osx_architectures "i386")
-            else()
-                if(NOT DEFINED QT_UIKIT_SDK)
-                    message(FATAL_ERROR "Please proviude a value for -DQT_UIKIT_SDK."
-                        " Possible values: watchos, watchsimulator.")
-                else()
-                    message(FATAL_ERROR
-                            "Unknown SDK argument given to QT_UIKIT_SDK: ${QT_UIKIT_SDK}.")
-                endif()
+                message(FATAL_ERROR
+                        "Unknown SDK argument given to QT_UIKIT_SDK: ${QT_UIKIT_SDK}.")
             endif()
         endif()
 
@@ -303,12 +269,8 @@ endfunction()
 
 function(qt_internal_get_darwin_sdk_version out_var)
     if(APPLE)
-        if(IOS)
+        if(CMAKE_SYSTEM_NAME STREQUAL iOS)
             set(sdk_name "iphoneos")
-        elseif(TVOS)
-            set(sdk_name "appletvos")
-        elseif(WATCHOS)
-            set(sdk_name "watchos")
         else()
             # Default to macOS
             set(sdk_name "macosx")
@@ -350,10 +312,6 @@ function(qt_auto_detect_darwin)
                 set(version "10.14")
             elseif(CMAKE_SYSTEM_NAME STREQUAL iOS)
                 set(version "13.0")
-            elseif(CMAKE_SYSTEM_NAME STREQUAL watchOS)
-                set(version "6.0")
-            elseif(CMAKE_SYSTEM_NAME STREQUAL tvOS)
-                set(version "13.0")
             endif()
             if(version)
                 set(CMAKE_OSX_DEPLOYMENT_TARGET "${version}" CACHE STRING "${description}")
@@ -366,9 +324,8 @@ function(qt_auto_detect_darwin)
         qt_internal_get_xcode_version(xcode_version)
         set(QT_MAC_XCODE_VERSION "${xcode_version}" CACHE STRING "Xcode version.")
 
-        set(device_names "iOS" "watchOS" "tvOS")
         list(LENGTH CMAKE_OSX_ARCHITECTURES arch_count)
-        if(NOT CMAKE_SYSTEM_NAME IN_LIST device_names AND arch_count GREATER 0)
+        if(NOT CMAKE_SYSTEM_NAME STREQUAL iOS AND arch_count GREATER 0)
             foreach(arch ${CMAKE_OSX_ARCHITECTURES})
                 if(arch STREQUAL "arm64e")
                     message(WARNING "Applications built against an arm64e Qt architecture will "
@@ -381,8 +338,7 @@ function(qt_auto_detect_darwin)
 endfunction()
 
 function(qt_auto_detect_macos_universal)
-    set(device_names "iOS" "watchOS" "tvOS")
-    if(APPLE AND NOT CMAKE_SYSTEM_NAME IN_LIST device_names)
+    if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL iOS)
         list(LENGTH CMAKE_OSX_ARCHITECTURES arch_count)
 
         set(is_universal "OFF")
@@ -418,6 +374,91 @@ function(qt_auto_detect_win32_arm)
     endif()
 endfunction()
 
+function(qt_auto_detect_linux_x86)
+    if("${QT_QMAKE_TARGET_MKSPEC}" STREQUAL "linux-g++-32" AND NOT QT_NO_AUTO_DETECT_LINUX_X86)
+
+        # Add flag to ensure code is compiled for 32bit x86 ABI aka i386 or its flavors.
+        set(__qt_toolchain_common_flags_init "-m32")
+
+        if(NOT QT_NO_OVERRIDE_LANG_FLAGS_INIT)
+            set(CMAKE_C_FLAGS_INIT "${__qt_toolchain_common_flags_init}" PARENT_SCOPE)
+            set(CMAKE_CXX_FLAGS_INIT "${__qt_toolchain_common_flags_init}" PARENT_SCOPE)
+            set(CMAKE_ASM_FLAGS_INIT "${__qt_toolchain_common_flags_init}" PARENT_SCOPE)
+        endif()
+
+        # Each distro places arch-specific libraries according to its own file system layout.
+        #
+        # https://wiki.debian.org/Multiarch/TheCaseForMultiarch
+        # https://wiki.ubuntu.com/MultiarchSpec
+        # https://wiki.gentoo.org/wiki/Project:AMD64/Multilib_layout
+        # https://wiki.archlinux.org/title/official_repositories#multilib
+        # https://documentation.suse.com/sles/15-SP3/html/SLES-all/cha-64bit.html
+        # https://pilotlogic.com/sitejoom/index.php/wiki?id=398
+        # https://unix.stackexchange.com/questions/458069/multilib-and-multiarch
+        #
+        # CMake can usually find 32 bit libraries just fine on its own.
+        # find_library will use prefixes from CMAKE_PREFIX_PATH / CMAKE_SYSTEM_PREFIX_PATH
+        # and add arch-specific lib folders like 'lib/i386-linux-gnu' on debian based systems
+        # or lib32/lib64 on other distros.
+        # The problem is that if no 32 bit library is found, a 64 bit one might get picked up.
+        # That's why we need to specify additional ignore paths.
+        #
+        # The paths used in the code below are Ubuntu specific.
+        # You can opt out of using them if you are using a different distro, but then you need to
+        # specify appropriate paths yourself in your own CMake toolchain file.
+        #
+        # Note that to absolutely ensure no x86_64 library is picked up on a multiarch /
+        # multilib-enabled system, you might need to specify extra directories in
+        # CMAKE_INGORE_PATH for each sub-directory containing a library.
+        #
+        # For example to exclude /usr/lib/x86_64-linux-gnu/mit-krb5/libgssapi_krb5.so
+        # you need to add /usr/lib/x86_64-linux-gnu/mit-krb5 explicitly to CMAKE_IGNORE_PATH.
+        # Adding just /usr/lib/x86_64-linux-gnu to either CMAKE_IGNORE_PATH or
+        # CMAKE_IGNORE_PREFIX_PATH is not enough.
+        #
+        # Another consideration are results returned by CMake's pkg_check_modules which uses
+        # pkg-config.
+        # CMAKE_IGNORE_PATH is not read by pkg_check_modules, but CMAKE_PREFIX_PATH
+        # values are passed as additional prefixes to look for .pc files, IN ADDITION to the default
+        # prefixes searched by pkg-config of each specific distro.
+        # For example on Ubuntu, the default searched paths on an x86_64 host are:
+        #   /usr/local/lib/x86_64-linux-gnu/pkgconfig
+        #   /usr/local/lib/pkgconfig
+        #   /usr/local/share/pkgconfig
+        #   /usr/lib/x86_64-linux-gnu/pkgconfig
+        #   /usr/lib/pkgconfig
+        #   /usr/share/pkgconfig
+        # To ensure the x86_64 packages are not picked up, the PKG_CONFIG_LIBDIR environment
+        # variable can be overridden with an explicit list of prefixes.
+        # Again, the paths below are Ubuntu specific.
+        if(NOT QT_NO_OVERRIDE_CMAKE_IGNORE_PATH)
+            set(linux_x86_ignore_path "/usr/lib/x86_64-linux-gnu;/lib/x86_64-linux-gnu")
+            set(CMAKE_IGNORE_PATH "${linux_x86_ignore_path}" PARENT_SCOPE)
+            set_property(GLOBAL PROPERTY
+                _qt_internal_linux_x86_ignore_path "${linux_x86_ignore_path}")
+        endif()
+        if(NOT QT_NO_OVERRIDE_PKG_CONFIG_LIBDIR)
+            set(pc_config_libdir "")
+            list(APPEND pc_config_libdir "/usr/local/lib/i386-linux-gnu/pkgconfig")
+            list(APPEND pc_config_libdir "/usr/local/lib/pkgconfig")
+            list(APPEND pc_config_libdir "/usr/local/share/pkgconfig")
+            list(APPEND pc_config_libdir "/usr/lib/i386-linux-gnu/pkgconfig")
+            list(APPEND pc_config_libdir "/usr/lib/pkgconfig")
+            list(APPEND pc_config_libdir "/usr/share/pkgconfig")
+            list(JOIN pc_config_libdir ":" pc_config_libdir)
+
+            set_property(GLOBAL PROPERTY
+                _qt_internal_linux_x86_pc_config_libdir "${pc_config_libdir}")
+
+            # Overrides the default prefix list.
+            set(ENV{PKG_CONFIG_LIBDIR} "${pc_config_libdir}")
+
+            # Overrides the additional prefixes list.
+            set(ENV{PKG_CONFIG_DIR} "")
+        endif()
+    endif()
+endfunction()
+
 function(qt_auto_detect_integrity)
     if(
        # Qt's custom CMake toolchain file sets this value.
@@ -447,4 +488,5 @@ qt_auto_detect_vcpkg()
 qt_auto_detect_pch()
 qt_auto_detect_wasm()
 qt_auto_detect_win32_arm()
+qt_auto_detect_linux_x86()
 qt_auto_detect_integrity()

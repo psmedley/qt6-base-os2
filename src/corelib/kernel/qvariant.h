@@ -1,67 +1,25 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QVARIANT_H
 #define QVARIANT_H
 
 #include <QtCore/qatomic.h>
-#include <QtCore/qbytearray.h>
-#include <QtCore/qlist.h>
+#include <QtCore/qcontainerfwd.h>
 #include <QtCore/qmetatype.h>
-#include <QtCore/qmap.h>
-#include <QtCore/qhash.h>
-#include <QtCore/qstring.h>
-#include <QtCore/qstringlist.h>
-#include <QtCore/qobject.h>
 #ifndef QT_NO_DEBUG_STREAM
 #include <QtCore/qdebug.h>
 #endif
-#ifndef QT_BOOTSTRAPPED
-#include <QtCore/qbytearraylist.h>
-#endif
 #include <memory>
 #include <type_traits>
-
-#if __has_include(<variant>) && __cplusplus >= 201703L
 #include <variant>
-#elif defined(Q_CLANG_QDOC)
-namespace std { template<typename...> struct variant; }
+#if !defined(QT_LEAN_HEADERS) || QT_LEAN_HEADERS < 1
+#  include <QtCore/qlist.h>
+#  include <QtCore/qstringlist.h>
+#  include <QtCore/qbytearraylist.h>
+#  include <QtCore/qhash.h>
+#  include <QtCore/qmap.h>
+#  include <QtCore/qobject.h>
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -196,7 +154,7 @@ class Q_CORE_EXPORT QVariant
     QVariant(const QByteArray &bytearray);
     QVariant(const QBitArray &bitarray);
     QVariant(const QString &string);
-    QVariant(QLatin1String string);
+    QVariant(QLatin1StringView string);
     QVariant(const QStringList &stringlist);
     QVariant(QChar qchar);
     QVariant(QDate date);
@@ -234,13 +192,21 @@ class Q_CORE_EXPORT QVariant
     QVariant(const QModelIndex &modelIndex);
     QVariant(const QPersistentModelIndex &modelIndex);
 #endif
+#if !defined(Q_CC_GHS)
+    // GHS has an ICE with this code; use the simplified version below
+    template <typename T,
+              std::enable_if_t<std::disjunction_v<std::is_pointer<T>, std::is_member_pointer<T>>, bool> = false>
+    QVariant(T) = delete;
+#else
+    QVariant(const volatile void *) = delete;
+#endif
 
     QVariant& operator=(const QVariant &other);
     inline QVariant(QVariant &&other) noexcept : d(other.d)
     { other.d = Private(); }
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_MOVE_AND_SWAP(QVariant)
 
-    inline void swap(QVariant &other) noexcept { qSwap(d, other.d); }
+    inline void swap(QVariant &other) noexcept { std::swap(d, other.d); }
 
     int userType() const { return typeId(); }
     int typeId() const { return metaType().id(); }
@@ -402,7 +368,6 @@ class Q_CORE_EXPORT QVariant
         return QVariant(QMetaType::fromType<T>(), std::addressof(value));
     }
 
-#if (__has_include(<variant>) && __cplusplus >= 201703L) || defined(Q_CLANG_QDOC)
     template<typename... Types>
     static inline QVariant fromStdVariant(const std::variant<Types...> &value)
     {
@@ -410,7 +375,6 @@ class Q_CORE_EXPORT QVariant
             return QVariant();
         return std::visit([](const auto &arg) { return fromValue(arg); }, value);
     }
-#endif
 
     template<typename T>
     bool canConvert() const
@@ -464,7 +428,7 @@ public:
         static constexpr size_t MaxInternalSize = 3*sizeof(void *);
         template<typename T>
         static constexpr bool CanUseInternalSpace = (QTypeInfo<T>::isRelocatable && sizeof(T) <= MaxInternalSize && alignof(T) <= alignof(double));
-        static constexpr bool canUseInternalSpace(QtPrivate::QMetaTypeInterface *type)
+        static constexpr bool canUseInternalSpace(const QtPrivate::QMetaTypeInterface *type)
         {
             Q_ASSERT(type);
             return QMetaType::TypeFlags(type->flags) & QMetaType::RelocatableType &&
@@ -499,19 +463,19 @@ public:
         // determine internal storage at compile time
         template<typename T>
         const T &get() const
-        { return *static_cast<const T *>(storage()); }
+        { return *static_cast<const T *>(CanUseInternalSpace<T> ? &data.data : data.shared->data()); }
         template<typename T>
         void set(const T &t)
         { *static_cast<T *>(CanUseInternalSpace<T> ? &data.data : data.shared->data()) = t; }
 
-        inline QMetaType type() const
+        inline const QtPrivate::QMetaTypeInterface* typeInterface() const
         {
-            return QMetaType(reinterpret_cast<QtPrivate::QMetaTypeInterface *>(packedType << 2));
+            return reinterpret_cast<const QtPrivate::QMetaTypeInterface *>(packedType << 2);
         }
 
-        inline QtPrivate::QMetaTypeInterface * typeInterface() const
+        inline QMetaType type() const
         {
-            return reinterpret_cast<QtPrivate::QMetaTypeInterface *>(packedType << 2);
+            return QMetaType(typeInterface());
         }
 
         inline int typeId() const
@@ -580,13 +544,11 @@ inline QVariant QVariant::fromValue(const QVariant &value)
     return value;
 }
 
-#if __has_include(<variant>) && __cplusplus >= 201703L
 template<>
 inline QVariant QVariant::fromValue(const std::monostate &)
 {
     return QVariant();
 }
-#endif
 
 inline bool QVariant::isValid() const
 {
@@ -666,6 +628,7 @@ namespace QtPrivate {
 class Q_CORE_EXPORT QVariantTypeCoercer
 {
 public:
+    // ### Qt7: Pass QMetaType as value rather than const ref.
     const void *convert(const QVariant &value, const QMetaType &type);
     const void *coerce(const QVariant &value, const QMetaType &type);
 

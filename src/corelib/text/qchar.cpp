@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 // Don't define it while compiling this module, or USERS of Qt will
 // not be able to link.
@@ -68,7 +32,7 @@ QT_BEGIN_NAMESPACE
 
     This class is only useful to construct a QChar with 8-bit character.
 
-    \sa QChar, QLatin1String, QString
+    \sa QChar, QLatin1StringView, QString
 */
 
 /*!
@@ -190,15 +154,16 @@ QT_BEGIN_NAMESPACE
     \value Unicode_6_0  Version 6.0
     \value Unicode_6_1  Version 6.1
     \value Unicode_6_2  Version 6.2
-    \value Unicode_6_3  Version 6.3  Since Qt 5.3
-    \value Unicode_7_0  Version 7.0  Since Qt 5.5
-    \value Unicode_8_0  Version 8.0  Since Qt 5.6
-    \value Unicode_9_0  Version 9.0  Since Qt 5.11
-    \value Unicode_10_0 Version 10.0 Since Qt 5.11
-    \value Unicode_11_0 Version 11.0 Since Qt 5.15
-    \value Unicode_12_0 Version 12.0 Since Qt 5.15
-    \value Unicode_12_1 Version 12.1 Since Qt 5.15
-    \value Unicode_13_0 Version 13.0 Since Qt 5.15
+    \value [since 5.3] Unicode_6_3  Version 6.3
+    \value [since 5.5] Unicode_7_0  Version 7.0
+    \value [since 5.6] Unicode_8_0  Version 8.0
+    \value [since 5.11] Unicode_9_0  Version 9.0
+    \value [since 5.11] Unicode_10_0 Version 10.0
+    \value [since 5.15] Unicode_11_0 Version 11.0
+    \value [since 5.15] Unicode_12_0 Version 12.0
+    \value [since 5.15] Unicode_12_1 Version 12.1
+    \value [since 5.15] Unicode_13_0 Version 13.0
+    \value [since 6.3] Unicode_14_0 Version 14.0
     \value Unicode_Unassigned  The value is not assigned to any character
                                in version 8.0 of Unicode.
 
@@ -298,18 +263,18 @@ QT_BEGIN_NAMESPACE
     \value Script_Common     For characters that may be used with multiple scripts
                              and that do not inherit their script from the preceding characters.
 
-    \value Script_Adlam Since Qt 5.11
-    \value Script_Ahom Since Qt 5.6
-    \value Script_AnatolianHieroglyphs Since Qt 5.6
+    \value [since 5.11] Script_Adlam
+    \value [since 5.6] Script_Ahom
+    \value [since 5.6] Script_AnatolianHieroglyphs
     \value Script_Arabic
     \value Script_Armenian
     \value Script_Avestan
     \value Script_Balinese
     \value Script_Bamum
-    \value Script_BassaVah Since Qt 5.5
+    \value [since 5.5] Script_BassaVah
     \value Script_Batak
     \value Script_Bengali
-    \value Script_Bhaiksuki Since Qt 5.11
+    \value [since 5.11] Script_Bhaiksuki
     \value Script_Bopomofo
     \value Script_Brahmi
     \value Script_Braille
@@ -317,37 +282,38 @@ QT_BEGIN_NAMESPACE
     \value Script_Buhid
     \value Script_CanadianAboriginal
     \value Script_Carian
-    \value Script_CaucasianAlbanian Since Qt 5.5
+    \value [since 5.5] Script_CaucasianAlbanian
     \value Script_Chakma
     \value Script_Cham
     \value Script_Cherokee
-    \value Script_Chorasmian Since Qt 5.15
+    \value [since 5.15] Script_Chorasmian
     \value Script_Coptic
     \value Script_Cuneiform
     \value Script_Cypriot
+    \value [since 6.3] Script_CyproMinoan
     \value Script_Cyrillic
     \value Script_Deseret
     \value Script_Devanagari
-    \value Script_DivesAkuru Since Qt 5.15
-    \value Script_Dogra Since Qt 5.15
-    \value Script_Duployan Since Qt 5.5
+    \value [since 5.15] Script_DivesAkuru
+    \value [since 5.15] Script_Dogra
+    \value [since 5.5] Script_Duployan
     \value Script_EgyptianHieroglyphs
-    \value Script_Elbasan Since Qt 5.5
-    \value Script_Elymaic Since Qt 5.15
+    \value [since 5.5] Script_Elbasan
+    \value [since 5.15] Script_Elymaic
     \value Script_Ethiopic
     \value Script_Georgian
     \value Script_Glagolitic
     \value Script_Gothic
-    \value Script_Grantha Since Qt 5.5
+    \value [since 5.5] Script_Grantha
     \value Script_Greek
     \value Script_Gujarati
-    \value Script_GunjalaGondi Since Qt 5.15
+    \value [since 5.15] Script_GunjalaGondi
     \value Script_Gurmukhi
     \value Script_Han
     \value Script_Hangul
-    \value Script_HanifiRohingya Since Qt 5.15
+    \value [since 5.15] Script_HanifiRohingya
     \value Script_Hanunoo
-    \value Script_Hatran Since Qt 5.6
+    \value [since 5.6] Script_Hatran
     \value Script_Hebrew
     \value Script_Hiragana
     \value Script_ImperialAramaic
@@ -359,75 +325,76 @@ QT_BEGIN_NAMESPACE
     \value Script_Katakana
     \value Script_KayahLi
     \value Script_Kharoshthi
-    \value Script_KhitanSmallScript Since Qt 5.15
+    \value [since 5.15] Script_KhitanSmallScript
     \value Script_Khmer
-    \value Script_Khojki Since Qt 5.5
-    \value Script_Khudawadi Since Qt 5.5
+    \value [since 5.5] Script_Khojki
+    \value [since 5.5] Script_Khudawadi
     \value Script_Lao
     \value Script_Latin
     \value Script_Lepcha
     \value Script_Limbu
-    \value Script_LinearA Since Qt 5.5
+    \value [since 5.5] Script_LinearA
     \value Script_LinearB
     \value Script_Lisu
     \value Script_Lycian
     \value Script_Lydian
-    \value Script_Mahajani Since Qt 5.5
-    \value Script_Makasar Since Qt 5.15
+    \value [since 5.5] Script_Mahajani
+    \value [since 5.15] Script_Makasar
     \value Script_Malayalam
     \value Script_Mandaic
-    \value Script_Manichaean Since Qt 5.5
-    \value Script_Marchen Since Qt 5.11
-    \value Script_MasaramGondi Since Qt 5.11
-    \value Script_Medefaidrin Since Qt 5.15
+    \value [since 5.5] Script_Manichaean
+    \value [since 5.11] Script_Marchen
+    \value [since 5.11] Script_MasaramGondi
+    \value [since 5.15] Script_Medefaidrin
     \value Script_MeeteiMayek
-    \value Script_MendeKikakui Since Qt 5.5
+    \value [since 5.5] Script_MendeKikakui
     \value Script_MeroiticCursive
     \value Script_MeroiticHieroglyphs
     \value Script_Miao
-    \value Script_Modi Since Qt 5.5
+    \value [since 5.5] Script_Modi
     \value Script_Mongolian
-    \value Script_Mro Since Qt 5.5
-    \value Script_Multani Since Qt 5.6
+    \value [since 5.5] Script_Mro
+    \value [since 5.6] Script_Multani
     \value Script_Myanmar
-    \value Script_Nabataean Since Qt 5.5
-    \value Script_Nandinagari Since Qt 5.15
-    \value Script_Newa Since Qt 5.11
+    \value [since 5.5] Script_Nabataean
+    \value [since 5.15] Script_Nandinagari
+    \value [since 5.11] Script_Newa
     \value Script_NewTaiLue
     \value Script_Nko
-    \value Script_Nushu Since Qt 5.11
-    \value Script_NyiakengPuachueHmong Since Qt 5.15
+    \value [since 5.11] Script_Nushu
+    \value [since 5.15] Script_NyiakengPuachueHmong
     \value Script_Ogham
     \value Script_OlChiki
-    \value Script_OldHungarian Since Qt 5.6
+    \value [since 5.6] Script_OldHungarian
     \value Script_OldItalic
-    \value Script_OldNorthArabian Since Qt 5.5
-    \value Script_OldPermic Since Qt 5.5
+    \value [since 5.5] Script_OldNorthArabian
+    \value [since 5.5] Script_OldPermic
     \value Script_OldPersian
-    \value Script_OldSogdian Since Qt 5.15
+    \value [since 5.15] Script_OldSogdian
     \value Script_OldSouthArabian
     \value Script_OldTurkic
+    \value [since 6.3] Script_OldUyghur
     \value Script_Oriya
-    \value Script_Osage Since Qt 5.11
+    \value [since 5.11] Script_Osage
     \value Script_Osmanya
-    \value Script_PahawhHmong Since Qt 5.5
-    \value Script_Palmyrene Since Qt 5.5
-    \value Script_PauCinHau Since Qt 5.5
+    \value [since 5.5] Script_PahawhHmong
+    \value [since 5.5] Script_Palmyrene
+    \value [since 5.5] Script_PauCinHau
     \value Script_PhagsPa
     \value Script_Phoenician
-    \value Script_PsalterPahlavi Since Qt 5.5
+    \value [since 5.5] Script_PsalterPahlavi
     \value Script_Rejang
     \value Script_Runic
     \value Script_Samaritan
     \value Script_Saurashtra
     \value Script_Sharada
     \value Script_Shavian
-    \value Script_Siddham Since Qt 5.5
-    \value Script_SignWriting Since Qt 5.6
+    \value [since 5.5] Script_Siddham
+    \value [since 5.6] Script_SignWriting
     \value Script_Sinhala
-    \value Script_Sogdian Since Qt 5.15
+    \value [since 5.15] Script_Sogdian
     \value Script_SoraSompeng
-    \value Script_Soyombo Since Qt 5.11
+    \value [since 5.11] Script_Soyombo
     \value Script_Sundanese
     \value Script_SylotiNagri
     \value Script_Syriac
@@ -438,20 +405,23 @@ QT_BEGIN_NAMESPACE
     \value Script_TaiViet
     \value Script_Takri
     \value Script_Tamil
-    \value Script_Tangut Since Qt 5.11
+    \value [since 5.11] Script_Tangut
+    \value [since 6.3] Script_Tangsa
     \value Script_Telugu
     \value Script_Thaana
     \value Script_Thai
     \value Script_Tibetan
     \value Script_Tifinagh
-    \value Script_Tirhuta Since Qt 5.5
+    \value [since 5.5] Script_Tirhuta
+    \value [since 6.3] Script_Toto
     \value Script_Ugaritic
     \value Script_Vai
-    \value Script_Wancho Since Qt 5.15
-    \value Script_WarangCiti Since Qt 5.5
-    \value Script_Yezidi Since Qt 5.15
+    \value [since 6.3] Script_Vithkuqi
+    \value [since 5.15] Script_Wancho
+    \value [since 5.5] Script_WarangCiti
+    \value [since 5.15] Script_Yezidi
     \value Script_Yi
-    \value Script_ZanabazarSquare Since Qt 5.11
+    \value [since 5.11] Script_ZanabazarSquare
 
     \omitvalue ScriptCount
 
@@ -476,18 +446,18 @@ QT_BEGIN_NAMESPACE
     \value DirEN
     \value DirES
     \value DirET
-    \value DirFSI Since Qt 5.3
+    \value [since 5.3] DirFSI
     \value DirL
     \value DirLRE
-    \value DirLRI Since Qt 5.3
+    \value [since 5.3] DirLRI
     \value DirLRO
     \value DirNSM
     \value DirON
     \value DirPDF
-    \value DirPDI Since Qt 5.3
+    \value [since 5.3] DirPDI
     \value DirR
     \value DirRLE
-    \value DirRLI Since Qt 5.3
+    \value [since 5.3] DirRLI
     \value DirRLO
     \value DirS
     \value DirWS
@@ -593,7 +563,7 @@ QT_BEGIN_NAMESPACE
     \value ByteOrderSwapped
     \value ParagraphSeparator
     \value LineSeparator
-    \value VisualTabCharacter Used to represent a tabulation as a horizontal arrow. Since 6.2.
+    \value [since 6.2] VisualTabCharacter Used to represent a tabulation as a horizontal arrow.
     \value LastValidCodePoint
 */
 
@@ -1378,31 +1348,28 @@ char32_t QChar::mirroredChar(char32_t ucs4) noexcept
     return ucs4 + qGetProp(ucs4)->mirrorDiff;
 }
 
-
-// constants for Hangul (de)composition, see UAX #15
-enum {
-    Hangul_SBase = 0xac00,
-    Hangul_LBase = 0x1100,
-    Hangul_VBase = 0x1161,
-    Hangul_TBase = 0x11a7,
-    Hangul_LCount = 19,
-    Hangul_VCount = 21,
-    Hangul_TCount = 28,
-    Hangul_NCount = Hangul_VCount * Hangul_TCount,
-    Hangul_SCount = Hangul_LCount * Hangul_NCount
-};
+// Constants for Hangul (de)composition, see UAX #15:
+static constexpr char32_t Hangul_SBase = 0xac00;
+static constexpr char32_t Hangul_LBase = 0x1100;
+static constexpr char32_t Hangul_VBase = 0x1161;
+static constexpr char32_t Hangul_TBase = 0x11a7;
+static constexpr quint32 Hangul_LCount = 19;
+static constexpr quint32 Hangul_VCount = 21;
+static constexpr quint32 Hangul_TCount = 28;
+static constexpr quint32 Hangul_NCount = Hangul_VCount * Hangul_TCount;
+static constexpr quint32 Hangul_SCount = Hangul_LCount * Hangul_NCount;
 
 // buffer has to have a length of 3. It's needed for Hangul decomposition
-static const unsigned short * QT_FASTCALL decompositionHelper
-    (uint ucs4, qsizetype *length, int *tag, unsigned short *buffer)
+static const QChar * QT_FASTCALL decompositionHelper(
+    char32_t ucs4, qsizetype *length, QChar::Decomposition  *tag, QChar *buffer)
 {
     if (ucs4 >= Hangul_SBase && ucs4 < Hangul_SBase + Hangul_SCount) {
         // compute Hangul syllable decomposition as per UAX #15
-        const uint SIndex = ucs4 - Hangul_SBase;
-        buffer[0] = Hangul_LBase + SIndex / Hangul_NCount; // L
-        buffer[1] = Hangul_VBase + (SIndex % Hangul_NCount) / Hangul_TCount; // V
-        buffer[2] = Hangul_TBase + SIndex % Hangul_TCount; // T
-        *length = buffer[2] == Hangul_TBase ? 2 : 3;
+        const char32_t SIndex = ucs4 - Hangul_SBase;
+        buffer[0] = QChar(Hangul_LBase + SIndex / Hangul_NCount); // L
+        buffer[1] = QChar(Hangul_VBase + (SIndex % Hangul_NCount) / Hangul_TCount); // V
+        buffer[2] = QChar(Hangul_TBase + SIndex % Hangul_TCount); // T
+        *length = buffer[2].unicode() == Hangul_TBase ? 2 : 3;
         *tag = QChar::Canonical;
         return buffer;
     }
@@ -1415,9 +1382,9 @@ static const unsigned short * QT_FASTCALL decompositionHelper
     }
 
     const unsigned short *decomposition = uc_decomposition_map+index;
-    *tag = (*decomposition) & 0xff;
+    *tag = QChar::Decomposition((*decomposition) & 0xff);
     *length = (*decomposition) >> 8;
-    return decomposition+1;
+    return reinterpret_cast<const QChar *>(decomposition + 1);
 }
 
 /*!
@@ -1438,11 +1405,11 @@ QString QChar::decomposition() const
 */
 QString QChar::decomposition(char32_t ucs4)
 {
-    unsigned short buffer[3];
+    QChar buffer[3];
     qsizetype length;
-    int tag;
-    const unsigned short *d = decompositionHelper(ucs4, &length, &tag, buffer);
-    return QString(reinterpret_cast<const QChar *>(d), length);
+    QChar::Decomposition tag;
+    const QChar *d = decompositionHelper(ucs4, &length, &tag, buffer);
+    return QString(d, length);
 }
 
 /*!
@@ -1818,6 +1785,23 @@ QDataStream &operator>>(QDataStream &in, QChar &chr)
     that of \a c2; otherwise returns \c false.
 */
 
+/*!
+    \fn Qt::Literals::StringLiterals::operator""_L1(char ch)
+
+    \relates QLatin1Char
+    \since 6.4
+
+    Literal operator that creates a QLatin1Char out of \a ch.
+
+    The following code creates a QLatin1Char:
+    \code
+    using namespace Qt::Literals::StringLiterals;
+
+    auto ch = 'a'_L1;
+    \endcode
+
+    \sa Qt::Literals::StringLiterals
+*/
 
 // ---------------------------------------------------------------------------
 
@@ -1825,15 +1809,15 @@ QDataStream &operator>>(QDataStream &in, QChar &chr)
 static void decomposeHelper(QString *str, bool canonical, QChar::UnicodeVersion version, qsizetype from)
 {
     qsizetype length;
-    int tag;
-    unsigned short buffer[3];
+    QChar::Decomposition tag;
+    QChar buffer[3];
 
     QString &s = *str;
 
     const unsigned short *utf16 = reinterpret_cast<unsigned short *>(s.data());
-    const unsigned short *uc = utf16 + s.length();
+    const unsigned short *uc = utf16 + s.size();
     while (uc != utf16 + from) {
-        uint ucs4 = *(--uc);
+        char32_t ucs4 = *(--uc);
         if (QChar(ucs4).isLowSurrogate() && uc != utf16) {
             ushort high = *(uc - 1);
             if (QChar(high).isHighSurrogate()) {
@@ -1845,12 +1829,12 @@ static void decomposeHelper(QString *str, bool canonical, QChar::UnicodeVersion 
         if (QChar::unicodeVersion(ucs4) > version)
             continue;
 
-        const unsigned short *d = decompositionHelper(ucs4, &length, &tag, buffer);
+        const QChar *d = decompositionHelper(ucs4, &length, &tag, buffer);
         if (!d || (canonical && tag != QChar::Canonical))
             continue;
 
         qsizetype pos = uc - utf16;
-        s.replace(pos, QChar::requiresSurrogates(ucs4) ? 2 : 1, reinterpret_cast<const QChar *>(d), length);
+        s.replace(pos, QChar::requiresSurrogates(ucs4) ? 2 : 1, d, length);
         // since the replace invalidates the pointers and we do decomposition recursive
         utf16 = reinterpret_cast<unsigned short *>(s.data());
         uc = utf16 + pos + length;
@@ -1877,26 +1861,26 @@ struct UCS2SurrogatePair {
 
 inline bool operator<(const UCS2SurrogatePair &ligature1, const UCS2SurrogatePair &ligature2)
 { return QChar::surrogateToUcs4(ligature1.p1.u1, ligature1.p1.u2) < QChar::surrogateToUcs4(ligature2.p1.u1, ligature2.p1.u2); }
-inline bool operator<(uint u1, const UCS2SurrogatePair &ligature)
+inline bool operator<(char32_t u1, const UCS2SurrogatePair &ligature)
 { return u1 < QChar::surrogateToUcs4(ligature.p1.u1, ligature.p1.u2); }
-inline bool operator<(const UCS2SurrogatePair &ligature, uint u1)
+inline bool operator<(const UCS2SurrogatePair &ligature, char32_t u1)
 { return QChar::surrogateToUcs4(ligature.p1.u1, ligature.p1.u2) < u1; }
 
-static uint inline ligatureHelper(uint u1, uint u2)
+static char32_t inline ligatureHelper(char32_t u1, char32_t u2)
 {
     if (u1 >= Hangul_LBase && u1 < Hangul_SBase + Hangul_SCount) {
         // compute Hangul syllable composition as per UAX #15
         // hangul L-V pair
-        const uint LIndex = u1 - Hangul_LBase;
+        const char32_t LIndex = u1 - Hangul_LBase;
         if (LIndex < Hangul_LCount) {
-            const uint VIndex = u2 - Hangul_VBase;
+            const char32_t VIndex = u2 - Hangul_VBase;
             if (VIndex < Hangul_VCount)
                 return Hangul_SBase + (LIndex * Hangul_VCount + VIndex) * Hangul_TCount;
         }
         // hangul LV-T pair
-        const uint SIndex = u1 - Hangul_SBase;
+        const char32_t SIndex = u1 - Hangul_SBase;
         if (SIndex < Hangul_SCount && (SIndex % Hangul_TCount) == 0) {
-            const uint TIndex = u2 - Hangul_TBase;
+            const char32_t TIndex = u2 - Hangul_TBase;
             if (TIndex < Hangul_TCount && TIndex)
                 return u1 + TIndex;
         }
@@ -1926,19 +1910,19 @@ static void composeHelper(QString *str, QChar::UnicodeVersion version, qsizetype
 {
     QString &s = *str;
 
-    if (from < 0 || s.length() - from < 2)
+    if (from < 0 || s.size() - from < 2)
         return;
 
-    uint stcode = 0; // starter code point
+    char32_t stcode = 0; // starter code point
     qsizetype starter = -1; // starter position
     qsizetype next = -1; // to prevent i == next
     int lastCombining = 255; // to prevent combining > lastCombining
 
     qsizetype pos = from;
-    while (pos < s.length()) {
+    while (pos < s.size()) {
         qsizetype i = pos;
         char32_t uc = s.at(pos).unicode();
-        if (QChar(uc).isHighSurrogate() && pos < s.length()-1) {
+        if (QChar(uc).isHighSurrogate() && pos < s.size()-1) {
             ushort low = s.at(pos+1).unicode();
             if (QChar(low).isLowSurrogate()) {
                 uc = QChar::surrogateToUcs4(uc, low);
@@ -1958,7 +1942,7 @@ static void composeHelper(QString *str, QChar::UnicodeVersion version, qsizetype
         int combining = p->combiningClass;
         if ((i == next || combining > lastCombining) && starter >= from) {
             // allowed to form ligature with S
-            uint ligature = ligatureHelper(stcode, uc);
+            char32_t ligature = ligatureHelper(stcode, uc);
             if (ligature) {
                 stcode = ligature;
                 QChar *d = s.data();
@@ -1985,7 +1969,7 @@ static void composeHelper(QString *str, QChar::UnicodeVersion version, qsizetype
 static void canonicalOrderHelper(QString *str, QChar::UnicodeVersion version, qsizetype from)
 {
     QString &s = *str;
-    const qsizetype l = s.length()-1;
+    const qsizetype l = s.size()-1;
 
     char32_t u1, u2;
     char16_t c1, c2;
@@ -2074,7 +2058,7 @@ static bool normalizationQuickCheckHelper(QString *str, QString::NormalizationFo
     enum { NFQC_YES = 0, NFQC_NO = 1, NFQC_MAYBE = 3 };
 
     const ushort *string = reinterpret_cast<const ushort *>(str->constData());
-    qsizetype length = str->length();
+    qsizetype length = str->size();
 
     // this avoids one out of bounds check in the loop
     while (length > from && QChar::isHighSurrogate(string[length - 1]))
@@ -2117,8 +2101,8 @@ static bool normalizationQuickCheckHelper(QString *str, QString::NormalizationFo
             *lastStable = pos;
     }
 
-    if (length != str->length()) // low surrogate parts at the end of text
-        *lastStable = str->length() - 1;
+    if (length != str->size()) // low surrogate parts at the end of text
+        *lastStable = str->size() - 1;
 
     return true;
 }

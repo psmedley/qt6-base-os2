@@ -1,48 +1,15 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2021 Alex Trotsenko <alex1973tr@gmail.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2021 Alex Trotsenko <alex1973tr@gmail.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwindowspipereader_p.h"
 #include <qcoreapplication.h>
 #include <QMutexLocker>
+#include <QPointer>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 static const DWORD minReadBufferSize = 4096;
 
@@ -103,6 +70,7 @@ void QWindowsPipeReader::setHandle(HANDLE hPipeReadEnd)
 void QWindowsPipeReader::stop()
 {
     cancelAsyncRead(Stopped);
+    pipeBroken = true;
 }
 
 /*!
@@ -112,6 +80,22 @@ void QWindowsPipeReader::stop()
 void QWindowsPipeReader::drainAndStop()
 {
     cancelAsyncRead(Draining);
+    pipeBroken = true;
+}
+
+/*!
+    Stops the asynchronous read sequence.
+    Clears the internal buffer and discards any pending data.
+ */
+void QWindowsPipeReader::stopAndClear()
+{
+    cancelAsyncRead(Stopped);
+    readBuffer.clear();
+    actualReadBufferSize = 0;
+    // QLocalSocket is supposed to write data in the 'Closing'
+    // state, so we don't set 'pipeBroken' flag here. Also, avoid
+    // setting this flag in checkForReadyRead().
+    lastError = ERROR_SUCCESS;
 }
 
 /*!
@@ -119,7 +103,6 @@ void QWindowsPipeReader::drainAndStop()
  */
 void QWindowsPipeReader::cancelAsyncRead(State newState)
 {
-    pipeBroken = true;
     if (state != Running)
         return;
 
@@ -146,9 +129,9 @@ void QWindowsPipeReader::cancelAsyncRead(State newState)
     }
     mutex.unlock();
 
-    // Because pipeBroken was set earlier, finish reading to keep the class
-    // state consistent. Note that signals are not emitted in the call
-    // below, as the caller is expected to do that synchronously.
+    // Finish reading to keep the class state consistent. Note that
+    // signals are not emitted in the call below, as the caller is
+    // expected to do that synchronously.
     consumePending();
 }
 
@@ -185,11 +168,9 @@ qint64 QWindowsPipeReader::bytesAvailable() const
  */
 qint64 QWindowsPipeReader::read(char *data, qint64 maxlen)
 {
-    if (pipeBroken && actualReadBufferSize == 0)
-        return 0;  // signal EOF
-
-    mutex.lock();
+    QMutexLocker locker(&mutex);
     qint64 readSoFar;
+
     // If startAsyncRead() has read data, copy it to its destination.
     if (maxlen == 1 && actualReadBufferSize > 0) {
         *data = readBuffer.getChar();
@@ -199,16 +180,57 @@ qint64 QWindowsPipeReader::read(char *data, qint64 maxlen)
         readSoFar = readBuffer.read(data, qMin(actualReadBufferSize, maxlen));
         actualReadBufferSize -= readSoFar;
     }
-    mutex.unlock();
 
     if (!pipeBroken) {
-        if (state == Running)
-            startAsyncRead();
+        startAsyncReadHelper(&locker);
         if (readSoFar == 0)
             return -2;      // signal EWOULDBLOCK
     }
 
     return readSoFar;
+}
+
+/*!
+    Reads a line from the internal buffer, but no more than \c{maxlen}
+    characters. A terminating '\0' byte is always appended to \c{data},
+    so \c{maxlen} must be larger than 1.
+ */
+qint64 QWindowsPipeReader::readLine(char *data, qint64 maxlen)
+{
+    QMutexLocker locker(&mutex);
+    qint64 readSoFar = 0;
+
+    if (actualReadBufferSize > 0) {
+        readSoFar = readBuffer.readLine(data, qMin(actualReadBufferSize + 1, maxlen));
+        actualReadBufferSize -= readSoFar;
+    }
+
+    if (!pipeBroken) {
+        startAsyncReadHelper(&locker);
+        if (readSoFar == 0)
+            return -2;      // signal EWOULDBLOCK
+    }
+
+    return readSoFar;
+}
+
+/*!
+    Skips up to \c{maxlen} bytes from the internal read buffer.
+ */
+qint64 QWindowsPipeReader::skip(qint64 maxlen)
+{
+    QMutexLocker locker(&mutex);
+
+    const qint64 skippedSoFar = readBuffer.skip(qMin(actualReadBufferSize, maxlen));
+    actualReadBufferSize -= skippedSoFar;
+
+    if (!pipeBroken) {
+        startAsyncReadHelper(&locker);
+        if (skippedSoFar == 0)
+            return -2;      // signal EWOULDBLOCK
+    }
+
+    return skippedSoFar;
 }
 
 /*!
@@ -226,7 +248,11 @@ bool QWindowsPipeReader::canReadLine() const
 void QWindowsPipeReader::startAsyncRead()
 {
     QMutexLocker locker(&mutex);
+    startAsyncReadHelper(&locker);
+}
 
+void QWindowsPipeReader::startAsyncReadHelper(QMutexLocker<QMutex> *locker)
+{
     if (readSequenceStarted || lastError != ERROR_SUCCESS)
         return;
 
@@ -239,10 +265,10 @@ void QWindowsPipeReader::startAsyncRead()
 
     if (!winEventActPosted) {
         winEventActPosted = true;
-        locker.unlock();
+        locker->unlock();
         QCoreApplication::postEvent(this, new QEvent(QEvent::WinEventAct));
     } else {
-        locker.unlock();
+        locker->unlock();
     }
 
     SetEvent(syncHandle);
@@ -425,12 +451,17 @@ bool QWindowsPipeReader::consumePendingAndEmit(bool allowWinActPosting)
     if (state != Running)
         return false;
 
-    if (emitReadyRead)
-        emit readyRead();
-    if (emitPipeClosed) {
-        if (dwError != ERROR_BROKEN_PIPE && dwError != ERROR_PIPE_NOT_CONNECTED)
-            emit winError(dwError, QLatin1String("QWindowsPipeReader::consumePendingAndEmit"));
-        emit pipeClosed();
+    if (!emitPipeClosed) {
+        if (emitReadyRead)
+            emit readyRead();
+    } else {
+        QPointer<QWindowsPipeReader> alive(this);
+        if (emitReadyRead)
+            emit readyRead();
+        if (alive && dwError != ERROR_BROKEN_PIPE && dwError != ERROR_PIPE_NOT_CONNECTED)
+            emit winError(dwError, "QWindowsPipeReader::consumePendingAndEmit"_L1);
+        if (alive)
+            emit pipeClosed();
     }
 
     return emitReadyRead;

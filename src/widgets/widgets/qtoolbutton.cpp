@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtoolbutton.h"
 
@@ -66,6 +30,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 class QToolButtonPrivate : public QAbstractButtonPrivate
 {
@@ -169,8 +135,7 @@ bool QToolButtonPrivate::hasMenu() const
          with actions used in other parts of the main window.
     \endtable
 
-    \sa QPushButton, QToolBar, QMainWindow, QAction,
-        {fowler}{GUI Design Handbook: Push Button}
+    \sa QPushButton, QToolBar, QMainWindow, QAction
 */
 
 /*!
@@ -348,7 +313,7 @@ QSize QToolButton::sizeHint() const
 
     if (opt.toolButtonStyle != Qt::ToolButtonIconOnly) {
         QSize textSize = fm.size(Qt::TextShowMnemonic, text());
-        textSize.setWidth(textSize.width() + fm.horizontalAdvance(QLatin1Char(' '))*2);
+        textSize.setWidth(textSize.width() + fm.horizontalAdvance(u' ') * 2);
         if (opt.toolButtonStyle == Qt::ToolButtonTextUnderIcon) {
             h += 4 + textSize.height();
             if (textSize.width() > w)
@@ -725,7 +690,7 @@ static QPoint positionMenu(const QToolButton *q, bool horizontal,
 {
     QPoint p;
     const QRect rect = q->rect(); // Find screen via point in case of QGraphicsProxyWidget.
-    const QRect screen = QWidgetPrivate::availableScreenGeometry(q);
+    const QRect screen = QWidgetPrivate::availableScreenGeometry(q, q->mapToGlobal(rect.center()));
     if (horizontal) {
         if (q->isRightToLeft()) {
             if (q->mapToGlobal(QPoint(0, rect.bottom())).y() + sh.height() <= screen.bottom()) {
@@ -940,7 +905,7 @@ void QToolButton::setDefaultAction(QAction *action)
     // If iconText() is generated from text(), we need to escape any '&'s so they
     // don't turn into shortcuts
     if (QActionPrivate::get(action)->iconText.isEmpty())
-        buttonText.replace(QLatin1String("&"), QLatin1String("&&"));
+        buttonText.replace("&"_L1, "&&"_L1);
     setText(buttonText);
     setIcon(action->icon());
 #if QT_CONFIG(tooltip)

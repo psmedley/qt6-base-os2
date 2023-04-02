@@ -1,44 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
+#include "QtGui/qimage.h"
 #include "qtexturefiledata_p.h"
-#include <QSize>
+#include <QtCore/qsize.h>
+#include <QtCore/qvarlengtharray.h>
+#include <QtCore/qmap.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -55,14 +22,17 @@ public:
 
     QTextureFileDataPrivate(const QTextureFileDataPrivate &other)
         : QSharedData(other),
+          mode(other.mode),
           logName(other.logName),
           data(other.data),
           offsets(other.offsets),
           lengths(other.lengths),
+          images(other.images),
           size(other.size),
           format(other.format),
           numFaces(other.numFaces),
-          numLevels(other.numLevels)
+          numLevels(other.numLevels),
+          keyValues(other.keyValues)
     {
     }
 
@@ -74,13 +44,18 @@ public:
     {
         numLevels = force ? levels : qMax(numLevels, levels);
         numFaces = force ? faces : qMax(numFaces, faces);
+        if (mode == QTextureFileData::ByteArrayMode) {
+            offsets.resize(numFaces);
+            lengths.resize(numFaces);
 
-        offsets.resize(numFaces);
-        lengths.resize(numFaces);
-
-        for (auto faceList : { &offsets, &lengths })
-            for (auto &levelList : *faceList)
+            for (auto faceList : { &offsets, &lengths })
+                for (auto &levelList : *faceList)
+                    levelList.resize(numLevels);
+        } else {
+            images.resize(numFaces);
+            for (auto &levelList : images)
                 levelList.resize(numLevels);
+        }
     }
 
     bool isValid(int level, int face) const { return level < numLevels && face < numFaces; }
@@ -90,10 +65,12 @@ public:
     int getLength(int level, int face) const { return lengths[face][level]; }
     void setLength(int value, int level, int face) { lengths[face][level] = value; }
 
+    QTextureFileData::Mode mode = QTextureFileData::ByteArrayMode;
     QByteArray logName;
     QByteArray data;
     QVarLengthArray<QList<int>, MAX_FACES> offsets; // [Face][Level] = offset
     QVarLengthArray<QList<int>, MAX_FACES> lengths; // [Face][Level] = length
+    QVarLengthArray<QList<QImage>, MAX_FACES> images; // [Face][Level] = length
     QSize size;
     quint32 format = 0;
     quint32 internalFormat = 0;
@@ -103,8 +80,10 @@ public:
     QMap<QByteArray, QByteArray> keyValues;
 };
 
-QTextureFileData::QTextureFileData()
+QTextureFileData::QTextureFileData(Mode mode)
 {
+    d = new QTextureFileDataPrivate;
+    d->mode = mode;
 }
 
 QTextureFileData::QTextureFileData(const QTextureFileData &other)
@@ -132,11 +111,14 @@ bool QTextureFileData::isValid() const
     if (!d)
         return false;
 
+    if (d->mode == ImageMode)
+        return true; // Manually populated: the caller needs to do verification at that time.
+
     if (d->data.isEmpty() || d->size.isEmpty() || (!d->format && !d->internalFormat))
         return false;
 
-    const int numFacesOffset = d->offsets.length();
-    const int numFacesLength = d->lengths.length();
+    const int numFacesOffset = d->offsets.size();
+    const int numFacesLength = d->lengths.size();
     if (numFacesOffset == 0 || numFacesLength == 0 || d->numFaces != numFacesOffset
         || d->numFaces != numFacesLength)
         return false;
@@ -173,19 +155,26 @@ QByteArray QTextureFileData::data() const
 
 void QTextureFileData::setData(const QByteArray &data)
 {
-    if (!d.constData())  //### uh think about this design, this is the only way to create; should be constructor instead at least
-        d = new QTextureFileDataPrivate;
-
+    Q_ASSERT(d->mode == ByteArrayMode);
     d->data = data;
+}
+
+void QTextureFileData::setData(const QImage &image, int level, int face)
+{
+    Q_ASSERT(d->mode == ImageMode);
+    d->ensureSize(level + 1, face + 1);
+    d->images[face][level] = image;
 }
 
 int QTextureFileData::dataOffset(int level, int face) const
 {
+    Q_ASSERT(d->mode == ByteArrayMode);
     return (d && d->isValid(level, face)) ? d->getOffset(level, face) : 0;
 }
 
 void QTextureFileData::setDataOffset(int offset, int level, int face)
 {
+    Q_ASSERT(d->mode == ByteArrayMode);
     if (d.constData() && level >= 0) {
         d->ensureSize(level + 1, face + 1);
         d->setOffset(offset, level, face);
@@ -194,22 +183,31 @@ void QTextureFileData::setDataOffset(int offset, int level, int face)
 
 int QTextureFileData::dataLength(int level, int face) const
 {
+    Q_ASSERT(d->mode == ByteArrayMode);
     return (d && d->isValid(level, face)) ? d->getLength(level, face) : 0;
 }
 
 QByteArrayView QTextureFileData::getDataView(int level, int face) const
 {
-    const int dataLength = this->dataLength(level, face);
-    const int dataOffset = this->dataOffset(level, face);
+    if (d->mode == ByteArrayMode) {
+        const int dataLength = this->dataLength(level, face);
+        const int dataOffset = this->dataOffset(level, face);
 
-    if (d == nullptr || dataLength == 0)
-        return QByteArrayView();
+        if (d == nullptr || dataLength == 0)
+            return QByteArrayView();
 
-    return QByteArrayView(d->data.constData() + dataOffset, dataLength);
+        return QByteArrayView(d->data.constData() + dataOffset, dataLength);
+    } else {
+        if (!d->isValid(level, face))
+            return QByteArrayView();
+        const QImage &img = d->images[face][level];
+        return img.isNull() ? QByteArrayView() : QByteArrayView(img.constBits(), img.sizeInBytes());
+    }
 }
 
 void QTextureFileData::setDataLength(int length, int level, int face)
 {
+    Q_ASSERT(d->mode == ByteArrayMode);
     if (d.constData() && level >= 0) {
         d->ensureSize(level + 1, face + 1);
         d->setLength(length, level, face);
@@ -320,9 +318,11 @@ QDebug operator<<(QDebug dbg, const QTextureFileData &d)
         dbg << "glInternalFormat:" << glFormatName(d.glInternalFormat());
         dbg << "glBaseInternalFormat:" << glFormatName(d.glBaseInternalFormat());
         dbg.nospace() << "Levels: " << d.numLevels();
+        dbg.nospace() << "Faces: " << d.numFaces();
         if (!d.isValid())
             dbg << " {Invalid}";
         dbg << ")";
+        dbg << (d.d->mode ? "[bytearray-based]" : "[image-based]");
     } else {
         dbg << "null)";
     }

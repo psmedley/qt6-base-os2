@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qgraphicsanchorlayout_p.h"
 
@@ -50,6 +14,8 @@
 #include <numeric>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // To ensure that all variables inside the simplex solver are non-negative,
 // we limit the size of anchors in the interval [-limit, limit]. Then before
@@ -493,7 +459,7 @@ void SequentialAnchorData::updateChildrenSizes()
     // "from" or "to", that _contains_ one of them.
     AnchorVertex *prev = from;
 
-    for (int i = 0; i < m_edges.count(); ++i) {
+    for (int i = 0; i < m_edges.size(); ++i) {
         AnchorData *e = m_edges.at(i);
 
         const bool edgeIsForward = (e->from == prev);
@@ -530,7 +496,7 @@ void SequentialAnchorData::calculateSizeHints()
 
     AnchorVertex *prev = from;
 
-    for (int i = 0; i < m_edges.count(); ++i) {
+    for (int i = 0; i < m_edges.size(); ++i) {
         AnchorData *edge = m_edges.at(i);
 
         const bool edgeIsForward = (edge->from == prev);
@@ -609,7 +575,7 @@ QSimplexConstraint *GraphPath::constraint(const GraphPath &path) const
 #ifdef QT_DEBUG
 QString GraphPath::toString() const
 {
-    QString string(QLatin1String("Path: "));
+    QString string("Path: "_L1);
     for (AnchorData *edge : positives)
         string += QString::fromLatin1(" (+++) %1").arg(edge->toString());
 
@@ -698,7 +664,7 @@ AnchorData *QGraphicsAnchorLayoutPrivate::addAnchorMaybeParallel(AnchorData *new
 
             parallel->isCenterAnchor = true;
 
-            for (int j = 0; j < constraints.count(); ++j) {
+            for (int j = 0; j < constraints.size(); ++j) {
                 QSimplexConstraint *c = constraints[j];
                 if (c->variables.contains(child)) {
                     childConstraints->append(c);
@@ -744,9 +710,9 @@ static AnchorData *createSequence(Graph<AnchorVertex, AnchorData> *graph, Anchor
 
     AnchorVertex *prev = before;
     QList<AnchorData *> edges;
-    edges.reserve(vertices.count() + 1);
+    edges.reserve(vertices.size() + 1);
 
-    const int numVertices = vertices.count();
+    const int numVertices = vertices.size();
     edges.reserve(numVertices + 1);
     // Take from the graph, the edges that will be simplificated
     for (int i = 0; i < numVertices; ++i) {
@@ -872,7 +838,7 @@ bool QGraphicsAnchorLayoutPrivate::replaceVertex(Qt::Orientation orientation, An
     Graph<AnchorVertex, AnchorData> &g = graph[orientation];
     bool feasible = true;
 
-    for (int i = 0; i < edges.count(); ++i) {
+    for (int i = 0; i < edges.size(); ++i) {
         AnchorData *ad = edges[i];
         AnchorVertex *otherV = replaceVertex_helper(ad, oldV, newV);
 
@@ -920,7 +886,7 @@ bool QGraphicsAnchorLayoutPrivate::simplifyVertices(Qt::Orientation orientation)
         QList<AnchorVertex *> adjacents = g.adjacentVertices(v);
         int index = 0;
 
-        while (index < adjacents.count()) {
+        while (index < adjacents.size()) {
             AnchorVertex *next = adjacents.at(index);
             index++;
 
@@ -940,7 +906,7 @@ bool QGraphicsAnchorLayoutPrivate::simplifyVertices(Qt::Orientation orientation)
                 const QList<AnchorVertex *> &vAdjacents = g.adjacentVertices(v);
                 const QList<AnchorVertex *> &nextAdjacents = g.adjacentVertices(next);
 
-                for (int i = 0; i < vAdjacents.count(); ++i) {
+                for (int i = 0; i < vAdjacents.size(); ++i) {
                     AnchorVertex *adjacent = vAdjacents.at(i);
                     if (adjacent != next) {
                         AnchorData *ad = g.edgeData(v, adjacent);
@@ -948,7 +914,7 @@ bool QGraphicsAnchorLayoutPrivate::simplifyVertices(Qt::Orientation orientation)
                     }
                 }
 
-                for (int i = 0; i < nextAdjacents.count(); ++i) {
+                for (int i = 0; i < nextAdjacents.size(); ++i) {
                     AnchorVertex *adjacent = nextAdjacents.at(i);
                     if (adjacent != v) {
                         AnchorData *ad = g.edgeData(next, adjacent);
@@ -1051,7 +1017,7 @@ bool QGraphicsAnchorLayoutPrivate::simplifyGraphIteration(Qt::Orientation orient
         //
 
         // Identifies cases (a) and (b)
-        endOfSequence = isLayoutVertex || adjacents.count() != 2;
+        endOfSequence = isLayoutVertex || adjacents.size() != 2;
 
         if (!endOfSequence) {
             // This is a tricky part. We peek at the next vertex to find out whether
@@ -1093,7 +1059,7 @@ bool QGraphicsAnchorLayoutPrivate::simplifyGraphIteration(Qt::Orientation orient
         //
         // Add next non-visited vertices to the stack.
         //
-        for (int i = 0; i < adjacents.count(); ++i) {
+        for (int i = 0; i < adjacents.size(); ++i) {
             AnchorVertex *next = adjacents.at(i);
             if (visited.contains(next))
                 continue;
@@ -1132,7 +1098,7 @@ bool QGraphicsAnchorLayoutPrivate::simplifyGraphIteration(Qt::Orientation orient
         const AnchorData *lastAnchor = g.edgeData(candidates.constLast(), afterSequence);
         if (lastAnchor->isCenterAnchor) {
             afterSequence = candidates.constLast();
-            candidates.remove(candidates.count() - 1);
+            candidates.remove(candidates.size() - 1);
 
             if (candidates.isEmpty())
                 continue;
@@ -1187,7 +1153,7 @@ void QGraphicsAnchorLayoutPrivate::restoreSimplifiedAnchor(AnchorData *edge)
     } else if (edge->type == AnchorData::Sequential) {
         SequentialAnchorData *sequence = static_cast<SequentialAnchorData *>(edge);
 
-        for (int i = 0; i < sequence->m_edges.count(); ++i) {
+        for (int i = 0; i < sequence->m_edges.size(); ++i) {
             AnchorData *data = sequence->m_edges.at(i);
             restoreSimplifiedAnchor(data);
         }
@@ -1222,7 +1188,7 @@ void QGraphicsAnchorLayoutPrivate::restoreSimplifiedConstraints(ParallelAnchorDa
     if (!parallel->isCenterAnchor)
         return;
 
-    for (int i = 0; i < parallel->m_firstConstraints.count(); ++i) {
+    for (int i = 0; i < parallel->m_firstConstraints.size(); ++i) {
         QSimplexConstraint *c = parallel->m_firstConstraints.at(i);
         qreal v = c->variables[parallel];
         c->variables.remove(parallel);
@@ -1233,7 +1199,7 @@ void QGraphicsAnchorLayoutPrivate::restoreSimplifiedConstraints(ParallelAnchorDa
     // addAnchorMaybeParallel().
     const bool needsReverse = !parallel->secondForward();
 
-    for (int i = 0; i < parallel->m_secondConstraints.count(); ++i) {
+    for (int i = 0; i < parallel->m_secondConstraints.size(); ++i) {
         QSimplexConstraint *c = parallel->m_secondConstraints.at(i);
         qreal v = c->variables[parallel];
         if (needsReverse)
@@ -1253,7 +1219,7 @@ void QGraphicsAnchorLayoutPrivate::restoreSimplifiedGraph(Qt::Orientation orient
     // Restore anchor simplification
     Graph<AnchorVertex, AnchorData> &g = graph[orientation];
     QList<QPair<AnchorVertex *, AnchorVertex *>> connections = g.connections();
-    for (int i = 0; i < connections.count(); ++i) {
+    for (int i = 0; i < connections.size(); ++i) {
         AnchorVertex *v1 = connections.at(i).first;
         AnchorVertex *v2 = connections.at(i).second;
         AnchorData *edge = g.edgeData(v1, v2);
@@ -1289,14 +1255,14 @@ void QGraphicsAnchorLayoutPrivate::restoreVertices(Qt::Orientation orientation)
     // In the next step, we'll change the anchors vertices so that would not be possible anymore.
     QList<AnchorData *> &parallelAnchors = anchorsFromSimplifiedVertices[orientation];
 
-    for (int i = parallelAnchors.count() - 1; i >= 0; --i) {
+    for (int i = parallelAnchors.size() - 1; i >= 0; --i) {
         ParallelAnchorData *parallel = static_cast<ParallelAnchorData *>(parallelAnchors.at(i));
         restoreSimplifiedConstraints(parallel);
     }
 
     // Then, we will restore the vertices in the inverse order of creation, this way we ensure that
     // the vertex being restored was not wrapped by another simplification.
-    for (int i = toRestore.count() - 1; i >= 0; --i) {
+    for (int i = toRestore.size() - 1; i >= 0; --i) {
         AnchorVertexPair *pair = toRestore.at(i);
         QList<AnchorVertex *> adjacents = g.adjacentVertices(pair);
 
@@ -1307,7 +1273,7 @@ void QGraphicsAnchorLayoutPrivate::restoreVertices(Qt::Orientation orientation)
         g.createEdge(first, second, pair->m_removedAnchor);
 
         // Restore the anchors for the first child vertex
-        for (int j = 0; j < pair->m_firstAnchors.count(); ++j) {
+        for (int j = 0; j < pair->m_firstAnchors.size(); ++j) {
             AnchorData *ad = pair->m_firstAnchors.at(j);
             Q_ASSERT(ad->from == pair || ad->to == pair);
 
@@ -1316,7 +1282,7 @@ void QGraphicsAnchorLayoutPrivate::restoreVertices(Qt::Orientation orientation)
         }
 
         // Restore the anchors for the second child vertex
-        for (int j = 0; j < pair->m_secondAnchors.count(); ++j) {
+        for (int j = 0; j < pair->m_secondAnchors.size(); ++j) {
             AnchorData *ad = pair->m_secondAnchors.at(j);
             Q_ASSERT(ad->from == pair || ad->to == pair);
 
@@ -1324,7 +1290,7 @@ void QGraphicsAnchorLayoutPrivate::restoreVertices(Qt::Orientation orientation)
             g.createEdge(ad->from, ad->to, ad);
         }
 
-        for (int j = 0; j < adjacents.count(); ++j) {
+        for (int j = 0; j < adjacents.size(); ++j) {
             g.takeEdge(pair, adjacents.at(j));
         }
 
@@ -1534,7 +1500,7 @@ void QGraphicsAnchorLayoutPrivate::removeCenterAnchors(
 
     AnchorData *oldData = g.edgeData(first, center);
     // Remove center constraint
-    for (int i = itemCenterConstraints[orientation].count() - 1; i >= 0; --i) {
+    for (int i = itemCenterConstraints[orientation].size() - 1; i >= 0; --i) {
         if (itemCenterConstraints[orientation].at(i)->variables.contains(oldData)) {
             delete itemCenterConstraints[orientation].takeAt(i);
             break;
@@ -1555,7 +1521,7 @@ void QGraphicsAnchorLayoutPrivate::removeCenterAnchors(
         // this is only called from removeAnchors()
         // first, remove all non-internal anchors
         QList<AnchorVertex*> adjacents = g.adjacentVertices(center);
-        for (int i = 0; i < adjacents.count(); ++i) {
+        for (int i = 0; i < adjacents.size(); ++i) {
             AnchorVertex *v = adjacents.at(i);
             if (v->m_item != item) {
                 removeAnchor_helper(center, internalVertex(v->m_item, v->m_edge));
@@ -2048,7 +2014,7 @@ void QGraphicsAnchorLayoutPrivate::calculateGraphs()
 QList<AnchorData *> getVariables(const QList<QSimplexConstraint *> &constraints)
 {
     QSet<AnchorData *> variableSet;
-    for (int i = 0; i < constraints.count(); ++i) {
+    for (int i = 0; i < constraints.size(); ++i) {
         const QSimplexConstraint *c = constraints.at(i);
         for (auto it = c->variables.cbegin(), end = c->variables.cend(); it != end; ++it)
             variableSet.insert(static_cast<AnchorData *>(it.key()));
@@ -2163,7 +2129,7 @@ void QGraphicsAnchorLayoutPrivate::calculateGraphs(Qt::Orientation orientation)
 */
 static void shiftConstraints(const QList<QSimplexConstraint *> &constraints, qreal amount)
 {
-    for (int i = 0; i < constraints.count(); ++i) {
+    for (int i = 0; i < constraints.size(); ++i) {
         QSimplexConstraint *c = constraints.at(i);
         const qreal multiplier = std::accumulate(c->variables.cbegin(), c->variables.cend(), qreal(0));
         c->constant += multiplier * amount;
@@ -2221,8 +2187,8 @@ bool QGraphicsAnchorLayoutPrivate::calculateTrunk(Qt::Orientation orientation, c
     } else {
         // No Simplex is necessary because the path was simplified all the way to a single
         // anchor.
-        Q_ASSERT(path.positives.count() == 1);
-        Q_ASSERT(path.negatives.count() == 0);
+        Q_ASSERT(path.positives.size() == 1);
+        Q_ASSERT(path.negatives.size() == 0);
 
         AnchorData *ad = *path.positives.cbegin();
         ad->sizeAtMinimum = ad->minSize;
@@ -2253,7 +2219,7 @@ bool QGraphicsAnchorLayoutPrivate::calculateNonTrunk(const QList<QSimplexConstra
     if (feasible) {
         // Propagate size at preferred to other sizes. Semi-floats always will be
         // in their sizeAtPreferred.
-        for (int j = 0; j < variables.count(); ++j) {
+        for (int j = 0; j < variables.size(); ++j) {
             AnchorData *ad = variables.at(j);
             Q_ASSERT(ad);
             ad->sizeAtMinimum = ad->sizeAtPreferred;
@@ -2277,7 +2243,7 @@ void QGraphicsAnchorLayoutPrivate::refreshAllSizeHints(Qt::Orientation orientati
     QList<QPair<AnchorVertex *, AnchorVertex *>> vertices = g.connections();
 
     QLayoutStyleInfo styleInf = styleInfo();
-    for (int i = 0; i < vertices.count(); ++i) {
+    for (int i = 0; i < vertices.size(); ++i) {
         AnchorData *data = g.edgeData(vertices.at(i).first, vertices.at(i).second);
         data->refreshSizeHints(&styleInf);
     }
@@ -2369,7 +2335,7 @@ void QGraphicsAnchorLayoutPrivate::updateAnchorSizes(Qt::Orientation orientation
     Graph<AnchorVertex, AnchorData> &g = graph[orientation];
     const QList<QPair<AnchorVertex *, AnchorVertex *>> &vertices = g.connections();
 
-    for (int i = 0; i < vertices.count(); ++i) {
+    for (int i = 0; i < vertices.size(); ++i) {
         AnchorData *ad = g.edgeData(vertices.at(i).first, vertices.at(i).second);
         ad->updateChildrenSizes();
     }
@@ -2512,7 +2478,7 @@ QGraphicsAnchorLayoutPrivate::getGraphParts(Qt::Orientation orientation)
 
             // Check if this constraint have some overlap with current
             // trunk variables...
-            for (QSimplexVariable *ad : qAsConst(trunkVariables)) {
+            for (QSimplexVariable *ad : std::as_const(trunkVariables)) {
                 if (c->variables.contains(ad)) {
                     match = true;
                     break;
@@ -2561,7 +2527,7 @@ void QGraphicsAnchorLayoutPrivate::identifyFloatItems(const QSet<AnchorData *> &
         identifyNonFloatItems_helper(ad, &nonFloating);
 
     QSet<QGraphicsLayoutItem *> floatItems;
-    for (QGraphicsLayoutItem *item : qAsConst(items)) {
+    for (QGraphicsLayoutItem *item : std::as_const(items)) {
         if (!nonFloating.contains(item))
             floatItems.insert(item);
     }
@@ -2620,7 +2586,7 @@ void QGraphicsAnchorLayoutPrivate::setItemsGeometries(const QRectF &geom)
     top += geom.top();
     right = geom.right() - right;
 
-    for (QGraphicsLayoutItem *item : qAsConst(items)) {
+    for (QGraphicsLayoutItem *item : std::as_const(items)) {
         QRectF newGeom;
         QSizeF itemPreferredSize = item->effectiveSizeHint(Qt::PreferredSize);
         if (m_floatItems[Qt::Horizontal].contains(item)) {
@@ -2691,7 +2657,7 @@ void QGraphicsAnchorLayoutPrivate::calculateVertexPositions(Qt::Orientation orie
         interpolateEdge(pair.first, edge);
 
         QList<AnchorVertex *> adjacents = graph[orientation].adjacentVertices(pair.second);
-        for (int i = 0; i < adjacents.count(); ++i) {
+        for (int i = 0; i < adjacents.size(); ++i) {
             if (!visited.contains(adjacents.at(i)))
                 queue.enqueue(qMakePair(pair.second, adjacents.at(i)));
         }
@@ -2775,7 +2741,7 @@ bool QGraphicsAnchorLayoutPrivate::solveMinMax(const QList<QSimplexConstraint *>
         for (iter = path.negatives.constBegin(); iter != path.negatives.constEnd(); ++iter)
             objective.variables.insert(*iter, -1.0);
 
-        const qreal objectiveOffset = (path.positives.count() - path.negatives.count()) * g_offset;
+        const qreal objectiveOffset = (path.positives.size() - path.negatives.size()) * g_offset;
         simplex.setObjective(&objective);
 
         // Calculate minimum values

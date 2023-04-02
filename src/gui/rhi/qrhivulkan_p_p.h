@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Gui module
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QRHIVULKAN_P_H
 #define QRHIVULKAN_P_H
@@ -123,13 +87,14 @@ struct QVkRenderBuffer : public QRhiRenderBuffer
     QVkTexture *backingTexture = nullptr;
     VkFormat vkformat;
     int lastActiveFrameSlot = -1;
+    uint generation = 0;
     friend class QRhiVulkan;
 };
 
 struct QVkTexture : public QRhiTexture
 {
     QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, int depth,
-               int sampleCount, Flags flags);
+               int arraySize, int sampleCount, Flags flags);
     ~QVkTexture();
     void destroy() override;
     bool create() override;
@@ -214,13 +179,14 @@ struct QVkRenderTargetData
     int colorAttCount = 0;
     int dsAttCount = 0;
     int resolveAttCount = 0;
+    QRhiRenderTargetAttachmentTracker::ResIdList currentResIdList;
     static const int MAX_COLOR_ATTACHMENTS = 8;
 };
 
-struct QVkReferenceRenderTarget : public QRhiRenderTarget
+struct QVkSwapChainRenderTarget : public QRhiSwapChainRenderTarget
 {
-    QVkReferenceRenderTarget(QRhiImplementation *rhi);
-    ~QVkReferenceRenderTarget();
+    QVkSwapChainRenderTarget(QRhiImplementation *rhi, QRhiSwapChain *swapchain);
+    ~QVkSwapChainRenderTarget();
     void destroy() override;
 
     QSize pixelSize() const override;
@@ -601,6 +567,7 @@ struct QVkSwapChain : public QRhiSwapChain
     QRhiRenderTarget *currentFrameRenderTarget() override;
 
     QSize surfacePixelSize() override;
+    bool isFormatSupported(Format f) override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool createOrResize() override;
@@ -622,7 +589,7 @@ struct QVkSwapChain : public QRhiSwapChain
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     QVarLengthArray<VkPresentModeKHR, 8> supportedPresentationModes;
     VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
-    QVkReferenceRenderTarget rtWrapper;
+    QVkSwapChainRenderTarget rtWrapper;
     QVkCommandBuffer cbWrapper;
 
     struct ImageResources {
@@ -682,6 +649,7 @@ public:
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
                                int depth,
+                               int arraySize,
                                int sampleCount,
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter,
@@ -762,7 +730,7 @@ public:
     int resourceLimit(QRhi::ResourceLimit limit) const override;
     const QRhiNativeHandles *nativeHandles() override;
     QRhiDriverInfo driverInfo() const override;
-    void sendVMemStatsToProfiler() override;
+    QRhiMemAllocStats graphicsMemoryAllocationStatistics() override;
     bool makeThreadLocalNativeContextCurrent() override;
     void releaseCachedResources() override;
     bool isDeviceLost() const override;
@@ -875,7 +843,7 @@ public:
     PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR;
     PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR;
     PFN_vkQueuePresentKHR vkQueuePresentKHR;
-    PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR = nullptr;
+    PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
     PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
     PFN_vkGetPhysicalDeviceSurfacePresentModesKHR vkGetPhysicalDeviceSurfacePresentModesKHR;
 
@@ -885,6 +853,10 @@ public:
         bool debugMarkers = false;
         bool vertexAttribDivisor = false;
         bool texture3DSliceAs2D = false;
+        bool tessellation = false;
+        bool vulkan11OrHigher = false;
+        bool geometryShader = false;
+        bool nonFillPolygonMode = false;
     } caps;
 
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;

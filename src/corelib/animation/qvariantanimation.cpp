@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qvariantanimation.h"
 #include "qvariantanimation_p.h"
@@ -192,7 +156,7 @@ void QVariantAnimationPrivate::convertValues(int t)
 {
     auto type = QMetaType(t);
     //this ensures that all the keyValues are of type t
-    for (int i = 0; i < keyValues.count(); ++i) {
+    for (int i = 0; i < keyValues.size(); ++i) {
         QVariantAnimation::KeyValue &pair = keyValues[i];
         pair.second.convert(type);
     }
@@ -226,7 +190,7 @@ void QVariantAnimationPrivate::updateInterpolator()
 void QVariantAnimationPrivate::recalculateCurrentInterval(bool force/*=false*/)
 {
     // can't interpolate if we don't have at least 2 values
-    if ((keyValues.count() + (defaultStartEndValue.isValid() ? 1 : 0)) < 2)
+    if ((keyValues.size() + (defaultStartEndValue.isValid() ? 1 : 0)) < 2)
         return;
 
     const qreal endProgress = (direction == QAbstractAnimation::Forward) ? qreal(1) : qreal(0);
@@ -243,7 +207,7 @@ void QVariantAnimationPrivate::recalculateCurrentInterval(bool force/*=false*/)
                                                                            animationValueLessThan);
         if (it == keyValues.constBegin()) {
             //the item pointed to by it is the start element in the range
-            if (it->first == 0 && keyValues.count() > 1) {
+            if (it->first == 0 && keyValues.size() > 1) {
                 currentInterval.start = *it;
                 currentInterval.end = *(it+1);
             } else {
@@ -252,7 +216,7 @@ void QVariantAnimationPrivate::recalculateCurrentInterval(bool force/*=false*/)
             }
         } else if (it == keyValues.constEnd()) {
             --it; //position the iterator on the last item
-            if (it->first == 1 && keyValues.count() > 1) {
+            if (it->first == 1 && keyValues.size() > 1) {
                 //we have an end value (item with progress = 1)
                 currentInterval.start = *(it-1);
                 currentInterval.end = *it;
@@ -287,7 +251,7 @@ void QVariantAnimationPrivate::setCurrentValueForProgress(const qreal progress)
                                    localProgress);
     qSwap(currentValue, ret);
     q->updateCurrentValue(currentValue);
-    static QBasicAtomicInt changedSignalIndex = Q_BASIC_ATOMIC_INITIALIZER(0);
+    Q_CONSTINIT static QBasicAtomicInt changedSignalIndex = Q_BASIC_ATOMIC_INITIALIZER(0);
     if (!changedSignalIndex.loadRelaxed()) {
         //we keep the mask so that we emit valueChanged only when needed (for performance reasons)
         changedSignalIndex.testAndSetRelaxed(0, signalIndex("valueChanged(QVariant)"));
@@ -404,7 +368,7 @@ QBindable<QEasingCurve> QVariantAnimation::bindableEasingCurve()
 
 typedef QList<QVariantAnimation::Interpolator> QInterpolatorVector;
 Q_GLOBAL_STATIC(QInterpolatorVector, registeredInterpolators)
-static QBasicMutex registeredInterpolatorsMutex;
+Q_CONSTINIT static QBasicMutex registeredInterpolatorsMutex;
 
 /*!
     \fn template <typename T> void qRegisterAnimationInterpolator(QVariant (*func)(const T &from, const T &to, qreal progress))
@@ -441,7 +405,7 @@ void QVariantAnimation::registerInterpolator(QVariantAnimation::Interpolator fun
     // to continue causes the app to crash on exit with a SEGV
     if (interpolators) {
         const auto locker = qt_scoped_lock(registeredInterpolatorsMutex);
-        if (interpolationType >= interpolators->count())
+        if (interpolationType >= interpolators->size())
             interpolators->resize(interpolationType + 1);
         interpolators->replace(interpolationType, func);
     }
@@ -459,7 +423,7 @@ QVariantAnimation::Interpolator QVariantAnimationPrivate::getInterpolator(int in
         QInterpolatorVector *interpolators = registeredInterpolators();
         const auto locker = qt_scoped_lock(registeredInterpolatorsMutex);
         QVariantAnimation::Interpolator ret = nullptr;
-        if (interpolationType < interpolators->count()) {
+        if (interpolationType < interpolators->size()) {
             ret = interpolators->at(interpolationType);
             if (ret) return ret;
         }

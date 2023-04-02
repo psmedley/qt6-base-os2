@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 /* This is the default Qt style sheet.
 
@@ -54,6 +18,7 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
 using namespace QCss;
 
 // This is the class name of the selector.
@@ -164,19 +129,19 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         -qt-style-features: background-color;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QLineEdit"));
+        SET_ELEMENT_NAME("QLineEdit"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("-qt-background-role"), QtBackgroundRole);
+        SET_PROPERTY("-qt-background-role"_L1, QtBackgroundRole);
         ADD_VALUE(Value::KnownIdentifier, Value_Base);
         ADD_DECLARATION;
 
-        SET_PROPERTY(QLatin1String("border"), Border);
+        SET_PROPERTY("border"_L1, Border);
         ADD_VALUE(Value::KnownIdentifier, Value_Native);
         ADD_DECLARATION;
 
-        SET_PROPERTY(QLatin1String("-qt-style-features"), QtStyleFeatures);
+        SET_PROPERTY("-qt-style-features"_L1, QtStyleFeatures);
         ADD_VALUE(Value::Identifier, QString::fromLatin1("background-color"));
         ADD_DECLARATION;
 
@@ -187,12 +152,12 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         border: none;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QLineEdit"));
-        ADD_PSEUDO(QLatin1String("no-frame"), PseudoClass_Frameless);
+        SET_ELEMENT_NAME("QLineEdit"_L1);
+        ADD_PSEUDO("no-frame"_L1, PseudoClass_Frameless);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("border"), Border);
+        SET_PROPERTY("border"_L1, Border);
         ADD_VALUE(Value::KnownIdentifier, Value_None);
         ADD_DECLARATION;
 
@@ -203,11 +168,11 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         border: native;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QFrame"));
+        SET_ELEMENT_NAME("QFrame"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("border"), Border);
+        SET_PROPERTY("border"_L1, Border);
         ADD_VALUE(Value::KnownIdentifier, Value_Native);
         ADD_DECLARATION;
 
@@ -219,19 +184,19 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         border-image: none;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QLabel"));
+        SET_ELEMENT_NAME("QLabel"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_ELEMENT_NAME(QLatin1String("QToolBox"));
+        SET_ELEMENT_NAME("QToolBox"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("background"), Background);
+        SET_PROPERTY("background"_L1, Background);
         ADD_VALUE(Value::KnownIdentifier, Value_None);
         ADD_DECLARATION;
 
-        SET_PROPERTY(QLatin1String("border-image"), BorderImage);
+        SET_PROPERTY("border-image"_L1, BorderImage);
         ADD_VALUE(Value::KnownIdentifier, Value_None);
         ADD_DECLARATION;
 
@@ -242,11 +207,11 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         border: native;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QGroupBox"));
+        SET_ELEMENT_NAME("QGroupBox"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("border"), Border);
+        SET_PROPERTY("border"_L1, Border);
         ADD_VALUE(Value::KnownIdentifier, Value_Native);
         ADD_DECLARATION;
 
@@ -259,15 +224,15 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         border: native;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QToolTip"));
+        SET_ELEMENT_NAME("QToolTip"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("-qt-background-role"), QtBackgroundRole);
+        SET_PROPERTY("-qt-background-role"_L1, QtBackgroundRole);
         ADD_VALUE(Value::KnownIdentifier, Value_Window);
         ADD_DECLARATION;
 
-        SET_PROPERTY(QLatin1String("border"), Border);
+        SET_PROPERTY("border"_L1, Border);
         ADD_VALUE(Value::KnownIdentifier, Value_Native);
         ADD_DECLARATION;
 
@@ -279,20 +244,20 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         -qt-style-features: background-color;  //only for not pixmap based styles
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QPushButton"));
+        SET_ELEMENT_NAME("QPushButton"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_ELEMENT_NAME(QLatin1String("QToolButton"));
+        SET_ELEMENT_NAME("QToolButton"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("border-style"), BorderStyles);
+        SET_PROPERTY("border-style"_L1, BorderStyles);
         ADD_VALUE(Value::KnownIdentifier, Value_Native);
         ADD_DECLARATION;
 
         if (!styleIsPixmapBased) {
-            SET_PROPERTY(QLatin1String("-qt-style-features"), QtStyleFeatures);
+            SET_PROPERTY("-qt-style-features"_L1, QtStyleFeatures);
             ADD_VALUE(Value::Identifier, QString::fromLatin1("background-color"));
             ADD_DECLARATION;
         }
@@ -309,22 +274,22 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
     }*/
 
     {
-        SET_ELEMENT_NAME(QLatin1String("QComboBox"));
+        SET_ELEMENT_NAME("QComboBox"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("border"), Border);
+        SET_PROPERTY("border"_L1, Border);
         ADD_VALUE(Value::KnownIdentifier, Value_Native);
         ADD_DECLARATION;
 
         if (!styleIsPixmapBased) {
-            SET_PROPERTY(QLatin1String("-qt-style-features"), QtStyleFeatures);
+            SET_PROPERTY("-qt-style-features"_L1, QtStyleFeatures);
             ADD_VALUE(Value::Identifier, QString::fromLatin1("background-color"));
             ADD_VALUE(Value::Identifier, QString::fromLatin1("background-gradient"));
             ADD_DECLARATION;
         }
 
-        SET_PROPERTY(QLatin1String("-qt-background-role"), QtBackgroundRole);
+        SET_PROPERTY("-qt-background-role"_L1, QtBackgroundRole);
         ADD_VALUE(Value::KnownIdentifier, Value_Base);
         ADD_DECLARATION;
 
@@ -339,12 +304,12 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
     }*/
     if (baseStyle()->inherits("QPlastiqueStyle")  || baseStyle()->inherits("QCleanlooksStyle") || baseStyle()->inherits("QFusionStyle"))
     {
-        SET_ELEMENT_NAME(QLatin1String("QComboBox"));
-        ADD_ATTRIBUTE_SELECTOR(QLatin1String("readOnly"), QLatin1String("true"), AttributeSelector::MatchEqual);
+        SET_ELEMENT_NAME("QComboBox"_L1);
+        ADD_ATTRIBUTE_SELECTOR("readOnly"_L1, "true"_L1, AttributeSelector::MatchEqual);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("-qt-background-role"), QtBackgroundRole);
+        SET_PROPERTY("-qt-background-role"_L1, QtBackgroundRole);
         ADD_VALUE(Value::KnownIdentifier, Value_Button);
         ADD_DECLARATION;
 
@@ -357,19 +322,19 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         -qt-background-role: base;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QAbstractSpinBox"));
+        SET_ELEMENT_NAME("QAbstractSpinBox"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("border"), Border);
+        SET_PROPERTY("border"_L1, Border);
         ADD_VALUE(Value::KnownIdentifier, Value_Native);
         ADD_DECLARATION;
 
-        SET_PROPERTY(QLatin1String("-qt-style-features"), QtStyleFeatures);
+        SET_PROPERTY("-qt-style-features"_L1, QtStyleFeatures);
         ADD_VALUE(Value::Identifier, QString::fromLatin1("background-color"));
         ADD_DECLARATION;
 
-        SET_PROPERTY(QLatin1String("-qt-background-role"), QtBackgroundRole);
+        SET_PROPERTY("-qt-background-role"_L1, QtBackgroundRole);
         ADD_VALUE(Value::KnownIdentifier, Value_Base);
         ADD_DECLARATION;
 
@@ -380,11 +345,11 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         -qt-background-role: window;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QMenu"));
+        SET_ELEMENT_NAME("QMenu"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("-qt-background-role"), QtBackgroundRole);
+        SET_PROPERTY("-qt-background-role"_L1, QtBackgroundRole);
         ADD_VALUE(Value::KnownIdentifier, Value_Window);
         ADD_DECLARATION;
 
@@ -394,12 +359,12 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         -qt-style-features: background-color;
     }*/
     if (!styleIsPixmapBased) {
-        SET_ELEMENT_NAME(QLatin1String("QMenu"));
-        ADD_PSEUDO(QLatin1String("item"), PseudoClass_Unknown);
+        SET_ELEMENT_NAME("QMenu"_L1);
+        ADD_PSEUDO("item"_L1, PseudoClass_Unknown);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("-qt-style-features"), QtStyleFeatures);
+        SET_PROPERTY("-qt-style-features"_L1, QtStyleFeatures);
         ADD_VALUE(Value::Identifier, QString::fromLatin1("background-color"));
         ADD_DECLARATION;
 
@@ -410,11 +375,11 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         -qt-background-role: window;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QHeaderView"));
+        SET_ELEMENT_NAME("QHeaderView"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("-qt-background-role"), QtBackgroundRole);
+        SET_PROPERTY("-qt-background-role"_L1, QtBackgroundRole);
         ADD_VALUE(Value::KnownIdentifier, Value_Window);
         ADD_DECLARATION;
 
@@ -427,27 +392,27 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         border: native;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QTableCornerButton"));
-        ADD_PSEUDO(QLatin1String("section"), PseudoClass_Unknown);
+        SET_ELEMENT_NAME("QTableCornerButton"_L1);
+        ADD_PSEUDO("section"_L1, PseudoClass_Unknown);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_ELEMENT_NAME(QLatin1String("QHeaderView"));
-        ADD_PSEUDO(QLatin1String("section"), PseudoClass_Unknown);
+        SET_ELEMENT_NAME("QHeaderView"_L1);
+        ADD_PSEUDO("section"_L1, PseudoClass_Unknown);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("-qt-background-role"), QtBackgroundRole);
+        SET_PROPERTY("-qt-background-role"_L1, QtBackgroundRole);
         ADD_VALUE(Value::KnownIdentifier, Value_Button);
         ADD_DECLARATION;
 
         if (!styleIsPixmapBased) {
-            SET_PROPERTY(QLatin1String("-qt-style-features"), QtStyleFeatures);
+            SET_PROPERTY("-qt-style-features"_L1, QtStyleFeatures);
             ADD_VALUE(Value::Identifier, QString::fromLatin1("background-color"));
             ADD_DECLARATION;
         }
 
-        SET_PROPERTY(QLatin1String("border"), Border);
+        SET_PROPERTY("border"_L1, Border);
         ADD_VALUE(Value::KnownIdentifier, Value_Native);
         ADD_DECLARATION;
 
@@ -458,11 +423,11 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         -qt-background-role: base;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QProgressBar"));
+        SET_ELEMENT_NAME("QProgressBar"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("-qt-background-role"), QtBackgroundRole);
+        SET_PROPERTY("-qt-background-role"_L1, QtBackgroundRole);
         ADD_VALUE(Value::KnownIdentifier, Value_Base);
         ADD_DECLARATION;
 
@@ -473,11 +438,11 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         -qt-background-role: window;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QScrollBar"));
+        SET_ELEMENT_NAME("QScrollBar"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("-qt-background-role"), QtBackgroundRole);
+        SET_PROPERTY("-qt-background-role"_L1, QtBackgroundRole);
         ADD_VALUE(Value::KnownIdentifier, Value_Window);
         ADD_DECLARATION;
 
@@ -488,11 +453,11 @@ StyleSheet QStyleSheetStyle::getDefaultStyleSheet() const
         border: native;
     }*/
     {
-        SET_ELEMENT_NAME(QLatin1String("QDockWidget"));
+        SET_ELEMENT_NAME("QDockWidget"_L1);
         ADD_BASIC_SELECTOR;
         ADD_SELECTOR;
 
-        SET_PROPERTY(QLatin1String("border"), Border);
+        SET_PROPERTY("border"_L1, Border);
         ADD_VALUE(Value::KnownIdentifier, Value_Native);
         ADD_DECLARATION;
 

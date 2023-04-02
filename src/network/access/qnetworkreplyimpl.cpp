@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qnetworkreplyimpl_p.h"
 #include "qnetworkaccessbackend_p.h"
@@ -50,6 +14,8 @@
 #include <QtCore/QCoreApplication>
 
 QT_BEGIN_NAMESPACE
+
+QT_IMPL_METATYPE_EXTERN_TAGGED(QSharedPointer<char>, QSharedPointer_char)
 
 inline QNetworkReplyImplPrivate::QNetworkReplyImplPrivate()
     : backend(nullptr), outgoingData(nullptr),
@@ -154,7 +120,7 @@ void QNetworkReplyImplPrivate::_q_copyReadyRead()
 
     QVariant totalSize = cookedHeaders.value(QNetworkRequest::ContentLengthHeader);
     pauseNotificationHandling();
-    // emit readyRead before downloadProgress incase this will cause events to be
+    // emit readyRead before downloadProgress in case this will cause events to be
     // processed and we get into a recursive call (as in QProgressDialog).
     emit q->readyRead();
     if (downloadProgressSignalChoke.elapsed() >= progressSignalInterval) {
@@ -193,7 +159,7 @@ void QNetworkReplyImplPrivate::_q_bufferOutgoingData()
 
     if (!outgoingDataBuffer) {
         // first call, create our buffer
-        outgoingDataBuffer = QSharedPointer<QRingBuffer>::create();
+        outgoingDataBuffer = std::make_shared<QRingBuffer>();
 
         QObject::connect(outgoingData, SIGNAL(readyRead()), q, SLOT(_q_bufferOutgoingData()));
         QObject::connect(outgoingData, SIGNAL(readChannelFinished()), q, SLOT(_q_bufferOutgoingDataFinished()));
@@ -249,7 +215,7 @@ void QNetworkReplyImplPrivate::setup(QNetworkAccessManager::Operation op, const 
     // The synchronous HTTP is a corner case, we will put all upload data in one big QByteArray in the outgoingDataBuffer.
     // Yes, this is not the most efficient thing to do, but on the other hand synchronous XHR needs to die anyway.
     if (synchronousHttpAttribute.toBool() && outgoingData) {
-        outgoingDataBuffer = QSharedPointer<QRingBuffer>::create();
+        outgoingDataBuffer = std::make_shared<QRingBuffer>();
         qint64 previousDataSize = 0;
         do {
             previousDataSize = outgoingDataBuffer->size();
@@ -517,7 +483,7 @@ void QNetworkReplyImplPrivate::appendDownstreamDataSignalEmissions()
     // important: At the point of this readyRead(), the data parameter list must be empty,
     // else implicit sharing will trigger memcpy when the user is reading data!
     emit q->readyRead();
-    // emit readyRead before downloadProgress incase this will cause events to be
+    // emit readyRead before downloadProgress in case this will cause events to be
     // processed and we get into a recursive call (as in QProgressDialog).
     if (downloadProgressSignalChoke.elapsed() >= progressSignalInterval) {
         downloadProgressSignalChoke.restart();
@@ -610,7 +576,7 @@ void QNetworkReplyImplPrivate::appendDownstreamDataDownloadBuffer(qint64 bytesRe
     downloadBufferCurrentSize = bytesReceived;
 
     // Only emit readyRead when actual data is there
-    // emit readyRead before downloadProgress incase this will cause events to be
+    // emit readyRead before downloadProgress in case this will cause events to be
     // processed and we get into a recursive call (as in QProgressDialog).
     if (bytesDownloaded > 0)
         emit q->readyRead();
@@ -734,6 +700,7 @@ void QNetworkReplyImplPrivate::readFromBackend()
         if (backend->bytesAvailable())
             emit q->readyRead();
     } else {
+        bool anyBytesRead = false;
         while (backend->bytesAvailable()
                && (!readBufferMaxSize || buffer.size() < readBufferMaxSize)) {
             qint64 toRead = qMin(nextDownstreamBlockSize(), backend->bytesAvailable());
@@ -743,8 +710,10 @@ void QNetworkReplyImplPrivate::readFromBackend()
             qint64 bytesRead = backend->read(data, toRead);
             Q_ASSERT(bytesRead <= toRead);
             buffer.chop(toRead - bytesRead);
-            emit q->readyRead();
+            anyBytesRead |= bytesRead > 0;
         }
+        if (anyBytesRead)
+            emit q->readyRead();
     }
 }
 

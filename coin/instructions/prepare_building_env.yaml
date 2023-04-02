@@ -8,6 +8,24 @@ instructions:
     variableName: CMAKE_GENERATOR
     variableValue: Ninja
 
+  # Set path separator based on host platform.
+  # \ on Windows (double \\ for escaping the backslash)
+  # / on UNIX
+  - type: EnvironmentVariable
+    variableName: CI_PATH_SEP
+    variableValue: "\\"
+    enable_if:
+      condition: property
+      property: host.os
+      equals_value: Windows
+  - type: EnvironmentVariable
+    variableName: CI_PATH_SEP
+    variableValue: "/"
+    disable_if:
+      condition: property
+      property: host.os
+      equals_value: Windows
+
 
   # Export ICC specific env. variables
   - type: Group
@@ -28,14 +46,14 @@ instructions:
   - type: Group
     instructions:
       - type: PrependToEnvironmentVariable
-        variableName: CONFIGURE_ARGS
+        variableName: COMMON_CMAKE_ARGS
         variableValue: "-DCMAKE_C_COMPILER=icc -DCMAKE_CXX_COMPILER=icpc "
         enable_if:
           condition: property
           property: host.compiler
           contains_value: ICC
       - type: PrependToEnvironmentVariable
-        variableName: CONFIGURE_ARGS
+        variableName: COMMON_CMAKE_ARGS
         variableValue: "-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ "
         enable_if:
           condition: or
@@ -47,14 +65,14 @@ instructions:
               property: host.compiler
               contains_value: Mingw
       - type: PrependToEnvironmentVariable
-        variableName: CONFIGURE_ARGS
+        variableName: COMMON_CMAKE_ARGS
         variableValue: "-DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe "
         enable_if:
           condition: property
           property: host.compiler
           contains_value: MSVC
       - type: PrependToEnvironmentVariable
-        variableName: CONFIGURE_ARGS
+        variableName: COMMON_CMAKE_ARGS
         variableValue: "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ "
         enable_if:
           condition: property
@@ -64,10 +82,10 @@ instructions:
       condition: and
       conditions:
         - condition: runtime
-          env_var: CONFIGURE_ARGS
+          env_var: COMMON_CMAKE_ARGS
           contains_value: "-DCMAKE_C_COMPILER="
         - condition: runtime
-          env_var: CONFIGURE_ARGS
+          env_var: COMMON_CMAKE_ARGS
           contains_value: "-DCMAKE_CXX_COMPILER="
 
 
@@ -265,7 +283,7 @@ instructions:
     instructions:
     # Need to unset QMAKESPEC, so that the pre-installed boot2qt mkspec is not picked up.
     - type: WriteFile
-      fileContents: "#!/bin/bash\nunset LD_LIBRARY_PATH\n. {{.Env.QT_YOCTO_ENVSETUP}}\nexport PATH={{.Env.QT_CMAKE_DIR}}:$PATH;\nunset QMAKESPEC\n$*"
+      fileContents: "#!/bin/bash\nunset LD_LIBRARY_PATH\n. {{.Env.QT_YOCTO_ENVSETUP}}\nexport PATH={{.Env.QT_CMAKE_DIR}}:$PATH;\nunset QMAKESPEC\n\"$@\""
       filename: "{{.Env.HOME}}/prefix.sh"
       fileMode: 493
       maxTimeInSeconds: 20
@@ -280,14 +298,14 @@ instructions:
       enable_if:
         condition: property
         property: target.osVersion
-        in_values: [QEMU, QNX_710]
+        in_values: [QEMU]
     - type: EnvironmentVariable
       variableName: TARGET_ENV_PREFIX
       variableValue: ""
       disable_if:
         condition: property
         property: target.osVersion
-        in_values: [QEMU, QNX_710]
+        in_values: [QEMU]
 
   # Windows on Arm, cross-compilation with MSVC
   - type: Group
@@ -308,25 +326,24 @@ instructions:
   # QNX variables
   - type: Group
     enable_if:
-      condition: property
-      property: target.os
-      equals_value: QNX
+      condition: and
+      conditions:
+        - condition: property
+          property: host.os
+          equals_value: Linux
+        - condition: property
+          property: target.os
+          equals_value: QNX
     instructions:
-    - type: WriteFile
-      fileContents: "#!/bin/bash\nexport TESTARGS={{.Env.TESTARGS}}\nexport TESTRUNNER={{.Env.TESTRUNNER}}\nexport COIN_CTEST_RESULTSDIR={{.Env.COIN_CTEST_RESULTSDIR}}\n$*"
-      filename: "{{.Env.HOME}}/prefix.sh"
-      fileMode: 493
-      maxTimeInSeconds: 20
-      maxTimeBetweenOutput: 20
     - type: EnvironmentVariable
       variableName: QNX_TARGET
       variableValue: "{{.Env.QNX_710}}/target/qnx7"
     - type: EnvironmentVariable
       variableName: QNX_CONFIGURATION_EXCLUSIVE
-      variableValue: "{{.Env.QNX_710}}/.qnx"
+      variableValue: "{{.Env.HOME}}/.qnx"
     - type: EnvironmentVariable
       variableName: QNX_CONFIGURATION
-      variableValue: "{{.Env.QNX_710}}/.qnx"
+      variableValue: "{{.Env.HOME}}/.qnx"
     - type: PrependToEnvironmentVariable
       variableName: PATH
       variableValue: "{{.Env.QNX_710}}/host/linux/x86_64/usr/bin:"
@@ -335,23 +352,55 @@ instructions:
       variableValue: "{{.Env.QNX_710}}/host/common/bin:"
     - type: PrependToEnvironmentVariable
       variableName: PATH
-      variableValue: "{{.Env.QNX_710}}/.qnx:"
+      variableValue: "{{.Env.HOME}}/.qnx:"
     - type: EnvironmentVariable
       variableName: QNX_HOST
       variableValue: "{{.Env.QNX_710}}/host/linux/x86_64"
     - type: AppendToEnvironmentVariable
       variableName: PATH
       variableValue: ":{{.Env.QEMUARMV7_TOOLCHAIN_SYSROOT}}/../x86_64-pokysdk-linux/usr/bin:"
-      enable_if:
-        condition: property
-        property: host.os
-        equals_value: Linux
+
+  - type: Group
+    enable_if:
+      condition: and
+      conditions:
+        - condition: property
+          property: host.os
+          equals_value: Windows
+        - condition: property
+          property: target.os
+          equals_value: QNX
+    instructions:
+    - type: EnvironmentVariable
+      variableName: QNX_TARGET
+      variableValue: "{{.Env.QNX_710_CMAKE}}/target/qnx7"
+    - type: EnvironmentVariable
+      variableName: QNX_CONFIGURATION_EXCLUSIVE
+      variableValue: "{{.Env.HOMEPATH}}\\.qnx"
+    - type: EnvironmentVariable
+      variableName: QNX_CONFIGURATION
+      variableValue: "{{.Env.HOMEPATH}}\\.qnx"
+    - type: PrependToEnvironmentVariable
+      variableName: PATH
+      variableValue: "{{.Env.QNX_710}}\\host\\win64\\x86_64\\usr\\bin;"
+    - type: PrependToEnvironmentVariable
+      variableName: PATH
+      variableValue: "{{.Env.QNX_710}}\\host\\common\\bin;"
+    - type: PrependToEnvironmentVariable
+      variableName: PATH
+      variableValue: "{{.Env.HOMEPATH}}\\.qnx;"
+    - type: EnvironmentVariable
+      variableName: QNX_HOST
+      variableValue: "{{.Env.QNX_710}}\\host\\win64\\x86_64"
 
   # Enable warnings are errors
   - type: Group
     instructions:
       - type: AppendToEnvironmentVariable
-        variableName: CONFIGURE_ARGS
+        variableName: COMMON_CMAKE_ARGS
+        variableValue: " -DWARNINGS_ARE_ERRORS=ON"
+      - type: AppendToEnvironmentVariable
+        variableName: COMMON_TARGET_CMAKE_ARGS
         variableValue: " -DWARNINGS_ARE_ERRORS=ON"
     enable_if:
       condition: property
@@ -361,48 +410,111 @@ instructions:
   - type: Group
     instructions:
       - type: AppendToEnvironmentVariable
-        variableName: CONFIGURE_ARGS
-        variableValue: " -DQT_BUILD_TESTS=OFF -DCMAKE_AUTOGEN_VERBOSE=ON"
+        variableName: COMMON_CMAKE_ARGS
+        variableValue: " -DQT_BUILD_TESTS=OFF -DCMAKE_AUTOGEN_VERBOSE=ON -DCMAKE_MESSAGE_LOG_LEVEL=STATUS"
       - type: AppendToEnvironmentVariable
-        variableName: NON_QTBASE_CONFIGURE_ARGS
-        variableValue: " -DQT_BUILD_TESTS=OFF -DCMAKE_AUTOGEN_VERBOSE=ON"
+        variableName: COMMON_NON_QTBASE_CMAKE_ARGS
+        variableValue: " -DQT_BUILD_TESTS=OFF -DCMAKE_AUTOGEN_VERBOSE=ON -DCMAKE_MESSAGE_LOG_LEVEL=STATUS"
       - type: AppendToEnvironmentVariable
-        variableName: TEST_CONFIGURE_ARGS
-        variableValue: " -DCMAKE_AUTOGEN_VERBOSE=ON"
+        variableName: COMMON_TEST_CMAKE_ARGS
+        variableValue: " -DCMAKE_AUTOGEN_VERBOSE=ON -DCMAKE_MESSAGE_LOG_LEVEL=STATUS"
 
       - type: AppendToEnvironmentVariable
-        variableName: TARGET_CONFIGURE_ARGS
-        variableValue: " -DQT_BUILD_TESTS=OFF -DCMAKE_AUTOGEN_VERBOSE=ON"
+        variableName: COMMON_TARGET_CMAKE_ARGS
+        variableValue: " -DQT_BUILD_TESTS=OFF -DCMAKE_AUTOGEN_VERBOSE=ON -DCMAKE_MESSAGE_LOG_LEVEL=STATUS"
       - type: AppendToEnvironmentVariable
-        variableName: NON_QTBASE_TARGET_CONFIGURE_ARGS
-        variableValue: " -DQT_BUILD_TESTS=OFF -DCMAKE_AUTOGEN_VERBOSE=ON"
+        variableName: COMMON_NON_QTBASE_TARGET_CMAKE_ARGS
+        variableValue: " -DQT_BUILD_TESTS=OFF -DCMAKE_AUTOGEN_VERBOSE=ON -DCMAKE_MESSAGE_LOG_LEVEL=STATUS"
       - type: AppendToEnvironmentVariable
-        variableName: TARGET_TEST_CONFIGURE_ARGS
-        variableValue: " -DCMAKE_AUTOGEN_VERBOSE=ON"
+        variableName: COMMON_TARGET_TEST_CMAKE_ARGS
+        variableValue: " -DCMAKE_AUTOGEN_VERBOSE=ON -DCMAKE_MESSAGE_LOG_LEVEL=STATUS"
 
   # Sccache
   - type: Group
     instructions:
       - type: AppendToEnvironmentVariable
-        variableName: CONFIGURE_ARGS
+        variableName: COMMON_CMAKE_ARGS
         variableValue: " -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
       - type: AppendToEnvironmentVariable
-        variableName: NON_QTBASE_CONFIGURE_ARGS
+        variableName: COMMON_NON_QTBASE_CMAKE_ARGS
         variableValue: " -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
       - type: AppendToEnvironmentVariable
-        variableName: TEST_CONFIGURE_ARGS
+        variableName: COMMON_TEST_CMAKE_ARGS
         variableValue: " -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
 
       - type: AppendToEnvironmentVariable
-        variableName: TARGET_CONFIGURE_ARGS
+        variableName: COMMON_TARGET_CMAKE_ARGS
         variableValue: " -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
       - type: AppendToEnvironmentVariable
-        variableName: NON_QTBASE_TARGET_CONFIGURE_ARGS
+        variableName: COMMON_NON_QTBASE_TARGET_CMAKE_ARGS
         variableValue: " -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
       - type: AppendToEnvironmentVariable
-        variableName: TARGET_TEST_CONFIGURE_ARGS
+        variableName: COMMON_TARGET_TEST_CMAKE_ARGS
         variableValue: " -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
     enable_if:
       condition: property
       property: features
       contains_value: Sccache
+
+  # Specify a custom examples installation directory, so that the built example binaries are not
+  # packaged into the artifact archive together with the Qt libraries.
+  - type: Group
+    instructions:
+      - type: AppendToEnvironmentVariable
+        variableName: COMMON_CMAKE_ARGS
+        variableValue: " -DQT_INTERNAL_EXAMPLES_INSTALL_PREFIX={{unixPathSeparators .BuildDir}}/installed_examples"
+      - type: AppendToEnvironmentVariable
+        variableName: COMMON_TARGET_CMAKE_ARGS
+        variableValue: " -DQT_INTERNAL_EXAMPLES_INSTALL_PREFIX={{unixPathSeparators .BuildDir}}/installed_examples"
+    enable_if:
+      # Only set the custom installation dir if examples are built.
+      condition: or
+      conditions:
+        # qtbase host case
+        - condition: runtime
+          env_var: CONFIGURE_ARGS
+          contains_value: "QT_BUILD_EXAMPLES=ON"
+        # qtbase target case
+        - condition: runtime
+          env_var: TARGET_CONFIGURE_ARGS
+          contains_value: "QT_BUILD_EXAMPLES=ON"
+        # non-qtbase host case
+        - condition: runtime
+          env_var: NON_QTBASE_CONFIGURE_ARGS
+          contains_value: "QT_BUILD_EXAMPLES=ON"
+        # non-qtbase target case
+        - condition: runtime
+          env_var: NON_QTBASE_TARGET_CONFIGURE_ARGS
+          contains_value: "QT_BUILD_EXAMPLES=ON"
+        # Same as above, but for configurations marked with UseConfigure
+        # qtbase host case
+        - condition: runtime
+          env_var: CONFIGURE_ARGS
+          contains_value: "-make examples"
+        # qtbase target case
+        - condition: runtime
+          env_var: TARGET_CONFIGURE_ARGS
+          contains_value: "-make examples"
+        # non-qtbase host case
+        - condition: runtime
+          env_var: NON_QTBASE_CONFIGURE_ARGS
+          contains_value: "-make examples"
+        # non-qtbase target case
+        - condition: runtime
+          env_var: NON_QTBASE_TARGET_CONFIGURE_ARGS
+          contains_value: "-make examples"
+
+  - type: SetEnvironmentFromScript
+    command: [C:\Utils\emsdk\emsdk_env.bat]
+    userMessageOnFailure: "Failed to set emscripten environment"
+    maxTimeInSeconds: 60
+    maxTimeBetweenOutput: 60
+    enable_if:
+      condition: and
+      conditions:
+        - condition: property
+          property: target.osVersion
+          contains_value: WebAssembly
+        - condition: property
+          property: host.os
+          contains_value: Windows

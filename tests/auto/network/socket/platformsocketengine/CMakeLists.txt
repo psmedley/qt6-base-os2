@@ -11,11 +11,10 @@ endif()
 qt_internal_add_test(tst_platformsocketengine
     SOURCES
         tst_platformsocketengine.cpp
-    INCLUDE_DIRECTORIES
-        ${QT_SOURCE_TREE}/src/network
     PUBLIC_LIBRARIES
         Qt::CorePrivate
         Qt::NetworkPrivate
+    QT_TEST_SERVER_LIST "cyrus" # special case
 )
 
 #### Keys ignored in scope 1:.:.:platformsocketengine.pro:<TRUE>:

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2013 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtOpenGL module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2013 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtCore/private/qobject_p.h>
 #include <QtCore/qglobal.h>
@@ -47,6 +11,8 @@
 #include "qopengldebug.h"
 
 QT_BEGIN_NAMESPACE
+
+QT_IMPL_METATYPE_EXTERN(QOpenGLDebugMessage)
 
 /*!
     \class QOpenGLDebugMessage
@@ -1181,7 +1147,7 @@ void QOpenGLDebugLoggerPrivate::controlDebugMessages(QOpenGLDebugMessage::Source
     QVarLengthArray<GLenum, 8> glTypes;
     QVarLengthArray<GLenum, 8> glSeverities;
 
-    if (ids.count() > 0) {
+    if (ids.size() > 0) {
         Q_ASSERT(severities == QOpenGLDebugMessage::AnySeverity);
 
         // The GL_KHR_debug extension says:
@@ -1222,7 +1188,7 @@ void QOpenGLDebugLoggerPrivate::controlDebugMessages(QOpenGLDebugMessage::Source
     CONVERT_TO_GL_DEBUG_MESSAGE_CONTROL_PARAMETERS(Severity, severities, glSeverities)
 #undef CONVERT_TO_GL_DEBUG_MESSAGE_CONTROL_PARAMETERS
 
-    const GLsizei idCount = ids.count();
+    const GLsizei idCount = ids.size();
     // The GL_KHR_debug extension says that if idCount is 0, idPtr must be ignored.
     // Unfortunately, some bugged drivers do NOT ignore it, so pass NULL in case.
     const GLuint * const idPtr = idCount ? ids.constData() : nullptr;
@@ -1538,9 +1504,9 @@ void QOpenGLDebugLogger::logMessage(const QOpenGLDebugMessage &debugMessage)
     QByteArray rawMessage = debugMessage.message().toUtf8();
     rawMessage.append('\0');
 
-    if (rawMessage.length() > d->maxMessageLength) {
+    if (rawMessage.size() > d->maxMessageLength) {
         qWarning("QOpenGLDebugLogger::logMessage(): message too long, truncating it\n"
-                 "    (%d bytes long, but the GL accepts up to %d bytes)", int(rawMessage.length()), d->maxMessageLength);
+                 "    (%d bytes long, but the GL accepts up to %d bytes)", int(rawMessage.size()), d->maxMessageLength);
         rawMessage.resize(d->maxMessageLength - 1);
         rawMessage.append('\0');
     }
@@ -1590,9 +1556,9 @@ void QOpenGLDebugLogger::pushGroup(const QString &name, GLuint id, QOpenGLDebugM
 
     QByteArray rawName = name.toUtf8();
     rawName.append('\0');
-    if (rawName.length() > d->maxMessageLength) {
+    if (rawName.size() > d->maxMessageLength) {
         qWarning("QOpenGLDebugLogger::pushGroup(): group name too long, truncating it\n"
-                 "    (%d bytes long, but the GL accepts up to %d bytes)", int(rawName.length()), d->maxMessageLength);
+                 "    (%d bytes long, but the GL accepts up to %d bytes)", int(rawName.size()), d->maxMessageLength);
         rawName.resize(d->maxMessageLength - 1);
         rawName.append('\0');
     }

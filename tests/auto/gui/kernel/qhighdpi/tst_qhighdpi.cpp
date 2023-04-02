@@ -1,38 +1,15 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <private/qhighdpiscaling_p.h>
 #include <qpa/qplatformscreen.h>
+#include <qpa/qplatformnativeinterface.h>
 
 #include <QTest>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QStringView>
 
 Q_LOGGING_CATEGORY(lcTests, "qt.gui.tests")
 
@@ -45,6 +22,10 @@ private: // helpers
     QGuiApplication *createStandardOffscreenApp(const QList<qreal> &dpiValues);
     QGuiApplication *createStandardOffscreenApp(const QJsonArray &screens);
     static void standardScreenDpiTestData();
+
+    static void setOffscreenConfiguration(const QJsonObject &configuration);
+    static QJsonObject offscreenConfiguration();
+
 private slots:
     void cleanup();
     void qhighdpiscaling_data();
@@ -53,6 +34,7 @@ private slots:
     void noscreens();
     void screenDpiAndDpr_data();
     void screenDpiAndDpr();
+    void screenDpiChange();
     void environment_QT_SCALE_FACTOR();
     void environment_QT_SCREEN_SCALE_FACTORS_data();
     void environment_QT_SCREEN_SCALE_FACTORS();
@@ -180,6 +162,24 @@ void tst_QHighDpi::standardScreenDpiTestData()
     QTest::newRow("240-252-360") << QList<qreal> { 400./160 * 96, 420./160 * 96, 600./160 * 96 };
 }
 
+void tst_QHighDpi::setOffscreenConfiguration(const QJsonObject &configuration)
+{
+    Q_ASSERT(qApp->platformName() == QLatin1String("offscreen"));
+    QPlatformNativeInterface *platformNativeInterface = qApp->platformNativeInterface();
+    auto setConfiguration = reinterpret_cast<void (*)(QJsonObject, QPlatformNativeInterface *)>(
+        platformNativeInterface->nativeResourceForIntegration("setConfiguration"));
+    setConfiguration(configuration, platformNativeInterface);
+}
+
+QJsonObject tst_QHighDpi::offscreenConfiguration()
+{
+    Q_ASSERT(qApp->platformName() == QLatin1String("offscreen"));
+    QPlatformNativeInterface *platformNativeInterface = qApp->platformNativeInterface();
+    auto getConfiguration = reinterpret_cast<QJsonObject (*)(QPlatformNativeInterface *)>(
+        platformNativeInterface->nativeResourceForIntegration("configuration"));
+    return getConfiguration(platformNativeInterface);
+}
+
 void tst_QHighDpi::cleanup()
 {
     // Some test functions set environment variables. Unset them here,
@@ -233,6 +233,35 @@ void tst_QHighDpi::screenDpiAndDpr()
         QWindow window(screen);
         QCOMPARE(window.devicePixelRatio(), screen->devicePixelRatio());
     }
+}
+
+void tst_QHighDpi::screenDpiChange()
+{
+    QList<qreal> dpiValues = { 96, 96, 96};
+    std::unique_ptr<QGuiApplication> app(createStandardOffscreenApp(dpiValues));
+
+    QCOMPARE(app->devicePixelRatio(), 1);
+
+    // Set new DPI
+    int newDpi = 192;
+    QJsonValue config = offscreenConfiguration();
+    // API defect until Qt 7, so go indirectly via CBOR
+    QCborMap map = QCborMap::fromJsonObject(config.toObject());
+    map[QLatin1String("screens")][0][QLatin1String("logicalDpi")] = newDpi;
+    map[QLatin1String("screens")][1][QLatin1String("logicalDpi")] = newDpi;
+    map[QLatin1String("screens")][2][QLatin1String("logicalDpi")] = newDpi;
+    setOffscreenConfiguration(map.toJsonObject());
+
+    // TODO check events
+
+    // Verify that the new DPI is in use
+    for (QScreen *screen : app->screens()) {
+        QCOMPARE(screen->devicePixelRatio(), newDpi / standardBaseDpi);
+        QCOMPARE(screen->logicalDotsPerInch(), newDpi / screen->devicePixelRatio());
+        QWindow window(screen);
+        QCOMPARE(window.devicePixelRatio(), screen->devicePixelRatio());
+    }
+    QCOMPARE(app->devicePixelRatio(), newDpi / standardBaseDpi);
 }
 
 void tst_QHighDpi::environment_QT_SCALE_FACTOR()

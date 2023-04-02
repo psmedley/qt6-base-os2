@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QGRAPHICSANCHORLAYOUT_P_H
 #define QGRAPHICSANCHORLAYOUT_P_H
@@ -269,42 +233,44 @@ struct AnchorVertexPair : public AnchorVertex {
 #ifdef QT_DEBUG
 inline QString AnchorVertex::toString() const
 {
+    using namespace Qt::StringLiterals;
+
     if (!m_item)
         return QString::fromLatin1("NULL_%1").arg(quintptr(this));
 
     QString edge;
     switch (m_edge) {
     case Qt::AnchorLeft:
-        edge = QLatin1String("Left");
+        edge = "Left"_L1;
         break;
     case Qt::AnchorHorizontalCenter:
-        edge = QLatin1String("HorizontalCenter");
+        edge = "HorizontalCenter"_L1;
         break;
     case Qt::AnchorRight:
-        edge = QLatin1String("Right");
+        edge = "Right"_L1;
         break;
     case Qt::AnchorTop:
-        edge = QLatin1String("Top");
+        edge = "Top"_L1;
         break;
     case Qt::AnchorVerticalCenter:
-        edge = QLatin1String("VerticalCenter");
+        edge = "VerticalCenter"_L1;
         break;
     case Qt::AnchorBottom:
-        edge = QLatin1String("Bottom");
+        edge = "Bottom"_L1;
         break;
     default:
-        edge = QLatin1String("None");
+        edge = "None"_L1;
         break;
     }
     QString itemName;
     if (m_item->isLayout()) {
-        itemName = QLatin1String("layout");
+        itemName = "layout"_L1;
     } else {
         if (QGraphicsItem *item = m_item->graphicsItem()) {
             itemName = item->data(0).toString();
         }
     }
-    edge.insert(0, QLatin1String("%1_"));
+    edge.insert(0, "%1_"_L1);
     return edge.arg(itemName);
 }
 #endif

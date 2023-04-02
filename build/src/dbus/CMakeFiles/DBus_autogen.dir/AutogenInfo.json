@@ -1,0 +1,452 @@
+{
+	"BUILD_DIR" : "/home/psmedley/qt6-base-os2/build/src/dbus/DBus_autogen",
+	"CMAKE_BINARY_DIR" : "/home/psmedley/qt6-base-os2/build",
+	"CMAKE_CURRENT_BINARY_DIR" : "/home/psmedley/qt6-base-os2/build/src/dbus",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/home/psmedley/qt6-base-os2/src/dbus",
+	"CMAKE_EXECUTABLE" : "/usr/bin/cmake",
+	"CMAKE_LIST_FILES" : 
+	[
+		"/home/psmedley/qt6-base-os2/src/dbus/CMakeLists.txt",
+		"/home/psmedley/qt6-base-os2/cmake/modulecppexports.h.in",
+		"/home/psmedley/qt6-base-os2/cmake/QtModuleConfig.cmake.in",
+		"/usr/share/cmake-3.25/Modules/BasicConfigVersion-AnyNewerVersion.cmake.in",
+		"/home/psmedley/qt6-base-os2/cmake/QtCMakePackageVersionFile.cmake.in",
+		"/home/psmedley/qt6-base-os2/cmake/ModuleDescription.json.in",
+		"/home/psmedley/qt6-base-os2/cmake/QtFileConfigure.txt.in",
+		"/home/psmedley/qt6-base-os2/cmake/PkgConfigLibrary.pc.in"
+	],
+	"CMAKE_SOURCE_DIR" : "/home/psmedley/qt6-base-os2",
+	"DEP_FILE" : "",
+	"DEP_FILE_RULE_NAME" : "",
+	"HEADERS" : 
+	[
+		[
+			"/home/psmedley/qt6-base-os2/build/include/QtDBus/qtdbusexports.h",
+			"Mu",
+			"2BYLCABCF2/moc_qtdbusexports.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/build/src/dbus/CMakeFiles/DBus.dir/cmake_pch.hxx",
+			"Mu",
+			"S3QSOYSJT2/moc_cmake_pch.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/dbus_minimal_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_dbus_minimal_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbus_symbols_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbus_symbols_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusabstractadaptor.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusabstractadaptor.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusabstractadaptor_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusabstractadaptor_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusabstractinterface.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusabstractinterface.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusabstractinterface_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusabstractinterface_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusargument.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusargument.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusargument_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusargument_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusconnection.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusconnection.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusconnection_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusconnection_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusconnectioninterface.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusconnectioninterface.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusconnectionmanager_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusconnectionmanager_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbuscontext.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbuscontext.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbuscontext_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbuscontext_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbuserror.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbuserror.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusextratypes.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusextratypes.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusintegrator_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusintegrator_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusinterface.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusinterface.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusinterface_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusinterface_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusintrospection_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusintrospection_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusmessage.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusmessage.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusmessage_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusmessage_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusmetaobject_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusmetaobject_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusmetatype.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusmetatype.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusmetatype_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusmetatype_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbuspendingcall.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbuspendingcall.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbuspendingcall_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbuspendingcall_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbuspendingreply.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbuspendingreply.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusreply.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusreply.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusserver.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusserver.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusservicewatcher.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusservicewatcher.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusthreaddebug_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusthreaddebug_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusunixfiledescriptor.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusunixfiledescriptor.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusutil_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusutil_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusvirtualobject.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusvirtualobject.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusxmlparser_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qdbusxmlparser_p.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qtdbusglobal.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtdbusglobal.cpp",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qtdbusglobal_p.h",
+			"Mu",
+			"EWIEGA46WW/moc_qtdbusglobal_p.cpp",
+			null
+		]
+	],
+	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
+	"INCLUDE_DIR" : "/home/psmedley/qt6-base-os2/build/src/dbus/DBus_autogen/include",
+	"MOC_COMPILATION_FILE" : "/home/psmedley/qt6-base-os2/build/src/dbus/DBus_autogen/mocs_compilation.cpp",
+	"MOC_DEFINITIONS" : 
+	[
+		"DBUS_API_SUBJECT_TO_CHANGE",
+		"DBus_EXPORTS",
+		"QT_ASCII_CAST_WARNINGS",
+		"QT_BUILDING_QT",
+		"QT_BUILD_DBUS_LIB",
+		"QT_CORE_LIB",
+		"QT_DEPRECATED_WARNINGS",
+		"QT_DEPRECATED_WARNINGS_SINCE=0x070000",
+		"QT_DISABLE_DEPRECATED_BEFORE=0x050000",
+		"QT_LEAN_HEADERS=1",
+		"QT_LINKED_LIBDBUS",
+		"QT_MOC_COMPAT",
+		"QT_NO_CAST_TO_ASCII",
+		"QT_NO_DEBUG",
+		"QT_NO_EXCEPTIONS",
+		"QT_NO_FOREACH",
+		"QT_NO_JAVA_STYLE_ITERATORS",
+		"QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+		"QT_USE_QSTRINGBUILDER",
+		"_LARGEFILE64_SOURCE",
+		"_LARGEFILE_SOURCE"
+	],
+	"MOC_DEPEND_FILTERS" : 
+	[
+		[
+			"Q_PLUGIN_METADATA",
+			"[\n][ \t]*Q_PLUGIN_METADATA[ \t]*\\([^\\)]*FILE[ \t]*\"([^\"]+)\""
+		]
+	],
+	"MOC_INCLUDES" : 
+	[
+		"/home/psmedley/qt6-base-os2/build/include",
+		"/home/psmedley/qt6-base-os2/build/include/QtDBus",
+		"/home/psmedley/qt6-base-os2/src/dbus",
+		"/home/psmedley/qt6-base-os2/build/src/dbus",
+		"/home/psmedley/qt6-base-os2/build/include/QtDBus/6.4.2",
+		"/home/psmedley/qt6-base-os2/build/include/QtDBus/6.4.2/QtDBus",
+		"/home/psmedley/qt6-base-os2/build/include/QtCore",
+		"/home/psmedley/qt6-base-os2/mkspecs/linux-g++",
+		"/home/psmedley/qt6-base-os2/build/src/corelib",
+		"/home/psmedley/qt6-base-os2/build/include/QtCore/6.4.2",
+		"/home/psmedley/qt6-base-os2/build/include/QtCore/6.4.2/QtCore",
+		"/usr/include/dbus-1.0",
+		"/usr/lib/x86_64-linux-gnu/dbus-1.0/include",
+		"/usr/include/c++/12",
+		"/usr/include/x86_64-linux-gnu/c++/12",
+		"/usr/include/c++/12/backward",
+		"/usr/lib/gcc/x86_64-linux-gnu/12/include",
+		"/usr/local/include",
+		"/usr/include/x86_64-linux-gnu",
+		"/usr/include"
+	],
+	"MOC_MACRO_NAMES" : 
+	[
+		"Q_OBJECT",
+		"Q_GADGET",
+		"Q_GADGET_EXPORT",
+		"Q_NAMESPACE",
+		"Q_NAMESPACE_EXPORT",
+		"Q_ENUM_NS"
+	],
+	"MOC_OPTIONS" : [ "--output-json" ],
+	"MOC_PATH_PREFIX" : false,
+	"MOC_PREDEFS_CMD" : 
+	[
+		"/usr/bin/c++",
+		"-dM",
+		"-E",
+		"-c",
+		"/usr/share/cmake-3.25/Modules/CMakeCXXCompilerABI.cpp"
+	],
+	"MOC_PREDEFS_FILE" : "/home/psmedley/qt6-base-os2/build/src/dbus/DBus_autogen/moc_predefs.h",
+	"MOC_RELAXED_MODE" : false,
+	"MOC_SKIP" : [],
+	"MULTI_CONFIG" : false,
+	"PARALLEL" : 4,
+	"PARSE_CACHE_FILE" : "/home/psmedley/qt6-base-os2/build/src/dbus/CMakeFiles/DBus_autogen.dir/ParseCache.txt",
+	"QT_MOC_EXECUTABLE" : "/home/psmedley/qt6-base-os2/build/libexec/moc",
+	"QT_UIC_EXECUTABLE" : "",
+	"QT_VERSION_MAJOR" : 6,
+	"QT_VERSION_MINOR" : 4,
+	"SETTINGS_FILE" : "/home/psmedley/qt6-base-os2/build/src/dbus/CMakeFiles/DBus_autogen.dir/AutogenUsed.txt",
+	"SOURCES" : 
+	[
+		[
+			"/home/psmedley/qt6-base-os2/build/src/dbus/CMakeFiles/DBus.dir/cmake_pch.hxx.cxx",
+			"Mu",
+			null
+		],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbus_symbols.cpp", "Mu", null ],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusabstractadaptor.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusabstractinterface.cpp",
+			"Mu",
+			null
+		],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbusargument.cpp", "Mu", null ],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusconnection.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusconnectioninterface.cpp",
+			"Mu",
+			null
+		],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbuscontext.cpp", "Mu", null ],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbuserror.cpp", "Mu", null ],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusextratypes.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusintegrator.cpp",
+			"Mu",
+			null
+		],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbusinterface.cpp", "Mu", null ],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusinternalfilters.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusintrospection.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusmarshaller.cpp",
+			"Mu",
+			null
+		],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbusmessage.cpp", "Mu", null ],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusmetaobject.cpp",
+			"Mu",
+			null
+		],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbusmetatype.cpp", "Mu", null ],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbusmisc.cpp", "Mu", null ],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbuspendingcall.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbuspendingreply.cpp",
+			"Mu",
+			null
+		],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbusreply.cpp", "Mu", null ],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbusserver.cpp", "Mu", null ],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusservicewatcher.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusunixfiledescriptor.cpp",
+			"Mu",
+			null
+		],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbusutil.cpp", "Mu", null ],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusvirtualobject.cpp",
+			"Mu",
+			null
+		],
+		[
+			"/home/psmedley/qt6-base-os2/src/dbus/qdbusxmlgenerator.cpp",
+			"Mu",
+			null
+		],
+		[ "/home/psmedley/qt6-base-os2/src/dbus/qdbusxmlparser.cpp", "Mu", null ]
+	],
+	"VERBOSITY" : 0
+}

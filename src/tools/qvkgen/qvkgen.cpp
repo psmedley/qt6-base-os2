@@ -1,35 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qlist.h>
+#include <QtCore/qmap.h>
 #include <QtCore/qxmlstream.h>
 
 // generate wrappers for core functions from the following versions
@@ -234,11 +210,11 @@ VkSpecParser::TypedName VkSpecParser::parseParamOrProto(const QString &tag)
         } else {
             auto text = m_reader.text().trimmed();
             if (!text.isEmpty()) {
-                if (text.startsWith(QLatin1Char('['))) {
+                if (text.startsWith(u'[')) {
                     t.typeSuffix += text;
                 } else {
                     if (!t.type.isEmpty())
-                        t.type += QLatin1Char(' ');
+                        t.type += u' ';
                     t.type += text;
                 }
             }
@@ -266,7 +242,7 @@ QString funcSig(const VkSpecParser::Command &c, const char *className = nullptr)
                                 (className ? className : ""), (className ? "::" : ""),
                                 qPrintable(c.cmd.name)));
     if (!c.args.isEmpty()) {
-        s += QLatin1Char('(');
+        s += u'(';
         bool first = true;
         for (const VkSpecParser::TypedName &a : c.args) {
             if (!first)
@@ -274,10 +250,10 @@ QString funcSig(const VkSpecParser::Command &c, const char *className = nullptr)
             else
                 first = false;
             s += QString::asprintf("%s%s%s%s", qPrintable(a.type),
-                                   (a.type.endsWith(QLatin1Char('*')) ? "" : " "),
+                                   (a.type.endsWith(u'*') ? "" : " "),
                                    qPrintable(a.name), qPrintable(a.typeSuffix));
         }
-        s += QLatin1Char(')');
+        s += u')';
     }
     return s;
 }
@@ -291,7 +267,7 @@ QString funcCall(const VkSpecParser::Command &c, int idx)
                                   qPrintable(c.cmd.name),
                                   idx);
     if (!c.args.isEmpty()) {
-        s += QLatin1Char('(');
+        s += u'(';
         bool first = true;
         for (const VkSpecParser::TypedName &a : c.args) {
             if (!first)
@@ -300,7 +276,7 @@ QString funcCall(const VkSpecParser::Command &c, int idx)
                 first = false;
             s += a.name;
         }
-        s += QLatin1Char(')');
+        s += u')';
     }
     return s;
 }
@@ -509,22 +485,25 @@ bool genVulkanFunctionsPC(const QList<VkSpecParser::Command> &commands,
         return false;
     }
 
-    static const char *s =
+    static const char s[] =
 "%s\n"
 "#include \"qvulkanfunctions_p.h\"\n"
 "#include \"qvulkaninstance.h\"\n"
+"\n"
+"#include <QtCore/private/qoffsetstringarray_p.h>\n"
 "\n"
 "QT_BEGIN_NAMESPACE\n"
 "\n%s"
 "QVulkanFunctionsPrivate::QVulkanFunctionsPrivate(QVulkanInstance *inst)\n"
 "{\n"
-"    static const char *funcNames[] = {\n"
+"    static constexpr auto funcNames = qOffsetStringArray(\n"
 "%s\n"
-"    };\n"
-"    for (int i = 0; i < %d; ++i) {\n"
-"        m_funcs[i] = inst->getInstanceProcAddr(funcNames[i]);\n"
+"    );\n"
+"    static_assert(std::extent_v<decltype(m_funcs)> == size_t(funcNames.count()));\n"
+"    for (int i = 0; i < funcNames.count(); ++i) {\n"
+"        m_funcs[i] = inst->getInstanceProcAddr(funcNames.at(i));\n"
 "        if (i < %d && !m_funcs[i])\n"
-"            qWarning(\"QVulkanFunctions: Failed to resolve %%s\", funcNames[i]);\n"
+"            qWarning(\"QVulkanFunctions: Failed to resolve %%s\", funcNames.at(i));\n"
 "    }\n"
 "}\n"
 "\n%s"
@@ -532,13 +511,14 @@ bool genVulkanFunctionsPC(const QList<VkSpecParser::Command> &commands,
 "{\n"
 "    QVulkanFunctions *f = inst->functions();\n"
 "    Q_ASSERT(f);\n\n"
-"    static const char *funcNames[] = {\n"
+"    static constexpr auto funcNames = qOffsetStringArray(\n"
 "%s\n"
-"    };\n"
-"    for (int i = 0; i < %d; ++i) {\n"
-"        m_funcs[i] = f->vkGetDeviceProcAddr(device, funcNames[i]);\n"
+"    );\n"
+"    static_assert(std::extent_v<decltype(m_funcs)> == size_t(funcNames.count()));\n"
+"    for (int i = 0; i < funcNames.count(); ++i) {\n"
+"        m_funcs[i] = f->vkGetDeviceProcAddr(device, funcNames.at(i));\n"
 "        if (i < %d && !m_funcs[i])\n"
-"            qWarning(\"QVulkanDeviceFunctions: Failed to resolve %%s\", funcNames[i]);\n"
+"            qWarning(\"QVulkanDeviceFunctions: Failed to resolve %%s\", funcNames.at(i));\n"
 "    }\n"
 "}\n"
 "\n"
@@ -547,9 +527,7 @@ bool genVulkanFunctionsPC(const QList<VkSpecParser::Command> &commands,
     QString devCmdWrapperStr;
     QString instCmdWrapperStr;
     int devIdx = 0;
-    int devCount = 0;
     int instIdx = 0;
-    int instCount = 0;
     QString devCmdNamesStr;
     QString instCmdNamesStr;
     int vulkan10DevCount = 0;
@@ -575,11 +553,6 @@ bool genVulkanFunctionsPC(const QList<VkSpecParser::Command> &commands,
             *dst += QStringLiteral("        \"");
             *dst += c.cmd.name;
             *dst += QStringLiteral("\",\n");
-
-            if (c.deviceLevel)
-                devCount += 1;
-            else
-                instCount += 1;
         }
         if (version == QStringLiteral("VK_VERSION_1_0")) {
             vulkan10InstCount = instIdx;
@@ -589,17 +562,17 @@ bool genVulkanFunctionsPC(const QList<VkSpecParser::Command> &commands,
         devCmdWrapperStr += "#endif\n\n";
     }
 
-    if (devCmdNamesStr.count() > 2)
-        devCmdNamesStr = devCmdNamesStr.left(devCmdNamesStr.count() - 2);
-    if (instCmdNamesStr.count() > 2)
-        instCmdNamesStr = instCmdNamesStr.left(instCmdNamesStr.count() - 2);
+    if (devCmdNamesStr.size() > 2)
+        devCmdNamesStr.chop(2);
+    if (instCmdNamesStr.size() > 2)
+        instCmdNamesStr.chop(2);
 
     const QString str =
             QString::asprintf(s, preamble.get(licHeaderFn).constData(),
                               instCmdWrapperStr.toUtf8().constData(),
-                              instCmdNamesStr.toUtf8().constData(), instCount, vulkan10InstCount,
+                              instCmdNamesStr.toUtf8().constData(), vulkan10InstCount,
                               devCmdWrapperStr.toUtf8().constData(),
-                              devCmdNamesStr.toUtf8().constData(), devCount, vulkan10DevCount);
+                              devCmdNamesStr.toUtf8().constData(), vulkan10DevCount);
 
     f.write(str.toUtf8());
 
@@ -633,7 +606,7 @@ int main(int argc, char **argv)
         QStringLiteral("vkGetInstanceProcAddr"),
         QStringLiteral("vkEnumerateInstanceVersion")
     };
-    for (int i = 0; i < commands.count(); ++i) {
+    for (int i = 0; i < commands.size(); ++i) {
         if (ignoredFuncs.contains(commands[i].cmd.name))
             commands.remove(i--);
     }

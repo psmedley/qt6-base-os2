@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qprinter.h"
 #include "qprinter_p.h"
@@ -60,6 +24,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 #define ABORT_IF_ACTIVE(location) \
     if (d->printEngine->printerState() == QPrinter::Active) { \
@@ -465,7 +431,7 @@ public:
 
   Note the difference between Point and DevicePixel. The Point unit is
   defined to be 1/72th of an inch, while the DevicePixel unit is
-  resolution dependant and is based on the actual pixels, or dots, on
+  resolution dependent and is based on the actual pixels, or dots, on
   the printer.
 */
 
@@ -749,7 +715,7 @@ void QPrinter::setOutputFileName(const QString &fileName)
     ABORT_IF_ACTIVE("QPrinter::setOutputFileName");
 
     QFileInfo fi(fileName);
-    if (!fi.suffix().compare(QLatin1String("pdf"), Qt::CaseInsensitive))
+    if (!fi.suffix().compare("pdf"_L1, Qt::CaseInsensitive))
         setOutputFormat(QPrinter::PdfFormat);
     else if (fileName.isEmpty())
         setOutputFormat(QPrinter::NativeFormat);
@@ -1444,7 +1410,8 @@ int QPrinter::toPage() const
 void QPrinter::setFromTo(int from, int to)
 {
     d->pageRanges.clear();
-    d->pageRanges.addRange(from, to);
+    if (from && to)
+        d->pageRanges.addRange(from, to);
 }
 
 /*!

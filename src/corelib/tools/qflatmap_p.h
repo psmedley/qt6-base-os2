@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QFLATMAP_P_H
 #define QFLATMAP_P_H
@@ -52,6 +16,7 @@
 //
 
 #include "qlist.h"
+#include "private/qglobal_p.h"
 
 #include <algorithm>
 #include <functional>
@@ -76,6 +41,19 @@ QT_BEGIN_NAMESPACE
   and MappedContainer template arguments:
       QFlatMap<float, int, std::less<float>, std::vector<float>, std::vector<int>>
 */
+
+// Qt 6.4:
+// - removed QFlatMap API which was incompatible with STL semantics
+// - will be released with said API disabled, to catch any out-of-tree users
+// - also allows opting in to the new API using QFLATMAP_ENABLE_STL_COMPATIBLE_INSERT
+// Qt 6.5
+// - will make QFLATMAP_ENABLE_STL_COMPATIBLE_INSERT the default:
+
+#ifndef QFLATMAP_ENABLE_STL_COMPATIBLE_INSERT
+# if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+#  define QFLATMAP_ENABLE_STL_COMPATIBLE_INSERT
+# endif
+#endif
 
 namespace Qt {
 
@@ -189,7 +167,7 @@ public:
         {
 
             iterator r = *this;
-            i++;
+            ++*this;
             return r;
         }
 
@@ -202,7 +180,7 @@ public:
         iterator operator--(int)
         {
             iterator r = *this;
-            i--;
+            --*this;
             return r;
         }
 
@@ -326,7 +304,7 @@ public:
         {
 
             const_iterator r = *this;
-            i++;
+            ++*this;
             return r;
         }
 
@@ -339,7 +317,7 @@ public:
         const_iterator operator--(int)
         {
             const_iterator r = *this;
-            i--;
+            --*this;
             return r;
         }
 
@@ -417,7 +395,7 @@ private:
     struct is_marked_transparent_type : std::false_type { };
 
     template <class X>
-    struct is_marked_transparent_type<X, typename X::is_transparent> : std::true_type { };
+    struct is_marked_transparent_type<X, std::void_t<typename X::is_transparent>> : std::true_type { };
 
     template <class X>
     using is_marked_transparent = typename std::enable_if<
@@ -430,6 +408,7 @@ private:
 public:
     QFlatMap() = default;
 
+#ifdef QFLATMAP_ENABLE_STL_COMPATIBLE_INSERT
     explicit QFlatMap(const key_container_type &keys, const mapped_container_type &values)
         : c{keys, values}
     {
@@ -465,6 +444,7 @@ public:
         initWithRange(first, last);
         ensureOrderedUnique();
     }
+#endif
 
     explicit QFlatMap(Qt::OrderedUniqueRange_t, const key_container_type &keys,
                       const mapped_container_type &values)
@@ -506,6 +486,7 @@ public:
     {
     }
 
+#ifdef QFLATMAP_ENABLE_STL_COMPATIBLE_INSERT
     explicit QFlatMap(const key_container_type &keys, const mapped_container_type &values,
                       const Compare &compare)
         : value_compare(compare), c{keys, values}
@@ -546,6 +527,7 @@ public:
         initWithRange(first, last);
         ensureOrderedUnique();
     }
+#endif
 
     explicit QFlatMap(Qt::OrderedUniqueRange_t, const key_container_type &keys,
                       const mapped_container_type &values, const Compare &compare)
@@ -607,12 +589,13 @@ public:
 
     bool remove(const Key &key)
     {
-        auto it = binary_find(key);
-        if (it != end()) {
-            erase(it);
-            return true;
-        }
-        return false;
+        return do_remove(find(key));
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    bool remove(const X &key)
+    {
+        return do_remove(find(key));
     }
 
     iterator erase(iterator it)
@@ -623,50 +606,60 @@ public:
 
     T take(const Key &key)
     {
-        auto it = binary_find(key);
-        if (it != end()) {
-            T result = std::move(it.value());
-            erase(it);
-            return result;
-        }
-        return {};
+        return do_take(find(key));
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    T take(const X &key)
+    {
+        return do_take(find(key));
     }
 
     bool contains(const Key &key) const
     {
-        return binary_find(key) != end();
+        return find(key) != end();
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    bool contains(const X &key) const
+    {
+        return find(key) != end();
     }
 
     T value(const Key &key, const T &defaultValue) const
     {
-        auto it = binary_find(key);
+        auto it = find(key);
+        return it == end() ? defaultValue : it.value();
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    T value(const X &key, const T &defaultValue) const
+    {
+        auto it = find(key);
         return it == end() ? defaultValue : it.value();
     }
 
     T value(const Key &key) const
     {
-        auto it = binary_find(key);
+        auto it = find(key);
+        return it == end() ? T() : it.value();
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    T value(const X &key) const
+    {
+        auto it = find(key);
         return it == end() ? T() : it.value();
     }
 
     T &operator[](const Key &key)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.keys.insert(toKeysIterator(it), key);
-            return *c.values.insert(toValuesIterator(it), T());
-        }
-        return it.value();
+        return try_emplace(key).first.value();
     }
 
     T &operator[](Key &&key)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.keys.insert(toKeysIterator(it), key);
-            return *c.values.insert(toValuesIterator(it), T());
-        }
-        return it.value();
+        return try_emplace(std::move(key)).first.value();
     }
 
     T operator[](const Key &key) const
@@ -674,54 +667,27 @@ public:
         return value(key);
     }
 
+#ifdef QFLATMAP_ENABLE_STL_COMPATIBLE_INSERT
     std::pair<iterator, bool> insert(const Key &key, const T &value)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.values.insert(toValuesIterator(it), value);
-            auto k = c.keys.insert(toKeysIterator(it), key);
-            return { fromKeysIterator(k), true };
-        } else {
-            it.value() = value;
-            return {it, false};
-        }
+        return try_emplace(key, value);
     }
 
     std::pair<iterator, bool> insert(Key &&key, const T &value)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.values.insert(toValuesIterator(it), value);
-            return { fromKeysIterator(c.keys.insert(toKeysIterator(it), std::move(key))), true };
-        } else {
-            *toValuesIterator(it) = value;
-            return {it, false};
-        }
+        return try_emplace(std::move(key), value);
     }
 
     std::pair<iterator, bool> insert(const Key &key, T &&value)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.values.insert(toValuesIterator(it), std::move(value));
-            return { fromKeysIterator(c.keys.insert(toKeysIterator(it), key)), true };
-        } else {
-            *toValuesIterator(it) = std::move(value);
-            return {it, false};
-        }
+        return try_emplace(key, std::move(value));
     }
 
     std::pair<iterator, bool> insert(Key &&key, T &&value)
     {
-        auto it = lower_bound(key);
-        if (it == end() || key_compare::operator()(key, it.key())) {
-            c.values.insert(toValuesIterator(it), std::move(value));
-            return { fromKeysIterator(c.keys.insert(toKeysIterator(it), std::move(key))), true };
-        } else {
-            *toValuesIterator(it) = std::move(value);
-            return {it, false};
-        }
+        return try_emplace(std::move(key), std::move(value));
     }
+#endif
 
     template <typename...Args>
     std::pair<iterator, bool> try_emplace(const Key &key, Args&&...args)
@@ -765,6 +731,7 @@ public:
         return r;
     }
 
+#ifdef QFLATMAP_ENABLE_STL_COMPATIBLE_INSERT
     template <class InputIt, is_compatible_iterator<InputIt> = nullptr>
     void insert(InputIt first, InputIt last)
     {
@@ -790,6 +757,7 @@ public:
     {
         insertOrderedUniqueRange(first, last);
     }
+#endif
 
     iterator begin() { return { &c, 0 }; }
     const_iterator begin() const { return { &c, 0 }; }
@@ -838,14 +806,113 @@ public:
         return fromKeysIterator(std::lower_bound(c.keys.begin(), c.keys.end(), key, key_comp()));
     }
 
-    iterator find(const key_type &k)
+    iterator find(const Key &key)
     {
-        return binary_find(k);
+        return { &c, std::as_const(*this).find(key).i };
     }
 
-    const_iterator find(const key_type &k) const
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    iterator find(const X &key)
     {
-        return binary_find(k);
+        return { &c, std::as_const(*this).find(key).i };
+    }
+
+    const_iterator find(const Key &key) const
+    {
+        auto it = lower_bound(key);
+        if (it != end()) {
+            if (!key_compare::operator()(key, it.key()))
+                return it;
+            it = end();
+        }
+        return it;
+    }
+
+    template <class X, class Y = Compare, is_marked_transparent<Y> = nullptr>
+    const_iterator find(const X &key) const
+    {
+        auto it = lower_bound(key);
+        if (it != end()) {
+            if (!key_compare::operator()(key, it.key()))
+                return it;
+            it = end();
+        }
+        return it;
+    }
+
+    template <typename Predicate>
+    size_type remove_if(Predicate pred)
+    {
+        const auto indirect_call_to_pred = [pred = std::move(pred)](iterator it) {
+            [[maybe_unused]] auto dependent_false = [](auto &&...) { return false; };
+            using Pair = decltype(*it);
+            using K = decltype(it.key());
+            using V = decltype(it.value());
+            using P = Predicate;
+            if constexpr (std::is_invocable_v<P, K, V>) {
+                return pred(it.key(), it.value());
+            } else if constexpr (std::is_invocable_v<P, Pair> && !std::is_invocable_v<P, K>) {
+                return pred(*it);
+            } else if constexpr (std::is_invocable_v<P, K> && !std::is_invocable_v<P, Pair>) {
+                return pred(it.key());
+            } else {
+                static_assert(dependent_false(pred),
+                    "Don't know how to call the predicate.\n"
+                    "Options:\n"
+                    "- pred(*it)\n"
+                    "- pred(it.key(), it.value())\n"
+                    "- pred(it.key())");
+            }
+        };
+
+        auto first = begin();
+        const auto last = end();
+
+        // find_if prefix loop
+        while (first != last && !indirect_call_to_pred(first))
+            ++first;
+
+        if (first == last)
+            return 0; // nothing to do
+
+        // we know that we need to remove *first
+
+        auto kdest = toKeysIterator(first);
+        auto vdest = toValuesIterator(first);
+
+        ++first;
+
+        auto k = std::next(kdest);
+        auto v = std::next(vdest);
+
+        // Main Loop
+        // - first is used only for indirect_call_to_pred
+        // - operations are done on k, v
+        // Loop invariants:
+        // - first, k, v are pointing to the same element
+        // - [begin(), first[, [c.keys.begin(), k[, [c.values.begin(), v[: already processed
+        // - [first, end()[,   [k, c.keys.end()[,   [v, c.values.end()[:   still to be processed
+        // - [c.keys.begin(), kdest[ and [c.values.begin(), vdest[ are keepers
+        // - [kdest, k[, [vdest, v[ are considered removed
+        // - kdest is not c.keys.end()
+        // - vdest is not v.values.end()
+        while (first != last) {
+            if (!indirect_call_to_pred(first)) {
+                // keep *first, aka {*k, *v}
+                *kdest = std::move(*k);
+                *vdest = std::move(*v);
+                ++kdest;
+                ++vdest;
+            }
+            ++k;
+            ++v;
+            ++first;
+        }
+
+        const size_type r = std::distance(kdest, c.keys.end());
+        c.keys.erase(kdest, c.keys.end());
+        c.values.erase(vdest, c.values.end());
+        return r;
     }
 
     key_compare key_comp() const noexcept
@@ -859,6 +926,25 @@ public:
     }
 
 private:
+    bool do_remove(iterator it)
+    {
+        if (it != end()) {
+            erase(it);
+            return true;
+        }
+        return false;
+    }
+
+    T do_take(iterator it)
+    {
+        if (it != end()) {
+            T result = std::move(it.value());
+            erase(it);
+            return result;
+        }
+        return {};
+    }
+
     template <class InputIt, is_compatible_iterator<InputIt> = nullptr>
     void initWithRange(InputIt first, InputIt last)
     {
@@ -938,22 +1024,6 @@ private:
         makeUnique();
     }
 
-    iterator binary_find(const Key &key)
-    {
-        return { &c, std::as_const(*this).binary_find(key).i };
-    }
-
-    const_iterator binary_find(const Key &key) const
-    {
-        auto it = lower_bound(key);
-        if (it != end()) {
-            if (!key_compare::operator()(key, it.key()))
-                return it;
-            it = end();
-        }
-        return it;
-    }
-
     void ensureOrderedUnique()
     {
         std::vector<size_type> p(size_t(c.keys.size()));
@@ -985,24 +1055,39 @@ private:
 
     void makeUnique()
     {
-        if (c.keys.size() < 2)
+        // std::unique, but over two ranges
+        auto equivalent = [this](const auto &lhs, const auto &rhs) {
+            return !key_compare::operator()(lhs, rhs) && !key_compare::operator()(rhs, lhs);
+        };
+        const auto kb = c.keys.begin();
+        const auto ke = c.keys.end();
+        auto k = std::adjacent_find(kb, ke, equivalent);
+        if (k == ke)
             return;
-        auto k = std::end(c.keys) - 1;
-        auto i = k - 1;
-        for (;;) {
-            if (key_compare::operator()(*i, *k) || key_compare::operator()(*k, *i)) {
-                if (i == std::begin(c.keys))
-                    break;
-                --i;
-                --k;
-            } else {
-                c.values.erase(std::begin(c.values) + std::distance(std::begin(c.keys), i));
-                i = c.keys.erase(i);
-                if (i == std::begin(c.keys))
-                    break;
-                k = i + 1;
+
+        // equivalent keys found, we need to do actual work:
+        auto v = std::next(c.values.begin(), std::distance(kb, k));
+
+        auto kdest = k;
+        auto vdest = v;
+
+        ++k;
+        ++v;
+
+        // Loop Invariants:
+        //
+        // - [keys.begin(), kdest] and [values.begin(), vdest] are unique
+        // - k is not keys.end(), v is not values.end()
+        // - [next(k), keys.end()[ and [next(v), values.end()[ still need to be checked
+        while ((++v, ++k) != ke) {
+            if (!equivalent(*kdest, *k)) {
+                *++kdest = std::move(*k);
+                *++vdest = std::move(*v);
             }
         }
+
+        c.keys.erase(std::next(kdest), ke);
+        c.values.erase(std::next(vdest), c.values.end());
     }
 
     containers c;

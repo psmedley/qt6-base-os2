@@ -4,24 +4,18 @@
 ## tst_qstringconverter Test:
 #####################################################################
 
-list(APPEND test_data "utf8.txt")
-
 qt_internal_add_test(tst_qstringconverter
     SOURCES
         tst_qstringconverter.cpp
     TESTDATA ${test_data}
+    PUBLIC_LIBRARIES
+        Qt::CorePrivate # for access to Qt's feature system
 )
 
-if(INTEGRITY)
-    # Resources:
-    set(testdata_resource_files
-        "utf8.txt"
-    )
 
-    qt_internal_add_resource(tst_qstringconverter "testdata"
-        PREFIX
-            "/"
-        FILES
-            ${testdata_resource_files}
-    )
-endif()
+qt_internal_add_resource(tst_qstringconverter  "compressedtexture_bc1"
+    PREFIX
+        "/"
+    FILES
+        "euc_kr.txt"
+)

@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <qurl.h>
 #include <QtCore/QDebug>
@@ -39,6 +14,8 @@
 #include <qmap.h>
 
 #include <QtTest/private/qemulationdetector_p.h>
+
+using namespace Qt::StringLiterals;
 
 Q_DECLARE_METATYPE(QUrl::FormattingOptions)
 
@@ -1113,7 +1090,7 @@ void tst_QUrl::toAndFromStringList()
     QFETCH(QStringList, strings);
 
     const QList<QUrl> urls = QUrl::fromStringList(strings);
-    QCOMPARE(urls.count(), strings.count());
+    QCOMPARE(urls.size(), strings.size());
     const QStringList converted = QUrl::toStringList(urls);
     QCOMPARE(converted, strings);
 }
@@ -2084,8 +2061,9 @@ void tst_QUrl::hasQuery()
 
 void tst_QUrl::nameprep()
 {
-    QUrl url(QString::fromUtf8("http://www.fu""\xc3""\x9f""ball.de/"));
-    QCOMPARE(url.toString(), QString::fromLatin1("http://www.fussball.de/"));
+    // U+FB01 LATIN SMALL LIGATURE FI
+    QUrl url(u"http://www.\uFB01le.de/"_s);
+    QCOMPARE(url.toString(), QStringLiteral(u"http://www.file.de/"));
 }
 
 void tst_QUrl::isValid()
@@ -2148,14 +2126,15 @@ void tst_QUrl::isValid()
     }
 
     {
-        QUrl url = QUrl::fromEncoded("foo://%f0%9f%93%99.example.la/g");
+        // U+1F100 DIGIT ZERO FULL STOP
+        QUrl url = QUrl::fromEncoded("foo://%f0%9f%84%80.example.la/g");
         QVERIFY(!url.isValid());
         QVERIFY(url.toString().isEmpty());
         QCOMPARE(url.path(), QString("/g"));
-        url.setHost("%f0%9f%93%99.example.la/");
+        url.setHost("%f0%9f%84%80.example.la/");
         QVERIFY(!url.isValid());
         QVERIFY(url.toString().isEmpty());
-        url.setHost("\xf0\x9f\x93\x99.example.la/");
+        url.setHost("\xf0\x9f\x84\x80.example.la/");
         QVERIFY(!url.isValid());
         QVERIFY(url.toString().isEmpty());
         QVERIFY2(url.errorString().contains("Invalid hostname"),
@@ -3820,106 +3799,106 @@ void tst_QUrl::setComponents_data()
 
     QTest::newRow("invalid-username-1") << QUrl("http://example.com")
                                         << int(UserName) << "{}" << Strict << false
-                                        << PrettyDecoded << "" << "";
+                                        << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-username-2") << QUrl("http://example.com")
                                         << int(UserName) << "foo/bar" << Strict << false
-                                        << PrettyDecoded << "" << "";
+                                        << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-username-3") << QUrl("http://example.com")
                                         << int(UserName) << "foo:bar" << Strict << false
-                                        << PrettyDecoded << "" << "";
+                                        << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-password-1") << QUrl("http://example.com")
                                         << int(Password) << "{}" << Strict << false
-                                        << PrettyDecoded << "" << "";
+                                        << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-password-2") << QUrl("http://example.com")
                                         << int(Password) << "foo/bar" << Strict << false
-                                        << PrettyDecoded << "" << "";
+                                        << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-password-3") << QUrl("http://example.com")
                                         << int(Password) << "foo:bar" << Strict << false
-                                        << PrettyDecoded << "" << "";
+                                        << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-userinfo-1") << QUrl("http://example.com")
                                         << int(UserInfo) << "{}" << Strict << false
-                                        << PrettyDecoded << "" << "";
+                                        << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-userinfo-2") << QUrl("http://example.com")
                                         << int(UserInfo) << "foo/bar" << Strict << false
-                                        << PrettyDecoded << "" << "";
+                                        << PrettyDecoded << QString() << QString();
 
     QTest::newRow("invalid-host-1") << QUrl("http://example.com")
                                     << int(Host) << "-not-valid-" << Tolerant << false
-                                    << PrettyDecoded << "" << "";
+                                    << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-host-2") << QUrl("http://example.com")
                                     << int(Host) << "%31%30.%30.%30.%31" << Strict << false
-                                    << PrettyDecoded << "" << "";
+                                    << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-authority-1") << QUrl("http://example.com")
                                          << int(Authority) << "-not-valid-" << Tolerant << false
-                                         << PrettyDecoded << "" << "";
+                                         << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-authority-2") << QUrl("http://example.com")
                                          << int(Authority) << "%31%30.%30.%30.%31" << Strict << false
-                                         << PrettyDecoded << "" << "";
+                                         << PrettyDecoded << QString() << QString();
 
     QTest::newRow("invalid-path-0") << QUrl("http://example.com")
                                     << int(Path) << "{}" << Strict << false
-                                    << PrettyDecoded << "" << "";
+                                    << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-query-1") << QUrl("http://example.com")
                                      << int(Query) << "{}" << Strict << false
-                                     << PrettyDecoded << "" << "";
+                                     << PrettyDecoded << QString() << QString();
     QTest::newRow("invalid-fragment-1") << QUrl("http://example.com")
                                         << int(Fragment) << "{}" << Strict << false
-                                        << PrettyDecoded << "" << "";
+                                        << PrettyDecoded << QString() << QString();
 
     // these test cases are "compound invalid":
     // they produces isValid == false, but the original is still available
     QTest::newRow("invalid-path-1") << QUrl("/relative")
                                     << int(Path) << "c:/" << Strict << false
-                                    << PrettyDecoded << "c:/" << "";
+                                    << PrettyDecoded << "c:/" << QString();
     QTest::newRow("invalid-path-2") << QUrl("http://example.com")
                                     << int(Path) << "relative" << Strict << false
-                                    << PrettyDecoded << "relative" << "";
+                                    << PrettyDecoded << "relative" << QString();
     QTest::newRow("invalid-path-3") << QUrl("trash:/")
                                     << int(Path) << "//path" << Tolerant << false
-                                    << PrettyDecoded << "//path" << "";
+                                    << PrettyDecoded << "//path" << QString();
 
     // -- test bad percent encoding --
     // unnecessary to test the scheme, since percent-decoding is not performed in it;
     // see tests above
     QTest::newRow("bad-percent-username") << QUrl("http://example.com")
                                           << int(UserName) << "bar%foo" << Strict << false
-                                          << PrettyDecoded << "" << "";
+                                          << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-password") << QUrl("http://user@example.com")
                                           << int(Password) << "bar%foo" << Strict << false
-                                          << PrettyDecoded << "" << "";
+                                          << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-userinfo-1") << QUrl("http://example.com")
                                             << int(UserInfo) << "bar%foo" << Strict << false
-                                            << PrettyDecoded << "" << "";
+                                            << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-userinfo-2") << QUrl("http://example.com")
                                             << int(UserInfo) << "bar%:foo" << Strict << false
-                                            << PrettyDecoded << "" << "";
+                                            << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-userinfo-3") << QUrl("http://example.com")
                                             << int(UserInfo) << "bar:%foo" << Strict << false
-                                            << PrettyDecoded << "" << "";
+                                            << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-authority-1") << QUrl("http://example.com")
                                              << int(Authority) << "bar%foo@example.org" << Strict << false
-                                             << PrettyDecoded << "" << "";
+                                             << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-authority-2") << QUrl("http://example.com")
                                              << int(Authority) << "bar%:foo@example.org" << Strict << false
-                                             << PrettyDecoded << "" << "";
+                                             << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-authority-3") << QUrl("http://example.com")
                                              << int(Authority) << "bar:%foo@example.org" << Strict << false
-                                             << PrettyDecoded << "" << "";
+                                             << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-authority-4") << QUrl("http://example.com")
                                              << int(Authority) << "bar:foo@bar%foo" << Strict << false
-                                             << PrettyDecoded << "" << "";
+                                             << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-host") << QUrl("http://example.com")
                                       << int(Host) << "bar%foo" << Strict << false
-                                      << PrettyDecoded << "" << "";
+                                      << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-path") << QUrl("http://example.com")
                                       << int(Path) << "/bar%foo" << Strict << false
-                                      << PrettyDecoded << "" << "";
+                                      << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-query") << QUrl("http://example.com")
                                        << int(Query) << "bar%foo" << Strict << false
-                                       << PrettyDecoded << "" << "";
+                                       << PrettyDecoded << QString() << QString();
     QTest::newRow("bad-percent-fragment") << QUrl("http://example.com")
                                           << int(Fragment) << "bar%foo" << Strict << false
-                                          << PrettyDecoded << "" << "";
+                                          << PrettyDecoded << QString() << QString();
 
     // -- test decoded behaviour --
     // '%' characters are not permitted in the scheme, this tests that it fails to set anything
@@ -3935,7 +3914,7 @@ void tst_QUrl::setComponents_data()
     // '%' characters are not permitted in the hostname, these test that it fails to set anything
     QTest::newRow("invalid-host-encode") << QUrl("http://example.com")
                                          << int(Host) << "ex%61mple.com" << Decoded << false
-                                         << PrettyDecoded << "" << "";
+                                         << PrettyDecoded << QString() << QString();
     QTest::newRow("path-encode") << QUrl("http://example.com/foo")
                                  << int(Path) << "/bar%23" << Decoded << true
                                  << PrettyDecoded << "/bar%2523" << "http://example.com/bar%2523";
@@ -3974,41 +3953,44 @@ void tst_QUrl::setComponents()
     QFETCH(int, encoding);
     QFETCH(QString, output);
 
+#define QNULLCOMPARE(a, b)     \
+    do { QCOMPARE(a, b); QCOMPARE(a.isNull(), b.isNull()); } while (false)
+
     switch (component) {
     case Scheme:
         // scheme is only parsed in strict mode
         copy.setScheme(newValue);
-        QCOMPARE(copy.scheme(), output);
+        QCOMPARE(copy.scheme(), output);    // schemes don't become null
         break;
 
     case Path:
         copy.setPath(newValue, QUrl::ParsingMode(parsingMode));
-        QCOMPARE(copy.path(QUrl::ComponentFormattingOptions(encoding)), output);
+        QNULLCOMPARE(copy.path(QUrl::ComponentFormattingOptions(encoding)), output);
         break;
 
     case UserInfo:
         copy.setUserInfo(newValue, QUrl::ParsingMode(parsingMode));
-        QCOMPARE(copy.userInfo(QUrl::ComponentFormattingOptions(encoding)), output);
+        QNULLCOMPARE(copy.userInfo(QUrl::ComponentFormattingOptions(encoding)), output);
         break;
 
     case UserName:
         copy.setUserName(newValue, QUrl::ParsingMode(parsingMode));
-        QCOMPARE(copy.userName(QUrl::ComponentFormattingOptions(encoding)), output);
+        QNULLCOMPARE(copy.userName(QUrl::ComponentFormattingOptions(encoding)), output);
         break;
 
     case Password:
         copy.setPassword(newValue, QUrl::ParsingMode(parsingMode));
-        QCOMPARE(copy.password(QUrl::ComponentFormattingOptions(encoding)), output);
+        QNULLCOMPARE(copy.password(QUrl::ComponentFormattingOptions(encoding)), output);
         break;
 
     case Host:
         copy.setHost(newValue, QUrl::ParsingMode(parsingMode));
-        QCOMPARE(copy.host(QUrl::ComponentFormattingOptions(encoding)), output);
+        QNULLCOMPARE(copy.host(QUrl::ComponentFormattingOptions(encoding)), output);
         break;
 
     case Authority:
         copy.setAuthority(newValue, QUrl::ParsingMode(parsingMode));
-        QCOMPARE(copy.authority(QUrl::ComponentFormattingOptions(encoding)), output);
+        QNULLCOMPARE(copy.authority(QUrl::ComponentFormattingOptions(encoding)), output);
         break;
 
     case Query:
@@ -4023,6 +4005,7 @@ void tst_QUrl::setComponents()
         QCOMPARE(copy.fragment(QUrl::ComponentFormattingOptions(encoding)), output);
         break;
     }
+#undef QNULLCOMPARE
 
     QFETCH(bool, isValid);
     QCOMPARE(copy.isValid(), isValid);

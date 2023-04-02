@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QtCore/QCoreApplication>
@@ -59,7 +34,9 @@ private slots:
     // keep last
     void moreThan4GiBOfData_data();
     void moreThan4GiBOfData();
+    void keccakBufferOverflow();
 private:
+    void ensureLargeData();
     std::vector<char> large;
 };
 
@@ -78,15 +55,17 @@ void tst_QCryptographicHash::repeated_result()
     hash.addData(first);
 
     QFETCH(QByteArray, hash_first);
-    QByteArray result = hash.result();
+    QByteArrayView result = hash.resultView();
     QCOMPARE(result, hash_first);
+    QCOMPARE(result, hash.resultView());
     QCOMPARE(result, hash.result());
 
     hash.reset();
     hash.addData(first);
-    result = hash.result();
+    result = hash.resultView();
     QCOMPARE(result, hash_first);
     QCOMPARE(result, hash.result());
+    QCOMPARE(result, hash.resultView());
 }
 
 void tst_QCryptographicHash::intermediary_result_data()
@@ -179,16 +158,14 @@ void tst_QCryptographicHash::intermediary_result()
     hash.addData(first);
 
     QFETCH(QByteArray, hash_first);
-    QByteArray result = hash.result();
-    QCOMPARE(result, hash_first);
+    QCOMPARE(hash.resultView(), hash_first);
 
     // don't reset
     QFETCH(QByteArray, second);
     QFETCH(QByteArray, hash_firstsecond);
     hash.addData(second);
 
-    result = hash.result();
-    QCOMPARE(result, hash_firstsecond);
+    QCOMPARE(hash.resultView(), hash_firstsecond);
 
     hash.reset();
 }
@@ -209,10 +186,7 @@ void tst_QCryptographicHash::sha1()
 
 //  SHA1(A million repetitions of "a") =
 //      34AA973C D4C4DAA4 F61EEB2B DBAD2731 6534016F
-    QByteArray as;
-    for (int i = 0; i < 1000000; ++i)
-        as += 'a';
-    QCOMPARE(QCryptographicHash::hash(as, QCryptographicHash::Sha1).toHex().toUpper(),
+    QCOMPARE(QCryptographicHash::hash(QByteArray(1'000'000, 'a'), QCryptographicHash::Sha1).toHex().toUpper(),
              QByteArray("34AA973CD4C4DAA4F61EEB2BDBAD27316534016F"));
 }
 
@@ -425,16 +399,18 @@ void tst_QCryptographicHash::hashLength()
 {
     QFETCH(const QCryptographicHash::Algorithm, algorithm);
 
-    QByteArray output = QCryptographicHash::hash(QByteArrayLiteral("test"), algorithm);
+    QByteArray output = QCryptographicHash::hash("test", algorithm);
     QCOMPARE(QCryptographicHash::hashLength(algorithm), output.length());
 }
 
-void tst_QCryptographicHash::moreThan4GiBOfData_data()
+void tst_QCryptographicHash::ensureLargeData()
 {
 #if QT_POINTER_SIZE > 4
     QElapsedTimer timer;
     timer.start();
     const size_t GiB = 1024 * 1024 * 1024;
+    if (large.size() == 4 * GiB + 1)
+        return;
     try {
         large.resize(4 * GiB + 1, '\0');
     } catch (const std::bad_alloc &) {
@@ -443,7 +419,14 @@ void tst_QCryptographicHash::moreThan4GiBOfData_data()
     QCOMPARE(large.size(), 4 * GiB + 1);
     large.back() = '\1';
     qDebug("created dataset in %lld ms", timer.elapsed());
+#endif
+}
 
+void tst_QCryptographicHash::moreThan4GiBOfData_data()
+{
+#if QT_POINTER_SIZE > 4
+    if (ensureLargeData(); large.empty())
+        return;
     QTest::addColumn<QCryptographicHash::Algorithm>("algorithm");
     auto me = QMetaEnum::fromType<QCryptographicHash::Algorithm>();
     auto row = [me] (QCryptographicHash::Algorithm algo) {
@@ -483,27 +466,55 @@ void tst_QCryptographicHash::moreThan4GiBOfData()
         qDebug() << algorithm << "test finished in" << timer.restart() << "ms";
     });
 
-    const auto begin = large.data();
-    const auto mid = begin + large.size() / 2;
-    const auto end = begin + large.size();
+    const auto view = QByteArrayView{large};
+    const auto first = view.first(view.size() / 2);
+    const auto last = view.sliced(view.size() / 2);
 
     QByteArray single;
     QByteArray chunked;
 
     auto t = MaybeThread{[&] {
         QCryptographicHash h(algorithm);
-        h.addData(begin, end - begin);
+        h.addData(view);
         single = h.result();
     }};
     {
         QCryptographicHash h(algorithm);
-        h.addData(begin, mid - begin);
-        h.addData(mid, end - mid);
+        h.addData(first);
+        h.addData(last);
         chunked = h.result();
     }
     t.join();
 
     QCOMPARE(single, chunked);
+}
+
+void tst_QCryptographicHash::keccakBufferOverflow()
+{
+#if QT_POINTER_SIZE == 4
+    QSKIP("This is a 64-bit-only test");
+#else
+
+    if (ensureLargeData(); large.empty())
+        return;
+
+    QElapsedTimer timer;
+    timer.start();
+    const auto sg = qScopeGuard([&] {
+        qDebug() << "test finished in" << timer.restart() << "ms";
+    });
+
+    constexpr qsizetype magic = INT_MAX/4;
+    QCOMPARE_GE(large.size(), size_t(magic + 1));
+
+    QCryptographicHash hash(QCryptographicHash::Algorithm::Keccak_224);
+    const auto first = QByteArrayView{large}.first(1);
+    const auto second = QByteArrayView{large}.sliced(1, magic);
+    hash.addData(first);
+    hash.addData(second);
+    (void)hash.resultView();
+    QVERIFY(true); // didn't crash
+#endif
 }
 
 QTEST_MAIN(tst_QCryptographicHash)

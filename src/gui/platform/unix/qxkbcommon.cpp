@@ -1,47 +1,12 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qxkbcommon_p.h"
 
 #include <private/qmakearray_p.h>
 
 #include <QtCore/private/qstringiterator_p.h>
+#include <QtCore/qvarlengtharray.h>
 #include <QtCore/QMetaMethod>
 
 #include <QtGui/QKeyEvent>
@@ -496,7 +461,7 @@ QList<xkb_keysym_t> QXkbCommon::toKeysym(QKeyEvent *event)
     // From libxkbcommon keysym-utf.c:
     // "We allow to represent any UCS character in the range U-00000000 to
     // U-00FFFFFF by a keysym value in the range 0x01000000 to 0x01ffffff."
-    for (uint utf32 : qAsConst(ucs4))
+    for (uint utf32 : std::as_const(ucs4))
         keysyms.append(utf32 | 0x01000000);
 
     return keysyms;
@@ -717,7 +682,7 @@ QList<int> QXkbCommon::possibleKeys(xkb_state *state, const QKeyEvent *event,
             // catch only more specific shortcuts, i.e. Ctrl+Shift+= also generates Ctrl++ and +,
             // but Ctrl++ is more specific than +, so we should skip the last one
             bool ambiguous = false;
-            for (int shortcut : qAsConst(result)) {
+            for (int shortcut : std::as_const(result)) {
                 if (int(shortcut & ~Qt::KeyboardModifierMask) == qtKey && (shortcut & mods) == mods) {
                     ambiguous = true;
                     break;
@@ -822,7 +787,7 @@ void QXkbCommon::setXkbContext(QPlatformInputContext *inputContext, struct xkb_c
     const char *const inputContextClassName = "QComposeInputContext";
     const char *const normalizedSignature = "setXkbContext(xkb_context*)";
 
-    if (inputContext->objectName() != QLatin1String(inputContextClassName))
+    if (inputContext->objectName() != QLatin1StringView(inputContextClassName))
         return;
 
     static const QMetaMethod setXkbContext = [&]() {

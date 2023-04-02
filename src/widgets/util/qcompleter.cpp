@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 /*!
     \class QCompleter
@@ -165,6 +129,8 @@
 #include "QtCore/qdir.h"
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QCompletionModel::QCompletionModel(QCompleterPrivate *c, QObject *parent)
     : QAbstractProxyModel(*new QCompletionModelPrivate, parent),
@@ -360,7 +326,7 @@ int QCompletionModel::rowCount(const QModelIndex &parent) const
 
     if (showAll) {
         // Show all items below current parent, even if we have no valid matches
-        if (engine->curParts.count() != 1  && !engine->matchCount()
+        if (engine->curParts.size() != 1  && !engine->matchCount()
             && !engine->curParent.isValid())
             return 0;
         return d->model->rowCount(engine->curParent);
@@ -445,7 +411,7 @@ void QCompletionEngine::filter(const QStringList& parts)
         return;
 
     QModelIndex parent;
-    for (int i = 0; i < curParts.count() - 1; i++) {
+    for (int i = 0; i < curParts.size() - 1; i++) {
         QString part = curParts.at(i);
         int emi = filter(part, parent, -1).exactMatchIndex;
         if (emi == -1)
@@ -466,7 +432,7 @@ void QCompletionEngine::filter(const QStringList& parts)
 QMatchData QCompletionEngine::filterHistory()
 {
     QAbstractItemModel *source = c->proxy->sourceModel();
-    if (curParts.count() <= 1 || c->proxy->showAll || !source)
+    if (curParts.size() <= 1 || c->proxy->showAll || !source)
         return QMatchData();
 
 #if QT_CONFIG(filesystemmodel)
@@ -550,7 +516,7 @@ void QCompletionEngine::saveInCache(QString part, const QModelIndex& parent, con
         QMap<QModelIndex, CacheItem>::iterator it1 = cache.begin();
         while (it1 != cache.end()) {
             CacheItem& ci = it1.value();
-            int sz = ci.count()/2;
+            int sz = ci.size()/2;
             QMap<QString, QMatchData>::iterator it2 = ci.begin();
             int i = 0;
             while (it2 != ci.end() && i < sz) {
@@ -558,7 +524,7 @@ void QCompletionEngine::saveInCache(QString part, const QModelIndex& parent, con
                 it2 = ci.erase(it2);
                 i++;
             }
-            if (ci.count() == 0) {
+            if (ci.size() == 0) {
               it1 = cache.erase(it1);
             } else {
               ++it1;
@@ -921,7 +887,7 @@ void QCompleterPrivate::_q_autoResizePopup()
 
 void QCompleterPrivate::showPopup(const QRect& rect)
 {
-    const QRect screen = QWidgetPrivate::availableScreenGeometry(widget);
+    const QRect screen = widget->screen()->availableGeometry();
     Qt::LayoutDirection dir = widget->layoutDirection();
     QPoint pos;
     int rh, w;
@@ -983,7 +949,7 @@ static bool completeOnLoaded(const QFileSystemModel *model,
     if (prefixSize == pathSize)
         return path.compare(prefix, caseSensitivity) == 0 && isRoot(model, path);
     // The user is typing something within that directory and is not in a subdirectory yet.
-    const auto separator = QLatin1Char('/');
+    const auto separator = u'/';
     return prefix.startsWith(path, caseSensitivity) && prefix.at(pathSize) == separator
         && !QStringView{prefix}.right(prefixSize - pathSize - 1).contains(separator);
 }
@@ -1100,6 +1066,8 @@ void QCompleter::setModel(QAbstractItemModel *model)
 {
     Q_D(QCompleter);
     QAbstractItemModel *oldModel = d->proxy->sourceModel();
+    if (oldModel == model)
+        return;
 #if QT_CONFIG(filesystemmodel)
     if (qobject_cast<const QFileSystemModel *>(oldModel))
         setCompletionRole(Qt::EditRole); // QTBUG-54642, clear FileNameRole set by QFileSystemModel
@@ -1843,7 +1811,7 @@ QString QCompleter::pathFromIndex(const QModelIndex& index) const
     } while (idx.isValid());
 
 #if !defined(Q_OS_WIN)
-    if (list.count() == 1) // only the separator or some other text
+    if (list.size() == 1) // only the separator or some other text
         return list[0];
     list[0].clear() ; // the join below will provide the separator
 #endif
@@ -1876,9 +1844,9 @@ QStringList QCompleter::splitPath(const QString& path) const
 
     QString pathCopy = QDir::toNativeSeparators(path);
 #if defined(Q_OS_WIN)
-    if (pathCopy == QLatin1String("\\") || pathCopy == QLatin1String("\\\\"))
+    if (pathCopy == "\\"_L1 || pathCopy == "\\\\"_L1)
         return QStringList(pathCopy);
-    const bool startsWithDoubleSlash = pathCopy.startsWith(QLatin1String("\\\\"));
+    const bool startsWithDoubleSlash = pathCopy.startsWith("\\\\"_L1);
     if (startsWithDoubleSlash)
         pathCopy = pathCopy.mid(2);
 #endif
@@ -1888,10 +1856,10 @@ QStringList QCompleter::splitPath(const QString& path) const
 
 #if defined(Q_OS_WIN)
     if (startsWithDoubleSlash)
-        parts[0].prepend(QLatin1String("\\\\"));
+        parts[0].prepend("\\\\"_L1);
 #else
     if (pathCopy[0] == sep) // readd the "/" at the beginning as the split removed it
-        parts[0] = QLatin1Char('/');
+        parts[0] = u'/';
 #endif
 
     return parts;

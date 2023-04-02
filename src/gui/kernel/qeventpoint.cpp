@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qeventpoint.h"
 #include "private/qeventpoint_p.h"
@@ -466,6 +430,7 @@ QPointF QEventPoint::normalizedPosition() const
     return (globalPosition() - geom.topLeft()) / geom.width();
 }
 
+#if QT_DEPRECATED_SINCE(6, 0)
 /*!
     \deprecated [6.0] Use globalPressPosition() instead.
 
@@ -503,7 +468,7 @@ QPointF QEventPoint::lastNormalizedPos() const
         return QPointF();
     return (globalLastPosition() - geom.topLeft()) / geom.width();
 }
-
+#endif // QT_DEPRECATED_SINCE(6, 0)
 
 /*! \internal
     This class is explicitly shared, which means if you construct an event and
@@ -515,17 +480,17 @@ QPointF QEventPoint::lastNormalizedPos() const
     modify an independent copy. (The independent copy can then be used in a
     subsequent event.)
 */
-void QMutableEventPoint::detach()
+void QMutableEventPoint::detach(QEventPoint &p)
 {
-    if (d)
-        d.detach();
+    if (p.d)
+        p.d.detach();
     else
-        d.reset(new QEventPointPrivate(-1, nullptr));
+        p.d.reset(new QEventPointPrivate(-1, nullptr));
 }
 
 /*! \internal
-    Update current state from the given \a other point, assuming that this
-    instance contains state from the previous event and \a other contains new
+    Update \a target state from the \a other point, assuming that \a target
+    contains state from the previous event and \a other contains new
     values that came in from a device.
 
     That is: global position and other valuators will be updated, but
@@ -537,40 +502,40 @@ void QMutableEventPoint::detach()
     \li properties that should be persistent between events (such as grabbers)
     \endlist
 */
-void QMutableEventPoint::updateFrom(const QEventPoint &other)
+void QMutableEventPoint::update(const QEventPoint &other, QEventPoint &target)
 {
-    detach();
-    setPressure(other.pressure());
+    detach(target);
+    setPressure(target, other.pressure());
 
     switch (other.state()) {
     case QEventPoint::State::Pressed:
-        setGlobalPressPosition(other.globalPosition());
-        setGlobalLastPosition(other.globalPosition());
-        if (pressure() < 0)
-            setPressure(1);
+        setGlobalPressPosition(target, other.globalPosition());
+        setGlobalLastPosition(target, other.globalPosition());
+        if (target.pressure() < 0)
+            setPressure(target, 1);
         break;
 
     case QEventPoint::State::Released:
-        if (globalPosition() != other.globalPosition())
-            setGlobalLastPosition(globalPosition());
-        setPressure(0);
+        if (target.globalPosition() != other.globalPosition())
+            setGlobalLastPosition(target, target.globalPosition());
+        setPressure(target, 0);
         break;
 
     default: // update or stationary
-        if (globalPosition() != other.globalPosition())
-            setGlobalLastPosition(globalPosition());
-        if (pressure() < 0)
-            setPressure(1);
+        if (target.globalPosition() != other.globalPosition())
+            setGlobalLastPosition(target, target.globalPosition());
+        if (target.pressure() < 0)
+            setPressure(target, 1);
         break;
     }
 
-    setState(other.state());
-    setPosition(other.position());
-    setScenePosition(other.scenePosition());
-    setGlobalPosition(other.globalPosition());
-    setEllipseDiameters(other.ellipseDiameters());
-    setRotation(other.rotation());
-    setVelocity(other.velocity());
+    setState(target, other.state());
+    setPosition(target, other.position());
+    setScenePosition(target, other.scenePosition());
+    setGlobalPosition(target, other.globalPosition());
+    setEllipseDiameters(target, other.ellipseDiameters());
+    setRotation(target, other.rotation());
+    setVelocity(target, other.velocity());
 }
 
 /*! \internal
@@ -591,33 +556,33 @@ void QMutableEventPoint::updateFrom(const QEventPoint &other)
     The velocity calculation is skipped if the platform has promised to
     provide velocities already by setting the QInputDevice::Velocity capability.
 */
-void QMutableEventPoint::setTimestamp(const ulong t)
+void QMutableEventPoint::setTimestamp(QEventPoint &p, ulong t)
 {
     // On mouse press, if the mouse has moved from its last-known location,
     // QGuiApplicationPrivate::processMouseEvent() sends first a mouse move and
     // then a press. Both events will get the same timestamp. So we need to set
     // the press timestamp and position even when the timestamp isn't advancing,
     // but skip setting lastTimestamp and velocity because those need a time delta.
-    if (d) {
-        if (state() == QEventPoint::State::Pressed) {
-            d->pressTimestamp = t;
-            d->globalPressPos = d->globalPos;
+    if (p.d) {
+        if (p.state() == QEventPoint::State::Pressed) {
+            p.d->pressTimestamp = t;
+            p.d->globalPressPos = p.d->globalPos;
         }
-        if (d->timestamp == t)
+        if (p.d->timestamp == t)
             return;
     }
-    detach();
-    if (device()) {
+    detach(p);
+    if (p.device()) {
         // get the persistent instance out of QPointingDevicePrivate::activePoints
         // (which sometimes might be the same as this instance)
         QEventPointPrivate *pd = QPointingDevicePrivate::get(
-                    const_cast<QPointingDevice *>(d->device))->pointById(id())->eventPoint.d.get();
+                    const_cast<QPointingDevice *>(p.d->device))->pointById(p.id())->eventPoint.d.get();
         if (t > pd->timestamp) {
             pd->lastTimestamp = pd->timestamp;
             pd->timestamp = t;
-            if (state() == QEventPoint::State::Pressed)
+            if (p.state() == QEventPoint::State::Pressed)
                 pd->pressTimestamp = t;
-            if (pd->lastTimestamp > 0 && !device()->capabilities().testFlag(QInputDevice::Capability::Velocity)) {
+            if (pd->lastTimestamp > 0 && !p.device()->capabilities().testFlag(QInputDevice::Capability::Velocity)) {
                 // calculate instantaneous velocity according to time and distance moved since the previous point
                 QVector2D newVelocity = QVector2D(pd->globalPos - pd->globalLastPos) / (t - pd->lastTimestamp) * 1000;
                 // VERY simple kalman filter: does a weighted average
@@ -628,17 +593,17 @@ void QMutableEventPoint::setTimestamp(const ulong t)
                                          "based on movement" << pd->globalLastPos << "->" << pd->globalPos <<
                                          "over time" << pd->lastTimestamp << "->" << pd->timestamp;
             }
-            if (d != pd) {
-                d->lastTimestamp = pd->lastTimestamp;
-                d->velocity = pd->velocity;
+            if (p.d != pd) {
+                p.d->lastTimestamp = pd->lastTimestamp;
+                p.d->velocity = pd->velocity;
             }
         }
     }
-    d->timestamp = t;
+    p.d->timestamp = t;
 }
 
 /*!
-    \fn void QMutableEventPoint::setPosition(const QPointF &pos)
+    \fn void QMutableEventPoint::setPosition(QPointF pos)
     \internal
 
     Sets the localized position.
@@ -649,3 +614,5 @@ void QMutableEventPoint::setTimestamp(const ulong t)
 */
 
 QT_END_NAMESPACE
+
+#include "moc_qeventpoint.cpp"

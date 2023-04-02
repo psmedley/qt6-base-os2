@@ -1,24 +1,15 @@
-# Generated from hellovulkancubes.pro.
-
 cmake_minimum_required(VERSION 3.16)
 project(hellovulkancubes LANGUAGES CXX)
 
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
-
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-  set(INSTALL_EXAMPLESDIR "examples")
+    set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/vulkan/hellovulkancubes")
 
-find_package(Qt6 COMPONENTS Core)
-find_package(Qt6 COMPONENTS Gui)
-find_package(Qt6 COMPONENTS Widgets)
-find_package(Qt6 COMPONENTS Concurrent)
+find_package(Qt6 REQUIRED COMPONENTS Concurrent Core Gui Widgets)
 
 qt_add_executable(hellovulkancubes
     camera.cpp camera.h
@@ -29,10 +20,12 @@ qt_add_executable(hellovulkancubes
     shader.cpp shader.h
     vulkanwindow.cpp vulkanwindow.h
 )
+
 set_target_properties(hellovulkancubes PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
+
 target_link_libraries(hellovulkancubes PUBLIC
     Qt::Concurrent
     Qt::Core
@@ -40,14 +33,15 @@ target_link_libraries(hellovulkancubes PUBLIC
     Qt::Widgets
 )
 
-
 # Resources:
 set_source_files_properties("../shared/block.buf"
     PROPERTIES QT_RESOURCE_ALIAS "block.buf"
 )
+
 set_source_files_properties("../shared/qt_logo.buf"
     PROPERTIES QT_RESOURCE_ALIAS "qt_logo.buf"
 )
+
 set(hellovulkancubes_resource_files
     "../shared/block.buf"
     "../shared/qt_logo.buf"

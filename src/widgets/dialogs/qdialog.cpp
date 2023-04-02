@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtWidgets/qtwidgetsglobal.h>
 #if QT_CONFIG(colordialog)
@@ -70,7 +34,7 @@
 #include <qpa/qplatformtheme.h>
 #include "private/qdialog_p.h"
 #include "private/qguiapplication_p.h"
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 #include "qaccessible.h"
 #endif
 
@@ -146,16 +110,39 @@ bool QDialogPrivate::canBeNativeDialog() const
 /*!
     \internal
 
-    Properly hides dialog and sets the \a resultCode.
+    Properly closes dialog and sets the \a resultCode.
  */
-void QDialogPrivate::hide(int resultCode)
+void QDialogPrivate::close(int resultCode)
 {
     Q_Q(QDialog);
 
     q->setResult(resultCode);
-    q->hide();
 
-    close_helper(QWidgetPrivate::CloseNoEvent);
+    if (!data.is_closing) {
+        // Until Qt 6.3 we didn't close dialogs, so they didn't receive a QCloseEvent.
+        // It is likely that subclasses implement closeEvent and handle them as rejection
+        // (like QMessageBox and QProgressDialog do), so eat those events.
+        struct CloseEventEater : QObject
+        {
+            using QObject::QObject;
+        protected:
+            bool eventFilter(QObject *o, QEvent *e) override
+            {
+                if (e->type() == QEvent::Close)
+                    return true;
+                return QObject::eventFilter(o, e);
+            }
+        } closeEventEater;
+        q->installEventFilter(&closeEventEater);
+        QWidgetPrivate::close();
+    } else {
+        // If the close was initiated outside of QDialog we will end up
+        // here via QDialog::closeEvent calling reject(), in which case
+        // we need to hide the dialog to ensure QDialog::closeEvent does
+        // not ignore the close event. FIXME: Why is QDialog doing this?
+        q->hide();
+    }
+
     resetModalitySetByOpen();
 }
 
@@ -357,8 +344,7 @@ void QDialogPrivate::deletePlatformHelper()
 
     \snippet dialogs/dialogs.cpp 0
 
-    \sa QDialogButtonBox, QTabWidget, QWidget, QProgressDialog,
-        {fowler}{GUI Design Handbook: Dialogs, Standard}, {Extension Example},
+    \sa QDialogButtonBox, QTabWidget, QWidget, QProgressDialog, {Extension Example},
         {Standard Dialogs Example}
 */
 
@@ -632,7 +618,7 @@ int QDialog::exec()
 void QDialog::done(int r)
 {
     Q_D(QDialog);
-    d->hide(r);
+    d->close(r);
     d->finalize(r, r);
 }
 
@@ -826,7 +812,7 @@ void QDialog::setVisible(bool visible)
             }
         }
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
         QAccessibleEvent event(this, QAccessible::DialogStart);
         QAccessible::updateAccessibility(&event);
 #endif
@@ -835,7 +821,7 @@ void QDialog::setVisible(bool visible)
         if (testAttribute(Qt::WA_WState_ExplicitShowHide) && testAttribute(Qt::WA_WState_Hidden))
             return;
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
         if (isVisible()) {
             QAccessibleEvent event(this, QAccessible::DialogEnd);
             QAccessible::updateAccessibility(&event);

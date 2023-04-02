@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
@@ -77,6 +52,7 @@ private slots:
     void cleanup();
     void repolish();
     void repolish_without_crashing();
+    void repolish_children();
     void numinstances();
     void widgetsBeforeAppStyleSheet();
     void widgetsAfterAppStyleSheet();
@@ -441,6 +417,19 @@ void tst_QStyleSheetStyle::repolish_without_crashing()
     splitter1->addWidget(splitter2.data());
     w.show();
     QCOMPARE(COLOR(*label), QColor(Qt::red));
+}
+
+void tst_QStyleSheetStyle::repolish_children()
+{
+    QWidget parent;
+    parent.setStyleSheet("QPushButton { color: red; background: white }");
+    QPushButton p2(&parent);
+    // a layout would call show, triggering a polish of the child while
+    // the parent on which the style sheet is set remains unpolished
+    p2.show();
+    QCOMPARE(BACKGROUND(p2), Qt::white);
+    parent.setStyleSheet("QPushButton { color: red; background: red }");
+    QCOMPARE(BACKGROUND(p2), Qt::red);
 }
 
 void tst_QStyleSheetStyle::widgetStyle()
@@ -970,7 +959,7 @@ void tst_QStyleSheetStyle::focusColors()
     // ten pixels of the right color requires quite a many characters, as the
     // majority of the pixels will have slightly different colors due to the
     // anti-aliasing effect.
-#if !defined(Q_OS_WIN32) && !(defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(Q_CC_INTEL))
+#if !defined(Q_OS_WIN32) && !(defined(Q_OS_LINUX) && defined(Q_CC_GNU))
     QSKIP("This is a fragile test which fails on many esoteric platforms because of focus problems"
           " (for example, QTBUG-33959)."
           "That doesn't mean that the feature doesn't work in practice.");
@@ -1718,7 +1707,7 @@ void tst_QStyleSheetStyle::toolTip()
                                  normalToolTip };
 
     QWidgetList topLevels;
-    for (int i = 0; i < widgets.count() ; ++i) {
+    for (int i = 0; i < widgets.size() ; ++i) {
         QWidget *wid = widgets.at(i);
         QColor col = colors.at(i);
 
@@ -1726,7 +1715,7 @@ void tst_QStyleSheetStyle::toolTip()
 
         topLevels = QApplication::topLevelWidgets();
         QWidget *tooltip = nullptr;
-        for (QWidget *widget : qAsConst(topLevels)) {
+        for (QWidget *widget : std::as_const(topLevels)) {
             if (widget->inherits("QTipLabel")) {
                 tooltip = widget;
                 break;
@@ -1742,7 +1731,7 @@ void tst_QStyleSheetStyle::toolTip()
     delete wid3; //should not crash;
     QTest::qWait(10);
     topLevels = QApplication::topLevelWidgets();
-    for (QWidget *widget : qAsConst(topLevels))
+    for (QWidget *widget : std::as_const(topLevels))
         widget->update(); //should not crash either
 }
 
@@ -2350,11 +2339,19 @@ void tst_QStyleSheetStyle::placeholderColor()
     QLineEdit le2;
     le2.setEnabled(false);
     le1.ensurePolished();
-    QCOMPARE(le1.palette().placeholderText(), red);
+    QColor phColor = le1.palette().placeholderText().color();
+    QCOMPARE(phColor.rgb(), red.rgb());
+    QVERIFY(phColor.alpha() < red.alpha());
+
     le2.ensurePolished();
-    QCOMPARE(le2.palette().placeholderText(), red);
+    phColor = le2.palette().placeholderText().color();
+    QCOMPARE(phColor.rgb(), red.rgb());
+    QVERIFY(phColor.alpha() < red.alpha());
+
     le2.setEnabled(true);
-    QCOMPARE(le2.palette().placeholderText(), red);
+    phColor = le2.palette().placeholderText().color();
+    QCOMPARE(phColor.rgb(), red.rgb());
+    QVERIFY(phColor.alpha() < red.alpha());
 }
 
 void tst_QStyleSheetStyle::enumPropertySelector_data()

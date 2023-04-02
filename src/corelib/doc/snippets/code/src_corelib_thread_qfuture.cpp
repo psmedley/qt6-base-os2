@@ -1,52 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:BSD$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** BSD License Usage
-** Alternatively, you may use this file under the terms of the BSD license
-** as follows:
-**
-** "Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions are
-** met:
-**   * Redistributions of source code must retain the above copyright
-**     notice, this list of conditions and the following disclaimer.
-**   * Redistributions in binary form must reproduce the above copyright
-**     notice, this list of conditions and the following disclaimer in
-**     the documentation and/or other materials provided with the
-**     distribution.
-**   * Neither the name of The Qt Company Ltd nor the names of its
-**     contributors may be used to endorse or promote products derived
-**     from this software without specific prior written permission.
-**
-**
-** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 //! [0]
 QFuture<QString> future = ...;
@@ -311,3 +264,124 @@ auto resultFuture = testFuture.then([](int res) {
     return -1;
 });
 //! [21]
+
+//! [22]
+QList<QFuture<int>> inputFutures {...};
+
+// whenAll has type QFuture<QList<QFuture<int>>>
+auto whenAll = QtFuture::whenAll(inputFutures.begin(), inputFutures.end());
+
+// whenAllVector has type QFuture<std::vector<QFuture<int>>>
+auto whenAllVector =
+        QtFuture::whenAll<std::vector<QFuture<int>>>(inputFutures.begin(), inputFutures.end());
+//! [22]
+
+//! [23]
+QList<QFuture<int>> inputFutures {...};
+
+QtFuture::whenAll(inputFutures.begin(), inputFutures.end())
+        .then([](const QList<QFuture<int>> &results) {
+            for (auto future : results) {
+                if (future.isCanceled())
+                    // handle the cancellation (possibly due to an exception)
+                else
+                    // do something with the result
+            }
+        });
+//! [23]
+
+//! [24]
+
+QFuture<int> intFuture = ...;
+QFuture<QString> stringFuture = ...;
+QFuture<void> voidFuture = ...;
+
+using FuturesVariant = std::variant<QFuture<int>, QFuture<QString>, QFuture<void>>;
+
+// whenAll has type QFuture<QList<FuturesVariant>>
+auto whenAll = QtFuture::whenAll(intFuture, stringFuture, voidFuture);
+
+// whenAllVector has type QFuture<std::vector<FuturesVariant>>
+auto whenAllVector =
+        QtFuture::whenAll<std::vector<FuturesVariant>>(intFuture, stringFuture, voidFuture);
+
+//! [24]
+
+//! [25]
+QFuture<int> intFuture = ...;
+QFuture<QString> stringFuture = ...;
+QFuture<void> voidFuture = ...;
+
+using FuturesVariant = std::variant<QFuture<int>, QFuture<QString>, QFuture<void>>;
+
+QtFuture::whenAll(intFuture, stringFuture, voidFuture)
+        .then([](const QList<FuturesVariant> &results) {
+            ...
+            for (auto result : results)
+            {
+                // assuming handleResult() is overloaded based on the QFuture type
+                std::visit([](auto &&future) { handleResult(future); }, result);
+            }
+            ...
+        });
+//! [25]
+
+//! [26]
+QList<QFuture<int>> inputFutures = ...;
+
+QtFuture::whenAny(inputFutures.begin(), inputFutures.end())
+        .then([](const QtFuture::WhenAnyResult<int> &result) {
+            qsizetype index = result.index;
+            QFuture<int> future = result.future;
+            // ...
+        });
+//! [26]
+
+//! [27]
+QFuture<int> intFuture = ...;
+QFuture<QString> stringFuture = ...;
+QFuture<void> voidFuture = ...;
+
+using FuturesVariant = std::variant<QFuture<int>, QFuture<QString>, QFuture<void>>;
+
+QtFuture::whenAny(intFuture, stringFuture, voidFuture).then([](const FuturesVariant &result) {
+    ...
+    // assuming handleResult() is overloaded based on the QFuture type
+    std::visit([](auto &&future) { handleResult(future); }, result);
+    ...
+});
+//! [27]
+
+//! [28]
+
+QFuture<QFuture<int>> outerFuture = ...;
+QFuture<int> unwrappedFuture = outerFuture.unwrap();
+
+//! [28]
+
+//! [29]
+
+auto downloadImages = [] (const QUrl &url) {
+    QList<QImage> images;
+    ...
+    return images;
+};
+
+auto processImages = [](const QList<QImage> &images) {
+   return QtConcurrent::mappedReduced(images, scale, reduceImages);
+}
+
+auto show = [](const QImage &image) { ... };
+
+auto future = QtConcurrent::run(downloadImages, url)
+               .then(processImages)
+               .unwrap()
+               .then(show);
+//! [29]
+
+//! [30]
+
+QFuture<QFuture<QFuture<int>>>> outerFuture;
+QFuture<int> unwrappedFuture = outerFuture.unwrap();
+
+//! [30]

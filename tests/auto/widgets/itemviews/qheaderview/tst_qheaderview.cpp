@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2012 Thorbjørn Lund Martsum - tmartsum[at]gmail.com
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2012 Thorbjørn Lund Martsum - tmartsum[at]gmail.com
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QHeaderView>
 #include <QProxyStyle>
@@ -171,7 +146,7 @@ private slots:
     void moveSectionAndReset();
     void moveSectionAndRemove();
     void saveRestore();
-    void restoreQt4State();
+    void QTBUG99487_saveRestoreQt5Compat();
     void restoreToMoreColumns();
     void restoreToMoreColumnsNoMovedColumns();
     void restoreBeforeSetModel();
@@ -250,6 +225,7 @@ private slots:
     void testResetCachedSizeHint();
     void statusTips();
     void testRemovingColumnsViaLayoutChanged();
+    void testModelMovingColumns();
 
 protected:
     void setupTestData(bool use_reset_model = false);
@@ -349,6 +325,12 @@ public:
         beginRemoveColumns(QModelIndex(), 0, cols - 1);
         cols = 0;
         endRemoveColumns();
+    }
+
+    void moveColumn(int from, int to)
+    {
+        beginMoveColumns(QModelIndex(), from, from, QModelIndex(), to);
+        endMoveColumns();
     }
 
     void cleanup()
@@ -492,7 +474,7 @@ void tst_QHeaderView::init()
 
     QSignalSpy spy(view, &QHeaderView::sectionCountChanged);
     view->setModel(model);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     view->resize(200,200);
 }
 
@@ -813,10 +795,10 @@ void tst_QHeaderView::visualIndexAt()
     for (int i : hidden)
         view->setSectionHidden(i, true);
 
-    for (int j = 0; j < from.count(); ++j)
+    for (int j = 0; j < from.size(); ++j)
         view->moveSection(from.at(j), to.at(j));
 
-    for (int k = 0; k < coordinate.count(); ++k)
+    for (int k = 0; k < coordinate.size(); ++k)
         QTRY_COMPARE(view->visualIndexAt(coordinate.at(k)), visual.at(k));
 }
 
@@ -928,14 +910,14 @@ void tst_QHeaderView::swapSections()
     QCOMPARE(view->sectionsMoved(), true);
     for (int i = 0; i < view->count(); ++i)
         QCOMPARE(view->logicalIndex(i), logical.at(i));
-    QCOMPARE(spy1.count(), 4);
+    QCOMPARE(spy1.size(), 4);
 
     logical = { 3, 1, 2, 0 };
     view->swapSections(3, 0);
     QCOMPARE(view->sectionsMoved(), true);
     for (int j = 0; j < view->count(); ++j)
         QCOMPARE(view->logicalIndex(j), logical.at(j));
-    QCOMPARE(spy1.count(), 6);
+    QCOMPARE(spy1.size(), 6);
 }
 
 void tst_QHeaderView::moveSection_data()
@@ -981,9 +963,9 @@ void tst_QHeaderView::moveSection()
     QFETCH(const IntList, logical);
     QFETCH(int, count);
 
-    QCOMPARE(from.count(), to.count());
-    QCOMPARE(from.count(), moved.count());
-    QCOMPARE(view->count(), logical.count());
+    QCOMPARE(from.size(), to.size());
+    QCOMPARE(from.size(), moved.size());
+    QCOMPARE(view->count(), logical.size());
 
     QSignalSpy spy1(view, &QHeaderView::sectionMoved);
     QCOMPARE(view->sectionsMoved(), false);
@@ -991,7 +973,7 @@ void tst_QHeaderView::moveSection()
     for (int h : hidden)
         view->setSectionHidden(h, true);
 
-    for (int i = 0; i < from.count(); ++i) {
+    for (int i = 0; i < from.size(); ++i) {
         view->moveSection(from.at(i), to.at(i));
         QCOMPARE(view->sectionsMoved(), moved.at(i));
     }
@@ -999,7 +981,7 @@ void tst_QHeaderView::moveSection()
     for (int j = 0; j < view->count(); ++j)
         QCOMPARE(view->logicalIndex(j), logical.at(j));
 
-    QCOMPARE(spy1.count(), count);
+    QCOMPARE(spy1.size(), count);
 }
 
 void tst_QHeaderView::resizeAndMoveSection_data()
@@ -1184,14 +1166,14 @@ void  tst_QHeaderView::resizeWithResizeModes()
     QFETCH(const IntList, expected);
 
     view->setStretchLastSection(false);
-    for (int i = 0; i < sections.count(); ++i) {
+    for (int i = 0; i < sections.size(); ++i) {
         view->resizeSection(i, sections.at(i));
         view->setSectionResizeMode(i, modes.at(i));
     }
     topLevel->show();
     QVERIFY(QTest::qWaitForWindowExposed(topLevel));
     view->resize(size, size);
-    for (int j = 0; j < expected.count(); ++j)
+    for (int j = 0; j < expected.size(); ++j)
         QCOMPARE(view->sectionSize(j), expected.at(j));
 }
 
@@ -1218,7 +1200,7 @@ void tst_QHeaderView::moveAndInsertSection()
     view->moveSection(from, to);
     model->insertRow(insert);
 
-    for (int i = 0; i < mapping.count(); ++i)
+    for (int i = 0; i < mapping.size(); ++i)
         QCOMPARE(view->logicalIndex(i), mapping.at(i));
 }
 
@@ -1289,21 +1271,21 @@ void tst_QHeaderView::resizeSection()
     view->setSectionsMovable(true);
     view->setStretchLastSection(false);
 
-    for (int i = 0; i < logical.count(); ++i)
+    for (int i = 0; i < logical.size(); ++i)
         if (logical.at(i) > -1 && logical.at(i) < view->count()) // for now
             view->setSectionResizeMode(logical.at(i), mode.at(i));
 
-    for (int j = 0; j < logical.count(); ++j)
+    for (int j = 0; j < logical.size(); ++j)
         view->resizeSection(logical.at(j), initial);
 
     QSignalSpy spy(view, &QHeaderView::sectionResized);
 
-    for (int k = 0; k < logical.count(); ++k)
+    for (int k = 0; k < logical.size(); ++k)
         view->resizeSection(logical.at(k), size.at(k));
 
-    QCOMPARE(spy.count(), resized);
+    QCOMPARE(spy.size(), resized);
 
-    for (int l = 0; l < logical.count(); ++l)
+    for (int l = 0; l < logical.size(); ++l)
         QCOMPARE(view->sectionSize(logical.at(l)), expected.at(l));
 }
 
@@ -1356,19 +1338,19 @@ void tst_QHeaderView::clearSectionSorting()
 
     QSignalSpy sectionClickedSpy(&h, &QHeaderView::sectionClicked);
     QVERIFY(sectionClickedSpy.isValid());
-    QCOMPARE(sectionClickedSpy.count(), 0);
+    QCOMPARE(sectionClickedSpy.size(), 0);
 
     QSignalSpy sortIndicatorChangedSpy(&h, &QHeaderView::sortIndicatorChanged);
     QVERIFY(sortIndicatorChangedSpy.isValid());
-    QCOMPARE(sortIndicatorChangedSpy.count(), 0);
+    QCOMPARE(sortIndicatorChangedSpy.size(), 0);
 
     enum { Count = 30 };
 
     // normal behavior: clicking multiple times will just toggle the sort indicator
     for (int i = 0; i < Count; ++i) {
         QTest::mouseClick(h.viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
-        QCOMPARE(sectionClickedSpy.count(), i + 1);
-        QCOMPARE(sortIndicatorChangedSpy.count(), i + 1);
+        QCOMPARE(sectionClickedSpy.size(), i + 1);
+        QCOMPARE(sortIndicatorChangedSpy.size(), i + 1);
         QCOMPARE(h.sortIndicatorSection(), 0);
         const auto expectedOrder = (i % 2) == 0 ? Qt::AscendingOrder : Qt::DescendingOrder;
         QCOMPARE(h.sortIndicatorOrder(), expectedOrder);
@@ -1385,8 +1367,8 @@ void tst_QHeaderView::clearSectionSorting()
     // clearing behavior: clicking multiple times will be tristate (asc, desc, nothing)
     for (int i = 0; i < Count; ++i) {
         QTest::mouseClick(h.viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
-        QCOMPARE(sectionClickedSpy.count(), i + 1);
-        QCOMPARE(sortIndicatorChangedSpy.count(), i + 1);
+        QCOMPARE(sectionClickedSpy.size(), i + 1);
+        QCOMPARE(sortIndicatorChangedSpy.size(), i + 1);
         switch (i % 3) {
         case 0:
             QCOMPARE(h.sortIndicatorSection(), 0);
@@ -1511,11 +1493,11 @@ void tst_QHeaderView::testEvent()
 void protected_QHeaderView::testEvent()
 {
     // No crashy please
-    QHoverEvent enterEvent(QEvent::HoverEnter, QPoint(), QPoint());
+    QHoverEvent enterEvent(QEvent::HoverEnter, QPoint(), QPoint(), QPoint());
     event(&enterEvent);
-    QHoverEvent eventLeave(QEvent::HoverLeave, QPoint(), QPoint());
+    QHoverEvent eventLeave(QEvent::HoverLeave, QPoint(), QPoint(), QPoint());
     event(&eventLeave);
-    QHoverEvent eventMove(QEvent::HoverMove, QPoint(), QPoint());
+    QHoverEvent eventMove(QEvent::HoverMove, QPoint(), QPoint(), QPoint());
     event(&eventMove);
 }
 
@@ -1735,18 +1717,26 @@ static QByteArray savedState()
     return h1.saveState();
 }
 
-void tst_QHeaderView::saveRestore()
+// As generated by savedState()
+static const QByteArray qt5SavedSate = QByteArrayLiteral("\x00\x00\x00\xFF\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x02\x01\x00\x00\x00\x04\x00\x00\x00\x02\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00\x02\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x04\b\x00\x00\x00\x01\x00\x00\x00\x03\x00\x00\x00""d\x00\x00\x00\xD2\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00""d\x00\x00\x00\x00\x00\x00\x00\x84\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00""d\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\n\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00""d\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x03\xE8\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+
+enum class SaveRestoreOption
+{
+    CheckGeneratedState,
+    DoNotCheckGeneratedState,
+};
+
+static void saveRestoreImpl(const QByteArray &state, SaveRestoreOption option)
 {
     QStandardItemModel m(4, 4);
-    const QByteArray s1 = savedState();
 
     QHeaderView h2(Qt::Vertical);
     QSignalSpy spy(&h2, &QHeaderView::sortIndicatorChanged);
 
     h2.setModel(&m);
-    QVERIFY(h2.restoreState(s1));
+    QVERIFY(h2.restoreState(state));
 
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     QCOMPARE(spy.at(0).at(0).toInt(), 2);
 
     QCOMPARE(h2.logicalIndex(0), 2);
@@ -1759,50 +1749,28 @@ void tst_QHeaderView::saveRestore()
     QVERIFY(h2.isSectionHidden(3));
     QCOMPARE(h2.hiddenSectionCount(), 1);
 
-    QByteArray s2 = h2.saveState();
-    QCOMPARE(s1, s2);
+    switch (option) {
+    case SaveRestoreOption::CheckGeneratedState:
+    {
+        QByteArray s2 = h2.saveState();
+        QCOMPARE(state, s2);
+        break;
+    }
+    case SaveRestoreOption::DoNotCheckGeneratedState:
+        break;
+    };
 
     QVERIFY(!h2.restoreState(QByteArrayLiteral("Garbage")));
 }
 
-void tst_QHeaderView::restoreQt4State()
+void tst_QHeaderView::saveRestore()
 {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    // QTBUG-40462
-    // Setting from Qt4, where information about multiple sections were grouped together in one
-    // sectionItem object
-    QStandardItemModel m(4, 10);
-    QHeaderView h2(Qt::Vertical);
-    QByteArray settings_qt4 =
-      QByteArray::fromHex("000000ff00000000000000010000000100000000010000000000000000000000000000"
-                          "0000000003e80000000a0101000100000000000000000000000064ffffffff00000081"
-                          "0000000000000001000003e80000000a00000000");
-    QVERIFY(h2.restoreState(settings_qt4));
-    int sectionItemsLengthTotal = 0;
-    for (int i = 0; i < h2.count(); ++i)
-        sectionItemsLengthTotal += h2.sectionSize(i);
-    QCOMPARE(sectionItemsLengthTotal, h2.length());
+    saveRestoreImpl(savedState(), SaveRestoreOption::CheckGeneratedState);
+}
 
-    // Buggy setting where sum(sectionItems) != length. Check false is returned and this corrupted
-    // state isn't restored
-    QByteArray settings_buggy_length =
-      QByteArray::fromHex("000000ff000000000000000100000000000000050100000000000000000000000a4000"
-                          "000000010000000600000258000000fb0000000a010100010000000000000000000000"
-                          "0064ffffffff00000081000000000000000a000000d30000000100000000000000c800"
-                          "000001000000000000008000000001000000000000005c00000001000000000000003c"
-                          "0000000100000000000002580000000100000000000000000000000100000000000002"
-                          "580000000100000000000002580000000100000000000003c000000001000000000000"
-                          "03e8");
-    int old_length = h2.length();
-    QByteArray old_state = h2.saveState();
-    // Check setting is correctly recognized as corrupted
-    QVERIFY(!h2.restoreState(settings_buggy_length));
-    // Check nothing has been actually restored
-    QCOMPARE(h2.length(), old_length);
-    QCOMPARE(h2.saveState(), old_state);
-#else
-    QSKIP("Qt4 compatibility no longer needed in Qt6");
-#endif
+void tst_QHeaderView::QTBUG99487_saveRestoreQt5Compat()
+{
+    saveRestoreImpl(qt5SavedSate, SaveRestoreOption::DoNotCheckGeneratedState);
 }
 
 void tst_QHeaderView::restoreToMoreColumns()
@@ -2072,9 +2040,9 @@ void tst_QHeaderView::sectionPressedSignal()
 
     QSignalSpy spy(&h, &QHeaderView::sectionPressed);
 
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
     QTest::mousePress(h.viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
-    QCOMPARE(spy.count(), count);
+    QCOMPARE(spy.size(), count);
 }
 
 void tst_QHeaderView::sectionClickedSignal()
@@ -2094,19 +2062,19 @@ void tst_QHeaderView::sectionClickedSignal()
     QSignalSpy spy(&h, &QHeaderView::sectionClicked);
     QSignalSpy spy2(&h, &QHeaderView::sortIndicatorChanged);
 
-    QCOMPARE(spy.count(), 0);
-    QCOMPARE(spy2.count(), 0);
+    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy2.size(), 0);
     QTest::mouseClick(h.viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
-    QCOMPARE(spy.count(), count);
-    QCOMPARE(spy2.count(), count);
+    QCOMPARE(spy.size(), count);
+    QCOMPARE(spy2.size(), count);
 
     //now let's try with the sort indicator hidden (the result should be the same
     spy.clear();
     spy2.clear();
     h.setSortIndicatorShown(false);
     QTest::mouseClick(h.viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
-    QCOMPARE(spy.count(), count);
-    QCOMPARE(spy2.count(), count);
+    QCOMPARE(spy.size(), count);
+    QCOMPARE(spy2.size(), count);
 }
 
 void tst_QHeaderView::defaultSectionSize_data()
@@ -2287,7 +2255,7 @@ void tst_QHeaderView::task236450_hidden()
     for (int i : hide1)
         view.hideSection(i);
 
-    QCOMPARE(view.hiddenSectionCount(), hide1.count());
+    QCOMPARE(view.hiddenSectionCount(), hide1.size());
     for (int i = 0; i < 6; i++)
         QCOMPARE(!view.isSectionHidden(i), !hide1.contains(i));
 
@@ -2295,13 +2263,13 @@ void tst_QHeaderView::task236450_hidden()
     view.scheduleDelayedItemsLayout();
     view.executeDelayedItemsLayout(); //force to do a relayout
 
-    QCOMPARE(view.hiddenSectionCount(), hide1.count());
+    QCOMPARE(view.hiddenSectionCount(), hide1.size());
     for (int i = 0; i < 6; i++) {
         QCOMPARE(!view.isSectionHidden(i), !hide1.contains(i));
         view.setSectionHidden(i, hide2.contains(i));
     }
 
-    QCOMPARE(view.hiddenSectionCount(), hide2.count());
+    QCOMPARE(view.hiddenSectionCount(), hide2.size());
     for (int i = 0; i < 6; i++)
         QCOMPARE(!view.isSectionHidden(i), !hide2.contains(i));
 }
@@ -2333,10 +2301,10 @@ void tst_QHeaderView::task248050_hideRow()
 //returns 0 if everything is fine.
 static int checkHeaderViewOrder(const QHeaderView *view, const IntList &expected)
 {
-    if (view->count() != expected.count())
+    if (view->count() != expected.size())
         return 1;
 
-    for (int i = 0; i < expected.count(); i++) {
+    for (int i = 0; i < expected.size(); i++) {
         if (view->logicalIndex(i) != expected.at(i))
             return i + 10;
         if (view->visualIndex(expected.at(i)) != i)
@@ -2427,8 +2395,8 @@ void tst_QHeaderView::QTBUG7833_sectionClicked()
     QTest::mouseClick(tv.horizontalHeader()->viewport(), Qt::LeftButton, Qt::NoModifier,
                       QPoint(tv.horizontalHeader()->sectionViewportPosition(11) +
                              tv.horizontalHeader()->sectionSize(11) / 2, 5));
-    QCOMPARE(clickedSpy.count(), 1);
-    QCOMPARE(pressedSpy.count(), 1);
+    QCOMPARE(clickedSpy.size(), 1);
+    QCOMPARE(pressedSpy.size(), 1);
     QCOMPARE(clickedSpy.at(0).at(0).toInt(), 11);
     QCOMPARE(pressedSpy.at(0).at(0).toInt(), 11);
 
@@ -2436,8 +2404,8 @@ void tst_QHeaderView::QTBUG7833_sectionClicked()
                       QPoint(tv.horizontalHeader()->sectionViewportPosition(8) +
                              tv.horizontalHeader()->sectionSize(0) / 2, 5));
 
-    QCOMPARE(clickedSpy.count(), 2);
-    QCOMPARE(pressedSpy.count(), 2);
+    QCOMPARE(clickedSpy.size(), 2);
+    QCOMPARE(pressedSpy.size(), 2);
     QCOMPARE(clickedSpy.at(1).at(0).toInt(), 8);
     QCOMPARE(pressedSpy.at(1).at(0).toInt(), 8);
 
@@ -2445,8 +2413,8 @@ void tst_QHeaderView::QTBUG7833_sectionClicked()
                       QPoint(tv.horizontalHeader()->sectionViewportPosition(0) +
                              tv.horizontalHeader()->sectionSize(0) / 2, 5));
 
-    QCOMPARE(clickedSpy.count(), 3);
-    QCOMPARE(pressedSpy.count(), 3);
+    QCOMPARE(clickedSpy.size(), 3);
+    QCOMPARE(pressedSpy.size(), 3);
     QCOMPARE(clickedSpy.at(2).at(0).toInt(), 0);
     QCOMPARE(pressedSpy.at(2).at(0).toInt(), 0);
 }
@@ -2573,7 +2541,7 @@ public:
     void insertRowAtBeginning()
     {
         Q_EMIT layoutAboutToBeChanged();
-        m_displayNames.insert(0, QStringLiteral("Item %1").arg(m_displayNames.count()));
+        m_displayNames.insert(0, QStringLiteral("Item %1").arg(m_displayNames.size()));
         // Rows are always inserted at the beginning, so move all others.
         const auto pl = persistentIndexList();
         // The vertical header view will have a persistent index stored here on the second call to insertRowAtBeginning.
@@ -2589,7 +2557,7 @@ public:
 
     QModelIndex index(int row, int column, const QModelIndex &) const override { return createIndex(row, column); }
     QModelIndex parent(const QModelIndex &) const override { return QModelIndex(); }
-    int rowCount(const QModelIndex &) const override { return m_displayNames.count(); }
+    int rowCount(const QModelIndex &) const override { return m_displayNames.size(); }
     int columnCount(const QModelIndex &) const override { return 1; }
 
 private:
@@ -3674,6 +3642,19 @@ void tst_QHeaderView::testRemovingColumnsViaLayoutChanged()
     for (int j = 0; j < model.cols; ++j)
         QCOMPARE(view->sectionSize(j), persistentSectionSize + j);
     // The main point of this test is that the section-size restoring code didn't go out of bounds.
+}
+
+void tst_QHeaderView::testModelMovingColumns()
+{
+    QtTestModel model(10, 10);
+    QHeaderView hv(Qt::Horizontal);
+    hv.setModel(&model);
+    hv.resizeSections(QHeaderView::ResizeToContents);
+    hv.show();
+
+    QPersistentModelIndex index3 = model.index(0, 3);
+    model.moveColumn(3, 1);
+    QCOMPARE(index3.column(), 1);
 }
 
 QTEST_MAIN(tst_QHeaderView)

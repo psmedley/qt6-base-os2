@@ -1,37 +1,13 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 // Used by both tst_qmetatype and tst_qsettings
 
 #ifndef TST_QMETATYPE_H
 #define TST_QMETATYPE_H
 
-#include <qmetatype.h>
+#include <QtCore>
+
 #include <float.h>
 
 #define FOR_EACH_PRIMITIVE_METATYPE(F) \
@@ -61,14 +37,14 @@ template <int ID>
 struct DefaultValueFactory
 {
     typedef typename MetaEnumToType<ID>::Type Type;
-    static Type *create() { return new Type; }
+    static Type *create() { return new Type(); }
 };
 
 template <>
 struct DefaultValueFactory<QMetaType::Void>
 {
     typedef MetaEnumToType<QMetaType::Void>::Type Type;
-    static Type *create() { return 0; }
+    static Type *create() { return nullptr; }
 };
 
 template <int ID>
@@ -78,14 +54,6 @@ struct DefaultValueTraits
     // initialized; e.g. QCOMPARE(*(new T), *(new T)) should succeed
     enum { IsInitialized = true };
 };
-
-#define DEFINE_NON_INITIALIZED_DEFAULT_VALUE_TRAITS(MetaTypeName, MetaTypeId, RealType) \
-template<> struct DefaultValueTraits<QMetaType::MetaTypeName> { \
-    enum { IsInitialized = false }; \
-};
-// Primitive types (int et al) aren't initialized
-FOR_EACH_PRIMITIVE_METATYPE(DEFINE_NON_INITIALIZED_DEFAULT_VALUE_TRAITS)
-#undef DEFINE_NON_INITIALIZED_DEFAULT_VALUE_TRAITS
 
 template <int ID>
 struct TestValueFactory {};

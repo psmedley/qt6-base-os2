@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qeglfscursor_p.h"
 #include "qeglfsintegration_p.h"
@@ -44,6 +8,7 @@
 
 #include <qpa/qwindowsysteminterface.h>
 #include <QtGui/QOpenGLContext>
+#include <QtGui/QOpenGLFunctions>
 #include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonArray>
@@ -57,6 +22,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QEglFSCursor::QEglFSCursor(QPlatformScreen *screen)
   : m_visible(true),
@@ -151,16 +118,18 @@ void QEglFSCursor::createShaderPrograms()
 
 void QEglFSCursor::createCursorTexture(uint *texture, const QImage &image)
 {
+    Q_ASSERT(QOpenGLContext::currentContext());
+    QOpenGLFunctions *f = QOpenGLContext::currentContext()->functions();
     if (!*texture)
-        glGenTextures(1, texture);
-    glBindTexture(GL_TEXTURE_2D, *texture);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        f->glGenTextures(1, texture);
+    f->glBindTexture(GL_TEXTURE_2D, *texture);
+    f->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    f->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    f->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    f->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    glTexImage2D(GL_TEXTURE_2D, 0 /* level */, GL_RGBA, image.width(), image.height(), 0 /* border */,
-                 GL_RGBA, GL_UNSIGNED_BYTE, image.constBits());
+    f->glTexImage2D(GL_TEXTURE_2D, 0 /* level */, GL_RGBA, image.width(), image.height(), 0 /* border */,
+                    GL_RGBA, GL_UNSIGNED_BYTE, image.constBits());
 }
 
 void QEglFSCursor::initCursorAtlas()
@@ -178,14 +147,14 @@ void QEglFSCursor::initCursorAtlas()
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
     QJsonObject object = doc.object();
 
-    QString atlas = object.value(QLatin1String("image")).toString();
+    QString atlas = object.value("image"_L1).toString();
     Q_ASSERT(!atlas.isEmpty());
 
-    const int cursorsPerRow = object.value(QLatin1String("cursorsPerRow")).toDouble();
+    const int cursorsPerRow = object.value("cursorsPerRow"_L1).toDouble();
     Q_ASSERT(cursorsPerRow);
     m_cursorAtlas.cursorsPerRow = cursorsPerRow;
 
-    const QJsonArray hotSpots = object.value(QLatin1String("hotSpots")).toArray();
+    const QJsonArray hotSpots = object.value("hotSpots"_L1).toArray();
     Q_ASSERT(hotSpots.count() == Qt::LastCursor + 1);
     for (int i = 0; i < hotSpots.count(); i++) {
         QPoint hotSpot(hotSpots[i].toArray()[0].toDouble(), hotSpots[i].toArray()[1].toDouble());
@@ -343,8 +312,7 @@ void QEglFSCursor::paintOnScreen()
     // screens are siblings of each other. When not enabled, the sibling list
     // only contains m_screen itself.
     for (QPlatformScreen *screen : m_screen->virtualSiblings()) {
-        if (screen->geometry().contains(cr.topLeft().toPoint() + m_cursor.hotSpot)
-            && QOpenGLContext::currentContext()->screen() == screen->screen())
+        if (screen->geometry().contains(cr.topLeft().toPoint() + m_cursor.hotSpot))
         {
             cr.translate(-screen->geometry().topLeft());
             const QSize screenSize = screen->geometry().size();
@@ -373,8 +341,8 @@ void QEglFSCursor::paintOnScreen()
 // to deal with the changes we make.
 struct StateSaver
 {
-    StateSaver() {
-        f = QOpenGLContext::currentContext()->functions();
+    StateSaver(QOpenGLFunctions* func) {
+        f = func;
         vaoHelper = QOpenGLVertexArrayObjectHelper::vertexArrayObjectHelperForContext(QOpenGLContext::currentContext());
 
         static bool windowsChecked = false;
@@ -465,13 +433,12 @@ struct StateSaver
 
 void QEglFSCursor::draw(const QRectF &r)
 {
-    StateSaver stateSaver;
+    Q_ASSERT(QOpenGLContext::currentContext());
+    QOpenGLFunctions *f = QOpenGLContext::currentContext()->functions();
+    StateSaver stateSaver(f);
 
     QEglFSCursorData &gfx = static_cast<QEglFSContext*>(QOpenGLContext::currentContext()->handle())->cursorData;
     if (!gfx.program) {
-        // one time initialization
-        initializeOpenGLFunctions();
-
         createShaderPrograms();
 
         if (!gfx.atlasTexture) {
@@ -517,13 +484,13 @@ void QEglFSCursor::draw(const QRectF &r)
         s2, t1
     };
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, cursorTexture);
+    f->glActiveTexture(GL_TEXTURE0);
+    f->glBindTexture(GL_TEXTURE_2D, cursorTexture);
 
     if (stateSaver.vaoHelper->isValid())
         stateSaver.vaoHelper->glBindVertexArray(0);
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    f->glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     gfx.program->enableAttributeArray(0);
     gfx.program->enableAttributeArray(1);
@@ -533,13 +500,13 @@ void QEglFSCursor::draw(const QRectF &r)
     gfx.program->setUniformValue(gfx.textureEntry, 0);
     gfx.program->setUniformValue(gfx.matEntry, m_rotationMatrix);
 
-    glDisable(GL_CULL_FACE);
-    glFrontFace(GL_CCW);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_DEPTH_TEST); // disable depth testing to make sure cursor is always on top
+    f->glDisable(GL_CULL_FACE);
+    f->glFrontFace(GL_CCW);
+    f->glEnable(GL_BLEND);
+    f->glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    f->glDisable(GL_DEPTH_TEST); // disable depth testing to make sure cursor is always on top
 
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    f->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
     gfx.program->disableAttributeArray(0);
     gfx.program->disableAttributeArray(1);
@@ -547,3 +514,5 @@ void QEglFSCursor::draw(const QRectF &r)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qeglfscursor_p.cpp"

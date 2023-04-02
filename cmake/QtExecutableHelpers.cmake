@@ -1,6 +1,13 @@
 # This function creates a CMake target for a generic console or GUI binary.
 # Please consider to use a more specific version target like the one created
 # by qt_add_test or qt_add_tool below.
+# One-value Arguments:
+#     CORE_LIBRARY
+#         The argument accepts 'Bootstrap' or 'None' values. If the argument value is set to
+#         'Bootstrap' the Qt::Bootstrap library is linked to the executable instead of Qt::Core.
+#         The 'None' value points that core library is not necessary and avoids linking neither
+#         Qt::Core or Qt::Bootstrap libraries. Otherwise the Qt::Core library will be publicly
+#         linked to the executable target by default.
 function(qt_internal_add_executable name)
     qt_parse_all_arguments(arg "qt_internal_add_executable"
         "${__qt_internal_add_executable_optional_args}"
@@ -20,9 +27,8 @@ function(qt_internal_add_executable name)
     endif()
 
     _qt_internal_create_executable(${name})
-    if (ANDROID)
-        qt_android_generate_deployment_settings("${name}")
-        qt_android_add_apk_target("${name}")
+    if(ANDROID)
+        _qt_internal_android_executable_finalizer(${name})
     endif()
 
     if(arg_QT_APP AND QT_FEATURE_debug_and_release AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.19.0")
@@ -31,8 +37,10 @@ function(qt_internal_add_executable name)
     endif()
 
     if(WASM)
-        qt6_wasm_add_target_helpers("${name}")
+        qt_internal_wasm_add_finalizers("${name}")
+        _qt_internal_wasm_add_target_helpers("${name}")
     endif()
+
     if (arg_VERSION)
         if(arg_VERSION MATCHES "[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+")
             # nothing to do
@@ -71,6 +79,9 @@ function(qt_internal_add_executable name)
     endif()
 
     qt_set_common_target_properties(${name})
+
+    qt_internal_add_repo_local_defines(${name})
+
     if(ANDROID)
         # The above call to qt_set_common_target_properties() sets the symbol
         # visibility to hidden, but for Android, we need main() to not be hidden
@@ -83,8 +94,10 @@ function(qt_internal_add_executable name)
     qt_skip_warnings_are_errors_when_repo_unclean("${name}")
 
     set(extra_libraries "")
-    if(NOT arg_BOOTSTRAP)
-        set(extra_libraries "Qt::Core")
+    if(arg_CORE_LIBRARY STREQUAL "Bootstrap")
+        list(APPEND extra_libraries ${QT_CMAKE_EXPORT_NAMESPACE}::Bootstrap)
+    elseif(NOT arg_CORE_LIBRARY STREQUAL "None")
+        list(APPEND extra_libraries ${QT_CMAKE_EXPORT_NAMESPACE}::Core)
     endif()
 
     set(private_includes

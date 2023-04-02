@@ -1,50 +1,38 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2013 Aleix Pol Gonzalez <aleixpol@kde.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2013 Aleix Pol Gonzalez <aleixpol@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qcollator_p.h"
 #include "qstringlist.h"
 #include "qstring.h"
 
 #include "qdebug.h"
+#include "qlocale_p.h"
+#include "qthreadstorage.h"
 
 QT_BEGIN_NAMESPACE
+
+namespace {
+struct GenerationalCollator
+{
+    QCollator theCollator;
+    int generation = QLocalePrivate::s_generation.loadRelaxed();
+public:
+    GenerationalCollator() = default;
+    GenerationalCollator(const QCollator &copy) : theCollator(copy) {}
+    QCollator &collator()
+    {
+        int currentGeneration = QLocalePrivate::s_generation.loadRelaxed();
+        if (Q_UNLIKELY(generation != currentGeneration)) {
+            // reinitialize the collator
+            generation = currentGeneration;
+            theCollator = QCollator();
+        }
+        return theCollator;
+    }
+};
+}
+Q_GLOBAL_STATIC(QThreadStorage<GenerationalCollator>, defaultCollator)
 
 /*!
     \class QCollator
@@ -109,8 +97,7 @@ QCollator::QCollator(const QCollator &other)
 {
     if (d) {
         // Ensure clean, lest both copies try to init() at the same time:
-        if (d->dirty)
-            d->init();
+        d->ensureInitialized();
         d->ref.ref();
     }
 }
@@ -135,8 +122,7 @@ QCollator &QCollator::operator=(const QCollator &other)
         d = other.d;
         if (d) {
             // Ensure clean, lest both copies try to init() at the same time:
-            if (d->dirty)
-                d->init();
+            d->ensureInitialized();
             d->ref.ref();
         }
     }
@@ -318,7 +304,7 @@ bool QCollator::ignorePunctuation() const
     Returns an integer less than, equal to, or greater than zero depending on
     whether \a s1 sorts before, with or after \a s2.
 */
-#if QT_STRINGVIEW_LEVEL < 2
+
 /*!
     \fn bool QCollator::operator()(const QString &s1, const QString &s2) const
     \overload
@@ -332,7 +318,7 @@ bool QCollator::ignorePunctuation() const
 */
 
 /*!
-    \fn int QCollator::compare(const QChar *s1, int len1, const QChar *s2, int len2) const
+    \fn int QCollator::compare(const QChar *s1, qsizetype len1, const QChar *s2, qsizetype len2) const
     \overload
     \since 5.2
 
@@ -341,8 +327,37 @@ bool QCollator::ignorePunctuation() const
 
     Returns an integer less than, equal to, or greater than zero depending on
     whether \a s1 sorts before, with or after \a s2.
+
+    \note In Qt versions prior to 6.4, the length arguments were of type
+    \c{int}, not \c{qsizetype}.
 */
-#endif // QT_STRINGVIEW_LEVEL < 2
+
+/*!
+    \since 6.3
+
+    Compares the strings \a s1 and \a s2, returning their sorting order. This
+    function performs the same operation as compare() on a default-constructed
+    QCollator object.
+
+    \sa compare(), defaultSortKey()
+*/
+int QCollator::defaultCompare(QStringView s1, QStringView s2)
+{
+    return defaultCollator->localData().collator().compare(s1, s2);
+}
+
+/*!
+    \since 6.3
+
+    Returns the sort key for the string \a key. This function performs the same
+    operation as sortKey() on a default-constructed QCollator object.
+
+    \sa sortKey(), defaultCompare()
+*/
+QCollatorSortKey QCollator::defaultSortKey(QStringView key)
+{
+    return defaultCollator->localData().collator().sortKey(key.toString());
+}
 
 /*!
     \fn QCollatorSortKey QCollator::sortKey(const QString &string) const

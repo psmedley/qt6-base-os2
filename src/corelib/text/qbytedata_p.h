@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QBYTEDATA_P_H
 #define QBYTEDATA_P_H
@@ -54,6 +18,8 @@
 #include <QtCore/private/qglobal_p.h>
 #include <qbytearray.h>
 #include <QtCore/qlist.h>
+
+#include <climits>
 
 QT_BEGIN_NAMESPACE
 
@@ -139,6 +105,7 @@ public:
     // preferably use this function to read data.
     inline QByteArray read()
     {
+        Q_ASSERT(!isEmpty());
         squeezeFirst();
         bufferCompleteSize -= buffers.first().size();
         return buffers.takeFirst();
@@ -156,8 +123,15 @@ public:
     inline QByteArray read(qint64 amount)
     {
         amount = qMin(byteAmount(), amount);
+        if constexpr (sizeof(qsizetype) == sizeof(int)) { // 32-bit
+            // While we cannot overall have more than INT_MAX memory allocated,
+            // the QByteArrays we hold may be shared copies of each other,
+            // causing byteAmount() to exceed INT_MAX.
+            if (amount > INT_MAX)
+                qBadAlloc(); // what resize() would do if it saw past the truncation
+        }
         QByteArray byteData;
-        byteData.resize(amount);
+        byteData.resize(qsizetype(amount));
         read(byteData.data(), byteData.size());
         return byteData;
     }
@@ -267,7 +241,7 @@ public:
     // the number of QByteArrays
     inline int bufferCount() const
     {
-        return buffers.length();
+        return buffers.size();
     }
 
     inline bool isEmpty() const
@@ -293,12 +267,12 @@ public:
 
     inline bool canReadLine() const {
         int i = 0;
-        if (i < buffers.length()) {
+        if (i < buffers.size()) {
             if (buffers.at(i).indexOf('\n', firstPos) != -1)
                 return true;
             ++i;
 
-            for (; i < buffers.length(); i++)
+            for (; i < buffers.size(); i++)
                 if (buffers.at(i).contains('\n'))
                     return true;
         }

@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 Intel Corporation.
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 Intel Corporation.
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 // for rand_s
 #define _CRT_RAND_S
@@ -46,7 +10,6 @@
 #include <qendian.h>
 #include <qmutex.h>
 #include <qobjectdefs.h>
-#include <qthreadstorage.h>
 
 #include <errno.h>
 
@@ -54,7 +17,9 @@
 #  include <sys/auxv.h>
 #endif
 
-#if !QT_CONFIG(getentropy) && (!defined(Q_OS_BSD4) || defined(__GLIBC__)) && !defined(Q_OS_WIN)
+#if QT_CONFIG(getentropy) && __has_include(<sys/random.h>)
+#  include <sys/random.h>
+#elif !QT_CONFIG(getentropy) && (!defined(Q_OS_BSD4) || defined(__GLIBC__)) && !defined(Q_OS_WIN)
 #  include "qdeadlinetimer.h"
 #  include "qhashfunctions.h"
 #endif // !QT_CONFIG(getentropy)
@@ -234,7 +199,7 @@ static void fallback_fill(quint32 *ptr, qsizetype left) noexcept
     arc4random_buf(ptr, left * sizeof(*ptr));
 }
 #else
-static QBasicAtomicInteger<unsigned> seed = Q_BASIC_ATOMIC_INITIALIZER(0U);
+Q_CONSTINIT static QBasicAtomicInteger<unsigned> seed = Q_BASIC_ATOMIC_INITIALIZER(0U);
 static void fallback_update_seed(unsigned value)
 {
     // Update the seed to be used for the fallback mechanism, if we need to.
@@ -358,16 +323,17 @@ struct QRandomGenerator::SystemAndGlobalGenerators
     //    the state in case another thread tries to lock the mutex. It's not
     //    a common scenario, but since sizeof(QRandomGenerator) >= 2560, the
     //    overhead is actually acceptable.
-    // 2) We use both alignas and std::aligned_storage<..., 64> because
-    //    some implementations of std::aligned_storage can't align to more
-    //    than a primitive type's alignment.
+    // 2) We use both alignas(T) and alignas(64) because some implementations
+    //    can't align to more than a primitive type's alignment.
     // 3) We don't store the entire system QRandomGenerator, only the space
     //    used by the QRandomGenerator::type member. This is fine because we
     //    (ab)use the common initial sequence exclusion to aliasing rules.
     QBasicMutex globalPRNGMutex;
     struct ShortenedSystem { uint type; } system_;
     SystemGenerator sys;
-    alignas(64) std::aligned_storage<sizeof(QRandomGenerator64), 64>::type global_;
+    alignas(64) struct {
+        alignas(QRandomGenerator64) uchar data[sizeof(QRandomGenerator64)];
+    } global_;
 
     constexpr SystemAndGlobalGenerators()
         : globalPRNGMutex{}, system_{0}, sys{}, global_{}
@@ -384,7 +350,7 @@ struct QRandomGenerator::SystemAndGlobalGenerators
 
     static SystemAndGlobalGenerators *self()
     {
-        static SystemAndGlobalGenerators g;
+        Q_CONSTINIT static SystemAndGlobalGenerators g;
         static_assert(sizeof(g) > sizeof(QRandomGenerator64));
         return &g;
     }
@@ -687,7 +653,7 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
     \fn bool operator==(const QRandomGenerator &rng1, const QRandomGenerator &rng2)
     \relates QRandomGenerator
 
-    Returns true if the two the two engines \a rng1 and \a rng2 are at the same
+    Returns true if the two engines \a rng1 and \a rng2 are at the same
     state or if they are both reading from the operating system facilities,
     false otherwise.
 */
@@ -695,7 +661,7 @@ inline QRandomGenerator::SystemGenerator &QRandomGenerator::SystemGenerator::sel
 /*!
     \fn bool QRandomGenerator::operator!=(const QRandomGenerator &rng1, const QRandomGenerator &rng2)
 
-    Returns \c true if the two the two engines \a rng1 and \a rng2 are at
+    Returns \c true if the two engines \a rng1 and \a rng2 are at
     different states or if one of them is reading from the operating system
     facilities and the other is not, \c false otherwise.
 */

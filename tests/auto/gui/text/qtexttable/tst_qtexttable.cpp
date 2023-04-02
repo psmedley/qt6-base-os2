@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -146,7 +121,7 @@ void tst_QTextTable::variousTableModifications()
     QTextTableFormat tableFmt;
 
     QTextTable *tab = cursor.insertTable(2, 2, tableFmt);
-    QCOMPARE(doc->toPlainText().length(), 5);
+    QCOMPARE(doc->toPlainText().size(), 5);
     QCOMPARE(tab, cursor.currentTable());
     QCOMPARE(tab->columns(), 2);
     QCOMPARE(tab->rows(), 2);
@@ -201,14 +176,14 @@ void tst_QTextTable::variousTableModifications()
     cursor.movePosition(QTextCursor::NextBlock);
     QCOMPARE(cursor.position(), 1);
     cursor.deleteChar();
-    QCOMPARE(doc->toPlainText().length(), 5);
+    QCOMPARE(doc->toPlainText().size(), 5);
     cursor.movePosition(QTextCursor::NextBlock);
     QCOMPARE(cursor.position(), 2);
     cursor.deleteChar();
-    QCOMPARE(doc->toPlainText().length(), 5);
+    QCOMPARE(doc->toPlainText().size(), 5);
     cursor.deletePreviousChar();
     QCOMPARE(cursor.position(), 2);
-    QCOMPARE(doc->toPlainText().length(), 5);
+    QCOMPARE(doc->toPlainText().size(), 5);
 
     QTextTable *table = cursor.currentTable();
     QCOMPARE(table->rows(), 2);
@@ -217,16 +192,16 @@ void tst_QTextTable::variousTableModifications()
     table->insertRows(2, 1);
     QCOMPARE(table->rows(), 3);
     QCOMPARE(table->columns(), 2);
-    QCOMPARE(doc->toPlainText().length(), 7);
+    QCOMPARE(doc->toPlainText().size(), 7);
     table->insertColumns(2, 2);
     QCOMPARE(table->rows(), 3);
     QCOMPARE(table->columns(), 4);
-    QCOMPARE(doc->toPlainText().length(), 13);
+    QCOMPARE(doc->toPlainText().size(), 13);
 
     table->resize(4, 5);
     QCOMPARE(table->rows(), 4);
     QCOMPARE(table->columns(), 5);
-    QCOMPARE(doc->toPlainText().length(), 21);
+    QCOMPARE(doc->toPlainText().size(), 21);
 }
 
 void tst_QTextTable::tableShrinking()
@@ -234,7 +209,7 @@ void tst_QTextTable::tableShrinking()
     QTextTableFormat tableFmt;
 
     cursor.insertTable(3, 4, tableFmt);
-    QCOMPARE(doc->toPlainText().length(), 13);
+    QCOMPARE(doc->toPlainText().size(), 13);
 
     QTextTable *table = cursor.currentTable();
     QCOMPARE(table->rows(), 3);
@@ -243,16 +218,16 @@ void tst_QTextTable::tableShrinking()
     table->removeRows(1, 1);
     QCOMPARE(table->rows(), 2);
     QCOMPARE(table->columns(), 4);
-    QCOMPARE(doc->toPlainText().length(), 9);
+    QCOMPARE(doc->toPlainText().size(), 9);
     table->removeColumns(1, 2);
     QCOMPARE(table->rows(), 2);
     QCOMPARE(table->columns(), 2);
-    QCOMPARE(doc->toPlainText().length(), 5);
+    QCOMPARE(doc->toPlainText().size(), 5);
 
     table->resize(1, 1);
     QCOMPARE(table->rows(), 1);
     QCOMPARE(table->columns(), 1);
-    QCOMPARE(doc->toPlainText().length(), 2);
+    QCOMPARE(doc->toPlainText().size(), 2);
 }
 
 void tst_QTextTable::spans()
@@ -277,7 +252,7 @@ void tst_QTextTable::variousModifications2()
     QTextTableFormat tableFmt;
 
     cursor.insertTable(2, 5, tableFmt);
-    QCOMPARE(doc->toPlainText().length(), 11);
+    QCOMPARE(doc->toPlainText().size(), 11);
     QTextTable *table = cursor.currentTable();
     QCOMPARE(cursor.position(), 1);
     QCOMPARE(table->rows(), 2);
@@ -1173,8 +1148,8 @@ void tst_QTextTable::QTBUG31330_renderBackground()
     doc.print(&paintDevice);
 
     QVERIFY(paintDevice.pages >= 2);
-    QCOMPARE(engine.rects.count(), paintDevice.pages);
-    for (int i = 0; i < engine.rects.count(); ++i) {
+    QCOMPARE(engine.rects.size(), paintDevice.pages);
+    for (int i = 0; i < engine.rects.size(); ++i) {
         QRectF rect = engine.rects[i];
         QVERIFY(rect.top() > 0);
         QVERIFY(rect.bottom() < 1000);

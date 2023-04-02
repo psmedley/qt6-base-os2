@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtNetwork/private/qtnetworkglobal_p.h>
 
@@ -80,12 +44,16 @@
 
 #include <QHostInfo>
 
+#include "QtCore/qapplicationstatic.h"
+#include "QtCore/qloggingcategory.h"
 #include <QtCore/private/qfactoryloader_p.h>
 
 #if defined(Q_OS_MACOS)
+#include <QtCore/private/qcore_mac_p.h>
+
 #include <CoreServices/CoreServices.h>
 #include <SystemConfiguration/SystemConfiguration.h>
-#include <Security/SecKeychain.h>
+#include <Security/Security.h>
 #endif
 #ifdef Q_OS_WASM
 #include "qnetworkreplywasmimpl_p.h"
@@ -99,67 +67,87 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_GLOBAL_STATIC(QNetworkAccessFileBackendFactory, fileBackend)
+using namespace Qt::StringLiterals;
+
+Q_LOGGING_CATEGORY(lcQnam, "qt.network.access.manager")
+
+Q_APPLICATION_STATIC(QNetworkAccessFileBackendFactory, fileBackend)
 
 #ifdef QT_BUILD_INTERNAL
 Q_GLOBAL_STATIC(QNetworkAccessDebugPipeBackendFactory, debugpipeBackend)
 #endif
 
-Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
-                          (QNetworkAccessBackendFactory_iid,
-                           QLatin1String("/networkaccess")))
+Q_APPLICATION_STATIC(QFactoryLoader, loader, QNetworkAccessBackendFactory_iid, "/networkaccess"_L1)
+
 #if defined(Q_OS_MACOS)
 bool getProxyAuth(const QString& proxyHostname, const QString &scheme, QString& username, QString& password)
 {
-    OSStatus err;
-    SecKeychainItemRef itemRef;
-    bool retValue = false;
-    SecProtocolType protocolType = kSecProtocolTypeAny;
-    if (scheme.compare(QLatin1String("ftp"),Qt::CaseInsensitive)==0) {
-        protocolType = kSecProtocolTypeFTPProxy;
-    } else if (scheme.compare(QLatin1String("http"),Qt::CaseInsensitive)==0
-               || scheme.compare(QLatin1String("preconnect-http"),Qt::CaseInsensitive)==0) {
-        protocolType = kSecProtocolTypeHTTPProxy;
-    } else if (scheme.compare(QLatin1String("https"),Qt::CaseInsensitive)==0
-               || scheme.compare(QLatin1String("preconnect-https"),Qt::CaseInsensitive)==0) {
-        protocolType = kSecProtocolTypeHTTPSProxy;
+    CFStringRef protocolType = nullptr;
+    if (scheme.compare("ftp"_L1, Qt::CaseInsensitive) == 0) {
+        protocolType = kSecAttrProtocolFTPProxy;
+    } else if (scheme.compare("http"_L1, Qt::CaseInsensitive) == 0
+               || scheme.compare("preconnect-http"_L1, Qt::CaseInsensitive) == 0) {
+        protocolType = kSecAttrProtocolHTTPProxy;
+    } else if (scheme.compare("https"_L1,Qt::CaseInsensitive)==0
+               || scheme.compare("preconnect-https"_L1, Qt::CaseInsensitive) == 0) {
+        protocolType = kSecAttrProtocolHTTPSProxy;
+    } else {
+        qCWarning(lcQnam) << "Cannot query user name and password for a proxy, unnknown protocol:"
+                          << scheme;
+        return false;
     }
-    QByteArray proxyHostnameUtf8(proxyHostname.toUtf8());
-    err = SecKeychainFindInternetPassword(NULL,
-                                          proxyHostnameUtf8.length(), proxyHostnameUtf8.constData(),
-                                          0,NULL,
-                                          0, NULL,
-                                          0, NULL,
-                                          0,
-                                          protocolType,
-                                          kSecAuthenticationTypeAny,
-                                          0, NULL,
-                                          &itemRef);
-    if (err == noErr) {
 
-        SecKeychainAttribute attr;
-        SecKeychainAttributeList attrList;
-        UInt32 length;
-        void *outData;
+    QCFType<CFMutableDictionaryRef> query(CFDictionaryCreateMutable(kCFAllocatorDefault,
+                                                                    0, nullptr, nullptr));
+    Q_ASSERT(query);
 
-        attr.tag = kSecAccountItemAttr;
-        attr.length = 0;
-        attr.data = NULL;
+    CFDictionaryAddValue(query, kSecClass, kSecClassInternetPassword);
+    CFDictionaryAddValue(query, kSecAttrProtocol, protocolType);
 
-        attrList.count = 1;
-        attrList.attr = &attr;
-
-        if (SecKeychainItemCopyContent(itemRef, NULL, &attrList, &length, &outData) == noErr) {
-            username = QString::fromUtf8((const char*)attr.data, attr.length);
-            password = QString::fromUtf8((const char*)outData, length);
-            SecKeychainItemFreeContent(&attrList,outData);
-            retValue = true;
-        }
-        CFRelease(itemRef);
+    QCFType<CFStringRef> serverName; // Note the scope.
+    if (proxyHostname.size()) {
+        serverName = proxyHostname.toCFString();
+        CFDictionaryAddValue(query, kSecAttrServer, serverName);
     }
-    return retValue;
+
+    // This is to get the user name in the result:
+    CFDictionaryAddValue(query, kSecReturnAttributes, kCFBooleanTrue);
+    // This one to get the password:
+    CFDictionaryAddValue(query, kSecReturnData, kCFBooleanTrue);
+
+    // The default for kSecMatchLimit key is 1 (the first match only), which is fine,
+    // so don't set this value explicitly.
+
+    QCFType<CFTypeRef> replyData;
+    if (SecItemCopyMatching(query, &replyData) != errSecSuccess) {
+        qCWarning(lcQnam, "Failed to extract user name and password from the keychain.");
+        return false;
+    }
+
+    if (!replyData || CFDictionaryGetTypeID() != CFGetTypeID(replyData)) {
+        qCWarning(lcQnam, "Query returned data in unexpected format.");
+        return false;
+    }
+
+    CFDictionaryRef accountData = replyData.as<CFDictionaryRef>();
+    const void *value = CFDictionaryGetValue(accountData, kSecAttrAccount);
+    if (!value || CFGetTypeID(value) != CFStringGetTypeID()) {
+        qCWarning(lcQnam, "Cannot find user name or its format is unknown.");
+        return false;
+    }
+    username = QString::fromCFString(static_cast<CFStringRef>(value));
+
+    value = CFDictionaryGetValue(accountData, kSecValueData);
+    if (!value || CFGetTypeID(value) != CFDataGetTypeID()) {
+        qCWarning(lcQnam, "Cannot find password or its format is unknown.");
+        return false;
+    }
+    const CFDataRef passData = static_cast<const CFDataRef>(value);
+    password = QString::fromLocal8Bit(reinterpret_cast<const char *>(CFDataGetBytePtr(passData)),
+                                      qsizetype(CFDataGetLength(passData)));
+    return true;
 }
-#endif
+#endif // Q_OS_MACOS
 
 
 
@@ -977,7 +965,7 @@ void QNetworkAccessManager::connectToHostEncrypted(const QString &hostName, quin
     QUrl url;
     url.setHost(hostName);
     url.setPort(port);
-    url.setScheme(QLatin1String("preconnect-https"));
+    url.setScheme("preconnect-https"_L1);
     QNetworkRequest request(url);
     if (sslConfiguration != QSslConfiguration::defaultConfiguration())
         request.setSslConfiguration(sslConfiguration);
@@ -1008,7 +996,7 @@ void QNetworkAccessManager::connectToHost(const QString &hostName, quint16 port)
     QUrl url;
     url.setHost(hostName);
     url.setPort(port);
-    url.setScheme(QLatin1String("preconnect-http"));
+    url.setScheme("preconnect-http"_L1);
     QNetworkRequest request(url);
     get(request);
 }
@@ -1163,13 +1151,13 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
      || op == QNetworkAccessManager::HeadOperation) {
         if (isLocalFile
 #ifdef Q_OS_ANDROID
-            || scheme == QLatin1String("assets")
+            || scheme == "assets"_L1
 #endif
-            || scheme == QLatin1String("qrc")) {
+            || scheme == "qrc"_L1) {
             return new QNetworkReplyFileImpl(this, req, op);
         }
 
-        if (scheme == QLatin1String("data"))
+        if (scheme == "data"_L1)
             return new QNetworkReplyDataImpl(this, req, op);
 
         // A request with QNetworkRequest::AlwaysCache does not need any bearer management
@@ -1211,7 +1199,7 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
 #ifdef Q_OS_WASM
     Q_UNUSED(isLocalFile);
     // Support http, https, and relative urls
-    if (scheme == QLatin1String("http") || scheme == QLatin1String("https") || scheme.isEmpty()) {
+    if (scheme == "http"_L1 || scheme == "https"_L1 || scheme.isEmpty()) {
         QNetworkReplyWasmImpl *reply = new QNetworkReplyWasmImpl(this);
         QNetworkReplyWasmImplPrivate *priv = reply->d_func();
         priv->manager = this;
@@ -1221,12 +1209,16 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
 #endif
 
 #if QT_CONFIG(http)
-    // Since Qt 5 we use the new QNetworkReplyHttpImpl
-    if (scheme == QLatin1String("http") || scheme == QLatin1String("preconnect-http")
+    constexpr char16_t httpSchemes[][17] = {
+        u"http",
+        u"preconnect-http",
 #ifndef QT_NO_SSL
-        || scheme == QLatin1String("https") || scheme == QLatin1String("preconnect-https")
+        u"https",
+        u"preconnect-https",
 #endif
-        ) {
+    };
+    // Since Qt 5 we use the new QNetworkReplyHttpImpl
+    if (std::find(std::begin(httpSchemes), std::end(httpSchemes), scheme) != std::end(httpSchemes)) {
 #ifndef QT_NO_SSL
         if (isStrictTransportSecurityEnabled() && d->stsCache.isKnownHost(request.url())) {
             QUrl stsUrl(request.url());
@@ -1241,7 +1233,7 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
             // MUST NOT add one.
             if (stsUrl.port() == 80)
                 stsUrl.setPort(443);
-            stsUrl.setScheme(QLatin1String("https"));
+            stsUrl.setScheme("https"_L1);
             request.setUrl(stsUrl);
         }
 #endif
@@ -1661,7 +1653,7 @@ QNetworkRequest QNetworkAccessManagerPrivate::prepareMultipart(const QNetworkReq
     // add Content-Type header if not there already
     if (!request.header(QNetworkRequest::ContentTypeHeader).isValid()) {
         QByteArray contentType;
-        contentType.reserve(34 + multiPart->d_func()->boundary.count());
+        contentType.reserve(34 + multiPart->d_func()->boundary.size());
         contentType += "multipart/";
         switch (multiPart->d_func()->contentType) {
         case QHttpMultiPart::RelatedType:
@@ -1709,7 +1701,7 @@ QNetworkRequest QNetworkAccessManagerPrivate::prepareMultipart(const QNetworkReq
 */
 void QNetworkAccessManagerPrivate::ensureBackendPluginsLoaded()
 {
-    static QBasicMutex mutex;
+    Q_CONSTINIT static QBasicMutex mutex;
     std::unique_lock locker(mutex);
     if (!loader())
         return;

@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qcoreevent.h"
 #include "qcoreapplication.h"
@@ -198,7 +162,8 @@ QT_BEGIN_NAMESPACE
     \value Polish                           The widget is polished.
     \value PolishRequest                    The widget should be polished.
     \value QueryWhatsThis                   The widget should accept the event if it has "What's This?" help (QHelpEvent).
-    \value ReadOnlyChange                   Widget's read-only state has changed (since Qt 5.4).
+    \value Quit                             The application has exited.
+    \value [since 5.4] ReadOnlyChange       Widget's read-only state has changed.
     \value RequestSoftwareInputPanel        A widget wants to open a software input panel (SIP).
     \value Resize                           Widget's size changed (QResizeEvent).
     \value ScrollPrepare                    The object needs to fill in its geometry information (QScrollPrepareEvent).
@@ -225,7 +190,7 @@ QT_BEGIN_NAMESPACE
     \omitvalue OkRequest
     \value TabletEnterProximity             Wacom tablet enter proximity event (QTabletEvent), sent to QApplication.
     \value TabletLeaveProximity             Wacom tablet leave proximity event (QTabletEvent), sent to QApplication.
-    \value TabletTrackingChange             The Wacom tablet tracking state has changed (since Qt 5.9).
+    \value [since 5.9] TabletTrackingChange The Wacom tablet tracking state has changed.
     \omitvalue ThemeChange
     \value ThreadChange                     The object is moved to another thread. This is the last event sent to this object in the previous thread. See QObject::moveToThread().
     \value Timer                            Regular timer events (QTimerEvent).
@@ -289,6 +254,7 @@ QT_BEGIN_NAMESPACE
     \omitvalue NativeGesture
     \omitvalue WindowChangeInternal
     \omitvalue ScreenChangeInternal
+    \omitvalue WindowAboutToChangeInternal
 */
 
 /*!
@@ -497,7 +463,7 @@ struct QBasicAtomicBitField {
 
 typedef QBasicAtomicBitField<QEvent::MaxUser - QEvent::User + 1> UserEventTypeRegistry;
 
-static UserEventTypeRegistry userEventTypeRegistry {};
+Q_CONSTINIT static UserEventTypeRegistry userEventTypeRegistry {};
 
 static inline int registerEventTypeZeroBased(int id) noexcept
 {
@@ -557,12 +523,7 @@ QTimerEvent::QTimerEvent(int timerId)
     : QEvent(Timer), id(timerId)
 {}
 
-/*!
-    \internal
-*/
-QTimerEvent::~QTimerEvent()
-{
-}
+Q_IMPL_EVENT_COMMON(QTimerEvent)
 
 /*!
     \fn int QTimerEvent::timerId() const
@@ -604,12 +565,7 @@ QChildEvent::QChildEvent(Type type, QObject *child)
     : QEvent(type), c(child)
 {}
 
-/*!
-    \internal
-*/
-QChildEvent::~QChildEvent()
-{
-}
+Q_IMPL_EVENT_COMMON(QChildEvent)
 
 /*!
     \fn QObject *QChildEvent::child() const
@@ -661,12 +617,7 @@ QDynamicPropertyChangeEvent::QDynamicPropertyChangeEvent(const QByteArray &name)
 {
 }
 
-/*!
-    \internal
-*/
-QDynamicPropertyChangeEvent::~QDynamicPropertyChangeEvent()
-{
-}
+Q_IMPL_EVENT_COMMON(QDynamicPropertyChangeEvent)
 
 /*!
     \fn QByteArray QDynamicPropertyChangeEvent::propertyName() const
@@ -685,11 +636,7 @@ QDeferredDeleteEvent::QDeferredDeleteEvent()
     , level(0)
 { }
 
-/*!
-    \internal
-*/
-QDeferredDeleteEvent::~QDeferredDeleteEvent()
-{ }
+Q_IMPL_EVENT_COMMON(QDeferredDeleteEvent)
 
 /*! \fn int QDeferredDeleteEvent::loopLevel() const
 

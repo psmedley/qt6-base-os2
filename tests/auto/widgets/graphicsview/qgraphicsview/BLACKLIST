@@ -1,7 +1,3 @@
-[task255529_transformationAnchorMouseAndViewportMargins]
-opensuse-leap
-[cursor]
-opensuse-leap
 [cursor2]
 ubuntu-16.04
 [sendEvent]
@@ -45,3 +41,9 @@ android
 android
 [update_ancestorClipsChildrenToShape2]
 android
+[QTBUG_70255_scrollTo]
+android # QTBUG-87397
+[embeddedViewsWithFocus]
+android # QTBUG-87397
+[viewportUpdateMode2]
+android # QTBUG-87397

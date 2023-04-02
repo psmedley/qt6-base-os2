@@ -1,52 +1,14 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #ifndef QBYTEARRAYVIEW_H
 #define QBYTEARRAYVIEW_H
 
 #include <QtCore/qbytearrayalgorithms.h>
+#include <QtCore/qstringfwd.h>
 
 #include <string>
 
 QT_BEGIN_NAMESPACE
-
-class QByteArray;
-class QLatin1String;
 
 namespace QtPrivate {
 
@@ -100,6 +62,13 @@ struct IsContainerCompatibleWithQByteArrayView<T, std::enable_if_t<
                 // Don't make an accidental copy constructor
                 std::negation<std::is_same<std::decay_t<T>, QByteArrayView>>>>> : std::true_type {};
 
+// Used by QLatin1StringView too
+template <typename Char>
+static constexpr qsizetype lengthHelperPointer(const Char *data) noexcept
+{
+    return qsizetype(std::char_traits<Char>::length(data));
+}
+
 } // namespace QtPrivate
 
 class Q_CORE_EXPORT QByteArrayView
@@ -137,12 +106,6 @@ private:
     using if_compatible_container =
             typename std::enable_if_t<QtPrivate::IsContainerCompatibleWithQByteArrayView<T>::value,
                                       bool>;
-
-    template <typename Char>
-    static constexpr qsizetype lengthHelperPointer(const Char *data) noexcept
-    {
-        return qsizetype(std::char_traits<Char>::length(data));
-    }
 
     template <typename Container>
     static constexpr qsizetype lengthHelperContainer(const Container &c) noexcept
@@ -185,7 +148,7 @@ public:
     template <typename Pointer, if_compatible_pointer<Pointer> = true>
     constexpr QByteArrayView(const Pointer &data) noexcept
         : QByteArrayView(
-              data, data ? lengthHelperPointer(data) : 0) {}
+              data, data ? QtPrivate::lengthHelperPointer(data) : 0) {}
 #endif
 
 #ifdef Q_QDOC
@@ -240,6 +203,40 @@ public:
     constexpr void chop(qsizetype n)
     { Q_ASSERT(n >= 0); Q_ASSERT(n <= size()); m_size -= n; }
 
+    // Defined in qbytearray.cpp:
+    [[nodiscard]] QByteArrayView trimmed() const noexcept
+    { return QtPrivate::trimmed(*this); }
+    [[nodiscard]] short toShort(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<short>(*this, ok, base); }
+    [[nodiscard]] ushort toUShort(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<ushort>(*this, ok, base); }
+    [[nodiscard]] int toInt(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<int>(*this, ok, base); }
+    [[nodiscard]] uint toUInt(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<uint>(*this, ok, base); }
+    [[nodiscard]] long toLong(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<long>(*this, ok, base); }
+    [[nodiscard]] ulong toULong(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<ulong>(*this, ok, base); }
+    [[nodiscard]] qlonglong toLongLong(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<qlonglong>(*this, ok, base); }
+    [[nodiscard]] qulonglong toULongLong(bool *ok = nullptr, int base = 10) const
+    { return QtPrivate::toIntegral<qulonglong>(*this, ok, base); }
+    [[nodiscard]] float toFloat(bool *ok = nullptr) const
+    {
+        const auto r = QtPrivate::toFloat(*this);
+        if (ok)
+            *ok = bool(r);
+        return r.value_or(0.0f);
+    }
+    [[nodiscard]] double toDouble(bool *ok = nullptr) const
+    {
+        const auto r = QtPrivate::toDouble(*this);
+        if (ok)
+            *ok = bool(r);
+        return r.value_or(0.0);
+    }
+
     [[nodiscard]] bool startsWith(QByteArrayView other) const noexcept
     { return QtPrivate::startsWith(*this, other); }
     [[nodiscard]] bool startsWith(char c) const noexcept
@@ -273,6 +270,8 @@ public:
     { return QtPrivate::count(*this, QByteArrayView(&ch, 1)); }
 
     inline int compare(QByteArrayView a, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
+
+    [[nodiscard]] inline bool isValidUtf8() const noexcept { return QtPrivate::isValidUtf8(*this); }
 
     //
     // STL compatibility API:

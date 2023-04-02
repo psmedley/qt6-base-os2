@@ -1,45 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qpointingdevice.h"
 #include "qpointingdevice_p.h"
 #include "qwindowsysteminterface_p.h"
+#include "qeventpoint_p.h"
+
 #include <QList>
 #include <QLoggingCategory>
 #include <QMutex>
@@ -48,6 +14,8 @@
 #include <private/qdebug_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 Q_LOGGING_CATEGORY(lcPointerGrab, "qt.pointer.grab");
 
@@ -143,11 +111,53 @@ Q_LOGGING_CATEGORY(lcPointerGrab, "qt.pointer.grab");
         Any of the above (used as a default filter value).
 */
 
+/*! \enum QPointingDevice::GrabTransition
+
+    This enum represents a transition of exclusive or passive grab
+    from one object (possibly \c nullptr) to another (possibly \c nullptr).
+    It is emitted as an argument of the QPointingDevice::grabChanged() signal.
+
+    Valid values are:
+
+    \value GrabExclusive
+        Emitted after QPointerEvent::setExclusiveGrabber().
+    \value UngrabExclusive
+        Emitted after QPointerEvent::setExclusiveGrabber() when the grabber is
+        set to \c nullptr, to notify that the grab has terminated normally.
+    \value CancelGrabExclusive
+        Emitted after QPointerEvent::setExclusiveGrabber() when the grabber is set
+        to a different object, to notify that the old grabber's grab is "stolen".
+    \value GrabPassive
+        Emitted after QPointerEvent::addPassiveGrabber().
+    \value UngrabPassive
+        Emitted when a passive grab is terminated normally,
+        for example after QPointerEvent::removePassiveGrabber().
+    \value CancelGrabPassive
+        Emitted when a passive grab is terminated abnormally (a gesture is canceled).
+    \value OverrideGrabPassive
+        This value is not currently used.
+*/
+
+/*! \fn void QPointingDevice::grabChanged(QObject *grabber, QPointingDevice::GrabTransition transition, const QPointerEvent *event, const QEventPoint &point) const
+
+    This signal is emitted when the \a grabber object gains or loses an
+    exclusive or passive grab of \a point during delivery of \a event.
+    The \a transition tells what happened, from the perspective of the
+    \c grabber object.
+
+    \note A grab transition from one object to another results in two signals,
+    to notify that one object has lost its grab, and to notify that there is
+    another grabber. In other cases, when transitioning to or from a non-grabbing
+    state, only one signal is emitted: the \a grabber argument is never \c nullptr.
+
+    \sa QPointerEvent::setExclusiveGrabber(), QPointerEvent::addPassiveGrabber(), QPointerEvent::removePassiveGrabber()
+*/
+
 /*!
     Creates a new invalid pointing device instance as a child of \a parent.
 */
 QPointingDevice::QPointingDevice(QObject *parent)
-    : QInputDevice(*(new QPointingDevicePrivate(QLatin1String("unknown"), -1,
+    : QInputDevice(*(new QPointingDevicePrivate("unknown"_L1, -1,
                                               DeviceType::Unknown, PointerType::Unknown,
                                               Capability::None, 0, 0)), parent)
 {
@@ -177,6 +187,7 @@ QPointingDevice::QPointingDevice(QPointingDevicePrivate &d, QObject *parent)
 {
 }
 
+#if QT_DEPRECATED_SINCE(6, 0)
 /*!
     \internal
     \deprecated [6.0] Please use the constructor rather than setters.
@@ -227,6 +238,7 @@ void QPointingDevice::setMaximumTouchPoints(int c)
     Q_D(QPointingDevice);
     d->maximumTouchPoints = c;
 }
+#endif // QT_DEPRECATED_SINCE(6, 0)
 
 /*!
     Returns the pointer type.
@@ -284,7 +296,7 @@ const QPointingDevice *QPointingDevice::primaryPointingDevice(const QString& sea
     const QPointingDevice *mouse = nullptr;
     const QPointingDevice *touchpad = nullptr;
     for (const QInputDevice *dev : v) {
-        if (dev->seatName() != seatName)
+        if (!seatName.isNull() && dev->seatName() != seatName)
             continue;
         if (dev->type() == QInputDevice::DeviceType::Mouse) {
             if (!mouse)
@@ -301,13 +313,13 @@ const QPointingDevice *QPointingDevice::primaryPointingDevice(const QString& sea
         qCDebug(lcQpaInputDevices) << "no mouse-like devices registered for seat" << seatName
                                    << "The platform plugin should have provided one via "
                                       "QWindowSystemInterface::registerInputDevice(). Creating a default mouse for now.";
-        mouse = new QPointingDevice(QLatin1String("core pointer"), 1, DeviceType::Mouse,
+        mouse = new QPointingDevice("core pointer"_L1, 1, DeviceType::Mouse,
                                     PointerType::Generic, Capability::Position, 1, 3, seatName,
                                     QPointingDeviceUniqueId(), QCoreApplication::instance());
         QInputDevicePrivate::registerDevice(mouse);
         return mouse;
     }
-    if (v.length() > 1)
+    if (v.size() > 1)
         qCDebug(lcQpaInputDevices) << "core pointer ambiguous for seat" << seatName;
     if (mouse)
         return mouse;
@@ -425,13 +437,12 @@ QPointingDevicePrivate::EventPointData *QPointingDevicePrivate::queryPointById(i
 */
 QPointingDevicePrivate::EventPointData *QPointingDevicePrivate::pointById(int id) const
 {
-    auto it = activePoints.find(id);
-    if (it == activePoints.end()) {
+    const auto [it, inserted] = activePoints.try_emplace(id);
+    if (inserted) {
         Q_Q(const QPointingDevice);
-        QPointingDevicePrivate::EventPointData epd;
-        QMutableEventPoint::from(epd.eventPoint).setId(id);
-        QMutableEventPoint::from(epd.eventPoint).setDevice(q);
-        return &activePoints.insert(id, epd).first.value();
+        auto &epd = it.value();
+        QMutableEventPoint::setId(epd.eventPoint, id);
+        QMutableEventPoint::setDevice(epd.eventPoint, q);
     }
     return &it.value();
 }
@@ -454,7 +465,7 @@ void QPointingDevicePrivate::removePointById(int id)
 QObject *QPointingDevicePrivate::firstActiveTarget() const
 {
     for (auto &pt : activePoints.values()) {
-        if (auto target = QMutableEventPoint::constFrom(pt.eventPoint).target())
+        if (auto target = QMutableEventPoint::target(pt.eventPoint))
             return target;
     }
     return nullptr;
@@ -469,7 +480,7 @@ QObject *QPointingDevicePrivate::firstActiveTarget() const
 QWindow *QPointingDevicePrivate::firstActiveWindow() const
 {
     for (auto &pt : activePoints.values()) {
-        if (auto window = QMutableEventPoint::constFrom(pt.eventPoint).window())
+        if (auto window = QMutableEventPoint::window(pt.eventPoint))
             return window;
     }
     return nullptr;
@@ -496,6 +507,7 @@ void QPointingDevicePrivate::setExclusiveGrabber(const QPointerEvent *event, con
         qWarning() << "point is not in activePoints" << point;
         return;
     }
+    Q_ASSERT(persistentPoint->eventPoint.id() == point.id());
     if (persistentPoint->exclusiveGrabber == exclusiveGrabber)
         return;
     auto oldGrabber = persistentPoint->exclusiveGrabber;
@@ -508,7 +520,7 @@ void QPointingDevicePrivate::setExclusiveGrabber(const QPointerEvent *event, con
                                << "@" << point.scenePosition()
                                << ": grab" << oldGrabber << "->" << exclusiveGrabber;
     }
-    QMutableEventPoint::from(persistentPoint->eventPoint).setGlobalGrabPosition(point.globalPosition());
+    QMutableEventPoint::setGlobalGrabPosition(persistentPoint->eventPoint, point.globalPosition());
     if (exclusiveGrabber)
         emit q->grabChanged(exclusiveGrabber, QPointingDevice::GrabExclusive, event, point);
     else
@@ -668,9 +680,9 @@ const QPointingDevice *QPointingDevicePrivate::tabletDevice(QInputDevice::Device
                                    << deviceType << pointerType << Qt::hex << uniqueId.numericId()
                                    << "The platform plugin should have provided one via "
                                       "QWindowSystemInterface::registerInputDevice(). Creating a default one for now.";
-        dev = new QPointingDevice(QLatin1String("fake tablet"), 2, deviceType, pointerType,
-                                                   QInputDevice::Capability::Position | QInputDevice::Capability::Pressure,
-                                                   1, 1, QString(), uniqueId, QCoreApplication::instance());
+        dev = new QPointingDevice("fake tablet"_L1, 2, deviceType, pointerType,
+                                  QInputDevice::Capability::Position | QInputDevice::Capability::Pressure,
+                                  1, 1, QString(), uniqueId, QCoreApplication::instance());
         QInputDevicePrivate::registerDevice(dev);
     }
     return dev;
@@ -807,3 +819,5 @@ size_t qHash(QPointingDeviceUniqueId key, size_t seed) noexcept
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qpointingdevice.cpp"

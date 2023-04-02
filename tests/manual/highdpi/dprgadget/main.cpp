@@ -1,30 +1,5 @@
-/****************************************************************************
- **
- ** Copyright (C) 2020 The Qt Company Ltd.
- ** Contact: https://www.qt.io/licensing/
- **
- ** This file is part of the test suite of the Qt Toolkit.
- **
- ** $QT_BEGIN_LICENSE:GPL-EXCEPT$
- ** Commercial License Usage
- ** Licensees holding valid commercial Qt licenses may use this file in
- ** accordance with the commercial license agreement provided with the
- ** Software or, alternatively, in accordance with the terms contained in
- ** a written agreement between you and The Qt Company. For licensing terms
- ** and conditions see https://www.qt.io/terms-conditions. For further
- ** information use the contact form at https://www.qt.io/contact-us.
- **
- ** GNU General Public License Usage
- ** Alternatively, this file may be used under the terms of the GNU
- ** General Public License version 3 as published by the Free Software
- ** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
- ** included in the packaging of this file. Please review the following
- ** information to ensure the GNU General Public License requirements will
- ** be met: https://www.gnu.org/licenses/gpl-3.0.html.
- **
- ** $QT_END_LICENSE$
- **
- ****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtGui/qpa/qplatformscreen.h>
 #include <QtGui/qpa/qplatformwindow.h>
@@ -47,6 +22,7 @@ bool g_qtScaleFactor = false;
 bool g_qtUsePhysicalDpi = false;
 bool g_qtFontDpi = false;
 bool g_qtScaleFactorRoundingPolicy = false;
+bool g_qtHighDpiDownscale = false;
 bool g_displayEvents = false;
 
 
@@ -161,7 +137,7 @@ public:
         if (g_displayEvents)
             layout->addWidget(eventsLabel);
 
-        bool activeEnvironment = g_qtScaleFactor || g_qtUsePhysicalDpi || g_qtFontDpi || g_qtScaleFactorRoundingPolicy;
+        bool activeEnvironment = g_qtScaleFactor || g_qtUsePhysicalDpi || g_qtFontDpi || g_qtScaleFactorRoundingPolicy || g_qtHighDpiDownscale;
         if (activeEnvironment) {
             layout->addWidget(new QLabel("Active Environment:"));
             if (g_qtScaleFactor) {
@@ -180,7 +156,10 @@ public:
                 QString text = QString("QT_SCALE_FACTOR_ROUNDING_POLICY=") + qgetenv("QT_SCALE_FACTOR_ROUNDING_POLICY");
                 layout->addWidget(new QLabel(text));
             }
-
+            if (g_qtHighDpiDownscale) {
+                QString text = QString("QT_WIDGETS_HIGHDPI_DOWNSCALE=") + qgetenv("QT_WIDGETS_HIGHDPI_DOWNSCALE");
+                layout->addWidget(new QLabel(text));
+            }
         }
 
         auto updateValues = [=]() {
@@ -269,6 +248,7 @@ int main(int argc, char **argv) {
     g_qtUsePhysicalDpi = qgetenv("QT_USE_PHYSICAL_DPI") == QByteArray("1");
     g_qtFontDpi = qEnvironmentVariableIsSet("QT_FONT_DPI");
     g_qtScaleFactorRoundingPolicy = qEnvironmentVariableIsSet("QT_SCALE_FACTOR_ROUNDING_POLICY");
+    g_qtHighDpiDownscale = qEnvironmentVariableIsSet("QT_WIDGETS_HIGHDPI_DOWNSCALE");
 
     QApplication app(argc, argv);
 

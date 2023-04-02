@@ -1,31 +1,6 @@
 #!/usr/bin/env python3
-#############################################################################
-##
-## Copyright (C) 2019 The Qt Company Ltd.
-## Contact: https://www.qt.io/licensing/
-##
-## This file is part of the plugins of the Qt Toolkit.
-##
-## $QT_BEGIN_LICENSE:GPL-EXCEPT$
-## Commercial License Usage
-## Licensees holding valid commercial Qt licenses may use this file in
-## accordance with the commercial license agreement provided with the
-## Software or, alternatively, in accordance with the terms contained in
-## a written agreement between you and The Qt Company. For licensing terms
-## and conditions see https://www.qt.io/terms-conditions. For further
-## information use the contact form at https://www.qt.io/contact-us.
-##
-## GNU General Public License Usage
-## Alternatively, this file may be used under the terms of the GNU
-## General Public License version 3 as published by the Free Software
-## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-## included in the packaging of this file. Please review the following
-## information to ensure the GNU General Public License requirements will
-## be met: https://www.gnu.org/licenses/gpl-3.0.html.
-##
-## $QT_END_LICENSE$
-##
-#############################################################################
+# Copyright (C) 2019 The Qt Company Ltd.
+# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 from __future__ import annotations
 
@@ -57,7 +32,7 @@ def _parse_commandline():
 
 
 class Blacklist:
-    """ Class to check if a certain dir_name / dir_path is blacklisted """
+    """Class to check if a certain dir_name / dir_path is blacklisted"""
 
     def __init__(self, names: typing.List[str], path_parts: typing.List[str]):
         self.names = names
@@ -99,7 +74,7 @@ class Blacklist:
 
 
 def recursive_scan(path: str, extension: str, result_paths: typing.List[str], blacklist: Blacklist):
-    """ Find files ending with a certain extension, filtering out blacklisted entries """
+    """Find files ending with a certain extension, filtering out blacklisted entries"""
     try:
         for entry in os.scandir(path):
             if entry.is_file() and entry.path.endswith(extension):

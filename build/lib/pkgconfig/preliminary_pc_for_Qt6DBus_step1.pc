@@ -1,0 +1,14 @@
+prefix=/usr/local/Qt-6.4.2
+exec_prefix=${prefix}
+bindir=${prefix}/bin
+libexecdir=${prefix}/./libexec
+libdir=${prefix}/lib
+includedir=${prefix}/include
+$<$<BOOL:>:mkspecsdir=${prefix}/mkspecs>
+$<1: >
+Name: Qt6 DBus
+Description: Qt DBus module
+Version: 6.4.2
+Libs: $<$<NOT:$<STREQUAL:$<TARGET_PROPERTY:Qt6::DBus,TYPE>,INTERFACE_LIBRARY>>:-L${libdir} -lQt6DBus> $<$<BOOL:loose_link_options-NOTFOUND>:$<JOIN:$<REMOVE_DUPLICATES:loose_link_options-NOTFOUND>, >> $<JOIN:$<REMOVE_DUPLICATES:>, >
+Cflags: $<$<BOOL:${includedir}/QtDBus;${includedir}>:-I$<JOIN:$<REMOVE_DUPLICATES:${includedir}/QtDBus;${includedir}>, -I>> $<$<BOOL:QT_DBUS_LIB>:-D$<JOIN:$<REMOVE_DUPLICATES:QT_DBUS_LIB>, -D>>
+Requires: $<JOIN:$<REMOVE_DUPLICATES:Qt6Core>, >

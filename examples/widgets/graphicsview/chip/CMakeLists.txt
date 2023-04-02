@@ -1,25 +1,18 @@
-# Generated from chip.pro.
-
 cmake_minimum_required(VERSION 3.16)
 project(chip LANGUAGES CXX)
 
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
-
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-  set(INSTALL_EXAMPLESDIR "examples")
+    set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/widgets/graphicsview/chip")
 
-find_package(Qt6 COMPONENTS Core)
-find_package(Qt6 COMPONENTS Gui)
-find_package(Qt6 COMPONENTS Widgets)
-find_package(Qt6 COMPONENTS OpenGL) # special case
-find_package(Qt6 COMPONENTS PrintSupport) # special case
+find_package(Qt6
+    REQUIRED COMPONENTS Core Gui Widgets
+    OPTIONAL_COMPONENTS PrintSupport
+)
 
 qt_add_executable(chip
     chip.cpp chip.h
@@ -27,16 +20,17 @@ qt_add_executable(chip
     mainwindow.cpp mainwindow.h
     view.cpp view.h
 )
+
 set_target_properties(chip PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
+
 target_link_libraries(chip PUBLIC
     Qt::Core
     Qt::Gui
     Qt::Widgets
 )
-
 
 # Resources:
 set(images_resource_files
@@ -48,7 +42,7 @@ set(images_resource_files
     "zoomout.png"
 )
 
-qt6_add_resources(chip "images"
+qt_add_resources(chip "images"
     PREFIX
         "/"
     FILES

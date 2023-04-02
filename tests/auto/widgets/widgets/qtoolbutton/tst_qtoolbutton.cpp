@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -147,7 +122,7 @@ void tst_QToolButton::triggered()
     QVERIFY(QTest::qWaitForWindowActive(&mainWidget));
 
     defaultAction->trigger();
-    QCOMPARE(spy.count(),1);
+    QCOMPARE(spy.size(),1);
     QCOMPARE(qvariant_cast<QAction *>(spy.at(0).at(0)), defaultAction);
 
     m_menu = menu.data();
@@ -158,7 +133,7 @@ void tst_QToolButton::triggered()
     timer->start();
     QTimer::singleShot(10000, &mainWidget, SLOT(close())); // Emergency bail-out
     toolButton->showMenu();
-    QTRY_COMPARE(spy.count(),2);
+    QTRY_COMPARE(spy.size(),2);
     QCOMPARE(qvariant_cast<QAction *>(spy.at(1).at(0)), one);
 }
 
@@ -211,7 +186,7 @@ void tst_QToolButton::task176137_autoRepeatOfAction()
     QTest::mousePress (toolButton, Qt::LeftButton);
     QTest::qWait(2000);
     QTest::mouseRelease (toolButton, Qt::LeftButton, {}, {});
-    QCOMPARE(spy.count(),1);
+    QCOMPARE(spy.size(),1);
 
     // try again with auto repeat
     toolButton->setAutoRepeat (true);
@@ -221,11 +196,11 @@ void tst_QToolButton::task176137_autoRepeatOfAction()
     QTest::mouseRelease (toolButton, Qt::LeftButton, {}, {});
     const qreal expected = (3000 - toolButton->autoRepeatDelay()) / toolButton->autoRepeatInterval() + 1;
     //we check that the difference is small (on some systems timers are not super accurate)
-    qreal diff = (expected - repeatSpy.count()) / expected;
+    qreal diff = (expected - repeatSpy.size()) / expected;
     QVERIFY2(qAbs(diff) < 0.2, qPrintable(
         QString("expected: %1, actual: %2, diff (fraction): %3")
             .arg(expected)
-            .arg(repeatSpy.count())
+            .arg(repeatSpy.size())
             .arg(diff)));
 }
 
@@ -298,21 +273,21 @@ void tst_QToolButton::defaultActionSynced()
 
     tb.setChecked(true);
     QVERIFY(a.isChecked());
-    QCOMPARE(tbSpy.count(), ++tbToggledCount);
-    QCOMPARE(aSpy.count(), ++aToggledCount);
+    QCOMPARE(tbSpy.size(), ++tbToggledCount);
+    QCOMPARE(aSpy.size(), ++aToggledCount);
     tb.setChecked(false);
     QVERIFY(!a.isChecked());
-    QCOMPARE(tbSpy.count(), ++tbToggledCount);
-    QCOMPARE(aSpy.count(), ++aToggledCount);
+    QCOMPARE(tbSpy.size(), ++tbToggledCount);
+    QCOMPARE(aSpy.size(), ++aToggledCount);
 
     a.setChecked(true);
     QVERIFY(tb.isChecked());
-    QCOMPARE(tbSpy.count(), ++tbToggledCount);
-    QCOMPARE(aSpy.count(), ++aToggledCount);
+    QCOMPARE(tbSpy.size(), ++tbToggledCount);
+    QCOMPARE(aSpy.size(), ++aToggledCount);
     a.setChecked(false);
     QVERIFY(!tb.isChecked());
-    QCOMPARE(tbSpy.count(), ++tbToggledCount);
-    QCOMPARE(aSpy.count(), ++aToggledCount);
+    QCOMPARE(tbSpy.size(), ++tbToggledCount);
+    QCOMPARE(aSpy.size(), ++aToggledCount);
 
     QAction b;
     QSignalSpy bSpy(&b, SIGNAL(toggled(bool)));
@@ -326,17 +301,17 @@ void tst_QToolButton::defaultActionSynced()
     QVERIFY(!a.isChecked());
     QVERIFY(b.isChecked());
 
-    QCOMPARE(tbSpy.count(), ++tbToggledCount);
-    QCOMPARE(aSpy.count(), aToggledCount);
-    QCOMPARE(bSpy.count(), ++bToggledCount);
+    QCOMPARE(tbSpy.size(), ++tbToggledCount);
+    QCOMPARE(aSpy.size(), aToggledCount);
+    QCOMPARE(bSpy.size(), ++bToggledCount);
 
     tb.click();
     QVERIFY(!a.isChecked());
     QVERIFY(!tb.isChecked());
     QVERIFY(!b.isChecked());
-    QCOMPARE(tbSpy.count(), ++tbToggledCount);
-    QCOMPARE(aSpy.count(), aToggledCount);
-    QCOMPARE(bSpy.count(), ++bToggledCount);
+    QCOMPARE(tbSpy.size(), ++tbToggledCount);
+    QCOMPARE(aSpy.size(), aToggledCount);
+    QCOMPARE(bSpy.size(), ++bToggledCount);
 }
 
 QTEST_MAIN(tst_QToolButton)

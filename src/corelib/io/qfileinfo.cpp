@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qplatformdefs.h"
 #include "qfileinfo.h"
@@ -45,6 +9,10 @@
 #include "qdebug.h"
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
+
+QT_IMPL_METATYPE_EXTERN(QFileInfo)
 
 QString QFileInfoPrivate::getFileName(QAbstractFileEngine::FileName name) const
 {
@@ -67,7 +35,7 @@ QString QFileInfoPrivate::getFileName(QAbstractFileEngine::FileName name) const
                     ret = entry.path();
                 break;
             }
-            case QAbstractFileEngine::LinkName:
+            case QAbstractFileEngine::AbsoluteLinkTarget:
                 ret = QFileSystemEngine::getLinkTarget(fileEntry, metaData).filePath();
                 break;
             case QAbstractFileEngine::JunctionName:
@@ -95,7 +63,7 @@ QString QFileInfoPrivate::getFileName(QAbstractFileEngine::FileName name) const
         ret = fileEngine->fileName(name);
     }
     if (ret.isNull())
-        ret = QLatin1String("");
+        ret = ""_L1;
     if (cache_enabled)
         fileNames[(int)name] = ret;
     return ret;
@@ -119,7 +87,7 @@ QString QFileInfoPrivate::getFileOwner(QAbstractFileEngine::FileOwner own) const
         ret = fileEngine->owner(own);
     }
     if (ret.isNull())
-        ret = QLatin1String("");
+        ret = ""_L1;
     if (cache_enabled)
         fileOwners[(int)own] = ret;
     return ret;
@@ -179,7 +147,7 @@ uint QFileInfoPrivate::getFileFlags(QAbstractFileEngine::FileFlags request) cons
             req |= QAbstractFileEngine::Refresh;
 
         QAbstractFileEngine::FileFlags flags = fileEngine->fileFlags(req);
-        fileFlags |= uint(flags);
+        fileFlags |= uint(flags.toInt());
         setCachedFlag(cachedFlags);
     }
 
@@ -297,6 +265,11 @@ QDateTime &QFileInfoPrivate::getFileTime(QAbstractFileEngine::FileTime request) 
 
     \snippet ntfsp.cpp 1
 
+    \note Since this is a non-atomic global variable, it is only safe
+    to increment or decrement \c qt_ntfs_permission_lookup before any
+    threads other than the main thread have started or after every thread
+    other than the main thread has ended.
+
     \section1 Performance Issues
 
     Some of QFileInfo's functions query the file system, but for
@@ -316,6 +289,10 @@ QDateTime &QFileInfoPrivate::getFileTime(QAbstractFileEngine::FileTime request) 
     every time you request information from it call setCaching(false).
     If you want to make sure that all information is read from the
     file system, use stat().
+
+    \section1 Platform Specific Issues
+
+    \include android-content-uri-limitations.qdocinc
 
     \sa QDir, QFile
 */
@@ -555,7 +532,7 @@ QString QFileInfo::absoluteFilePath() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::AbsoluteName);
 }
 
@@ -572,7 +549,7 @@ QString QFileInfo::canonicalFilePath() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::CanonicalName);
 }
 
@@ -598,9 +575,8 @@ QString QFileInfo::absolutePath() const
 {
     Q_D(const QFileInfo);
 
-    if (d->isDefaultConstructed) {
-        return QLatin1String("");
-    }
+    if (d->isDefaultConstructed)
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::AbsolutePathName);
 }
 
@@ -616,7 +592,7 @@ QString QFileInfo::canonicalPath() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::CanonicalPathName);
 }
 
@@ -633,7 +609,7 @@ QString QFileInfo::path() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->fileEntry.path();
 }
 
@@ -752,7 +728,7 @@ QString QFileInfo::filePath() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->fileEntry.filePath();
 }
 
@@ -771,8 +747,10 @@ QString QFileInfo::fileName() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
-    return d->fileEntry.fileName();
+        return ""_L1;
+    if (!d->fileEngine)
+        return d->fileEntry.fileName();
+    return d->fileEngine->fileName(QAbstractFileEngine::BaseName);
 }
 
 /*!
@@ -791,7 +769,7 @@ QString QFileInfo::bundleName() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::BundleName);
 }
 
@@ -815,8 +793,10 @@ QString QFileInfo::baseName() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
-    return d->fileEntry.baseName();
+        return ""_L1;
+    if (!d->fileEngine)
+        return d->fileEntry.baseName();
+    return QFileSystemEntry(d->fileEngine->fileName(QAbstractFileEngine::BaseName)).baseName();
 }
 
 /*!
@@ -834,8 +814,11 @@ QString QFileInfo::completeBaseName() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
-    return d->fileEntry.completeBaseName();
+        return ""_L1;
+    if (!d->fileEngine)
+        return d->fileEntry.completeBaseName();
+    const QString fileEngineBaseName = d->fileEngine->fileName(QAbstractFileEngine::BaseName);
+    return QFileSystemEntry(fileEngineBaseName).completeBaseName();
 }
 
 /*!
@@ -853,7 +836,7 @@ QString QFileInfo::completeSuffix() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->fileEntry.completeSuffix();
 }
 
@@ -876,7 +859,7 @@ QString QFileInfo::suffix() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->fileEntry.suffix();
 }
 
@@ -1073,8 +1056,8 @@ bool QFileInfo::isBundle() const
 }
 
 /*!
-    Returns \c true if this object points to a symbolic link or shortcut;
-    otherwise returns \c false.
+    Returns \c true if this object points to a symbolic link, shortcut,
+    or alias; otherwise returns \c false.
 
     Symbolic links exist on Unix (including \macos and iOS) and Windows
     and are typically created by the \c{ln -s} or \c{mklink} commands,
@@ -1082,8 +1065,9 @@ bool QFileInfo::isBundle() const
     the \l{symLinkTarget()}{link's target}.
 
     In addition, true will be returned for shortcuts (\c *.lnk files) on
-    Windows. This behavior is deprecated and will likely change in a future
-    version of Qt. Opening those will open the \c .lnk file itself.
+    Windows, and aliases on \macos. This behavior is deprecated and will
+    likely change in a future version of Qt. Opening a shortcut or alias
+    will open the \c .lnk or alias file itself.
 
     Example:
 
@@ -1115,7 +1099,8 @@ bool QFileInfo::isSymLink() const
     opens the \l{symLinkTarget()}{link's target}.
 
     In contrast to isSymLink(), false will be returned for shortcuts
-    (\c *.lnk files) on Windows. Use QFileInfo::isShortcut() instead.
+    (\c *.lnk files) on Windows and aliases on \macos. Use QFileInfo::isShortcut()
+    and QFileInfo::isAlias() instead.
 
     \note If the symlink points to a non existing file, exists() returns
     false.
@@ -1158,6 +1143,29 @@ bool QFileInfo::isShortcut() const
             [d]() { return d->getFileFlags(QAbstractFileEngine::LinkType); });
 }
 
+/*!
+    Returns \c true if this object points to an alias;
+    otherwise returns \c false.
+
+    \since 6.4
+
+    Aliases only exist on \macos. They are treated as regular files, so
+    opening an alias will open the file itself. In order to open the file
+    or directory an alias references use symLinkTarget().
+
+    \note Even if an alias points to a non existing file,
+    isAlias() returns true.
+
+    \sa isFile(), isDir(), isSymLink(), symLinkTarget()
+*/
+bool QFileInfo::isAlias() const
+{
+    Q_D(const QFileInfo);
+    return d->checkAttribute<bool>(
+            QFileSystemMetaData::LegacyLinkType,
+            [d]() { return d->metaData.isAlias(); },
+            [d]() { return d->getFileFlags(QAbstractFileEngine::LinkType); });
+}
 
 /*!
     \since 5.15
@@ -1223,8 +1231,8 @@ QString QFileInfo::symLinkTarget() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
-    return d->getFileName(QAbstractFileEngine::LinkName);
+        return ""_L1;
+    return d->getFileName(QAbstractFileEngine::AbsoluteLinkTarget);
 }
 
 /*!
@@ -1245,7 +1253,7 @@ QString QFileInfo::junctionTarget() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileName(QAbstractFileEngine::JunctionName);
 }
 
@@ -1267,7 +1275,7 @@ QString QFileInfo::owner() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileOwner(QAbstractFileEngine::OwnerUser);
 }
 
@@ -1308,7 +1316,7 @@ QString QFileInfo::group() const
 {
     Q_D(const QFileInfo);
     if (d->isDefaultConstructed)
-        return QLatin1String("");
+        return ""_L1;
     return d->getFileOwner(QAbstractFileEngine::OwnerGroup);
 }
 
@@ -1361,7 +1369,7 @@ bool QFileInfo::permission(QFile::Permissions permissions) const
                 fseFlags,
                 [=]() { return (d->metaData.permissions() & permissions) == permissions; },
         [=]() {
-            return d->getFileFlags(feFlags) == uint(permissions);
+            return d->getFileFlags(feFlags) == uint(permissions.toInt());
         });
 }
 
@@ -1694,10 +1702,8 @@ QDebug operator<<(QDebug dbg, const QFileInfo &fi)
 
     QDirIterator it(dir);
     while (it.hasNext()) {
-        it.next();
-
         // Extract the QFileInfo from the iterator directly:
-        QFileInfo fi = it.fileInfo();
+        QFileInfo fi = it.nextFileInfo();
 
         ~~~
     }

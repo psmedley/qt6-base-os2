@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -92,6 +67,11 @@ private slots:
 
     void testProxyCalled();
     void testStyleOptionInit();
+
+    void sliderPositionFromValue_data();
+    void sliderPositionFromValue();
+    void sliderValueFromPosition_data();
+    void sliderValueFromPosition();
 private:
     bool testAllFunctions(QStyle *);
     bool testScrollBarSubControls(const QStyle *style);
@@ -653,13 +633,116 @@ void tst_QStyle::testStyleOptionInit()
     QStringList keys = QStyleFactory::keys();
     keys.prepend(QString()); // QCommonStyle marker
 
-    for (const QString &key : qAsConst(keys)) {
+    for (const QString &key : std::as_const(keys)) {
         QStyle* style = key.isEmpty() ? new QCommonStyle : QStyleFactory::create(key);
         TestStyleOptionInitProxy testStyle;
         testStyle.setBaseStyle(style);
         testAllFunctions(style);
         QVERIFY(!testStyle.invalidOptionsDetected);
     }
+}
+
+void tst_QStyle::sliderPositionFromValue_data()
+{
+    QTest::addColumn<int>("min");
+    QTest::addColumn<int>("max");
+    QTest::addColumn<int>("value");
+    QTest::addColumn<int>("span");
+    QTest::addColumn<bool>("upsideDown");
+    QTest::addColumn<int>("position");
+
+    QTest::addRow("no span") << 12 << 56 << 34 << 0 << false << 0;
+    QTest::addRow("no span inverse") << 12 << 56 << 34 << 0 << true << 0;
+
+    QTest::addRow("value too small") << 34 << 56 << 12 << 2000 << false << 0;
+    QTest::addRow("value too small inverse") << 34 << 56 << 12 << 2000 << true << 2000;
+
+    QTest::addRow("no-range") << 12 << 12 << 12 << 2000 << false << 0;
+    QTest::addRow("no-range-inverse") << 12 << 12 << 12 << 2000 << true << 0;
+
+    QTest::addRow("close-to-max") << 12 << 34 << 33 << 2000 << false << 1909;
+    QTest::addRow("at-max") << 12 << 34 << 34 << 2000 << false << 2000;
+    QTest::addRow("value too large") << 12 << 34 << 35 << 2000 << false << 2000;
+    QTest::addRow("close-to-max-inverse") << 12 << 34 << 33 << 2000 << true << 91;
+    QTest::addRow("at-max-inverse") << 12 << 34 << 34 << 2000 << true << 0;
+    QTest::addRow("value too large-inverse") << 12 << 34 << 35 << 2000 << true << 0;
+
+    QTest::addRow("big-range") << 100000 << 700000 << 250000 << 2000 << false << 500;
+    QTest::addRow("big-range-inverse") << 100000 << 700000 << 250000 << 2000 << true << 1500;
+
+    QTest::addRow("across-zero") << -1000 << 1000 << -500 << 100 << false << 25;
+    QTest::addRow("across-zero-inverse") << -1000 << 1000 << -500 << 100 << true << 75;
+
+    QTest::addRow("span>range") << 0 << 100 << 60 << 2000 << false << 1200;
+    QTest::addRow("span>range-inverse") << 0 << 100 << 60 << 2000 << true << 800;
+
+    QTest::addRow("overflow1 (QTBUG-101581)") << -1 << INT_MAX << 235 << 891 << false << 0;
+    QTest::addRow("overflow2") << INT_MIN << INT_MAX << 10 << 100 << false << 50;
+    QTest::addRow("overflow2-inverse") << INT_MIN << INT_MAX << 10 << 100 << true << 49;
+    QTest::addRow("overflow3") << INT_MIN << INT_MAX << -10 << 100 << false << 49;
+    QTest::addRow("overflow3-inverse") << INT_MIN << INT_MAX << -10 << 100 << true << 50;
+}
+
+void tst_QStyle::sliderPositionFromValue()
+{
+    QFETCH(int, min);
+    QFETCH(int, max);
+    QFETCH(int, value);
+    QFETCH(int, span);
+    QFETCH(bool, upsideDown);
+    QFETCH(int, position);
+
+    QCOMPARE(QStyle::sliderPositionFromValue(min, max, value, span, upsideDown), position);
+}
+
+void tst_QStyle::sliderValueFromPosition_data()
+{
+    QTest::addColumn<int>("min");
+    QTest::addColumn<int>("max");
+    QTest::addColumn<int>("position");
+    QTest::addColumn<int>("span");
+    QTest::addColumn<bool>("upsideDown");
+    QTest::addColumn<int>("value");
+
+    QTest::addRow("position zero") << 0 << 100 << 0 << 2000 << false << 0;
+    QTest::addRow("position zero inverse") << 0 << 100 << 0 << 2000 << true << 100;
+
+    QTest::addRow("span zero") << 0 << 100 << 1200 << 0 << false << 0;
+    QTest::addRow("span zero inverse") << 0 << 100 << 1200 << 0 << true << 100;
+
+    QTest::addRow("position > span") << -300 << -200 << 2 << 1 << false << -200;
+    QTest::addRow("position > span inverse") << -300 << -200 << 2 << 1 << true << -300;
+
+    QTest::addRow("large") << 0 << 100 << 1200 << 2000 << false << 60;
+    QTest::addRow("large-inverse") << 0 << 100 << 1200 << 2000 << true << 40;
+
+    QTest::addRow("normal") << 0 << 100 << 12 << 20 << false << 60;
+    QTest::addRow("inverse") << 0 << 100 << 12 << 20 << true << 40;
+
+    QTest::addRow("overflow1") << -1 << INT_MAX << 10 << 10 << false << INT_MAX;
+    QTest::addRow("overflow1-inverse") << -1 << INT_MAX << 10 << 10 << true << -1;
+    QTest::addRow("overflow2") << INT_MIN << INT_MAX << 5 << 10 << false << 0;
+    QTest::addRow("overflow2-inverse") << INT_MIN << INT_MAX << 5 << 10 << true << -1;
+    QTest::addRow("overflow3") << INT_MIN << 0 << 0 << 10 << false << INT_MIN;
+    QTest::addRow("overflow3-inverse") << INT_MIN << 0 << 0 << 10 << true << 0;
+
+    QTest::addRow("overflow4") << 0 << INT_MAX << INT_MAX/2-6 << INT_MAX/2-5 << false << INT_MAX-2;
+    QTest::addRow("overflow4-inverse") << 0 << INT_MAX << INT_MAX/2-6 << INT_MAX/2-5 << true << 2;
+
+    QTest::addRow("overflow5") << 0 << 4 << INT_MAX/4 << INT_MAX << false << 1;
+    QTest::addRow("overflow5-inverse") << 0 << 4 << INT_MAX/4 << INT_MAX << true << 3;
+}
+
+void tst_QStyle::sliderValueFromPosition()
+{
+    QFETCH(int, min);
+    QFETCH(int, max);
+    QFETCH(int, position);
+    QFETCH(int, span);
+    QFETCH(bool, upsideDown);
+    QFETCH(int, value);
+
+    QCOMPARE(QStyle::sliderValueFromPosition(min, max, position, span, upsideDown), value);
 }
 
 QTEST_MAIN(tst_QStyle)

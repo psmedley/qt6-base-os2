@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -47,6 +22,7 @@ private Q_SLOTS:
     void noBrushesSetForDefaultPalette();
     void cannotCheckIfInvalidBrushSet();
     void checkIfBrushForCurrentGroupSet();
+    void cacheKey();
 };
 
 void tst_QPalette::roleValues_data()
@@ -122,6 +98,21 @@ void tst_QPalette::resolve()
 
     QVERIFY(p2ResolvedTo1 != p1);
     QVERIFY(p2ResolvedTo1 != p2);
+
+    QPalette p3;
+    // ensure the resolve mask is full
+    for (int r = 0; r < QPalette::NColorRoles; ++r)
+        p3.setBrush(QPalette::All, QPalette::ColorRole(r), Qt::red);
+    const QPalette::ResolveMask fullMask = p3.resolveMask();
+
+    QPalette p3ResolvedToP1 = p3.resolve(p1);
+    QVERIFY(p3ResolvedToP1.isCopyOf(p3));
+
+    QPalette p4;
+    QCOMPARE(p4.resolveMask(), QPalette::ResolveMask{});
+    // resolve must detach even if p4 has no mask
+    p4 = p4.resolve(p3);
+    QCOMPARE(p3.resolveMask(), fullMask);
 }
 
 
@@ -207,9 +198,6 @@ void tst_QPalette::setBrush()
 
     const QPalette pp = p;
     QVERIFY(pp.isCopyOf(p));
-    // Setting the same brush won't detach
-    p.setBrush(QPalette::Disabled, QPalette::Button, Qt::green);
-    QVERIFY(pp.isCopyOf(p));
 }
 
 void tst_QPalette::isBrushSet()
@@ -234,7 +222,7 @@ void tst_QPalette::isBrushSet()
     QVERIFY(!p2.isBrushSet(QPalette::Active, QPalette::Dark));
     p2.setBrush(QPalette::Active, QPalette::Dark, p2.brush(QPalette::Active, QPalette::Dark));
     QVERIFY(!p3.isBrushSet(QPalette::Active, QPalette::Dark));
-    QVERIFY(!p2.isBrushSet(QPalette::Active, QPalette::Dark));
+    QVERIFY(p2.isBrushSet(QPalette::Active, QPalette::Dark));
 }
 
 void tst_QPalette::setAllPossibleBrushes()
@@ -275,6 +263,70 @@ void tst_QPalette::checkIfBrushForCurrentGroupSet()
     p.setBrush(QPalette::Current, QPalette::Link, QBrush(Qt::yellow));
 
     QVERIFY(p.isBrushSet(QPalette::Current, QPalette::Link));
+}
+
+void tst_QPalette::cacheKey()
+{
+    const QPalette defaultPalette;
+    // precondition: all palettes are expected to have contrasting text on base
+    QVERIFY(defaultPalette.base() != defaultPalette.text());
+    const auto defaultCacheKey = defaultPalette.cacheKey();
+    const auto defaultSerNo = defaultCacheKey >> 32;
+    const auto defaultDetachNo = defaultCacheKey & 0xffffffff;
+
+    QPalette changeTwicePalette(defaultPalette);
+    changeTwicePalette.setBrush(QPalette::All, QPalette::ButtonText, Qt::red);
+    const auto firstChangeCacheKey = changeTwicePalette.cacheKey();
+    QCOMPARE_NE(firstChangeCacheKey, defaultCacheKey);
+    changeTwicePalette.setBrush(QPalette::All, QPalette::ButtonText, Qt::green);
+    const auto secondChangeCacheKey = changeTwicePalette.cacheKey();
+    QCOMPARE_NE(firstChangeCacheKey, secondChangeCacheKey);
+
+    QPalette copyDifferentData(defaultPalette);
+    QPalette copyDifferentMask(defaultPalette);
+    QPalette copyDifferentMaskAndData(defaultPalette);
+
+    QCOMPARE(defaultPalette.cacheKey(), copyDifferentData.cacheKey());
+
+    // deep detach of both private and data
+    copyDifferentData.setBrush(QPalette::Base, defaultPalette.text());
+    const auto differentDataKey = copyDifferentData.cacheKey();
+    const auto differentDataSerNo = differentDataKey >> 32;
+    const auto differentDataDetachNo = differentDataKey & 0xffffffff;
+
+    QCOMPARE_NE(copyDifferentData.cacheKey(), defaultCacheKey);
+    QCOMPARE(defaultPalette.cacheKey(), defaultCacheKey);
+
+    // shallow detach, both privates reference the same data
+    copyDifferentMask.setResolveMask(0xffffffffffffffff);
+    const auto differentMaskKey = copyDifferentMask.cacheKey();
+    const auto differentMaskSerNo = differentMaskKey >> 32;
+    const auto differentMaskDetachNo = differentMaskKey & 0xffffffff;
+    QCOMPARE(differentMaskSerNo, defaultSerNo);
+    QCOMPARE_NE(differentMaskSerNo, defaultDetachNo);
+    QCOMPARE_NE(differentMaskKey, defaultCacheKey);
+    QCOMPARE_NE(differentMaskKey, differentDataKey);
+
+    // shallow detach, both privates reference the same data
+    copyDifferentMaskAndData.setResolveMask(0xeeeeeeeeeeeeeeee);
+    const auto modifiedCacheKey = copyDifferentMaskAndData.cacheKey();
+    QCOMPARE_NE(modifiedCacheKey, copyDifferentMask.cacheKey());
+    QCOMPARE_NE(modifiedCacheKey, defaultCacheKey);
+    QCOMPARE_NE(modifiedCacheKey, copyDifferentData.cacheKey());
+    QCOMPARE_NE(copyDifferentMask.cacheKey(), defaultCacheKey);
+
+    // full detach - both key elements are different
+    copyDifferentMaskAndData.setBrush(QPalette::Base, defaultPalette.text());
+    const auto modifiedAllKey = copyDifferentMaskAndData.cacheKey();
+    const auto modifiedAllSerNo = modifiedAllKey >> 32;
+    const auto modifiedAllDetachNo = modifiedAllKey & 0xffffffff;
+    QCOMPARE_NE(modifiedAllSerNo, defaultSerNo);
+    QCOMPARE_NE(modifiedAllDetachNo, defaultDetachNo);
+
+    QCOMPARE_NE(modifiedAllKey, copyDifferentMask.cacheKey());
+    QCOMPARE_NE(modifiedAllKey, defaultCacheKey);
+    QCOMPARE_NE(modifiedAllKey, differentDataKey);
+    QCOMPARE_NE(modifiedAllKey, modifiedCacheKey);
 }
 
 QTEST_MAIN(tst_QPalette)

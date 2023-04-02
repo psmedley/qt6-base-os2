@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Copyright (C) 2014 Keith Gardner <kreios4004@gmail.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2022 Intel Corporation.
+// Copyright (C) 2015 Keith Gardner <kreios4004@gmail.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QVERSIONNUMBER_H
 #define QVERSIONNUMBER_H
@@ -93,16 +57,18 @@ class QVersionNumber
 
         SegmentStorage(const QList<int> &seg)
         {
-            if (dataFitsInline(seg.begin(), seg.size()))
-                setInlineData(seg.begin(), seg.size());
+            if (dataFitsInline(seg.data(), seg.size()))
+                setInlineData(seg.data(), seg.size());
             else
-                pointer_segments = new QList<int>(seg);
+                setListData(seg);
         }
+
+        Q_CORE_EXPORT void setListData(const QList<int> &seg);
 
         SegmentStorage(const SegmentStorage &other)
         {
             if (other.isUsingPointer())
-                pointer_segments = new QList<int>(*other.pointer_segments);
+                setListData(*other.pointer_segments);
             else
                 dummy = other.dummy;
         }
@@ -112,7 +78,7 @@ class QVersionNumber
             if (isUsingPointer() && other.isUsingPointer()) {
                 *pointer_segments = *other.pointer_segments;
             } else if (other.isUsingPointer()) {
-                pointer_segments = new QList<int>(*other.pointer_segments);
+                setListData(*other.pointer_segments);
             } else {
                 if (isUsingPointer())
                     delete pointer_segments;
@@ -136,40 +102,45 @@ class QVersionNumber
 
         explicit SegmentStorage(QList<int> &&seg)
         {
-            if (dataFitsInline(seg.cbegin(), seg.size()))
-                setInlineData(seg.cbegin(), seg.size());
+            if (dataFitsInline(std::as_const(seg).data(), seg.size()))
+                setInlineData(std::as_const(seg).data(), seg.size());
             else
-                pointer_segments = new QList<int>(std::move(seg));
+                setListData(std::move(seg));
         }
-        SegmentStorage(std::initializer_list<int> args)
+
+        Q_CORE_EXPORT void setListData(QList<int> &&seg);
+
+        explicit SegmentStorage(std::initializer_list<int> args)
+            : SegmentStorage(args.begin(), args.end()) {}
+
+        explicit SegmentStorage(const int *first, const int *last)
         {
-            if (dataFitsInline(args.begin(), int(args.size()))) {
-                setInlineData(args.begin(), int(args.size()));
+            if (dataFitsInline(first, last - first)) {
+                setInlineData(first, last - first);
             } else {
-                pointer_segments = new QList<int>(args);
+                setListData(first, last);
             }
         }
+
+        Q_CORE_EXPORT void setListData(const int *first, const int *last);
 
         ~SegmentStorage() { if (isUsingPointer()) delete pointer_segments; }
 
         bool isUsingPointer() const noexcept
         { return (inline_segments[InlineSegmentMarker] & 1) == 0; }
 
-        int size() const noexcept
+        qsizetype size() const noexcept
         { return isUsingPointer() ? pointer_segments->size() : (inline_segments[InlineSegmentMarker] >> 1); }
 
-        void setInlineSize(int len)
-        { inline_segments[InlineSegmentMarker] = qint8(1 + 2 * len); }
-
-        void resize(int len)
+        void setInlineSize(qsizetype len)
         {
-            if (isUsingPointer())
-                pointer_segments->resize(len);
-            else
-                setInlineSize(len);
+            Q_ASSERT(len <= InlineSegmentCount);
+            inline_segments[InlineSegmentMarker] = qint8(1 + 2 * len);
         }
 
-        int at(int index) const
+        Q_CORE_EXPORT void resize(qsizetype len);
+
+        int at(qsizetype index) const
         {
             return isUsingPointer() ?
                         pointer_segments->at(index) :
@@ -187,28 +158,29 @@ class QVersionNumber
         }
 
     private:
-        static bool dataFitsInline(const int *data, int len)
+        static bool dataFitsInline(const int *data, qsizetype len)
         {
             if (len > InlineSegmentCount)
                 return false;
-            for (int i = 0; i < len; ++i)
+            for (qsizetype i = 0; i < len; ++i)
                 if (data[i] != qint8(data[i]))
                     return false;
             return true;
         }
-        void setInlineData(const int *data, int len)
+        void setInlineData(const int *data, qsizetype len)
         {
+            Q_ASSERT(len <= InlineSegmentCount);
             dummy = 1 + len * 2;
 #if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
-            for (int i = 0; i < len; ++i)
+            for (qsizetype i = 0; i < len; ++i)
                 dummy |= quintptr(data[i] & 0xFF) << (8 * (i + 1));
 #elif Q_BYTE_ORDER == Q_BIG_ENDIAN
-            for (int i = 0; i < len; ++i)
+            for (qsizetype i = 0; i < len; ++i)
                 dummy |= quintptr(data[i] & 0xFF) << (8 * (sizeof(void *) - i - 1));
 #else
             // the code above is equivalent to:
             setInlineSize(len);
-            for (int i = 0; i < len; ++i)
+            for (qsizetype i = 0; i < len; ++i)
                 inline_segments[InlineSegmentStartIdx + i] = data[i] & 0xFF;
 #endif
         }
@@ -228,6 +200,11 @@ public:
 
     inline QVersionNumber(std::initializer_list<int> args)
         : m_segments(args)
+    {}
+
+    template <qsizetype N>
+    explicit QVersionNumber(const QVarLengthArray<int, N> &sec)
+        : m_segments(sec.begin(), sec.end())
     {}
 
     inline explicit QVersionNumber(int maj)
@@ -258,24 +235,46 @@ public:
 
     [[nodiscard]] Q_CORE_EXPORT QList<int> segments() const;
 
-    [[nodiscard]] inline int segmentAt(int index) const noexcept
+    [[nodiscard]] inline int segmentAt(qsizetype index) const noexcept
     { return (m_segments.size() > index) ? m_segments.at(index) : 0; }
 
-    [[nodiscard]] inline int segmentCount() const noexcept
+    [[nodiscard]] inline qsizetype segmentCount() const noexcept
     { return m_segments.size(); }
 
     [[nodiscard]] Q_CORE_EXPORT bool isPrefixOf(const QVersionNumber &other) const noexcept;
 
     [[nodiscard]] Q_CORE_EXPORT static int compare(const QVersionNumber &v1, const QVersionNumber &v2) noexcept;
 
-    [[nodiscard]] Q_CORE_EXPORT static Q_DECL_PURE_FUNCTION QVersionNumber commonPrefix(const QVersionNumber &v1, const QVersionNumber &v2);
+    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber commonPrefix(const QVersionNumber &v1, const QVersionNumber &v2);
 
     [[nodiscard]] Q_CORE_EXPORT QString toString() const;
-#if QT_STRINGVIEW_LEVEL < 2
-    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber fromString(const QString &string, int *suffixIndex = nullptr);
+    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber fromString(QAnyStringView string, qsizetype *suffixIndex = nullptr);
+
+#if QT_DEPRECATED_SINCE(6, 4) && QT_POINTER_SIZE != 4
+    Q_WEAK_OVERLOAD
+    QT_DEPRECATED_VERSION_X_6_4("Use the 'qsizetype *suffixIndex' overload.")
+    [[nodiscard]] static QVersionNumber fromString(QAnyStringView string, int *suffixIndex)
+    {
+        QT_WARNING_PUSH
+        // fromString() writes to *n unconditionally, but GCC can't know that
+        QT_WARNING_DISABLE_GCC("-Wmaybe-uninitialized")
+        qsizetype n;
+        auto r = fromString(string, &n);
+        if (suffixIndex) {
+            Q_ASSERT(int(n) == n);
+            *suffixIndex = int(n);
+        }
+        return r;
+        QT_WARNING_POP
+    }
 #endif
-    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber fromString(QLatin1String string, int *suffixIndex = nullptr);
-    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber fromString(QStringView string, int *suffixIndex = nullptr);
+
+
+#if QT_CORE_REMOVED_SINCE(6, 4)
+    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber fromString(const QString &string, int *suffixIndex);
+    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber fromString(QLatin1StringView string, int *suffixIndex);
+    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber fromString(QStringView string, int *suffixIndex);
+#endif
 
     [[nodiscard]] friend bool operator> (const QVersionNumber &lhs, const QVersionNumber &rhs) noexcept
     { return compare(lhs, rhs) > 0; }
@@ -294,7 +293,6 @@ public:
 
     [[nodiscard]] friend bool operator!=(const QVersionNumber &lhs, const QVersionNumber &rhs) noexcept
     { return compare(lhs, rhs) != 0; }
-
 
 private:
 #ifndef QT_NO_DATASTREAM
@@ -462,7 +460,7 @@ Q_CORE_EXPORT QDebug operator<<(QDebug, const QTypeRevision &revision);
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QVersionNumber)
-Q_DECLARE_METATYPE(QTypeRevision)
+QT_DECL_METATYPE_EXTERN(QVersionNumber, Q_CORE_EXPORT)
+QT_DECL_METATYPE_EXTERN(QTypeRevision, Q_CORE_EXPORT)
 
 #endif // QVERSIONNUMBER_H

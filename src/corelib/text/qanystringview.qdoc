@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
     \class QAnyStringView
@@ -41,9 +17,11 @@
 
     Unlike QStringView and QUtf8StringView, QAnyStringView can hold
     strings of any of the following encodings: UTF-8, UTF-16, and
-    Latin-1. The latter is supported to keep old source working
-    efficiently. It is expected that by Qt 7, the Latin-1 support will
-    be removed.
+    Latin-1. The latter is supported because Latin-1, unlike UTF-8,
+    can be efficiently compared to UTF-16 data: a length mismatch
+    already means the strings cannot be equal. This is not true for
+    UTF-8/UTF-16 comparisons, because UTF-8 is a variable-length
+    encoding.
 
     The string may be represented as an array (or an array-compatible
     data-structure such as QString, std::basic_string, etc.) of \c
@@ -60,14 +38,19 @@
     When used as an interface type, QAnyStringView allows a single
     function to accept a wide variety of string data sources. One
     function accepting QAnyStringView thus replaces five function
-    overloads (taking QString, \c{(const QChar*, int)},
-    QUtf8StringView, QLatin1String (but see above), and QChar), while
+    overloads (taking QString, \c{(const QChar*, qsizetype)},
+    QUtf8StringView, QLatin1StringView (but see above), and QChar), while
     at the same time enabling even more string data sources to be
     passed to the function, such as \c{u8"Hello World"}, a \c char8_t
     string literal.
 
     Like elsewhere in Qt, QAnyStringView assumes \c char data is encoded
-    in UTF-8, unless it is presented as a QLatin1String.
+    in UTF-8, unless it is presented as a QLatin1StringView.
+
+    Since Qt 6.4, however, UTF-8 string literals that are pure US-ASCII are
+    automatically stored as Latin-1. This is a compile-time check with no
+    runtime overhead. The feature requires compiling in C++20, or with a recent
+    GCC.
 
     QAnyStringViews should be passed by value, not by reference-to-const:
     \snippet code/src_corelib_text_qanystringview.cpp 0
@@ -97,13 +80,13 @@
     \endlist
 
     The 8-bit character types are interpreted as UTF-8 data (except when
-    presented as a QLatin1String) while the 16-bit character types are
+    presented as a QLatin1StringView) while the 16-bit character types are
     interpreted as UTF-16 data in host byte order (the same as QString).
 
     \section2 Sizes and Sub-Strings
 
     All sizes and positions in QAnyStringView functions are in the
-    encoding's code points (that is, UTF-16 surrogate pairs count as
+    encoding's code units (that is, UTF-16 surrogate pairs count as
     two for the purposes of these functions, the same as in QString,
     and UTF-8 multibyte sequences count as two, three or four,
     depending on their length).
@@ -164,7 +147,7 @@
     The range \c{[first,last)} must remain valid for the lifetime of
     this string view object.
 
-    Passing \c \nullptr as \a first is safe if \a last is \nullptr, too,
+    Passing \nullptr as \a first is safe if \a last is \nullptr, too,
     and results in a null string view.
 
     The behavior is undefined if \a last precedes \a first, or \a first
@@ -263,7 +246,7 @@
 /*!
     \fn const void *QAnyStringView::data() const
 
-    Returns a const pointer to the first character in the string.
+    Returns a const pointer to the first character in the string view.
 
     \note The character array represented by the return value is \e not null-terminated.
 
@@ -321,7 +304,7 @@
 */
 
 /*!
-    \fn int QAnyStringView::length() const
+    \fn QAnyStringView::length() const
 
     Same as size().
 
@@ -333,7 +316,7 @@
 /*!
     \fn QChar QAnyStringView::front() const
 
-    Returns the first character in the string.
+    Returns the first character in the string view.
 
     This function is provided for STL compatibility.
 
@@ -346,7 +329,7 @@
 /*!
     \fn QChar QAnyStringView::back() const
 
-    Returns the last character in the string.
+    Returns the last character in the string view.
 
     This function is provided for STL compatibility.
 
@@ -354,6 +337,72 @@
     undefined behavior.
 
     \sa front(), {Sizes and Sub-Strings}
+*/
+
+/*! \fn template <typename Visitor> decltype(auto) QAnyStringView::visit(Visitor &&v) const
+
+    Calls \a v with either a QUtf8StringView, QLatin1String, or QStringView, depending
+    on the encoding of the string data this string-view references.
+
+    This is how most functions taking QAnyStringView fork off into per-encoding
+    functions:
+
+    \code
+    void processImpl(QLatin1String s) { ~~~ }
+    void processImpl(QUtf8StringView s) { ~~~ }
+    void processImpl(QStringView s) { ~~~ }
+
+    void process(QAnyStringView s)
+    {
+        s.visit([](auto s) { processImpl(s); });
+    }
+    \endcode
+
+    Here, we're reusing the same name, \c s, for both the QAnyStringView
+    object, as well as the lambda's parameter. This is idiomatic code and helps
+    track the identity of the objects through visit() calls, for example in more
+    complex situations such as
+
+    \code
+    bool equal(QAnyStringView lhs, QAnyStringView rhs)
+    {
+        // assuming operator==(QAnyStringView, QAnyStringView) didn't, yet, exist:
+        return lhs.visit([rhs](auto lhs) {
+            rhs.visit([lhs](auto rhs) {
+                return lhs == rhs;
+            });
+        });
+    }
+    \endcode
+
+    visit() requires that all lambda instantiations have the same return type.
+    If they differ, you get a compile error, even if there is a common type. To
+    fix, you can use explicit return types on the lambda, or cast in the return
+    statements:
+
+    \code
+    // wrong:
+    QAnyStringView firstHalf(QAnyStringView input)
+    {
+        return input.visit([](auto input) {   // ERROR: lambdas return different types
+            return input.sliced(0, input.size() / 2);
+        });
+    }
+    // correct:
+    QAnyStringView firstHalf(QAnyStringView input)
+    {
+        return input.visit([](auto input) -> QAnyStringView { // OK, explicit return type
+            return input.sliced(0, input.size() / 2);
+        });
+    }
+    // also correct:
+    QAnyStringView firstHalf(QAnyStringView input)
+    {
+        return input.visit([](auto input) {
+            return QAnyStringView(input.sliced(0, input.size() / 2)); // OK, cast to common type
+        });
+    }
+    \endcode
 */
 
 /*!
@@ -387,7 +436,7 @@
 
     Convert \a s to a QAnyStringView ignoring \c{s.isNull()}.
 
-    Returns a string-view that references \a{s}'s data, but is never null.
+    Returns a string view that references \a{s}'s data, but is never null.
 
     This is a faster way to convert a QString or QByteArray to a QAnyStringView,
     if null QStrings or QByteArrays can legitimately be treated as empty ones.

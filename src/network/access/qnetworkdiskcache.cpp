@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 //#define QNETWORKDISKCACHE_DEBUG
 
@@ -52,17 +16,20 @@
 #include <qurl.h>
 #include <qcryptographichash.h>
 #include <qdebug.h>
+#include <QMultiMap>
 
 #include <memory>
 
-#define CACHE_POSTFIX QLatin1String(".d")
-#define PREPARED_SLASH QLatin1String("prepared/")
+#define CACHE_POSTFIX ".d"_L1
+#define PREPARED_SLASH "prepared/"_L1
 #define CACHE_VERSION 8
-#define DATA_DIR QLatin1String("data")
+#define DATA_DIR "data"_L1
 
 #define MAX_COMPRESSION_SIZE (1024 * 1024 * 3)
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 /*!
     \class QNetworkDiskCache
@@ -147,10 +114,10 @@ void QNetworkDiskCache::setCacheDirectory(const QString &cacheDir)
     d->cacheDirectory = cacheDir;
     QDir dir(d->cacheDirectory);
     d->cacheDirectory = dir.absolutePath();
-    if (!d->cacheDirectory.endsWith(QLatin1Char('/')))
-        d->cacheDirectory += QLatin1Char('/');
+    if (!d->cacheDirectory.endsWith(u'/'))
+        d->cacheDirectory += u'/';
 
-    d->dataDirectory = d->cacheDirectory + DATA_DIR + QString::number(CACHE_VERSION) + QLatin1Char('/');
+    d->dataDirectory = d->cacheDirectory + DATA_DIR + QString::number(CACHE_VERSION) + u'/';
     d->prepareLayout();
 }
 
@@ -522,8 +489,8 @@ qint64 QNetworkDiskCache::expire()
     QMultiMap<QDateTime, QString> cacheItems;
     qint64 totalSize = 0;
     while (it.hasNext()) {
-        QString path = it.next();
-        QFileInfo info = it.fileInfo();
+        QFileInfo info = it.nextFileInfo();
+        QString path = info.filePath();
         QString fileName = info.fileName();
         if (fileName.endsWith(CACHE_POSTFIX)) {
             const QDateTime birthTime = info.fileTime(QFile::FileBirthTime);
@@ -533,7 +500,7 @@ qint64 QNetworkDiskCache::expire()
         }
     }
 
-    int removedFiles = 0;
+    [[maybe_unused]] int removedFiles = 0; // used under QNETWORKDISKCACHE_DEBUG
     qint64 goal = (maximumCacheSize() * 9) / 10;
     QMultiMap<QDateTime, QString>::const_iterator i = cacheItems.constBegin();
     while (i != cacheItems.constEnd()) {
@@ -543,7 +510,7 @@ qint64 QNetworkDiskCache::expire()
         QFile file(name);
 
         if (name.contains(PREPARED_SLASH)) {
-            for (QCacheItem *item : qAsConst(d->inserting)) {
+            for (QCacheItem *item : std::as_const(d->inserting)) {
                 if (item && item->file && item->file->fileName() == name) {
                     delete item->file;
                     item->file = nullptr;
@@ -592,14 +559,12 @@ QString QNetworkDiskCachePrivate::uniqueFileName(const QUrl &url)
     cleanUrl.setPassword(QString());
     cleanUrl.setFragment(QString());
 
-    QCryptographicHash hash(QCryptographicHash::Sha1);
-    hash.addData(cleanUrl.toEncoded());
+    const QByteArray hash = QCryptographicHash::hash(cleanUrl.toEncoded(), QCryptographicHash::Sha1);
     // convert sha1 to base36 form and return first 8 bytes for use as string
-    const QByteArray id = QByteArray::number(*(qlonglong*)hash.result().constData(), 36).left(8);
-    // generates <one-char subdir>/<8-char filname.d>
-    uint code = (uint)id.at(id.length()-1) % 16;
-    QString pathFragment = QString::number(code, 16) + QLatin1Char('/')
-                             + QLatin1String(id) + CACHE_POSTFIX;
+    const QByteArray id = QByteArray::number(*(qlonglong*)hash.data(), 36).left(8);
+    // generates <one-char subdir>/<8-char filename.d>
+    uint code = (uint)id.at(id.size()-1) % 16;
+    QString pathFragment = QString::number(code, 16) + u'/' + QLatin1StringView(id) + CACHE_POSTFIX;
 
     return pathFragment;
 }
@@ -607,7 +572,7 @@ QString QNetworkDiskCachePrivate::uniqueFileName(const QUrl &url)
 QString QNetworkDiskCachePrivate::tmpCacheFileName() const
 {
     //The subdirectory is presumed to be already read for use.
-    return cacheDirectory + PREPARED_SLASH + QLatin1String("XXXXXX") + CACHE_POSTFIX;
+    return cacheDirectory + PREPARED_SLASH + "XXXXXX"_L1 + CACHE_POSTFIX;
 }
 
 /*!
@@ -726,3 +691,5 @@ bool QCacheItem::read(QFile *device, bool readData)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qnetworkdiskcache.cpp"

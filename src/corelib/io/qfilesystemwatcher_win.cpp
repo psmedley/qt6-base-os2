@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qfilesystemwatcher.h"
 #include "qfilesystemwatcher_win_p.h"
@@ -63,6 +27,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 // #define WINQFSW_DEBUG
 #ifdef WINQFSW_DEBUG
 #  define DEBUG qDebug
@@ -75,8 +41,8 @@ static Qt::HANDLE createChangeNotification(const QString &path, uint flags)
     // Volume and folder paths need a trailing slash for proper notification
     // (e.g. "c:" -> "c:/").
     QString nativePath = QDir::toNativeSeparators(path);
-    if ((flags & FILE_NOTIFY_CHANGE_ATTRIBUTES) == 0 && !nativePath.endsWith(QLatin1Char('\\')))
-        nativePath.append(QLatin1Char('\\'));
+    if ((flags & FILE_NOTIFY_CHANGE_ATTRIBUTES) == 0 && !nativePath.endsWith(u'\\'))
+        nativePath.append(u'\\');
     const HANDLE result = FindFirstChangeNotification(reinterpret_cast<const wchar_t *>(nativePath.utf16()),
                                                       FALSE, flags);
     DEBUG() << __FUNCTION__ << nativePath << Qt::hex << Qt::showbase << flags << "returns" << result;
@@ -274,7 +240,7 @@ bool QWindowsRemovableDriveListener::nativeEventFilter(const QByteArray &, void 
 // Set up listening for WM_DEVICECHANGE+DBT_CUSTOMEVENT for a removable drive path,
 void QWindowsRemovableDriveListener::addPath(const QString &p)
 {
-    const wchar_t drive = p.size() >= 2 && p.at(0).isLetter() && p.at(1) == QLatin1Char(':')
+    const wchar_t drive = p.size() >= 2 && p.at(0).isLetter() && p.at(1) == u':'
         ? wchar_t(p.at(0).toUpper().unicode()) : L'\0';
     if (!drive)
         return;
@@ -351,9 +317,9 @@ QWindowsFileSystemWatcherEngine::QWindowsFileSystemWatcherEngine(QObject *parent
 
 QWindowsFileSystemWatcherEngine::~QWindowsFileSystemWatcherEngine()
 {
-    for (auto *thread : qAsConst(threads))
+    for (auto *thread : std::as_const(threads))
         thread->stop();
-    for (auto *thread : qAsConst(threads))
+    for (auto *thread : std::as_const(threads))
         thread->wait();
     qDeleteAll(threads);
 }
@@ -366,12 +332,7 @@ QStringList QWindowsFileSystemWatcherEngine::addPaths(const QStringList &paths,
     QStringList unhandled;
     for (const QString &path : paths) {
         auto sg = qScopeGuard([&] { unhandled.push_back(path); });
-        QString normalPath = path;
-        if ((normalPath.endsWith(QLatin1Char('/')) && !normalPath.endsWith(QLatin1String(":/")))
-            || (normalPath.endsWith(QLatin1Char('\\')) && !normalPath.endsWith(QLatin1String(":\\")))) {
-            normalPath.chop(1);
-        }
-        QFileInfo fileInfo(normalPath);
+        QFileInfo fileInfo(path);
         fileInfo.stat();
         if (!fileInfo.exists())
             continue;
@@ -385,7 +346,7 @@ QStringList QWindowsFileSystemWatcherEngine::addPaths(const QStringList &paths,
                 continue;
         }
 
-        DEBUG() << "Looking for a thread/handle for" << normalPath;
+        DEBUG() << "Looking for a thread/handle for" << fileInfo.path();
 
         const QString absolutePath = isDir ? fileInfo.absoluteFilePath() : fileInfo.absolutePath();
         const uint flags = isDir
@@ -467,7 +428,7 @@ QStringList QWindowsFileSystemWatcherEngine::addPaths(const QStringList &paths,
 
             // now look for a thread to insert
             bool found = false;
-            for (QWindowsFileSystemWatcherEngineThread *thread : qAsConst(threads)) {
+            for (QWindowsFileSystemWatcherEngineThread *thread : std::as_const(threads)) {
                 const auto locker = qt_scoped_lock(thread->mutex);
                 if (thread->handles.count() < MAXIMUM_WAIT_OBJECTS) {
                     DEBUG() << "Added handle" << handle.handle << "for" << absolutePath << "to watch" << fileInfo.absoluteFilePath()
@@ -529,11 +490,8 @@ QStringList QWindowsFileSystemWatcherEngine::removePaths(const QStringList &path
     QStringList unhandled;
     for (const QString &path : paths) {
         auto sg = qScopeGuard([&] { unhandled.push_back(path); });
-        QString normalPath = path;
-        if (normalPath.endsWith(QLatin1Char('/')) || normalPath.endsWith(QLatin1Char('\\')))
-            normalPath.chop(1);
-        QFileInfo fileInfo(normalPath);
-        DEBUG() << "removing" << normalPath;
+        QFileInfo fileInfo(path);
+        DEBUG() << "removing" << fileInfo.path();
         QString absolutePath = fileInfo.absoluteFilePath();
         QList<QWindowsFileSystemWatcherEngineThread *>::iterator jt, end;
         end = threads.end();
@@ -620,7 +578,7 @@ QWindowsFileSystemWatcherEngineThread::~QWindowsFileSystemWatcherEngineThread()
     CloseHandle(handles.at(0));
     handles[0] = INVALID_HANDLE_VALUE;
 
-    for (HANDLE h : qAsConst(handles)) {
+    for (HANDLE h : std::as_const(handles)) {
         if (h == INVALID_HANDLE_VALUE)
             continue;
         FindCloseChangeNotification(h);
@@ -631,10 +589,10 @@ Q_DECL_COLD_FUNCTION
 static QString msgFindNextFailed(const QWindowsFileSystemWatcherEngineThread::PathInfoHash &pathInfos)
 {
     QString str;
-    str += QLatin1String("QFileSystemWatcher: FindNextChangeNotification failed for");
+    str += "QFileSystemWatcher: FindNextChangeNotification failed for"_L1;
     for (const QWindowsFileSystemWatcherEngine::PathInfo &pathInfo : pathInfos)
-        str += QLatin1String(" \"") + QDir::toNativeSeparators(pathInfo.absolutePath) + QLatin1Char('"');
-    str += QLatin1Char(' ');
+        str += " \""_L1 + QDir::toNativeSeparators(pathInfo.absolutePath) + u'"';
+    str += u' ';
     return str;
 }
 

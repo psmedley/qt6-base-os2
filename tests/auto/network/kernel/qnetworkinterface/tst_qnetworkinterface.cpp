@@ -1,35 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
 #include <QtEndian>
+#include <QSet>
 
 #include <qcoreapplication.h>
 #include <qnetworkinterface.h>
@@ -59,6 +35,8 @@ private slots:
     void interfaceFromXXX_data();
     void interfaceFromXXX();
     void copyInvalidInterface();
+private:
+    bool hasNetworkServer = false;
 };
 
 tst_QNetworkInterface::tst_QNetworkInterface()
@@ -72,9 +50,14 @@ tst_QNetworkInterface::~tst_QNetworkInterface()
 bool tst_QNetworkInterface::isIPv6Working()
 {
 #ifndef QT_NO_IPV6
-    QUdpSocket socket;
-    socket.connectToHost(QHostAddress::LocalHostIPv6, 1234);
-    return socket.state() == QAbstractSocket::ConnectedState || socket.waitForConnected(100);
+ // Version without following cannot get IPV6 information
+ #if !defined(QT_NO_GETIFADDRS) && !defined(QT_NO_IPV6IFNAME)
+     QUdpSocket socket;
+     socket.connectToHost(QHostAddress::LocalHostIPv6, 1234);
+     return socket.state() == QAbstractSocket::ConnectedState || socket.waitForConnected(100);
+ #else
+     return false;
+ #endif
 #else
     return false;
 #endif
@@ -82,8 +65,11 @@ bool tst_QNetworkInterface::isIPv6Working()
 
 void tst_QNetworkInterface::initTestCase()
 {
-    if (!QtNetworkSettings::verifyTestNetworkSettings())
-        QSKIP("No network test server available");
+#ifdef QT_TEST_SERVER
+    hasNetworkServer = QtNetworkSettings::verifyConnection(QtNetworkSettings::httpServerName(), 80);
+#else
+    hasNetworkServer = QtNetworkSettings::verifyTestNetworkSettings();
+#endif
 }
 
 void tst_QNetworkInterface::dump()
@@ -193,7 +179,8 @@ void tst_QNetworkInterface::localAddress_data()
     if (ipv6)
         QTest::newRow("localhost-ipv6") << QHostAddress(QHostAddress::LocalHostIPv6);
 
-    QTest::newRow("test-server") << QtNetworkSettings::serverIP();
+    if (hasNetworkServer)
+        QTest::newRow("test-server") << QtNetworkSettings::httpServerIp();
 
     QSet<QHostAddress> added;
     const QList<QNetworkInterface> ifaces = QNetworkInterface::allInterfaces();
@@ -268,7 +255,7 @@ void tst_QNetworkInterface::interfaceFromXXX_data()
     QTest::addColumn<QNetworkInterface>("iface");
 
     QList<QNetworkInterface> allInterfaces = QNetworkInterface::allInterfaces();
-    if (allInterfaces.count() == 0)
+    if (allInterfaces.size() == 0)
         QSKIP("No interfaces to test!");
     foreach (QNetworkInterface iface, allInterfaces)
         QTest::newRow(iface.name().toLocal8Bit()) << iface;

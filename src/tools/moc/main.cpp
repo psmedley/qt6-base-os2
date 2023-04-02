@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <depfile_shared.h>
 #include "preprocessor.h"
@@ -47,6 +22,8 @@
 #include <qscopedpointer.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 /*
     This function looks at two file names and returns the name of the
@@ -153,7 +130,7 @@ static QStringList argumentsFromCommandLineAndFile(const QStringList &arguments,
     allArguments.reserve(arguments.size());
     for (const QString &argument : arguments) {
         // "@file" doesn't start with a '-' so we can't use QCommandLineParser for it
-        if (argument.startsWith(QLatin1Char('@'))) {
+        if (argument.startsWith(u'@')) {
             QString optionsFile = argument;
             optionsFile.remove(0, 1);
             if (optionsFile.isEmpty()) {
@@ -306,6 +283,10 @@ int runMoc(int argc, char **argv)
     jsonOption.setDescription(QStringLiteral("In addition to generating C++ code, create a machine-readable JSON file in a file that matches the output file and an extra .json extension."));
     parser.addOption(jsonOption);
 
+    QCommandLineOption debugIncludesOption(QStringLiteral("debug-includes"));
+    debugIncludesOption.setDescription(QStringLiteral("Display debug messages of each considered include path."));
+    parser.addOption(debugIncludesOption);
+
     QCommandLineOption collectOption(QStringLiteral("collect-json"));
     collectOption.setDescription(QStringLiteral("Instead of processing C++ code, collect previously generated JSON output into a single file."));
     parser.addOption(collectOption);
@@ -349,8 +330,8 @@ int runMoc(int argc, char **argv)
     if (parser.isSet(collectOption))
         return collectJson(files, output, hasOptionFiles);
 
-    if (files.count() > 1) {
-        error(qPrintable(QLatin1String("Too many input files specified: '") + files.join(QLatin1String("' '")) + QLatin1Char('\'')));
+    if (files.size() > 1) {
+        error(qPrintable("Too many input files specified: '"_L1 + files.join("' '"_L1) + u'\''));
         parser.showHelp(1);
     } else if (!files.isEmpty()) {
         filename = files.first();
@@ -358,6 +339,7 @@ int runMoc(int argc, char **argv)
 
     const bool ignoreConflictingOptions = parser.isSet(ignoreConflictsOption);
     pp.preprocessOnly = parser.isSet(preprocessOption);
+    pp.setDebugIncludes(parser.isSet(debugIncludesOption));
     if (parser.isSet(noIncludeOption)) {
         moc.noInclude = true;
         autoInclude = false;
@@ -385,7 +367,7 @@ int runMoc(int argc, char **argv)
     for (const QString &path : includePaths)
         pp.includes += Preprocessor::IncludePath(QFile::encodeName(path));
     QString compilerFlavor = parser.value(compilerFlavorOption);
-    if (compilerFlavor.isEmpty() || compilerFlavor == QLatin1String("unix")) {
+    if (compilerFlavor.isEmpty() || compilerFlavor == "unix"_L1) {
         // traditional Unix compilers use both CPATH and CPLUS_INCLUDE_PATH
         // $CPATH feeds to #include <...> and #include "...", whereas
         // CPLUS_INCLUDE_PATH is equivalent to GCC's -isystem, so we parse later
@@ -395,14 +377,14 @@ int runMoc(int argc, char **argv)
         const auto cplus_include_path = qgetenv("CPLUS_INCLUDE_PATH").split(QDir::listSeparator().toLatin1());
         for (const QByteArray &p : cplus_include_path)
             pp.includes += Preprocessor::IncludePath(p);
-    } else if (compilerFlavor == QLatin1String("msvc")) {
+    } else if (compilerFlavor == "msvc"_L1) {
         // MSVC uses one environment variable: INCLUDE
         const auto include = qgetenv("INCLUDE").split(QDir::listSeparator().toLatin1());
         for (const QByteArray &p : include)
             pp.includes += Preprocessor::IncludePath(p);
     } else {
-        error(qPrintable(QLatin1String("Unknown compiler flavor '") + compilerFlavor +
-                         QLatin1String("'; valid values are: msvc, unix.")));
+        error(qPrintable("Unknown compiler flavor '"_L1 + compilerFlavor +
+                         "'; valid values are: msvc, unix."_L1));
         parser.showHelp(1);
     }
 
@@ -441,16 +423,16 @@ int runMoc(int argc, char **argv)
         pp.macros.remove(macro);
     }
     const QStringList noNotesCompatValues = parser.values(noNotesWarningsCompatOption);
-    if (parser.isSet(noNotesOption) || noNotesCompatValues.contains(QLatin1String("n")))
+    if (parser.isSet(noNotesOption) || noNotesCompatValues.contains("n"_L1))
         moc.displayNotes = false;
-    if (parser.isSet(noWarningsOption) || noNotesCompatValues.contains(QLatin1String("w")))
+    if (parser.isSet(noWarningsOption) || noNotesCompatValues.contains("w"_L1))
         moc.displayWarnings = moc.displayNotes = false;
 
     if (autoInclude) {
-        int spos = filename.lastIndexOf(QDir::separator());
-        int ppos = filename.lastIndexOf(QLatin1Char('.'));
+        qsizetype spos = filename.lastIndexOf(QDir::separator());
+        qsizetype ppos = filename.lastIndexOf(u'.');
         // spos >= -1 && ppos > spos => ppos >= 0
-        moc.noInclude = (ppos > spos && filename.at(ppos + 1).toLower() != QLatin1Char('h'));
+        moc.noInclude = (ppos > spos && filename.at(ppos + 1).toLower() != u'h');
     }
     if (defaultInclude) {
         if (moc.includePath.isEmpty()) {
@@ -479,13 +461,13 @@ int runMoc(int argc, char **argv)
 
     const auto metadata = parser.values(metadataOption);
     for (const QString &md : metadata) {
-        int split = md.indexOf(QLatin1Char('='));
+        qsizetype split = md.indexOf(u'=');
         QString key = md.left(split);
         QString value = md.mid(split + 1);
 
         if (split == -1 || key.isEmpty() || value.isEmpty()) {
             error("missing key or value for option '-M'");
-        } else if (key.indexOf(QLatin1Char('.')) != -1) {
+        } else if (key.indexOf(u'.') != -1) {
             // Don't allow keys with '.' for now, since we might need this
             // format later for more advanced meta data API
             error("A key cannot contain the letter '.' for option '-M'");
@@ -498,6 +480,17 @@ int runMoc(int argc, char **argv)
 
     moc.currentFilenames.push(filename.toLocal8Bit());
     moc.includes = pp.includes;
+
+    if (Q_UNLIKELY(parser.isSet(debugIncludesOption))) {
+        fprintf(stderr, "debug-includes: include search list:\n");
+
+        for (auto &includePath : pp.includes) {
+            fprintf(stderr, "debug-includes:   '%s' framework: %d \n",
+                    includePath.path.constData(),
+                    includePath.isFrameworkPath);
+        }
+        fprintf(stderr, "debug-includes: end of search list.\n");
+    }
 
     // 1. preprocess
     const auto includeFiles = parser.values(includeOption);
@@ -548,7 +541,7 @@ int runMoc(int argc, char **argv)
         }
 
         if (parser.isSet(jsonOption)) {
-            const QString jsonOutputFileName = output + QLatin1String(".json");
+            const QString jsonOutputFileName = output + ".json"_L1;
             FILE *f;
 #if defined(_MSC_VER)
             if (_wfopen_s(&f, reinterpret_cast<const wchar_t *>(jsonOutputFileName.utf16()), L"w") != 0)
@@ -589,7 +582,7 @@ int runMoc(int argc, char **argv)
         if (parser.isSet(depFilePathOption)) {
             depOutputFileName = parser.value(depFilePathOption);
         } else if (outputToFile) {
-            depOutputFileName = output + QLatin1String(".d");
+            depOutputFileName = output + ".d"_L1;
         } else {
             fprintf(stderr, "moc: Writing to stdout, but no depfile path specified.\n");
         }

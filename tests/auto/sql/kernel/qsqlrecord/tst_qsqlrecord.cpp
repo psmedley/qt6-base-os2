@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -39,12 +14,7 @@
 
 class tst_QSqlRecord : public QObject
 {
-Q_OBJECT
-
-public:
-    tst_QSqlRecord();
-    virtual ~tst_QSqlRecord();
-
+    Q_OBJECT
 
 public slots:
     void init();
@@ -72,25 +42,10 @@ private slots:
     void append();
 
 private:
-    QSqlRecord* rec;
-    QSqlField* fields[ NUM_FIELDS ];
+    std::unique_ptr<QSqlRecord> rec;
+    std::array<std::unique_ptr<QSqlField>, NUM_FIELDS> fields;
     void createTestRecord();
 };
-
-tst_QSqlRecord::tst_QSqlRecord()
-{
-    rec = 0;
-    for ( int i = 0; i < NUM_FIELDS; ++i )
-        fields[ i ] = 0;
-}
-
-tst_QSqlRecord::~tst_QSqlRecord()
-{
-    delete rec;
-    for ( int i = 0; i < NUM_FIELDS; ++i )
-        delete fields[ i ];
-    rec = 0;
-}
 
 void tst_QSqlRecord::init()
 {
@@ -99,31 +54,26 @@ void tst_QSqlRecord::init()
 
 void tst_QSqlRecord::cleanup()
 {
-    delete rec;
-    for ( int i = 0; i < NUM_FIELDS; ++i ) {
-        delete fields[ i ];
-        fields[ i ] = 0;
-    }
-    rec = 0;
+    rec = nullptr;
+    for (auto &field : fields)
+        field = nullptr;
 }
 
 void tst_QSqlRecord::createTestRecord()
 {
-    delete rec;
-    rec = new QSqlRecord();
-    fields[0] = new QSqlField(QStringLiteral("string"), QMetaType(QMetaType::QString), QStringLiteral("stringtable"));
-    fields[1] = new QSqlField(QStringLiteral("int"), QMetaType(QMetaType::Int), QStringLiteral("inttable"));
-    fields[2] = new QSqlField(QStringLiteral("double"), QMetaType(QMetaType::Double), QStringLiteral("doubletable"));
-    fields[3] = new QSqlField(QStringLiteral("bool"), QMetaType(QMetaType::Bool));
-    for ( int i = 0; i < NUM_FIELDS; ++i )
-        rec->append( *(fields[ i ] ) );
+    rec = std::make_unique<QSqlRecord>();
+    fields[0] = std::make_unique<QSqlField>(QStringLiteral("string"), QMetaType(QMetaType::QString), QStringLiteral("stringtable"));
+    fields[1] = std::make_unique<QSqlField>(QStringLiteral("int"), QMetaType(QMetaType::Int), QStringLiteral("inttable"));
+    fields[2] = std::make_unique<QSqlField>(QStringLiteral("double"), QMetaType(QMetaType::Double), QStringLiteral("doubletable"));
+    fields[3] = std::make_unique<QSqlField>(QStringLiteral("bool"), QMetaType(QMetaType::Bool));
+    for (const auto &field : fields)
+        rec->append(*field);
 }
 
 
 void tst_QSqlRecord::append()
 {
-    delete rec;
-    rec = new QSqlRecord();
+    rec = std::make_unique<QSqlRecord>();
     rec->append(QSqlField("string", QMetaType(QMetaType::QString), QStringLiteral("stringtable")));
     QCOMPARE( rec->field( 0 ).name(), (QString) "string" );
     QCOMPARE(rec->field(0).tableName(), QStringLiteral("stringtable"));
@@ -182,10 +132,7 @@ void tst_QSqlRecord::clearValues()
     QFETCH( double, dval );
     QFETCH( int, bval );
 
-    if(rec)
-        delete rec;
-
-    rec = new QSqlRecord();
+    rec = std::make_unique<QSqlRecord>();
     rec->append( QSqlField( "string", QMetaType(QMetaType::QString) ) );
     QCOMPARE( rec->field(0).name(), (QString) "string" );
     QVERIFY( !rec->isEmpty() );
@@ -225,8 +172,8 @@ void tst_QSqlRecord::clearValues()
 void tst_QSqlRecord::contains()
 {
     createTestRecord();
-    for ( int i = 0; i < NUM_FIELDS; ++i )
-        QVERIFY( rec->contains( fields[ i ]->name() ) );
+    for (const auto &field : fields)
+        QVERIFY(rec->contains(field->name()));
     QVERIFY( !rec->contains( "__Harry__" ) );
 }
 
@@ -258,8 +205,8 @@ void tst_QSqlRecord::fieldName()
 {
     createTestRecord();
 
-    for ( int i = 0; i < NUM_FIELDS; ++i )
-        QVERIFY( rec->field( (fields[ i ] )->name() ) == *( fields[ i ] ) );
+    for (const auto &field : fields)
+        QVERIFY(rec->field(field->name()) == *field);
     QVERIFY( rec->fieldName( NUM_FIELDS ).isNull() );
 }
 
@@ -437,8 +384,7 @@ void tst_QSqlRecord::setValue()
 {
     int i;
 
-    delete rec;
-    rec = new QSqlRecord();
+    rec = std::make_unique<QSqlRecord>();
     rec->append( QSqlField( "string", QMetaType(QMetaType::QString) ) );
     QCOMPARE( rec->field( 0 ).name(), (QString) "string" );
     QVERIFY( !rec->isEmpty() );

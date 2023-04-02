@@ -1,53 +1,16 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QMUTEX_H
 #define QMUTEX_H
 
 #include <QtCore/qglobal.h>
 #include <QtCore/qatomic.h>
+#include <QtCore/qtsan_impl.h>
 #include <new>
 
-#if __has_include(<chrono>)
-#  include <chrono>
-#  include <limits>
-#endif
+#include <chrono>
+#include <limits>
 
 class tst_QMutex;
 
@@ -66,7 +29,6 @@ class QMutex;
 class QRecursiveMutex;
 class QMutexPrivate;
 
-#if __has_include(<chrono>)
 namespace QtPrivate
 {
     template<class Rep, class Period>
@@ -92,7 +54,6 @@ namespace QtPrivate
         return ms < maxInt ? int(ms) : maxInt;
     }
 }
-#endif
 
 class Q_CORE_EXPORT QBasicMutex
 {
@@ -104,19 +65,37 @@ public:
 
     // BasicLockable concept
     inline void lock() QT_MUTEX_LOCK_NOEXCEPT {
+        QtTsan::mutexPreLock(this, 0u);
+
         if (!fastTryLock())
             lockInternal();
+
+        QtTsan::mutexPostLock(this, 0u, 0);
     }
 
     // BasicLockable concept
     inline void unlock() noexcept {
         Q_ASSERT(d_ptr.loadRelaxed()); //mutex must be locked
+
+        QtTsan::mutexPreUnlock(this, 0u);
+
         if (!fastTryUnlock())
             unlockInternal();
+
+        QtTsan::mutexPostUnlock(this, 0u);
     }
 
     bool tryLock() noexcept {
-        return fastTryLock();
+        unsigned tsanFlags = QtTsan::TryLock;
+        QtTsan::mutexPreLock(this, tsanFlags);
+
+        const bool success = fastTryLock();
+
+        if (!success)
+            tsanFlags |= QtTsan::TryLockFailed;
+        QtTsan::mutexPostLock(this, tsanFlags, 0);
+
+        return success;
     }
 
     // Lockable concept
@@ -168,9 +147,23 @@ public:
     using QBasicMutex::tryLock;
     bool tryLock(int timeout) QT_MUTEX_LOCK_NOEXCEPT
     {
-        if (fastTryLock())
-            return true;
-        return lockInternal(timeout);
+        unsigned tsanFlags = QtTsan::TryLock;
+        QtTsan::mutexPreLock(this, tsanFlags);
+
+        bool success = fastTryLock();
+
+        if (success) {
+            QtTsan::mutexPostLock(this, tsanFlags, 0);
+            return success;
+        }
+
+        success = lockInternal(timeout);
+
+        if (!success)
+            tsanFlags |= QtTsan::TryLockFailed;
+        QtTsan::mutexPostLock(this, tsanFlags, 0);
+
+        return success;
     }
 
     // TimedLockable concept
@@ -235,48 +228,65 @@ public:
 };
 
 template <typename Mutex>
-class QMutexLocker
+class [[nodiscard]] QMutexLocker
 {
 public:
     inline explicit QMutexLocker(Mutex *mutex) QT_MUTEX_LOCK_NOEXCEPT
     {
-        m = mutex;
+        m_mutex = mutex;
         if (Q_LIKELY(mutex)) {
             mutex->lock();
-            isLocked = true;
+            m_isLocked = true;
         }
     }
-    inline ~QMutexLocker() {
-        unlock();
+
+    inline QMutexLocker(QMutexLocker &&other) noexcept
+        : m_mutex(std::exchange(other.m_mutex, nullptr)),
+          m_isLocked(std::exchange(other.m_isLocked, false))
+    {}
+
+    QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_MOVE_AND_SWAP(QMutexLocker)
+
+    inline ~QMutexLocker()
+    {
+        if (m_isLocked)
+            unlock();
+    }
+
+    inline bool isLocked() const noexcept
+    {
+        return m_isLocked;
     }
 
     inline void unlock() noexcept
     {
-        if (!isLocked)
-            return;
-        m->unlock();
-        isLocked = false;
+        Q_ASSERT(m_isLocked);
+        m_mutex->unlock();
+        m_isLocked = false;
     }
 
     inline void relock() QT_MUTEX_LOCK_NOEXCEPT
     {
-        if (isLocked)
-            return;
-        if (m) {
-            m->lock();
-            isLocked = true;
-        }
+        Q_ASSERT(!m_isLocked);
+        m_mutex->lock();
+        m_isLocked = true;
+    }
+
+    inline void swap(QMutexLocker &other) noexcept
+    {
+        qt_ptr_swap(m_mutex, other.m_mutex);
+        std::swap(m_isLocked, other.m_isLocked);
     }
 
     Mutex *mutex() const
     {
-        return m;
+        return m_mutex;
     }
 private:
     Q_DISABLE_COPY(QMutexLocker)
 
-    Mutex *m;
-    bool isLocked = false;
+    Mutex *m_mutex;
+    bool m_isLocked = false;
 };
 
 #else // !QT_CONFIG(thread) && !Q_CLANG_QDOC
@@ -313,7 +323,7 @@ private:
 class QRecursiveMutex : public QMutex {};
 
 template <typename Mutex>
-class QMutexLocker
+class [[nodiscard]] QMutexLocker
 {
 public:
     inline explicit QMutexLocker(Mutex *) noexcept {}

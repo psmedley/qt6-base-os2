@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 static const int QGRAPHICSVIEW_REGION_RECT_THRESHOLD = 50;
 
@@ -97,7 +61,7 @@ static const int QGRAPHICSVIEW_PREALLOC_STYLE_OPTIONS = 503; // largest prime < 
     convenience functions rotate(), scale(), translate() or shear(). The most
     two common transformations are scaling, which is used to implement
     zooming, and rotation. QGraphicsView keeps the center of the view fixed
-    during a transformation. Because of the scene alignment (setAligment()),
+    during a transformation. Because of the scene alignment (setAlignment()),
     translating the view will have no visual impact.
 
     You can interact with the items on the scene by using the mouse and
@@ -294,6 +258,7 @@ static const int QGRAPHICSVIEW_PREALLOC_STYLE_OPTIONS = 503; // largest prime < 
 #include <QtWidgets/qstyleoption.h>
 
 #include <private/qevent_p.h>
+#include <QtGui/private/qeventpoint_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -314,7 +279,7 @@ void QGraphicsViewPrivate::translateTouchEvent(QGraphicsViewPrivate *d, QTouchEv
         auto &pt = touchEvent->point(i);
         // the scene will set the item local pos, startPos, lastPos, and rect before delivering to
         // an item, but for now those functions are returning the view's local coordinates
-        QMutableEventPoint::from(pt).setScenePosition(d->mapToScene(pt.position()));
+        QMutableEventPoint::setScenePosition(pt, d->mapToScene(pt.position()));
         // screenPos, startScreenPos, and lastScreenPos are already set
     }
 }
@@ -701,7 +666,7 @@ void QGraphicsViewPrivate::mouseMoveEventHandler(QMouseEvent *event)
                                                                                   mouseEvent.widget());
     }
     // Find the topmost item under the mouse with a cursor.
-    for (QGraphicsItem *item : qAsConst(scene->d_func()->cachedItemsUnderMouse)) {
+    for (QGraphicsItem *item : std::as_const(scene->d_func()->cachedItemsUnderMouse)) {
         if (item->isEnabled() && item->hasCursor()) {
             _q_setViewportCursor(item->cursor());
             return;
@@ -731,7 +696,7 @@ QRegion QGraphicsViewPrivate::rubberBandRegion(const QWidget *widget, const QRec
     option.shape = QRubberBand::Rectangle;
 
     QRegion tmp;
-    tmp += rect;
+    tmp += rect.adjusted(-1, -1, 1, 1);
     if (widget->style()->styleHint(QStyle::SH_RubberBand_Mask, &option, widget, &mask))
         tmp &= mask.region;
     return tmp;
@@ -2448,7 +2413,7 @@ QPolygonF QGraphicsView::mapToScene(const QRect &rect) const
 QPolygonF QGraphicsView::mapToScene(const QPolygon &polygon) const
 {
     QPolygonF poly;
-    poly.reserve(polygon.count());
+    poly.reserve(polygon.size());
     for (const QPoint &point : polygon)
         poly << mapToScene(point);
     return poly;
@@ -2544,7 +2509,7 @@ QPolygon QGraphicsView::mapFromScene(const QRectF &rect) const
 QPolygon QGraphicsView::mapFromScene(const QPolygonF &polygon) const
 {
     QPolygon poly;
-    poly.reserve(polygon.count());
+    poly.reserve(polygon.size());
     for (const QPointF &point : polygon)
         poly << mapFromScene(point);
     return poly;
@@ -2658,7 +2623,7 @@ void QGraphicsView::updateScene(const QList<QRectF> &rects)
 
     // Extract and reset dirty scene rect info.
     QList<QRect> dirtyViewportRects;
-    dirtyViewportRects.reserve(d->dirtyRegion.rectCount() + rects.count());
+    dirtyViewportRects.reserve(d->dirtyRegion.rectCount() + rects.size());
     for (const QRect &dirtyRect : d->dirtyRegion)
         dirtyViewportRects += dirtyRect;
     d->dirtyRegion = QRegion();
@@ -2687,7 +2652,7 @@ void QGraphicsView::updateScene(const QList<QRectF> &rects)
         dirtyViewportRects << xrect;
     }
 
-    for (const QRect &rect : qAsConst(dirtyViewportRects)) {
+    for (const QRect &rect : std::as_const(dirtyViewportRects)) {
         // Add the exposed rect to the update region. In rect update
         // mode, we only count the bounding rect of items.
         if (!boundingRectUpdate) {
@@ -3719,7 +3684,12 @@ void QGraphicsView::drawBackground(QPainter *painter, const QRectF &rect)
         return;
     }
 
+    const bool wasAa = painter->testRenderHint(QPainter::Antialiasing);
+    if (wasAa)
+        painter->setRenderHints(QPainter::Antialiasing, false);
     painter->fillRect(rect, d->backgroundBrush);
+    if (wasAa)
+        painter->setRenderHints(QPainter::Antialiasing, true);
 }
 
 /*!
@@ -3834,13 +3804,13 @@ bool QGraphicsView::isTransformed() const
 
     \snippet code/src_gui_graphicsview_qgraphicsview.cpp 7
 
-    To simplify interation with items using a transformed view, QGraphicsView
+    To simplify interaction with items using a transformed view, QGraphicsView
     provides mapTo... and mapFrom... functions that can translate between
     scene and view coordinates. For example, you can call mapToScene() to map
     a view coordinate to a floating point scene coordinate, or mapFromScene()
     to map from floating point scene coordinates to view coordinates.
 
-    \sa transform(), rotate(), scale(), shear(), translate()
+    \sa transform(), resetTransform(), rotate(), scale(), shear(), translate()
 */
 void QGraphicsView::setTransform(const QTransform &matrix, bool combine )
 {

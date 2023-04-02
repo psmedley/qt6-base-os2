@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QIODEVICE_P_H
 #define QIODEVICE_P_H
@@ -53,9 +17,9 @@
 
 #include "QtCore/qbytearray.h"
 #include "QtCore/qiodevice.h"
-#include "QtCore/qlist.h"
 #include "QtCore/qobjectdefs.h"
 #include "QtCore/qstring.h"
+#include "QtCore/qvarlengtharray.h"
 #include "private/qringbuffer_p.h"
 #ifndef QT_NO_QOBJECT
 #include "private/qobject_p.h"
@@ -75,6 +39,7 @@ class Q_CORE_EXPORT QIODevicePrivate
 #endif
 {
     Q_DECLARE_PUBLIC(QIODevice)
+    Q_DISABLE_COPY_MOVE(QIODevicePrivate)
 
 public:
     QIODevicePrivate();
@@ -134,8 +99,8 @@ public:
     int readBufferChunkSize = QIODEVICE_BUFFERSIZE;
     int writeBufferChunkSize = 0;
 
-    QList<QRingBuffer> readBuffers;
-    QList<QRingBuffer> writeBuffers;
+    QVarLengthArray<QRingBuffer, 2> readBuffers;
+    QVarLengthArray<QRingBuffer, 1> writeBuffers;
     QString errorString;
     QIODevice::OpenMode openMode = QIODevice::NotOpen;
 
@@ -180,10 +145,18 @@ public:
     void setWriteChannelCount(int count);
 
     qint64 read(char *data, qint64 maxSize, bool peeking = false);
+    qint64 readLine(char *data, qint64 maxSize);
     virtual qint64 peek(char *data, qint64 maxSize);
     virtual QByteArray peek(qint64 maxSize);
     qint64 skipByReading(qint64 maxSize);
     void write(const char *data, qint64 size);
+
+    inline bool isWriteChunkCached(const char *data, qint64 size) const
+    {
+        return currentWriteChunk != nullptr
+               && currentWriteChunk->constData() == data
+               && currentWriteChunk->size() == size;
+    }
 
 #ifdef QT_NO_QOBJECT
     QIODevice *q_ptr = nullptr;

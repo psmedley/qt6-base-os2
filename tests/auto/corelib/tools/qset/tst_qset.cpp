@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <qset.h>
@@ -33,7 +8,7 @@
 int toNumber(const QString &str)
 {
     int res = 0;
-    for (int i = 0; i < str.length(); ++i)
+    for (int i = 0; i < str.size(); ++i)
         res = (res * 10) + str[i].digitValue();
     return res;
 }
@@ -164,44 +139,44 @@ void tst_QSet::size()
     QSet<int> set;
     QVERIFY(set.size() == 0);
     QVERIFY(set.isEmpty());
-    QVERIFY(set.count() == set.size());
+    QVERIFY(set.size() == set.size());
     QVERIFY(set.isEmpty() == set.empty());
     QVERIFY(!set.isDetached());
 
     set.insert(1);
     QVERIFY(set.size() == 1);
     QVERIFY(!set.isEmpty());
-    QVERIFY(set.count() == set.size());
+    QVERIFY(set.size() == set.size());
     QVERIFY(set.isEmpty() == set.empty());
 
     set.insert(1);
     QVERIFY(set.size() == 1);
     QVERIFY(!set.isEmpty());
-    QVERIFY(set.count() == set.size());
+    QVERIFY(set.size() == set.size());
     QVERIFY(set.isEmpty() == set.empty());
 
     set.insert(2);
     QVERIFY(set.size() == 2);
     QVERIFY(!set.isEmpty());
-    QVERIFY(set.count() == set.size());
+    QVERIFY(set.size() == set.size());
     QVERIFY(set.isEmpty() == set.empty());
 
     set.remove(1);
     QVERIFY(set.size() == 1);
     QVERIFY(!set.isEmpty());
-    QVERIFY(set.count() == set.size());
+    QVERIFY(set.size() == set.size());
     QVERIFY(set.isEmpty() == set.empty());
 
     set.remove(1);
     QVERIFY(set.size() == 1);
     QVERIFY(!set.isEmpty());
-    QVERIFY(set.count() == set.size());
+    QVERIFY(set.size() == set.size());
     QVERIFY(set.isEmpty() == set.empty());
 
     set.remove(2);
     QVERIFY(set.size() == 0);
     QVERIFY(set.isEmpty());
-    QVERIFY(set.count() == set.size());
+    QVERIFY(set.size() == set.size());
     QVERIFY(set.isEmpty() == set.empty());
 }
 
@@ -339,7 +314,6 @@ void tst_QSet::clear()
 
 void tst_QSet::cpp17ctad()
 {
-#ifdef __cpp_deduction_guides
 #define QVERIFY_IS_SET_OF(obj, Type) \
     QVERIFY2((std::is_same<decltype(obj), QSet<Type>>::value), \
              QMetaType::fromType<decltype(obj)::value_type>().name())
@@ -359,9 +333,6 @@ void tst_QSet::cpp17ctad()
     CHECK(QString, QStringLiteral("one"), QStringLiteral("two"), QStringLiteral("three"));
 #undef QVERIFY_IS_SET_OF
 #undef CHECK
-#else
-    QSKIP("This test requires C++17 Constructor Template Argument Deduction support enabled in the compiler.");
-#endif
 }
 
 void tst_QSet::remove()
@@ -1040,7 +1011,7 @@ void tst_QSet::makeSureTheComfortFunctionsCompile()
 void tst_QSet::initializerList()
 {
     QSet<int> set = {1, 1, 2, 3, 4, 5};
-    QCOMPARE(set.count(), 5);
+    QCOMPARE(set.size(), 5);
     QVERIFY(set.contains(1));
     QVERIFY(set.contains(2));
     QVERIFY(set.contains(3));
@@ -1049,7 +1020,7 @@ void tst_QSet::initializerList()
 
     // check _which_ of the equal elements gets inserted (in the QHash/QMap case, it's the last):
     const QSet<IdentityTracker> set2 = {{1, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}};
-    QCOMPARE(set2.count(), 5);
+    QCOMPARE(set2.size(), 5);
     const int dummy = -1;
     const IdentityTracker searchKey = {1, dummy};
     QCOMPARE(set2.find(searchKey)->id, 0);

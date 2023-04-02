@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 by Southwest Research Institute (R)
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2016 by Southwest Research Institute (R)
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QFloat16>
@@ -213,13 +188,7 @@ void tst_qfloat16::qNaN()
     QVERIFY(qIsNaN(nan));
     QVERIFY(qIsNaN(nan + one));
     QVERIFY(qIsNaN(-nan));
-#ifdef Q_CC_INTEL
-    QEXPECT_FAIL("", "ICC optimizes zero * anything to zero", Continue);
-#endif
     QVERIFY(qIsNaN(nan * zero));
-#ifdef Q_CC_INTEL
-    QEXPECT_FAIL("", "ICC optimizes zero * anything to zero", Continue);
-#endif
     QVERIFY(qIsNaN(Bounds::infinity() * zero));
 
     QVERIFY(!nan.isNormal());
@@ -550,16 +519,19 @@ void tst_qfloat16::properties()
     // and the same supposed to be for qfloat16.
 #if !defined(Q_CC_GHS)
     QVERIFY(Bounds::is_iec559);
-#else
+#endif //Q_CC_GHS
+#if QT_CONFIG(signaling_nan)
     // Technically, presence of NaN and infinities are implied from the above check, but that checkings GHS compiler complies.
     QVERIFY(Bounds::has_infinity && Bounds::has_quiet_NaN && Bounds::has_signaling_NaN);
-#endif // Q_CC_GHS
+#endif
     QVERIFY(Bounds::is_bounded);
     QVERIFY(!Bounds::is_modulo);
     QVERIFY(!Bounds::traps);
     QVERIFY(Bounds::has_infinity);
     QVERIFY(Bounds::has_quiet_NaN);
+#if QT_CONFIG(signaling_nan)
     QVERIFY(Bounds::has_signaling_NaN);
+#endif
 #if !defined(Q_CC_GHS)
     QCOMPARE(Bounds::has_denorm, std::denorm_present);
 #else

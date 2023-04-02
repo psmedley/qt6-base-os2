@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -77,14 +52,14 @@ void tst_QDial::valueChanged()
     dial.setMaximum(100);
     QSignalSpy spy(&dial, SIGNAL(valueChanged(int)));
     dial.setValue(50);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     spy.clear();
     dial.setValue(25);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.size(), 1);
     spy.clear();
     // repeat!
     dial.setValue(25);
-    QCOMPARE(spy.count(), 0);
+    QCOMPARE(spy.size(), 0);
 }
 
 void tst_QDial::sliderMoved()
@@ -100,7 +75,7 @@ void tst_QDial::sliderMoved()
 
     QPoint init(dial.width()/4, dial.height()/2);
 
-    QMouseEvent pressevent(QEvent::MouseButtonPress, init,
+    QMouseEvent pressevent(QEvent::MouseButtonPress, init, dial.mapToGlobal(init),
                            Qt::LeftButton, Qt::LeftButton, {});
     qApp->sendEvent(&dial, &pressevent);
 
@@ -110,27 +85,27 @@ void tst_QDial::sliderMoved()
 
     { //move on top of the slider
         init = QPoint(dial.width()/2, dial.height()/4);
-        QMouseEvent moveevent(QEvent::MouseMove, init,
+        QMouseEvent moveevent(QEvent::MouseMove, init, dial.mapToGlobal(init),
                               Qt::LeftButton, Qt::LeftButton, {});
         qApp->sendEvent(&dial, &moveevent);
-        QCOMPARE( sliderspy.count(), 1);
-        QCOMPARE( valuespy.count(), 0);
+        QCOMPARE( sliderspy.size(), 1);
+        QCOMPARE( valuespy.size(), 0);
     }
 
 
     { //move on the right of the slider
         init = QPoint(dial.width()*3/4, dial.height()/2);
-        QMouseEvent moveevent(QEvent::MouseMove, init,
+        QMouseEvent moveevent(QEvent::MouseMove, init, dial.mapToGlobal(init),
                               Qt::LeftButton, Qt::LeftButton, {});
         qApp->sendEvent(&dial, &moveevent);
-        QCOMPARE( sliderspy.count(), 2);
-        QCOMPARE( valuespy.count(), 0);
+        QCOMPARE( sliderspy.size(), 2);
+        QCOMPARE( valuespy.size(), 0);
     }
 
-    QMouseEvent releaseevent(QEvent::MouseButtonRelease, init,
+    QMouseEvent releaseevent(QEvent::MouseButtonRelease, init, dial.mapToGlobal(init),
                              Qt::LeftButton, Qt::LeftButton, {});
     qApp->sendEvent(&dial, &releaseevent);
-    QCOMPARE( valuespy.count(), 1); // valuechanged signal should be called at this point
+    QCOMPARE( valuespy.size(), 1); // valuechanged signal should be called at this point
 
 }
 

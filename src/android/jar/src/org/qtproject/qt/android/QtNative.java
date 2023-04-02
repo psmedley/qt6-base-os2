@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Android port of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 BogDan Vatra <bogdan@kde.org>
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 package org.qtproject.qt.android;
 
@@ -46,7 +10,6 @@ import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
-import java.util.HashMap;
 
 import android.app.Activity;
 import android.app.Service;
@@ -61,6 +24,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.system.Os;
 import android.content.ClipboardManager;
 import android.content.ClipData;
 import android.content.ClipDescription;
@@ -115,8 +79,6 @@ public class QtNative
     private static Boolean m_tabletEventSupported = null;
     private static boolean m_usePrimaryClip = false;
     public static QtThread m_qtThread = new QtThread();
-    private static HashMap<String, Uri> m_cachedUris = new HashMap<String, Uri>();
-    private static ArrayList<String> m_knownDirs = new ArrayList<String>();
     private static final int KEYBOARD_HEIGHT_THRESHOLD = 100;
 
     private static final String INVALID_OR_NULL_URI_ERROR_MESSAGE = "Received invalid/null Uri";
@@ -127,6 +89,13 @@ public class QtNative
             runPendingCppRunnables();
         }
     };
+
+    public static boolean isStarted()
+    {
+        boolean hasActivity = m_activity != null && m_activityDelegate != null;
+        boolean hasService = m_service != null && m_serviceDelegate != null;
+        return m_started && (hasActivity || hasService);
+    }
 
     private static ClassLoader m_classLoader = null;
     public static ClassLoader classLoader()
@@ -240,209 +209,6 @@ public class QtNative
             Log.e(QtTAG, getCurrentMethodNameLog() + e.toString());
             return false;
         }
-    }
-
-    public static ParcelFileDescriptor openParcelFdForContentUrl(Context context, String contentUrl,
-                                                                 String openMode)
-    {
-        Uri uri = m_cachedUris.get(contentUrl);
-        if (uri == null)
-            uri = getUriWithValidPermission(context, contentUrl, openMode);
-
-        if (uri == null) {
-            Log.e(QtTAG, getCurrentMethodNameLog() + INVALID_OR_NULL_URI_ERROR_MESSAGE);
-            return null;
-        }
-
-        try {
-            final ContentResolver resolver = context.getContentResolver();
-            return resolver.openFileDescriptor(uri, openMode);
-        } catch (FileNotFoundException | IllegalArgumentException | SecurityException e) {
-            Log.e(QtTAG, getCurrentMethodNameLog() + e.toString());
-        }
-
-        return null;
-    }
-
-    public static FileDescriptor openFdObjectForContentUrl(Context context, String contentUrl,
-                                                           String openMode)
-    {
-        final ParcelFileDescriptor pfd = openParcelFdForContentUrl(context, contentUrl, openMode);
-        if (pfd != null)
-            return pfd.getFileDescriptor();
-        return null;
-    }
-
-    public static int openFdForContentUrl(Context context, String contentUrl, String openMode)
-    {
-        Uri uri = m_cachedUris.get(contentUrl);
-        if (uri == null)
-            uri = getUriWithValidPermission(context, contentUrl, openMode);
-
-        int fileDescriptor = -1;
-        if (uri == null) {
-            Log.e(QtTAG, getCurrentMethodNameLog() + INVALID_OR_NULL_URI_ERROR_MESSAGE);
-            return fileDescriptor;
-        }
-
-        try {
-            final ContentResolver resolver = context.getContentResolver();
-            fileDescriptor = resolver.openFileDescriptor(uri, openMode).detachFd();
-        } catch (IllegalArgumentException | SecurityException | FileNotFoundException e) {
-            Log.e(QtTAG, getCurrentMethodNameLog() + e.toString());
-        }
-
-        return fileDescriptor;
-    }
-
-    public static long getSize(Context context, String contentUrl)
-    {
-        long size = -1;
-        Uri uri = m_cachedUris.get(contentUrl);
-        if (uri == null)
-            uri = getUriWithValidPermission(context, contentUrl, "r");
-
-        if (uri == null) {
-            Log.e(QtTAG, getCurrentMethodNameLog() + INVALID_OR_NULL_URI_ERROR_MESSAGE);
-            return size;
-        } else if (!m_cachedUris.containsKey(contentUrl)) {
-            m_cachedUris.put(contentUrl, uri);
-        }
-
-        try {
-            ContentResolver resolver = context.getContentResolver();
-            Cursor cur = resolver.query(uri, new String[] {
-                    DocumentsContract.Document.COLUMN_SIZE },
-                    null, null, null);
-            if (cur != null) {
-                if (cur.moveToFirst())
-                    size = cur.getLong(0);
-                cur.close();
-            }
-            return size;
-        } catch (IllegalArgumentException | SecurityException | UnsupportedOperationException e) {
-            Log.e(QtTAG, getCurrentMethodNameLog() + e.toString());
-        }
-        return size;
-    }
-
-    public static boolean checkFileExists(Context context, String contentUrl)
-    {
-        boolean exists = false;
-        Uri uri = m_cachedUris.get(contentUrl);
-        if (uri == null)
-            uri = getUriWithValidPermission(context, contentUrl, "r");
-        if (uri == null) {
-            Log.e(QtTAG, getCurrentMethodNameLog() + INVALID_OR_NULL_URI_ERROR_MESSAGE);
-            return exists;
-        } else {
-            if (!m_cachedUris.containsKey(contentUrl))
-                m_cachedUris.put(contentUrl, uri);
-        }
-
-        try {
-            ContentResolver resolver = context.getContentResolver();
-            Cursor cur = resolver.query(uri, null, null, null, null);
-            if (cur != null) {
-                exists = true;
-                cur.close();
-            }
-            return exists;
-        } catch (IllegalArgumentException | SecurityException | UnsupportedOperationException e) {
-            Log.e(QtTAG, getCurrentMethodNameLog() + e.toString());
-        }
-        return exists;
-    }
-
-    public static boolean checkIfWritable(Context context, String contentUrl)
-    {
-        return getUriWithValidPermission(context, contentUrl, "w") != null;
-    }
-
-    public static boolean checkIfDir(Context context, String contentUrl)
-    {
-        boolean isDir = false;
-        Uri uri = m_cachedUris.get(contentUrl);
-        if (m_knownDirs.contains(contentUrl))
-            return true;
-        if (uri == null)
-            uri = getUriWithValidPermission(context, contentUrl, "r");
-
-        if (uri == null) {
-            Log.e(QtTAG, getCurrentMethodNameLog() + INVALID_OR_NULL_URI_ERROR_MESSAGE);
-            return isDir;
-        } else {
-            if (!m_cachedUris.containsKey(contentUrl))
-                m_cachedUris.put(contentUrl, uri);
-        }
-
-        try {
-            final List<String> paths = uri.getPathSegments();
-            // getTreeDocumentId will throw an exception if it is not a directory so check manually
-            if (!paths.get(0).equals("tree"))
-                return false;
-            ContentResolver resolver = context.getContentResolver();
-            Uri docUri = DocumentsContract.buildDocumentUriUsingTree(uri,
-                    DocumentsContract.getTreeDocumentId(uri));
-            if (!docUri.toString().startsWith(uri.toString()))
-                return false;
-            Cursor cur = resolver.query(docUri, new String[] {
-                    DocumentsContract.Document.COLUMN_MIME_TYPE },
-                    null, null, null);
-            if (cur != null) {
-                if (cur.moveToFirst()) {
-                    final String dirStr = new String(DocumentsContract.Document.MIME_TYPE_DIR);
-                    isDir = cur.getString(0).equals(dirStr);
-                    if (isDir)
-                        m_knownDirs.add(contentUrl);
-                }
-                cur.close();
-            }
-            return isDir;
-        } catch (IllegalArgumentException | SecurityException | UnsupportedOperationException e) {
-            Log.e(QtTAG, getCurrentMethodNameLog() + e.toString());
-        }
-        return false;
-    }
-
-    public static String[] listContentsFromTreeUri(Context context, String contentUrl)
-    {
-        Uri treeUri = Uri.parse(contentUrl);
-        final ArrayList<String> results = new ArrayList<>();
-        if (treeUri == null) {
-            Log.e(QtTAG, getCurrentMethodNameLog() + INVALID_OR_NULL_URI_ERROR_MESSAGE);
-            return results.toArray(new String[results.size()]);
-        }
-        final ContentResolver resolver = context.getContentResolver();
-        final Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri,
-                DocumentsContract.getTreeDocumentId(treeUri));
-        final Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(docUri,
-                                DocumentsContract.getDocumentId(docUri));
-        Cursor c;
-        final String dirStr = DocumentsContract.Document.MIME_TYPE_DIR;
-        try {
-            c = resolver.query(childrenUri, new String[] {
-                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                    DocumentsContract.Document.COLUMN_MIME_TYPE },
-                    null, null, null);
-            while (c.moveToNext()) {
-                final String fileString = c.getString(1);
-                if (!m_cachedUris.containsKey(contentUrl + "/" + fileString)) {
-                    m_cachedUris.put(contentUrl + "/" + fileString,
-                                     DocumentsContract.buildDocumentUriUsingTree(treeUri,
-                                             c.getString(0)));
-                }
-                results.add(fileString);
-                if (c.getString(2).equals(dirStr))
-                    m_knownDirs.add(contentUrl + "/" + fileString);
-            }
-            c.close();
-        } catch (Exception e) {
-            Log.w(QtTAG, "Failed query: " + e);
-            return results.toArray(new String[results.size()]);
-        }
-        return results.toArray(new String[results.size()]);
     }
 
     // this method loads full path libs
@@ -620,7 +386,7 @@ public class QtNative
         });
     }
 
-    public static boolean startApplication(String params, final String environment, String mainLib) throws Exception
+    public static boolean startApplication(String params, String mainLib) throws Exception
     {
         if (params == null)
             params = "-platform\tandroid";
@@ -634,7 +400,7 @@ public class QtNative
             m_qtThread.run(new Runnable() {
                 @Override
                 public void run() {
-                    res[0] = startQtAndroidPlugin(qtParams, environment);
+                    res[0] = startQtAndroidPlugin(qtParams);
                     setDisplayMetrics(
                             m_displayMetricsScreenWidthPixels, m_displayMetricsScreenHeightPixels,
                             m_displayMetricsAvailableLeftPixels, m_displayMetricsAvailableTopPixels,
@@ -693,15 +459,16 @@ public class QtNative
 
 
     // application methods
-    public static native boolean startQtAndroidPlugin(String params, String env);
+    public static native boolean startQtAndroidPlugin(String params);
     public static native void startQtApplication();
     public static native void waitForServiceSetup();
     public static native void quitQtCoreApplication();
     public static native void quitQtAndroidPlugin();
     public static native void terminateQt();
+    public static native boolean updateNativeActivity();
     // application methods
 
-    private static void quitApp()
+    public static void quitApp()
     {
         runAction(new Runnable() {
             @Override
@@ -711,6 +478,8 @@ public class QtNative
                      m_activity.finish();
                  if (m_service != null)
                      m_service.stopSelf();
+
+                 m_started = false;
             }
         });
     }
@@ -962,13 +731,13 @@ public class QtNative
         return m_activityDelegate.isKeyboardVisible() && !m_isKeyboardHiding;
     }
 
-    private static void notifyAccessibilityLocationChange()
+    private static void notifyAccessibilityLocationChange(final int viewId)
     {
         runAction(new Runnable() {
             @Override
             public void run() {
                 if (m_activityDelegate != null) {
-                    m_activityDelegate.notifyAccessibilityLocationChange();
+                    m_activityDelegate.notifyAccessibilityLocationChange(viewId);
                 }
             }
         });
@@ -1010,6 +779,18 @@ public class QtNative
         });
     }
 
+    private static void notifyScrolledEvent(final int viewId)
+    {
+        runAction(new Runnable() {
+            @Override
+            public void run() {
+                if (m_activityDelegate != null) {
+                    m_activityDelegate.notifyScrolledEvent(viewId);
+                }
+            }
+        });
+    }
+
     public static void notifyQtAndroidPluginRunning(final boolean running)
     {
         m_activityDelegate.notifyQtAndroidPluginRunning(running);
@@ -1044,9 +825,16 @@ public class QtNative
 
     private static void clearClipData()
     {
-        if (Build.VERSION.SDK_INT >= 28 && m_clipboardManager != null)
-            m_clipboardManager.clearPrimaryClip();
-         m_usePrimaryClip = false;
+        if (m_clipboardManager != null) {
+            if (Build.VERSION.SDK_INT >= 28) {
+                m_clipboardManager.clearPrimaryClip();
+            } else {
+                String[] mimeTypes = { ClipDescription.MIMETYPE_UNKNOWN };
+                ClipData data = new ClipData("", mimeTypes, new ClipData.Item(new Intent()));
+                m_clipboardManager.setPrimaryClip(data);
+            }
+        }
+        m_usePrimaryClip = false;
     }
     private static void setClipboardText(String text)
     {
@@ -1367,6 +1155,40 @@ public class QtNative
         return res.toArray(new String[res.size()]);
     }
 
+    /**
+     *Sets a single environment variable
+     *
+     * returns true if the value was set, false otherwise.
+     * in case it cannot set value will log the exception
+     **/
+    public static void setEnvironmentVariable(String key, String value)
+    {
+        try {
+            android.system.Os.setenv(key, value, true);
+        } catch (Exception e) {
+            Log.e(QtNative.QtTAG, "Could not set environment variable:" + key + "=" + value);
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     *Sets multiple environment variables
+     *
+     * Uses '\t' as divider between variables and '=' between key/value
+     * Ex: key1=val1\tkey2=val2\tkey3=val3
+     * Note: it assumed that the key cannot have '=' but the value can
+     **/
+    public static void setEnvironmentVariables(String environmentVariables)
+    {
+        for (String variable : environmentVariables.split("\t")) {
+            String[] keyvalue = variable.split("=", 2);
+            if (keyvalue.length < 2 || keyvalue[0].isEmpty())
+                continue;
+
+            setEnvironmentVariable(keyvalue[0], keyvalue[1]);
+        }
+    }
+
     // screen methods
     public static native void setDisplayMetrics(int screenWidthPixels, int screenHeightPixels,
                                                 int availableLeftPixels, int availableTopPixels,
@@ -1376,6 +1198,7 @@ public class QtNative
     public static native void handleOrientationChanged(int newRotation, int nativeOrientation);
     public static native void handleRefreshRateChanged(float refreshRate);
     // screen methods
+    public static native void handleUiDarkModeChanged(int newUiMode);
 
     // pointer methods
     public static native void mouseDown(int winId, int x, int y);

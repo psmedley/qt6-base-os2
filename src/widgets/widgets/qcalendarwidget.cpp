@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qcalendarwidget.h"
 
@@ -63,6 +27,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 enum {
     RowCount = 6,
     ColumnCount = 7,
@@ -75,7 +41,7 @@ namespace {
 
 static QString formatNumber(int number, int fieldWidth)
 {
-    return QString::number(number).rightJustified(fieldWidth, QLatin1Char('0'));
+    return QString::number(number).rightJustified(fieldWidth, u'0');
 }
 
 class QCalendarDateSectionValidator
@@ -105,9 +71,9 @@ protected:
 QString QCalendarDateSectionValidator::highlightString(const QString &str, int pos)
 {
     if (pos == 0)
-        return QLatin1String("<b>") + str + QLatin1String("</b>");
-    int startPos = str.length() - pos;
-    return QStringView{str}.mid(0, startPos) + QLatin1String("<b>") + QStringView{str}.mid(startPos, pos) + QLatin1String("</b>");
+        return "<b>"_L1 + str + "</b>"_L1;
+    int startPos = str.size() - pos;
+    return QStringView{str}.mid(0, startPos) + "<b>"_L1 + QStringView{str}.mid(startPos, pos) + "</b>"_L1;
 
 }
 
@@ -544,7 +510,7 @@ void QCalendarDateValidator::setFormat(const QString &format)
     clear();
 
     int pos = 0;
-    const QLatin1Char quote('\'');
+    const auto quote = u'\'';
     bool quoting = false;
     QString separator;
     while (pos < format.size()) {
@@ -560,13 +526,13 @@ void QCalendarDateValidator::setFormat(const QString &format)
                 quoting = false;
             } else {
                 QCalendarDateSectionValidator *validator = nullptr;
-                if (nextChar == QLatin1Char('d')) {
+                if (nextChar == u'd') {
                     offset = qMin(4, countRepeat(format, pos));
                     validator = &m_dayValidator;
-                } else if (nextChar == QLatin1Char('M')) {
+                } else if (nextChar == u'M') {
                     offset = qMin(4, countRepeat(format, pos));
                     validator = &m_monthValidator;
-                } else if (nextChar == QLatin1Char('y')) {
+                } else if (nextChar == u'y') {
                     offset = qMin(4, countRepeat(format, pos));
                     validator = &m_yearValidator;
                 } else {
@@ -762,7 +728,7 @@ bool QCalendarTextNavigator::eventFilter(QObject *o, QEvent *e)
     if (m_widget) {
         if (e->type() == QEvent::KeyPress || e->type() == QEvent::KeyRelease) {
             QKeyEvent* ke = (QKeyEvent*)e;
-            if ((ke->text().length() > 0 && ke->text().at(0).isPrint()) || m_dateFrame) {
+            if ((ke->text().size() > 0 && ke->text().at(0).isPrint()) || m_dateFrame) {
                 if (ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter || ke->key() == Qt::Key_Select) {
                     applyDate();
                     emit editingFinished();
@@ -1758,7 +1724,7 @@ void QCalendarWidgetPrivate::createNavigationBar(QWidget *widget)
 {
     Q_Q(QCalendarWidget);
     navBarBackground = new QWidget(widget);
-    navBarBackground->setObjectName(QLatin1String("qt_calendar_navigationbar"));
+    navBarBackground->setObjectName("qt_calendar_navigationbar"_L1);
     navBarBackground->setAutoFillBackground(true);
     navBarBackground->setBackgroundRole(QPalette::Highlight);
 
@@ -1819,11 +1785,11 @@ void QCalendarWidgetPrivate::createNavigationBar(QWidget *widget)
     monthButton->setFocusPolicy(Qt::NoFocus);
 
     //set names for the header controls.
-    prevMonth->setObjectName(QLatin1String("qt_calendar_prevmonth"));
-    nextMonth->setObjectName(QLatin1String("qt_calendar_nextmonth"));
-    monthButton->setObjectName(QLatin1String("qt_calendar_monthbutton"));
-    yearButton->setObjectName(QLatin1String("qt_calendar_yearbutton"));
-    yearEdit->setObjectName(QLatin1String("qt_calendar_yearedit"));
+    prevMonth->setObjectName("qt_calendar_prevmonth"_L1);
+    nextMonth->setObjectName("qt_calendar_nextmonth"_L1);
+    monthButton->setObjectName("qt_calendar_monthbutton"_L1);
+    yearButton->setObjectName("qt_calendar_yearbutton"_L1);
+    yearEdit->setObjectName("qt_calendar_yearedit"_L1);
 
     updateMonthMenu();
     showMonth(m_model->m_date.year(m_model->m_calendar), m_model->m_date.month(m_model->m_calendar));
@@ -2135,7 +2101,7 @@ QCalendarWidget::QCalendarWidget(QWidget *parent)
     d->m_model->m_dayFormats.insert(Qt::Saturday, fmt);
     d->m_model->m_dayFormats.insert(Qt::Sunday, fmt);
     d->m_view = new QCalendarView(this);
-    d->m_view->setObjectName(QLatin1String("qt_calendar_calendarview"));
+    d->m_view->setObjectName("qt_calendar_calendarview"_L1);
     d->m_view->setModel(d->m_model);
     d->m_model->setView(d->m_view);
     d->m_view->setSelectionBehavior(QAbstractItemView::SelectItems);
@@ -2278,7 +2244,7 @@ QSize QCalendarWidget::minimumSizeHint() const
         headerW += monthW + buttonDecoMargin;
 
         fm = d->yearButton->fontMetrics();
-        headerW += fm.boundingRect(QLatin1String("5555")).width() + buttonDecoMargin;
+        headerW += fm.boundingRect("5555"_L1).width() + buttonDecoMargin;
 
         headerSize = QSize(headerW, headerH);
     }

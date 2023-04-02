@@ -1,0 +1,1 @@
+FINAL_PRL_FILE_PATH = /home/psmedley/qt6-base-os2/build/lib/libQt6Sql.prl

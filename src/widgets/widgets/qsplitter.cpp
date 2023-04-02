@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsplitter.h"
 
@@ -61,6 +25,8 @@
 #include <ctype.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 //#define QSPLITTER_DEBUG
 
@@ -289,10 +255,11 @@ bool QSplitterHandle::event(QEvent *event)
 void QSplitterHandle::mouseMoveEvent(QMouseEvent *e)
 {
     Q_D(QSplitterHandle);
-    if (!(e->buttons() & Qt::LeftButton))
+    if (!d->pressed)
         return;
-    int pos = d->pick(parentWidget()->mapFromGlobal(e->globalPosition().toPoint()))
-                 - d->mouseOffset;
+
+    const int pos = d->pick(parentWidget()->mapFromGlobal(e->globalPosition().toPoint()))
+                    - d->mouseOffset;
     if (opaqueResize()) {
         moveSplitter(pos);
     } else {
@@ -319,16 +286,18 @@ void QSplitterHandle::mousePressEvent(QMouseEvent *e)
 void QSplitterHandle::mouseReleaseEvent(QMouseEvent *e)
 {
     Q_D(QSplitterHandle);
-    if (!opaqueResize() && e->button() == Qt::LeftButton) {
-        int pos = d->pick(parentWidget()->mapFromGlobal(e->globalPosition().toPoint()))
-                     - d->mouseOffset;
+    if (!d->pressed)
+        return;
+
+    if (!opaqueResize()) {
+        const int pos = d->pick(parentWidget()->mapFromGlobal(e->globalPosition().toPoint()))
+                        - d->mouseOffset;
         d->s->setRubberBand(-1);
         moveSplitter(pos);
     }
-    if (e->button() == Qt::LeftButton) {
-        d->pressed = false;
-        update();
-    }
+
+    d->pressed = false;
+    update();
 }
 
 /*!
@@ -392,7 +361,7 @@ void QSplitterPrivate::init()
 void QSplitterPrivate::recalc(bool update)
 {
     Q_Q(QSplitter);
-    int n = list.count();
+    int n = list.size();
     /*
       Splitter handles before the first visible widget or right
       before a hidden widget must be hidden.
@@ -482,7 +451,7 @@ void QSplitterPrivate::doResize()
 {
     Q_Q(QSplitter);
     QRect r = q->contentsRect();
-    int n = list.count();
+    int n = list.size();
     QList<QLayoutStruct> a(n * 2);
     int i;
 
@@ -596,7 +565,7 @@ int QSplitterPrivate::findWidgetJustBeforeOrJustAfter(int index, int delta, int 
             return index;
         }
         index += delta;
-    } while (index >= 0 && index < list.count());
+    } while (index >= 0 && index < list.size());
 
     return -1;
 }
@@ -608,7 +577,7 @@ int QSplitterPrivate::findWidgetJustBeforeOrJustAfter(int index, int delta, int 
 void QSplitterPrivate::getRange(int index, int *farMin, int *min, int *max, int *farMax) const
 {
     Q_Q(const QSplitter);
-    int n = list.count();
+    int n = list.size();
     if (index <= 0 || index >= n)
         return;
 
@@ -732,6 +701,11 @@ void QSplitterPrivate::setSizes_helper(const QList<int> &sizes, bool clampNegati
     doResize();
 }
 
+/*
+    Used by various methods inserting a widget to find out if we need to show the widget
+    explicitly, which we have to if the splitter is already visible, and if the widget hasn't
+    been explicitly hidden before inserting it.
+*/
 bool QSplitterPrivate::shouldShowWidget(const QWidget *w) const
 {
     Q_Q(const QSplitter);
@@ -783,7 +757,7 @@ void QSplitterPrivate::setGeo(QSplitterLayoutStruct *sls, int p, int s, bool all
 void QSplitterPrivate::doMove(bool backwards, int hPos, int index, int delta, bool mayCollapse,
                               int *positions, int *widths)
 {
-    if (index < 0 || index >= list.count())
+    if (index < 0 || index >= list.size())
         return;
 
 #ifdef QSPLITTER_DEBUG
@@ -853,7 +827,7 @@ QSplitterLayoutStruct *QSplitterPrivate::insertWidget(int index, QWidget *w)
     Q_Q(QSplitter);
     QSplitterLayoutStruct *sls = nullptr;
     int i;
-    int last = list.count();
+    int last = list.size();
     for (i = 0; i < list.size(); ++i) {
         QSplitterLayoutStruct *s = list.at(i);
         if (s->widget == w) {
@@ -870,7 +844,7 @@ QSplitterLayoutStruct *QSplitterPrivate::insertWidget(int index, QWidget *w)
     } else {
         sls = new QSplitterLayoutStruct;
         QSplitterHandle *newHandle = q->createHandle();
-        newHandle->setObjectName(QLatin1String("qt_splithandle_") + w->objectName());
+        newHandle->setObjectName("qt_splithandle_"_L1 + w->objectName());
         sls->handle = newHandle;
         sls->widget = w;
         w->lower();
@@ -1105,7 +1079,7 @@ void QSplitter::resizeEvent(QResizeEvent *)
 void QSplitter::addWidget(QWidget *widget)
 {
     Q_D(QSplitter);
-    insertWidget(d->list.count(), widget);
+    insertWidget(d->list.size(), widget);
 }
 
 /*!
@@ -1155,7 +1129,7 @@ QWidget *QSplitter::replaceWidget(int index, QWidget *widget)
         return nullptr;
     }
 
-    if (index < 0 || index >= d->list.count()) {
+    if (index < 0 || index >= d->list.size()) {
         qWarning("QSplitter::replaceWidget: Index %d out of range", index);
         return nullptr;
     }
@@ -1175,7 +1149,7 @@ QWidget *QSplitter::replaceWidget(int index, QWidget *widget)
     QBoolBlocker b(d->blockChildAdd);
 
     const QRect geom = current->geometry();
-    const bool shouldShow = d->shouldShowWidget(current);
+    const bool wasHidden = current->isHidden();
 
     s->widget = widget;
     current->setParent(nullptr);
@@ -1185,7 +1159,10 @@ QWidget *QSplitter::replaceWidget(int index, QWidget *widget)
     // should not change. Only set the geometry on the new widget
     widget->setGeometry(geom);
     widget->lower();
-    widget->setVisible(shouldShow);
+    if (wasHidden)
+        widget->hide();
+    else if (d->shouldShowWidget(widget))
+        widget->show();
 
     return current;
 }
@@ -1265,7 +1242,7 @@ QWidget *QSplitter::widget(int index) const
 int QSplitter::count() const
 {
     Q_D(const QSplitter);
-    return d->list.count();
+    return d->list.size();
 }
 
 /*!
@@ -1286,16 +1263,18 @@ int QSplitter::count() const
 void QSplitter::childEvent(QChildEvent *c)
 {
     Q_D(QSplitter);
-    if (!c->child()->isWidgetType()) {
-        if (Q_UNLIKELY(c->type() == QEvent::ChildAdded && qobject_cast<QLayout *>(c->child())))
-            qWarning("Adding a QLayout to a QSplitter is not supported.");
-        return;
-    }
     if (c->added()) {
+        if (!c->child()->isWidgetType()) {
+            if (Q_UNLIKELY(qobject_cast<QLayout *>(c->child())))
+                qWarning("Adding a QLayout to a QSplitter is not supported.");
+            return;
+        }
         QWidget *w = static_cast<QWidget*>(c->child());
         if (!d->blockChildAdd && !w->isWindow() && !d->findWidget(w))
-            d->insertWidget_helper(d->list.count(), w, false);
+            d->insertWidget_helper(d->list.size(), w, false);
     } else if (c->polished()) {
+        if (!c->child()->isWidgetType())
+            return;
         QWidget *w = static_cast<QWidget*>(c->child());
         if (!d->blockChildAdd && !w->isWindow() && d->shouldShowWidget(w))
             w->show();
@@ -1335,7 +1314,7 @@ void QSplitter::setRubberBand(int pos)
         QBoolBlocker b(d->blockChildAdd);
         d->rubberBand = new QRubberBand(QRubberBand::Line, this);
         // For accessibility to identify this special widget.
-        d->rubberBand->setObjectName(QLatin1String("qt_rubberband"));
+        d->rubberBand->setObjectName("qt_rubberband"_L1);
     }
 
     const QRect newGeom = d->orient == Qt::Horizontal ? QRect(QPoint(pos + hw / 2 - rBord, r.y()), QSize(2 * rBord, r.height()))
@@ -1419,15 +1398,15 @@ void QSplitter::moveSplitter(int pos, int index)
     qDebug() << "QSplitter::moveSplitter" << debugp << index << "adjusted" << pos << "oldP" << oldP;
 #endif
 
-    QVarLengthArray<int, 32> poss(d->list.count());
-    QVarLengthArray<int, 32> ws(d->list.count());
+    QVarLengthArray<int, 32> poss(d->list.size());
+    QVarLengthArray<int, 32> ws(d->list.size());
     bool upLeft;
 
     d->doMove(false, pos, index, +1, (d->collapsible(s) && (pos > max)), poss.data(), ws.data());
     d->doMove(true, pos, index - 1, +1, (d->collapsible(index - 1) && (pos < min)), poss.data(), ws.data());
     upLeft = (pos < oldP);
 
-    int wid, delta, count = d->list.count();
+    int wid, delta, count = d->list.size();
     if (upLeft) {
         wid = 0;
         delta = 1;
@@ -1679,6 +1658,7 @@ QByteArray QSplitter::saveState() const
     int version = 1;
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
+    stream.setVersion(QDataStream::Qt_5_0);
 
     stream << qint32(SplitterMagic);
     stream << qint32(version);
@@ -1720,6 +1700,7 @@ bool QSplitter::restoreState(const QByteArray &state)
     int version = 1;
     QByteArray sd = state;
     QDataStream stream(&sd, QIODevice::ReadOnly);
+    stream.setVersion(QDataStream::Qt_5_0);
     QList<int> list;
     bool b;
     qint32 i;
@@ -1770,7 +1751,7 @@ bool QSplitter::restoreState(const QByteArray &state)
 void QSplitter::setStretchFactor(int index, int stretch)
 {
     Q_D(QSplitter);
-    if (index <= -1 || index >= d->list.count())
+    if (index <= -1 || index >= d->list.size())
         return;
 
     QWidget *widget = d->list.at(index)->widget;

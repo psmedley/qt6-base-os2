@@ -32,6 +32,8 @@ set(qt_framework_search_path_inserted FALSE)
 foreach(line ${lines})
     if(line MATCHES "^RCC_OBJECTS = (.*)")
         set(rcc_objects ${CMAKE_MATCH_1})
+    elseif(line MATCHES "^QMAKE_PRL_TARGET_PATH_FOR_CMAKE = (.*)")
+        set(target_library_path "${CMAKE_MATCH_1}")
     elseif(line MATCHES "^QMAKE_PRL_LIBS_FOR_CMAKE = (.*)")
         unset(adjusted_libs)
         foreach(lib ${CMAKE_MATCH_1})
@@ -74,7 +76,49 @@ foreach(line ${lines})
             endif()
         endforeach()
         if(rcc_objects)
-            list(PREPEND adjusted_libs ${rcc_objects})
+            set(libs_to_prepend ${rcc_objects})
+
+            # By default, when qmake processes prl files, it first puts the processed library
+            # on the link line, followed by all values specified in QMAKE_PRL_LIBS.
+            # Because we add the resource object files into QMAKE_PRL_LIBS, this means they will
+            # also appear on the link line after the library.
+            # This causes issues on Linux because the linker may discard unreferenced symbols from
+            # the library, which are referenced by the resource object files.
+            # We can't control the placement of the library in relation to QMAKE_PRL_LIBS, but we
+            # can add the library one more time in QMAKE_PRL_LIBS, after the object files.
+            # qmake's UnixMakefileGenerator::findLibraries then takes care of deduplication, which
+            # keeps the last occurrence of the library on the link line, the one after the object
+            # files.
+            qt_internal_path_is_relative_to_qt_lib_path(
+                "${target_library_path}" "${QT_LIB_DIRS}" lib_is_a_qt_module relative_lib)
+            if(NOT lib_is_a_qt_module)
+                qt_internal_path_is_relative_to_qt_lib_path(
+                    "${target_library_path}" "${QT_PLUGIN_DIRS}" lib_is_a_qt_plugin relative_lib)
+            endif()
+            if(NOT lib_is_a_qt_module AND NOT lib_is_a_qt_plugin)
+                qt_internal_path_is_relative_to_qt_lib_path(
+                    "${target_library_path}" "${QT_QML_DIRS}" lib_is_a_qt_qml_plugin relative_lib)
+            endif()
+            if(NOT lib_is_a_qt_module AND NOT lib_is_a_qt_plugin AND NOT lib_is_a_qt_qml_plugin)
+                message(AUTHOR_WARNING
+                    "Could not determine relative path for library ${target_library_path} when "
+                    "generating prl file contents. An absolute path will be embedded, which "
+                    "will cause issues if the Qt installation is relocated.")
+                list(APPEND libs_to_prepend "${target_library_path}")
+            else()
+                set(qmake_lib_path_prefix "$$[QT_PRL_INVALID_QMAKE_VARIABLE]")
+                if(lib_is_a_qt_module)
+                    set(qmake_lib_path_prefix "$$[QT_INSTALL_LIBS]")
+                elseif(lib_is_a_qt_plugin)
+                    set(qmake_lib_path_prefix "$$[QT_INSTALL_PLUGINS]")
+                elseif(lib_is_a_qt_qml_plugin)
+                    set(qmake_lib_path_prefix "$$[QT_INSTALL_QML]")
+                endif()
+                qt_strip_library_version_suffix(relative_lib "${relative_lib}")
+                list(APPEND libs_to_prepend "${qmake_lib_path_prefix}/${relative_lib}")
+            endif()
+
+            list(PREPEND adjusted_libs ${libs_to_prepend})
         endif()
         list(JOIN adjusted_libs " " adjusted_libs_for_qmake)
         string(APPEND content "QMAKE_PRL_LIBS = ${adjusted_libs_for_qmake}\n")

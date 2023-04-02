@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qjnienvironment.h"
 #include "qjniobject.h"
@@ -232,6 +196,16 @@ jmethodID QJniEnvironment::findMethod(jclass clazz, const char *methodName, cons
 }
 
 /*!
+    \fn template<typename ...Args> jmethodId QJniEnvironment::findMethod(jclass clazz, const char *methodName)
+    \since 6.4
+
+    Searches for an instance method of a class \a clazz. The method is specified
+    by its \a methodName, the signature is deduced from the template parameters.
+
+    Returns the method ID or \c nullptr if the method is not found.
+*/
+
+/*!
     Searches for a static method of a class \a clazz. The method is specified
     by its \a methodName and \a signature.
 
@@ -265,9 +239,28 @@ jmethodID QJniEnvironment::findStaticMethod(jclass clazz, const char *methodName
     return nullptr;
 }
 
+/*!
+    \fn template<typename ...Args> jmethodId QJniEnvironment::findStaticMethod(jclass clazz, const char *methodName)
+    \since 6.4
+
+    Searches for an instance method of a class \a clazz. The method is specified
+    by its \a methodName, the signature is deduced from the template parameters.
+
+    Returns the method ID or \c nullptr if the method is not found.
+
+    \code
+    QJniEnvironment env;
+    jclass javaClass = env.findClass("org/qtproject/example/android/CustomClass");
+    jmethodID methodId = env.findStaticMethod<void, jstring>(javaClass, "staticJavaMethod");
+    QJniObject javaMessage = QJniObject::fromString("findStaticMethod example");
+    QJniObject::callStaticMethod<void>(javaClass,
+                                       methodId,
+                                       javaMessage.object<jstring>());
+    \endcode
+*/
 
 /*!
-    Searches for an member field of a class \a clazz. The field is specified
+    Searches for a member field of a class \a clazz. The field is specified
     by its \a fieldName and \a signature.
 
     Returns the field ID or \c nullptr if the field is not found.
@@ -287,6 +280,16 @@ jfieldID QJniEnvironment::findField(jclass clazz, const char *fieldName, const c
 
     return nullptr;
 }
+
+/*!
+    \fn template<typename T> jfieldID QJniEnvironment::findField(jclass clazz, const char *fieldName)
+    \since 6.4
+
+    Searches for a member field of a class \a clazz. The field is specified
+    by its \a fieldName. The signature of the field is deduced from the template parameter.
+
+    Returns the field ID or \c nullptr if the field is not found.
+*/
 
 /*!
     Searches for a static field of a class \a clazz. The field is specified
@@ -309,6 +312,16 @@ jfieldID QJniEnvironment::findStaticField(jclass clazz, const char *fieldName, c
 
     return nullptr;
 }
+
+/*!
+    \fn template<typename T> jfieldID QJniEnvironment::findStaticField(jclass clazz, const char *fieldName)
+    \since 6.4
+
+    Searches for a static field of a class \a clazz. The field is specified
+    by its \a fieldName. The signature of the field is deduced from the template parameter.
+
+    Returns the field ID or \c nullptr if the field is not found.
+*/
 
 /*!
     \fn JavaVM *QJniEnvironment::javaVM()

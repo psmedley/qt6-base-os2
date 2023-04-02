@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qitemselectionmodel.h"
 #include "qitemselectionmodel_p.h"
@@ -43,12 +7,16 @@
 #include <private/qitemselectionmodel_p.h>
 #include <private/qabstractitemmodel_p.h>
 #include <private/qduplicatetracker_p.h>
+#include <private/qoffsetstringarray_p.h>
 #include <qdebug.h>
 
 #include <algorithm>
 #include <functional>
 
 QT_BEGIN_NAMESPACE
+
+QT_IMPL_METATYPE_EXTERN(QItemSelectionRange)
+QT_IMPL_METATYPE_EXTERN(QItemSelection)
 
 /*!
     \class QItemSelectionRange
@@ -490,25 +458,23 @@ void QItemSelection::merge(const QItemSelection &other, QItemSelectionModel::Sel
           command & QItemSelectionModel::Toggle))
         return;
 
-    QItemSelection newSelection = other;
+    QItemSelection newSelection;
+    newSelection.reserve(other.size());
     // Collect intersections
     QItemSelection intersections;
-    QItemSelection::iterator it = newSelection.begin();
-    while (it != newSelection.end()) {
-        if (!(*it).isValid()) {
-            it = newSelection.erase(it);
+    for (const auto &range : other) {
+        if (!range.isValid())
             continue;
+        newSelection.push_back(range);
+        for (int t = 0; t < size(); ++t) {
+            if (range.intersects(at(t)))
+                intersections.append(at(t).intersected(range));
         }
-        for (int t = 0; t < count(); ++t) {
-            if ((*it).intersects(at(t)))
-                intersections.append(at(t).intersected(*it));
-        }
-        ++it;
     }
 
     //  Split the old (and new) ranges using the intersections
-    for (int i = 0; i < intersections.count(); ++i) { // for each intersection
-        for (int t = 0; t < count();) { // splitt each old range
+    for (int i = 0; i < intersections.size(); ++i) { // for each intersection
+        for (int t = 0; t < size();) { // splitt each old range
             if (at(t).intersects(intersections.at(i))) {
                 split(at(t), intersections.at(i), this);
                 removeAt(t);
@@ -517,7 +483,7 @@ void QItemSelection::merge(const QItemSelection &other, QItemSelectionModel::Sel
             }
         }
         // only split newSelection if Toggle is specified
-        for (int n = 0; (command & QItemSelectionModel::Toggle) && n < newSelection.count();) {
+        for (int n = 0; (command & QItemSelectionModel::Toggle) && n < newSelection.size();) {
             if (newSelection.at(n).intersects(intersections.at(i))) {
                 split(newSelection.at(n), intersections.at(i), &newSelection);
                 newSelection.removeAt(n);
@@ -584,45 +550,40 @@ void QItemSelection::split(const QItemSelectionRange &range,
 
 void QItemSelectionModelPrivate::initModel(QAbstractItemModel *m)
 {
-    struct Cx {
-        const char *signal;
-        const char *slot;
-    };
-    static const Cx connections[] = {
-        { SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
-          SLOT(_q_rowsAboutToBeRemoved(QModelIndex,int,int)) },
-        { SIGNAL(columnsAboutToBeRemoved(QModelIndex,int,int)),
-          SLOT(_q_columnsAboutToBeRemoved(QModelIndex,int,int)) },
-        { SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
-          SLOT(_q_rowsAboutToBeInserted(QModelIndex,int,int)) },
-        { SIGNAL(columnsAboutToBeInserted(QModelIndex,int,int)),
-          SLOT(_q_columnsAboutToBeInserted(QModelIndex,int,int)) },
-        { SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)),
-          SLOT(_q_layoutAboutToBeChanged()) },
-        { SIGNAL(columnsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)),
-          SLOT(_q_layoutAboutToBeChanged()) },
-        { SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)),
-          SLOT(_q_layoutChanged()) },
-        { SIGNAL(columnsMoved(QModelIndex,int,int,QModelIndex,int)),
-          SLOT(_q_layoutChanged()) },
-        { SIGNAL(layoutAboutToBeChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
-          SLOT(_q_layoutAboutToBeChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)) },
-        { SIGNAL(layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
-          SLOT(_q_layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)) },
-        { SIGNAL(modelReset()),
-          SLOT(reset()) },
-        { SIGNAL(destroyed(QObject*)),
-           SLOT(_q_modelDestroyed()) },
-        { nullptr, nullptr }
-    };
+    static constexpr auto connections = qOffsetStringArray(
+        QT_STRINGIFY_SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
+        QT_STRINGIFY_SLOT(_q_rowsAboutToBeRemoved(QModelIndex,int,int)),
+        QT_STRINGIFY_SIGNAL(columnsAboutToBeRemoved(QModelIndex,int,int)),
+        QT_STRINGIFY_SLOT(_q_columnsAboutToBeRemoved(QModelIndex,int,int)),
+        QT_STRINGIFY_SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
+        QT_STRINGIFY_SLOT(_q_rowsAboutToBeInserted(QModelIndex,int,int)),
+        QT_STRINGIFY_SIGNAL(columnsAboutToBeInserted(QModelIndex,int,int)),
+        QT_STRINGIFY_SLOT(_q_columnsAboutToBeInserted(QModelIndex,int,int)),
+        QT_STRINGIFY_SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)),
+        QT_STRINGIFY_SLOT(_q_layoutAboutToBeChanged()),
+        QT_STRINGIFY_SIGNAL(columnsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)),
+        QT_STRINGIFY_SLOT(_q_layoutAboutToBeChanged()),
+        QT_STRINGIFY_SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)),
+        QT_STRINGIFY_SLOT(_q_layoutChanged()),
+        QT_STRINGIFY_SIGNAL(columnsMoved(QModelIndex,int,int,QModelIndex,int)),
+        QT_STRINGIFY_SLOT(_q_layoutChanged()),
+        QT_STRINGIFY_SIGNAL(layoutAboutToBeChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
+        QT_STRINGIFY_SLOT(_q_layoutAboutToBeChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
+        QT_STRINGIFY_SIGNAL(layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
+        QT_STRINGIFY_SLOT(_q_layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
+        QT_STRINGIFY_SIGNAL(modelReset()),
+        QT_STRINGIFY_SLOT(reset()),
+        QT_STRINGIFY_SIGNAL(destroyed(QObject*)),
+        QT_STRINGIFY_SLOT(_q_modelDestroyed())
+    );
 
     if (model == m)
         return;
 
     Q_Q(QItemSelectionModel);
     if (model.value()) {
-        for (const Cx *cx = &connections[0]; cx->signal; cx++)
-            QObject::disconnect(model.value(), cx->signal, q, cx->slot);
+        for (int i = 0; i < connections.count(); i += 2)
+            QObject::disconnect(model.value(), connections.at(i), q, connections.at(i + 1));
         q->reset();
     }
 
@@ -630,8 +591,8 @@ void QItemSelectionModelPrivate::initModel(QAbstractItemModel *m)
     model.setValueBypassingBindings(m);
 
     if (model.value()) {
-        for (const Cx *cx = &connections[0]; cx->signal; cx++)
-            QObject::connect(model.value(), cx->signal, q, cx->slot);
+        for (int i = 0; i < connections.count(); i += 2)
+            QObject::connect(model.value(), connections.at(i), q, connections.at(i + 1));
     }
 }
 
@@ -652,7 +613,7 @@ QItemSelection QItemSelectionModelPrivate::expandSelection(const QItemSelection 
 
     QItemSelection expanded;
     if (command & QItemSelectionModel::Rows) {
-        for (int i = 0; i < selection.count(); ++i) {
+        for (int i = 0; i < selection.size(); ++i) {
             QModelIndex parent = selection.at(i).parent();
             int colCount = model->columnCount(parent);
             QModelIndex tl = model->index(selection.at(i).top(), 0, parent);
@@ -662,7 +623,7 @@ QItemSelection QItemSelectionModelPrivate::expandSelection(const QItemSelection 
         }
     }
     if (command & QItemSelectionModel::Columns) {
-        for (int i = 0; i < selection.count(); ++i) {
+        for (int i = 0; i < selection.size(); ++i) {
             QModelIndex parent = selection.at(i).parent();
             int rowCount = model->rowCount(parent);
             QModelIndex tl = model->index(0, selection.at(i).left(), parent);
@@ -877,7 +838,7 @@ void QItemSelectionModelPrivate::_q_layoutAboutToBeChanged(const QList<QPersiste
 
     // optimization for when all indexes are selected
     // (only if there is lots of items (1000) because this is not entirely correct)
-    if (ranges.isEmpty() && currentSelection.count() == 1) {
+    if (ranges.isEmpty() && currentSelection.size() == 1) {
         QItemSelectionRange range = currentSelection.constFirst();
         QModelIndex parent = range.parent();
         tableRowCount = model->rowCount(parent);
@@ -917,7 +878,7 @@ static QItemSelection mergeRowLengths(const QList<QPair<QPersistentModelIndex, u
 
     QItemSelection result;
     int i = 0;
-    while (i < rowLengths.count()) {
+    while (i < rowLengths.size()) {
         const QPersistentModelIndex &tl = rowLengths.at(i).first;
         if (!tl.isValid()) {
             ++i;
@@ -925,7 +886,7 @@ static QItemSelection mergeRowLengths(const QList<QPair<QPersistentModelIndex, u
         }
         QPersistentModelIndex br = tl;
         const uint length = rowLengths.at(i).second;
-        while (++i < rowLengths.count()) {
+        while (++i < rowLengths.size()) {
             const QPersistentModelIndex &next = rowLengths.at(i).first;
             if (!next.isValid())
                 continue;
@@ -955,7 +916,7 @@ static QItemSelection mergeIndexes(const QList<QPersistentModelIndex> &indexes)
     QItemSelection colSpans;
     // merge columns
     int i = 0;
-    while (i < indexes.count()) {
+    while (i < indexes.size()) {
         const QPersistentModelIndex &tl = indexes.at(i);
         if (!tl.isValid()) {
             ++i;
@@ -965,7 +926,7 @@ static QItemSelection mergeIndexes(const QList<QPersistentModelIndex> &indexes)
         QModelIndex brParent = br.parent();
         int brRow = br.row();
         int brColumn = br.column();
-        while (++i < indexes.count()) {
+        while (++i < indexes.size()) {
             const QPersistentModelIndex &next = indexes.at(i);
             if (!next.isValid())
                 continue;
@@ -988,11 +949,11 @@ static QItemSelection mergeIndexes(const QList<QPersistentModelIndex> &indexes)
     // merge rows
     QItemSelection rowSpans;
     i = 0;
-    while (i < colSpans.count()) {
+    while (i < colSpans.size()) {
         QModelIndex tl = colSpans.at(i).topLeft();
         QModelIndex br = colSpans.at(i).bottomRight();
         QModelIndex prevTl = tl;
-        while (++i < colSpans.count()) {
+        while (++i < colSpans.size()) {
             QModelIndex nextTl = colSpans.at(i).topLeft();
             QModelIndex nextBr = colSpans.at(i).bottomRight();
 
@@ -1401,7 +1362,7 @@ void QItemSelectionModel::reset()
 void QItemSelectionModel::clearSelection()
 {
     Q_D(QItemSelectionModel);
-    if (d->ranges.count() == 0 && d->currentSelection.count() == 0)
+    if (d->ranges.size() == 0 && d->currentSelection.size() == 0)
         return;
 
     select(QItemSelection(), Clear);
@@ -1472,7 +1433,7 @@ bool QItemSelectionModel::isSelected(const QModelIndex &index) const
     }
 
     // check  currentSelection
-    if (d->currentSelection.count()) {
+    if (d->currentSelection.size()) {
         if ((d->currentCommand & Deselect) && selected)
             selected = !d->currentSelection.contains(index);
         else if (d->currentCommand & Toggle)
@@ -1507,8 +1468,8 @@ bool QItemSelectionModel::isRowSelected(int row, const QModelIndex &parent) cons
         return false;
 
     // return false if row exist in currentSelection (Deselect)
-    if (d->currentCommand & Deselect && d->currentSelection.count()) {
-        for (int i=0; i<d->currentSelection.count(); ++i) {
+    if (d->currentCommand & Deselect && d->currentSelection.size()) {
+        for (int i=0; i<d->currentSelection.size(); ++i) {
             if (d->currentSelection.at(i).parent() == parent &&
                 row >= d->currentSelection.at(i).top() &&
                 row <= d->currentSelection.at(i).bottom())
@@ -1517,11 +1478,11 @@ bool QItemSelectionModel::isRowSelected(int row, const QModelIndex &parent) cons
     }
     // return false if ranges in both currentSelection and ranges
     // intersect and have the same row contained
-    if (d->currentCommand & Toggle && d->currentSelection.count()) {
-        for (int i=0; i<d->currentSelection.count(); ++i)
+    if (d->currentCommand & Toggle && d->currentSelection.size()) {
+        for (int i=0; i<d->currentSelection.size(); ++i)
             if (d->currentSelection.at(i).top() <= row &&
                 d->currentSelection.at(i).bottom() >= row)
-                for (int j=0; j<d->ranges.count(); ++j)
+                for (int j=0; j<d->ranges.size(); ++j)
                     if (d->ranges.at(j).top() <= row && d->ranges.at(j).bottom() >= row
                         && d->currentSelection.at(i).intersected(d->ranges.at(j)).isValid())
                         return false;
@@ -1536,7 +1497,7 @@ bool QItemSelectionModel::isRowSelected(int row, const QModelIndex &parent) cons
     // add ranges and currentSelection and check through them all
     QList<QItemSelectionRange>::const_iterator it;
     QList<QItemSelectionRange> joined = d->ranges;
-    if (d->currentSelection.count())
+    if (d->currentSelection.size())
         joined += d->currentSelection;
     for (int column = 0; column < colCount; ++column) {
         if (!isSelectable(row, column)) {
@@ -1581,8 +1542,8 @@ bool QItemSelectionModel::isColumnSelected(int column, const QModelIndex &parent
         return false;
 
     // return false if column exist in currentSelection (Deselect)
-    if (d->currentCommand & Deselect && d->currentSelection.count()) {
-        for (int i = 0; i < d->currentSelection.count(); ++i) {
+    if (d->currentCommand & Deselect && d->currentSelection.size()) {
+        for (int i = 0; i < d->currentSelection.size(); ++i) {
             if (d->currentSelection.at(i).parent() == parent &&
                 column >= d->currentSelection.at(i).left() &&
                 column <= d->currentSelection.at(i).right())
@@ -1591,11 +1552,11 @@ bool QItemSelectionModel::isColumnSelected(int column, const QModelIndex &parent
     }
     // return false if ranges in both currentSelection and the selection model
     // intersect and have the same column contained
-    if (d->currentCommand & Toggle && d->currentSelection.count()) {
-        for (int i = 0; i < d->currentSelection.count(); ++i) {
+    if (d->currentCommand & Toggle && d->currentSelection.size()) {
+        for (int i = 0; i < d->currentSelection.size(); ++i) {
             if (d->currentSelection.at(i).left() <= column &&
                 d->currentSelection.at(i).right() >= column) {
-                for (int j = 0; j < d->ranges.count(); ++j) {
+                for (int j = 0; j < d->ranges.size(); ++j) {
                     if (d->ranges.at(j).left() <= column && d->ranges.at(j).right() >= column
                         && d->currentSelection.at(i).intersected(d->ranges.at(j)).isValid()) {
                         return false;
@@ -1614,7 +1575,7 @@ bool QItemSelectionModel::isColumnSelected(int column, const QModelIndex &parent
     // add ranges and currentSelection and check through them all
     QList<QItemSelectionRange>::const_iterator it;
     QList<QItemSelectionRange> joined = d->ranges;
-    if (d->currentSelection.count())
+    if (d->currentSelection.size())
         joined += d->currentSelection;
     for (int row = 0; row < rowCount; ++row) {
         if (!isSelectable(row, column)) {
@@ -1655,7 +1616,7 @@ bool QItemSelectionModel::rowIntersectsSelection(int row, const QModelIndex &par
 
     QItemSelection sel = d->ranges;
     sel.merge(d->currentSelection, d->currentCommand);
-    for (const QItemSelectionRange &range : qAsConst(sel)) {
+    for (const QItemSelectionRange &range : std::as_const(sel)) {
         if (range.parent() != parent)
             return false;
         int top = range.top();
@@ -1690,7 +1651,7 @@ bool QItemSelectionModel::columnIntersectsSelection(int column, const QModelInde
 
     QItemSelection sel = d->ranges;
     sel.merge(d->currentSelection, d->currentCommand);
-    for (const QItemSelectionRange &range : qAsConst(sel)) {
+    for (const QItemSelectionRange &range : std::as_const(sel)) {
         if (range.parent() != parent)
             return false;
         int top = range.top();
@@ -1798,7 +1759,7 @@ QModelIndexList QItemSelectionModel::selectedRows(int column) const
     QDuplicateTracker<RowOrColumnDefinition> rowsSeen;
 
     const QItemSelection ranges = selection();
-    for (int i = 0; i < ranges.count(); ++i) {
+    for (int i = 0; i < ranges.size(); ++i) {
         const QItemSelectionRange &range = ranges.at(i);
         QModelIndex parent = range.parent();
         for (int row = range.top(); row <= range.bottom(); row++) {
@@ -1827,7 +1788,7 @@ QModelIndexList QItemSelectionModel::selectedColumns(int row) const
     QDuplicateTracker<RowOrColumnDefinition> columnsSeen;
 
     const QItemSelection ranges = selection();
-    for (int i = 0; i < ranges.count(); ++i) {
+    for (int i = 0; i < ranges.size(); ++i) {
         const QItemSelectionRange &range = ranges.at(i);
         QModelIndex parent = range.parent();
         for (int column = range.left(); column <= range.right(); column++) {
@@ -1950,9 +1911,9 @@ void QItemSelectionModel::emitSelectionChanged(const QItemSelection &newSelectio
 
     // remove equal ranges
     bool advance;
-    for (int o = 0; o < deselected.count(); ++o) {
+    for (int o = 0; o < deselected.size(); ++o) {
         advance = true;
-        for (int s = 0; s < selected.count() && o < deselected.count();) {
+        for (int s = 0; s < selected.size() && o < deselected.size();) {
             if (deselected.at(o) == selected.at(s)) {
                 deselected.removeAt(o);
                 selected.removeAt(s);
@@ -1967,17 +1928,17 @@ void QItemSelectionModel::emitSelectionChanged(const QItemSelection &newSelectio
 
     // find intersections
     QItemSelection intersections;
-    for (int o = 0; o < deselected.count(); ++o) {
-        for (int s = 0; s < selected.count(); ++s) {
+    for (int o = 0; o < deselected.size(); ++o) {
+        for (int s = 0; s < selected.size(); ++s) {
             if (deselected.at(o).intersects(selected.at(s)))
                 intersections.append(deselected.at(o).intersected(selected.at(s)));
         }
     }
 
     // compare remaining ranges with intersections and split them to find deselected and selected
-    for (int i = 0; i < intersections.count(); ++i) {
+    for (int i = 0; i < intersections.size(); ++i) {
         // split deselected
-        for (int o = 0; o < deselected.count();) {
+        for (int o = 0; o < deselected.size();) {
             if (deselected.at(o).intersects(intersections.at(i))) {
                 QItemSelection::split(deselected.at(o), intersections.at(i), &deselected);
                 deselected.removeAt(o);
@@ -1986,7 +1947,7 @@ void QItemSelectionModel::emitSelectionChanged(const QItemSelection &newSelectio
             }
         }
         // split selected
-        for (int s = 0; s < selected.count();) {
+        for (int s = 0; s < selected.size();) {
             if (selected.at(s).intersects(intersections.at(i))) {
                 QItemSelection::split(selected.at(s), intersections.at(i), &selected);
                 selected.removeAt(s);

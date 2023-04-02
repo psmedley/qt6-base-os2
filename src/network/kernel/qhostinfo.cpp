@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 //#define QHOSTINFO_DEBUG
 
@@ -43,6 +7,7 @@
 #include "qhostinfo_p.h"
 #include <qplatformdefs.h>
 
+#include "QtCore/qapplicationstatic.h"
 #include "QtCore/qscopedpointer.h"
 #include <qabstracteventdispatcher.h>
 #include <qcoreapplication.h>
@@ -58,7 +23,7 @@
 #  include <unistd.h>
 #  include <netdb.h>
 #  include <netinet/in.h>
-#  if defined(AI_ADDRCONFIG)
+#  if defined(AI_ADDRCONFIG) && !defined(Q_OS_WASM)
 #    define Q_ADDRCONFIG          AI_ADDRCONFIG
 #  endif
 #elif defined Q_OS_WIN
@@ -73,7 +38,11 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 //#define QHOSTINFO_DEBUG
+
+QT_IMPL_METATYPE_EXTERN(QHostInfo)
 
 namespace {
 struct ToBeLookedUpEquals {
@@ -103,24 +72,7 @@ std::pair<OutputIt1, OutputIt2> separate_if(InputIt first, InputIt last, OutputI
     return std::make_pair(dest1, dest2);
 }
 
-QHostInfoLookupManager* theHostInfoLookupManager()
-{
-    static QHostInfoLookupManager* theManager = nullptr;
-    static QBasicMutex theMutex;
-
-    const QMutexLocker locker(&theMutex);
-    if (theManager == nullptr) {
-        theManager = new QHostInfoLookupManager();
-        Q_ASSERT(QCoreApplication::instance());
-        QObject::connect(QCoreApplication::instance(), &QCoreApplication::destroyed, [] {
-            const QMutexLocker locker(&theMutex);
-            delete theManager;
-            theManager = nullptr;
-        });
-    }
-
-    return theManager;
-}
+Q_APPLICATION_STATIC(QHostInfoLookupManager, theHostInfoLookupManager)
 
 }
 
@@ -398,11 +350,16 @@ QHostInfo QHostInfo::fromName(const QString &name)
     qDebug("QHostInfo::fromName(\"%s\")",name.toLatin1().constData());
 #endif
 
+#ifdef Q_OS_WASM
+    return QHostInfoAgent::lookup(name);
+#else
     QHostInfo hostInfo = QHostInfoAgent::fromName(name);
     QHostInfoLookupManager* manager = theHostInfoLookupManager();
     manager->cache.put(name, hostInfo);
     return hostInfo;
+#endif
 }
+
 
 QHostInfo QHostInfoAgent::reverseLookup(const QHostAddress &address)
 {
@@ -555,7 +512,7 @@ QHostInfo QHostInfoAgent::lookup(const QString &hostName)
         QString tmp;
         QList<QHostAddress> addresses = results.addresses();
         for (int i = 0; i < addresses.count(); ++i) {
-            if (i != 0) tmp += QLatin1String(", ");
+            if (i != 0) tmp += ", "_L1;
             tmp += addresses.at(i).toString();
         }
         qDebug("QHostInfoAgent::fromName(): found %i entries for \"%s\": {%s}",
@@ -827,6 +784,20 @@ int QHostInfo::lookupHostImpl(const QString &name,
         return id;
     }
 
+#ifdef Q_OS_WASM
+    // Resolve the host name directly without using a thread or cache,
+    // since Emscripten's host lookup is fast. Emscripten maintains an internal
+    // mapping of hosts and addresses for the purposes of WebSocket socket
+    // tunnelling, and does not perform an actual host lookup.
+    QHostInfo hostInfo = QHostInfoAgent::lookup(name);
+    hostInfo.setLookupId(id);
+
+    QHostInfoResult result(receiver, slotObj);
+    if (receiver && member)
+        QObject::connect(&result, SIGNAL(resultsReady(QHostInfo)),
+                        receiver, member, Qt::QueuedConnection);
+    result.postResultsReady(hostInfo);
+#else
     QHostInfoLookupManager *manager = theHostInfoLookupManager();
 
     if (Q_LIKELY(manager)) {
@@ -853,6 +824,7 @@ int QHostInfo::lookupHostImpl(const QString &name,
                                 receiver, member, Qt::QueuedConnection);
         manager->scheduleLookup(runnable);
     }
+#endif // Q_OS_WASM
     return id;
 }
 
@@ -972,7 +944,7 @@ void QHostInfoLookupManager::rescheduleWithMutexHeld()
 
     if (!finishedLookups.isEmpty()) {
         // remove ID from aborted if it is in there
-        for (int i = 0; i < finishedLookups.length(); i++) {
+        for (int i = 0; i < finishedLookups.size(); i++) {
            abortedLookups.removeAll(finishedLookups.at(i)->id);
         }
 
@@ -1040,7 +1012,7 @@ void QHostInfoLookupManager::abortLookup(int id)
 
 #if QT_CONFIG(thread)
     // is postponed? delete and return
-    for (int i = 0; i < postponedLookups.length(); i++) {
+    for (int i = 0; i < postponedLookups.size(); i++) {
         if (postponedLookups.at(i)->id == id) {
             delete postponedLookups.takeAt(i);
             return;
@@ -1049,7 +1021,7 @@ void QHostInfoLookupManager::abortLookup(int id)
 #endif
 
     // is scheduled? delete and return
-    for (int i = 0; i < scheduledLookups.length(); i++) {
+    for (int i = 0; i < scheduledLookups.size(); i++) {
         if (scheduledLookups.at(i)->id == id) {
             delete scheduledLookups.takeAt(i);
             return;
@@ -1184,3 +1156,5 @@ void QHostInfoCache::clear()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qhostinfo_p.cpp"

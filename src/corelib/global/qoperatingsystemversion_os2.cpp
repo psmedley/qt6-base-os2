@@ -44,11 +44,6 @@
 #include "qoperatingsystemversion_p.h"
 
 QT_BEGIN_NAMESPACE
-
-QOperatingSystemVersion QOperatingSystemVersion::current()
-{
-    // TODO: use v.m_micro to differentiate between WSeB/eCS/ArcaOS releases?
-    return QOperatingSystemVersion(currentType(), _osmajor, _osminor);
-}
+//TODO implement QOperatingSystemVersionBase QOperatingSystemVersionBase::current_impl()
 
 QT_END_NAMESPACE

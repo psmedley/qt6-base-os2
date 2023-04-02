@@ -1,32 +1,8 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
-\page qt_add_executable.html
+\page qt-add-executable.html
 \ingroup cmake-commands-qtcore
 
 \title qt_add_executable
@@ -84,25 +60,38 @@ for you as a convenience.
 
 After a target is created, further processing or \e{finalization} steps are
 commonly needed. The steps to perform depend on the platform and on various
-properties of the target. The finalization processing is implemented by the
-\l{qt6_finalize_target}{qt_finalize_target()} command.
+properties of the target.
 
-Finalization can occur either as part of this call or be deferred to sometime
-after this command returns (but it should still be in the same directory scope).
-When using CMake 3.19 or later, finalization is automatically deferred to the
+The finalization processing is implemented by two commands:
+\l{qt6_finalize_target}{qt_finalize_target()} and
+\l{qt6_finalize_project}{qt_finalize_project()}.
+
+Target finalization can occur either as part of calling \c{qt_add_executable}
+or be deferred to sometime after this command returns (but it should still be in
+the same directory scope).
+
+When using CMake 3.19 or later, target finalization is automatically deferred to the
 end of the current directory scope. This gives the caller an opportunity to
 modify properties of the created target before it is finalized. When using
 CMake versions earlier than 3.19, automatic deferral isn't supported. In that
-case, finalization is performed immediately before this command returns.
+case, target finalization is performed immediately before this command returns.
 
 Regardless of the CMake version, the \c{MANUAL_FINALIZATION} keyword can be given to
 indicate that you will explicitly call \l{qt6_finalize_target}{qt_finalize_target()}
 yourself instead at some later time. In general, \c MANUAL_FINALIZATION should
 not be needed unless the project has to support CMake 3.18 or earlier.
 
+Project finalization occurs automatically when using CMake 3.19 or later.
+When using an older CMake version, you should call
+\l{qt6_finalize_project}{qt_finalize_project()} manually, at the end
+of the root \c CMakeLists.txt file.
+This is especially important when targeting Android, to collect dependencies
+between project targets for deployment purposes.
+
 \sa {qt6_finalize_target}{qt_finalize_target()},
     {qt6_set_finalizer_mode}{qt_set_finalizer_mode()},
-    {qt6_add_library}{qt_add_library()}
+    {qt6_add_library}{qt_add_library()},
+    {qt6_finalize_project}{qt_finalize_project()}
 
 \section1 Examples
 
@@ -120,4 +109,6 @@ support using CMake versions earlier than 3.19, we take over responsibility
 for finalizing the target by adding the \c{MANUAL_FINALIZATION} keyword.
 
 \snippet cmake-macros/examples.cmake qt_add_executable_deferred
+
+\include cmake-android-qt-finalize-project-warning.cmake
 */

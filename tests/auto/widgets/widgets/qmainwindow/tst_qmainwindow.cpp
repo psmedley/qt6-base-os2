@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -68,13 +43,13 @@ public:
     }
     void timerEvent(QTimerEvent*) override
     {
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseButtonPress, QPoint(6, 7), Qt::LeftButton, {}, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(7, 8), Qt::LeftButton, Qt::LeftButton, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(27, 23), Qt::LeftButton, Qt::LeftButton, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(30, 27), Qt::LeftButton, Qt::LeftButton, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(162, 109), Qt::LeftButton, Qt::LeftButton, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(10, 4), Qt::LeftButton, Qt::LeftButton, {}));
-        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseButtonRelease, QPoint(9, 4), Qt::LeftButton, {}, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseButtonPress, QPoint(6, 7), m_tb->mapToGlobal(QPoint(6, 7)), Qt::LeftButton, {}, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(7, 8), m_tb->mapToGlobal(QPoint(7, 8)), Qt::LeftButton, Qt::LeftButton, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(27, 23), m_tb->mapToGlobal(QPoint(27, 23)), Qt::LeftButton, Qt::LeftButton, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(30, 27), m_tb->mapToGlobal(QPoint(30, 27)), Qt::LeftButton, Qt::LeftButton, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(162, 109), m_tb->mapToGlobal(QPoint(162, 109)), Qt::LeftButton, Qt::LeftButton, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseMove, QPoint(10, 4), m_tb->mapToGlobal(QPoint(10, 4)), Qt::LeftButton, Qt::LeftButton, {}));
+        QCoreApplication::postEvent(m_tb, new QMouseEvent(QEvent::MouseButtonRelease, QPoint(9, 4), m_tb->mapToGlobal(QPoint(6, 7)), Qt::LeftButton, {}, {}));
     }
 };
 
@@ -92,8 +67,8 @@ public:
 
     void timerEvent(QTimerEvent*) override
     {
-        QCoreApplication::postEvent(m_w, new QMouseEvent(QEvent::MouseButtonPress, QPoint(230, 370), Qt::LeftButton, {}, {}));
-        QCoreApplication::postEvent(m_w, new QMouseEvent(QEvent::MouseButtonRelease, QPoint(230, 370), Qt::LeftButton, {}, {}));
+        QCoreApplication::postEvent(m_w, new QMouseEvent(QEvent::MouseButtonPress, QPoint(230, 370), m_w->mapToGlobal(QPoint(230, 370)), Qt::LeftButton, {}, {}));
+        QCoreApplication::postEvent(m_w, new QMouseEvent(QEvent::MouseButtonRelease, QPoint(230, 370), m_w->mapToGlobal(QPoint(230, 370)), Qt::LeftButton, {}, {}));
     }
 };
 
@@ -127,6 +102,8 @@ private slots:
     void dockWidgetArea();
     void restoreState();
     void restoreStateFromPreviousVersion();
+    void restoreStateSizeChanged_data();
+    void restoreStateSizeChanged();
     void createPopupMenu();
     void hideBeforeLayout();
 #ifdef QT_BUILD_INTERNAL
@@ -1363,14 +1340,19 @@ void tst_QMainWindow::restoreState()
     dw.setObjectName(QLatin1String("dock"));
     mw.addDockWidget(Qt::LeftDockWidgetArea, &dw);
 
+    QWidgetPrivate *tbp = QWidgetPrivate::get(&tb);
+    QVERIFY(tbp->widgetItem);
+
     QByteArray state;
 
     state = mw.saveState();
     QVERIFY(mw.restoreState(state));
+    QVERIFY(tbp->widgetItem);
 
     state = mw.saveState(1);
     QVERIFY(!mw.restoreState(state));
     QVERIFY(mw.restoreState(state, 1));
+    QVERIFY(tbp->widgetItem);
 }
 
 //tests the restoration of the previous versions of window settings
@@ -1404,6 +1386,94 @@ void tst_QMainWindow::restoreStateFromPreviousVersion()
 
 }
 
+void tst_QMainWindow::restoreStateSizeChanged_data()
+{
+    QTest::addColumn<Qt::WindowState>("saveState");
+    QTest::addColumn<Qt::WindowState>("showState");
+    QTest::addColumn<bool>("sameSize");
+
+    QTest::addRow("fullscreen") << Qt::WindowFullScreen << Qt::WindowFullScreen << true;
+    QTest::addRow("maximized") << Qt::WindowMaximized << Qt::WindowMaximized << true;
+    QTest::addRow("maximized->normal") << Qt::WindowMaximized << Qt::WindowNoState << false;
+    QTest::addRow("fullscreen->normal") << Qt::WindowFullScreen << Qt::WindowNoState << false;
+    QTest::addRow("fullscreen->maximized") << Qt::WindowFullScreen << Qt::WindowMaximized << false;
+    QTest::addRow("maximized->fullscreen") << Qt::WindowMaximized << Qt::WindowFullScreen << true;
+}
+
+void tst_QMainWindow::restoreStateSizeChanged()
+{
+    QFETCH(Qt::WindowState, saveState);
+    QFETCH(Qt::WindowState, showState);
+    QFETCH(bool, sameSize);
+
+    auto createMainWindow = []{
+        QMainWindow *mainWindow = new QMainWindow;
+        mainWindow->move(QGuiApplication::primaryScreen()->availableGeometry().topLeft());
+        mainWindow->setCentralWidget(new QLabel("X"));
+        QDockWidget *dockWidget = new QDockWidget;
+        dockWidget->setObjectName("Dock Widget");
+        mainWindow->addDockWidget(Qt::LeftDockWidgetArea, dockWidget);
+        return mainWindow;
+    };
+
+    QByteArray geometryData;
+    QByteArray stateData;
+    int dockWidgetWidth = 0;
+    QRect normalGeometry;
+
+    {
+        auto mainWindow = QScopedPointer<QMainWindow>(createMainWindow());
+        mainWindow->setWindowState(saveState);
+        mainWindow->show();
+        QVERIFY(QTest::qWaitForWindowExposed(mainWindow.data()));
+        dockWidgetWidth = mainWindow->width() - 100;
+        QDockWidget *dockWidget = mainWindow->findChild<QDockWidget*>("Dock Widget");
+        mainWindow->resizeDocks({dockWidget}, {dockWidgetWidth}, Qt::Horizontal);
+        geometryData = mainWindow->saveGeometry();
+        stateData = mainWindow->saveState();
+        normalGeometry = mainWindow->normalGeometry();
+    }
+
+    auto mainWindow = QScopedPointer<QMainWindow>(createMainWindow());
+    mainWindow->restoreGeometry(geometryData);
+    QElapsedTimer timer;
+    timer.start();
+    mainWindow->restoreState(stateData);
+    mainWindow->setWindowState(showState);
+    mainWindow->show();
+    QVERIFY(QTest::qWaitForWindowExposed(mainWindow.data()));
+
+    QDockWidget *dockWidget = mainWindow->findChild<QDockWidget*>("Dock Widget");
+    QVERIFY(dockWidget);
+    QCOMPARE(mainWindow->normalGeometry().size(), normalGeometry.size());
+    if (sameSize) {
+        // The implementation discards the restored state 150ms after a resize
+        // event. If it takes too long to get here, then the test cannot pass anymore
+        // and we want to XFAIL rather then skip it with some information that might
+        // help us adjust the timeout in QMainWindowLayout.
+        bool expectFail = false;
+        const auto waitForLastResize = [&]() -> bool {
+            if (dockWidget->width() == dockWidgetWidth)
+                return true;
+            if (timer.elapsed() > 150) {
+                QMainWindowLayout *l = mainWindow->findChild<QMainWindowLayout *>();
+                Q_ASSERT(l);
+                if (!l->restoredState) {
+                    qWarning("Restored state discarded after %lld", timer.elapsed());
+                    expectFail = true;
+                    return true;
+                }
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(waitForLastResize(), 500);
+        if (expectFail) {
+            QEXPECT_FAIL("fullscreen", "Restored state probably discarded too early", Continue);
+            QEXPECT_FAIL("maximized->fullscreen", "Restored state probably discarded too early", Continue);
+        }
+        QCOMPARE(dockWidget->width(), dockWidgetWidth);
+    }
+}
 
 void tst_QMainWindow::createPopupMenu()
 {
@@ -1705,6 +1775,7 @@ void tst_QMainWindow::saveRestore()
             adw.apply(&mainWindow);
 
         mainWindow.show();
+
         mainWindow.restoreState(stateData);
 
         COMPARE_DOCK_WIDGET_GEOS(dockWidgetGeos, dockWidgetGeometries(&mainWindow));
@@ -1723,6 +1794,7 @@ void tst_QMainWindow::saveRestore()
         mainWindow.restoreState(stateData);
 
         mainWindow.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
         COMPARE_DOCK_WIDGET_GEOS(dockWidgetGeos, dockWidgetGeometries(&mainWindow));
     }
 }
@@ -1767,11 +1839,11 @@ void tst_QMainWindow::setCursor()
     QVERIFY(QTest::qWaitForWindowActive(&mw));
     QCOMPARE(cur.shape(), mw.cursor().shape());
 
-    QHoverEvent enterE(QEvent::HoverEnter, QPoint(10,10), QPoint());
+    QHoverEvent enterE(QEvent::HoverEnter, QPoint(10,10), QPoint(), QPoint());
     mw.event(&enterE);
     QCOMPARE(cur.shape(), mw.cursor().shape());
 
-    QHoverEvent leaveE(QEvent::HoverLeave, QPoint(), QPoint());
+    QHoverEvent leaveE(QEvent::HoverLeave, QPoint(), QPoint(), QPoint());
     mw.event(&leaveE);
     QCOMPARE(cur.shape(), mw.cursor().shape());
 }
@@ -2052,14 +2124,14 @@ void tst_QMainWindow::resizeDocks()
 
     int totalFromList = 0;
     int actualTotal = 0;
-    for (int i = 0; i < docks.count(); ++i) {
+    for (int i = 0; i < docks.size(); ++i) {
         totalFromList += sizes[i];
         QSize s = list[i]->size();
         actualTotal += (orientation == Qt::Horizontal) ? s.width() : s.height();
 //        qDebug() << list[i] << list[i]->size() << sizes[i];
     }
 
-    for (int i = 0; i < docks.count(); ++i) {
+    for (int i = 0; i < docks.size(); ++i) {
         QSize s = list[i]->size();
         int value = (orientation == Qt::Horizontal) ? s.width() : s.height();
         QCOMPARE(value,  qRound(sizes[i]*actualTotal/double(totalFromList)));

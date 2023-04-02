@@ -1,0 +1,4 @@
+-o
+/home/psmedley/qt6-base-os2/build/src/corelib/kernel/moc_qobject.cpp
+kernel/qobject.h
+--output-json

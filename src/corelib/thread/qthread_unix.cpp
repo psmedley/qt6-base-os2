@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qthread.h"
 
@@ -70,8 +34,10 @@
 #include <sched.h>
 #include <errno.h>
 
-#ifdef Q_OS_BSD4
-#include <sys/sysctl.h>
+#if defined(Q_OS_FREEBSD)
+#  include <sys/cpuset.h>
+#elif defined(Q_OS_BSD4)
+#  include <sys/sysctl.h>
 #endif
 #ifdef Q_OS_VXWORKS
 #  if (_WRS_VXWORKS_MAJOR > 6) || ((_WRS_VXWORKS_MAJOR == 6) && (_WRS_VXWORKS_MINOR >= 6))
@@ -111,10 +77,10 @@ static_assert(sizeof(pthread_t) <= sizeof(Qt::HANDLE));
 enum { ThreadPriorityResetFlag = 0x80000000 };
 
 
-static thread_local QThreadData *currentThreadData = nullptr;
+Q_CONSTINIT static thread_local QThreadData *currentThreadData = nullptr;
 
-static pthread_once_t current_thread_data_once = PTHREAD_ONCE_INIT;
-static pthread_key_t current_thread_data_key;
+Q_CONSTINIT static pthread_once_t current_thread_data_once = PTHREAD_ONCE_INIT;
+Q_CONSTINIT static pthread_key_t current_thread_data_key;
 
 static void destroy_current_thread_data(void *p)
 {
@@ -171,8 +137,7 @@ static void set_thread_data(QThreadData *data)
 
 static void clear_thread_data()
 {
-    currentThreadData = nullptr;
-    pthread_setspecific(current_thread_data_key, nullptr);
+    set_thread_data(nullptr);
 }
 
 template <typename T>
@@ -446,8 +411,31 @@ int QThread::idealThreadCount() noexcept
     } else {
         cores = (int)psd.psd_proc_cnt;
     }
+#elif (defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)) || defined(Q_OS_FREEBSD)
+#  if defined(Q_OS_FREEBSD) && !defined(CPU_COUNT_S)
+#    define CPU_COUNT_S(setsize, cpusetp)   ((int)BIT_COUNT(setsize, cpusetp))
+    // match the Linux API for simplicity
+    using cpu_set_t = cpuset_t;
+    auto sched_getaffinity = [](pid_t, size_t cpusetsize, cpu_set_t *mask) {
+        return cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, -1, cpusetsize, mask);
+    };
+#  endif
+
+    // get the number of threads we're assigned, not the total in the system
+    QVarLengthArray<cpu_set_t, 1> cpuset(1);
+    int size = 1;
+    if (Q_UNLIKELY(sched_getaffinity(0, sizeof(cpu_set_t), cpuset.data()) < 0)) {
+        for (size = 2; size <= 4; size *= 2) {
+            cpuset.resize(size);
+            if (sched_getaffinity(0, sizeof(cpu_set_t) * size, cpuset.data()) == 0)
+                break;
+        }
+        if (size > 4)
+            return 1;
+    }
+    cores = CPU_COUNT_S(sizeof(cpu_set_t) * size, cpuset.data());
 #elif defined(Q_OS_BSD4)
-    // FreeBSD, OpenBSD, NetBSD, BSD/OS, OS X, iOS
+    // OpenBSD, NetBSD, BSD/OS, Darwin (macOS, iOS, etc.)
     size_t len = sizeof(cores);
     int mib[2];
     mib[0] = CTL_HW;
@@ -485,7 +473,7 @@ int QThread::idealThreadCount() noexcept
 #elif defined(Q_OS_WASM)
     cores = QThreadPrivate::idealThreadCount;
 #else
-    // the rest: Linux, Solaris, AIX, Tru64
+    // the rest: Solaris, AIX, Tru64
     cores = (int)sysconf(_SC_NPROCESSORS_ONLN);
     if (cores == -1)
         return 1;

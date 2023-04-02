@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 // When using WinSock2 on Windows, it's the first thing that can be included
@@ -52,7 +27,7 @@
 
 #include <time.h>
 #if defined(Q_OS_WIN)
-#include <windows.h>
+#include <qt_windows.h>
 #else
 #include <unistd.h>
 #include <signal.h>
@@ -255,7 +230,7 @@ void tst_QHostInfo::lookupIPv4()
     QCOMPARE((int)lookupResults.error(), (int)err);
 
     QStringList tmp;
-    for (int i = 0; i < lookupResults.addresses().count(); ++i)
+    for (int i = 0; i < lookupResults.addresses().size(); ++i)
         tmp.append(lookupResults.addresses().at(i).toString());
     tmp.sort();
 
@@ -300,7 +275,7 @@ void tst_QHostInfo::lookupIPv6()
     QCOMPARE((int)lookupResults.error(), (int)err);
 
     QStringList tmp;
-    for (int i = 0; i < lookupResults.addresses().count(); ++i)
+    for (int i = 0; i < lookupResults.addresses().size(); ++i)
         tmp.append(lookupResults.addresses().at(i).toString());
     tmp.sort();
 
@@ -366,7 +341,7 @@ void tst_QHostInfo::lookupConnectToLambda()
     QFETCH(QString, addresses);
 
     lookupDone = false;
-    QHostInfo::lookupHost(hostname, [=](const QHostInfo &hostInfo) {
+    QHostInfo::lookupHost(hostname, [this](const QHostInfo &hostInfo) {
         resultsReady(hostInfo);
     });
 
@@ -379,7 +354,7 @@ void tst_QHostInfo::lookupConnectToLambda()
     QCOMPARE(int(lookupResults.error()), int(err));
 
     QStringList tmp;
-    for (int i = 0; i < lookupResults.addresses().count(); ++i)
+    for (int i = 0; i < lookupResults.addresses().size(); ++i)
         tmp.append(lookupResults.addresses().at(i).toString());
     tmp.sort();
 
@@ -433,12 +408,12 @@ static QStringList reverseLookupHelper(const QString &ip)
     for (QByteArray line : lines) {
         int index = -1;
         if ((index = line.indexOf(nameMarkerNix)) != -1) { // Linux and macOS
-            name = line.mid(index + nameMarkerNix.length()).chopped(1).trimmed();
+            name = line.mid(index + nameMarkerNix.size()).chopped(1).trimmed();
             results << name;
         } else if (line.startsWith(nameMarkerWin)) { // Windows formatting
             name = line.mid(line.lastIndexOf(" ")).trimmed();
         } else if (line.startsWith(addressMarkerWin)) {
-            QByteArray address = line.mid(addressMarkerWin.length()).trimmed();
+            QByteArray address = line.mid(addressMarkerWin.size()).trimmed();
             if (address == ip.toUtf8()) {
                 results << name;
             }
@@ -505,7 +480,7 @@ void tst_QHostInfo::blockingLookup()
 
     QHostInfo hostInfo = QHostInfo::fromName(hostname);
     QStringList tmp;
-    for (int i = 0; i < hostInfo.addresses().count(); ++i)
+    for (int i = 0; i < hostInfo.addresses().size(); ++i)
         tmp.append(hostInfo.addresses().at(i).toString());
     tmp.sort();
 
@@ -535,7 +510,7 @@ protected:
     {
          QHostInfo info = QHostInfo::fromName("a-single" TEST_DOMAIN);
          QCOMPARE(info.error(), QHostInfo::NoError);
-         QVERIFY(info.addresses().count() > 0);
+         QVERIFY(info.addresses().size() > 0);
          QCOMPARE(info.addresses().at(0).toString(), QString("192.0.2.1"));
     }
 };
@@ -594,7 +569,7 @@ void tst_QHostInfo::threadSafetyAsynchronousAPI()
         thread->start();
         threads.append(thread);
     }
-    for (int k = threads.count() - 1; k >= 0; --k)
+    for (int k = threads.size() - 1; k >= 0; --k)
         QVERIFY(threads.at(k)->wait(60000));
     foreach (LookupReceiver* receiver, receivers) {
         QCOMPARE(receiver->result.error(), QHostInfo::NoError);

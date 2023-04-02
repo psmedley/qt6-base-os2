@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtTest/QTest>
 
@@ -81,8 +56,12 @@ private slots:
 
 void tst_PlatformSocketEngine::initTestCase()
 {
+#ifdef QT_TEST_SERVER
+     QVERIFY(QtNetworkSettings::verifyConnection(QtNetworkSettings::imapServerName(), 143));
+#else
     if (!QtNetworkSettings::verifyTestNetworkSettings())
         QSKIP("No network test server available");
+#endif
 }
 
 //---------------------------------------------------------------------------
@@ -122,14 +101,14 @@ void tst_PlatformSocketEngine::simpleConnectToIMAP()
     QVERIFY(socketDevice.initialize(QAbstractSocket::TcpSocket, QAbstractSocket::IPv4Protocol));
     QCOMPARE(socketDevice.state(), QAbstractSocket::UnconnectedState);
 
-    const bool isConnected = socketDevice.connectToHost(QtNetworkSettings::serverIP(), 143);
+    const bool isConnected = socketDevice.connectToHost(QtNetworkSettings::imapServerIp(), 143);
     if (!isConnected) {
         QCOMPARE(socketDevice.state(), QAbstractSocket::ConnectingState);
         QVERIFY(socketDevice.waitForWrite());
         QCOMPARE(socketDevice.state(), QAbstractSocket::ConnectedState);
     }
     QCOMPARE(socketDevice.state(), QAbstractSocket::ConnectedState);
-    QCOMPARE(socketDevice.peerAddress(), QtNetworkSettings::serverIP());
+    QCOMPARE(socketDevice.peerAddress(), QtNetworkSettings::imapServerIp());
 
     // Wait for the greeting
     QVERIFY(socketDevice.waitForRead());
@@ -324,7 +303,7 @@ void tst_PlatformSocketEngine::serverTest()
     quint16 port = server.localPort();
 
     // Listen for incoming connections
-    QVERIFY(server.listen());
+    QVERIFY(server.listen(50));
     QCOMPARE(server.state(), QAbstractSocket::ListeningState);
 
     // Initialize a Tcp socket
@@ -429,7 +408,7 @@ void tst_PlatformSocketEngine::tcpLoopbackPerformance()
     quint16 port = server.localPort();
 
     // Listen for incoming connections
-    QVERIFY(server.listen());
+    QVERIFY(server.listen(50));
     QCOMPARE(server.state(), QAbstractSocket::ListeningState);
 
     // Initialize a Tcp socket
@@ -567,7 +546,7 @@ void tst_PlatformSocketEngine::networkError()
 
     QVERIFY(client.initialize(QAbstractSocket::TcpSocket, QAbstractSocket::IPv4Protocol));
 
-    const bool isConnected = client.connectToHost(QtNetworkSettings::serverIP(), 143);
+    const bool isConnected = client.connectToHost(QtNetworkSettings::imapServerIp(), 143);
     if (!isConnected) {
         QCOMPARE(client.state(), QAbstractSocket::ConnectingState);
         QVERIFY(client.waitForWrite());
@@ -620,7 +599,7 @@ void tst_PlatformSocketEngine::receiveUrgentData()
     QCOMPARE(server.state(), QAbstractSocket::BoundState);
     quint16 port = server.localPort();
 
-    QVERIFY(server.listen());
+    QVERIFY(server.listen(50));
     QCOMPARE(server.state(), QAbstractSocket::ListeningState);
 
     PLATFORMSOCKETENGINE client;

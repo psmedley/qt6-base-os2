@@ -1,41 +1,5 @@
-﻿/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qandroidextras_p.h"
 
@@ -153,13 +117,16 @@ QAndroidBinder QAndroidParcelPrivate::readBinder() const
 
 /*!
     \class QAndroidParcel
+    \inheaderfile QtCore/private/qandroidextras_p.h
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \brief Wraps the most important methods of Android Parcel class.
 
     The QAndroidParcel is a convenience class that wraps the most important
     \l {https://developer.android.com/reference/android/os/Parcel.html}{Android Parcel}
     methods.
+
+    \include qtcore.qdoc qtcoreprivate-usage
 
     \since 6.2
 */
@@ -269,13 +236,16 @@ QJniObject QAndroidParcel::handle() const
 
 /*!
     \class QAndroidBinder
+    \inheaderfile QtCore/private/qandroidextras_p.h
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \brief Wraps the most important methods of Android Binder class.
 
     The QAndroidBinder is a convenience class that wraps the most important
     \l {https://developer.android.com/reference/android/os/Binder.html}{Android Binder}
     methods.
+
+    \include qtcore.qdoc qtcoreprivate-usage
 
     \since 6.2
 */
@@ -406,8 +376,9 @@ QJniObject QAndroidBinder::handle() const
 
 /*!
     \class QAndroidServiceConnection
+    \inheaderfile QtCore/private/qandroidextras_p.h
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \brief Wraps the most important methods of Android ServiceConnection class.
 
     The QAndroidServiceConnection is a convenience abstract class which wraps the
@@ -415,6 +386,8 @@ QJniObject QAndroidBinder::handle() const
     interface.
 
     It is useful when you perform a QtAndroidPrivate::bindService operation.
+
+    \include qtcore.qdoc qtcoreprivate-usage
 
     \since 6.2
 */
@@ -502,19 +475,22 @@ public:
 
     int globalRequestCode(int localRequestCode) const
     {
-        if (!localToGlobalRequestCode.contains(localRequestCode)) {
+        const auto oldSize = localToGlobalRequestCode.size();
+        auto &e = localToGlobalRequestCode[localRequestCode];
+        if (localToGlobalRequestCode.size() != oldSize) {
+            // new entry, populate:
             int globalRequestCode = uniqueActivityRequestCode();
-            localToGlobalRequestCode[localRequestCode] = globalRequestCode;
+            e = globalRequestCode;
             globalToLocalRequestCode[globalRequestCode] = localRequestCode;
         }
-        return localToGlobalRequestCode.value(localRequestCode);
+        return e;
     }
 
     bool handleActivityResult(jint requestCode, jint resultCode, jobject data)
     {
-        if (globalToLocalRequestCode.contains(requestCode)) {
-            q->handleActivityResult(globalToLocalRequestCode.value(requestCode),
-                                    resultCode, QJniObject(data));
+        const auto it = std::as_const(globalToLocalRequestCode).find(requestCode);
+        if (it != globalToLocalRequestCode.cend()) {
+            q->handleActivityResult(*it, resultCode, QJniObject(data));
             return true;
         }
 
@@ -529,13 +505,16 @@ public:
 
 /*!
   \class QAndroidActivityResultReceiver
+  \inheaderfile QtCore/private/qandroidextras_p.h
   \preliminary
-  \inmodule QtCore
+  \inmodule QtCorePrivate
   \since 6.2
   \brief Interface used for callbacks from onActivityResult() in the main Android activity.
 
   Create a subclass of this class to be notified of the results when using the
   \c QtAndroidPrivate::startActivity() and \c QtAndroidPrivate::startIntentSender() APIs.
+
+  \include qtcore.qdoc qtcoreprivate-usage
  */
 
 /*!
@@ -624,13 +603,16 @@ public:
 
 /*!
     \class QAndroidService
+    \inheaderfile QtCore/private/qandroidextras_p.h
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \brief Wraps the most important methods of Android Service class.
 
     The QAndroidService is a convenience class that wraps the most important
     \l {https://developer.android.com/reference/android/app/Service.html}{Android Service}
     methods.
+
+    \include qtcore.qdoc qtcoreprivate-usage
 
     \since 6.2
 */
@@ -693,13 +675,16 @@ QAndroidBinder* QAndroidService::onBind(const QAndroidIntent &/*intent*/)
 
 /*!
     \class QAndroidIntent
+    \inheaderfile QtCore/private/qandroidextras_p.h
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \brief Wraps the most important methods of Android Intent class.
 
     The QAndroidIntent is a convenience class that wraps the most important
     \l {https://developer.android.com/reference/android/content/Intent.html}{Android Intent}
     methods.
+
+    \include qtcore.qdoc qtcoreprivate-usage
 
     \since 6.2
 */
@@ -821,10 +806,13 @@ QJniObject QAndroidIntent::handle() const
 /*!
     \namespace QtAndroidPrivate
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \since 6.2
-    \brief The QtAndroid namespace provides miscellaneous functions to aid Android development.
-    \inheaderfile QtAndroid
+    \brief The QtAndroidPrivate namespace provides miscellaneous functions
+           to aid Android development.
+    \inheaderfile QtCore/private/qandroidextras_p.h
+
+    \include qtcore.qdoc qtcoreprivate-usage
 */
 
 /*!
@@ -1227,7 +1215,7 @@ QtAndroidPrivate::requestPermission(QtAndroidPrivate::PermissionType permission)
     promise->start();
     const auto nativePermissions = nativeStringsFromPermission(permission);
 
-    if (nativePermissions.size() > 0) {
+    if (nativePermissions.size() > 0 && QtAndroidPrivate::acquireAndroidDeadlockProtector()) {
         requestPermissionsInternal(nativePermissions).then(
                     [promise, permission](QFuture<QtAndroidPrivate::PermissionResult> future) {
             auto AuthorizedCount = future.results().count(QtAndroidPrivate::Authorized);
@@ -1239,6 +1227,7 @@ QtAndroidPrivate::requestPermission(QtAndroidPrivate::PermissionType permission)
             } else {
                 promise->addResult(QtAndroidPrivate::Denied, 0);
             }
+            QtAndroidPrivate::releaseAndroidDeadlockProtector();
             promise->finish();
         });
 
@@ -1308,7 +1297,7 @@ bool QtAndroidPrivate::registerPermissionNatives()
     if (QtAndroidPrivate::androidSdkVersion() < 23)
         return true;
 
-    JNINativeMethod methods[] = {
+    const JNINativeMethod methods[] = {
         {"sendRequestPermissionsResult", "(I[Ljava/lang/String;[I)V",
          reinterpret_cast<void *>(sendRequestPermissionsResult)
         }};

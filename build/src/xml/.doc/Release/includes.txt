@@ -1,0 +1,14 @@
+-I/home/psmedley/qt6-base-os2/build/src/xml/Xml_autogen/include
+-I/home/psmedley/qt6-base-os2/build/include
+-I/home/psmedley/qt6-base-os2/build/include/QtXml
+-I/home/psmedley/qt6-base-os2/src/xml
+-I/home/psmedley/qt6-base-os2/build/src/xml
+-I/home/psmedley/qt6-base-os2/build/include/QtXml/6.4.2
+-I/home/psmedley/qt6-base-os2/build/include/QtXml/6.4.2/QtXml
+-I/home/psmedley/qt6-base-os2/build/include
+-I/home/psmedley/qt6-base-os2/build/include/QtCore
+-I/home/psmedley/qt6-base-os2/mkspecs/linux-g++
+-I/home/psmedley/qt6-base-os2/build/include
+-I/home/psmedley/qt6-base-os2/build/src/corelib
+-I/home/psmedley/qt6-base-os2/build/include/QtCore/6.4.2
+-I/home/psmedley/qt6-base-os2/build/include/QtCore/6.4.2/QtCore

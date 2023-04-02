@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <qglobal.h>
 
@@ -43,69 +7,168 @@
 
 #if QT_CONFIG(topleveldomain)
 
-#include "qplatformdefs.h"
 #include "qurl.h"
-#include "private/qurltlds_p.h"
-#include "private/qtldurl_p.h"
-#include "QtCore/qlist.h"
+#include "QtCore/qfile.h"
+#include "QtCore/qfileinfo.h"
+#include "QtCore/qloggingcategory.h"
+#include "QtCore/qstandardpaths.h"
 #include "QtCore/qstring.h"
+
+#if !QT_CONFIG(publicsuffix_qt) && !QT_CONFIG(publicsuffix_system)
+#   error Enable at least one feature: publicsuffix-qt, publicsuffix-system
+#endif
+
+#if QT_CONFIG(publicsuffix_qt)
+#   include "qurltlds_p.h"
+#endif
+
+// Defined in src/3rdparty/libpsl/src/lookup_string_in_fixed_set.c
+extern "C" int LookupStringInFixedSet(const unsigned char *graph, std::size_t length,
+                                      const char *key, std::size_t key_length);
 
 QT_BEGIN_NAMESPACE
 
-enum TLDMatchType {
-    ExactMatch,
-    SuffixMatch,
-    ExceptionMatch,
+using namespace Qt::StringLiterals;
+
+Q_LOGGING_CATEGORY(lcTld, "qt.network.tld")
+
+static constexpr int PSL_NOT_FOUND = -1;
+static constexpr int PSL_FLAG_EXCEPTION = 1 << 0;
+static constexpr int PSL_FLAG_WILDCARD = 1 << 1;
+
+class QPublicSuffixDatabase final
+{
+public:
+#if QT_CONFIG(publicsuffix_system)
+    QPublicSuffixDatabase();
+#endif // QT_CONFIG(publicsuffix_system)
+
+    int lookupDomain(QByteArrayView domain) const;
+
+private:
+    QByteArrayView m_data
+#if QT_CONFIG(publicsuffix_qt)
+    {
+        kDafsa, sizeof(kDafsa)
+    }
+#endif // QT_CONFIG(publicsuffix_qt)
+    ;
+
+#if QT_CONFIG(publicsuffix_system)
+    std::unique_ptr<QFile> m_dev;
+    QByteArray m_storage;
+    bool loadFile(const QString &fileName);
+#endif // QT_CONFIG(publicsuffix_system)
 };
 
-// Scan the auto-generated table of TLDs for an entry. For more details
-// see comments in file: util/publicSuffix/main.cpp
-static bool containsTLDEntry(QStringView entry, TLDMatchType match)
+int QPublicSuffixDatabase::lookupDomain(QByteArrayView domain) const
 {
-    const QStringView matchSymbols[] = {
-        u"",
-        u"*",
-        u"!",
-    };
-    const auto symbol = matchSymbols[match];
-    const int index = qt_hash(entry, qt_hash(symbol)) % tldCount;
-
-    // select the right chunk from the big table
-    short chunk = 0;
-    uint chunkIndex = tldIndices[index], offset = 0;
-
-    // The offset in the big string, of the group that our entry hashes into.
-    const auto tldGroupOffset = tldIndices[index];
-
-    // It should always be inside all chunks' total size.
-    Q_ASSERT(tldGroupOffset < tldChunks[tldChunkCount - 1]);
-    // All offsets are stored in non-decreasing order.
-    // This check is within bounds as tldIndices has length tldCount+1.
-    Q_ASSERT(tldGroupOffset <= tldIndices[index + 1]);
-    // The last extra entry in tldIndices
-    // should be equal to the total of all chunks' lengths.
-    static_assert(tldIndices[tldCount] == tldChunks[tldChunkCount - 1]);
-
-    // Find which chunk contains the tldGroupOffset
-    while (tldGroupOffset >= tldChunks[chunk]) {
-        chunkIndex -= tldChunks[chunk];
-        offset += tldChunks[chunk];
-        chunk++;
-
-        // We can not go above the number of chunks we have, since all our
-        // indices are less than the total chunks' size (see asserts above).
-        Q_ASSERT(chunk < tldChunkCount);
-    }
-
-    // check all the entries from the given offset
-    while (chunkIndex < tldIndices[index+1] - offset) {
-        const auto utf8 = tldData[chunk] + chunkIndex;
-        if ((symbol.isEmpty() || QLatin1Char(*utf8) == symbol) && entry == QString::fromUtf8(utf8 + symbol.size()))
-            return true;
-        chunkIndex += uint(qstrlen(utf8)) + 1; // +1 for the ending \0
-    }
-    return false;
+    return LookupStringInFixedSet(reinterpret_cast<const unsigned char *>(m_data.constData()),
+                                     m_data.size(), domain.data(), domain.size());
 }
+
+#if QT_CONFIG(publicsuffix_system)
+
+static QStringList locatePublicSuffixFiles()
+{
+    return QStandardPaths::locateAll(QStandardPaths::GenericDataLocation,
+                                     u"publicsuffix/public_suffix_list.dafsa"_s);
+}
+
+QPublicSuffixDatabase::QPublicSuffixDatabase()
+{
+    for (auto &&fileName : locatePublicSuffixFiles()) {
+        if (loadFile(fileName))
+            return;
+    }
+
+#if QT_CONFIG(publicsuffix_qt)
+    qCDebug(lcTld, "Using builtin publicsuffix list");
+#else
+    qCWarning(lcTld, "No usable publicsuffix file found");
+#endif
+}
+
+bool QPublicSuffixDatabase::loadFile(const QString &fileName)
+{
+    static const QByteArrayView DafsaFileHeader = ".DAFSA@PSL_0   \n";
+
+    qCDebug(lcTld, "Loading publicsuffix file: %s", qUtf8Printable(fileName));
+
+    auto systemFile = std::make_unique<QFile>(fileName);
+
+    if (!systemFile->open(QIODevice::ReadOnly)) {
+        qCDebug(lcTld, "Failed to open publicsuffix file: %s",
+                qUtf8Printable(systemFile->errorString()));
+        return false;
+    }
+
+    auto fileSize = systemFile->size();
+    // Check if there is enough data for header, version byte and some data
+    if (fileSize < DafsaFileHeader.size() + 2) {
+        qCWarning(lcTld, "publicsuffix file is too small: %zu", std::size_t(fileSize));
+        return false;
+    }
+
+    auto header = systemFile->read(DafsaFileHeader.size());
+    if (header != DafsaFileHeader) {
+        qCWarning(lcTld, "Invalid publicsuffix file header: %s", header.toHex().constData());
+        return false;
+    }
+
+    // Check if the file is UTF-8 compatible
+    if (!systemFile->seek(fileSize - 1)) {
+        qCWarning(lcTld, "Failed to seek to the end of file: %s",
+                  qUtf8Printable(systemFile->errorString()));
+        return false;
+    }
+
+    char version;
+    if (systemFile->read(&version, 1) != 1) {
+        qCWarning(lcTld, "Failed to read publicsuffix version");
+        return false;
+    }
+
+    if (version != 0x01) {
+        qCWarning(lcTld, "Unsupported publicsuffix version: %d", int(version));
+        return false;
+    }
+
+    const auto dataSize = fileSize - DafsaFileHeader.size() - 1;
+    // Try to map the file first
+    auto mappedData = systemFile->map(DafsaFileHeader.size(), dataSize);
+    if (mappedData) {
+        qCDebug(lcTld, "Using mapped system publicsuffix data");
+        systemFile->close();
+        m_data = QByteArrayView(mappedData, dataSize);
+        m_dev = std::move(systemFile);
+        return true;
+    }
+
+    qCDebug(lcTld, "Failed to map publicsuffix file: %s",
+            qUtf8Printable(systemFile->errorString()));
+
+    systemFile->seek(DafsaFileHeader.size());
+    m_storage = systemFile->read(dataSize);
+    if (m_storage.size() != dataSize) {
+        qCWarning(lcTld, "Failed to read publicsuffix file");
+        m_storage.clear();
+        return false;
+    }
+
+    qCDebug(lcTld, "Using system publicsuffix data");
+    m_data = m_storage;
+
+    return true;
+}
+
+Q_GLOBAL_STATIC(QPublicSuffixDatabase, publicSuffix);
+
+#else
+
+static const QPublicSuffixDatabase m_publicSuffix;
+
+#endif // QT_CONFIG(publicsuffix_system)
 
 /*!
     \internal
@@ -118,19 +181,35 @@ static bool containsTLDEntry(QStringView entry, TLDMatchType match)
 Q_NETWORK_EXPORT bool qIsEffectiveTLD(QStringView domain)
 {
     // for domain 'foo.bar.com':
-    // 1. return if TLD table contains 'foo.bar.com'
-    // 2. else if table contains '*.bar.com',
-    // 3. test that table does not contain '!foo.bar.com'
+    // 1. return false if TLD table contains '!foo.bar.com'
+    // 2. return true if TLD table contains 'foo.bar.com'
+    // 3. return true if the table contains '*.bar.com'
 
-    if (containsTLDEntry(domain, ExactMatch)) // 1
-        return true;
+    QByteArray decodedDomain = domain.toUtf8();
+    QByteArrayView domainView(decodedDomain);
 
-    const auto dot = domain.indexOf(QLatin1Char('.'));
+#if QT_CONFIG(publicsuffix_system)
+    if (publicSuffix.isDestroyed())
+        return false;
+#else
+    auto publicSuffix = &m_publicSuffix;
+#endif // QT_CONFIG(publicsuffix_system)
+
+    auto ret = publicSuffix->lookupDomain(domainView);
+    if (ret != PSL_NOT_FOUND) {
+        if (ret & PSL_FLAG_EXCEPTION) // 1
+            return false;
+        if ((ret & PSL_FLAG_WILDCARD) == 0) // 2
+            return true;
+    }
+
+    const auto dot = domainView.indexOf('.');
     if (dot < 0) // Actual TLD: may be effective if the subject of a wildcard rule:
-        return containsTLDEntry(QString(QLatin1Char('.') + domain), SuffixMatch);
-    if (containsTLDEntry(domain.mid(dot), SuffixMatch))   // 2
-        return !containsTLDEntry(domain, ExceptionMatch); // 3
-    return false;
+        return ret != PSL_NOT_FOUND;
+    ret = publicSuffix->lookupDomain(domainView.sliced(dot + 1)); // 3
+    if (ret == PSL_NOT_FOUND)
+        return false;
+    return (ret & PSL_FLAG_WILDCARD) != 0;
 }
 
 QT_END_NAMESPACE

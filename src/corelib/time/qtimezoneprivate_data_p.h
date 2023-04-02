@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Copyright (C) 2013 John Layt <jlayt@kde.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2013 John Layt <jlayt@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 
 #ifndef QTIMEZONEPRIVATE_DATA_P_H
@@ -54,6 +18,8 @@
 //
 
 #include <QtCore/private/qglobal_p.h>
+#include "qbytearrayview.h"
+#include "qstring.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -73,22 +39,30 @@ QT_BEGIN_NAMESPACE
     table removed
 */
 
-struct QZoneData {
+struct QZoneData
+{
     quint16 windowsIdKey;      // Windows ID Key
     quint16 territory;         // Territory of IANA ID's, AnyTerritory means No Territory
-    quint16 ianaIdIndex;      // All IANA ID's for the Windows ID and Country, space separated
+    quint16 ianaIdIndex;       // All IANA ID's for the Windows ID and Country, space separated
+    inline QLatin1StringView id() const;
+    inline auto ids() const { return id().tokenize(u' '); }
 };
 
-struct QWindowsData {
+struct QWindowsData
+{
     quint16 windowsIdKey;      // Windows ID Key
     quint16 windowsIdIndex;    // Windows ID Literal
-    quint16 ianaIdIndex;      // Default IANA ID for the Windows ID
+    quint16 ianaIdIndex;       // Default IANA ID for the Windows ID
     qint32 offsetFromUtc;      // Standard Time Offset from UTC, used for quick look-ups
+    inline QByteArrayView windowsId() const;
+    inline QByteArrayView ianaId() const;
 };
 
-struct QUtcData {
-    quint16 ianaIdIndex;      // IANA ID's
+struct QUtcData
+{
+    quint16 ianaIdIndex;       // IANA ID
     qint32 offsetFromUtc;      // Offset form UTC is seconds
+    inline QByteArrayView id() const;
 };
 
 /*
@@ -115,8 +89,8 @@ struct QUtcData {
 // GENERATED PART STARTS HERE
 
 /*
-    This part of the file was generated on 2021-11-10 from the
-    Common Locale Data Repository v40 file supplemental/windowsZones.xml
+    This part of the file was generated on 2022-04-07 from the
+    Common Locale Data Repository v41 file supplemental/windowsZones.xml
 
     http://www.unicode.org/cldr/
 
@@ -125,7 +99,7 @@ struct QUtcData {
 */
 
 // Windows ID Key, Territory Enum, IANA ID Index
-static const QZoneData zoneDataTable[] = {
+static constexpr QZoneData zoneDataTable[] = {
     {      1,     1,     0 }, // Afghanistan Standard Time / Afghanistan
     {      2,   248,    11 }, // Alaskan Standard Time / United States
     {      3,   248,   106 }, // Aleutian Standard Time / United States
@@ -493,11 +467,10 @@ static const QZoneData zoneDataTable[] = {
     {    137,   182,  7221 }, // West Pacific Standard Time / Papua New Guinea
     {    138,   193,  7242 }, // Yakutsk Standard Time / Russia
     {    139,    41,  7269 }, // Yukon Standard Time / Canada
-    {      0,     0,     0 } // Trailing zeroes
 };
 
 // Windows ID Key, Windows ID Index, IANA ID Index, UTC Offset
-static const QWindowsData windowsDataTable[] = {
+static constexpr QWindowsData windowsDataTable[] = {
     {      1,     0,     0, 16200 }, // Afghanistan Standard Time
     {      2,    26,  7303,-32400 }, // Alaskan Standard Time
     {      3,    48,   106,-36000 }, // Aleutian Standard Time
@@ -637,11 +610,10 @@ static const QWindowsData windowsDataTable[] = {
     {    137,  3150,  7221, 36000 }, // West Pacific Standard Time
     {    138,  3177,  7752, 32400 }, // Yakutsk Standard Time
     {    139,  3199,  7765,-25200 }, // Yukon Standard Time
-    {      0,     0,     0,     0 } // Trailing zeroes
 };
 
 // IANA ID Index, UTC Offset
-static const QUtcData utcDataTable[] = {
+static constexpr QUtcData utcDataTable[] = {
     {   7784,     0 }, // UTC
     {   7788,-50400 }, // UTC-14:00
     {   7798,-46800 }, // UTC-13:00
@@ -682,10 +654,9 @@ static const QUtcData utcDataTable[] = {
     {   8148, 43200 }, // UTC+12:00
     {   8158, 46800 }, // UTC+13:00
     {   8168, 50400 }, // UTC+14:00
-    {     0,      0 } // Trailing zeroes
 };
 
-static const char windowsIdData[] = {
+static constexpr char windowsIdData[] = {
 0x41, 0x66, 0x67, 0x68, 0x61, 0x6e, 0x69, 0x73, 0x74, 0x61, 0x6e, 0x20, 0x53, 0x74, 0x61, 0x6e, 0x64, 0x61, 0x72, 0x64,
 0x20, 0x54, 0x69, 0x6d, 0x65, 0x0, 0x41, 0x6c, 0x61, 0x73, 0x6b, 0x61, 0x6e, 0x20, 0x53, 0x74, 0x61, 0x6e, 0x64, 0x61,
 0x72, 0x64, 0x20, 0x54, 0x69, 0x6d, 0x65, 0x0, 0x41, 0x6c, 0x65, 0x75, 0x74, 0x69, 0x61, 0x6e, 0x20, 0x53, 0x74, 0x61,
@@ -849,7 +820,7 @@ static const char windowsIdData[] = {
 0x75, 0x6b, 0x6f, 0x6e, 0x20, 0x53, 0x74, 0x61, 0x6e, 0x64, 0x61, 0x72, 0x64, 0x20, 0x54, 0x69, 0x6d, 0x65, 0x0
 };
 
-static const char ianaIdData[] = {
+static constexpr char ianaIdData[] = {
 0x41, 0x73, 0x69, 0x61, 0x2f, 0x4b, 0x61, 0x62, 0x75, 0x6c, 0x0, 0x41, 0x6d, 0x65, 0x72, 0x69, 0x63, 0x61, 0x2f, 0x41,
 0x6e, 0x63, 0x68, 0x6f, 0x72, 0x61, 0x67, 0x65, 0x20, 0x41, 0x6d, 0x65, 0x72, 0x69, 0x63, 0x61, 0x2f, 0x4a, 0x75, 0x6e,
 0x65, 0x61, 0x75, 0x20, 0x41, 0x6d, 0x65, 0x72, 0x69, 0x63, 0x61, 0x2f, 0x4d, 0x65, 0x74, 0x6c, 0x61, 0x6b, 0x61, 0x74,
@@ -1261,6 +1232,12 @@ static const char ianaIdData[] = {
 0x43, 0x2b, 0x31, 0x33, 0x3a, 0x30, 0x30, 0x0, 0x55, 0x54, 0x43, 0x2b, 0x31, 0x34, 0x3a, 0x30, 0x30, 0x0
 };
 // GENERATED PART ENDS HERE
+
+inline QByteArrayView QWindowsData::windowsId() const { return windowsIdData + windowsIdIndex; }
+inline QByteArrayView QWindowsData::ianaId() const { return ianaIdData + ianaIdIndex; }
+inline QByteArrayView QUtcData::id() const { return ianaIdData + ianaIdIndex; }
+inline QLatin1StringView QZoneData::id() const
+{ return QLatin1StringView(ianaIdData + ianaIdIndex); }
 
 QT_END_NAMESPACE
 

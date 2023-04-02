@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
     \page qttest-best-practices.qdoc
@@ -132,7 +108,11 @@
     Do not simply number the test-case, or use bug-tracking identifiers. Someone
     reading the test output will have no idea what the numbers or identifiers
     mean. You can add a comment on the test-row that mentions the bug-tracking
-    identifier, when relevant.
+    identifier, when relevant. It's best to avoid spacing characters and
+    characters that may be significant to command-line shells on which you may
+    want to run tests. This makes it easier to specify the test and tag on \l{Qt
+    Test Command Line Arguments}{the command-line} to your test program - for
+    example, to limit a test run to just one test-case.
 
     \section2 Write Self-contained Test Functions
 
@@ -182,9 +162,16 @@
     tested even when earlier ones fail. It also encourages systematic and
     uniform testing, because the same tests are applied to each data sample.
 
+    When a test is data-driven, you can specify its data-tag along with the
+    test-function name, as \c{function:tag}, on the command-line of the test to
+    run the test on just one specific test-case, rather than all test-cases of
+    the function. This can be used for either a global data tag or a local tag,
+    identifying a row from the function's own data; you can even combine them as
+    \c{function:global:local}.
+
     \section2 Use Coverage Tools
 
-    Use a coverage tool such as \l {Froglogic Coco Code Coverage} or \l {gcov}
+    Use a coverage tool such as \l {Coco} or \l {gcov}
     to help write tests that cover as many statements, branches, and conditions
     as possible in the function or class being tested. The earlier this is done
     in the development cycle for a new feature, the easier it will be to catch
@@ -215,15 +202,27 @@
     attempt to run a slot that is not implemented. In the second case, the
     test will not attempt to run a test slot even though it should.
 
-    If an entire test program is inapplicable for a specific platform or
-    unless a particular feature is enabled, the best approach is to use the
-    parent directory's \c .pro file to avoid building the test. For example,
-    if the \c tests/auto/gui/someclass test is not valid for \macOS, add the
-    following line to \c tests/auto/gui.pro:
+    If an entire test program is inapplicable for a specific platform or unless
+    a particular feature is enabled, the best approach is to use the parent
+    directory's build configuration to avoid building the test. For example, if
+    the \c tests/auto/gui/someclass test is not valid for \macOS, wrap its
+    inclusion as a subdirectory in \c{tests/auto/gui/CMakeLists.txt} in a
+    platform check:
+
+    \badcode
+    if(NOT APPLE)
+        add_subdirectory(someclass)
+    endif
+    \endcode
+
+    or, if using \c qmake, add the following line to \c tests/auto/gui.pro:
 
     \badcode
     mac*: SUBDIRS -= someclass
     \endcode
+
+    See also \l {Chapter 6: Skipping Tests with QSKIP}
+    {Skipping Tests with QSKIP}.
 
     \section2 Avoid Q_ASSERT
 

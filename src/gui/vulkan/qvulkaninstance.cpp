@@ -1,44 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
-#include "qvulkaninstance.h"
-#include <private/qvulkanfunctions_p.h>
+#include "qvulkaninstance_p.h"
 #include <qpa/qplatformvulkaninstance.h>
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformnativeinterface.h>
@@ -245,32 +208,6 @@ QT_BEGIN_NAMESPACE
     \value NoDebugOutputRedirect Disables Vulkan debug output (\c{VK_EXT_debug_report}) redirection to qDebug.
 */
 
-class QVulkanInstancePrivate
-{
-public:
-    QVulkanInstancePrivate(QVulkanInstance *q)
-        : q_ptr(q),
-          vkInst(VK_NULL_HANDLE),
-          errorCode(VK_SUCCESS)
-    { }
-    ~QVulkanInstancePrivate() { reset(); }
-
-    bool ensureVulkan();
-    void reset();
-
-    QVulkanInstance *q_ptr;
-    QScopedPointer<QPlatformVulkanInstance> platformInst;
-    VkInstance vkInst;
-    QVulkanInstance::Flags flags;
-    QByteArrayList layers;
-    QByteArrayList extensions;
-    QVersionNumber apiVersion;
-    VkResult errorCode;
-    QScopedPointer<QVulkanFunctions> funcs;
-    QHash<VkDevice, QVulkanDeviceFunctions *> deviceFuncs;
-    QList<QVulkanInstance::DebugFilter> debugFilters;
-};
-
 bool QVulkanInstancePrivate::ensureVulkan()
 {
     if (!platformInst) {
@@ -315,6 +252,7 @@ QVulkanInstance::~QVulkanInstance()
 
 /*!
     \class QVulkanLayer
+    \inmodule QtGui
     \brief Represents information about a Vulkan layer.
  */
 
@@ -358,7 +296,7 @@ QVulkanInstance::~QVulkanInstance()
 */
 
 /*!
-    \fn size_t qHash(const QVulkanLayer &key, size_t seed)
+    \fn size_t qHash(const QVulkanLayer &key, size_t seed = 0)
     \since 5.10
     \relates QVulkanLayer
 
@@ -368,6 +306,7 @@ QVulkanInstance::~QVulkanInstance()
 
 /*!
     \class QVulkanExtension
+    \inmodule QtGui
     \brief Represents information about a Vulkan extension.
  */
 
@@ -401,7 +340,7 @@ QVulkanInstance::~QVulkanInstance()
 */
 
 /*!
-    \fn size_t qHash(const QVulkanExtension &key, size_t seed)
+    \fn size_t qHash(const QVulkanExtension &key, size_t seed = 0)
     \since 5.10
     \relates QVulkanExtension
 
@@ -411,6 +350,7 @@ QVulkanInstance::~QVulkanInstance()
 
 /*!
     \class QVulkanInfoVector
+    \inmodule QtGui
     \brief A specialized QList for QVulkanLayer and QVulkanExtension.
  */
 
@@ -538,9 +478,13 @@ void QVulkanInstance::setLayers(const QByteArrayList &layers)
 /*!
     Specifies the list of additional instance \a extensions to enable. It is
     safe to specify unsupported extensions as well because these get ignored
-    when not supported at run time. The surface-related extensions required by
-    Qt will always be added automatically, no need to include them in this
-    list.
+    when not supported at run time.
+
+    \note The surface-related extensions required by Qt (for example, \c
+    VK_KHR_win32_surface) will always be added automatically, no need to
+    include them in this list.
+
+    \note \c VK_KHR_portability_enumeration is added automatically.
 
     \note This function can only be called before create() and has no effect if
     called afterwards.
@@ -598,6 +542,10 @@ void QVulkanInstance::setApiVersion(const QVersionNumber &vulkanVersion)
 
     The Vulkan instance and library is available as long as this
     QVulkanInstance exists, or until destroy() is called.
+
+    The VkInstance is always created with the flag
+    \l{https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkInstanceCreateFlagBits.html}{VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR}
+    set. This means that Vulkan Portability physical devices get enumerated as well.
  */
 bool QVulkanInstance::create()
 {

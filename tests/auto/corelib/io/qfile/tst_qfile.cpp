@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2021 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2021 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #define _CRT_SECURE_NO_WARNINGS 1
 
@@ -102,9 +77,7 @@ QT_END_NAMESPACE
 #  undef fileno
 #endif
 
-#if defined(Q_OS_DOSLIKE)
-#include "../../../network-settings.h"
-#endif
+#include "../../../../shared/filesystem.h"
 
 #ifndef STDIN_FILENO
 #define STDIN_FILENO 0
@@ -121,6 +94,8 @@ QT_END_NAMESPACE
 #ifndef QT_OPEN_BINARY
 #define QT_OPEN_BINARY 0
 #endif
+
+using namespace Qt::StringLiterals;
 
 Q_DECLARE_METATYPE(QFile::FileError)
 
@@ -186,6 +161,8 @@ private slots:
     void ungetChar();
     void createFile();
     void createFileNewOnly();
+    void createFilePermissions_data();
+    void createFilePermissions();
     void openFileExistingOnly();
     void append();
     void permissions_data();
@@ -194,6 +171,7 @@ private slots:
     void permissionsNtfs_data();
     void permissionsNtfs();
 #endif
+    void setPermissions_data();
     void setPermissions();
     void copy();
     void copyAfterFail();
@@ -566,7 +544,7 @@ void tst_QFile::exists()
     QVERIFY(!file.exists());
 
 #if defined(Q_OS_DOSLIKE)
-    const QString uncRoot = "//" + QtNetworkSettings::winServerName();
+    const QString uncRoot = "//" + QTest::uncServerName();
     // Disable some UNC tests if the server is not accessible
     if (QFile::exists(uncRoot)) {
         const QString uncPath = uncRoot + "/testshare/readme.txt";
@@ -636,7 +614,7 @@ void tst_QFile::open_data()
         QTest::newRow("//./PhysicalDrive0") << QString("//./PhysicalDrive0") << int(QIODevice::ReadOnly)
                                             << false << QFile::OpenError;
     }
-    QTest::newRow("uncFile") << "//" + QtNetworkSettings::winServerName() + "/testshare/test.pri" << int(QIODevice::ReadOnly)
+    QTest::newRow("uncFile") << "//" + QTest::uncServerName() + "/testshare/test.pri" << int(QIODevice::ReadOnly)
                              << true << QFile::NoError;
 #endif
 }
@@ -710,7 +688,7 @@ void tst_QFile::size_data()
     QTest::newRow( "exist01" ) << m_testFile << (qint64)245;
 #if defined(Q_OS_DOSLIKE) && !defined(Q_OS_WINRT)
     // Only test UNC on Windows./
-    const QString uncRoot = "//" + QtNetworkSettings::winServerName();
+    const QString uncRoot = "//" + QString(QTest::uncServerName();
     // Disable some UNC tests if the server is not accessible
     if (QFile::exists(uncRoot)) {
         QTest::newRow("unc") << "//" + QString(uncRoot + "/testshare/test.pri") << (qint64)34;
@@ -1292,6 +1270,56 @@ void tst_QFile::createFileNewOnly()
     QFile::remove("createme.txt");
 }
 
+void tst_QFile::createFilePermissions_data()
+{
+    QTest::addColumn<QFile::Permissions>("permissions");
+
+    for (int u = 0; u < 8; ++u) {
+        for (int g = 0; g < 8; ++g) {
+            for (int o = 0; o < 8; ++o) {
+                auto permissions = QFileDevice::Permissions::fromInt((u << 12) | (g << 4) | o);
+                QTest::addRow("%04x", permissions.toInt()) << permissions;
+            }
+        }
+    }
+}
+
+void tst_QFile::createFilePermissions()
+{
+    QFETCH(QFile::Permissions, permissions);
+
+#ifdef Q_OS_WIN
+    QScopedValueRollback<int> ntfsMode(qt_ntfs_permission_lookup);
+    ++qt_ntfs_permission_lookup;
+#endif
+#ifdef Q_OS_UNIX
+    auto restoreMask = qScopeGuard([oldMask = umask(0)] { umask(oldMask); });
+#endif
+
+    const QFile::Permissions setPermissions = {
+        QFile::ReadOther, QFile::WriteOther, QFile::ExeOther,
+        QFile::ReadGroup, QFile::WriteGroup, QFile::ExeGroup,
+        QFile::ReadOwner, QFile::WriteOwner, QFile::ExeOwner
+    };
+
+    const QString fileName = u"createme.txt"_s;
+
+    QFile::remove(fileName);
+    QVERIFY(!QFile::exists(fileName));
+
+    QFile f(fileName);
+    auto removeFile = qScopeGuard([&f] {
+        f.close();
+        f.remove();
+    });
+    QVERIFY2(f.open(QIODevice::WriteOnly, permissions), msgOpenFailed(f).constData());
+
+    QVERIFY(QFile::exists(fileName));
+
+    auto actualPermissions = QFileInfo(fileName).permissions();
+    QCOMPARE(actualPermissions & setPermissions, permissions);
+}
+
 void tst_QFile::openFileExistingOnly()
 {
     QFile::remove("dontcreateme.txt");
@@ -1417,21 +1445,38 @@ void tst_QFile::permissionsNtfs()
 }
 #endif
 
+void tst_QFile::setPermissions_data()
+{
+    QTest::addColumn<bool>("opened");
+    QTest::newRow("closed") << false;       // chmod()
+    QTest::newRow("opened") << true;        // fchmod()
+}
+
 void tst_QFile::setPermissions()
 {
-    if ( QFile::exists( "createme.txt" ) )
-        QFile::remove( "createme.txt" );
+#ifdef Q_OS_QNX
+    QSKIP("This test doesn't pass on QNX and no one has cared to investigate.");
+#endif
+    QFETCH(bool, opened);
+
+    auto remove = []() { QFile::remove("createme.txt"); };
+    auto guard = qScopeGuard(remove);
+    remove();
     QVERIFY( !QFile::exists( "createme.txt" ) );
 
     QFile f("createme.txt");
     QVERIFY2(f.open(QIODevice::WriteOnly | QIODevice::Truncate), msgOpenFailed(f).constData());
     f.putChar('a');
-    f.close();
+    if (!opened)
+        f.close();
 
     QFile::Permissions perms(QFile::WriteUser | QFile::ReadUser);
+    QVERIFY(f.setPermissions(QFile::ReadUser));
+    QVERIFY((f.permissions() & perms) == QFile::ReadUser);
     QVERIFY(f.setPermissions(perms));
     QVERIFY((f.permissions() & perms) == perms);
 
+    // we should end the test with the file in writeable state
 }
 
 void tst_QFile::copy()
@@ -1544,7 +1589,7 @@ static QString getWorkingDirectoryForLink(const QString &linkFileName)
     HRESULT hres = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (void **)&psl);
     if (hres == CO_E_NOTINITIALIZED) { // COM was not initialized
         neededCoInit = true;
-        CoInitialize(NULL);
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
         hres = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (void **)&psl);
     }
 
@@ -1767,7 +1812,7 @@ void tst_QFile::largeUncFileSupport()
     qint64 size = Q_INT64_C(8589934592);
     qint64 dataOffset = Q_INT64_C(8589914592);
     QByteArray knownData("LargeFile content at offset 8589914592");
-    QString largeFile("//" + QtNetworkSettings::winServerName() + "/testsharelargefile/file.bin");
+    QString largeFile("//" + QTest::uncServerName() + "/testsharelargefile/file.bin");
     const QByteArray largeFileEncoded = QFile::encodeName(largeFile);
 
     {
@@ -2232,35 +2277,10 @@ class MyEngine : public QAbstractFileEngine
 {
 public:
     MyEngine(int n) { number = n; }
-    virtual ~MyEngine() {}
 
-    void setFileName(const QString &) override {}
-    bool open(QIODevice::OpenMode) override { return false; }
-    bool close() override { return false; }
-    bool flush() override { return false; }
     qint64 size() const override { return 123 + number; }
-    qint64 at() const { return -1; }
-    bool seek(qint64) override { return false; }
-    bool isSequential() const override { return false; }
-    qint64 read(char *, qint64) override { return -1; }
-    qint64 write(const char *, qint64) override { return -1; }
-    bool remove() override { return false; }
-    bool copy(const QString &) override { return false; }
-    bool rename(const QString &) override { return false; }
-    bool link(const QString &) override { return false; }
-    bool mkdir(const QString &, bool) const override { return false; }
-    bool rmdir(const QString &, bool) const override { return false; }
-    bool setSize(qint64) override { return false; }
     QStringList entryList(QDir::Filters, const QStringList &) const override { return QStringList(); }
-    bool caseSensitive() const override { return false; }
-    bool isRelativePath() const override { return false; }
-    FileFlags fileFlags(FileFlags) const override { return { }; }
-    bool chmod(uint) { return false; }
     QString fileName(FileName) const override { return name; }
-    uint ownerId(FileOwner) const override { return 0; }
-    QString owner(FileOwner) const override { return QString(); }
-    QDateTime fileTime(FileTime) const override { return QDateTime(); }
-    bool setFileTime(const QDateTime &, FileTime) override { return false; }
 
 private:
     int number;
@@ -2475,7 +2495,7 @@ void tst_QFile::writeLargeDataBlock_data()
 
 #if defined(Q_OS_DOSLIKE) && !defined(QT_NO_NETWORK)
     // Some semi-randomness to avoid collisions.
-    const QString uncRoot = "//" + QtNetworkSettings::winServerName();
+    const QString uncRoot = "//" + QString(QTest::uncServerName();
     // Disable some UNC tests if the server is not accessible
     if (QFile::exists(uncRoot)) {
         QTest::newRow("unc file")
@@ -2648,7 +2668,7 @@ static void unixPipe_helper(int pipes[2])
     QFile f;
     if (useStdio) {
         FILE *fh = fdopen(pipes[0], "rb");
-        QVERIFY(f.open(fh, QIODevice::ReadOnly | QIODevice::Unbuffered));
+        QVERIFY(f.open(fh, QIODevice::ReadOnly | QIODevice::Unbuffered, QFileDevice::AutoCloseHandle));
     } else {
         QVERIFY(f.open(pipes[0], QIODevice::ReadOnly | QIODevice::Unbuffered));
     }
@@ -2905,7 +2925,7 @@ void tst_QFile::appendAndRead()
 void tst_QFile::miscWithUncPathAsCurrentDir()
 {
 #if defined(Q_OS_DOSLIKE)
-    const QString uncRoot = "//" + QtNetworkSettings::winServerName();
+    const QString uncRoot = "//" + QString(QTest::uncServerName();
     // Disable some UNC tests if the server is not accessible
     if (QFile::exists(uncRoot)) {
         QString current = QDir::currentPath();
@@ -2937,13 +2957,16 @@ void tst_QFile::handle()
     QVERIFY(fd > 2);
     QCOMPARE(int(file.handle()), fd);
     char c = '\0';
-    const auto readResult = QT_READ(int(file.handle()), &c, 1);
-    QCOMPARE(readResult, static_cast<decltype(readResult)>(1));
+    {
+        const auto readResult = QT_READ(int(file.handle()), &c, 1);
+        decltype(readResult) expected = 1;
+        QCOMPARE(readResult, expected);
+    }
     QCOMPARE(c, '/');
 
     // test if the QFile and the handle remain in sync
     QVERIFY(file.getChar(&c));
-    QCOMPARE(c, '*');
+    QCOMPARE(c, '/');
 
     // same, but read from QFile first now
     file.close();
@@ -2958,7 +2981,7 @@ void tst_QFile::handle()
     QCOMPARE(QT_READ(fd, &c, 1), 1);
 #endif
 
-    QCOMPARE(c, '*');
+    QCOMPARE(c, '/');
 
     //test round trip of adopted stdio file handle
     QFile file2;
@@ -3828,8 +3851,8 @@ void tst_QFile::moveToTrash_data()
 
 void tst_QFile::moveToTrash()
 {
-#ifdef Q_OS_ANDROID
-    QSKIP("Android doesn't implement a trash bin");
+#if defined(Q_OS_ANDROID) or defined(Q_OS_WEBOS)
+    QSKIP("This platform doesn't implement a trash bin");
 #endif
     QFETCH(QString, source);
     QFETCH(bool, create);
@@ -3955,12 +3978,26 @@ void tst_QFile::stdfilesystem()
     path = "tile-fest";
     QVERIFY(file.rename(path));
     QVERIFY(fs::exists(path));
+#ifdef Q_OS_WIN
+    fs::path linkfile { "test-link.lnk" };
+#else
     fs::path linkfile { "test-link" };
+#endif
     QVERIFY(file.link(linkfile));
     QVERIFY(fs::exists(linkfile));
+    QVERIFY(QFile::remove(linkfile));
+    QVERIFY(QFile::link(file.filesystemFileName(), linkfile));
+    QVERIFY(fs::exists(linkfile));
+    QCOMPARE(QFileInfo(QFile::filesystemSymLinkTarget(linkfile)),
+             QFileInfo(file.filesystemFileName()));
+    QCOMPARE(QFileInfo(QFile(linkfile).filesystemSymLinkTarget()),
+             QFileInfo(file.filesystemFileName()));
 
     fs::path copyfile { "copy-file" };
     QVERIFY(file.copy(copyfile));
+    QVERIFY(fs::exists(copyfile));
+    QVERIFY(QFile::remove(copyfile));
+    QVERIFY(QFile::copy(file.filesystemFileName(), copyfile));
     QVERIFY(fs::exists(copyfile));
 
     QFileDevice::Permissions p = QFile::permissions(path);
@@ -3970,6 +4007,10 @@ void tst_QFile::stdfilesystem()
     else if (p.testFlag(QFile::ReadOwner))
         p.setFlag(QFile::ReadOwner, false);
     QVERIFY(QFile::setPermissions(path, p));
+
+    path = "test-exists";
+    fs::create_directory(path);
+    QVERIFY(QFile::exists(path) == fs::exists(path));
 #else
     QSKIP("Not supported");
 #endif

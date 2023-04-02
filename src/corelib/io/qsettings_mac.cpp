@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsettings.h"
 
@@ -49,6 +13,8 @@
 #endif // QT_NO_QOBJECT
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 static const CFStringRef hostNames[2] = { kCFPreferencesCurrentHost, kCFPreferencesAnyHost };
 static const int numHostNames = 2;
@@ -291,18 +257,16 @@ static QString comify(const QString &organization)
 {
     for (int i = organization.size() - 1; i >= 0; --i) {
         QChar ch = organization.at(i);
-        if (ch == QLatin1Char('.') || ch == QChar(0x3002) || ch == QChar(0xff0e)
+        if (ch == u'.' || ch == QChar(0x3002) || ch == QChar(0xff0e)
                 || ch == QChar(0xff61)) {
             QString suffix = organization.mid(i + 1).toLower();
-            if (suffix.size() == 2 || suffix == QLatin1String("com")
-                    || suffix == QLatin1String("org") || suffix == QLatin1String("net")
-                    || suffix == QLatin1String("edu") || suffix == QLatin1String("gov")
-                    || suffix == QLatin1String("mil") || suffix == QLatin1String("biz")
-                    || suffix == QLatin1String("info") || suffix == QLatin1String("name")
-                    || suffix == QLatin1String("pro") || suffix == QLatin1String("aero")
-                    || suffix == QLatin1String("coop") || suffix == QLatin1String("museum")) {
+            if (suffix.size() == 2 || suffix == "com"_L1 || suffix == "org"_L1
+                    || suffix == "net"_L1 || suffix == "edu"_L1 || suffix == "gov"_L1
+                    || suffix == "mil"_L1 || suffix == "biz"_L1 || suffix == "info"_L1
+                    || suffix == "name"_L1 || suffix == "pro"_L1 || suffix == "aero"_L1
+                    || suffix == "coop"_L1 || suffix == "museum"_L1) {
                 QString result = organization;
-                result.replace(QLatin1Char('/'), QLatin1Char(' '));
+                result.replace(u'/', u' ');
                 return result;
             }
             break;
@@ -321,13 +285,13 @@ static QString comify(const QString &organization)
         } else if (uc >= 'A' && uc <= 'Z') {
             domain += ch.toLower();
         } else {
-           domain += QLatin1Char(' ');
+           domain += u' ';
         }
     }
     domain = domain.simplified();
-    domain.replace(QLatin1Char(' '), QLatin1Char('-'));
+    domain.replace(u' ', u'-');
     if (!domain.isEmpty())
-        domain.append(QLatin1String(".com"));
+        domain.append(".com"_L1);
     return domain;
 }
 
@@ -340,7 +304,7 @@ public:
 
     void remove(const QString &key) override;
     void set(const QString &key, const QVariant &value) override;
-    bool get(const QString &key, QVariant *value) const override;
+    std::optional<QVariant> get(const QString &key) const override;
     QStringList children(const QString &prefix, ChildSpec spec) const override;
     void clear() override;
     void sync() override;
@@ -380,35 +344,34 @@ QMacSettingsPrivate::QMacSettingsPrivate(QSettings::Scope scope, const QString &
             if (main_bundle_identifier != NULL) {
                 QString bundle_identifier(qtKey(main_bundle_identifier));
                 // CFBundleGetIdentifier returns identifier separated by slashes rather than periods.
-                QStringList bundle_identifier_components = bundle_identifier.split(QLatin1Char('/'));
+                QStringList bundle_identifier_components = bundle_identifier.split(u'/');
                 // pre-reverse them so that when they get reversed again below, they are in the com.company.product format.
                 QStringList bundle_identifier_components_reversed;
                 for (int i=0; i<bundle_identifier_components.size(); ++i) {
                     const QString &bundle_identifier_component = bundle_identifier_components.at(i);
                     bundle_identifier_components_reversed.push_front(bundle_identifier_component);
                 }
-                domainName = bundle_identifier_components_reversed.join(QLatin1Char('.'));
+                domainName = bundle_identifier_components_reversed.join(u'.');
             }
         }
     }
     // if no bundle identifier yet. use a hard coded string.
-    if (domainName.isEmpty()) {
-        domainName = QLatin1String("unknown-organization.trolltech.com");
-    }
+    if (domainName.isEmpty())
+        domainName = "unknown-organization.trolltech.com"_L1;
 
-    while ((nextDot = domainName.indexOf(QLatin1Char('.'), curPos)) != -1) {
+    while ((nextDot = domainName.indexOf(u'.', curPos)) != -1) {
         javaPackageName.prepend(QStringView{domainName}.mid(curPos, nextDot - curPos));
-        javaPackageName.prepend(QLatin1Char('.'));
+        javaPackageName.prepend(u'.');
         curPos = nextDot + 1;
     }
     javaPackageName.prepend(QStringView{domainName}.mid(curPos));
     javaPackageName = std::move(javaPackageName).toLower();
     if (curPos == 0)
-        javaPackageName.prepend(QLatin1String("com."));
+        javaPackageName.prepend("com."_L1);
     suiteId = javaPackageName;
 
     if (!application.isEmpty()) {
-        javaPackageName += QLatin1Char('.') + application;
+        javaPackageName += u'.' + application;
         applicationId = javaPackageName;
     }
 
@@ -436,13 +399,13 @@ QMacSettingsPrivate::~QMacSettingsPrivate()
 
 void QMacSettingsPrivate::remove(const QString &key)
 {
-    QStringList keys = children(key + QLatin1Char('/'), AllKeys);
+    QStringList keys = children(key + u'/', AllKeys);
 
     // If i == -1, then delete "key" itself.
     for (int i = -1; i < keys.size(); ++i) {
         QString subKey = key;
         if (i >= 0) {
-            subKey += QLatin1Char('/');
+            subKey += u'/';
             subKey += keys.at(i);
         }
         CFPreferencesSetValue(macKey(subKey), 0, domains[0].applicationOrSuiteId,
@@ -456,7 +419,7 @@ void QMacSettingsPrivate::set(const QString &key, const QVariant &value)
                           domains[0].userName, hostName);
 }
 
-bool QMacSettingsPrivate::get(const QString &key, QVariant *value) const
+std::optional<QVariant> QMacSettingsPrivate::get(const QString &key) const
 {
     QCFString k = macKey(key);
     for (int i = 0; i < numDomains; ++i) {
@@ -464,17 +427,14 @@ bool QMacSettingsPrivate::get(const QString &key, QVariant *value) const
             QCFType<CFPropertyListRef> ret =
                     CFPreferencesCopyValue(k, domains[i].applicationOrSuiteId, domains[i].userName,
                                            hostNames[j]);
-            if (ret) {
-                if (value)
-                    *value = qtValue(ret);
-                return true;
-            }
+            if (ret)
+                return qtValue(ret);
         }
 
         if (!fallbacks)
             break;
     }
-    return false;
+    return std::nullopt;
 }
 
 QStringList QMacSettingsPrivate::children(const QString &prefix, ChildSpec spec) const
@@ -537,14 +497,14 @@ void QMacSettingsPrivate::flush()
 bool QMacSettingsPrivate::isWritable() const
 {
     QMacSettingsPrivate *that = const_cast<QMacSettingsPrivate *>(this);
-    QString impossibleKey(QLatin1String("qt_internal/"));
+    QString impossibleKey("qt_internal/"_L1);
 
     QSettings::Status oldStatus = that->status;
     that->status = QSettings::NoError;
 
     that->set(impossibleKey, QVariant());
     that->sync();
-    bool writable = (status == QSettings::NoError) && that->get(impossibleKey, 0);
+    bool writable = (status == QSettings::NoError) && that->get(impossibleKey).has_value();
     that->remove(impossibleKey);
     that->sync();
 
@@ -557,9 +517,9 @@ QString QMacSettingsPrivate::fileName() const
     QString result;
     if (scope == QSettings::UserScope)
         result = QDir::homePath();
-    result += QLatin1String("/Library/Preferences/");
+    result += "/Library/Preferences/"_L1;
     result += QString::fromCFString(domains[0].applicationOrSuiteId);
-    result += QLatin1String(".plist");
+    result += ".plist"_L1;
     return result;
 }
 
@@ -569,7 +529,7 @@ QSettingsPrivate *QSettingsPrivate::create(QSettings::Format format,
                                            const QString &application)
 {
 #ifndef QT_BOOTSTRAPPED
-    if (organization == QLatin1String("Qt"))
+    if (organization == "Qt"_L1)
     {
         QString organizationDomain = QCoreApplication::organizationDomain();
         QString applicationName = QCoreApplication::applicationName();

@@ -10,6 +10,7 @@ macro(qt_find_apple_system_frameworks)
         qt_internal_find_apple_system_framework(FWCoreGraphics CoreGraphics)
         qt_internal_find_apple_system_framework(FWCoreText CoreText)
         qt_internal_find_apple_system_framework(FWCoreVideo CoreVideo)
+        qt_internal_find_apple_system_framework(FWCryptoTokenKit CryptoTokenKit)
         qt_internal_find_apple_system_framework(FWDiskArbitration DiskArbitration)
         qt_internal_find_apple_system_framework(FWFoundation Foundation)
         qt_internal_find_apple_system_framework(FWIOBluetooth IOBluetooth)
@@ -85,7 +86,8 @@ function(qt_copy_framework_headers target)
             OUTPUT ${out_file_path}
             DEPENDS ${in_file_path}
             COMMAND ${CMAKE_COMMAND} -E make_directory "${fw_output_header_dir}"
-            COMMAND ${CMAKE_COMMAND} -E copy "${in_file_path}" "${fw_output_header_dir}")
+            COMMAND ${CMAKE_COMMAND} -E copy "${in_file_path}" "${fw_output_header_dir}"
+            VERBATIM)
         list(APPEND out_files ${out_file_path})
     endforeach()
 

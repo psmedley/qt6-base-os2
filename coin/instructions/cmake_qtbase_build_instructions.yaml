@@ -6,19 +6,25 @@ instructions:
     directory: "{{.SourceDir}}"
   - type: ChangeDirectory
     directory: "{{.BuildDir}}"
+
+  - type: EnvironmentVariable
+    variableName: COIN_CONFIGURE_ARGS
+    variableValue: "{{.Env.CONFIGURE_ARGS}}"
+  - type: EnvironmentVariable
+    variableName: COIN_CMAKE_ARGS
+    # Use unix separators even on Windows, to avoid escaping issues in the configure script.
+    variableValue: "{{.Env.CMAKE_ARGS}} {{.Env.COMMON_CMAKE_ARGS}} -DCMAKE_INSTALL_PREFIX:PATH={{unixPathSeparators .InstallDir}}"
+  - type: EnvironmentVariable
+    variableName: CONFIGURE_ENV_PREFIX
+    variableValue: "{{.Env.ENV_PREFIX}}"
+  - !include "{{qt/qtbase}}/call_configure_qtbase.yaml"
+
   - type: ExecuteCommand
-    command: "{{.Env.ENV_PREFIX}} cmake {{.Env.CONFIGURE_ARGS}} -DCMAKE_INSTALL_PREFIX:PATH={{.InstallDir}} {{.SourceDir}}"
-    executeCommandArgumentSplitingBehavior: SplitAfterVariableSubstitution
+    command: "{{.Env.CONFIGURE_ENV_PREFIX}} cmake --build . --parallel -v"
     maxTimeInSeconds: 6000
     maxTimeBetweenOutput: 1200
     userMessageOnFailure: >
-      Failed to call cmake.
-  - type: ExecuteCommand
-    command: "{{.Env.ENV_PREFIX}} cmake --build . --parallel -v"
-    maxTimeInSeconds: 6000
-    maxTimeBetweenOutput: 1200
-    userMessageOnFailure: >
-      Failed to build sources. In the current state bug can be everywhere.
+      Failed to build sources.
   - type: EnvironmentVariable
     variableName: COIN_CMAKE_INSTALL_SCRIPT_PATH
     variableValue: "{{.BuildDir}}"

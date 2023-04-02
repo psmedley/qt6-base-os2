@@ -1,41 +1,5 @@
-----------------------------------------------------------------------------
---
 -- Copyright (C) 2020 The Qt Company Ltd.
--- Contact: https://www.qt.io/licensing/
---
--- This file is part of the QtCore module of the Qt Toolkit.
---
--- $QT_BEGIN_LICENSE:LGPL$
--- Commercial License Usage
--- Licensees holding valid commercial Qt licenses may use this file in
--- accordance with the commercial license agreement provided with the
--- Software or, alternatively, in accordance with the terms contained in
--- a written agreement between you and The Qt Company. For licensing terms
--- and conditions see https://www.qt.io/terms-conditions. For further
--- information use the contact form at https://www.qt.io/contact-us.
---
--- GNU Lesser General Public License Usage
--- Alternatively, this file may be used under the terms of the GNU Lesser
--- General Public License version 3 as published by the Free Software
--- Foundation and appearing in the file LICENSE.LGPL3 included in the
--- packaging of this file. Please review the following information to
--- ensure the GNU Lesser General Public License version 3 requirements
--- will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
---
--- GNU General Public License Usage
--- Alternatively, this file may be used under the terms of the GNU
--- General Public License version 2.0 or (at your option) the GNU General
--- Public license version 3 or any later version approved by the KDE Free
--- Qt Foundation. The licenses are as published by the Free Software
--- Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
--- included in the packaging of this file. Please review the following
--- information to ensure the GNU General Public License requirements will
--- be met: https://www.gnu.org/licenses/gpl-2.0.html and
--- https://www.gnu.org/licenses/gpl-3.0.html.
---
--- $QT_END_LICENSE$
---
-----------------------------------------------------------------------------
+-- SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 %parser QXmlStreamGrammar
 %impl           qxmlstreamparser_p.h
@@ -88,7 +52,7 @@
 %token IMPLIED "IMPLIED"
 %token FIXED "FIXED"
 
--- conent spec
+-- content spec
 %token EMPTY "EMPTY"
 %token ANY "ANY"
 %token PCDATA "PCDATA"
@@ -145,44 +109,8 @@
 
 %start document
 
-/./****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+/.// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only$
 
 
 //
@@ -219,11 +147,15 @@
 #ifndef QXMLSTREAMPARSER_P_H
 #define QXMLSTREAMPARSER_P_H
 
+QT_BEGIN_NAMESPACE
+
 #ifndef QT_NO_XMLSTREAMREADER
 
 bool QXmlStreamReaderPrivate::parse()
 {
     // cleanup currently reported token
+
+    using namespace Qt::StringLiterals;
 
     switch (type) {
     case QXmlStreamReader::StartElement:
@@ -732,9 +664,9 @@ attdef ::= attdef_start att_type default_decl;
             dtdAttribute.attributePrefix = addToStringStorage(symPrefix(1));
             dtdAttribute.attributeName = addToStringStorage(symString(1));
             dtdAttribute.attributeQualifiedName = addToStringStorage(symName(1));
-            dtdAttribute.isNamespaceAttribute = (dtdAttribute.attributePrefix == QLatin1String("xmlns")
+            dtdAttribute.isNamespaceAttribute = (dtdAttribute.attributePrefix == "xmlns"_L1
                                                  || (dtdAttribute.attributePrefix.isEmpty()
-                                                     && dtdAttribute.attributeName == QLatin1String("xmlns")));
+                                                     && dtdAttribute.attributeName == "xmlns"_L1));
             if (lastAttributeValue.isNull()) {
                 dtdAttribute.defaultValue.clear();
             } else {
@@ -756,14 +688,14 @@ attlist_decl ::= langle_bang ATTLIST qname attdef_list space_opt RANGLE;
         case $rule_number: {
             if (referenceToUnparsedEntityDetected && !standalone)
                 break;
-            int n = dtdAttributes.size();
+            qsizetype n = dtdAttributes.size();
             XmlStringRef tagName = addToStringStorage(symName(3));
             while (n--) {
                 DtdAttribute &dtdAttribute = dtdAttributes[n];
                 if (!dtdAttribute.tagName.isNull())
                     break;
                 dtdAttribute.tagName = tagName;
-                for (int i = 0; i < n; ++i) {
+                for (qsizetype i = 0; i < n; ++i) {
                     if ((dtdAttributes[i].tagName.isNull() || dtdAttributes[i].tagName == tagName)
                         && dtdAttributes[i].attributeQualifiedName == dtdAttribute.attributeQualifiedName) {
                         dtdAttribute.attributeQualifiedName.clear(); // redefined, delete it
@@ -869,11 +801,11 @@ processing_instruction ::= LANGLE QUESTIONMARK name space;
 /.
         case $rule_number: {
             setType(QXmlStreamReader::ProcessingInstruction);
-            int pos = sym(4).pos + sym(4).len;
+            const qsizetype pos = sym(4).pos + sym(4).len;
             processingInstructionTarget = symString(3);
             if (scanUntil("?>")) {
                 processingInstructionData = XmlStringRef(&textBuffer, pos, textBuffer.size() - pos - 2);
-                if (!processingInstructionTarget.view().compare(QLatin1String("xml"), Qt::CaseInsensitive)) {
+                if (!processingInstructionTarget.view().compare("xml"_L1, Qt::CaseInsensitive)) {
                     raiseWellFormedError(QXmlStream::tr("XML declaration not at start of document."));
                 }
                 else if (!QXmlUtils::isNCName(processingInstructionTarget))
@@ -891,7 +823,7 @@ processing_instruction ::= LANGLE QUESTIONMARK name QUESTIONMARK RANGLE;
         case $rule_number:
             setType(QXmlStreamReader::ProcessingInstruction);
             processingInstructionTarget = symString(3);
-            if (!processingInstructionTarget.view().compare(QLatin1String("xml"), Qt::CaseInsensitive))
+            if (!processingInstructionTarget.view().compare("xml"_L1, Qt::CaseInsensitive))
                 raiseWellFormedError(QXmlStream::tr("Invalid processing instruction name."));
         break;
 ./
@@ -921,7 +853,7 @@ comment ::= comment_start RANGLE;
 /.
         case $rule_number: {
             setType(QXmlStreamReader::Comment);
-            int pos = sym(1).pos + 4;
+            const qsizetype pos = sym(1).pos + 4;
             text = XmlStringRef(&textBuffer, pos, textBuffer.size() - pos - 3);
         } break;
 ./
@@ -933,7 +865,7 @@ cdata ::= langle_bang CDATA_START;
             setType(QXmlStreamReader::Characters);
             isCDATA = true;
             isWhitespace = false;
-            int pos = sym(2).pos;
+            const qsizetype pos = sym(2).pos;
             if (scanUntil("]]>", -1)) {
                 text = XmlStringRef(&textBuffer, pos, textBuffer.size() - pos - 3);
             } else {
@@ -1069,7 +1001,7 @@ literal_content_start ::= SPACE;
 /.
         case $rule_number:
             if (normalizeLiterals)
-                textBuffer.data()[textBuffer.size()-1] = QLatin1Char(' ');
+                textBuffer.data()[textBuffer.size()-1] = u' ';
         break;
 ./
 
@@ -1184,13 +1116,13 @@ attribute ::= qname space_opt EQ space_opt attribute_value;
 /.
         case $rule_number: {
             XmlStringRef prefix = symPrefix(1);
-            if (prefix.isEmpty() && symString(1) == QLatin1String("xmlns") && namespaceProcessing) {
+            if (prefix.isEmpty() && symString(1) == "xmlns"_L1 && namespaceProcessing) {
                 NamespaceDeclaration &namespaceDeclaration = namespaceDeclarations.push();
                 namespaceDeclaration.prefix.clear();
 
                 const XmlStringRef ns(symString(5));
-                if (ns.view() == QLatin1String("http://www.w3.org/2000/xmlns/") ||
-                    ns.view() == QLatin1String("http://www.w3.org/XML/1998/namespace"))
+                if (ns.view() == "http://www.w3.org/2000/xmlns/"_L1 ||
+                    ns.view() == "http://www.w3.org/XML/1998/namespace"_L1)
                     raiseWellFormedError(QXmlStream::tr("Illegal namespace declaration."));
                 else
                     namespaceDeclaration.namespaceUri = addToStringStorage(ns);
@@ -1201,8 +1133,7 @@ attribute ::= qname space_opt EQ space_opt attribute_value;
 
                 XmlStringRef attributeQualifiedName = symName(1);
                 bool normalize = false;
-                for (int a = 0; a < dtdAttributes.size(); ++a) {
-                    DtdAttribute &dtdAttribute = dtdAttributes[a];
+                for (const DtdAttribute &dtdAttribute : std::as_const(dtdAttributes)) {
                     if (!dtdAttribute.isCDATA
                         && dtdAttribute.tagName == qualifiedName
                         && dtdAttribute.attributeQualifiedName == attributeQualifiedName
@@ -1213,10 +1144,10 @@ attribute ::= qname space_opt EQ space_opt attribute_value;
                 }
                 if (normalize) {
                     // normalize attribute value (simplify and trim)
-                    int pos = textBuffer.size();
-                    int n = 0;
+                    const qsizetype pos = textBuffer.size();
+                    qsizetype n = 0;
                     bool wasSpace = true;
-                    for (int i = 0; i < attribute.value.len; ++i) {
+                    for (qsizetype i = 0; i < attribute.value.len; ++i) {
                         QChar c = textBuffer.at(attribute.value.pos + i);
                         if (c.unicode() == ' ') {
                             if (wasSpace)
@@ -1234,16 +1165,16 @@ attribute ::= qname space_opt EQ space_opt attribute_value;
                     attribute.value.pos = pos;
                     attribute.value.len = n;
                 }
-                if (prefix == QLatin1String("xmlns") && namespaceProcessing) {
+                if (prefix == "xmlns"_L1 && namespaceProcessing) {
                     NamespaceDeclaration &namespaceDeclaration = namespaceDeclarations.push();
                     XmlStringRef namespacePrefix = symString(attribute.key);
                     XmlStringRef namespaceUri = symString(attribute.value);
                     attributeStack.pop();
-                    if (((namespacePrefix == QLatin1String("xml"))
-                         ^ (namespaceUri == QLatin1String("http://www.w3.org/XML/1998/namespace")))
-                        || namespaceUri == QLatin1String("http://www.w3.org/2000/xmlns/")
+                    if (((namespacePrefix == "xml"_L1)
+                         ^ (namespaceUri == "http://www.w3.org/XML/1998/namespace"_L1))
+                        || namespaceUri == "http://www.w3.org/2000/xmlns/"_L1
                         || namespaceUri.isEmpty()
-                        || namespacePrefix == QLatin1String("xmlns"))
+                        || namespacePrefix == "xmlns"_L1)
                         raiseWellFormedError(QXmlStream::tr("Illegal namespace declaration."));
 
                     namespaceDeclaration.prefix = addToStringStorage(namespacePrefix);
@@ -1299,9 +1230,9 @@ etag ::= LANGLE SLASH qname space_opt RANGLE;
             Tag tag = tagStack_pop();
 
             namespaceUri = tag.namespaceDeclaration.namespaceUri;
+            prefix = tag.namespaceDeclaration.prefix;
             name = tag.name;
             qualifiedName = tag.qualifiedName;
-            prefix = tag.namespaceDeclaration.prefix;
             if (qualifiedName != symName(3))
                 raiseWellFormedError(QXmlStream::tr("Opening and ending tag mismatch."));
         } break;
@@ -1548,6 +1479,8 @@ nmtoken ::= COLON;
 }
 
 #endif
+
+QT_END_NAMESPACE
 
 #endif
 

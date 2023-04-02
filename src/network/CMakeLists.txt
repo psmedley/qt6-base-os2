@@ -14,12 +14,12 @@ qt_internal_add_module(Network
         access/qnetworkaccessbackend.cpp access/qnetworkaccessbackend_p.h
         access/qnetworkaccesscache.cpp access/qnetworkaccesscache_p.h
         access/qnetworkaccesscachebackend.cpp access/qnetworkaccesscachebackend_p.h
-        access/qnetworkaccessdebugpipebackend.cpp access/qnetworkaccessdebugpipebackend_p.h
         access/qnetworkaccessfilebackend.cpp access/qnetworkaccessfilebackend_p.h
         access/qnetworkaccessmanager.cpp access/qnetworkaccessmanager.h access/qnetworkaccessmanager_p.h
         access/qnetworkcookie.cpp access/qnetworkcookie.h access/qnetworkcookie_p.h
         access/qnetworkcookiejar.cpp access/qnetworkcookiejar.h access/qnetworkcookiejar_p.h
         access/qnetworkfile.cpp access/qnetworkfile_p.h
+        access/qhttpheaderparser.cpp access/qhttpheaderparser_p.h
         access/qnetworkreply.cpp access/qnetworkreply.h access/qnetworkreply_p.h
         access/qnetworkreplydataimpl.cpp access/qnetworkreplydataimpl_p.h
         access/qnetworkreplyfileimpl.cpp access/qnetworkreplyfileimpl_p.h
@@ -59,6 +59,8 @@ qt_internal_add_module(Network
         Qt::CorePrivate
     PRECOMPILED_HEADER
         "../corelib/global/qt_pch.h"
+    GENERATE_CPP_EXPORTS
+    GENERATE_PRIVATE_CPP_EXPORTS
 )
 
 #### Keys ignored in scope 1:.:.:network.pro:<TRUE>:
@@ -66,6 +68,11 @@ qt_internal_add_module(Network
 
 ## Scopes:
 #####################################################################
+
+qt_internal_extend_target(Network CONDITION QT_FEATURE_private_tests
+    SOURCES
+        access/qnetworkaccessdebugpipebackend.cpp access/qnetworkaccessdebugpipebackend_p.h
+)
 
 qt_internal_extend_target(Network CONDITION MSVC AND (TEST_architecture_arch STREQUAL "i386")
     LINK_OPTIONS
@@ -127,7 +134,7 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_brotli AND QT_FEATURE_htt
 
 qt_internal_extend_target(Network CONDITION QT_FEATURE_http AND QT_FEATURE_zstd
     LIBRARIES
-        ZSTD::ZSTD
+        WrapZSTD::WrapZSTD
 )
 
 qt_internal_extend_target(Network CONDITION QT_FEATURE_system_zlib
@@ -149,6 +156,7 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_topleveldomain
     SOURCES
         kernel/qtldurl.cpp kernel/qtldurl_p.h
         kernel/qurltlds_p.h
+        ../3rdparty/libpsl/src/lookup_string_in_fixed_set.c
 )
 
 qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup
@@ -333,6 +341,7 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_ssl
         ssl/qsslkey.h ssl/qsslkey_p.cpp ssl/qsslkey_p.h
         ssl/qsslpresharedkeyauthenticator.cpp ssl/qsslpresharedkeyauthenticator.h ssl/qsslpresharedkeyauthenticator_p.h
         ssl/qsslsocket.cpp ssl/qsslsocket.h ssl/qsslsocket_p.h
+        ssl/qsslserver.cpp ssl/qsslserver.h ssl/qsslserver_p.h
 )
 
 qt_internal_extend_target(Network CONDITION QT_FEATURE_dtls AND QT_FEATURE_ssl

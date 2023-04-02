@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "filedialogpanel.h"
 #include "utils.h"
@@ -326,7 +301,6 @@ void FileDialogPanel::getOpenFileNames()
 
 void FileDialogPanel::getOpenFileUrls()
 {
-#if QT_VERSION >= 0x050000
     QString selectedFilter = m_selectedNameFilter->text().trimmed();
     const QList<QUrl> files =
         QFileDialog::getOpenFileUrls(this, tr("getOpenFileNames Qt %1").arg(QLatin1String(QT_VERSION_STR)),
@@ -339,7 +313,6 @@ void FileDialogPanel::getOpenFileUrls()
             << "\nName filter: " << selectedFilter;
         QMessageBox::information(this, tr("getOpenFileNames"), result, QMessageBox::Ok);
     }
-#endif // Qt 5
 }
 
 void FileDialogPanel::getOpenFileName()
@@ -359,7 +332,6 @@ void FileDialogPanel::getOpenFileName()
 
 void FileDialogPanel::getOpenFileUrl()
 {
-#if QT_VERSION >= 0x050000
     QString selectedFilter = m_selectedNameFilter->text().trimmed();
     const QUrl file =
         QFileDialog::getOpenFileUrl(this, tr("getOpenFileUrl Qt %1").arg(QLatin1String(QT_VERSION_STR)),
@@ -372,7 +344,6 @@ void FileDialogPanel::getOpenFileUrl()
             << "\nName filter: " << selectedFilter;
         QMessageBox::information(this, tr("getOpenFileName"), result, QMessageBox::Ok);
     }
-#endif // Qt 5
 }
 
 void FileDialogPanel::getSaveFileName()
@@ -392,7 +363,6 @@ void FileDialogPanel::getSaveFileName()
 
 void FileDialogPanel::getSaveFileUrl()
 {
-#if QT_VERSION >= 0x050000
     QString selectedFilter = m_selectedNameFilter->text().trimmed();
     const QUrl file =
         QFileDialog::getSaveFileUrl(this, tr("getSaveFileName Qt %1").arg(QLatin1String(QT_VERSION_STR)),
@@ -405,7 +375,6 @@ void FileDialogPanel::getSaveFileUrl()
             << "\nName filter: " << selectedFilter;
         QMessageBox::information(this, tr("getSaveFileNames"), result, QMessageBox::Ok);
     }
-#endif // Qt 5
 }
 
 void FileDialogPanel::getExistingDirectory()
@@ -419,14 +388,12 @@ void FileDialogPanel::getExistingDirectory()
 
 void FileDialogPanel::getExistingDirectoryUrl()
 {
-#if QT_VERSION >= 0x050000
     const QUrl dir =
         QFileDialog::getExistingDirectoryUrl(this, tr("getExistingDirectory Qt %1").arg(QLatin1String(QT_VERSION_STR)),
                                              currentDirectoryUrl(), options() | QFileDialog::ShowDirsOnly,
                                           allowedSchemes());
     if (!dir.isEmpty())
         QMessageBox::information(this, tr("getExistingDirectory"), QLatin1String("Directory: ") + dir.toString(), QMessageBox::Ok);
-#endif // Qt 5
 }
 
 void FileDialogPanel::restoreDefaults()
@@ -473,11 +440,9 @@ void FileDialogPanel::applySettings(QFileDialog *d) const
         if (!filter.isEmpty())
             d->selectNameFilter(filter);
     } else {
-#if QT_VERSION >= 0x050000
         d->setMimeTypeFilters(filters);
         if (!filter.isEmpty())
             d->selectMimeTypeFilter(filter);
-#endif // Qt 5
     }
     foreach (LabelLineEdit *l, m_labelLineEdits)
         l->apply(d);
@@ -504,14 +469,10 @@ void FileDialogPanel::accepted()
     Q_ASSERT(d);
     m_result.clear();
     QDebug(&m_result).nospace()
-#if QT_VERSION >= 0x050000
         << "URLs: " << d->selectedUrls() << '\n'
-#endif
         << "Files: " << d->selectedFiles()
         << "\nDirectory: "
-#if QT_VERSION >= 0x050000
         << d->directoryUrl() << ", "
-#endif
         << d->directory().absolutePath()
         << "\nName filter: " << d->selectedNameFilter();
     QTimer::singleShot(0, this, SLOT(showAcceptedResult())); // Avoid problems with the closing (modal) dialog as parent.

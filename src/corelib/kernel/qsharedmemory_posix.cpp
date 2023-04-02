@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2015 Konstantin Ritt <ritt.ks@gmail.com>
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Tobias Koenig <tobias.koenig@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2015 Konstantin Ritt <ritt.ks@gmail.com>
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Tobias Koenig <tobias.koenig@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qplatformdefs.h"
 
@@ -61,12 +25,14 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 int QSharedMemoryPrivate::handle()
 {
     // don't allow making handles on empty keys
     const QString safeKey = makePlatformSafeKey(key);
     if (safeKey.isEmpty()) {
-        errorString = QSharedMemory::tr("%1: key is empty").arg(QLatin1String("QSharedMemory::handle"));
+        errorString = QSharedMemory::tr("%1: key is empty").arg("QSharedMemory::handle"_L1);
         error = QSharedMemory::KeyError;
         return 0;
     }
@@ -100,7 +66,7 @@ bool QSharedMemoryPrivate::create(qsizetype size)
 #endif
     if (fd == -1) {
         const int errorNumber = errno;
-        const QLatin1String function("QSharedMemory::attach (shm_open)");
+        const auto function = "QSharedMemory::attach (shm_open)"_L1;
         switch (errorNumber) {
         case EINVAL:
             errorString = QSharedMemory::tr("%1: bad name").arg(function);
@@ -116,7 +82,7 @@ bool QSharedMemoryPrivate::create(qsizetype size)
     int ret;
     EINTR_LOOP(ret, QT_FTRUNCATE(fd, size));
     if (ret == -1) {
-        setErrorString(QLatin1String("QSharedMemory::create (ftruncate)"));
+        setErrorString("QSharedMemory::create (ftruncate)"_L1);
         qt_safe_close(fd);
         return false;
     }
@@ -143,7 +109,7 @@ bool QSharedMemoryPrivate::attach(QSharedMemory::AccessMode mode)
 #endif
     if (hand == -1) {
         const int errorNumber = errno;
-        const QLatin1String function("QSharedMemory::attach (shm_open)");
+        const auto function = "QSharedMemory::attach (shm_open)"_L1;
         switch (errorNumber) {
         case EINVAL:
             errorString = QSharedMemory::tr("%1: bad name").arg(function);
@@ -159,7 +125,7 @@ bool QSharedMemoryPrivate::attach(QSharedMemory::AccessMode mode)
     // grab the size
     QT_STATBUF st;
     if (QT_FSTAT(hand, &st) == -1) {
-        setErrorString(QLatin1String("QSharedMemory::attach (fstat)"));
+        setErrorString("QSharedMemory::attach (fstat)"_L1);
         cleanHandle();
         return false;
     }
@@ -169,7 +135,7 @@ bool QSharedMemoryPrivate::attach(QSharedMemory::AccessMode mode)
     const int mprot = (mode == QSharedMemory::ReadOnly ? PROT_READ : PROT_READ | PROT_WRITE);
     memory = QT_MMAP(0, size_t(size), mprot, MAP_SHARED, hand, 0);
     if (memory == MAP_FAILED || !memory) {
-        setErrorString(QLatin1String("QSharedMemory::attach (mmap)"));
+        setErrorString("QSharedMemory::attach (mmap)"_L1);
         cleanHandle();
         memory = 0;
         size = 0;
@@ -190,7 +156,7 @@ bool QSharedMemoryPrivate::detach()
 {
     // detach from the memory segment
     if (::munmap(memory, size_t(size)) == -1) {
-        setErrorString(QLatin1String("QSharedMemory::detach (munmap)"));
+        setErrorString("QSharedMemory::detach (munmap)"_L1);
         return false;
     }
     memory = 0;
@@ -216,7 +182,7 @@ bool QSharedMemoryPrivate::detach()
     if (shm_nattch == 0) {
         const QByteArray shmName = QFile::encodeName(makePlatformSafeKey(key));
         if (::shm_unlink(shmName.constData()) == -1 && errno != ENOENT)
-            setErrorString(QLatin1String("QSharedMemory::detach (shm_unlink)"));
+            setErrorString("QSharedMemory::detach (shm_unlink)"_L1);
     }
 #else
     // On non-QNX systems (tested Linux and Haiku), the st_nlink field is always 1,

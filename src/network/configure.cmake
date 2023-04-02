@@ -54,6 +54,8 @@ SSL_free(SSL_new(0));
 ")
 
 qt_find_package(GSSAPI PROVIDED_TARGETS GSSAPI::GSSAPI MODULE_NAME network QMAKE_LIB gssapi)
+qt_find_package(GLIB2 OPTIONAL_COMPONENTS GOBJECT PROVIDED_TARGETS GLIB2::GOBJECT MODULE_NAME core QMAKE_LIB gobject)
+qt_find_package(GLIB2 OPTIONAL_COMPONENTS GIO PROVIDED_TARGETS GLIB2::GIO MODULE_NAME core QMAKE_LIB gio)
 
 
 #### Tests
@@ -299,7 +301,7 @@ qt_feature("ocsp" PUBLIC
     SECTION "Networking"
     LABEL "OCSP-stapling"
     PURPOSE "Provides OCSP stapling support"
-    CONDITION QT_FEATURE_opensslv11 AND TEST_ocsp
+    CONDITION QT_FEATURE_openssl AND TEST_ocsp
 )
 qt_feature("opensslv11" PUBLIC
     LABEL "OpenSSL 1.1"
@@ -398,7 +400,22 @@ qt_feature("topleveldomain" PUBLIC
     SECTION "Networking"
     LABEL "qTopLevelDomain()"
     PURPOSE "Provides support for extracting the top level domain from URLs.  If enabled, a binary dump of the Public Suffix List (http://www.publicsuffix.org, Mozilla License) is included. The data is then also used in QNetworkCookieJar::validateCookie."
+    DISABLE INPUT_publicsuffix STREQUAL "no"
 )
+qt_feature("publicsuffix-qt" PRIVATE
+    LABEL "  Built-in publicsuffix database"
+    CONDITION QT_FEATURE_topleveldomain
+    ENABLE INPUT_publicsuffix STREQUAL "qt" OR INPUT_publicsuffix STREQUAL "all"
+    DISABLE INPUT_publicsuffix STREQUAL "system"
+)
+qt_feature("publicsuffix-system" PRIVATE
+    LABEL "  System publicsuffix database"
+    CONDITION QT_FEATURE_topleveldomain
+    AUTODETECT LINUX
+    ENABLE INPUT_publicsuffix STREQUAL "system" OR INPUT_publicsuffix STREQUAL "all"
+    DISABLE INPUT_publicsuffix STREQUAL "qt"
+)
+
 qt_configure_add_summary_section(NAME "Qt Network")
 qt_configure_add_summary_entry(ARGS "getifaddrs")
 qt_configure_add_summary_entry(ARGS "ipv6ifname")
@@ -424,6 +441,9 @@ qt_configure_add_summary_entry(ARGS "sctp")
 qt_configure_add_summary_entry(ARGS "system-proxies")
 qt_configure_add_summary_entry(ARGS "gssapi")
 qt_configure_add_summary_entry(ARGS "brotli")
+qt_configure_add_summary_entry(ARGS "topleveldomain")
+qt_configure_add_summary_entry(ARGS "publicsuffix-qt")
+qt_configure_add_summary_entry(ARGS "publicsuffix-system")
 qt_configure_end_summary_section() # end of "Qt Network" section
 # special case begin
 qt_configure_add_report_entry(

@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QABSTRACTITEMMODEL_H
 #define QABSTRACTITEMMODEL_H
@@ -309,28 +273,28 @@ public:
     virtual Qt::DropActions supportedDropActions() const;
     virtual Qt::DropActions supportedDragActions() const;
 
-    virtual bool insertRows(int row, int count, const QModelIndex &parent = QModelIndex());
-    virtual bool insertColumns(int column, int count, const QModelIndex &parent = QModelIndex());
-    virtual bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex());
-    virtual bool removeColumns(int column, int count, const QModelIndex &parent = QModelIndex());
-    virtual bool moveRows(const QModelIndex &sourceParent, int sourceRow, int count,
+    Q_INVOKABLE Q_REVISION(6, 4) virtual bool insertRows(int row, int count, const QModelIndex &parent = QModelIndex());
+    Q_INVOKABLE Q_REVISION(6, 4) virtual bool insertColumns(int column, int count, const QModelIndex &parent = QModelIndex());
+    Q_INVOKABLE Q_REVISION(6, 4) virtual bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex());
+    Q_INVOKABLE Q_REVISION(6, 4) virtual bool removeColumns(int column, int count, const QModelIndex &parent = QModelIndex());
+    Q_INVOKABLE Q_REVISION(6, 4) virtual bool moveRows(const QModelIndex &sourceParent, int sourceRow, int count,
                           const QModelIndex &destinationParent, int destinationChild);
-    virtual bool moveColumns(const QModelIndex &sourceParent, int sourceColumn, int count,
+    Q_INVOKABLE Q_REVISION(6, 4) virtual bool moveColumns(const QModelIndex &sourceParent, int sourceColumn, int count,
                              const QModelIndex &destinationParent, int destinationChild);
 
-    inline bool insertRow(int row, const QModelIndex &parent = QModelIndex());
-    inline bool insertColumn(int column, const QModelIndex &parent = QModelIndex());
-    inline bool removeRow(int row, const QModelIndex &parent = QModelIndex());
-    inline bool removeColumn(int column, const QModelIndex &parent = QModelIndex());
-    inline bool moveRow(const QModelIndex &sourceParent, int sourceRow,
+    Q_INVOKABLE Q_REVISION(6, 4) inline bool insertRow(int row, const QModelIndex &parent = QModelIndex());
+    Q_INVOKABLE Q_REVISION(6, 4) inline bool insertColumn(int column, const QModelIndex &parent = QModelIndex());
+    Q_INVOKABLE Q_REVISION(6, 4) inline bool removeRow(int row, const QModelIndex &parent = QModelIndex());
+    Q_INVOKABLE Q_REVISION(6, 4) inline bool removeColumn(int column, const QModelIndex &parent = QModelIndex());
+    Q_INVOKABLE Q_REVISION(6, 4) inline bool moveRow(const QModelIndex &sourceParent, int sourceRow,
                         const QModelIndex &destinationParent, int destinationChild);
-    inline bool moveColumn(const QModelIndex &sourceParent, int sourceColumn,
+    Q_INVOKABLE Q_REVISION(6, 4) inline bool moveColumn(const QModelIndex &sourceParent, int sourceColumn,
                            const QModelIndex &destinationParent, int destinationChild);
 
     Q_INVOKABLE virtual void fetchMore(const QModelIndex &parent);
     Q_INVOKABLE virtual bool canFetchMore(const QModelIndex &parent) const;
     Q_INVOKABLE virtual Qt::ItemFlags flags(const QModelIndex &index) const;
-    virtual void sort(int column, Qt::SortOrder order = Qt::AscendingOrder);
+    Q_INVOKABLE Q_REVISION(6, 4) virtual void sort(int column, Qt::SortOrder order = Qt::AscendingOrder);
     virtual QModelIndex buddy(const QModelIndex &index) const;
     Q_INVOKABLE virtual QModelIndexList match(const QModelIndex &start, int role,
                                               const QVariant &value, int hits = 1,
@@ -386,10 +350,10 @@ Q_SIGNALS:
     void modelReset(QPrivateSignal);
 
     void rowsAboutToBeMoved( const QModelIndex &sourceParent, int sourceStart, int sourceEnd, const QModelIndex &destinationParent, int destinationRow, QPrivateSignal);
-    void rowsMoved( const QModelIndex &parent, int start, int end, const QModelIndex &destination, int row, QPrivateSignal);
+    void rowsMoved( const QModelIndex &sourceParent, int sourceStart, int sourceEnd, const QModelIndex &destinationParent, int destinationRow, QPrivateSignal);
 
     void columnsAboutToBeMoved( const QModelIndex &sourceParent, int sourceStart, int sourceEnd, const QModelIndex &destinationParent, int destinationColumn, QPrivateSignal);
-    void columnsMoved( const QModelIndex &parent, int start, int end, const QModelIndex &destination, int column, QPrivateSignal);
+    void columnsMoved( const QModelIndex &sourceParent, int sourceStart, int sourceEnd, const QModelIndex &destinationParent, int destinationColumn, QPrivateSignal);
 
 public Q_SLOTS:
     virtual bool submit();
@@ -539,6 +503,6 @@ inline size_t qHash(const QModelIndex &index, size_t seed = 0) noexcept
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QModelIndexList)
+QT_DECL_METATYPE_EXTERN(QModelIndexList, Q_CORE_EXPORT)
 
 #endif // QABSTRACTITEMMODEL_H

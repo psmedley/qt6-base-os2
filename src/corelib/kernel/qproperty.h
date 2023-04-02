@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QPROPERTY_H
 #define QPROPERTY_H
@@ -54,16 +18,27 @@
 #if defined(__cpp_lib_source_location)
 #define QT_SOURCE_LOCATION_NAMESPACE std
 #define QT_PROPERTY_COLLECT_BINDING_LOCATION
-#define QT_PROPERTY_DEFAULT_BINDING_LOCATION QPropertyBindingSourceLocation(std::source_location::current())
+#if defined(Q_CC_MSVC)
+/* MSVC runs into an issue with constexpr with source location (error C7595)
+   so use the factory function as a workaround */
+#  define QT_PROPERTY_DEFAULT_BINDING_LOCATION QPropertyBindingSourceLocation::fromStdSourceLocation(std::source_location::current())
+#else
+/* some versions of gcc in turn run into
+   expression ‘std::source_location::current()’ is not a constant expression
+   so don't use the workaround there */
+#  define QT_PROPERTY_DEFAULT_BINDING_LOCATION QPropertyBindingSourceLocation(std::source_location::current())
+#endif
 #endif
 #endif
 
-#if !defined(QT_PROPERTY_COLLECT_BINDING_LOCATION) && __has_include(<experimental/source_location>) && __cplusplus >= 201703L && !defined(Q_CLANG_QDOC)
+#if __has_include(<experimental/source_location>) && !defined(Q_CLANG_QDOC)
 #include <experimental/source_location>
+#if !defined(QT_PROPERTY_COLLECT_BINDING_LOCATION)
 #if defined(__cpp_lib_experimental_source_location)
 #define QT_SOURCE_LOCATION_NAMESPACE std::experimental
 #define QT_PROPERTY_COLLECT_BINDING_LOCATION
 #define QT_PROPERTY_DEFAULT_BINDING_LOCATION QPropertyBindingSourceLocation(std::experimental::source_location::current())
+#endif // defined(__cpp_lib_experimental_source_location)
 #endif
 #endif
 
@@ -104,6 +79,7 @@ public:
     void setValueBypassingBindings(rvalue_ref v) { val = std::move(v); }
 };
 
+// ### Qt 7: un-export
 struct Q_CORE_EXPORT QPropertyBindingSourceLocation
 {
     const char *fileName = nullptr;
@@ -111,8 +87,23 @@ struct Q_CORE_EXPORT QPropertyBindingSourceLocation
     quint32 line = 0;
     quint32 column = 0;
     QPropertyBindingSourceLocation() = default;
-#ifdef QT_PROPERTY_COLLECT_BINDING_LOCATION
-    constexpr QPropertyBindingSourceLocation(const QT_SOURCE_LOCATION_NAMESPACE::source_location &cppLocation)
+#ifdef __cpp_lib_source_location
+    constexpr QPropertyBindingSourceLocation(const std::source_location &cppLocation)
+    {
+        fileName = cppLocation.file_name();
+        functionName = cppLocation.function_name();
+        line = cppLocation.line();
+        column = cppLocation.column();
+    }
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    static consteval QPropertyBindingSourceLocation
+    fromStdSourceLocation(const std::source_location &cppLocation)
+    {
+        return cppLocation;
+    }
+#endif
+#ifdef __cpp_lib_experimental_source_location
+    constexpr QPropertyBindingSourceLocation(const std::experimental::source_location &cppLocation)
     {
         fileName = cppLocation.file_name();
         functionName = cppLocation.function_name();

@@ -1,46 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qktxhandler_p.h"
 #include "qtexturefiledata_p.h"
 #include <QtEndian>
 #include <QSize>
+#include <QMap>
 #include <QtCore/qiodevice.h>
 
 //#define KTX_DEBUG
@@ -51,6 +16,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 #define KTX_IDENTIFIER_LENGTH 12
 static const char ktxIdentifier[KTX_IDENTIFIER_LENGTH] = { '\xAB', 'K', 'T', 'X', ' ', '1', '1', '\xBB', '\r', '\n', '\x1A', '\n' };
@@ -111,6 +78,8 @@ constexpr quint32 withPadding(quint32 value, quint32 rounding)
     return value + (rounding - 1) - ((value + (rounding - 1)) % rounding);
 }
 
+QKtxHandler::~QKtxHandler() = default;
+
 bool QKtxHandler::canRead(const QByteArray &suffix, const QByteArray &block)
 {
     Q_UNUSED(suffix);
@@ -123,14 +92,14 @@ QTextureFileData QKtxHandler::read()
     if (!device())
         return QTextureFileData();
 
-    QByteArray buf = device()->readAll();
+    const QByteArray buf = device()->readAll();
     const quint32 dataSize = quint32(buf.size());
     if (dataSize < headerSize || !canRead(QByteArray(), buf)) {
         qCDebug(lcQtGuiTextureIO, "Invalid KTX file %s", logName().constData());
         return QTextureFileData();
     }
 
-    const KTXHeader *header = reinterpret_cast<const KTXHeader *>(buf.constData());
+    const KTXHeader *header = reinterpret_cast<const KTXHeader *>(buf.data());
     if (!checkHeader(*header)) {
         qCDebug(lcQtGuiTextureIO, "Unsupported KTX file format in %s", logName().constData());
         return QTextureFileData();
@@ -148,7 +117,7 @@ QTextureFileData QKtxHandler::read()
     texData.setNumFaces(decode(header->numberOfFaces));
 
     const quint32 bytesOfKeyValueData = decode(header->bytesOfKeyValueData);
-    if (headerSize + bytesOfKeyValueData < quint64(buf.length())) // oob check
+    if (headerSize + bytesOfKeyValueData < quint64(buf.size())) // oob check
         texData.setKeyValueMetadata(
                 decodeKeyValues(QByteArrayView(buf.data() + headerSize, bytesOfKeyValueData)));
     quint32 offset = headerSize + bytesOfKeyValueData;
@@ -159,7 +128,7 @@ QTextureFileData QKtxHandler::read()
         if (offset + sizeof(quint32) > dataSize) // Corrupt file; avoid oob read
             break;
 
-        const quint32 imageSize = decode(qFromUnaligned<quint32>(buf.constData() + offset));
+        const quint32 imageSize = decode(qFromUnaligned<quint32>(buf.data() + offset));
         offset += sizeof(quint32);
 
         for (int face = 0; face < qMin(texData.numFaces(), MAX_ITERATIONS); face++) {
@@ -234,7 +203,7 @@ QMap<QByteArray, QByteArray> QKtxHandler::decodeKeyValues(QByteArrayView view) c
         // To separate the key and value we convert the complete data to utf-8 and find the first
         // null terminator from the left, here we split the data into two.
         const auto str = QString::fromUtf8(view.constData() + offset, keyAndValueByteSize);
-        const int idx = str.indexOf(QLatin1Char('\0'));
+        const int idx = str.indexOf('\0'_L1);
         if (idx == -1)
             continue;
 

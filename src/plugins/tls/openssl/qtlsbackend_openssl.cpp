@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsslsocket_openssl_symbols_p.h"
 #include "qtlsbackend_openssl_p.h"
@@ -57,6 +21,7 @@
 #include <QtCore/qlist.h>
 #include <QtCore/qmutex.h>
 #include <QtCore/qscopeguard.h>
+#include <QtCore/qset.h>
 
 #include "qopenssl_p.h"
 
@@ -64,7 +29,15 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcTlsBackend, "qt.tlsbackend.ossl");
+using namespace Qt::StringLiterals;
+
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+constexpr auto DefaultWarningLevel = QtCriticalMsg;
+#else
+constexpr auto DefaultWarningLevel = QtDebugMsg;
+#endif
+
+Q_LOGGING_CATEGORY(lcTlsBackend, "qt.tlsbackend.ossl", DefaultWarningLevel);
 
 Q_GLOBAL_STATIC(QRecursiveMutex, qt_opensslInitMutex)
 
@@ -79,9 +52,9 @@ static void q_loadCiphersForConnection(SSL *connection, QList<QSslCipher> &ciphe
             const auto ciph = QTlsBackendOpenSSL::qt_OpenSSL_cipher_to_QSslCipher(cipher);
             if (!ciph.isNull()) {
                 // Unconditionally exclude ADH and AECDH ciphers since they offer no MITM protection
-                if (!ciph.name().toLower().startsWith(QLatin1String("adh")) &&
-                    !ciph.name().toLower().startsWith(QLatin1String("exp-adh")) &&
-                    !ciph.name().toLower().startsWith(QLatin1String("aecdh"))) {
+                if (!ciph.name().toLower().startsWith("adh"_L1) &&
+                    !ciph.name().toLower().startsWith("exp-adh"_L1) &&
+                    !ciph.name().toLower().startsWith("aecdh"_L1)) {
                     ciphers << ciph;
 
                     if (ciph.usedBits() >= 128)
@@ -103,9 +76,9 @@ QString QTlsBackendOpenSSL::getErrorsFromOpenSsl()
     unsigned long errNum;
     while ((errNum = q_ERR_get_error())) {
         if (!errorString.isEmpty())
-            errorString.append(QLatin1String(", "));
+            errorString.append(", "_L1);
         q_ERR_error_string_n(errNum, buf, sizeof buf);
-        errorString.append(QString::fromLatin1(buf)); // error is ascii according to man ERR_error_string
+        errorString.append(QLatin1StringView(buf)); // error is ascii according to man ERR_error_string
     }
     return errorString;
 }
@@ -119,8 +92,8 @@ void QTlsBackendOpenSSL::logAndClearErrorQueue()
 
 void QTlsBackendOpenSSL::clearErrorQueue()
 {
-    const auto errs = getErrorsFromOpenSsl();
-    Q_UNUSED(errs);
+    while (q_ERR_get_error())
+        ;
 }
 
 bool QTlsBackendOpenSSL::ensureLibraryLoaded()
@@ -223,11 +196,11 @@ void QTlsBackendOpenSSL::ensureCiphersAndCertsLoaded() const
     QSslSocketPrivate::setRootCertOnDemandLoadingSupported(true);
 #elif defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN)
     // check whether we can enable on-demand root-cert loading (i.e. check whether the sym links are there)
-    QList<QByteArray> dirs = QSslSocketPrivate::unixRootCertDirectories();
+    const QList<QByteArray> dirs = QSslSocketPrivate::unixRootCertDirectories();
     QStringList symLinkFilter;
-    symLinkFilter << QLatin1String("[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].[0-9]");
-    for (int a = 0; a < dirs.count(); ++a) {
-        QDirIterator iterator(QLatin1String(dirs.at(a)), symLinkFilter, QDir::Files);
+    symLinkFilter << "[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].[0-9]"_L1;
+    for (const auto &dir : dirs) {
+        QDirIterator iterator(QLatin1StringView(dir), symLinkFilter, QDir::Files);
         if (iterator.hasNext()) {
             QSslSocketPrivate::setRootCertOnDemandLoadingSupported(true);
             break;
@@ -291,10 +264,13 @@ QList<QSsl::SslProtocol> QTlsBackendOpenSSL::supportedProtocols() const
 
     protocols << QSsl::AnyProtocol;
     protocols << QSsl::SecureProtocols;
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
     protocols << QSsl::TlsV1_0;
     protocols << QSsl::TlsV1_0OrLater;
     protocols << QSsl::TlsV1_1;
     protocols << QSsl::TlsV1_1OrLater;
+QT_WARNING_POP
     protocols << QSsl::TlsV1_2;
     protocols << QSsl::TlsV1_2OrLater;
 
@@ -304,8 +280,11 @@ QList<QSsl::SslProtocol> QTlsBackendOpenSSL::supportedProtocols() const
 #endif // TLS1_3_VERSION
 
 #if QT_CONFIG(dtls)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
     protocols << QSsl::DtlsV1_0;
     protocols << QSsl::DtlsV1_0OrLater;
+QT_WARNING_POP
     protocols << QSsl::DtlsV1_2;
     protocols << QSsl::DtlsV1_2OrLater;
 #endif // dtls
@@ -361,7 +340,7 @@ QTlsPrivate::X509Certificate *QTlsBackendOpenSSL::createCertificate() const
 
 namespace QTlsPrivate {
 
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
 QList<QByteArray> fetchSslCertificateData();
 #endif
 
@@ -391,44 +370,35 @@ QList<QSslCertificate> systemCaCertificates()
         }
         CertCloseStore(hSystemStore, 0);
     }
-#elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#elif defined(Q_OS_ANDROID)
     const QList<QByteArray> certData = fetchSslCertificateData();
     for (auto certDatum : certData)
         systemCerts.append(QSslCertificate::fromData(certDatum, QSsl::Der));
 #elif defined(Q_OS_UNIXLIKE)
-    QSet<QString> certFiles;
-    QDir currentDir;
-    QStringList nameFilters;
-    QList<QByteArray> directories;
-    QSsl::EncodingFormat platformEncodingFormat;
-# ifndef Q_OS_ANDROID
-    directories = QSslSocketPrivate::unixRootCertDirectories();
-    nameFilters << QLatin1String("*.pem") << QLatin1String("*.crt");
-    platformEncodingFormat = QSsl::Pem;
-# endif //Q_OS_ANDROID
     {
-        currentDir.setNameFilters(nameFilters);
-        for (int a = 0; a < directories.count(); a++) {
-            currentDir.setPath(QLatin1String(directories.at(a)));
+        const QList<QByteArray> directories = QSslSocketPrivate::unixRootCertDirectories();
+        QSet<QString> certFiles = {
+#ifdef Q_OS_OS2
+            QStringLiteral("/@unixroot/etc/pki/tls/certs/ca-bundle.crt"), // OS/2
+#else
+            QStringLiteral("/etc/pki/tls/certs/ca-bundle.crt"), // Fedora, Mandriva
+            QStringLiteral("/usr/local/share/certs/ca-root-nss.crt") // FreeBSD's ca_root_nss
+#endif
+        };
+        QDir currentDir;
+        currentDir.setNameFilters(QStringList{QStringLiteral("*.pem"), QStringLiteral("*.crt")});
+        for (const auto &directory : directories) {
+            currentDir.setPath(QLatin1StringView(directory));
             QDirIterator it(currentDir);
             while (it.hasNext()) {
-                it.next();
                 // use canonical path here to not load the same certificate twice if symlinked
-                certFiles.insert(it.fileInfo().canonicalFilePath());
+                certFiles.insert(it.nextFileInfo().canonicalFilePath());
             }
         }
-        for (const QString& file : qAsConst(certFiles))
-            systemCerts.append(QSslCertificate::fromPath(file, platformEncodingFormat));
-# ifndef Q_OS_ANDROID
-#  ifdef Q_OS_OS2
-        systemCerts.append(QSslCertificate::fromPath(QLatin1String("/@unixroot/etc/pki/tls/certs/ca-bundle.crt"), QSsl::Pem));
-#  else
-        systemCerts.append(QSslCertificate::fromPath(QLatin1String("/etc/pki/tls/certs/ca-bundle.crt"), QSsl::Pem)); // Fedora, Mandriva
-        systemCerts.append(QSslCertificate::fromPath(QLatin1String("/usr/local/share/certs/ca-root-nss.crt"), QSsl::Pem)); // FreeBSD's ca_root_nss
-#  endif
-# endif
+        for (const QString& file : std::as_const(certFiles))
+            systemCerts.append(QSslCertificate::fromPath(file, QSsl::Pem));
     }
-#endif
+#endif // platform
 #ifdef QSSLSOCKET_DEBUG
     qCDebug(lcTlsBackend) << "systemCaCertificates retrieval time " << timer.elapsed() << "ms";
     qCDebug(lcTlsBackend) << "imported " << systemCerts.count() << " certificates";
@@ -633,3 +603,5 @@ void QTlsBackendOpenSSL::forceAutotestSecurityLevel()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qtlsbackend_openssl_p.cpp"

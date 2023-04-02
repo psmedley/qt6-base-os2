@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2014 Drew Parsons <dparsons@emerall.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2014 Drew Parsons <dparsons@emerall.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtimezone.h"
 #include "qtimezoneprivate_p.h"
@@ -85,24 +49,17 @@ QAndroidTimeZonePrivate::~QAndroidTimeZonePrivate()
 {
 }
 
-static QJniObject getDisplayName(QJniObject zone, jint style, jboolean dst,
+static QString getDisplayName(QJniObject zone, jint style, jboolean dst,
                                         const QLocale &locale)
 {
-    QJniObject jlanguage
-        = QJniObject::fromString(QLocale::languageToString(locale.language()));
-    QJniObject jterritory
-        = QJniObject::fromString(QLocale::territoryToString(locale.territory()));
-    QJniObject
-        jvariant = QJniObject::fromString(QLocale::scriptToString(locale.script()));
-    QJniObject jlocale("java.util.Locale",
-                       "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
-                       jlanguage.object<jstring>(),
-                       jterritory.object<jstring>(),
-                       jvariant.object<jstring>());
+    QJniObject jbcpTag = QJniObject::fromString(locale.bcp47Name());
+    QJniObject jlocale = QJniObject::callStaticObjectMethod(
+                "java/util/Locale", "forLanguageTag", "(Ljava/lang/String;)Ljava/util/Locale;",
+                jbcpTag.object<jstring>());
 
     return zone.callObjectMethod("getDisplayName",
                                  "(ZILjava/util/Locale;)Ljava/lang/String;",
-                                 dst, style, jlocale.object());
+                                 dst, style, jlocale.object()).toString();
 }
 
 void QAndroidTimeZonePrivate::init(const QByteArray &ianaId)
@@ -113,8 +70,7 @@ void QAndroidTimeZonePrivate::init(const QByteArray &ianaId)
         QJniObject::fromString(iana).object<jstring>());
 
     // The ID or display name of the zone we've got, if it looks like what we asked for:
-    const auto match = [iana](const QJniObject &jname) -> QByteArray {
-        const QString name = jname.toString();
+    const auto match = [iana](const QString &name) -> QByteArray {
         if (iana.compare(name, Qt::CaseInsensitive) == 0)
             return name.toUtf8();
 
@@ -125,7 +81,7 @@ void QAndroidTimeZonePrivate::init(const QByteArray &ianaId)
     // recognize the name; so check for whether ianaId is a recognized name of
     // the zone object we got and ignore the zone if not.
     // Try checking ianaId against getID(), getDisplayName():
-    m_id = match(androidTimeZone.callObjectMethod("getID", "()Ljava/lang/String;"));
+    m_id = match(androidTimeZone.callObjectMethod("getID", "()Ljava/lang/String;").toString());
     for (int style = 1; m_id.isEmpty() && style >= 0; --style) {
         for (int dst = 1; m_id.isEmpty() && dst >= 0; --dst) {
             for (int pick = 2; m_id.isEmpty() && pick >= 0; --pick) {
@@ -154,7 +110,7 @@ QString QAndroidTimeZonePrivate::displayName(QTimeZone::TimeType timeType, QTime
         // treat all NameTypes as java TimeZone style LONG (value 1), except of course QTimeZone::ShortName which is style SHORT (value 0);
         jint style = (nameType == QTimeZone::ShortName ? 0 : 1);
 
-        name = getDisplayName(androidTimeZone, style, daylightTime, locale).toString();
+        name = getDisplayName(androidTimeZone, style, daylightTime, locale);
     }
 
     return name;

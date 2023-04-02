@@ -1,36 +1,13 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 
 #include "qbytearray.h"
 #include "qdebug.h"
 #include "qhash.h"
+#include "qmap.h"
+#include "qset.h"
 #include "qlist.h"
 #include "qstring.h"
 #include "qvarlengtharray.h"
@@ -47,7 +24,7 @@
 #include <unordered_set>
 #include <unordered_map>
 
-#if __cplusplus >= 202002L && defined(__cpp_lib_erase_if)
+#if defined(__cpp_lib_erase_if) && __cpp_lib_erase_if >= 202002L
 #  define STDLIB_HAS_UNIFORM_ERASURE
 #endif
 
@@ -345,6 +322,17 @@ private Q_SLOTS:
 
 private:
     template <typename Container>
+    void resize_impl() const;
+
+private Q_SLOTS:
+    void resize_std_vector() { resize_impl<std::vector<int>>(); }
+    void resize_QList() { resize_impl<QList<qintptr>>(); }
+    void resize_QVarLengthArray() { resize_impl<QVarLengthArray<int>>(); }
+    void resize_QString() { resize_impl<QString>(); }
+    void resize_QByteArray() { resize_impl<QByteArray>(); }
+
+private:
+    template <typename Container>
     void front_back_impl() const;
 
 private Q_SLOTS:
@@ -365,6 +353,15 @@ private:
 
     template <typename Container>
     void erase_if_associative_impl() const;
+
+    template <typename Container>
+    void member_erase_impl() const;
+
+    template <typename Container>
+    void member_erase_associative_impl() const;
+
+    template <typename Container>
+    void member_erase_set_impl() const;
 
 private Q_SLOTS:
     void erase_QList() { erase_impl<QList<int>>(); }
@@ -391,6 +388,27 @@ private Q_SLOTS:
     void erase_if_QMultiMap() {erase_if_associative_impl<QMultiMap<int, int>>(); }
     void erase_if_QHash() { erase_if_associative_impl<QHash<int, int>>(); }
     void erase_if_QMultiHash() { erase_if_associative_impl<QMultiHash<int, int>>(); }
+
+    void member_erase_QList() { member_erase_impl<QList<int>>(); }
+    void member_erase_QVarLengthArray() { member_erase_impl<QVarLengthArray<int>>(); }
+    void member_erase_QString() { member_erase_impl<QString>(); }
+    void member_erase_QByteArray() { member_erase_impl<QByteArray>(); }
+    void member_erase_QSet() { member_erase_set_impl<QSet<int>>(); }
+
+    void member_erase_QMap() { member_erase_associative_impl<QMap<int, int>>(); }
+    void member_erase_QMultiMap() {member_erase_associative_impl<QMultiMap<int, int>>(); }
+    void member_erase_QHash() { member_erase_associative_impl<QHash<int, int>>(); }
+    void member_erase_QMultiHash() { member_erase_associative_impl<QMultiHash<int, int>>(); }
+
+private:
+    template <typename Container>
+    void keyValueRange_impl() const;
+
+private Q_SLOTS:
+    void keyValueRange_QMap() { keyValueRange_impl<QMap<int, int>>(); }
+    void keyValueRange_QMultiMap() { keyValueRange_impl<QMultiMap<int, int>>(); }
+    void keyValueRange_QHash() { keyValueRange_impl<QHash<int, int>>(); }
+    void keyValueRange_QMultiHash() { keyValueRange_impl<QMultiHash<int, int>>(); }
 };
 
 void tst_ContainerApiSymmetry::init()
@@ -718,20 +736,44 @@ template <typename T> T clean(T &&t) { return std::forward<T>(t); }
 inline char clean(QLatin1Char ch) { return ch.toLatin1(); }
 
 template <typename Container>
+void tst_ContainerApiSymmetry::resize_impl() const
+{
+    using V = typename Container::value_type;
+    using S = typename Container::size_type;
+    auto c = make<Container>(3);
+    QCOMPARE(c.size(), S(3));
+    c.resize(4, V(5));
+    QCOMPARE(c.size(), S(4));
+    QCOMPARE(c.back(), V(5));
+
+    // ctor/resize symmetry:
+    {
+        Container c1(S(5), V(4));
+        QCOMPARE(c1.size(), S(5));
+
+        Container c2;
+        c2.resize(S(5), V(4));
+        QCOMPARE(c2.size(), S(5));
+
+        QCOMPARE(c1, c2);
+    }
+}
+
+template <typename Container>
 void tst_ContainerApiSymmetry::front_back_impl() const
 {
     using V = typename Container::value_type;
     auto c1 = make<Container>(1);
     QCOMPARE(clean(c1.front()), V(1));
     QCOMPARE(clean(c1.back()), V(1));
-    QCOMPARE(clean(qAsConst(c1).front()), V(1));
-    QCOMPARE(clean(qAsConst(c1).back()), V(1));
+    QCOMPARE(clean(std::as_const(c1).front()), V(1));
+    QCOMPARE(clean(std::as_const(c1).back()), V(1));
 
     auto c2 = make<Container>(2);
     QCOMPARE(clean(c2.front()), V(1));
     QCOMPARE(clean(c2.back()), V(2));
-    QCOMPARE(clean(qAsConst(c2).front()), V(1));
-    QCOMPARE(clean(qAsConst(c2).back()), V(2));
+    QCOMPARE(clean(std::as_const(c2).front()), V(1));
+    QCOMPARE(clean(std::as_const(c2).back()), V(2));
 }
 
 namespace {
@@ -849,6 +891,186 @@ void tst_ContainerApiSymmetry::erase_if_associative_impl() const
     result = erase_if(c, [](const I &it) { return Conv::toInt(it.key()) % 2 == 1; });
     QCOMPARE(result, S(7));
     QCOMPARE(c.size(), S(0));
+}
+
+template <typename Container>
+void tst_ContainerApiSymmetry::member_erase_impl() const
+{
+    using S = typename Container::size_type;
+    using V = typename Container::value_type;
+    const S size = 7;
+    auto c = make<Container>(size); // {1, 2, 3, 4, 5, 6, 7}
+    QCOMPARE(c.size(), size);
+
+    auto copy = c;
+    // Container::erase() returns an iterator, not const_iterator
+    auto it = c.erase(c.cbegin(), c.cbegin());
+    static_assert(std::is_same_v<decltype(it), typename Container::iterator>);
+    QCOMPARE(c.size(), size);
+    const V newVal{100};
+    QCOMPARE_NE(*it, newVal);
+    *it = newVal;
+    QCOMPARE(it, c.cbegin());
+    QCOMPARE(*c.cbegin(), newVal);
+
+    QCOMPARE(std::find(copy.cbegin(), copy.cend(), newVal), copy.cend());
+}
+
+template <typename Container>
+void tst_ContainerApiSymmetry::member_erase_associative_impl() const
+{
+    using S = typename Container::size_type;
+    using V = typename Container::mapped_type;
+
+    const S size = 20;
+    auto c = makeAssociative<Container>(size);
+    QCOMPARE(c.size(), size);
+
+    // Verify Container::erase() returns iterator, not const_iterator
+    auto it = c.erase(c.cbegin());
+    static_assert(std::is_same_v<decltype(it), typename Container::iterator>);
+    QCOMPARE(c.size(), size - 1);
+    QCOMPARE(it, c.cbegin());
+    const auto current = it.value();
+    it.value() = current + V(5);
+    QCOMPARE(c.cbegin().value(),current + V(5));
+}
+
+template <typename Container>
+void tst_ContainerApiSymmetry::member_erase_set_impl() const
+{
+    using S = typename Container::size_type;
+
+    const S size = 20;
+    auto c = make<Container>(size);
+    QCOMPARE(c.size(), size);
+
+    // Verify Container::erase() returns iterator, not const_iterator
+    auto it = c.erase(c.cbegin());
+    static_assert(std::is_same_v<decltype(it), typename Container::iterator>);
+    QCOMPARE(c.size(), size - 1);
+    QCOMPARE(it, c.cbegin());
+}
+
+template <typename Container>
+void tst_ContainerApiSymmetry::keyValueRange_impl() const
+{
+    constexpr int COUNT = 20;
+
+    using K = typename Container::key_type;
+    using V = typename Container::mapped_type;
+    QVector<K> keys;
+    keys.reserve(COUNT);
+    QVector<V> values;
+    values.reserve(COUNT);
+
+    auto c = makeAssociative<Container>(COUNT);
+    auto returnC = [&](){ return c; };
+
+    const auto verify = [](QVector<K> v, int count, int offset = 0) -> bool {
+        if (v.size() != count)
+            return false;
+        std::sort(v.begin(), v.end());
+        for (int i = 0; i < count; ++i) {
+            // vector is indexed from 0, but makeAssociative starts from 1
+            if (v[i] != i + 1 + offset)
+                return false;
+        }
+        return true;
+    };
+
+    // Check that the range has the right size
+    auto range = c.asKeyValueRange();
+    QCOMPARE(std::distance(range.begin(), range.end()), COUNT);
+
+    auto constRange = std::as_const(c).asKeyValueRange();
+    QCOMPARE(std::distance(constRange.begin(), constRange.end()), COUNT);
+
+    auto rvalueRange = returnC().asKeyValueRange();
+    QCOMPARE(std::distance(rvalueRange.begin(), rvalueRange.end()), COUNT);
+
+    // auto, mutating
+    keys.clear(); values.clear();
+    for (auto [key, value] : c.asKeyValueRange()) {
+        keys << key;
+        values << value;
+        QCOMPARE(key, value);
+        QCOMPARE(c.value(key), value);
+        ++value;
+        QCOMPARE(key, value - 1);
+        QCOMPARE(c.value(key), value);
+    }
+    QVERIFY(verify(keys, COUNT));
+    QVERIFY(verify(values, COUNT));
+
+    // auto, non-mutating
+    keys.clear(); values.clear();
+    for (auto [key, value] : c.asKeyValueRange()) {
+        keys << key;
+        values << value;
+        QCOMPARE(key, value - 1);
+        QCOMPARE(c.value(key), value);
+    }
+    QVERIFY(verify(keys, COUNT));
+    QVERIFY(verify(values, COUNT, 1));
+
+    // auto &&, mutating
+    keys.clear(); values.clear();
+    for (auto &&[key, value] : c.asKeyValueRange()) {
+        keys << key;
+        values << value;
+        QCOMPARE(key, value - 1);
+        QCOMPARE(c.value(key), value);
+        ++value;
+        QCOMPARE(key, value - 2);
+        QCOMPARE(c.value(key), value);
+    }
+    QVERIFY(verify(keys, COUNT));
+    QVERIFY(verify(values, COUNT, 1));
+
+    // auto, non-mutating (const map)
+    keys.clear(); values.clear();
+    for (auto [key, value] : std::as_const(c).asKeyValueRange()) {
+        keys << key;
+        values << value;
+        QCOMPARE(key, value - 2);
+        QCOMPARE(c.value(key), value);
+    }
+    QVERIFY(verify(keys, COUNT));
+    QVERIFY(verify(values, COUNT, 2));
+
+    // auto &&, non-mutating (const map)
+    keys.clear(); values.clear();
+    for (auto &&[key, value] : std::as_const(c).asKeyValueRange()) {
+        keys << key;
+        values << value;
+        QCOMPARE(key, value - 2);
+        QCOMPARE(c.value(key), value);
+    }
+    QVERIFY(verify(keys, COUNT));
+    QVERIFY(verify(values, COUNT, 2));
+
+    // auto, non-mutating (rvalue map)
+    keys.clear(); values.clear();
+    for (auto [key, value] : returnC().asKeyValueRange()) {
+        keys << key;
+        values << value;
+        QCOMPARE(key, value - 2);
+        QCOMPARE(c.value(key), value);
+    }
+    QVERIFY(verify(keys, COUNT));
+    QVERIFY(verify(values, COUNT, 2));
+
+    // auto &&, non-mutating (rvalue map)
+    keys.clear(); values.clear();
+    for (auto &&[key, value] : returnC().asKeyValueRange()) {
+        keys << key;
+        values << value;
+        QCOMPARE(key, value - 2);
+        QCOMPARE(c.value(key), value);
+    }
+    QVERIFY(verify(keys, COUNT));
+    QVERIFY(verify(values, COUNT, 2));
 }
 
 QTEST_APPLESS_MAIN(tst_ContainerApiSymmetry)

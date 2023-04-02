@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtOpenGL module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QOPENGLPAINTENGINE_P_H
 #define QOPENGLPAINTENGINE_P_H
@@ -343,51 +307,32 @@ void QOpenGL2PaintEngineExPrivate::uploadData(unsigned int arrayIndex, const GLf
 {
     Q_ASSERT(arrayIndex < 3);
 
-    // If a vertex array object is created we have a profile that supports them
-    // and we will upload the data via a QOpenGLBuffer. Otherwise we will use
-    // the legacy way of uploading the data via glVertexAttribPointer.
-    if (vao.isCreated()) {
-        if (arrayIndex == QT_VERTEX_COORDS_ATTR) {
-            vertexBuffer.bind();
-            vertexBuffer.allocate(data, count * sizeof(float));
-        }
-        if (arrayIndex == QT_TEXTURE_COORDS_ATTR) {
-            texCoordBuffer.bind();
-            texCoordBuffer.allocate(data, count * sizeof(float));
-        }
-        if (arrayIndex == QT_OPACITY_ATTR) {
-            opacityBuffer.bind();
-            opacityBuffer.allocate(data, count * sizeof(float));
-        }
-        if (arrayIndex == QT_OPACITY_ATTR)
-            funcs.glVertexAttribPointer(arrayIndex, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
-        else
-            funcs.glVertexAttribPointer(arrayIndex, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
-    } else {
-        // If we already uploaded the data we don't have to do it again
-        if (data == vertexAttribPointers[arrayIndex])
-            return;
+    if (arrayIndex == QT_VERTEX_COORDS_ATTR) {
+        vertexBuffer.bind();
+        vertexBuffer.allocate(data, count * sizeof(float));
+    }
+    if (arrayIndex == QT_TEXTURE_COORDS_ATTR) {
+        texCoordBuffer.bind();
+        texCoordBuffer.allocate(data, count * sizeof(float));
+    }
+    if (arrayIndex == QT_OPACITY_ATTR) {
+        opacityBuffer.bind();
+        opacityBuffer.allocate(data, count * sizeof(float));
 
-        // Store the data in cache and upload it to the graphics card.
-        vertexAttribPointers[arrayIndex] = data;
-        if (arrayIndex == QT_OPACITY_ATTR)
-            funcs.glVertexAttribPointer(arrayIndex, 1, GL_FLOAT, GL_FALSE, 0, data);
-        else
-            funcs.glVertexAttribPointer(arrayIndex, 2, GL_FLOAT, GL_FALSE, 0, data);
+        funcs.glVertexAttribPointer(arrayIndex, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
+    } else {
+        funcs.glVertexAttribPointer(arrayIndex, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
     }
 }
 
 bool QOpenGL2PaintEngineExPrivate::uploadIndexData(const void *data, GLenum indexValueType, GLuint count)
 {
-    // Follow the uploadData() logic: VBOs are used only when VAO support is available.
-    // Otherwise the legacy client-side pointer path is used.
-    if (vao.isCreated()) {
-        Q_ASSERT(indexValueType == GL_UNSIGNED_SHORT || indexValueType == GL_UNSIGNED_INT);
-        indexBuffer.bind();
-        indexBuffer.allocate(data, count * (indexValueType == GL_UNSIGNED_SHORT ? sizeof(quint16) : sizeof(quint32)));
-        return true;
-    }
-    return false;
+    Q_ASSERT(indexValueType == GL_UNSIGNED_SHORT || indexValueType == GL_UNSIGNED_INT);
+    indexBuffer.bind();
+    indexBuffer.allocate(
+            data,
+            count * (indexValueType == GL_UNSIGNED_SHORT ? sizeof(quint16) : sizeof(quint32)));
+    return true;
 }
 
 QT_END_NAMESPACE

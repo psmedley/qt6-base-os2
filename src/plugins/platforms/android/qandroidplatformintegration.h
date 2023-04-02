@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QANDROIDPLATFORMINTERATION_H
 #define QANDROIDPLATFORMINTERATION_H
@@ -49,6 +13,7 @@
 #include <qpa/qplatformnativeinterface.h>
 #include <qpa/qplatformopenglcontext.h>
 #include <qpa/qplatformoffscreensurface.h>
+#include <qpa/qplatformtheme.h>
 
 #include <EGL/egl.h>
 #include <memory>
@@ -99,6 +64,12 @@ public:
     void setAvailableGeometry(const QRect &availableGeometry);
     void setPhysicalSize(int width, int height);
     void setScreenSize(int width, int height);
+    // The 3 methods above were replaced by a new one, so that we could have
+    // a better control over "geometry changed" event handling. Technically
+    // they are no longer used and can be removed. Not doing it now, because
+    // I'm not sure if it might be helpful to have them or not.
+    void setScreenSizeParameters(const QSize &physicalSize, const QSize &screenSize,
+                                 const QRect &availableGeometry);
     void setRefreshRate(qreal refreshRate);
     bool isVirtualDesktop() { return true; }
 
@@ -112,7 +83,7 @@ public:
     QPlatformNativeInterface *nativeInterface() const override;
     QPlatformServices *services() const override;
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     virtual QPlatformAccessibility *accessibility() const override;
 #endif
 
@@ -133,6 +104,8 @@ public:
 
     void flushPendingUpdates();
 
+    static void setAppearance(QPlatformTheme::Appearance newAppearance);
+    static QPlatformTheme::Appearance appearance() { return m_appearance; }
 #if QT_CONFIG(vulkan)
     QPlatformVulkanInstance *createPlatformVulkanInstance(QVulkanInstance *instance) const override;
 #endif
@@ -144,6 +117,8 @@ private:
     QAndroidPlatformScreen *m_primaryScreen;
 
     QThread *m_mainThread;
+
+    static QPlatformTheme::Appearance m_appearance;
 
     static QRect m_defaultAvailableGeometry;
     static QSize m_defaultPhysicalSize;
@@ -162,7 +137,7 @@ private:
 #endif
 
     QAndroidSystemLocale *m_androidSystemLocale;
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     mutable QPlatformAccessibility *m_accessibility;
 #endif
 

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qscreen.h"
 #include "qscreen_p.h"
@@ -186,6 +150,10 @@ QPlatformScreen *QScreen::handle() const
 
   For example, on X11 these correspond to the XRandr screen names,
   typically "VGA1", "HDMI1", etc.
+
+  \note The user presentable string is not guaranteed to match the
+  result of any native APIs, and should not be used to uniquely identify
+  a screen.
 */
 QString QScreen::name() const
 {
@@ -449,7 +417,7 @@ QList<QScreen *> QScreen::virtualSiblings() const
     Q_D(const QScreen);
     const QList<QPlatformScreen *> platformScreens = d->platformScreen->virtualSiblings();
     QList<QScreen *> screens;
-    screens.reserve(platformScreens.count());
+    screens.reserve(platformScreens.size());
     for (QPlatformScreen *platformScreen : platformScreens)
         screens << platformScreen->screen();
     return screens;
@@ -547,6 +515,11 @@ Qt::ScreenOrientation QScreen::orientation() const
 /*!
   \property QScreen::refreshRate
   \brief the approximate vertical refresh rate of the screen in Hz
+
+  \warning Avoid using the screen's refresh rate to drive animations
+  via a timer such as QTimer. Instead use QWindow::requestUpdate().
+
+  \sa QWindow::requestUpdate()
 */
 qreal QScreen::refreshRate() const
 {
@@ -847,3 +820,5 @@ Q_GUI_EXPORT QDebug operator<<(QDebug debug, const QScreen *screen)
 #endif // !QT_NO_DEBUG_STREAM
 
 QT_END_NAMESPACE
+
+#include "moc_qscreen.cpp"

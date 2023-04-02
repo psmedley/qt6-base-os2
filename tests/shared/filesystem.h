@@ -1,43 +1,19 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef QT_TESTS_SHARED_FILESYSTEM_H_INCLUDED
 #define QT_TESTS_SHARED_FILESYSTEM_H_INCLUDED
 
+#include <QDir>
+#include <QFile>
+#include <QOperatingSystemVersion>
+#include <QScopedPointer>
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
-#include <QScopedPointer>
-#include <QDir>
-#include <QFile>
 
 #if defined(Q_OS_WIN)
-#include <windows.h>
+#include <qt_windows.h>
 #include <winioctl.h>
 #ifndef IO_REPARSE_TAG_MOUNT_POINT
 #define IO_REPARSE_TAG_MOUNT_POINT       (0xA0000003L)
@@ -49,6 +25,11 @@
 #ifndef SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE // MinGW
 #define SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE (0x2)
 #endif
+QT_BEGIN_NAMESPACE
+namespace QTest {
+    static QString uncServerName() { return qgetenv("COMPUTERNAME"); }
+}
+QT_END_NAMESPACE
 #endif
 
 // QTemporaryDir-based helper class for creating file-system hierarchies and cleaning up.

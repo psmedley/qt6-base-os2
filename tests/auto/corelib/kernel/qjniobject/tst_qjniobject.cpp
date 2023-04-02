@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <jni.h>
 
@@ -34,6 +9,7 @@
 #include <QtTest>
 
 static const char testClassName[] = "org/qtproject/qt/android/testdatapackage/QtJniObjectTestClass";
+Q_DECLARE_JNI_CLASS(QtJniObjectTestClass, testClassName)
 
 static const jbyte A_BYTE_VALUE = 127;
 static const jshort A_SHORT_VALUE = 32767;
@@ -160,8 +136,20 @@ void tst_QJniObject::ctor()
     }
 
     {
+        QJniObject object = QJniObject::construct<jstring>();
+        QVERIFY(object.isValid());
+    }
+
+    {
         QJniObject string = QJniObject::fromString(QLatin1String("Hello, Java"));
         QJniObject object("java/lang/String", "(Ljava/lang/String;)V", string.object<jstring>());
+        QVERIFY(object.isValid());
+        QCOMPARE(string.toString(), object.toString());
+    }
+
+    {
+        QJniObject string = QJniObject::fromString(QLatin1String("Hello, Java"));
+        QJniObject object = QJniObject::construct<jstring>(string.object<jstring>());
         QVERIFY(object.isValid());
         QCOMPARE(string.toString(), object.toString());
     }
@@ -182,6 +170,16 @@ void tst_QJniObject::ctor()
         QVERIFY(stringCpy.isValid());
         QCOMPARE(qString, stringCpy.toString());
     }
+
+    {
+        QJniEnvironment env;
+        const QString qString = QLatin1String("Hello, Java");
+        jclass javaStringClass = env->FindClass("java/lang/String");
+        QJniObject string = QJniObject::fromString(qString);
+        QJniObject stringCpy(javaStringClass, string.object<jstring>());
+        QVERIFY(stringCpy.isValid());
+        QCOMPARE(qString, stringCpy.toString());
+    }
 }
 
 void tst_QJniObject::callMethodTest()
@@ -194,9 +192,12 @@ void tst_QJniObject::callMethodTest()
         const jboolean isEmpty = jString1.callMethod<jboolean>("isEmpty");
         QVERIFY(!isEmpty);
 
-        const jint ret = jString1.callMethod<jint>("compareToIgnoreCase",
-                                                   "(Ljava/lang/String;)I",
-                                                   jString2.object<jstring>());
+        jint ret = jString1.callMethod<jint>("compareToIgnoreCase",
+                                             "(Ljava/lang/String;)I",
+                                             jString2.object<jstring>());
+        QVERIFY(0 == ret);
+
+        ret = jString1.callMethod<jint>("compareToIgnoreCase", jString2.object<jstring>());
         QVERIFY(0 == ret);
     }
 
@@ -205,6 +206,17 @@ void tst_QJniObject::callMethodTest()
         QJniObject longObject("java/lang/Long", "(J)V", jLong);
         jlong ret = longObject.callMethod<jlong>("longValue");
         QCOMPARE(ret, jLong);
+    }
+
+    // as of Qt 6.4, callMethod works with an object type as well!
+    {
+        const QString qString = QLatin1String("Hello, Java");
+        QJniObject jString = QJniObject::fromString(qString);
+        const QString qStringRet = jString.callMethod<jstring>("toUpperCase").toString();
+        QCOMPARE(qString.toUpper(), qStringRet);
+
+        QJniObject subString = jString.callMethod<jstring>("substring", 0, 4);
+        QCOMPARE(subString.toString(), qString.mid(0, 4));
     }
 }
 
@@ -219,6 +231,10 @@ void tst_QJniObject::callObjectMethodTest()
                                                     "(II)Ljava/lang/String;",
                                                     0, 4);
     QCOMPARE(subString.toString(), qString.mid(0, 4));
+
+    subString = jString.callObjectMethod<jstring>("substring", 0, 4);
+    QCOMPARE(subString.toString(), qString.mid(0, 4));
+
 }
 
 void tst_QJniObject::stringConvertionTest()
@@ -276,6 +292,16 @@ void tst_QJniObject::callStaticObjectMethodClassName()
     QString returnedString = returnValue.toString();
 
     QCOMPARE(returnedString, QString::fromLatin1("test format"));
+
+    returnValue = QJniObject::callStaticObjectMethod<jstring>("java/lang/String",
+                                                              "format",
+                                                              formatString.object<jstring>(),
+                                                              jobjectArray(0));
+    QVERIFY(returnValue.isValid());
+
+    returnedString = returnValue.toString();
+
+    QCOMPARE(returnedString, QString::fromLatin1("test format"));
 }
 
 void tst_QJniObject::callStaticObjectMethod()
@@ -295,6 +321,27 @@ void tst_QJniObject::callStaticObjectMethod()
     QVERIFY(returnValue.isValid());
 
     QString returnedString = returnValue.toString();
+
+    QCOMPARE(returnedString, QString::fromLatin1("test format"));
+
+    returnValue = QJniObject::callStaticObjectMethod<jstring>(cls,
+                                                              "format",
+                                                              formatString.object<jstring>(),
+                                                              jobjectArray(0));
+    QVERIFY(returnValue.isValid());
+
+    returnedString = returnValue.toString();
+
+    QCOMPARE(returnedString, QString::fromLatin1("test format"));
+
+    // from 6.4 on we can use callStaticMethod
+    returnValue = QJniObject::callStaticMethod<jstring>(cls,
+                                                        "format",
+                                                        formatString.object<jstring>(),
+                                                        jobjectArray(0));
+    QVERIFY(returnValue.isValid());
+
+    returnedString = returnValue.toString();
 
     QCOMPARE(returnedString, QString::fromLatin1("test format"));
 }
@@ -319,6 +366,15 @@ void tst_QJniObject::callStaticObjectMethodById()
     QString returnedString = returnValue.toString();
 
     QCOMPARE(returnedString, QString::fromLatin1("test format"));
+
+    // from Qt 6.4 on we can use callStaticMethod as well
+    returnValue = QJniObject::callStaticMethod<jstring>(
+            cls, id, formatString.object<jstring>(), jobjectArray(0));
+    QVERIFY(returnValue.isValid());
+
+    returnedString = returnValue.toString();
+
+    QCOMPARE(returnedString, QString::fromLatin1("test format"));
 }
 
 void tst_QJniObject::callStaticBooleanMethod()
@@ -336,6 +392,9 @@ void tst_QJniObject::callStaticBooleanMethod()
                                                             "(Ljava/lang/String;)Z",
                                                             parameter.object<jstring>());
         QVERIFY(b);
+
+        b = QJniObject::callStaticMethod<jboolean>(cls, "parseBoolean", parameter.object<jstring>());
+        QVERIFY(b);
     }
 
     {
@@ -346,6 +405,9 @@ void tst_QJniObject::callStaticBooleanMethod()
                                                             "parseBoolean",
                                                             "(Ljava/lang/String;)Z",
                                                             parameter.object<jstring>());
+        QVERIFY(!b);
+
+        b = QJniObject::callStaticMethod<jboolean>(cls, "parseBoolean", parameter.object<jstring>());
         QVERIFY(!b);
     }
 }
@@ -387,6 +449,10 @@ void tst_QJniObject::callStaticBooleanMethodClassName()
                                                             "(Ljava/lang/String;)Z",
                                                             parameter.object<jstring>());
         QVERIFY(b);
+        b = QJniObject::callStaticMethod<jboolean>("java/lang/Boolean",
+                                                   "parseBoolean",
+                                                   parameter.object<jstring>());
+        QVERIFY(b);
     }
 
     {
@@ -398,6 +464,10 @@ void tst_QJniObject::callStaticBooleanMethodClassName()
                                                             "(Ljava/lang/String;)Z",
                                                             parameter.object<jstring>());
         QVERIFY(!b);
+        b = QJniObject::callStaticMethod<jboolean>("java/lang/Boolean",
+                                                   "parseBoolean",
+                                                   parameter.object<jstring>());
+        QVERIFY(!b);
     }
 }
 
@@ -408,7 +478,6 @@ void tst_QJniObject::callStaticByteMethodClassName()
 
     jbyte returnValue = QJniObject::callStaticMethod<jbyte>("java/lang/Byte",
                                                             "parseByte",
-                                                            "(Ljava/lang/String;)B",
                                                             parameter.object<jstring>());
     QCOMPARE(returnValue, jbyte(number.toInt()));
 }
@@ -424,7 +493,6 @@ void tst_QJniObject::callStaticByteMethod()
 
     jbyte returnValue = QJniObject::callStaticMethod<jbyte>(cls,
                                                             "parseByte",
-                                                            "(Ljava/lang/String;)B",
                                                             parameter.object<jstring>());
     QCOMPARE(returnValue, jbyte(number.toInt()));
 }
@@ -452,7 +520,6 @@ void tst_QJniObject::callStaticIntMethodClassName()
 
     jint returnValue = QJniObject::callStaticMethod<jint>("java/lang/Integer",
                                                           "parseInt",
-                                                          "(Ljava/lang/String;)I",
                                                           parameter.object<jstring>());
     QCOMPARE(returnValue, number.toInt());
 }
@@ -469,7 +536,6 @@ void tst_QJniObject::callStaticIntMethod()
 
     jint returnValue = QJniObject::callStaticMethod<jint>(cls,
                                                           "parseInt",
-                                                          "(Ljava/lang/String;)I",
                                                           parameter.object<jstring>());
     QCOMPARE(returnValue, number.toInt());
 }
@@ -494,7 +560,6 @@ void tst_QJniObject::callStaticCharMethodClassName()
 {
     jchar returnValue = QJniObject::callStaticMethod<jchar>("java/lang/Character",
                                                             "toUpperCase",
-                                                            "(C)C",
                                                             jchar('a'));
     QCOMPARE(returnValue, jchar('A'));
 }
@@ -508,7 +573,6 @@ void tst_QJniObject::callStaticCharMethod()
 
     jchar returnValue = QJniObject::callStaticMethod<jchar>(cls,
                                                             "toUpperCase",
-                                                            "(C)C",
                                                             jchar('a'));
     QCOMPARE(returnValue, jchar('A'));
 }
@@ -533,7 +597,6 @@ void tst_QJniObject::callStaticDoubleMethodClassName    ()
 
     jdouble returnValue = QJniObject::callStaticMethod<jdouble>("java/lang/Double",
                                                                 "parseDouble",
-                                                                "(Ljava/lang/String;)D",
                                                                 parameter.object<jstring>());
     QCOMPARE(returnValue, number.toDouble());
 }
@@ -550,7 +613,6 @@ void tst_QJniObject::callStaticDoubleMethod()
 
     jdouble returnValue = QJniObject::callStaticMethod<jdouble>(cls,
                                                                 "parseDouble",
-                                                                "(Ljava/lang/String;)D",
                                                                 parameter.object<jstring>());
     QCOMPARE(returnValue, number.toDouble());
 }
@@ -579,7 +641,6 @@ void tst_QJniObject::callStaticFloatMethodClassName()
 
     jfloat returnValue = QJniObject::callStaticMethod<jfloat>("java/lang/Float",
                                                               "parseFloat",
-                                                              "(Ljava/lang/String;)F",
                                                               parameter.object<jstring>());
     QCOMPARE(returnValue, number.toFloat());
 }
@@ -596,7 +657,6 @@ void tst_QJniObject::callStaticFloatMethod()
 
     jfloat returnValue = QJniObject::callStaticMethod<jfloat>(cls,
                                                               "parseFloat",
-                                                              "(Ljava/lang/String;)F",
                                                               parameter.object<jstring>());
     QCOMPARE(returnValue, number.toFloat());
 }
@@ -624,7 +684,6 @@ void tst_QJniObject::callStaticShortMethodClassName()
 
     jshort returnValue = QJniObject::callStaticMethod<jshort>("java/lang/Short",
                                                               "parseShort",
-                                                              "(Ljava/lang/String;)S",
                                                               parameter.object<jstring>());
     QCOMPARE(returnValue, number.toShort());
 }
@@ -641,7 +700,6 @@ void tst_QJniObject::callStaticShortMethod()
 
     jshort returnValue = QJniObject::callStaticMethod<jshort>(cls,
                                                               "parseShort",
-                                                              "(Ljava/lang/String;)S",
                                                               parameter.object<jstring>());
     QCOMPARE(returnValue, number.toShort());
 }
@@ -669,7 +727,6 @@ void tst_QJniObject::callStaticLongMethodClassName()
 
     jlong returnValue = QJniObject::callStaticMethod<jlong>("java/lang/Long",
                                                             "parseLong",
-                                                            "(Ljava/lang/String;)J",
                                                             parameter.object<jstring>());
     QCOMPARE(returnValue, jlong(number.toLong()));
 }
@@ -685,7 +742,6 @@ void tst_QJniObject::callStaticLongMethod()
 
     jlong returnValue = QJniObject::callStaticMethod<jlong>(cls,
                                                             "parseLong",
-                                                            "(Ljava/lang/String;)J",
                                                             parameter.object<jstring>());
     QCOMPARE(returnValue, jlong(number.toLong()));
 }
@@ -980,6 +1036,12 @@ void setStaticField(const char *fieldName, T testValue)
 
     T res = QJniObject::getStaticField<T>(testClassName, fieldName);
     QCOMPARE(res, testValue);
+
+    // use template overload to reset to default
+    T defaultValue = {};
+    QJniObject::setStaticField<QtJniTypes::QtJniObjectTestClass, T>(fieldName, defaultValue);
+    res = QJniObject::getStaticField<QtJniTypes::QtJniObjectTestClass, T>(fieldName);
+    QCOMPARE(res, defaultValue);
 }
 
 void tst_QJniObject::setStaticIntField()
@@ -1044,9 +1106,15 @@ void tst_QJniObject::templateApiCheck()
                                        1,
                                        true,
                                        'c');
+    QJniObject::callStaticMethod<void>(testClassName,
+                                       "staticVoidMethodWithArgs",
+                                       1,
+                                       true,
+                                       'c');
 
     testClass.callMethod<void>("voidMethod");
     testClass.callMethod<void>("voidMethodWithArgs", "(IZC)V", 1, true, 'c');
+    testClass.callMethod<void>("voidMethodWithArgs", 1, true, 'c');
 
     // jboolean -----------------------------------------------------------------------------------
     QVERIFY(QJniObject::callStaticMethod<jboolean>(testClassName, "staticBooleanMethod"));
@@ -1056,10 +1124,19 @@ void tst_QJniObject::templateApiCheck()
                                                    true,
                                                    true,
                                                    true));
+    QVERIFY(QJniObject::callStaticMethod<jboolean>(testClassName,
+                                                   "staticBooleanMethodWithArgs",
+                                                   true,
+                                                   true,
+                                                   true));
 
     QVERIFY(testClass.callMethod<jboolean>("booleanMethod"));
     QVERIFY(testClass.callMethod<jboolean>("booleanMethodWithArgs",
                                            "(ZZZ)Z",
+                                           true,
+                                           true,
+                                           true));
+    QVERIFY(testClass.callMethod<jboolean>("booleanMethodWithArgs",
                                            true,
                                            true,
                                            true));
@@ -1073,9 +1150,15 @@ void tst_QJniObject::templateApiCheck()
                                                 1,
                                                 1,
                                                 1) == A_BYTE_VALUE);
+    QVERIFY(QJniObject::callStaticMethod<jbyte>(testClassName,
+                                                "staticByteMethodWithArgs",
+                                                jbyte(1),
+                                                jbyte(1),
+                                                jbyte(1)) == A_BYTE_VALUE);
 
     QVERIFY(testClass.callMethod<jbyte>("byteMethod") == A_BYTE_VALUE);
     QVERIFY(testClass.callMethod<jbyte>("byteMethodWithArgs", "(BBB)B", 1, 1, 1) == A_BYTE_VALUE);
+    QVERIFY(testClass.callMethod<jbyte>("byteMethodWithArgs", jbyte(1), jbyte(1), jbyte(1)) == A_BYTE_VALUE);
 
     // jchar --------------------------------------------------------------------------------------
     QVERIFY(QJniObject::callStaticMethod<jchar>(testClassName,
@@ -1086,10 +1169,19 @@ void tst_QJniObject::templateApiCheck()
                                                 jchar(1),
                                                 jchar(1),
                                                 jchar(1)) == A_CHAR_VALUE);
+    QVERIFY(QJniObject::callStaticMethod<jchar>(testClassName,
+                                                "staticCharMethodWithArgs",
+                                                jchar(1),
+                                                jchar(1),
+                                                jchar(1)) == A_CHAR_VALUE);
 
     QVERIFY(testClass.callMethod<jchar>("charMethod") == A_CHAR_VALUE);
     QVERIFY(testClass.callMethod<jchar>("charMethodWithArgs",
                                         "(CCC)C",
+                                        jchar(1),
+                                        jchar(1),
+                                        jchar(1)) == A_CHAR_VALUE);
+    QVERIFY(testClass.callMethod<jchar>("charMethodWithArgs",
                                         jchar(1),
                                         jchar(1),
                                         jchar(1)) == A_CHAR_VALUE);
@@ -1103,10 +1195,19 @@ void tst_QJniObject::templateApiCheck()
                                                  jshort(1),
                                                  jshort(1),
                                                  jshort(1)) == A_SHORT_VALUE);
+    QVERIFY(QJniObject::callStaticMethod<jshort>(testClassName,
+                                                 "staticShortMethodWithArgs",
+                                                 jshort(1),
+                                                 jshort(1),
+                                                 jshort(1)) == A_SHORT_VALUE);
 
     QVERIFY(testClass.callMethod<jshort>("shortMethod") == A_SHORT_VALUE);
     QVERIFY(testClass.callMethod<jshort>("shortMethodWithArgs",
                                          "(SSS)S",
+                                         jshort(1),
+                                         jshort(1),
+                                         jshort(1)) == A_SHORT_VALUE);
+    QVERIFY(testClass.callMethod<jshort>("shortMethodWithArgs",
                                          jshort(1),
                                          jshort(1),
                                          jshort(1)) == A_SHORT_VALUE);
@@ -1120,10 +1221,19 @@ void tst_QJniObject::templateApiCheck()
                                                jint(1),
                                                jint(1),
                                                jint(1)) == A_INT_VALUE);
+    QVERIFY(QJniObject::callStaticMethod<jint>(testClassName,
+                                               "staticIntMethodWithArgs",
+                                               jint(1),
+                                               jint(1),
+                                               jint(1)) == A_INT_VALUE);
 
     QVERIFY(testClass.callMethod<jint>("intMethod") == A_INT_VALUE);
     QVERIFY(testClass.callMethod<jint>("intMethodWithArgs",
                                        "(III)I",
+                                       jint(1),
+                                       jint(1),
+                                       jint(1)) == A_INT_VALUE);
+    QVERIFY(testClass.callMethod<jint>("intMethodWithArgs",
                                        jint(1),
                                        jint(1),
                                        jint(1)) == A_INT_VALUE);
@@ -1137,10 +1247,19 @@ void tst_QJniObject::templateApiCheck()
                                                 jlong(1),
                                                 jlong(1),
                                                 jlong(1)) == A_LONG_VALUE);
+    QVERIFY(QJniObject::callStaticMethod<jlong>(testClassName,
+                                                "staticLongMethodWithArgs",
+                                                jlong(1),
+                                                jlong(1),
+                                                jlong(1)) == A_LONG_VALUE);
 
     QVERIFY(testClass.callMethod<jlong>("longMethod") == A_LONG_VALUE);
     QVERIFY(testClass.callMethod<jlong>("longMethodWithArgs",
                                         "(JJJ)J",
+                                        jlong(1),
+                                        jlong(1),
+                                        jlong(1)) == A_LONG_VALUE);
+    QVERIFY(testClass.callMethod<jlong>("longMethodWithArgs",
                                         jlong(1),
                                         jlong(1),
                                         jlong(1)) == A_LONG_VALUE);
@@ -1154,10 +1273,19 @@ void tst_QJniObject::templateApiCheck()
                                                  jfloat(1.1),
                                                  jfloat(1.1),
                                                  jfloat(1.1)) == A_FLOAT_VALUE);
+    QVERIFY(QJniObject::callStaticMethod<jfloat>(testClassName,
+                                                 "staticFloatMethodWithArgs",
+                                                 jfloat(1.1),
+                                                 jfloat(1.1),
+                                                 jfloat(1.1)) == A_FLOAT_VALUE);
 
     QVERIFY(testClass.callMethod<jfloat>("floatMethod") == A_FLOAT_VALUE);
     QVERIFY(testClass.callMethod<jfloat>("floatMethodWithArgs",
                                          "(FFF)F",
+                                         jfloat(1.1),
+                                         jfloat(1.1),
+                                         jfloat(1.1)) == A_FLOAT_VALUE);
+    QVERIFY(testClass.callMethod<jfloat>("floatMethodWithArgs",
                                          jfloat(1.1),
                                          jfloat(1.1),
                                          jfloat(1.1)) == A_FLOAT_VALUE);
@@ -1171,10 +1299,19 @@ void tst_QJniObject::templateApiCheck()
                                                   jdouble(1.1),
                                                   jdouble(1.1),
                                                   jdouble(1.1)) == A_DOUBLE_VALUE);
+    QVERIFY(QJniObject::callStaticMethod<jdouble>(testClassName,
+                                                  "staticDoubleMethodWithArgs",
+                                                  jdouble(1.1),
+                                                  jdouble(1.1),
+                                                  jdouble(1.1)) == A_DOUBLE_VALUE);
 
     QVERIFY(testClass.callMethod<jdouble>("doubleMethod") == A_DOUBLE_VALUE);
     QVERIFY(testClass.callMethod<jdouble>("doubleMethodWithArgs",
                                           "(DDD)D",
+                                          jdouble(1.1),
+                                          jdouble(1.1),
+                                          jdouble(1.1)) == A_DOUBLE_VALUE);
+    QVERIFY(testClass.callMethod<jdouble>("doubleMethodWithArgs",
                                           jdouble(1.1),
                                           jdouble(1.1),
                                           jdouble(1.1)) == A_DOUBLE_VALUE);

@@ -1,34 +1,9 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
-
-#include <QtCore/QCoreApplication>
 #include <QTest>
+#include <QtCore/QCoreApplication>
+#include <QtCore/QTimer>
 #ifdef QT_GUI_LIB
 #include <QtGui/QColor>
 #include <QtGui/QImage>
@@ -139,6 +114,8 @@ private slots:
     void compare_pointerfuncs();
     void compare_tostring();
     void compare_tostring_data();
+    void compare_unknown();
+    void compare_textFromDebug();
     void compareQObjects();
     void compareQStringLists();
     void compareQStringLists_data();
@@ -162,6 +139,7 @@ private slots:
     void compareQVector3D();
     void compareQVector4D();
 #endif
+    void tryCompare();
     void verify();
     void verify2();
     void tryVerify();
@@ -346,6 +324,40 @@ void tst_Cmptest::compare_tostring()
     QFETCH(QVariant, expected);
 
     QCOMPARE(actual, expected);
+}
+
+struct UnknownType
+{
+    int value;
+    bool operator==(const UnknownType &rhs) const { return value == rhs.value; }
+};
+
+void tst_Cmptest::compare_unknown()
+{
+    UnknownType a{1};
+    UnknownType b{2};
+
+    QCOMPARE(a, b);
+}
+
+struct CustomType
+{
+    int value;
+    bool operator==(const CustomType &rhs) const { return value == rhs.value; }
+};
+
+QDebug operator<<(QDebug dbg, const CustomType &val)
+{
+    dbg << "QDebug stream: " << val.value;
+    return dbg;
+}
+
+void tst_Cmptest::compare_textFromDebug()
+{
+    CustomType a{0};
+    CustomType b{1};
+
+    QCOMPARE(a, b);
 }
 
 void tst_Cmptest::compareQStringLists_data()
@@ -638,16 +650,88 @@ void tst_Cmptest::verify2()
     QVERIFY2(opaqueFunc() < 2, QByteArray::number(opaqueFunc()).constData());
 }
 
+class DeferredFlag : public QObject // Can't be const.
+{
+    Q_OBJECT
+    bool m_flag;
+public:
+    // A boolean that either starts out true or decays to true after 50 ms.
+    // However, that decay will only happen when the event loop is run.
+    explicit DeferredFlag(bool initial = false) : m_flag(initial)
+    {
+        if (!initial)
+            QTimer::singleShot(50, this, &DeferredFlag::onTimeOut);
+    }
+    explicit operator bool() const { return m_flag; }
+    bool operator!() const { return !m_flag; }
+    friend bool operator==(const DeferredFlag &a, const DeferredFlag &b)
+    {
+        return bool(a) == bool(b);
+    }
+public slots:
+    void onTimeOut() { m_flag = true; }
+};
+
+char *toString(const DeferredFlag &val)
+{
+    return qstrdup(bool(val) ? "DeferredFlag(true)" : "DeferredFlag(false)");
+}
+
+void tst_Cmptest::tryCompare()
+{
+    /* Note that expected values given as DeferredFlag() shall be re-evaluated
+       each time the comparison is checked, hence supply a fresh false instance,
+       that'll be discarded before it has a chance to decay, hence only compare
+       equal to a false instance. Do not replace them with a local variable
+       initialized to false, as it would (of course) decay.
+    */
+    DeferredFlag trueAlready(true);
+    {
+        DeferredFlag c;
+        // QTRY should check before looping, so be equal to the fresh false immediately.
+        QTRY_COMPARE(c, DeferredFlag());
+        // Given time, it'll end up equal to a true one.
+        QTRY_COMPARE(c, trueAlready);
+    }
+    {
+        DeferredFlag c;
+        QTRY_COMPARE_WITH_TIMEOUT(c, DeferredFlag(), 300);
+        QVERIFY(!c); // Instantly equal, so succeeded without delay.
+        QTRY_COMPARE_WITH_TIMEOUT(c, trueAlready, 200);
+        qInfo("Should now time out and fail");
+        QTRY_COMPARE_WITH_TIMEOUT(c, DeferredFlag(), 200);
+    }
+}
+
 void tst_Cmptest::tryVerify()
 {
-    QTRY_VERIFY(opaqueFunc() > 2);
-    QTRY_VERIFY_WITH_TIMEOUT(opaqueFunc() < 2, 1);
+    {
+        DeferredFlag c;
+        QTRY_VERIFY(!c);
+        QTRY_VERIFY(c);
+    }
+    {
+        DeferredFlag c;
+        QTRY_VERIFY_WITH_TIMEOUT(!c, 300);
+        QTRY_VERIFY_WITH_TIMEOUT(c, 200);
+        qInfo("Should now time out and fail");
+        QTRY_VERIFY_WITH_TIMEOUT(!c, 200);
+    }
 }
 
 void tst_Cmptest::tryVerify2()
 {
-    QTRY_VERIFY2(opaqueFunc() > 2, QByteArray::number(opaqueFunc()).constData());
-    QTRY_VERIFY2_WITH_TIMEOUT(opaqueFunc() < 2, QByteArray::number(opaqueFunc()).constData(), 1);
+    {
+        DeferredFlag c;
+        QTRY_VERIFY2(!c, "Failed to check before looping");
+        QTRY_VERIFY2(c, "Failed to trigger single-shot");
+    }
+    {
+        DeferredFlag c;
+        QTRY_VERIFY2_WITH_TIMEOUT(!c, "Failed to check before looping", 300);
+        QTRY_VERIFY2_WITH_TIMEOUT(c, "Failed to trigger single-shot", 200);
+        QTRY_VERIFY2_WITH_TIMEOUT(!c, "Should time out and fail", 200);
+    }
 }
 
 void tst_Cmptest::verifyExplicitOperatorBool()

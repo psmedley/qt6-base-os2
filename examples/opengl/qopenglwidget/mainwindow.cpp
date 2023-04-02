@@ -1,52 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the examples of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:BSD$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** BSD License Usage
-** Alternatively, you may use this file under the terms of the BSD license
-** as follows:
-**
-** "Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions are
-** met:
-**   * Redistributions of source code must retain the above copyright
-**     notice, this list of conditions and the following disclaimer.
-**   * Redistributions in binary form must reproduce the above copyright
-**     notice, this list of conditions and the following disclaimer in
-**     the documentation and/or other materials provided with the
-**     distribution.
-**   * Neither the name of The Qt Company Ltd nor the names of its
-**     contributors may be used to endorse or promote products derived
-**     from this software without specific prior written permission.
-**
-**
-** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 #include "mainwindow.h"
 
@@ -59,13 +12,16 @@
 #include <QRandomGenerator>
 #include <QSpinBox>
 #include <QScrollArea>
+#include <QTabWidget>
+#include <QTabBar>
+#include <QToolButton>
 
 #include "glwidget.h"
 
 MainWindow::MainWindow()
     : m_nextX(1), m_nextY(1)
 {
-    GLWidget *glwidget = new GLWidget(this, true, qRgb(20, 20, 50));
+    GLWidget *glwidget = new GLWidget(this, qRgb(20, 20, 50));
     m_glWidgets << glwidget;
     QLabel *label = new QLabel(this);
     m_timer = new QTimer(this);
@@ -127,6 +83,7 @@ MainWindow::MainWindow()
     QAction *showBubbles = showMenu->addAction("Show bubbles", glwidget, &GLWidget::setShowBubbles);
     showBubbles->setCheckable(true);
     showBubbles->setChecked(true);
+    showMenu->addAction("Open tab window", this, &MainWindow::showNewWindow);
     QMenu *helpMenu = menuBar()->addMenu("&Help");
     helpMenu->addAction("About Qt", qApp, &QApplication::aboutQt);
 
@@ -156,9 +113,9 @@ void MainWindow::addNew()
 {
     if (m_nextY == 4)
         return;
-    GLWidget *w = new GLWidget(this, false, qRgb(QRandomGenerator::global()->bounded(256),
-                                                 QRandomGenerator::global()->bounded(256),
-                                                 QRandomGenerator::global()->bounded(256)));
+    GLWidget *w = new GLWidget(nullptr, qRgb(QRandomGenerator::global()->bounded(256),
+                                             QRandomGenerator::global()->bounded(256),
+                                             QRandomGenerator::global()->bounded(256)));
     m_glWidgets << w;
     connect(m_timer, &QTimer::timeout, w, QOverload<>::of(&QWidget::update));
     m_layout->addWidget(w, m_nextY, m_nextX, 1, 1);
@@ -176,7 +133,7 @@ void MainWindow::timerUsageChanged(bool enabled)
         m_timer->start();
     } else {
         m_timer->stop();
-        for (QOpenGLWidget *w : qAsConst(m_glWidgets))
+        for (QOpenGLWidget *w : std::as_const(m_glWidgets))
             w->update();
     }
 }
@@ -184,4 +141,48 @@ void MainWindow::timerUsageChanged(bool enabled)
 void MainWindow::resizeEvent(QResizeEvent *)
 {
      m_glWidgets[0]->setMinimumSize(size() + QSize(128, 128));
+}
+
+void MainWindow::showNewWindow()
+{
+    QTabWidget *tabs = new QTabWidget;
+    tabs->resize(800, 600);
+
+    QToolButton *tb = new QToolButton;
+    tb->setText(QLatin1String("+"));
+    tabs->addTab(new QLabel(QLatin1String("Add OpenGL widgets with +")), QString());
+    tabs->setTabEnabled(0, false);
+    tabs->tabBar()->setTabButton(0, QTabBar::RightSide, tb);
+    tabs->tabBar()->setTabsClosable(true);
+    QObject::connect(tabs->tabBar(), &QTabBar::tabCloseRequested, tabs, [tabs](int index) {
+        tabs->widget(index)->deleteLater();
+    });
+
+    const QString msgToTopLevel = QLatin1String("Break out to top-level window");
+    const QString msgFromTopLevel = QLatin1String("Move back under tab widget");
+
+    QObject::connect(tb, &QAbstractButton::clicked, tabs, [=] {
+        GLWidget *glwidget = new GLWidget(nullptr, Qt::blue);
+        glwidget->resize(tabs->size());
+        glwidget->setWindowTitle(QString::asprintf("QOpenGLWidget %p", glwidget));
+
+        QPushButton *btn = new QPushButton(msgToTopLevel, glwidget);
+        connect(btn, &QPushButton::clicked, glwidget, [=] {
+            if (glwidget->parent()) {
+                glwidget->setAttribute(Qt::WA_DeleteOnClose, true);
+                glwidget->setParent(nullptr);
+                glwidget->show();
+                btn->setText(msgFromTopLevel);
+            } else {
+                glwidget->setAttribute(Qt::WA_DeleteOnClose, false);
+                tabs->addTab(glwidget, glwidget->windowTitle());
+                btn->setText(msgToTopLevel);
+            }
+        });
+
+        tabs->setCurrentIndex(tabs->addTab(glwidget, glwidget->windowTitle()));
+    });
+
+    tabs->setAttribute(Qt::WA_DeleteOnClose);
+    tabs->show();
 }

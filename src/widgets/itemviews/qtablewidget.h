@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QTABLEWIDGET_H
 #define QTABLEWIDGET_H
@@ -56,6 +20,14 @@ public:
     QTableWidgetSelectionRange(int top, int left, int bottom, int right)
       : m_top(top), m_left(left), m_bottom(bottom), m_right(right)
     {}
+
+    friend bool operator==(const QTableWidgetSelectionRange &lhs,
+                           const QTableWidgetSelectionRange &rhs) noexcept
+    { return lhs.m_top == rhs.m_top && lhs.m_left == rhs.m_left
+          && lhs.m_bottom == rhs.m_bottom && lhs.m_right == rhs.m_right; };
+    friend bool operator!=(const QTableWidgetSelectionRange &lhs,
+                           const QTableWidgetSelectionRange &rhs) noexcept
+    { return !(lhs == rhs); }
 
     inline int topRow() const { return m_top; }
     inline int bottomRow() const { return m_bottom; }
@@ -125,10 +97,22 @@ public:
         { return qvariant_cast<QFont>(data(Qt::FontRole)); }
     inline void setFont(const QFont &font);
 
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
     inline int textAlignment() const
         { return data(Qt::TextAlignmentRole).toInt(); }
+#else
+    inline Qt::Alignment textAlignment() const
+    { return qvariant_cast<Qt::Alignment>(data(Qt::TextAlignmentRole)); }
+#endif
+#if QT_DEPRECATED_SINCE(6, 4)
+    QT_DEPRECATED_VERSION_X_6_4("Use the overload taking Qt::Alignment")
     inline void setTextAlignment(int alignment)
         { setData(Qt::TextAlignmentRole, alignment); }
+    inline void setTextAlignment(Qt::AlignmentFlag alignment)
+        { setData(Qt::TextAlignmentRole, QVariant::fromValue(Qt::Alignment(alignment))); }
+#endif
+    inline void setTextAlignment(Qt::Alignment alignment)
+        { setData(Qt::TextAlignmentRole, QVariant::fromValue(alignment)); }
 
     inline QBrush background() const
         { return qvariant_cast<QBrush>(data(Qt::BackgroundRole)); }
@@ -141,7 +125,7 @@ public:
         { setData(Qt::ForegroundRole, brush.style() != Qt::NoBrush ? QVariant(brush) : QVariant()); }
 
     inline Qt::CheckState checkState() const
-        { return static_cast<Qt::CheckState>(data(Qt::CheckStateRole).toInt()); }
+        { return qvariant_cast<Qt::CheckState>(data(Qt::CheckStateRole)); }
     inline void setCheckState(Qt::CheckState state)
         { setData(Qt::CheckStateRole, state); }
 

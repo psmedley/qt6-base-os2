@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2021 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2021 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QDATETIME_H
 #define QDATETIME_H
@@ -47,6 +11,7 @@
 #include <QtCore/qcalendar.h>
 
 #include <limits>
+#include <chrono>
 
 #if defined(Q_OS_DARWIN) || defined(Q_QDOC)
 Q_FORWARD_DECLARE_CF_TYPE(CFDate);
@@ -67,6 +32,57 @@ public:
     constexpr QDate() : jd(nullJd()) {}
     QDate(int y, int m, int d);
     QDate(int y, int m, int d, QCalendar cal);
+#if __cpp_lib_chrono >= 201907L || defined(Q_QDOC)
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    Q_IMPLICIT QDate(std::chrono::year_month_day ymd)
+    {
+        if (!ymd.ok())
+            jd = nullJd();
+        else
+            *this = fromStdSysDays(ymd);
+    }
+
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    Q_IMPLICIT QDate(std::chrono::year_month_day_last ymdl)
+    {
+        if (!ymdl.ok())
+            jd = nullJd();
+        else
+            *this = fromStdSysDays(ymdl);
+    }
+
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    Q_IMPLICIT QDate(std::chrono::year_month_weekday ymw)
+    {
+        if (!ymw.ok())
+            jd = nullJd();
+        else
+            *this = fromStdSysDays(ymw);
+    }
+
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    Q_IMPLICIT QDate(std::chrono::year_month_weekday_last ymwl)
+    {
+        if (!ymwl.ok())
+            jd = nullJd();
+        else
+            *this = fromStdSysDays(ymwl);
+    }
+
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    static QDate fromStdSysDays(const std::chrono::sys_days &days)
+    {
+        const QDate epoch(unixEpochJd());
+        return epoch.addDays(days.time_since_epoch().count());
+    }
+
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    std::chrono::sys_days toStdSysDays() const
+    {
+        const QDate epoch(unixEpochJd());
+        return std::chrono::sys_days(std::chrono::days(epoch.daysTo(*this)));
+    }
+#endif
 
     constexpr bool isNull() const { return !isValid(); }
     constexpr bool isValid() const { return jd >= minJd() && jd <= maxJd(); }
@@ -98,10 +114,8 @@ public:
 
 #if QT_CONFIG(datestring)
     QString toString(Qt::DateFormat format = Qt::TextDate) const;
-# if QT_STRINGVIEW_LEVEL < 2
     QString toString(const QString &format, QCalendar cal = QCalendar()) const
     { return toString(qToStringViewIgnoringNull(format), cal); }
-# endif
     QString toString(QStringView format, QCalendar cal = QCalendar()) const;
 #endif
     bool setDate(int year, int month, int day); // Gregorian-optimized
@@ -110,6 +124,13 @@ public:
     void getDate(int *year, int *month, int *day) const;
 
     [[nodiscard]] QDate addDays(qint64 days) const;
+#if __cpp_lib_chrono >= 201907L || defined(Q_QDOC)
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    [[nodiscard]] QDate addDuration(std::chrono::days days) const
+    {
+        return addDays(days.count());
+    }
+#endif
     // Gregorian-optimized:
     [[nodiscard]] QDate addMonths(int months) const;
     [[nodiscard]] QDate addYears(int years) const;
@@ -123,13 +144,11 @@ public:
     static QDate fromString(QStringView string, QStringView format, QCalendar cal = QCalendar())
     { return fromString(string.toString(), format, cal); }
     static QDate fromString(const QString &string, QStringView format, QCalendar cal = QCalendar());
-# if QT_STRINGVIEW_LEVEL < 2
     static QDate fromString(const QString &string, Qt::DateFormat format = Qt::TextDate)
     { return fromString(qToStringViewIgnoringNull(string), format); }
     static QDate fromString(const QString &string, const QString &format,
                             QCalendar cal = QCalendar())
     { return fromString(string, qToStringViewIgnoringNull(format), cal); }
-# endif
 #endif
     static bool isValid(int y, int m, int d);
     static bool isLeapYear(int year);
@@ -143,6 +162,7 @@ private:
     static constexpr inline qint64 nullJd() { return (std::numeric_limits<qint64>::min)(); }
     static constexpr inline qint64 minJd() { return Q_INT64_C(-784350574879); }
     static constexpr inline qint64 maxJd() { return Q_INT64_C( 784354017364); }
+    static constexpr inline qint64 unixEpochJd() { return Q_INT64_C(2440588); }
 
     qint64 jd;
 
@@ -180,10 +200,8 @@ public:
     int msec() const;
 #if QT_CONFIG(datestring)
     QString toString(Qt::DateFormat f = Qt::TextDate) const;
-#if QT_STRINGVIEW_LEVEL < 2
     QString toString(const QString &format) const
     { return toString(qToStringViewIgnoringNull(format)); }
-#endif
     QString toString(QStringView format) const;
 #endif
     bool setHMS(int h, int m, int s, int ms = 0);
@@ -202,12 +220,10 @@ public:
     static QTime fromString(QStringView string, QStringView format)
     { return fromString(string.toString(), format); }
     static QTime fromString(const QString &string, QStringView format);
-# if QT_STRINGVIEW_LEVEL < 2
     static QTime fromString(const QString &string, Qt::DateFormat format = Qt::TextDate)
     { return fromString(qToStringViewIgnoringNull(string), format); }
     static QTime fromString(const QString &string, const QString &format)
     { return fromString(string, qToStringViewIgnoringNull(format)); }
-# endif
 #endif
     static bool isValid(int h, int m, int s, int ms = 0);
 
@@ -237,18 +253,25 @@ class QDateTimePrivate;
 class Q_CORE_EXPORT QDateTime
 {
     struct ShortData {
-#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
-        quintptr status : 8;
-#endif
-#if QT_VERSION >= QT_VERSION_CHECK(7,0,0)
+#if QT_VERSION >= QT_VERSION_CHECK(7,0,0) || defined(QT_BOOTSTRAPPED)
+#  if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+        qint64 status : 8;
+#  endif
         qint64 msecs : 56;
+
+#  if Q_BYTE_ORDER == Q_BIG_ENDIAN
+        qint64 status : 8;
+#  endif
 #else
+#  if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+        quintptr status : 8;
+#  endif
         // note: this is only 24 bits on 32-bit systems...
         qintptr msecs : sizeof(void *) * 8 - 8;
-#endif
 
-#if Q_BYTE_ORDER == Q_BIG_ENDIAN
+#  if Q_BYTE_ORDER == Q_BIG_ENDIAN
         quintptr status : 8;
+#  endif
 #endif
     };
 
@@ -266,6 +289,9 @@ class Q_CORE_EXPORT QDateTime
         Data(Data &&other);
         Data &operator=(const Data &other);
         ~Data();
+
+        void swap(Data &other) noexcept
+        { std::swap(data, other.data); }
 
         bool isShort() const;
         void detach();
@@ -290,7 +316,7 @@ public:
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QDateTime)
     QDateTime &operator=(const QDateTime &other) noexcept;
 
-    void swap(QDateTime &other) noexcept { qSwap(d.d, other.d.d); }
+    void swap(QDateTime &other) noexcept { d.swap(other.d); }
 
     bool isNull() const;
     bool isValid() const;
@@ -320,10 +346,8 @@ public:
 
 #if QT_CONFIG(datestring)
     QString toString(Qt::DateFormat format = Qt::TextDate) const;
-# if QT_STRINGVIEW_LEVEL < 2
     QString toString(const QString &format, QCalendar cal = QCalendar()) const
     { return toString(qToStringViewIgnoringNull(format), cal); }
-# endif
     QString toString(QStringView format, QCalendar cal = QCalendar()) const;
 #endif
     [[nodiscard]] QDateTime addDays(qint64 days) const;
@@ -331,6 +355,10 @@ public:
     [[nodiscard]] QDateTime addYears(int years) const;
     [[nodiscard]] QDateTime addSecs(qint64 secs) const;
     [[nodiscard]] QDateTime addMSecs(qint64 msecs) const;
+    [[nodiscard]] QDateTime addDuration(std::chrono::milliseconds msecs) const
+    {
+        return addMSecs(msecs.count());
+    }
 
     QDateTime toTimeSpec(Qt::TimeSpec spec) const;
     inline QDateTime toLocalTime() const { return toTimeSpec(Qt::LocalTime); }
@@ -353,13 +381,11 @@ public:
     { return fromString(string.toString(), format, cal); }
     static QDateTime fromString(const QString &string, QStringView format,
                                 QCalendar cal = QCalendar());
-# if QT_STRINGVIEW_LEVEL < 2
     static QDateTime fromString(const QString &string, Qt::DateFormat format = Qt::TextDate)
     { return fromString(qToStringViewIgnoringNull(string), format); }
     static QDateTime fromString(const QString &string, const QString &format,
                                 QCalendar cal = QCalendar())
     { return fromString(string, qToStringViewIgnoringNull(format), cal); }
-# endif
 #endif
 
     static QDateTime fromMSecsSinceEpoch(qint64 msecs, Qt::TimeSpec spec = Qt::LocalTime,
@@ -381,6 +407,96 @@ public:
     static QDateTime fromNSDate(const NSDate *date);
     NSDate *toNSDate() const Q_DECL_NS_RETURNS_AUTORELEASED;
 #endif
+
+#if __cpp_lib_chrono >= 201907L || defined(Q_QDOC)
+#if __cpp_concepts >= 201907L || defined(Q_QDOC)
+    // Generic clock, as long as it's compatible with us (= system_clock)
+    template <typename Clock, typename Duration>
+    static QDateTime fromStdTimePoint(const std::chrono::time_point<Clock, Duration> &time)
+        requires
+            requires(const std::chrono::time_point<Clock, Duration> &t) {
+                // the clock can be converted to system_clock
+                std::chrono::clock_cast<std::chrono::system_clock>(t);
+                // the duration can be converted to milliseconds
+                requires std::is_convertible_v<Duration, std::chrono::milliseconds>;
+            }
+    {
+        const auto sysTime = std::chrono::clock_cast<std::chrono::system_clock>(time);
+        // clock_cast can change the duration, so convert it again to milliseconds
+        const auto timeInMSec = std::chrono::time_point_cast<std::chrono::milliseconds>(sysTime);
+        return fromMSecsSinceEpoch(timeInMSec.time_since_epoch().count(), Qt::UTC);
+    }
+#endif // __cpp_concepts
+
+    // local_time
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    static QDateTime fromStdTimePoint(const std::chrono::local_time<std::chrono::milliseconds> &time)
+    {
+        return fromStdLocalTime(time);
+    }
+
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    static QDateTime fromStdLocalTime(const std::chrono::local_time<std::chrono::milliseconds> &time)
+    {
+        QDateTime result(QDate(1970, 1, 1), QTime(0, 0, 0), Qt::LocalTime);
+        return result.addMSecs(time.time_since_epoch().count());
+    }
+
+#if QT_CONFIG(timezone)
+    // zoned_time. defined in qtimezone.h
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    static QDateTime fromStdZonedTime(const std::chrono::zoned_time<
+                                          std::chrono::milliseconds,
+                                          const std::chrono::time_zone *
+                                      > &time);
+#endif // QT_CONFIG(timezone)
+
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    std::chrono::sys_time<std::chrono::milliseconds> toStdSysMilliseconds() const
+    {
+        const std::chrono::milliseconds duration(toMSecsSinceEpoch());
+        return std::chrono::sys_time<std::chrono::milliseconds>(duration);
+    }
+
+    QT_POST_CXX17_API_IN_EXPORTED_CLASS
+    std::chrono::sys_seconds toStdSysSeconds() const
+    {
+        const std::chrono::seconds duration(toSecsSinceEpoch());
+        return std::chrono::sys_seconds(duration);
+    }
+#endif // __cpp_lib_chrono >= 201907L
+
+    friend std::chrono::milliseconds operator-(const QDateTime &lhs, const QDateTime &rhs)
+    {
+        return std::chrono::milliseconds(rhs.msecsTo(lhs));
+    }
+
+    friend QDateTime operator+(const QDateTime &dateTime, std::chrono::milliseconds duration)
+    {
+        return dateTime.addMSecs(duration.count());
+    }
+
+    friend QDateTime operator+(std::chrono::milliseconds duration, const QDateTime &dateTime)
+    {
+        return dateTime + duration;
+    }
+
+    QDateTime &operator+=(std::chrono::milliseconds duration)
+    {
+        *this = addMSecs(duration.count());
+        return *this;
+    }
+
+    friend QDateTime operator-(const QDateTime &dateTime, std::chrono::milliseconds duration)
+    {
+        return dateTime.addMSecs(-duration.count());
+    }
+
+    QDateTime &operator-=(std::chrono::milliseconds duration)
+    {
+        *this = addMSecs(-duration.count());
+        return *this;
+    }
 
     // (1<<63) ms is 292277024.6 (average Gregorian) years, counted from the start of 1970, so
     // Last is floor(1970 + 292277024.6); no year 0, so First is floor(1970 - 1 - 292277024.6)

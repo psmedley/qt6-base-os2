@@ -1,34 +1,10 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtGui/QVulkanInstance>
 #include <QtGui/QVulkanFunctions>
 #include <QtGui/QVulkanWindow>
+#include <QtCore/qvarlengtharray.h>
 
 #include <QTest>
 
@@ -112,6 +88,10 @@ void tst_QVulkan::vulkanCheckSupported()
 
 void tst_QVulkan::vulkan11()
 {
+#ifdef Q_OS_ANDROID
+    if (QNativeInterface::QAndroidApplication::sdkVersion() >= 31)
+        QSKIP("Fails on Android 12 (QTBUG-105739)");
+#endif
 #if VK_VERSION_1_1
     QVulkanInstance inst;
     if (inst.supportedApiVersion() < QVersionNumber(1, 1))
@@ -161,15 +141,17 @@ void tst_QVulkan::vulkan11()
                     QByteArray deviceUuid = QByteArray::fromRawData((const char *) deviceIdProps.deviceUUID, VK_UUID_SIZE).toHex();
                     QByteArray driverUuid = QByteArray::fromRawData((const char *) deviceIdProps.driverUUID, VK_UUID_SIZE).toHex();
                     qDebug() << "deviceUUID" << deviceUuid << "driverUUID" << driverUuid;
+                    const bool deviceUuidZero = std::find_if(deviceUuid.cbegin(), deviceUuid.cend(), [](char c) -> bool { return c; }) == deviceUuid.cend();
+                    const bool driverUuidZero = std::find_if(driverUuid.cbegin(), driverUuid.cend(), [](char c) -> bool { return c; }) == driverUuid.cend();
                     // deviceUUID cannot be all zero as per spec
-                    bool seenNonZero = false;
-                    for (int i = 0; i < VK_UUID_SIZE; ++i) {
-                        if (deviceIdProps.deviceUUID[i]) {
-                            seenNonZero = true;
-                            break;
-                        }
+                    if (!driverUuidZero) {
+                        // ...but then there are implementations such as some
+                        // versions of Mesa lavapipe, that returns all zeroes
+                        // for both uuids. skip the check if the driver uuid
+                        // was zero too.
+                        // https://gitlab.freedesktop.org/mesa/mesa/-/issues/5875
+                        QVERIFY(!deviceUuidZero);
                     }
-                    QVERIFY(seenNonZero);
                 } else {
                     qDebug("Physical device is not Vulkan 1.1 capable");
                 }
@@ -471,6 +453,10 @@ void tst_QVulkan::vulkanWindowRenderer()
 
 void tst_QVulkan::vulkanWindowGrab()
 {
+#ifdef Q_OS_ANDROID
+    if (QNativeInterface::QAndroidApplication::sdkVersion() >= 31)
+        QSKIP("Fails on Android 12 (QTBUG-105739)");
+#endif
     QVulkanInstance inst;
     inst.setLayers(QByteArrayList() << "VK_LAYER_KHRONOS_validation");
     if (!inst.create())
