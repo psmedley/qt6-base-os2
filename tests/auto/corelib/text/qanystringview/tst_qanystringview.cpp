@@ -7,6 +7,7 @@
 #include <QString>
 #include <QStringBuilder>
 #include <QVarLengthArray>
+#include <private/qxmlstream_p.h>
 
 #include <QTest>
 
@@ -58,6 +59,16 @@ constexpr inline bool CanConvert = std::is_convertible_v<T, QAnyStringView>;
 static_assert(CanConvert<QLatin1String>);
 static_assert(CanConvert<const char*>);
 static_assert(CanConvert<QByteArray>);
+
+template <typename T>
+struct ImplicitlyConvertibleTo
+{
+    operator T() const;
+};
+
+static_assert(CanConvert<ImplicitlyConvertibleTo<QString>>);
+static_assert(CanConvert<ImplicitlyConvertibleTo<QByteArray>>);
+static_assert(!CanConvert<ImplicitlyConvertibleTo<QLatin1StringView>>);
 
 // QAnyStringView qchar_does_not_compile() { return QAnyStringView(QChar('a')); }
 // QAnyStringView qlatin1string_does_not_compile() { return QAnyStringView(QLatin1String("a")); }
@@ -154,6 +165,8 @@ static_assert(CanConvert<std::vector<char16_t>>);
 static_assert(CanConvert<std::array<char16_t, 123>>);
 static_assert(!CanConvert<std::deque<char16_t>>);
 static_assert(!CanConvert<std::list<char16_t>>);
+
+static_assert(CanConvert<QtPrivate::XmlStringRef>);
 
 //
 // char32_t

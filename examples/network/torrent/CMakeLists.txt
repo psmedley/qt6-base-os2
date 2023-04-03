@@ -1,8 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(torrent LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -11,6 +11,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/network/torrent")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Widgets)
+
+qt_standard_project_setup()
 
 qt_add_executable(torrent
     addtorrentdialog.cpp addtorrentdialog.h
@@ -33,11 +35,11 @@ set_target_properties(torrent PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-target_link_libraries(torrent PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Network
-    Qt::Widgets
+target_link_libraries(torrent PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Widgets
 )
 
 # Resources:

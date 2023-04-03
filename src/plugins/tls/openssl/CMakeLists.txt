@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_internal_add_plugin(QTlsBackendOpenSSLPlugin
     OUTPUT_NAME qopensslbackend
     CLASS_NAME QTlsBackendOpenSSL
@@ -20,6 +23,10 @@ qt_internal_add_plugin(QTlsBackendOpenSSLPlugin
     DEFINES
         OPENSSL_API_COMPAT=0x10100000L
 )
+
+if (WIN32) # Windows header issues
+    set_target_properties(QTlsBackendOpenSSLPlugin PROPERTIES UNITY_BUILD OFF)
+endif()
 
 qt_internal_extend_target(QTlsBackendOpenSSLPlugin CONDITION QT_FEATURE_dtls
     SOURCES

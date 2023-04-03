@@ -1,4 +1,5 @@
-# Generated from qgraphicsitemgroup.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qgraphicsitemgroup Binary:
@@ -10,12 +11,9 @@ qt_internal_add_manual_test(qgraphicsitemgroup
         customitem.cpp customitem.h
         main.cpp
         widget.cpp widget.h widget.ui
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
     ENABLE_AUTOGEN_TOOLS
         uic
 )
-
-#### Keys ignored in scope 1:.:.:qgraphicsitemgroup.pro:<TRUE>:
-# TEMPLATE = "app"

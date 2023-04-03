@@ -31,12 +31,6 @@ public Q_SLOTS:
     void onAppFocusWindowChanged(QWindow *window);
 
 private:
-    /*
-        Function to return the default background pixmap.
-        Needed by QWizard in the Qt widget module.
-    */
-    Q_INVOKABLE QPixmap defaultBackgroundPixmapForQWizard();
-
     Q_INVOKABLE void clearCurrentThreadCocoaEventDispatcherInterruptFlag();
 
     static void registerDraggedTypes(const QStringList &types);
@@ -53,9 +47,6 @@ private:
     // deregisters.
     static void registerTouchWindow(QWindow *window,  bool enable);
 
-    // Set the size of the unified title and toolbar area.
-    static void setContentBorderThickness(QWindow *window, int topThickness, int bottomThickness);
-
     // Set the size for a unified toolbar content border area.
     // Multiple callers can register areas and the platform plugin
     // will extend the "unified" area to cover them.
@@ -67,12 +58,6 @@ private:
     // Returns true if the given coordinate is inside the current
     // content border.
     static bool testContentBorderPosition(QWindow *window, int position);
-
-    // Sets a NSToolbar instance for the given QWindow. The
-    // toolbar will be attached to the native NSWindow when
-    // that is created;
-   static void setNSToolbar(QWindow *window, void *nsToolbar);
-
 };
 
 QT_END_NAMESPACE

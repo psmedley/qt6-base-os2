@@ -1,4 +1,5 @@
-# Generated from qobject.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qobject Test:
@@ -7,8 +8,6 @@
 qt_internal_add_test(tst_qobject
     SOURCES
         tst_qobject.cpp
-    DEFINES
-        QT_DISABLE_DEPRECATED_BEFORE=0
     LIBRARIES
         Qt::CorePrivate
         Qt::Network
@@ -18,4 +17,4 @@ qt_internal_add_test(tst_qobject
 ## Scopes:
 #####################################################################
 add_subdirectory(signalbug)
-add_dependencies(tst_qobject signalbug_helper) # special case
+add_dependencies(tst_qobject signalbug_helper)

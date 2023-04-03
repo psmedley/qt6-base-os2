@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_internal_add_test(tst_baseline_widgets
     SOURCES
         ../shared/baselineprotocol.cpp ../shared/baselineprotocol.h ../shared/lookup3.cpp
@@ -6,8 +9,9 @@ qt_internal_add_test(tst_baseline_widgets
         tst_baseline_widgets.cpp
     INCLUDE_DIRECTORIES
         ../shared
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
+        Qt::WidgetsPrivate
         Qt::Network
 )

@@ -1,4 +1,5 @@
-# Generated from tst.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qlibrary Test:
@@ -12,7 +13,7 @@ qt_internal_add_test(tst_qlibrary
     SOURCES
         ../tst_qlibrary.cpp
     TESTDATA ${test_data}
-    LIBRARIES mylib mylib2 # special case
+    LIBRARIES mylib mylib2
 )
 
 add_dependencies(tst_qlibrary mylib mylib2)

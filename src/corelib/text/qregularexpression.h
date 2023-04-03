@@ -50,10 +50,10 @@ public:
 
     QRegularExpression();
     explicit QRegularExpression(const QString &pattern, PatternOptions options = NoPatternOption);
-    QRegularExpression(const QRegularExpression &re);
+    QRegularExpression(const QRegularExpression &re) noexcept;
     QRegularExpression(QRegularExpression &&re) = default;
     ~QRegularExpression();
-    QRegularExpression &operator=(const QRegularExpression &re);
+    QRegularExpression &operator=(const QRegularExpression &re) noexcept;
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QRegularExpression)
 
     void swap(QRegularExpression &other) noexcept { d.swap(other.d); }
@@ -91,11 +91,20 @@ public:
                                   MatchType matchType       = NormalMatch,
                                   MatchOptions matchOptions = NoMatchOption) const;
 
+#if QT_DEPRECATED_SINCE(6, 8)
     [[nodiscard]]
+    QT_DEPRECATED_VERSION_X_6_8("Use matchView instead.")
     QRegularExpressionMatch match(QStringView subjectView,
                                   qsizetype offset          = 0,
                                   MatchType matchType       = NormalMatch,
                                   MatchOptions matchOptions = NoMatchOption) const;
+#endif
+
+    [[nodiscard]]
+    QRegularExpressionMatch matchView(QStringView subjectView,
+                                      qsizetype offset          = 0,
+                                      MatchType matchType       = NormalMatch,
+                                      MatchOptions matchOptions = NoMatchOption) const;
 
     [[nodiscard]]
     QRegularExpressionMatchIterator globalMatch(const QString &subject,
@@ -103,11 +112,20 @@ public:
                                                 MatchType matchType       = NormalMatch,
                                                 MatchOptions matchOptions = NoMatchOption) const;
 
+#if QT_DEPRECATED_SINCE(6, 8)
     [[nodiscard]]
+    QT_DEPRECATED_VERSION_X_6_8("Use globalMatchView instead.")
     QRegularExpressionMatchIterator globalMatch(QStringView subjectView,
                                                 qsizetype offset          = 0,
                                                 MatchType matchType       = NormalMatch,
                                                 MatchOptions matchOptions = NoMatchOption) const;
+#endif
+
+    [[nodiscard]]
+    QRegularExpressionMatchIterator globalMatchView(QStringView subjectView,
+                                                    qsizetype offset          = 0,
+                                                    MatchType matchType       = NormalMatch,
+                                                    MatchOptions matchOptions = NoMatchOption) const;
 
     void optimize() const;
 

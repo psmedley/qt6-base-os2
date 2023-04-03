@@ -22,12 +22,13 @@
 
 #include <d3d11_1.h>
 #include <dxgi1_6.h>
+#include <dcomp.h>
 
 QT_BEGIN_NAMESPACE
 
 struct QD3D11Buffer : public QRhiBuffer
 {
-    QD3D11Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
+    QD3D11Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, quint32 size);
     ~QD3D11Buffer();
     void destroy() override;
     bool create() override;
@@ -35,12 +36,12 @@ struct QD3D11Buffer : public QRhiBuffer
     char *beginFullDynamicBufferUpdateForCurrentFrame() override;
     void endFullDynamicBufferUpdateForCurrentFrame() override;
 
-    ID3D11UnorderedAccessView *unorderedAccessView();
+    ID3D11UnorderedAccessView *unorderedAccessView(quint32 offset);
 
     ID3D11Buffer *buffer = nullptr;
     char *dynBuf = nullptr;
     bool hasPendingDynamicUpdates = false;
-    ID3D11UnorderedAccessView *uav = nullptr;
+    QHash<quint32, ID3D11UnorderedAccessView *> uavs;
     uint generation = 0;
     friend class QRhiD3D11;
 };
@@ -81,11 +82,14 @@ struct QD3D11Texture : public QRhiTexture
     {
         if (tex)
             return tex;
+        else if (tex1D)
+            return tex1D;
         return tex3D;
     }
 
     ID3D11Texture2D *tex = nullptr;
     ID3D11Texture3D *tex3D = nullptr;
+    ID3D11Texture1D *tex1D = nullptr;
     bool owns = true;
     ID3D11ShaderResourceView *srv = nullptr;
     DXGI_FORMAT dxgiFormat;
@@ -220,39 +224,66 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
     };
     QVarLengthArray<BoundResourceData, 8> boundResourceData;
 
-    bool vsubufsPresent = false;
-    bool fsubufsPresent = false;
-    bool csubufsPresent = false;
-    bool vssamplersPresent = false;
-    bool fssamplersPresent = false;
-    bool cssamplersPresent = false;
-    bool csUAVsPresent = false;
+    struct StageUniformBufferBatches {
+        bool present = false;
+        QRhiBatchedBindings<ID3D11Buffer *> ubufs;
+        QRhiBatchedBindings<UINT> ubuforigbindings;
+        QRhiBatchedBindings<UINT> ubufoffsets;
+        QRhiBatchedBindings<UINT> ubufsizes;
+        void finish() {
+            present = ubufs.finish();
+            ubuforigbindings.finish();
+            ubufoffsets.finish();
+            ubufsizes.finish();
+        }
+        void clear() {
+            ubufs.clear();
+            ubuforigbindings.clear();
+            ubufoffsets.clear();
+            ubufsizes.clear();
+        }
+    };
 
-    QRhiBatchedBindings<ID3D11Buffer *> vsubufs;
-    QRhiBatchedBindings<UINT> vsubuforigbindings;
-    QRhiBatchedBindings<UINT> vsubufoffsets;
-    QRhiBatchedBindings<UINT> vsubufsizes;
+    struct StageSamplerBatches {
+        bool present = false;
+        QRhiBatchedBindings<ID3D11SamplerState *> samplers;
+        QRhiBatchedBindings<ID3D11ShaderResourceView *> shaderresources;
+        void finish() {
+            present = samplers.finish();
+            shaderresources.finish();
+        }
+        void clear() {
+            samplers.clear();
+            shaderresources.clear();
+        }
+    };
 
-    QRhiBatchedBindings<ID3D11Buffer *> fsubufs;
-    QRhiBatchedBindings<UINT> fsubuforigbindings;
-    QRhiBatchedBindings<UINT> fsubufoffsets;
-    QRhiBatchedBindings<UINT> fsubufsizes;
+    struct StageUavBatches {
+        bool present = false;
+        QRhiBatchedBindings<ID3D11UnorderedAccessView *> uavs;
+        void finish() {
+            present = uavs.finish();
+        }
+        void clear() {
+            uavs.clear();
+        }
+    };
 
-    QRhiBatchedBindings<ID3D11Buffer *> csubufs;
-    QRhiBatchedBindings<UINT> csubuforigbindings;
-    QRhiBatchedBindings<UINT> csubufoffsets;
-    QRhiBatchedBindings<UINT> csubufsizes;
+    StageUniformBufferBatches vsUniformBufferBatches;
+    StageUniformBufferBatches hsUniformBufferBatches;
+    StageUniformBufferBatches dsUniformBufferBatches;
+    StageUniformBufferBatches gsUniformBufferBatches;
+    StageUniformBufferBatches fsUniformBufferBatches;
+    StageUniformBufferBatches csUniformBufferBatches;
 
-    QRhiBatchedBindings<ID3D11SamplerState *> vssamplers;
-    QRhiBatchedBindings<ID3D11ShaderResourceView *> vsshaderresources;
+    StageSamplerBatches vsSamplerBatches;
+    StageSamplerBatches hsSamplerBatches;
+    StageSamplerBatches dsSamplerBatches;
+    StageSamplerBatches gsSamplerBatches;
+    StageSamplerBatches fsSamplerBatches;
+    StageSamplerBatches csSamplerBatches;
 
-    QRhiBatchedBindings<ID3D11SamplerState *> fssamplers;
-    QRhiBatchedBindings<ID3D11ShaderResourceView *> fsshaderresources;
-
-    QRhiBatchedBindings<ID3D11SamplerState *> cssamplers;
-    QRhiBatchedBindings<ID3D11ShaderResourceView *> csshaderresources;
-
-    QRhiBatchedBindings<ID3D11UnorderedAccessView *> csUAVs;
+    StageUavBatches csUavBatches;
 
     friend class QRhiD3D11;
 };
@@ -272,6 +303,18 @@ struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
         ID3D11VertexShader *shader = nullptr;
         QShader::NativeResourceBindingMap nativeResourceBindingMap;
     } vs;
+    struct {
+        ID3D11HullShader *shader = nullptr;
+        QShader::NativeResourceBindingMap nativeResourceBindingMap;
+    } hs;
+    struct {
+        ID3D11DomainShader *shader = nullptr;
+        QShader::NativeResourceBindingMap nativeResourceBindingMap;
+    } ds;
+    struct {
+        ID3D11GeometryShader *shader = nullptr;
+        QShader::NativeResourceBindingMap nativeResourceBindingMap;
+    } gs;
     struct {
         ID3D11PixelShader *shader = nullptr;
         QShader::NativeResourceBindingMap nativeResourceBindingMap;
@@ -551,6 +594,8 @@ struct QD3D11SwapChain : public QRhiSwapChain
     ID3D11Query *timestampDisjointQuery[BUFFER_COUNT];
     ID3D11Query *timestampQuery[BUFFER_COUNT * 2];
     UINT swapInterval = 1;
+    IDCompositionTarget *dcompTarget = nullptr;
+    IDCompositionVisual *dcompVisual = nullptr;
 };
 
 class QRhiD3D11 : public QRhiImplementation
@@ -566,7 +611,7 @@ public:
     QRhiShaderResourceBindings *createShaderResourceBindings() override;
     QRhiBuffer *createBuffer(QRhiBuffer::Type type,
                              QRhiBuffer::UsageFlags usage,
-                             int size) override;
+                             quint32 size) override;
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
                                          int sampleCount,
@@ -656,7 +701,7 @@ public:
     int resourceLimit(QRhi::ResourceLimit limit) const override;
     const QRhiNativeHandles *nativeHandles() override;
     QRhiDriverInfo driverInfo() const override;
-    QRhiMemAllocStats graphicsMemoryAllocationStatistics() override;
+    QRhiStats statistics() override;
     bool makeThreadLocalNativeContextCurrent() override;
     void releaseCachedResources() override;
     bool isDeviceLost() const override;
@@ -681,6 +726,7 @@ public:
     void clearShaderCache();
     QByteArray compileHlslShaderSource(const QShader &shader, QShader::Variant shaderVariant, uint flags,
                                        QString *error, QShaderKey *usedShaderKey);
+    bool ensureDirectCompositionDevice();
 
     QRhi::Flags rhiFlags;
     bool debugLayer = false;
@@ -692,9 +738,8 @@ public:
     ID3DUserDefinedAnnotation *annotations = nullptr;
     IDXGIAdapter1 *activeAdapter = nullptr;
     IDXGIFactory1 *dxgiFactory = nullptr;
-    bool supportsFlipSwapchain = false;
+    IDCompositionDevice *dcompDevice = nullptr;
     bool supportsAllowTearing = false;
-    bool forceFlipDiscard = false;
     bool deviceLost = false;
     QRhiD3D11NativeHandles nativeHandlesStruct;
     QRhiDriverInfo driverInfoStruct;
@@ -703,6 +748,9 @@ public:
         int vsHighestActiveVertexBufferBinding = -1;
         bool vsHasIndexBufferBound = false;
         int vsHighestActiveSrvBinding = -1;
+        int hsHighestActiveSrvBinding = -1;
+        int dsHighestActiveSrvBinding = -1;
+        int gsHighestActiveSrvBinding = -1;
         int fsHighestActiveSrvBinding = -1;
         int csHighestActiveSrvBinding = -1;
         int csHighestActiveUavBinding = -1;

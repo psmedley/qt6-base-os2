@@ -11,12 +11,12 @@
 #pragma qt_sync_skip_header_check
 #endif
 
-#if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
+#if QT_CONFIG(vulkan) || defined(Q_QDOC)
 
 #ifndef VK_NO_PROTOTYPES
 #define VK_NO_PROTOTYPES
 #endif
-#if !defined(Q_CLANG_QDOC) && __has_include(<vulkan/vulkan.h>)
+#if !defined(Q_QDOC) && __has_include(<vulkan/vulkan.h>)
 #include <vulkan/vulkan.h>
 #else
 // QT_CONFIG(vulkan) implies vulkan.h being available at Qt build time, but it
@@ -45,7 +45,7 @@ typedef int VkDebugReportObjectTypeEXT;
 // QVulkanInstance itself is only applicable if vulkan.h is available, or if
 // it's qdoc. An application that is built on a vulkan.h-less system against a
 // Vulkan-enabled Qt gets the dummy typedefs but not QVulkan*.
-#if __has_include(<vulkan/vulkan.h>) || defined(Q_CLANG_QDOC)
+#if __has_include(<vulkan/vulkan.h>) || defined(Q_QDOC)
 
 #include <QtCore/qbytearraylist.h>
 #include <QtCore/qdebug.h>
@@ -135,7 +135,8 @@ public:
     ~QVulkanInstance();
 
     enum Flag {
-        NoDebugOutputRedirect = 0x01
+        NoDebugOutputRedirect = 0x01,
+        NoPortabilityDrivers = 0x02
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -187,6 +188,25 @@ public:
     void installDebugOutputFilter(DebugFilter filter);
     void removeDebugOutputFilter(DebugFilter filter);
 
+    enum DebugMessageSeverityFlag {
+        VerboseSeverity = 0x01,
+        InfoSeverity = 0x02,
+        WarningSeverity = 0x04,
+        ErrorSeverity = 0x08
+    };
+    Q_DECLARE_FLAGS(DebugMessageSeverityFlags, DebugMessageSeverityFlag)
+
+    enum DebugMessageTypeFlag {
+        GeneralMessage = 0x01,
+        ValidationMessage = 0x02,
+        PerformanceMessage = 0x04
+    };
+    Q_DECLARE_FLAGS(DebugMessageTypeFlags, DebugMessageTypeFlag)
+
+    using DebugUtilsFilter = std::function<bool(DebugMessageSeverityFlags severity, DebugMessageTypeFlags type, const void *message)>;
+    void installDebugOutputFilter(DebugUtilsFilter filter);
+    void clearDebugOutputFilters();
+
 private:
     friend class QVulkanInstancePrivate;
     QScopedPointer<QVulkanInstancePrivate> d_ptr;
@@ -194,11 +214,13 @@ private:
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVulkanInstance::Flags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVulkanInstance::DebugMessageTypeFlags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVulkanInstance::DebugMessageSeverityFlags)
 
 QT_END_NAMESPACE
 
-#endif // __has_include(<vulkan/vulkan.h>) || defined(Q_CLANG_QDOC)
+#endif // __has_include(<vulkan/vulkan.h>) || defined(Q_QDOC)
 
-#endif // QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
+#endif // QT_CONFIG(vulkan) || defined(Q_QDOC)
 
 #endif // QVULKANINSTANCE_H

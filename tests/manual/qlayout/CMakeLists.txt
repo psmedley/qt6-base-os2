@@ -1,4 +1,5 @@
-# Generated from qlayout.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qlayout Binary:
@@ -12,10 +13,7 @@ qt_internal_add_manual_test(qlayout
         main.cpp
         mainwindow.cpp mainwindow.h
         vbwidget.cpp vbwidget.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )
-
-#### Keys ignored in scope 1:.:.:qlayout.pro:<TRUE>:
-# TEMPLATE = "app"

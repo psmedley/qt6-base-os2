@@ -18,7 +18,7 @@ QT_BEGIN_NAMESPACE
 using namespace Qt::StringLiterals;
 
 #ifdef QT_BUILD_INTERNAL
-static QBasicAtomicInt fetchedRoot = Q_BASIC_ATOMIC_INITIALIZER(false);
+Q_CONSTINIT static QBasicAtomicInt fetchedRoot = Q_BASIC_ATOMIC_INITIALIZER(false);
 Q_AUTOTEST_EXPORT void qt_test_resetFetchedRoot()
 {
     fetchedRoot.storeRelaxed(false);
@@ -121,9 +121,13 @@ void QFileInfoGatherer::fetchExtendedInformation(const QString &path, const QStr
         }
         loc = this->path.lastIndexOf(path, loc - 1);
     }
+#if QT_CONFIG(thread)
     this->path.push(path);
     this->files.push(files);
     condition.wakeAll();
+#else // !QT_CONFIG(thread)
+    getFileInfos(path, files);
+#endif // QT_CONFIG(thread)
 
 #if QT_CONFIG(filesystemwatcher)
     if (files.isEmpty()

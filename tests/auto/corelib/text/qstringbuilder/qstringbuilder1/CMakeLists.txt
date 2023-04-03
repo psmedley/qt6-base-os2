@@ -1,4 +1,5 @@
-# Generated from qstringbuilder1.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qstringbuilder1 Test:

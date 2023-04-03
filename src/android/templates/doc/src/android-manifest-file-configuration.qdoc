@@ -68,7 +68,7 @@ Qt sets the following manifest configuration by default:
         default values are \c anyDensity, \c largeScreens,
         \c normalScreens, and \c smallScreens.
 \row
-    \li {1, 8} \l {Android: App Manifest <application>}{<application>}
+    \li {1, 7} \l {Android: App Manifest <application>}{<application>}
     \li android:name
     \li The application class name. Default value is
         \c {org.qtproject.qt.android.bindings.QtApplication}.
@@ -199,6 +199,13 @@ The following is a list of such meta-data defined by Qt:
         by the app.
         For more information, see
         \l {QNativeInterface::}{QAndroidApplication::hideSplashScreen()}.
+\row
+    \li android.app.trace_location
+    \li Specifies a location on device where the application can save tracing files.
+        For example: /storage/emulated/0/Android/data/<app_package_name>/files/.
+        This is needed when using Common Trace Format (CTF) tracing backend.
+        \note The application needs storage permission for the location.
+        Default: not set.
 \endtable
 
 \section2 Application Specific Meta-data

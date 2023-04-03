@@ -6,14 +6,14 @@
 \ingroup cmake-commands-qtcore
 
 \title qt_android_generate_deployment_settings
-\target qt6_android_generate_deployment_settings
+\keyword qt6_android_generate_deployment_settings
 
 \summary {Generates the deployment settings file needed by androiddeployqt.}
 
 \include cmake-find-package-core.qdocinc
 
 \cmakecommandsince 6.0
-\preliminarycmakecommand
+\warning This command is deprecated since Qt 6.5. Use \l qt_add_executable instead.
 \cmakecommandandroidonly
 
 \section1 Synopsis

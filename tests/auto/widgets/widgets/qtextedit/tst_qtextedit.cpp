@@ -33,6 +33,8 @@
 #include "../../../shared/platforminputcontext.h"
 #include <private/qinputmethod_p.h>
 
+#include <QtWidgets/private/qapplication_p.h>
+
 Q_LOGGING_CATEGORY(lcTests, "qt.widgets.tests")
 
 //Used in copyAvailable
@@ -2229,7 +2231,6 @@ void tst_QTextEdit::setDocumentPreservesPalette()
     QWidgetTextControl *control = ed->findChild<QWidgetTextControl *>();
     QVERIFY(control);
 
-    QPalette defaultPal = ed->palette();
     QPalette whitePal = ed->palette();
     whitePal.setColor(QPalette::Active, QPalette::Text, Qt::white);
 
@@ -2538,7 +2539,7 @@ void tst_QTextEdit::inputMethodEvent()
 
     // test that input method gets chance to commit preedit when removing focus
     ed->setText("");
-    QApplication::setActiveWindow(ed);
+    QApplicationPrivate::setActiveWindow(ed);
     QTRY_VERIFY(QApplication::focusWindow());
     QCOMPARE(qApp->focusObject(), ed);
 

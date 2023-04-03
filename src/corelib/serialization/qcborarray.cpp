@@ -849,7 +849,7 @@ void QCborArray::detach(qsizetype reserved)
 /*!
     \fn QCborArray::Iterator &QCborArray::Iterator::operator++()
 
-    The prefix ++ operator, \c{++it}, advances the iterator to the next item in
+    The prefix \c{++} operator, \c{++it}, advances the iterator to the next item in
     the array and returns this iterator.
 
     Calling this function on QCborArray::end() leads to undefined results.
@@ -861,14 +861,14 @@ void QCborArray::detach(qsizetype reserved)
     \fn QCborArray::Iterator QCborArray::Iterator::operator++(int)
     \overload
 
-    The postfix ++ operator, \c{it++}, advances the iterator to the next item
+    The postfix \c{++} operator, \c{it++}, advances the iterator to the next item
     in the array and returns an iterator to the previously current item.
 */
 
 /*!
     \fn QCborArray::Iterator &QCborArray::Iterator::operator--()
 
-    The prefix -- operator, \c{--it}, makes the preceding item current and
+    The prefix \c{--} operator, \c{--it}, makes the preceding item current and
     returns this iterator.
 
     Calling this function on QCborArray::begin() leads to undefined results.
@@ -880,7 +880,7 @@ void QCborArray::detach(qsizetype reserved)
     \fn QCborArray::Iterator QCborArray::Iterator::operator--(int)
     \overload
 
-    The postfix -- operator, \c{it--}, makes the preceding item current and
+    The postfix \c{--} operator, \c{it--}, makes the preceding item current and
     returns an iterator to the previously current item.
 */
 
@@ -1089,7 +1089,7 @@ void QCborArray::detach(qsizetype reserved)
 /*!
     \fn QCborArray::ConstIterator &QCborArray::ConstIterator::operator++()
 
-    The prefix ++ operator, \c{++it}, advances the iterator to the next item in
+    The prefix \c{++} operator, \c{++it}, advances the iterator to the next item in
     the array and returns this iterator.
 
     Calling this function on QCborArray::end() leads to undefined results.
@@ -1101,14 +1101,14 @@ void QCborArray::detach(qsizetype reserved)
     \fn QCborArray::ConstIterator QCborArray::ConstIterator::operator++(int)
     \overload
 
-    The postfix ++ operator, \c{it++}, advances the iterator to the next item
+    The postfix \c{++} operator, \c{it++}, advances the iterator to the next item
     in the array and returns an iterator to the previously current item.
 */
 
 /*!
     \fn QCborArray::ConstIterator &QCborArray::ConstIterator::operator--()
 
-    The prefix -- operator, \c{--it}, makes the preceding item current and
+    The prefix \c{--} operator, \c{--it}, makes the preceding item current and
     returns this iterator.
 
     Calling this function on QCborArray::begin() leads to undefined results.
@@ -1120,7 +1120,7 @@ void QCborArray::detach(qsizetype reserved)
     \fn QCborArray::ConstIterator QCborArray::ConstIterator::operator--(int)
     \overload
 
-    The postfix -- operator, \c{it--}, makes the preceding item current and
+    The postfix \c{--} operator, \c{it--}, makes the preceding item current and
     returns an iterator to the previously current item.
 */
 

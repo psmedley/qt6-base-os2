@@ -1,4 +1,5 @@
-# Generated from devicediscovery.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## DeviceDiscoverySupportPrivate Module:
@@ -15,10 +16,6 @@ qt_internal_add_module(DeviceDiscoverySupportPrivate
     PUBLIC_LIBRARIES
         Qt::CorePrivate
 )
-
-#### Keys ignored in scope 1:.:.:devicediscovery.pro:<TRUE>:
-# MODULE = "devicediscovery_support"
-# QT_FOR_CONFIG = "gui-private"
 
 ## Scopes:
 #####################################################################

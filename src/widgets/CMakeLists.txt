@@ -1,4 +1,5 @@
-# Generated from widgets.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## Widgets Module:
@@ -66,6 +67,11 @@ qt_internal_add_module(Widgets
         "kernel/qt_widgets_pch.h"
     GENERATE_CPP_EXPORTS
 )
+
+if(APPLE)
+    set_source_files_properties(kernel/qapplication.cpp
+                                PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+endif()
 
 # Resources:
 set(qstyle_resource_files
@@ -297,10 +303,6 @@ if(QT_FEATURE_reduce_relocations AND UNIX AND GCC)
     target_link_options(Widgets PRIVATE
                         "LINKER:--dynamic-list=${CMAKE_CURRENT_LIST_DIR}/QtWidgets.dynlist")
 endif()
-
-#### Keys ignored in scope 1:.:.:widgets.pro:<TRUE>:
-# MODULE_CONFIG = "uic"
-# QMAKE_LIBS = "$$QMAKE_LIBS_GUI"
 
 ## Scopes:
 #####################################################################
@@ -682,15 +684,25 @@ qt_internal_extend_target(Widgets CONDITION QT_FEATURE_progressdialog
         dialogs/qprogressdialog.cpp dialogs/qprogressdialog.h
 )
 
-qt_internal_extend_target(Widgets CONDITION QT_FEATURE_wizard
-    SOURCES
-        dialogs/qwizard.cpp dialogs/qwizard.h
-)
+if(QT_FEATURE_wizard)
+    qt_internal_extend_target(Widgets CONDITION
+        SOURCES
+            dialogs/qwizard.cpp dialogs/qwizard.h
+    )
 
-qt_internal_extend_target(Widgets CONDITION QT_FEATURE_wizard AND WIN32
-    SOURCES
-        dialogs/qwizard_win.cpp dialogs/qwizard_win_p.h
-)
+    if(APPLE)
+        set_source_files_properties(dialogs/qwizard.cpp
+            PROPERTIES
+                COMPILE_FLAGS "-x objective-c++"
+                SKIP_PRECOMPILE_HEADERS ON
+        )
+    endif()
+
+    qt_internal_extend_target(Widgets CONDITION WIN32
+        SOURCES
+            dialogs/qwizard_win.cpp dialogs/qwizard_win_p.h
+    )
+endif()
 
 qt_internal_extend_target(Widgets CONDITION QT_FEATURE_accessibility
     SOURCES
@@ -830,7 +842,11 @@ qt_internal_extend_target(Widgets CONDITION NOT QT_FEATURE_xcb
 )
 
 
-qt_internal_create_tracepoints(Widgets qtwidgets.tracepoints)
+qt_internal_generate_tracepoints(Widgets widgets
+    SOURCES
+        kernel/qapplication.cpp
+)
+
 qt_internal_add_docs(Widgets
     doc/qtwidgets.qdocconf
 )

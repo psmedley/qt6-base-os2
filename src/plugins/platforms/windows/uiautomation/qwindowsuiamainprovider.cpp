@@ -38,13 +38,10 @@ QT_BEGIN_NAMESPACE
 
 using namespace QWindowsUiAutomation;
 
-QMutex QWindowsUiaMainProvider::m_mutex;
 
 // Returns a cached instance of the provider for a specific accessible interface.
 QWindowsUiaMainProvider *QWindowsUiaMainProvider::providerForAccessible(QAccessibleInterface *accessible)
 {
-    QMutexLocker locker(&m_mutex);
-
     if (!accessible)
         return nullptr;
 
@@ -243,8 +240,6 @@ ULONG QWindowsUiaMainProvider::AddRef()
 
 ULONG STDMETHODCALLTYPE QWindowsUiaMainProvider::Release()
 {
-    QMutexLocker locker(&m_mutex);
-
     if (!--m_ref) {
         delete this;
         return 0;

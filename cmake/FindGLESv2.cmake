@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 include(CheckCXXSourceCompiles)
 
 # No library linkage is necessary to use GLESv2 with Emscripten. The headers are also

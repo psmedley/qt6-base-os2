@@ -217,11 +217,12 @@ static void calculateCoarseTimerTimeout(QTimerInfo *t, timespec currentTime)
     // The objective is to make most timers wake up at the same time, thereby reducing CPU wakeups.
 
     uint interval = uint(t->interval);
-    uint msec = uint(t->timeout.tv_nsec) / 1000 / 1000;
     Q_ASSERT(interval >= 20);
-
     // Calculate how much we can round and still keep within 5% error
     uint absMaxRounding = interval / 20;
+
+    using namespace std::chrono;
+    uint msec = duration_cast<milliseconds>(nanoseconds{t->timeout.tv_nsec}).count();
 
     if (interval < 100 && interval != 25 && interval != 50 && interval != 75) {
         // special mode for timers of less than 100 ms
@@ -301,7 +302,7 @@ recalculate:
         ++t->timeout.tv_sec;
         t->timeout.tv_nsec = 0;
     } else {
-        t->timeout.tv_nsec = msec * 1000 * 1000;
+        t->timeout.tv_nsec = nanoseconds{milliseconds{msec}}.count();
     }
 
     if (t->timeout < currentTime)
@@ -384,23 +385,24 @@ bool QTimerInfoList::timerWait(timespec &tm)
 }
 
 /*
-  Returns the timer's remaining time in milliseconds with the given timerId, or
-  null if there is nothing left. If the timer id is not found in the list, the
-  returned value will be -1. If the timer is overdue, the returned value will be 0.
+  Returns the timer's remaining time in milliseconds with the given timerId.
+  If the timer id is not found in the list, the returned value will be -1.
+  If the timer is overdue, the returned value will be 0.
 */
-int QTimerInfoList::timerRemainingTime(int timerId)
+qint64 QTimerInfoList::timerRemainingTime(int timerId)
 {
     timespec currentTime = updateCurrentTime();
     repairTimersIfNeeded();
     timespec tm = {0, 0};
 
-    for (int i = 0; i < size(); ++i) {
-        QTimerInfo *t = at(i);
+    for (const auto *t : std::as_const(*this)) {
         if (t->id == timerId) {
             if (currentTime < t->timeout) {
                 // time to wait
                 tm = roundToMillisecond(t->timeout - currentTime);
-                return tm.tv_sec*1000 + tm.tv_nsec/1000/1000;
+                using namespace std::chrono;
+                const auto dur = duration_cast<milliseconds>(seconds{tm.tv_sec} + nanoseconds{tm.tv_nsec});
+                return dur.count();
             } else {
                 return 0;
             }
@@ -460,7 +462,8 @@ void QTimerInfoList::registerTimer(int timerId, qint64 interval, Qt::TimerType t
         t->timeout.tv_nsec = 0;
 
         // if we're past the half-second mark, increase the timeout again
-        if (currentTime.tv_nsec > 500*1000*1000)
+        using namespace std::chrono;
+        if (currentTime.tv_nsec > nanoseconds{500ms}.count())
             ++t->timeout.tv_sec;
     }
 

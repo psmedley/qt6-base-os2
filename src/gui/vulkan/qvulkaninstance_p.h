@@ -6,7 +6,7 @@
 
 #include <QtGui/private/qtguiglobal_p.h>
 
-#if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
+#if QT_CONFIG(vulkan) || defined(Q_QDOC)
 
 #include "qvulkaninstance.h"
 #include <private/qvulkanfunctions_p.h>
@@ -49,7 +49,8 @@ public:
     VkResult errorCode;
     QScopedPointer<QVulkanFunctions> funcs;
     QHash<VkDevice, QVulkanDeviceFunctions *> deviceFuncs;
-    QList<QVulkanInstance::DebugFilter> debugFilters;
+    QList<QVulkanInstance::DebugFilter> debugFilters; // legacy filters based on VK_EXT_debug_report
+    QList<QVulkanInstance::DebugUtilsFilter> debugUtilsFilters; // the modern version based on VK_EXT_debug_utils
 };
 
 QT_END_NAMESPACE

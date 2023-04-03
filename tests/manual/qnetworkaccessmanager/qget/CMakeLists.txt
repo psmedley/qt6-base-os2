@@ -1,4 +1,5 @@
-# Generated from qget.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qget Binary:
@@ -9,9 +10,6 @@ qt_internal_add_manual_test(qget
         downloadmanager.cpp
         qget.cpp qget.h
         transferitem.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Network
 )
-
-#### Keys ignored in scope 1:.:.:qget.pro:<TRUE>:
-# TEMPLATE = "app"

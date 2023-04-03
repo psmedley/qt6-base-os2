@@ -4,6 +4,7 @@ macro(qt_internal_get_add_library_option_args option_args)
         STATIC
         MODULE
         INTERFACE
+        NO_UNITY_BUILD
         )
 endmacro()
 
@@ -14,12 +15,12 @@ endmacro()
 # Everything else is just prepation for option validating.
 function(qt_internal_add_common_qt_library_helper target)
     qt_internal_get_add_library_option_args(option_args)
-    qt_parse_all_arguments(arg "qt_internal_add_common_qt_library_helper"
+    cmake_parse_arguments(PARSE_ARGV 1 arg
         "${option_args}"
         ""
         ""
-        ${ARGN}
     )
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     if(arg_SHARED)
         set(arg_SHARED SHARED)
@@ -49,7 +50,18 @@ function(qt_internal_add_common_qt_library_helper target)
         set(arg_MODULE STATIC)
     endif()
 
+    if(arg_NO_UNITY_BUILD)
+        set(arg_NO_UNITY_BUILD NO_UNITY_BUILD)
+    else()
+        set(arg_NO_UNITY_BUILD "")
+    endif()
+
     _qt_internal_add_library(${target} ${arg_STATIC} ${arg_SHARED} ${arg_MODULE} ${arg_INTERFACE})
+
+    if(arg_NO_UNITY_BUILD)
+        set_property(TARGET "${target}" PROPERTY UNITY_BUILD OFF)
+    endif()
+
     qt_internal_mark_as_internal_library(${target})
 endfunction()
 
@@ -67,12 +79,12 @@ function(qt_internal_add_cmake_library target)
         ${__default_public_args}
     )
 
-    qt_parse_all_arguments(arg "qt_add_cmake_library"
+    cmake_parse_arguments(PARSE_ARGV 1 arg
         "${option_args}"
         "${single_args}"
         "${multi_args}"
-        ${ARGN}
     )
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     qt_remove_args(library_helper_args
         ARGS_TO_REMOVE
@@ -98,10 +110,18 @@ function(qt_internal_add_cmake_library target)
         )
     endif()
 
+    if(arg_NO_UNITY_BUILD)
+        set(arg_NO_UNITY_BUILD NO_UNITY_BUILD)
+    else()
+        set(arg_NO_UNITY_BUILD "")
+    endif()
+
     qt_internal_extend_target("${target}"
         SOURCES ${arg_SOURCES}
         INCLUDE_DIRECTORIES
             ${arg_INCLUDE_DIRECTORIES}
+        SYSTEM_INCLUDE_DIRECTORIES
+            ${arg_SYSTEM_INCLUDE_DIRECTORIES}
         PUBLIC_INCLUDE_DIRECTORIES
             ${arg_PUBLIC_INCLUDE_DIRECTORIES}
         PUBLIC_DEFINES
@@ -117,6 +137,8 @@ function(qt_internal_add_cmake_library target)
         MOC_OPTIONS ${arg_MOC_OPTIONS}
         ENABLE_AUTOGEN_TOOLS ${arg_ENABLE_AUTOGEN_TOOLS}
         DISABLE_AUTOGEN_TOOLS ${arg_DISABLE_AUTOGEN_TOOLS}
+        NO_UNITY_BUILD_SOURCES ${arg_NO_UNITY_BUILD_SOURCES}
+        ${arg_NO_UNITY_BUILD}
     )
 endfunction()
 
@@ -139,12 +161,12 @@ function(qt_internal_add_3rdparty_library target)
         ${__default_public_args}
     )
 
-    qt_parse_all_arguments(arg "qt_internal_add_3rdparty_library"
+    cmake_parse_arguments(PARSE_ARGV 1 arg
         "${library_option_args};${option_args}"
         "${single_args}"
         "${multi_args}"
-        ${ARGN}
     )
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     qt_remove_args(library_helper_args
         ARGS_TO_REMOVE
@@ -238,6 +260,7 @@ function(qt_internal_add_3rdparty_library target)
         MOC_OPTIONS ${arg_MOC_OPTIONS}
         ENABLE_AUTOGEN_TOOLS ${arg_ENABLE_AUTOGEN_TOOLS}
         DISABLE_AUTOGEN_TOOLS ${arg_DISABLE_AUTOGEN_TOOLS}
+        NO_UNITY_BUILD
     )
 
     if(NOT BUILD_SHARED_LIBS OR arg_INSTALL)
@@ -308,6 +331,12 @@ function(qt_internal_add_3rdparty_library target)
         qt_enable_separate_debug_info(${target} "${debug_install_dir}")
         qt_internal_install_pdb_files(${target} "${INSTALL_LIBDIR}")
     endif()
+
+    if(BUILD_SHARED_LIBS AND MSVC)
+        set_target_properties(${target} PROPERTIES
+            INTERPROCEDURAL_OPTIMIZATION OFF
+        )
+    endif()
 endfunction()
 
 function(qt_install_3rdparty_library_wrap_config_extra_file target)
@@ -341,12 +370,13 @@ function(qt_internal_add_3rdparty_header_module target)
     set(multi_args
         EXTERNAL_HEADERS
     )
-    qt_parse_all_arguments(arg "qt_internal_add_header_module"
+    cmake_parse_arguments(PARSE_ARGV 1 arg
         "${option_args}"
         "${single_args}"
         "${multi_args}"
-        ${ARGN}
     )
+    _qt_internal_validate_all_args_are_parsed(arg)
+
     qt_internal_add_module(${target}
         INTERNAL_MODULE
         HEADER_MODULE

@@ -1,4 +1,5 @@
-# Generated from qfuture.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qfuture Test:
@@ -7,7 +8,7 @@
 qt_internal_add_test(tst_qfuture
     SOURCES
         tst_qfuture.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
 )
 

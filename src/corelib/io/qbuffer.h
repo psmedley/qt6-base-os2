@@ -33,7 +33,10 @@ public:
     void setBuffer(QByteArray *a);
 
     void setData(const QByteArray &data);
-    inline void setData(const char *data, int len);
+#if QT_CORE_REMOVED_SINCE(6, 5) && QT_POINTER_SIZE != 4
+    void setData(const char *data, int len) { setData(data, qsizetype(len)); }
+#endif
+    void setData(const char *data, qsizetype len);
     const QByteArray &data() const;
 
     bool open(OpenMode openMode) override;
@@ -59,9 +62,6 @@ private:
 
     Q_PRIVATE_SLOT(d_func(), void _q_emitSignals())
 };
-
-inline void QBuffer::setData(const char *adata, int alen)
-{ setData(QByteArray(adata, alen)); }
 
 QT_END_NAMESPACE
 

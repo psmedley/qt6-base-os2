@@ -1,8 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(books LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -11,6 +11,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/sql/books")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Sql Widgets)
+
+qt_standard_project_setup()
 
 qt_add_executable(books
     bookdelegate.cpp bookdelegate.h
@@ -24,11 +26,11 @@ set_target_properties(books PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-target_link_libraries(books PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Sql
-    Qt::Widgets
+target_link_libraries(books PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Sql
+    Qt6::Widgets
 )
 
 # Resources:

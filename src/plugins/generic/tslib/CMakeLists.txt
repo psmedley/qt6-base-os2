@@ -1,6 +1,7 @@
-# Generated from tslib.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
-qt_find_package(Tslib) # special case
+qt_find_package(Tslib)
 
 #####################################################################
 ## QTsLibPlugin Plugin:
@@ -20,7 +21,3 @@ qt_internal_add_plugin(QTsLibPlugin
         Qt::GuiPrivate
         Qt::InputSupportPrivate
 )
-
-#### Keys ignored in scope 1:.:.:tslib.pro:<TRUE>:
-# OTHER_FILES = "tslib.json"
-# PLUGIN_EXTENDS = "-"

@@ -39,7 +39,7 @@ typedef void * QVkAllocator;
 
 struct QVkBuffer : public QRhiBuffer
 {
-    QVkBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
+    QVkBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, quint32 size);
     ~QVkBuffer();
     void destroy() override;
     bool create() override;
@@ -50,7 +50,7 @@ struct QVkBuffer : public QRhiBuffer
     VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
     QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
     struct DynamicUpdate {
-        int offset;
+        quint32 offset;
         QRhiBufferData data;
     };
     QVarLengthArray<DynamicUpdate, 16> pendingDynamicUpdates[QVK_FRAMES_IN_FLIGHT];
@@ -499,14 +499,18 @@ struct QVkCommandBuffer : public QRhiCommandBuffer
                 uint32_t firstInstance;
             } drawIndexed;
             struct {
-                VkDebugMarkerMarkerInfoEXT marker;
-                int markerNameIndex;
+#ifdef VK_EXT_debug_utils
+                VkDebugUtilsLabelEXT label;
+                int labelNameIndex;
+#endif
             } debugMarkerBegin;
             struct {
             } debugMarkerEnd;
             struct {
-                VkDebugMarkerMarkerInfoEXT marker;
-                int markerNameIndex;
+#ifdef VK_EXT_debug_utils
+                VkDebugUtilsLabelEXT label;
+                int labelNameIndex;
+#endif
             } debugMarkerInsert;
             struct {
                 int trackerIndex;
@@ -640,7 +644,7 @@ public:
     QRhiShaderResourceBindings *createShaderResourceBindings() override;
     QRhiBuffer *createBuffer(QRhiBuffer::Type type,
                              QRhiBuffer::UsageFlags usage,
-                             int size) override;
+                             quint32 size) override;
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
                                          int sampleCount,
@@ -730,7 +734,7 @@ public:
     int resourceLimit(QRhi::ResourceLimit limit) const override;
     const QRhiNativeHandles *nativeHandles() override;
     QRhiDriverInfo driverInfo() const override;
-    QRhiMemAllocStats graphicsMemoryAllocationStatistics() override;
+    QRhiStats statistics() override;
     bool makeThreadLocalNativeContextCurrent() override;
     void releaseCachedResources() override;
     bool isDeviceLost() const override;
@@ -795,7 +799,7 @@ public:
     void executeDeferredReleases(bool forced = false);
     void finishActiveReadbacks(bool forced = false);
 
-    void setObjectName(uint64_t object, VkDebugReportObjectTypeEXT type, const QByteArray &name, int slot = -1);
+    void setObjectName(uint64_t object, VkObjectType type, const QByteArray &name, int slot = -1);
     void trackedBufferBarrier(QVkCommandBuffer *cbD, QVkBuffer *bufD, int slot,
                               VkAccessFlags access, VkPipelineStageFlags stage);
     void trackedImageBarrier(QVkCommandBuffer *cbD, QVkTexture *texD,
@@ -817,8 +821,8 @@ public:
     VkPhysicalDevice physDev = VK_NULL_HANDLE;
     VkDevice dev = VK_NULL_HANDLE;
     VkCommandPool cmdPool[QVK_FRAMES_IN_FLIGHT] = {};
-    int gfxQueueFamilyIdx = -1;
-    int gfxQueueIdx = 0;
+    quint32 gfxQueueFamilyIdx = 0;
+    quint32 gfxQueueIdx = 0;
     VkQueue gfxQueue = VK_NULL_HANDLE;
     quint32 timestampValidBits = 0;
     bool importedAllocator = false;
@@ -833,10 +837,12 @@ public:
     bool deviceLost = false;
     bool releaseCachedResourcesCalledBeforeFrameStart = false;
 
-    PFN_vkCmdDebugMarkerBeginEXT vkCmdDebugMarkerBegin = nullptr;
-    PFN_vkCmdDebugMarkerEndEXT vkCmdDebugMarkerEnd = nullptr;
-    PFN_vkCmdDebugMarkerInsertEXT vkCmdDebugMarkerInsert = nullptr;
-    PFN_vkDebugMarkerSetObjectNameEXT vkDebugMarkerSetObjectName = nullptr;
+#ifdef VK_EXT_debug_utils
+    PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT = nullptr;
+    PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT = nullptr;
+    PFN_vkCmdEndDebugUtilsLabelEXT vkCmdEndDebugUtilsLabelEXT = nullptr;
+    PFN_vkCmdInsertDebugUtilsLabelEXT vkCmdInsertDebugUtilsLabelEXT = nullptr;
+#endif
 
     PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = nullptr;
     PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
@@ -850,13 +856,13 @@ public:
     struct {
         bool compute = false;
         bool wideLines = false;
-        bool debugMarkers = false;
+        bool debugUtils = false;
         bool vertexAttribDivisor = false;
         bool texture3DSliceAs2D = false;
         bool tessellation = false;
-        bool vulkan11OrHigher = false;
         bool geometryShader = false;
         bool nonFillPolygonMode = false;
+        QVersionNumber apiVersion;
     } caps;
 
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
@@ -913,7 +919,7 @@ public:
     struct BufferReadback {
         int activeFrameSlot = -1;
         QRhiBufferReadbackResult *result;
-        int byteSize;
+        quint32 byteSize;
         VkBuffer stagingBuf;
         QVkAlloc stagingAlloc;
     };

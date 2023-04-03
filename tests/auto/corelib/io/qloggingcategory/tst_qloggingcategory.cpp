@@ -181,7 +181,7 @@ private slots:
     void initTestCase()
     {
         qputenv("XDG_CONFIG_DIRS", "/does/not/exist");
-        qputenv("QT_MESSAGE_PATTERN", QByteArray("%{category}: %{type},%{message}"));
+        qputenv("QT_MESSAGE_PATTERN", "%{category}: %{type},%{message}");
         oldMessageHandler = qInstallMessageHandler(myCustomMessageHandler);
         // Create configuration
         _config = new Configuration();
@@ -915,6 +915,23 @@ private slots:
     {
         delete _config;
         qInstallMessageHandler(oldMessageHandler);
+    }
+
+    void qFatalMacros()
+    {
+        QLoggingCategory customCategory("custom");
+
+        // compile-only test for fatal macros
+        return;
+
+        qFatal("Message");
+        qFatal("Message %d", 42);
+        qFatal(customCategory, "Message %d", 42);
+        qFatal(TST_LOG, "Message %d", 42);
+
+        qFatal() << "Message" << 42;
+        qCFatal(customCategory) << "Message" << 42;
+        qCFatal(TST_LOG) << "Message" << 42;
     }
 };
 

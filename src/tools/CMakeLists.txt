@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # The configure.cmake here does not get picked up automatically.
 # Manually evaluate tool-related features.
 include("${CMAKE_CURRENT_SOURCE_DIR}/configure.cmake")

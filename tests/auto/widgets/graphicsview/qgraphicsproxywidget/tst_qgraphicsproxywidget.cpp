@@ -9,6 +9,8 @@
 #include <private/qgraphicsproxywidget_p.h>
 #include <private/qlayoutengine_p.h>    // qSmartMin functions...
 
+#include <QtWidgets/private/qapplication_p.h>
+
 Q_LOGGING_CATEGORY(lcTests, "qt.widgets.tests")
 
 /*
@@ -333,7 +335,7 @@ void tst_QGraphicsProxyWidget::setWidget()
     widget->setStyle(style.data());
     widget->setFont(QFont("Times"));
     widget->setVisible(true);
-    QApplication::setActiveWindow(widget);
+    QApplicationPrivate::setActiveWindow(widget);
     widget->activateWindow();
     widget->setEnabled(true);
     widget->resize(325, 241);
@@ -707,7 +709,7 @@ void tst_QGraphicsProxyWidget::focusNextPrevChild()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     if (hasScene) {
         scene.addItem(proxyGuard.release());
@@ -749,7 +751,7 @@ void tst_QGraphicsProxyWidget::focusOutEvent()
     SubQGraphicsProxyWidget *proxy = new SubQGraphicsProxyWidget;
     scene.addItem(proxy);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     view.activateWindow();
     view.setFocus();
     QVERIFY(QTest::qWaitForWindowActive(&view));
@@ -928,7 +930,7 @@ void tst_QGraphicsProxyWidget::hoverEnterLeaveEvent()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     SubQGraphicsProxyWidget *proxy = new SubQGraphicsProxyWidget;
@@ -982,7 +984,7 @@ void tst_QGraphicsProxyWidget::keyPressEvent()
     QGraphicsView view(&scene);
     view.show();
     view.viewport()->setFocus();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), (QWidget*)&view);
 
@@ -1021,7 +1023,7 @@ void tst_QGraphicsProxyWidget::keyReleaseEvent()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), (QWidget*)&view);
 
@@ -1067,7 +1069,7 @@ void tst_QGraphicsProxyWidget::mouseDoubleClickEvent()
     view.resize(100, 100);
     view.show();
 
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), (QWidget*)&view);
     // wait for scene to be updated before doing any coordinate mappings on it
@@ -1153,7 +1155,7 @@ void tst_QGraphicsProxyWidget::paintEvent()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QVERIFY(view.isActiveWindow());
 
@@ -1540,7 +1542,7 @@ void tst_QGraphicsProxyWidget::tabFocus_simpleWidget()
     window.setLayout(layout);
 
     window.show();
-    QApplication::setActiveWindow(&window);
+    QApplicationPrivate::setActiveWindow(&window);
     window.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&window));
 
@@ -1624,7 +1626,7 @@ void tst_QGraphicsProxyWidget::tabFocus_simpleTwoWidgets()
     window.setLayout(layout);
 
     window.show();
-    QApplication::setActiveWindow(&window);
+    QApplicationPrivate::setActiveWindow(&window);
     window.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&window));
 
@@ -1757,7 +1759,7 @@ void tst_QGraphicsProxyWidget::tabFocus_complexWidget()
     window.setLayout(layout);
 
     window.show();
-    QApplication::setActiveWindow(&window);
+    QApplicationPrivate::setActiveWindow(&window);
     window.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&window));
 
@@ -1894,7 +1896,7 @@ void tst_QGraphicsProxyWidget::tabFocus_complexTwoWidgets()
     window.setLayout(layout);
 
     window.show();
-    QApplication::setActiveWindow(&window);
+    QApplicationPrivate::setActiveWindow(&window);
     window.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&window));
 
@@ -2068,7 +2070,7 @@ void tst_QGraphicsProxyWidget::setFocus_simpleWidget()
     window.setLayout(layout);
 
     window.show();
-    QApplication::setActiveWindow(&window);
+    QApplicationPrivate::setActiveWindow(&window);
     window.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&window));
     QCOMPARE(QApplication::activeWindow(), &window);
@@ -2140,7 +2142,7 @@ void tst_QGraphicsProxyWidget::setFocus_simpleTwoWidgets()
     window.setLayout(layout);
 
     window.show();
-    QApplication::setActiveWindow(&window);
+    QApplicationPrivate::setActiveWindow(&window);
     window.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&window));
     QCOMPARE(QApplication::activeWindow(), &window);
@@ -2219,7 +2221,7 @@ void tst_QGraphicsProxyWidget::setFocus_complexTwoWidgets()
     window.setLayout(layout);
 
     window.show();
-    QApplication::setActiveWindow(&window);
+    QApplicationPrivate::setActiveWindow(&window);
     window.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&window));
     QCOMPARE(QApplication::activeWindow(), &window);
@@ -2464,7 +2466,7 @@ void tst_QGraphicsProxyWidget::tooltip_basic()
     QGraphicsView view(&scene);
     view.setFixedSize(200, 200);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     {
         QHelpEvent helpEvent(QEvent::ToolTip, view.viewport()->rect().topLeft(),
@@ -2601,7 +2603,7 @@ void tst_QGraphicsProxyWidget::windowOpacity()
     QGraphicsProxyWidget *proxy = scene.addWidget(widget);
     proxy->setCacheMode(QGraphicsItem::ItemCoordinateCache);
 
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     view.show();
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QVERIFY(view.isActiveWindow());
@@ -2999,7 +3001,7 @@ void tst_QGraphicsProxyWidget::actionsContextMenu()
     view.resize(200, 200);
     view.move(QGuiApplication::primaryScreen()->geometry().center() - QPoint(100, 100));
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     view.setFocus();
     QTRY_VERIFY(view.hasFocus());
@@ -3081,7 +3083,7 @@ void tst_QGraphicsProxyWidget::bypassGraphicsProxyWidget()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     QGraphicsProxyWidget *proxy = scene.addWidget(widgetGuard.release());
@@ -3347,7 +3349,7 @@ void tst_QGraphicsProxyWidget::clickFocus()
         view.setFrameStyle(0);
         view.resize(300, 300);
         view.show();
-        QApplication::setActiveWindow(&view);
+        QApplicationPrivate::setActiveWindow(&view);
         QVERIFY(QTest::qWaitForWindowActive(&view));
 
         QVERIFY(!proxy->hasFocus());
@@ -3491,7 +3493,7 @@ void tst_QGraphicsProxyWidget::QTBUG_6986_sendMouseEventToAlienWidget()
 
     QGraphicsView view(&scene);
     view.resize(600, 600);
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     view.show();
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
@@ -3535,7 +3537,7 @@ void tst_QGraphicsProxyWidget::mapToGlobal() // QTBUG-41135
     childWidget->resize(embeddedWidget->size() / 2);
     childWidget->move(embeddedWidget->width() / 4, embeddedWidget->height() / 4); // center in embeddedWidget
     scene.addWidget(embeddedWidget);
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     const QPoint embeddedCenter = embeddedWidget->rect().center();

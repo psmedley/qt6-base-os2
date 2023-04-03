@@ -364,6 +364,16 @@ QUrlQuery::QUrlQuery(const QUrlQuery &other)
 }
 
 /*!
+    \since 6.5
+    Moves the contents of the \a other QUrlQuery object, including the query
+    delimiters.
+*/
+QUrlQuery::QUrlQuery(QUrlQuery &&other) noexcept
+    : d(std::move(other.d))
+{
+}
+
+/*!
     Copies the contents of the \a other QUrlQuery object, including the query
     delimiters.
 */
@@ -807,3 +817,7 @@ void QUrlQuery::removeAllQueryItems(const QString &key)
     \sa operator==()
 */
 QT_END_NAMESPACE
+
+#undef decode
+#undef leave
+#undef encode

@@ -174,7 +174,7 @@ struct Q_GUI_EXPORT QtFontFamily
     bool matchesFamilyName(const QString &familyName) const;
     QtFontFoundry *foundry(const QString &f, bool = false);
 
-    void ensurePopulated();
+    bool ensurePopulated();
 };
 
 class Q_GUI_EXPORT QFontDatabasePrivate
@@ -207,6 +207,10 @@ public:
     QCache<QtFontFallbacksCacheKey, QStringList> fallbacksCache;
     struct ApplicationFont {
         QString fileName;
+
+        // Note: The data may be implicitly shared throughout the
+        // font database and platform font database, so be careful
+        // to never detach when accessing this member!
         QByteArray data;
 
         bool isNull() const { return fileName.isEmpty(); }

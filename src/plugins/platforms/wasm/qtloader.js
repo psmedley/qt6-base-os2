@@ -18,10 +18,10 @@
 //     var config = {
 //         containerElements : [$("container-id")];
 //     }
-//     var qtLoader = QtLoader(config);
+//     var qtLoader = new QtLoader(config);
 //     qtLoader.loadEmscriptenModule("applicationName");
 //
-// External mode.usage:
+// External mode usage:
 //
 //    var config = {
 //        canvasElements : [$("canvas-id")],
@@ -35,11 +35,13 @@
 //            return canvas;
 //        }
 //     }
-//     var qtLoader = QtLoader(config);
+//     var qtLoader = new QtLoader(config);
 //     qtLoader.loadEmscriptenModule("applicationName");
 //
 // Config keys
 //
+//  moduleConfig : {}
+//      Emscripten module configuration
 //  containerElements : [container-element, ...]
 //      One or more HTML elements. QtLoader will display loader elements
 //      on these while loading the application, and replace the loader with a
@@ -109,12 +111,29 @@
 //      Loading to Running occurs.
 
 
+// Forces the use of constructor on QtLoader instance.
+// This passthrough makes both the old-style:
+//
+//   const loader = QtLoader(config);
+//
+// and the new-style:
+//
+//   const loader = new QtLoader(config);
+//
+// instantiation types work.
 function QtLoader(config)
 {
+    return new _QtLoader(config);
+}
+
+function _QtLoader(config)
+{
+    const self = this;
+
     // The Emscripten module and module configuration object. The module
     // object is created in completeLoadEmscriptenModule().
     self.module = undefined;
-    self.moduleConfig = {};
+    self.moduleConfig = config.moduleConfig || {};
 
     // Qt properties. These are propagated to the Emscripten module after
     // it has been created.
@@ -564,7 +583,7 @@ function QtLoader(config)
     function setFontDpi(dpi) {
         self.qtFontDpi = dpi;
         if (publicAPI.status == "Running")
-            self.qtUpdateDpi();
+            self.module.qtUpdateDpi();
     }
 
     function fontDpi() {

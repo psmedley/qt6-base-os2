@@ -9,6 +9,7 @@
 #include <qtextstream.h>
 #include <qregularexpression.h>
 #include <qstring.h>
+#include <qtpreprocessorsupport.h>
 
 using namespace Qt::StringLiterals;
 
@@ -95,46 +96,53 @@ static QString removeBraces(QString type)
     return type.remove(rx);
 }
 
-static Tracepoint::Field::BackendType backendType(QString rawType)
+#define TYPEDATA_ENTRY(type, backendType) \
+{ QT_STRINGIFY(type), backendType }
+
+static Tracepoint::Field::Type backendType(QString rawType)
 {
-    static const struct {
+    static const struct TypeData {
         const char *type;
-        Tracepoint::Field::BackendType backendType;
+        Tracepoint::Field::Type backendType;
     } typeTable[] = {
-        { "bool",                   Tracepoint::Field::Integer },
-        { "short_int",              Tracepoint::Field::Integer },
-        { "signed_short",           Tracepoint::Field::Integer },
-        { "signed_short_int",       Tracepoint::Field::Integer },
-        { "unsigned_short",         Tracepoint::Field::Integer },
-        { "unsigned_short_int",     Tracepoint::Field::Integer },
-        { "int",                    Tracepoint::Field::Integer },
-        { "signed",                 Tracepoint::Field::Integer },
-        { "signed_int",             Tracepoint::Field::Integer },
-        { "unsigned",               Tracepoint::Field::Integer },
-        { "unsigned_int",           Tracepoint::Field::Integer },
-        { "long",                   Tracepoint::Field::Integer },
-        { "long_int",               Tracepoint::Field::Integer },
-        { "signed_long",            Tracepoint::Field::Integer },
-        { "signed_long_int",        Tracepoint::Field::Integer },
-        { "unsigned_long",          Tracepoint::Field::Integer },
-        { "unsigned_long_int",      Tracepoint::Field::Integer },
-        { "long_long",              Tracepoint::Field::Integer },
-        { "long_long_int",          Tracepoint::Field::Integer },
-        { "signed_long_long",       Tracepoint::Field::Integer },
-        { "signed_long_long_int",   Tracepoint::Field::Integer },
-        { "unsigned_long_long",     Tracepoint::Field::Integer },
-        { "char",                   Tracepoint::Field::Integer },
-        { "intptr_t",               Tracepoint::Field::IntegerHex },
-        { "uintptr_t",              Tracepoint::Field::IntegerHex },
-        { "std::intptr_t",          Tracepoint::Field::IntegerHex },
-        { "std::uintptr_t",         Tracepoint::Field::IntegerHex },
-        { "float",                  Tracepoint::Field::Float },
-        { "double",                 Tracepoint::Field::Float },
-        { "long_double",            Tracepoint::Field::Float },
-        { "QString",                Tracepoint::Field::QtString },
-        { "QByteArray",             Tracepoint::Field::QtByteArray },
-        { "QUrl",                   Tracepoint::Field::QtUrl },
-        { "QRect",                  Tracepoint::Field::QtRect }
+        TYPEDATA_ENTRY(short_int, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(signed_short, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(signed_short_int, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(unsigned_short, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(unsigned_short_int, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(unsigned_int, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(signed_int, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(long_int, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(signed_long, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(signed_long_int, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(unsigned_long, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(unsigned_long_int, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(long_long, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(long_long_int, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(signed_long_long, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(signed_long_long_int, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(unsigned_long_long, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(bool, Tracepoint::Field::Boolean),
+        TYPEDATA_ENTRY(int, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(signed, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(unsigned, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(long, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(qint64, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(char, Tracepoint::Field::Integer),
+        TYPEDATA_ENTRY(intptr_t, Tracepoint::Field::IntegerHex),
+        TYPEDATA_ENTRY(uintptr_t, Tracepoint::Field::IntegerHex),
+        TYPEDATA_ENTRY(std::intptr_t, Tracepoint::Field::IntegerHex),
+        TYPEDATA_ENTRY(std::uintptr_t, Tracepoint::Field::IntegerHex),
+        TYPEDATA_ENTRY(float, Tracepoint::Field::Float),
+        TYPEDATA_ENTRY(double, Tracepoint::Field::Float),
+        TYPEDATA_ENTRY(long double, Tracepoint::Field::Float),
+        TYPEDATA_ENTRY(QString, Tracepoint::Field::QtString),
+        TYPEDATA_ENTRY(QByteArray, Tracepoint::Field::QtByteArray),
+        TYPEDATA_ENTRY(QUrl, Tracepoint::Field::QtUrl),
+        TYPEDATA_ENTRY(QRect, Tracepoint::Field::QtRect),
+        TYPEDATA_ENTRY(QSize, Tracepoint::Field::QtSize),
+        TYPEDATA_ENTRY(QRectF, Tracepoint::Field::QtRectF),
+        TYPEDATA_ENTRY(QSizeF, Tracepoint::Field::QtSizeF)
     };
 
     auto backendType = [](const QString &rawType) {
@@ -142,14 +150,16 @@ static Tracepoint::Field::BackendType backendType(QString rawType)
 
         for (size_t i = 0; i < tableSize; ++i) {
             if (rawType == QLatin1StringView(typeTable[i].type))
-                return typeTable[i].backendType;
+                return typeTable[i];
         }
 
-        return Tracepoint::Field::Unknown;
+        TypeData unknown = { nullptr, Tracepoint::Field::Unknown };
+        return unknown;
     };
 
-    if (arrayLength(rawType) > 0)
-        return Tracepoint::Field::Array;
+    int arrayLen = arrayLength(rawType);
+    if (arrayLen > 0)
+        rawType = removeBraces(rawType);
 
     if (!sequenceLength(rawType).isNull())
         return Tracepoint::Field::Sequence;
@@ -169,14 +179,31 @@ static Tracepoint::Field::BackendType backendType(QString rawType)
     if (rawType.endsWith("_ptr"_L1))
         return Tracepoint::Field::Pointer;
 
-    return backendType(rawType);
+    TypeData d = backendType(rawType);
+    return d.backendType;
 }
 
-static Tracepoint parseTracepoint(const QString &name, const QStringList &args,
+static Tracepoint parseTracepoint(const Provider &provider, const QString &name, const QStringList &args,
         const QString &fileName, const int lineNumber)
 {
     Tracepoint t;
     t.name = name;
+
+    auto findEnumeration = [](const QList<TraceEnum> &enums, const QString &name) {
+        for (const auto &e : enums) {
+            if (e.name == name)
+                return e;
+        }
+        return TraceEnum();
+    };
+    auto findFlags = [](const QList<TraceFlags> &flags, const QString &name) {
+        for (const auto &f : flags) {
+            if (f.name == name)
+                return f;
+        }
+        return TraceFlags();
+    };
+
 
     if (args.isEmpty())
         return t;
@@ -213,19 +240,53 @@ static Tracepoint parseTracepoint(const QString &name, const QStringList &args,
 
         t.args << std::move(a);
 
-        Tracepoint::Field f;
-        f.backendType = backendType(type);
-        f.paramType = removeBraces(type);
-        f.name = name;
-        f.arrayLen = arrayLen;
-        f.seqLen = sequenceLength(type);
+        Tracepoint::Field field;
+        const TraceEnum &e = findEnumeration(provider.enumerations, type);
+        const TraceFlags &f = findFlags(provider.flags, type);
+        if (!e.name.isEmpty()) {
+            field.backendType = Tracepoint::Field::EnumeratedType;
+            field.enumValueSize = e.valueSize;
+        } else if (!f.name.isEmpty()) {
+            field.backendType = Tracepoint::Field::FlagType;
+        } else {
+            field.backendType = backendType(type);
+        }
+        field.paramType = removeBraces(type);
+        field.name = name;
+        field.arrayLen = arrayLen;
+        field.seqLen = sequenceLength(type);
 
-        t.fields << std::move(f);
+        t.fields << std::move(field);
 
         ++i;
     }
 
     return t;
+}
+
+static int minumumValueSize(int min, int max)
+{
+    if (min < 0) {
+        if (min >= std::numeric_limits<char>::min() && max <= std::numeric_limits<char>::max())
+            return 8;
+        if (min >= std::numeric_limits<short>::min() && max <= std::numeric_limits<short>::max())
+            return 16;
+        return 32;
+    }
+    if (max <= std::numeric_limits<unsigned char>::max())
+        return 8;
+    if (max <= std::numeric_limits<unsigned short>::max())
+        return 16;
+    return 32;
+}
+
+static bool isPow2OrZero(quint32 value)
+{
+    return (value & (value - 1)) == 0;
+}
+
+static quint32 pow2Log2(quint32 v) {
+    return 32 - qCountLeadingZeroBits(v);
 }
 
 Provider parseProvider(const QString &filename)
@@ -238,11 +299,21 @@ Provider parseProvider(const QString &filename)
     QTextStream s(&f);
 
     static const QRegularExpression tracedef(QStringLiteral("^([A-Za-z][A-Za-z0-9_]*)\\((.*)\\)$"));
+    static const QRegularExpression enumenddef(QStringLiteral("^} ?([A-Za-z][A-Za-z0-9_:]*);"));
+    static const QRegularExpression enumdef(QStringLiteral("^([A-Za-z][A-Za-z0-9_]*)( *= *([xabcdef0-9]*))?"));
+    static const QRegularExpression rangedef(QStringLiteral("^RANGE\\(([A-Za-z][A-Za-z0-9_]*) ?, ?([0-9]*) ?... ?([0-9]*) ?\\)"));
 
     Provider provider;
     provider.name = QFileInfo(filename).baseName();
 
     bool parsingPrefixText = false;
+    bool parsingEnum = false;
+    bool parsingFlags = false;
+    TraceEnum currentEnum;
+    TraceFlags currentFlags;
+    int currentEnumValue = 0;
+    int minEnumValue = std::numeric_limits<int>::max();
+    int maxEnumValue = std::numeric_limits<int>::min();
     for (int lineNumber = 1; !s.atEnd(); ++lineNumber) {
         QString line = s.readLine().trimmed();
 
@@ -255,10 +326,105 @@ Provider parseProvider(const QString &filename)
         } else if (parsingPrefixText) {
             provider.prefixText.append(line);
             continue;
+        } else if (line == "ENUM {"_L1) {
+            parsingEnum = true;
+            continue;
+        } else if (line == "FLAGS {"_L1) {
+            parsingFlags = true;
+            continue;
+        } else if (line.startsWith("}"_L1) && (parsingEnum || parsingFlags)) {
+            auto match = enumenddef.match(line);
+            if (match.hasMatch()) {
+                if (parsingEnum) {
+                    currentEnum.name = match.captured(1);
+                    currentEnum.valueSize = minumumValueSize(minEnumValue, maxEnumValue);
+                    provider.enumerations.push_back(currentEnum);
+                    currentEnum = TraceEnum();
+                    parsingEnum = false;
+                } else {
+                    currentFlags.name = match.captured(1);
+                    provider.flags.push_back(currentFlags);
+                    currentFlags = TraceFlags();
+                    parsingFlags = false;
+                }
+
+                minEnumValue = std::numeric_limits<int>::max();
+                maxEnumValue = std::numeric_limits<int>::min();
+            } else {
+                panic("Syntax error while processing '%s' line %d:\n"
+                      "    '%s' end of enum/flags does not match",
+                      qPrintable(filename), lineNumber,
+                      qPrintable(line));
+            }
+
+            continue;
         }
 
         if (line.isEmpty() || line.startsWith(u'#'))
             continue;
+
+        if (parsingEnum || parsingFlags) {
+            auto m = enumdef.match(line);
+            if (parsingEnum && line.startsWith(QStringLiteral("RANGE"))) {
+                auto m = rangedef.match(line);
+                if (m.hasMatch()) {
+                    TraceEnum::EnumValue value;
+                    value.name = m.captured(1);
+                    value.value = m.captured(2).toInt();
+                    value.range = m.captured(3).toInt();
+                    currentEnumValue = value.range + 1;
+                    currentEnum.values.push_back(value);
+                    maxEnumValue = qMax(maxEnumValue, value.range);
+                    minEnumValue = qMin(minEnumValue, value.value);
+                }
+            } else if (m.hasMatch()) {
+                if (m.hasCaptured(3)) {
+                    if (parsingEnum) {
+                        TraceEnum::EnumValue value;
+                        value.name = m.captured(1);
+                        value.value = m.captured(3).toInt();
+                        value.range = 0;
+                        currentEnumValue = value.value + 1;
+                        currentEnum.values.push_back(value);
+                        maxEnumValue = qMax(maxEnumValue, value.value);
+                        minEnumValue = qMin(minEnumValue, value.value);
+                    } else {
+                        TraceFlags::FlagValue value;
+                        value.name = m.captured(1);
+                        if (m.captured(3).startsWith(QStringLiteral("0x")))
+                            value.value = m.captured(3).toInt(nullptr, 16);
+                        else
+                            value.value = m.captured(3).toInt();
+                        if (!isPow2OrZero(value.value)) {
+                            printf("Warning: '%s' line %d:\n"
+                                  "    '%s' flag value is not power of two.\n",
+                                  qPrintable(filename), lineNumber,
+                                  qPrintable(line));
+                        } else {
+                            value.value = pow2Log2(value.value);
+                            currentFlags.values.push_back(value);
+                        }
+                    }
+                } else {
+                    maxEnumValue = qMax(maxEnumValue, currentEnumValue);
+                    minEnumValue = qMin(minEnumValue, currentEnumValue);
+                    if (parsingEnum) {
+                        currentEnum.values.push_back({m.captured(0), currentEnumValue++, 0});
+                    } else {
+                        panic("Syntax error while processing '%s' line %d:\n"
+                              "    '%s' flags value not set",
+                              qPrintable(filename), lineNumber,
+                              qPrintable(line));
+                    }
+                }
+            } else {
+                panic("Syntax error while processing '%s' line %d:\n"
+                      "    '%s' enum/flags does not match",
+                      qPrintable(filename), lineNumber,
+                      qPrintable(line));
+            }
+            continue;
+        }
 
         auto match = tracedef.match(line);
         if (match.hasMatch()) {
@@ -266,7 +432,7 @@ Provider parseProvider(const QString &filename)
             const QString argsString = match.captured(2);
             const QStringList args = argsString.split(u',', Qt::SkipEmptyParts);
 
-            provider.tracepoints << parseTracepoint(name, args, filename, lineNumber);
+            provider.tracepoints << parseTracepoint(provider, name, args, filename, lineNumber);
         } else {
             panic("Syntax error while processing '%s' line %d:\n"
                   "    '%s' does not look like a tracepoint definition",

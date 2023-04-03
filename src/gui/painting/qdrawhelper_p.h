@@ -29,7 +29,7 @@
 #include "private/qrasterdefs_p.h"
 #include <private/qsimd_p.h>
 
-#include <QtCore/qsharedpointer.h>
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 
@@ -52,13 +52,6 @@ static const uint AMASK = 0xff000000;
 static const uint RMASK = 0x00ff0000;
 static const uint GMASK = 0x0000ff00;
 static const uint BMASK = 0x000000ff;
-
-/*******************************************************************************
- * QSpan
- *
- * duplicate definition of FT_Span
- */
-typedef QT_FT_Span QSpan;
 
 struct QSolidData;
 struct QTextureData;
@@ -147,9 +140,9 @@ struct quint24 {
     uchar data[3];
 };
 
-void qBlendGradient(int count, const QSpan *spans, void *userData);
-void qBlendTexture(int count, const QSpan *spans, void *userData);
-#ifdef __SSE2__
+void qBlendGradient(int count, const QT_FT_Span *spans, void *userData);
+void qBlendTexture(int count, const QT_FT_Span *spans, void *userData);
+#ifdef Q_PROCESSOR_X86
 extern void (*qt_memfill64)(quint64 *dest, quint64 value, qsizetype count);
 extern void (*qt_memfill32)(quint32 *dest, quint32 value, qsizetype count);
 #else
@@ -337,11 +330,7 @@ struct QSpanData
         QGradientData gradient;
         QTextureData texture;
     };
-    class Pinnable {
-    protected:
-        ~Pinnable() {}
-    }; // QSharedPointer<const void> is not supported
-    QSharedPointer<const Pinnable> cachedGradient;
+    std::shared_ptr<const void> cachedGradient;
 
 
     void init(QRasterBuffer *rb, const QRasterPaintEngine *pe);

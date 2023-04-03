@@ -281,7 +281,7 @@ void QNetworkReplyImplPrivate::handleNotifications()
     if (notificationHandlingPaused)
         return;
 
-     for (InternalNotifications notification : qExchange(pendingNotifications, {})) {
+     for (InternalNotifications notification : std::exchange(pendingNotifications, {})) {
         if (state != Working)
             return;
         switch (notification) {
@@ -458,7 +458,7 @@ void QNetworkReplyImplPrivate::appendDownstreamData(QByteDataBuffer &data)
     }
 
     qint64 bytesWritten = 0;
-    for (int i = 0; i < data.bufferCount(); i++) {
+    for (qsizetype i = 0; i < data.bufferCount(); ++i) {
         QByteArray const &item = data[i];
 
         if (cacheSaveDevice)

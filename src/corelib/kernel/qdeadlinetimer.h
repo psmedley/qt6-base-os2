@@ -26,9 +26,9 @@ public:
     enum ForeverConstant { Forever };
 
     constexpr QDeadlineTimer(Qt::TimerType type_ = Qt::CoarseTimer) noexcept
-        : t1(0), t2(0), type(type_) {}
+        : type(type_) {}
     constexpr QDeadlineTimer(ForeverConstant, Qt::TimerType type_ = Qt::CoarseTimer) noexcept
-        : t1((std::numeric_limits<qint64>::max)()), t2(0), type(type_) {}
+        : t1((std::numeric_limits<qint64>::max)()), type(type_) {}
     explicit QDeadlineTimer(qint64 msecs, Qt::TimerType type = Qt::CoarseTimer) noexcept;
 
     void swap(QDeadlineTimer &other) noexcept
@@ -82,15 +82,15 @@ public:
     QDeadlineTimer &operator-=(qint64 msecs)
     { *this = *this + (-msecs); return *this; }
 
-    template <class Clock, class Duration>
+    template <class Clock, class Duration = typename Clock::duration>
     QDeadlineTimer(std::chrono::time_point<Clock, Duration> deadline_,
                    Qt::TimerType type_ = Qt::CoarseTimer) : t2(0)
     { setDeadline(deadline_, type_); }
-    template <class Clock, class Duration>
+    template <class Clock, class Duration = typename Clock::duration>
     QDeadlineTimer &operator=(std::chrono::time_point<Clock, Duration> deadline_)
     { setDeadline(deadline_); return *this; }
 
-    template <class Clock, class Duration>
+    template <class Clock, class Duration = typename Clock::duration>
     void setDeadline(std::chrono::time_point<Clock, Duration> deadline_,
                      Qt::TimerType type_ = Qt::CoarseTimer)
     { setRemainingTime(deadline_ == deadline_.max() ? Duration::max() : deadline_ - Clock::now(), type_); }
@@ -141,8 +141,8 @@ public:
     { return dt = dt + value; }
 
 private:
-    qint64 t1;
-    unsigned t2;
+    qint64 t1 = 0;
+    unsigned t2 = 0;
     unsigned type;
 
     qint64 rawRemainingTimeNSecs() const noexcept;

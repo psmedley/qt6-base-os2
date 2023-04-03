@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # The test represents the order-related issue that we have with the ld linker.
 #
 # CMake versions < 3.21.0 produce the following linker line:

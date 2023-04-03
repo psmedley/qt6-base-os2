@@ -84,8 +84,12 @@ template <QtMsgType Which> struct QLoggingCategoryMacroHolder
             control = cat.isInfoEnabled();
         } else if constexpr (Which == QtWarningMsg) {
             control = cat.isWarningEnabled();
-        } else {
+        } else if constexpr (Which == QtCriticalMsg) {
             control = cat.isCriticalEnabled();
+        } else if constexpr (Which == QtFatalMsg) {
+            control = true;
+        } else {
+            static_assert(QtPrivate::value_dependent_false<Which>(), "Unknown Qt message type");
         }
     }
     const char *name() const { return category->categoryName(); }
@@ -105,7 +109,10 @@ template <> const bool QLoggingCategoryMacroHolder<QtWarningMsg>::IsOutputEnable
 } // unnamed namespace
 
 #define Q_DECLARE_LOGGING_CATEGORY(name) \
-    extern const QLoggingCategory &name();
+    const QLoggingCategory &name();
+
+#define Q_DECLARE_EXPORTED_LOGGING_CATEGORY(name, export_macro) \
+    export_macro Q_DECLARE_LOGGING_CATEGORY(name)
 
 #define Q_LOGGING_CATEGORY(name, ...) \
     const QLoggingCategory &name() \
@@ -122,6 +129,7 @@ template <> const bool QLoggingCategoryMacroHolder<QtWarningMsg>::IsOutputEnable
 #define qCInfo(category, ...) QT_MESSAGE_LOGGER_COMMON(category, QtInfoMsg).info(__VA_ARGS__)
 #define qCWarning(category, ...) QT_MESSAGE_LOGGER_COMMON(category, QtWarningMsg).warning(__VA_ARGS__)
 #define qCCritical(category, ...) QT_MESSAGE_LOGGER_COMMON(category, QtCriticalMsg).critical(__VA_ARGS__)
+#define qCFatal(category, ...) QT_MESSAGE_LOGGER_COMMON(category, QtFatalMsg).fatal(__VA_ARGS__)
 
 QT_END_NAMESPACE
 

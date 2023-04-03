@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Handle files that need special SIMD-related flags.
 #
 # This function adds the passed source files to the given target only if the SIMD specific condition
@@ -13,8 +16,12 @@
 #                            SIMD compiler flags. This is mostly relevant for fat / universal builds
 #
 function(qt_internal_add_simd_part target)
-    qt_parse_all_arguments(arg "qt_add_simd_part" "" "NAME;SIMD"
-       "${__default_private_args};COMPILE_FLAGS;EXCLUDE_OSX_ARCHITECTURES" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 1 arg
+        ""
+        "NAME;SIMD"
+        "${__default_private_args};COMPILE_FLAGS;EXCLUDE_OSX_ARCHITECTURES")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
     if ("x${arg_SIMD}" STREQUAL x)
         message(FATAL_ERROR "qt_add_simd_part needs a SIMD type to be set.")
     endif()
@@ -91,7 +98,9 @@ function(qt_internal_add_simd_part target)
                 ${arg_COMPILE_FLAGS}
             )
         endforeach()
-        set_source_files_properties(${arg_SOURCES} PROPERTIES SKIP_PRECOMPILE_HEADERS TRUE)
+        set_source_files_properties(${arg_SOURCES} PROPERTIES
+                                                   SKIP_PRECOMPILE_HEADERS TRUE
+                                                   SKIP_UNITY_BUILD_INCLUSION TRUE)
         target_sources(${target} PRIVATE ${arg_SOURCES})
     else()
         if(QT_CMAKE_DEBUG_EXTEND_TARGET)

@@ -606,8 +606,9 @@ static inline void setCoords(GLfloat *coords, const QOpenGLRect &rect)
     coords[7] = rect.bottom;
 }
 
-void QOpenGL2PaintEngineExPrivate::drawTexture(const QOpenGLRect& dest, const QOpenGLRect& src, const QSize &textureSize, bool opaque, bool pattern)
+void Q_TRACE_INSTRUMENT(qtopengl) QOpenGL2PaintEngineExPrivate::drawTexture(const QOpenGLRect& dest, const QOpenGLRect& src, const QSize &textureSize, bool opaque, bool pattern)
 {
+    Q_TRACE_PARAM_REPLACE(QOpenGLRect, QRectF);
     Q_TRACE_SCOPE(QOpenGL2PaintEngineExPrivate_drawTexture, dest, src, textureSize, opaque, pattern);
 
     // Setup for texture drawing
@@ -2131,6 +2132,10 @@ void QOpenGL2PaintEngineExPrivate::drawPixmapFragments(const QPainter::PixmapFra
     }
 
     transferMode(ImageOpacityArrayDrawingMode);
+
+    uploadData(QT_VERTEX_COORDS_ATTR, (GLfloat*)vertexCoordinateArray.data(), vertexCoordinateArray.vertexCount() * 2);
+    uploadData(QT_TEXTURE_COORDS_ATTR, (GLfloat*)textureCoordinateArray.data(), textureCoordinateArray.vertexCount() * 2);
+    uploadData(QT_OPACITY_ATTR, (GLfloat*)opacityArray.data(), opacityArray.size());
 
     GLenum filterMode = q->state()->renderHints & QPainter::SmoothPixmapTransform ? GL_LINEAR : GL_NEAREST;
     updateTexture(QT_IMAGE_TEXTURE_UNIT, pixmap, GL_CLAMP_TO_EDGE, filterMode);

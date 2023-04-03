@@ -1,4 +1,5 @@
-# Generated from ico.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QICOPlugin Plugin:
@@ -16,5 +17,4 @@ qt_internal_add_plugin(QICOPlugin
         Qt::Gui
 )
 
-#### Keys ignored in scope 1:.:.:ico.pro:<TRUE>:
-# OTHER_FILES = "ico.json"
+set_target_properties(QICOPlugin PROPERTIES UNITY_BUILD OFF)

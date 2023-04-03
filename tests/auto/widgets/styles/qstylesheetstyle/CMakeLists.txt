@@ -1,4 +1,5 @@
-# Generated from qstylesheetstyle.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qstylesheetstyle Test:
@@ -13,7 +14,7 @@ set(resources_resource_files
 qt_internal_add_test(tst_qstylesheetstyle
     SOURCES
         tst_qstylesheetstyle.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
         Qt::TestPrivate
@@ -23,5 +24,4 @@ qt_internal_add_test(tst_qstylesheetstyle
     BUILTIN_TESTDATA
 )
 
-#### Keys ignored in scope 1:.:.:qstylesheetstyle.pro:<TRUE>:
 # _REQUIREMENTS = "qtConfig(private_tests)"

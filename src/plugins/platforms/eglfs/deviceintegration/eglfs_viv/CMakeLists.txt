@@ -1,4 +1,5 @@
-# Generated from eglfs_viv.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QEglFSVivIntegrationPlugin Plugin:
@@ -22,6 +23,3 @@ qt_internal_add_plugin(QEglFSVivIntegrationPlugin
         Qt::Gui
         Qt::GuiPrivate
 )
-
-#### Keys ignored in scope 1:.:.:eglfs_viv.pro:<TRUE>:
-# OTHER_FILES = "$$PWD/eglfs_viv.json"

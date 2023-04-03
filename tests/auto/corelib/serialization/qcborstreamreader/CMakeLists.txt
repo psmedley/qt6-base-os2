@@ -1,4 +1,5 @@
-# Generated from qcborstreamreader.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qcborstreamreader Test:
@@ -10,6 +11,6 @@ qt_internal_add_test(tst_qcborstreamreader
     INCLUDE_DIRECTORIES
         ../../../../../src/3rdparty/tinycbor/src
         ../../../../../src/3rdparty/tinycbor/tests/parser
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
 )

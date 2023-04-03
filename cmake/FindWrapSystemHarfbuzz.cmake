@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # We can't create the same interface imported target multiple times, CMake will complain if we do
 # that. This can happen if the find_package call is done in multiple different subdirectories.
 if(TARGET WrapSystemHarfbuzz::WrapSystemHarfbuzz)
@@ -29,7 +32,7 @@ endif()
 
 if(__harfbuzz_broken_config_file OR NOT __harfbuzz_found)
     find_package(PkgConfig QUIET)
-    pkg_check_modules(PC_HARFBUZZ harfbuzz IMPORTED_TARGET)
+    pkg_check_modules(PC_HARFBUZZ IMPORTED_TARGET "harfbuzz")
     if(PC_HARFBUZZ_FOUND)
         set(__harfbuzz_target_name "PkgConfig::PC_HARFBUZZ")
         set(__harfbuzz_find_include_dirs_hints

@@ -1,4 +1,5 @@
-# Generated from qeventloop.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qeventloop Test:
@@ -7,7 +8,7 @@
 qt_internal_add_test(tst_qeventloop
     SOURCES
         tst_qeventloop.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Network
 )
@@ -16,7 +17,7 @@ qt_internal_add_test(tst_qeventloop
 #####################################################################
 
 qt_internal_extend_target(tst_qeventloop CONDITION WIN32
-    PUBLIC_LIBRARIES
+    LIBRARIES
         user32
 )
 

@@ -1,5 +1,0 @@
-#ifndef QT_QTTESTAUTOGENERATINGCPPEXPORTS_MODULE_H
-#define QT_QTTESTAUTOGENERATINGCPPEXPORTS_MODULE_H
-#include <QtTestAutogeneratingCppExports/QtTestAutogeneratingCppExportsDepends>
-#include "qttestautogeneratingcppexportsversion.h"
-#endif

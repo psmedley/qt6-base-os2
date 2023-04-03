@@ -148,8 +148,8 @@ public:
         executePendingSort();
         return children.at(index);
     }
-    inline int childCount() const { return children.size(); }
-    inline int columnCount() const { return values.size(); }
+    inline int childCount() const { return int(children.size()); }
+    inline int columnCount() const { return int(values.size()); }
     inline int indexOfChild(QTreeWidgetItem *child) const;
 
     void addChild(QTreeWidgetItem *child);
@@ -213,7 +213,7 @@ inline void QTreeWidgetItem::setFont(int column, const QFont &afont)
 { setData(column, Qt::FontRole, afont); }
 
 inline int QTreeWidgetItem::indexOfChild(QTreeWidgetItem *achild) const
-{ executePendingSort(); return children.indexOf(achild); }
+{ executePendingSort(); return int(children.indexOf(achild)); }
 
 #ifndef QT_NO_DATASTREAM
 Q_WIDGETS_EXPORT QDataStream &operator<<(QDataStream &out, const QTreeWidgetItem &item);

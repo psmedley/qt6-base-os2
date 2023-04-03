@@ -120,7 +120,7 @@ public:
     {
         if (d == other)
             return;
-        T *oldD = qExchange(d, other);
+        T *oldD = std::exchange(d, other);
         Cleanup::cleanup(oldD);
     }
 
@@ -128,7 +128,7 @@ public:
     QT_DEPRECATED_VERSION_X_6_1("Use std::unique_ptr instead, and call release().")
     T *take() noexcept
     {
-        T *oldD = qExchange(d, nullptr);
+        T *oldD = std::exchange(d, nullptr);
         return oldD;
     }
 #endif
@@ -201,12 +201,12 @@ public:
     {
     }
 
-    inline T &operator[](int i)
+    T &operator[](qsizetype i)
     {
         return this->d[i];
     }
 
-    inline const T &operator[](int i) const
+    const T &operator[](qsizetype i) const
     {
         return this->d[i];
     }

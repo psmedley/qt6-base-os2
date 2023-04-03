@@ -2949,7 +2949,7 @@ bool QMenu::event(QEvent *e)
         d->updateLayoutDirection();
         break;
     case QEvent::ShortcutOverride: {
-            QKeyEvent *kev = static_cast<QKeyEvent*>(e);
+            QKeyEvent *kev = static_cast<QKeyEvent *>(e);
             if (kev->key() == Qt::Key_Up || kev->key() == Qt::Key_Down
                 || kev->key() == Qt::Key_Left || kev->key() == Qt::Key_Right
                 || kev->key() == Qt::Key_Enter || kev->key() == Qt::Key_Return
@@ -2963,7 +2963,7 @@ bool QMenu::event(QEvent *e)
         }
         break;
     case QEvent::KeyPress: {
-        QKeyEvent *ke = (QKeyEvent*)e;
+        QKeyEvent *ke = static_cast<QKeyEvent *>(e);
         if (ke->key() == Qt::Key_Tab || ke->key() == Qt::Key_Backtab) {
             keyPressEvent(ke);
             return true;
@@ -3597,7 +3597,7 @@ void QMenu::internalDelayedPopup()
     const QRect actionRect(d->actionRect(d->currentAction));
     QPoint subMenuPos(mapToGlobal(QPoint(actionRect.right() + subMenuOffset + 1, actionRect.top())));
     if (subMenuPos.x() > screen.right())
-        subMenuPos.setX(QCursor::pos().x());
+        subMenuPos.setX(geometry().left());
 
     const auto &subMenuActions = d->activeMenu->actions();
     if (!subMenuActions.isEmpty()) {

@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(undoframework LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -10,6 +11,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/widgets/tools/undoframework")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+
+qt_standard_project_setup()
 
 qt_add_executable(undoframework
     commands.cpp commands.h
@@ -24,15 +27,20 @@ set_target_properties(undoframework PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-target_link_libraries(undoframework PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
+target_link_libraries(undoframework PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
 )
 
 # Resources:
 set(undoframework_resource_files
-    "images/cross.png"
+    "icons/cross.png"
+    "icons/rectangle.png"
+    "icons/redo.png"
+    "icons/remove.png"
+    "icons/triangle.png"
+    "icons/undo.png"
 )
 
 qt_add_resources(undoframework "undoframework"

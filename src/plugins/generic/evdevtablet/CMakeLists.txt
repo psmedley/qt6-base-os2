@@ -1,4 +1,5 @@
-# Generated from evdevtablet.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QEvdevTabletPlugin Plugin:
@@ -17,7 +18,3 @@ qt_internal_add_plugin(QEvdevTabletPlugin
         Qt::GuiPrivate
         Qt::InputSupportPrivate
 )
-
-#### Keys ignored in scope 1:.:.:evdevtablet.pro:<TRUE>:
-# OTHER_FILES = "evdevtablet.json"
-# PLUGIN_EXTENDS = "-"

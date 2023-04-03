@@ -1,4 +1,5 @@
-# Generated from qtexteditlist.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qtexteditlist Binary:
@@ -9,12 +10,9 @@ qt_internal_add_manual_test(qtexteditlist
     SOURCES
         main.cpp
         widget.cpp widget.h widget.ui
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
     ENABLE_AUTOGEN_TOOLS
         uic
 )
-
-#### Keys ignored in scope 1:.:.:qtexteditlist.pro:<TRUE>:
-# TEMPLATE = "app"

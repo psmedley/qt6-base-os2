@@ -3,10 +3,6 @@
 
 #define QT_NO_URL_CAST_FROM_STRING 1
 
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0A00
-#endif
-
 #include <QtCore/qt_windows.h>
 #include "qwindowscombase.h"
 #include "qwindowsdialoghelpers.h"
@@ -35,6 +31,7 @@
 #include <QtCore/qmutex.h>
 #include <QtCore/quuid.h>
 #include <QtCore/qtemporaryfile.h>
+#include <QtCore/private/qsystemerror_p.h>
 
 #include <algorithm>
 #include <vector>
@@ -62,14 +59,6 @@ static inline QString guidToString(const GUID &g)
         << ", " << g.Data4[4] << ", " << g.Data4[5]  << ", " << g.Data4[6]  << ", " << g.Data4[7]
         << "}};";
     return rc;
-}
-
-inline QDebug operator<<(QDebug d, const GUID &g)
-{
-    QDebugStateSaver saver(d);
-    d.nospace();
-    d << guidToString(g);
-    return d;
 }
 #endif // !QT_NO_DEBUG_STREAM
 
@@ -636,7 +625,7 @@ bool QWindowsShellItem::copyData(QIODevice *out, QString *errorMessage)
     HRESULT hr = m_item->BindToHandler(nullptr, BHID_Stream, IID_PPV_ARGS(&istream));
     if (FAILED(hr)) {
         *errorMessage = "BindToHandler() failed: "_L1
-                        + QLatin1StringView(QWindowsContext::comErrorString(hr));
+                        + QSystemError::windowsComString(hr);
         return false;
     }
     enum : ULONG { bufSize = 102400 };
@@ -653,7 +642,7 @@ bool QWindowsShellItem::copyData(QIODevice *out, QString *errorMessage)
     istream->Release();
     if (hr != S_OK && hr != S_FALSE) {
         *errorMessage = "Read() failed: "_L1
-                        + QLatin1StringView(QWindowsContext::comErrorString(hr));
+                        + QSystemError::windowsComString(hr);
         return false;
     }
     return true;

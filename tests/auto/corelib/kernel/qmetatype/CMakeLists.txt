@@ -1,4 +1,5 @@
-# Generated from qmetatype.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qmetatype Test:
@@ -40,11 +41,9 @@ qt_internal_add_test(tst_qmetatype
     SOURCES
         tst_qmetatype.h tst_qmetatype.cpp tst_qmetatype2.cpp
         tst_qmetatype3.cpp
-    DEFINES
-        QT_DISABLE_DEPRECATED_BEFORE=0
     INCLUDE_DIRECTORIES
         ../../../other/qvariant_common
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         qmetatype_lib1

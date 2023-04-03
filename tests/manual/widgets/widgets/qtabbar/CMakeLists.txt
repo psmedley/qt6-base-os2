@@ -1,14 +1,4 @@
-# Generated from qtabbar.pro.
+# Copyright (C) 2023 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
-#####################################################################
-## qtabbar Binary:
-#####################################################################
-
-qt_internal_add_manual_test(qtabbar
-    GUI
-    PUBLIC_LIBRARIES
-        Qt::Gui
-)
-
-#### Keys ignored in scope 1:.:.:qtabbar.pro:<TRUE>:
-# SUBDIRS = "stylesheet"
+add_subdirectory(stylesheet)

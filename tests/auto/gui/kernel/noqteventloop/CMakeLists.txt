@@ -1,4 +1,5 @@
-# Generated from noqteventloop.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_noqteventloop Test:
@@ -7,7 +8,7 @@
 qt_internal_add_test(tst_noqteventloop
     SOURCES
         tst_noqteventloop.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
@@ -18,6 +19,6 @@ qt_internal_add_test(tst_noqteventloop
 #####################################################################
 
 qt_internal_extend_target(tst_noqteventloop CONDITION QT_FEATURE_dynamicgl AND WIN32
-    PUBLIC_LIBRARIES
+    LIBRARIES
         user32
 )

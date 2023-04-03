@@ -3,7 +3,9 @@
 
 /*!
     \example threadedfortuneserver
-    \title Threaded Fortune Server Example
+    \title Threaded Fortune Server
+    \meta category {Networking}
+    \meta tags {tcp,network,threading,server,synchronous-io}
     \ingroup examples-network
 
     \brief The Threaded Fortune Server example shows how to create a server for a
@@ -79,6 +81,5 @@
     the socket has disconnected. Because we are running in a separate thread,
     the GUI will remain responsive.
 
-    \sa {Fortune Server Example}, {Fortune Client Example}, {Blocking Fortune
-    Client Example}
+    \sa {Fortune Server}, {Fortune Client}, {Blocking Fortune Client}
 */

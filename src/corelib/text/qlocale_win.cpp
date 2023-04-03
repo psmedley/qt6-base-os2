@@ -12,18 +12,20 @@
 
 #include "QtCore/private/qgregoriancalendar_p.h" // for yearSharingWeekDays()
 
+#include <q20algorithm.h>
+
 #ifdef Q_OS_WIN
 #   include <qt_windows.h>
 #   include <time.h>
 #endif
 
-#if QT_CONFIG(cpp_winrt) && !defined(Q_CC_CLANG)
+#if QT_CONFIG(cpp_winrt)
 #   include <QtCore/private/qt_winrtbase_p.h>
 
 #   include <winrt/Windows.Foundation.h>
 #   include <winrt/Windows.Foundation.Collections.h>
 #   include <winrt/Windows.System.UserProfile.h>
-#endif // QT_CONFIG(cpp_winrt) && !defined(Q_CC_CLANG)
+#endif // QT_CONFIG(cpp_winrt)
 
 QT_BEGIN_NAMESPACE
 
@@ -173,10 +175,11 @@ QVariant QSystemLocalePrivate::getLocaleInfo(LCTYPE type)
 
 int QSystemLocalePrivate::getLocaleInfo_int(LCTYPE type)
 {
-    const QString str = getLocaleInfo(type).toString();
-    bool ok = false;
-    const int v = str.toInt(&ok);
-    return ok ? v : 0;
+    DWORD value;
+    int r = GetLocaleInfo(lcid, type | LOCALE_RETURN_NUMBER,
+                          reinterpret_cast<wchar_t *>(&value),
+                          sizeof(value) / sizeof(wchar_t));
+    return r == sizeof(value) / sizeof(wchar_t) ? value : 0;
 }
 
 QSystemLocalePrivate::SubstitutionType QSystemLocalePrivate::substitution()
@@ -655,7 +658,7 @@ QVariant QSystemLocalePrivate::toCurrencyString(const QSystemLocale::CurrencyToS
 QVariant QSystemLocalePrivate::uiLanguages()
 {
     QStringList result;
-#if QT_CONFIG(cpp_winrt) && !defined(Q_CC_CLANG)
+#if QT_CONFIG(cpp_winrt)
     using namespace winrt;
     using namespace Windows::System::UserProfile;
     QT_TRY {
@@ -667,7 +670,7 @@ QVariant QSystemLocalePrivate::uiLanguages()
     }
     if (!result.isEmpty())
         return result; // else just fall back to WIN32 API implementation
-#endif // QT_CONFIG(cpp_winrt) && !defined(Q_CC_CLANG)
+#endif // QT_CONFIG(cpp_winrt)
     // mingw and clang still have to use Win32 API
     unsigned long cnt = 0;
     QVarLengthArray<wchar_t, 64> buf(64);
@@ -888,8 +891,18 @@ struct WindowsToISOListElt {
     char iso_name[6];
 };
 
-/* NOTE: This array should be sorted by the first column! */
-static const WindowsToISOListElt windows_to_iso_list[] = {
+namespace {
+struct ByWindowsCode {
+    constexpr bool operator()(int lhs, WindowsToISOListElt rhs) const noexcept
+    { return lhs < int(rhs.windows_code); }
+    constexpr bool operator()(WindowsToISOListElt lhs, int rhs) const noexcept
+    { return int(lhs.windows_code) < rhs; }
+    constexpr bool operator()(WindowsToISOListElt lhs, WindowsToISOListElt rhs) const noexcept
+    { return lhs.windows_code < rhs.windows_code; }
+};
+} // unnamed namespace
+
+static constexpr WindowsToISOListElt windows_to_iso_list[] = {
     { 0x0401, "ar_SA" },
     { 0x0402, "bg\0  " },
     { 0x0403, "ca\0  " },
@@ -1000,40 +1013,33 @@ static const WindowsToISOListElt windows_to_iso_list[] = {
     { 0x500a, "es_PR" }
 };
 
-static const int windows_to_iso_count
-    = sizeof(windows_to_iso_list)/sizeof(WindowsToISOListElt);
+static_assert(q20::is_sorted(std::begin(windows_to_iso_list), std::end(windows_to_iso_list),
+                             ByWindowsCode{}));
 
 static const char *winLangCodeToIsoName(int code)
 {
     int cmp = code - windows_to_iso_list[0].windows_code;
     if (cmp < 0)
-        return 0;
+        return nullptr;
 
     if (cmp == 0)
         return windows_to_iso_list[0].iso_name;
 
-    int begin = 0;
-    int end = windows_to_iso_count;
+    const auto it = std::lower_bound(std::begin(windows_to_iso_list),
+                                     std::end(windows_to_iso_list),
+                                     code,
+                                     ByWindowsCode{});
+    if (it != std::end(windows_to_iso_list) && !ByWindowsCode{}(code, *it))
+        return it->iso_name;
 
-    while (end - begin > 1) {
-        uint mid = (begin + end)/2;
-
-        const WindowsToISOListElt *elt = windows_to_iso_list + mid;
-        int cmp = code - elt->windows_code;
-        if (cmp < 0)
-            end = mid;
-        else if (cmp > 0)
-            begin = mid;
-        else
-            return elt->iso_name;
-    }
-
-    return 0;
+    return nullptr;
 
 }
 
 LCID qt_inIsoNametoLCID(const char *name)
 {
+    if (!name)
+        return LOCALE_USER_DEFAULT;
     // handle norwegian manually, the list above will fail
     if (!strncmp(name, "nb", 2))
         return 0x0414;
@@ -1071,8 +1077,8 @@ static QString winIso639LangName(LCID id)
 
     if (!lang_code.isEmpty()) {
         const QByteArray latin1 = std::move(lang_code).toLatin1();
-        const auto [i, endptr] = qstrntoull(latin1.data(), latin1.size(), 16);
-        if (endptr && *endptr == '\0') {
+        const auto [i, used] = qstrntoull(latin1.data(), latin1.size(), 16);
+        if (used >= latin1.size() || (used > 0 && latin1[used] == '\0')) {
             switch (i) {
                 case 0x814:
                     result = u"nn"_s; // Nynorsk
@@ -1113,8 +1119,8 @@ static QByteArray getWinLocaleName(LCID id)
         if (result == "C"
             || (!result.isEmpty() && qt_splitLocaleName(QString::fromLocal8Bit(result)))) {
             // See if we have a Windows locale code instead of a locale name:
-            auto [id, ok] = qstrntoll(result.data(), result.size(), 0);
-            if (!ok || id == 0 || id < INT_MIN || id > INT_MAX) // Assume real locale name
+            auto [id, used] = qstrntoll(result.data(), result.size(), 0);
+            if (used <= 0 || id == 0 || id < INT_MIN || id > INT_MAX) // Assume real locale name
                 return result;
             return winLangCodeToIsoName(int(id));
         }

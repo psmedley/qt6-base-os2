@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #####################################################################
 ## tst_qjnienvironment Test:
 #####################################################################
@@ -11,6 +14,4 @@ if(ANDROID)
     set_property(TARGET tst_qjnienvironment APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
         ${CMAKE_CURRENT_SOURCE_DIR}/testdata
     )
-    # QTBUG-88840
-    qt_android_generate_deployment_settings(tst_qjnienvironment)
 endif()

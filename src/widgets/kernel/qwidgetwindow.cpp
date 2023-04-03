@@ -129,7 +129,7 @@ QWidgetWindow::QWidgetWindow(QWidget *widget)
     }
 
     connect(widget, &QObject::objectNameChanged, this, &QWidgetWindow::updateObjectName);
-    connect(this, SIGNAL(screenChanged(QScreen*)), this, SLOT(handleScreenChange()));
+    connect(this, &QWidgetWindow::screenChanged, this, &QWidgetWindow::handleScreenChange);
 }
 
 QWidgetWindow::~QWidgetWindow()
@@ -629,6 +629,8 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
         && m_widget->rect().contains(event->position().toPoint())) {
         QContextMenuEvent e(QContextMenuEvent::Mouse, mapped, event->globalPosition().toPoint(), event->modifiers());
         QGuiApplication::forwardEvent(receiver, &e, event);
+        if (e.isAccepted())
+            event->accept();
     }
 #endif
 }

@@ -1,18 +1,14 @@
-# special case skip regeneration
-cmake_minimum_required(VERSION 3.16)
-project(screengadget LANGUAGES CXX)
-set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+#####################################################################
+## screengadget Binary:
+#####################################################################
 
-qt_add_executable(screengadget
-    main.cpp
+qt_internal_add_manual_test(screengadget
+    GUI
+    SOURCES
+        main.cpp
+    PUBLIC_LIBRARIES
+        Qt::Gui
+        Qt::Widgets
+        Qt::GuiPrivate
 )
-
-target_link_libraries(screengadget PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::GuiPrivate
-    Qt::Widgets
-)
-

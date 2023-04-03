@@ -1,4 +1,5 @@
-# Generated from qt_on_cocoa.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qt_on_cocoa Binary:
@@ -9,14 +10,9 @@ qt_internal_add_manual_test(qt_on_cocoa
     SOURCES
         main.mm
         rasterwindow.cpp rasterwindow.h
-    DEFINES
-        QT_DISABLE_DEPRECATED_BEFORE=0
-    PUBLIC_LIBRARIES
+    LIBRARIES
         ${FWAppKit}
         Qt::Gui
         Qt::Quick
         Qt::Widgets
 )
-
-#### Keys ignored in scope 1:.:.:qt_on_cocoa.pro:<TRUE>:
-# TEMPLATE = "app"

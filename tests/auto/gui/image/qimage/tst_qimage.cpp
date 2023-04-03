@@ -4,6 +4,7 @@
 
 #include <QTest>
 #include <QBuffer>
+#include <QMatrix4x4>
 
 #include <qimage.h>
 #include <qimagereader.h>
@@ -67,6 +68,7 @@ private slots:
 
     void rotate_data();
     void rotate();
+    void rotateBigImage();
 
     void copy();
 
@@ -1210,6 +1212,23 @@ void tst_QImage::rotate()
     dest = dest.convertToFormat(format);
 
     QCOMPARE(original, dest);
+}
+
+void tst_QImage::rotateBigImage()
+{
+    // QTBUG-105088
+    QImage big_image(3840, 2160, QImage::Format_ARGB32_Premultiplied);
+    QTransform t;
+    t.translate(big_image.width() / 2.0, big_image.height() / 2.0);
+    t.rotate(-89, Qt::YAxis, big_image.width());
+    t.translate(-big_image.width() / 2.0, -big_image.height() / 2.0);
+    QVERIFY(!big_image.transformed(t).isNull());
+
+    QMatrix4x4 m;
+    m.translate(big_image.width() / 2.0, big_image.height() / 2.0);
+    m.projectedRotate(89, 0, 1, 0, big_image.width());
+    m.translate(-big_image.width() / 2.0, -big_image.height() / 2.0);
+    QVERIFY(!big_image.transformed(m.toTransform()).isNull());
 }
 
 void tst_QImage::copy()
@@ -2620,20 +2639,20 @@ void tst_QImage::mirrored_data()
     QTest::newRow("Format_Mono, horizontal+vertical") << QImage::Format_Mono << true << true << 16 << 16;
     QTest::newRow("Format_MonoLSB, horizontal+vertical") << QImage::Format_MonoLSB << true << true << 16 << 16;
 
-    QTest::newRow("Format_RGB32, vertical") << QImage::Format_RGB32 << true << false << 8 << 16;
-    QTest::newRow("Format_ARGB32, vertical") << QImage::Format_ARGB32 << true << false << 16 << 8;
+    QTest::newRow("Format_RGB32, vertical, narrow") << QImage::Format_RGB32 << true << false << 8 << 16;
+    QTest::newRow("Format_ARGB32, vertical, short") << QImage::Format_ARGB32 << true << false << 16 << 8;
     QTest::newRow("Format_Mono, vertical, non-aligned") << QImage::Format_Mono << true << false << 19 << 25;
     QTest::newRow("Format_MonoLSB, vertical, non-aligned") << QImage::Format_MonoLSB << true << false << 19 << 25;
 
     // Non-aligned horizontal 1-bit needs special handling so test this.
     QTest::newRow("Format_Mono, horizontal, non-aligned") << QImage::Format_Mono << false << true << 13 << 17;
-    QTest::newRow("Format_Mono, horizontal, non-aligned") << QImage::Format_Mono << false << true << 19 << 25;
-    QTest::newRow("Format_Mono, horizontal+vertical, non-aligned") << QImage::Format_Mono << true << true << 25 << 47;
+    QTest::newRow("Format_Mono, horizontal, non-aligned, big") << QImage::Format_Mono << false << true << 19 << 25;
+    QTest::newRow("Format_Mono, horizontal+vertical, non-aligned, big") << QImage::Format_Mono << true << true << 25 << 47;
     QTest::newRow("Format_Mono, horizontal+vertical, non-aligned") << QImage::Format_Mono << true << true << 21 << 16;
 
     QTest::newRow("Format_MonoLSB, horizontal, non-aligned") << QImage::Format_MonoLSB << false << true << 13 << 17;
-    QTest::newRow("Format_MonoLSB, horizontal, non-aligned") << QImage::Format_MonoLSB << false << true << 19 << 25;
-    QTest::newRow("Format_MonoLSB, horizontal+vertical, non-aligned") << QImage::Format_MonoLSB << true << true << 25 << 47;
+    QTest::newRow("Format_MonoLSB, horizontal, non-aligned, big") << QImage::Format_MonoLSB << false << true << 19 << 25;
+    QTest::newRow("Format_MonoLSB, horizontal+vertical, non-aligned, big") << QImage::Format_MonoLSB << true << true << 25 << 47;
     QTest::newRow("Format_MonoLSB, horizontal+vertical, non-aligned") << QImage::Format_MonoLSB << true << true << 21 << 16;
 }
 
@@ -3831,7 +3850,7 @@ void tst_QImage::reinterpretAsFormat_data()
     QTest::newRow("rgb32 -> argb32") << QImage::Format_RGB32 << QImage::Format_ARGB32 << QColor(Qt::cyan) << QColor(Qt::cyan);
     QTest::newRow("argb32pm -> rgb32") << QImage::Format_ARGB32_Premultiplied << QImage::Format_RGB32 << QColor(Qt::transparent) << QColor(Qt::black);
     QTest::newRow("argb32 -> rgb32") << QImage::Format_ARGB32 << QImage::Format_RGB32 << QColor(255, 0, 0, 127) << QColor(255, 0, 0);
-    QTest::newRow("argb32pm -> rgb32") << QImage::Format_ARGB32_Premultiplied << QImage::Format_RGB32 << QColor(255, 0, 0, 127) << QColor(127, 0, 0);
+    QTest::newRow("argb32pm (red) -> rgb32") << QImage::Format_ARGB32_Premultiplied << QImage::Format_RGB32 << QColor(255, 0, 0, 127) << QColor(127, 0, 0);
 }
 
 void tst_QImage::reinterpretAsFormat()

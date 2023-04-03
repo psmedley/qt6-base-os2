@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # The function returns location of the imported 'tool', returns an empty string if tool is not
 # imported.
 function(__qt_internal_get_tool_imported_location out_var tool)
@@ -102,38 +105,6 @@ set PATH=${path_dirs};%PATH%
         CACHE INTERNAL "Path to the wrapper of the tool commands")
 
     set_property(GLOBAL PROPERTY _qt_internal_generate_tool_command_wrapper_called TRUE)
-endfunction()
-
-# Wraps a tool command with a script that contains the necessary environment for the tool to run
-# correctly.
-# _qt_internal_wrap_tool_command(var <SET|APPEND> <command> [args...])
-# Arguments:
-#    APPEND Selects the 'append' mode for the out_variable argument.
-#    SET Selects the 'set' mode for the out_variable argument.
-#
-# FIXME: Replace all usages of _qt_internal_wrap_tool_command
-# with _qt_internal_get_wrap_tool_script_path and remove the former.
-# The former always adds the COMMAND keyword, which does not allow the caller to wrap the
-# commands in a generator expression. See _qt_internal_target_enable_qmllint for an example.
-function(_qt_internal_wrap_tool_command out_variable action)
-    set(append FALSE)
-    if(action STREQUAL "APPEND")
-        set(append TRUE)
-    elseif(NOT action STREQUAL "SET")
-        message(FATAL_ERROR "Invalid action specified ${action}. Supported actions: SET, APPEND")
-    endif()
-
-    # Ensure the script wrapper exists.
-    _qt_internal_generate_tool_command_wrapper()
-
-    set(cmd COMMAND ${QT_TOOL_COMMAND_WRAPPER_PATH} ${ARGN})
-
-    if(append)
-        list(APPEND ${out_variable} ${cmd})
-    else()
-        set(${out_variable} ${cmd})
-    endif()
-    set(${out_variable} "${${out_variable}}" PARENT_SCOPE)
 endfunction()
 
 # Gets the path to tool wrapper shell script.

@@ -4,9 +4,13 @@
 #ifndef QTCONCURRENT_FILTER_H
 #define QTCONCURRENT_FILTER_H
 
+#if 0
+#pragma qt_class(QtConcurrentFilter)
+#endif
+
 #include <QtConcurrent/qtconcurrent_global.h>
 
-#if !defined(QT_NO_CONCURRENT) || defined(Q_CLANG_QDOC)
+#if !defined(QT_NO_CONCURRENT) || defined(Q_QDOC)
 
 #include <QtConcurrent/qtconcurrentfilterkernel.h>
 #include <QtConcurrent/qtconcurrentfunctionwrappers.h>
@@ -67,7 +71,7 @@ QFuture<ResultType> filteredReduced(Sequence &&sequence,
             std::forward<KeepFunctor>(keep), std::forward<ReduceFunctor>(reduce), options);
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Sequence, typename KeepFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -90,7 +94,7 @@ QFuture<ResultType> filteredReduced(QThreadPool *pool,
             ResultType(std::forward<InitialValueType>(initialValue)), options);
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Sequence, typename KeepFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -112,7 +116,7 @@ QFuture<ResultType> filteredReduced(Sequence &&sequence,
             ResultType(std::forward<InitialValueType>(initialValue)), options);
 }
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
 template <typename Sequence, typename KeepFunctor, typename ReduceFunctor,
           std::enable_if_t<QtPrivate::isInvocable<KeepFunctor, Sequence>::value, int> = 0,
           typename ResultType = typename QtPrivate::ReduceResultTypeHelper<ReduceFunctor>::type>
@@ -209,7 +213,7 @@ QFuture<ResultType> filteredReduced(Iterator begin,
                                             std::forward<ReduceFunctor>(reduce), options);
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Iterator, typename KeepFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -232,7 +236,7 @@ QFuture<ResultType> filteredReduced(QThreadPool *pool,
             ResultType(std::forward<InitialValueType>(initialValue)), options);
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Iterator, typename KeepFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -255,7 +259,7 @@ QFuture<ResultType> filteredReduced(Iterator begin,
             ResultType(std::forward<InitialValueType>(initialValue)), options);
 }
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
 template <typename Iterator, typename KeepFunctor, typename ReduceFunctor,
           typename ResultType = typename QtPrivate::ReduceResultTypeHelper<ReduceFunctor>::type>
 QFuture<ResultType> filteredReduced(QThreadPool *pool,
@@ -402,7 +406,7 @@ ResultType blockingFilteredReduced(Sequence &&sequence,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Sequence, typename KeepFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -426,7 +430,7 @@ ResultType blockingFilteredReduced(QThreadPool *pool,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Sequence, typename KeepFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -449,7 +453,7 @@ ResultType blockingFilteredReduced(Sequence &&sequence,
     return future.takeResult();
 }
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
 template <typename Sequence, typename KeepFunctor, typename ReduceFunctor,
           std::enable_if_t<QtPrivate::isInvocable<KeepFunctor, Sequence>::value, int> = 0,
           typename ResultType = typename QtPrivate::ReduceResultTypeHelper<ReduceFunctor>::type>
@@ -553,7 +557,7 @@ ResultType blockingFilteredReduced(Iterator begin,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Iterator, typename KeepFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -577,7 +581,7 @@ ResultType blockingFilteredReduced(QThreadPool *pool,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Iterator, typename KeepFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -600,7 +604,7 @@ ResultType blockingFilteredReduced(Iterator begin,
     return future.takeResult();
 }
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
 template <typename Iterator, typename KeepFunctor, typename ReduceFunctor,
           typename ResultType = typename QtPrivate::ReduceResultTypeHelper<ReduceFunctor>::type>
 ResultType blockingFilteredReduced(QThreadPool *pool,

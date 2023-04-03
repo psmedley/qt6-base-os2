@@ -44,33 +44,35 @@ extern QString qAppFileName();
 
 static QString qSystemDirectory()
 {
-    QVarLengthArray<wchar_t, MAX_PATH> fullPath;
-
-    UINT retLen = ::GetSystemDirectory(fullPath.data(), MAX_PATH);
-    if (retLen > MAX_PATH) {
-        fullPath.resize(retLen);
-        retLen = ::GetSystemDirectory(fullPath.data(), retLen);
-    }
-    // in some rare cases retLen might be 0
-    return QString::fromWCharArray(fullPath.constData(), int(retLen));
+    static const QString result = []() -> QString {
+        QVarLengthArray<wchar_t, MAX_PATH> fullPath = {};
+        UINT retLen = ::GetSystemDirectoryW(fullPath.data(), MAX_PATH);
+        if (retLen > MAX_PATH) {
+            fullPath.resize(retLen);
+            retLen = ::GetSystemDirectoryW(fullPath.data(), retLen);
+        }
+        // in some rare cases retLen might be 0
+        return QString::fromWCharArray(fullPath.constData(), int(retLen));
+    }();
+    return result;
 }
 
 HINSTANCE QSystemLibrary::load(const wchar_t *libraryName, bool onlySystemDirectory /* = true */)
 {
+    if (onlySystemDirectory)
+        return ::LoadLibraryExW(libraryName, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+
     QStringList searchOrder;
 
 #if !defined(QT_BOOTSTRAPPED)
-    if (!onlySystemDirectory)
-        searchOrder << QFileInfo(qAppFileName()).path();
+    searchOrder << QFileInfo(qAppFileName()).path();
 #endif
     searchOrder << qSystemDirectory();
 
-    if (!onlySystemDirectory) {
-        const QString PATH(QLatin1StringView(qgetenv("PATH")));
-        searchOrder << PATH.split(u';', Qt::SkipEmptyParts);
-    }
-    QString fileName = QString::fromWCharArray(libraryName);
-    fileName.append(".dll"_L1);
+    const QString PATH(QLatin1StringView(qgetenv("PATH")));
+    searchOrder << PATH.split(u';', Qt::SkipEmptyParts);
+
+    const QString fileName = QString::fromWCharArray(libraryName);
 
     // Start looking in the order specified
     for (int i = 0; i < searchOrder.count(); ++i) {
@@ -80,10 +82,10 @@ HINSTANCE QSystemLibrary::load(const wchar_t *libraryName, bool onlySystemDirect
         }
         fullPathAttempt.append(fileName);
         HINSTANCE inst = ::LoadLibrary(reinterpret_cast<const wchar_t *>(fullPathAttempt.utf16()));
-        if (inst != 0)
+        if (inst != nullptr)
             return inst;
     }
-    return 0;
+    return nullptr;
 }
 
 QT_END_NAMESPACE

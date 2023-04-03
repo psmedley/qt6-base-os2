@@ -8,6 +8,7 @@
 #include <QSysInfo>
 #include <QLatin1String>
 #include <QString>
+#include <QtVersion>
 
 #include <cmath>
 

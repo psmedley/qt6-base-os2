@@ -46,15 +46,35 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
-QSize QAndroidPlatformIntegration::m_defaultScreenSize = QSize(320, 455);
-QRect QAndroidPlatformIntegration::m_defaultAvailableGeometry = QRect(0, 0, 320, 455);
-QSize QAndroidPlatformIntegration::m_defaultPhysicalSize = QSize(50, 71);
+Q_CONSTINIT QSize QAndroidPlatformIntegration::m_defaultScreenSize = QSize(320, 455);
+Q_CONSTINIT QRect QAndroidPlatformIntegration::m_defaultAvailableGeometry = QRect(0, 0, 320, 455);
+Q_CONSTINIT QSize QAndroidPlatformIntegration::m_defaultPhysicalSize = QSize(50, 71);
 
 Qt::ScreenOrientation QAndroidPlatformIntegration::m_orientation = Qt::PrimaryOrientation;
 Qt::ScreenOrientation QAndroidPlatformIntegration::m_nativeOrientation = Qt::PrimaryOrientation;
 
 bool QAndroidPlatformIntegration::m_showPasswordEnabled = false;
 static bool m_running = false;
+
+Q_DECLARE_JNI_CLASS(QtNative, "org/qtproject/qt/android/QtNative")
+Q_DECLARE_JNI_CLASS(Display, "android/view/Display")
+
+Q_DECLARE_JNI_TYPE(List, "Ljava/util/List;")
+
+namespace {
+
+QAndroidPlatformScreen* createScreenForDisplayId(int displayId)
+{
+    const QJniObject display = QJniObject::callStaticObjectMethod<QtJniTypes::Display>(
+        QtJniTypes::className<QtJniTypes::QtNative>(),
+        "getDisplay",
+        displayId);
+    if (!display.isValid())
+        return nullptr;
+    return new QAndroidPlatformScreen(display);
+}
+
+} // anonymous namespace
 
 void *QAndroidPlatformNativeInterface::nativeResourceForIntegration(const QByteArray &resource)
 {
@@ -163,10 +183,34 @@ QAndroidPlatformIntegration::QAndroidPlatformIntegration(const QStringList &para
     if (Q_UNLIKELY(!eglBindAPI(EGL_OPENGL_ES_API)))
         qFatal("Could not bind GL_ES API");
 
-    m_primaryScreen = new QAndroidPlatformScreen();
-    QWindowSystemInterface::handleScreenAdded(m_primaryScreen);
-    m_primaryScreen->setSizeParameters(m_defaultPhysicalSize, m_defaultScreenSize,
-                                       m_defaultAvailableGeometry);
+    m_primaryDisplayId = QJniObject::getStaticField<jint>(
+        QtJniTypes::className<QtJniTypes::Display>(), "DEFAULT_DISPLAY");
+
+    const QJniObject nativeDisplaysList = QJniObject::callStaticObjectMethod<QtJniTypes::List>(
+                QtJniTypes::className<QtJniTypes::QtNative>(),
+                "getAvailableDisplays");
+
+    const int numberOfAvailableDisplays = nativeDisplaysList.callMethod<jint>("size");
+    for (int i = 0; i < numberOfAvailableDisplays; ++i) {
+        const QJniObject display =
+                nativeDisplaysList.callObjectMethod<jobject, jint>("get", jint(i));
+        const int displayId = display.callMethod<jint>("getDisplayId");
+        const bool isPrimary = (m_primaryDisplayId == displayId);
+        auto screen = new QAndroidPlatformScreen(display);
+
+        if (isPrimary)
+            m_primaryScreen = screen;
+
+        QWindowSystemInterface::handleScreenAdded(screen, isPrimary);
+        m_screens[displayId] = screen;
+    }
+
+    if (numberOfAvailableDisplays == 0) {
+        // If no displays are found, add a dummy display
+        auto defaultScreen = new QAndroidPlatformScreen(QJniObject {});
+        m_primaryScreen = defaultScreen;
+        QWindowSystemInterface::handleScreenAdded(defaultScreen, true);
+    }
 
     m_mainThread = QThread::currentThread();
 
@@ -488,16 +532,16 @@ void QAndroidPlatformIntegration::setScreenSize(int width, int height)
         QMetaObject::invokeMethod(m_primaryScreen, "setSize", Qt::AutoConnection, Q_ARG(QSize, QSize(width, height)));
 }
 
-QPlatformTheme::Appearance QAndroidPlatformIntegration::m_appearance = QPlatformTheme::Appearance::Light;
+Qt::ColorScheme QAndroidPlatformIntegration::m_colorScheme = Qt::ColorScheme::Light;
 
-void QAndroidPlatformIntegration::setAppearance(QPlatformTheme::Appearance newAppearance)
+void QAndroidPlatformIntegration::setColorScheme(Qt::ColorScheme colorScheme)
 {
-    if (m_appearance == newAppearance)
+    if (m_colorScheme == colorScheme)
         return;
-    m_appearance = newAppearance;
+    m_colorScheme = colorScheme;
 
     QMetaObject::invokeMethod(qGuiApp,
-                    [] () { QAndroidPlatformTheme::instance()->updateAppearance();});
+                    [] () { QAndroidPlatformTheme::instance()->updateColorScheme();});
 }
 
 void QAndroidPlatformIntegration::setScreenSizeParameters(const QSize &physicalSize,
@@ -517,6 +561,49 @@ void QAndroidPlatformIntegration::setRefreshRate(qreal refreshRate)
         QMetaObject::invokeMethod(m_primaryScreen, "setRefreshRate", Qt::AutoConnection,
                                   Q_ARG(qreal, refreshRate));
 }
+
+void QAndroidPlatformIntegration::handleScreenAdded(int displayId)
+{
+    auto result = m_screens.insert(displayId, nullptr);
+    if (result.first->second == nullptr) {
+        auto it = result.first;
+        it->second = createScreenForDisplayId(displayId);
+        if (it->second == nullptr)
+            return;
+        const bool isPrimary = (m_primaryDisplayId == displayId);
+        if (isPrimary)
+            m_primaryScreen = it->second;
+        QWindowSystemInterface::handleScreenAdded(it->second, isPrimary);
+    } else {
+        qWarning() << "Display with id" << displayId << "already exists.";
+    }
+}
+
+void QAndroidPlatformIntegration::handleScreenChanged(int displayId)
+{
+    auto it = m_screens.find(displayId);
+    if (it == m_screens.end() || it->second == nullptr) {
+        handleScreenAdded(displayId);
+    }
+    // We do not do anything more here as handling of change of
+    // rotation and refresh rate is done in QtActivityDelegate java class
+    // which calls QAndroidPlatformIntegration::setOrientation, and
+    // QAndroidPlatformIntegration::setRefreshRate accordingly.
+}
+
+void QAndroidPlatformIntegration::handleScreenRemoved(int displayId)
+{
+    auto it = m_screens.find(displayId);
+
+    if (it == m_screens.end())
+        return;
+
+    if (it->second != nullptr)
+        QWindowSystemInterface::handleScreenRemoved(it->second);
+
+    m_screens.erase(it);
+}
+
 #if QT_CONFIG(vulkan)
 
 QPlatformVulkanInstance *QAndroidPlatformIntegration::createPlatformVulkanInstance(QVulkanInstance *instance) const

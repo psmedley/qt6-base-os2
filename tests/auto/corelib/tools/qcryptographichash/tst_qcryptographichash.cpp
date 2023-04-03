@@ -31,6 +31,8 @@ private slots:
     void files();
     void hashLength_data();
     void hashLength();
+    void move();
+    void swap();
     // keep last
     void moreThan4GiBOfData_data();
     void moreThan4GiBOfData();
@@ -50,6 +52,8 @@ void tst_QCryptographicHash::repeated_result()
     QFETCH(int, algo);
     QCryptographicHash::Algorithm _algo = QCryptographicHash::Algorithm(algo);
     QCryptographicHash hash(_algo);
+
+    QCOMPARE_EQ(hash.algorithm(), _algo);
 
     QFETCH(QByteArray, first);
     hash.addData(first);
@@ -391,7 +395,7 @@ void tst_QCryptographicHash::hashLength_data()
     auto metaEnum = QMetaEnum::fromType<QCryptographicHash::Algorithm>();
     for (int i = 0, value = metaEnum.value(i); value != -1; value = metaEnum.value(++i)) {
         auto algorithm = QCryptographicHash::Algorithm(value);
-        QTest::addRow("%s", metaEnum.valueToKey(value)) << algorithm;
+        QTest::addRow("%s", metaEnum.key(i)) << algorithm;
     }
 }
 
@@ -400,7 +404,42 @@ void tst_QCryptographicHash::hashLength()
     QFETCH(const QCryptographicHash::Algorithm, algorithm);
 
     QByteArray output = QCryptographicHash::hash("test", algorithm);
-    QCOMPARE(QCryptographicHash::hashLength(algorithm), output.length());
+    QCOMPARE(QCryptographicHash::hashLength(algorithm), output.size());
+}
+
+void tst_QCryptographicHash::move()
+{
+    QCryptographicHash hash1(QCryptographicHash::Sha1);
+    hash1.addData("a");
+
+    // move constructor
+    auto hash2(std::move(hash1));
+    hash2.addData("b");
+
+    // move assign operator
+    QCryptographicHash hash3(QCryptographicHash::Sha256);
+    hash3.addData("no effect on the end result");
+    hash3 = std::move(hash2);
+    hash3.addData("c");
+
+    QCOMPARE(hash3.resultView(), QByteArray::fromHex("A9993E364706816ABA3E25717850C26C9CD0D89D"));
+}
+
+void tst_QCryptographicHash::swap()
+{
+    QCryptographicHash hash1(QCryptographicHash::Sha1);
+    QCryptographicHash hash2(QCryptographicHash::Sha256);
+
+    hash1.addData("da");
+    hash2.addData("te");
+
+    hash1.swap(hash2);
+
+    hash2.addData("ta");
+    hash1.addData("st");
+
+    QCOMPARE(hash2.result(), QCryptographicHash::hash("data", QCryptographicHash::Sha1));
+    QCOMPARE(hash1.result(), QCryptographicHash::hash("test", QCryptographicHash::Sha256));
 }
 
 void tst_QCryptographicHash::ensureLargeData()

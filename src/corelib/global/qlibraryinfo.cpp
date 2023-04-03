@@ -240,6 +240,19 @@ QLibraryInfo::isDebugBuild() noexcept
 }
 
 /*!
+    \since 6.5
+    Returns \c true if this is a shared (dynamic) build of Qt.
+*/
+bool QLibraryInfo::isSharedBuild() noexcept
+{
+#ifdef QT_SHARED
+    return true;
+#else
+    return false;
+#endif
+}
+
+/*!
     \since 5.8
     Returns the version of the Qt library.
 
@@ -658,6 +671,42 @@ QStringList QLibraryInfo::platformPluginArguments(const QString &platformName)
     \typealias QLibraryInfo::LibraryLocation
     \deprecated Use LibraryPath with QLibraryInfo::path() instead.
 */
+
+/*!
+    \macro QT_VERSION_STR
+    \relates <QtVersion>
+
+    This macro expands to a string that specifies Qt's version number (for
+    example, "6.1.2"). This is the version with which the application is
+    compiled. This may be a different version than the version the application
+    will find itself using at \e runtime.
+
+    \sa qVersion(), QT_VERSION
+*/
+
+/*!
+    \relates <QtVersion>
+
+    Returns the version number of Qt at runtime as a string (for example,
+    "6.1.2"). This is the version of the Qt library in use at \e runtime,
+    which need not be the version the application was \e compiled with.
+
+    \sa QT_VERSION_STR, QLibraryInfo::version()
+*/
+
+const char *qVersion() noexcept
+{
+    return QT_VERSION_STR;
+}
+
+#if QT_DEPRECATED_SINCE(6, 9)
+
+bool qSharedBuild() noexcept
+{
+    return QLibraryInfo::isSharedBuild();
+}
+
+#endif // QT_DEPRECATED_SINCE(6, 9)
 
 QT_END_NAMESPACE
 

@@ -6,8 +6,16 @@
 # include <QtCore/qglobal.h>
 #endif
 
+#if 0
+#pragma qt_class(QtCompilerDetection)
+#pragma qt_sync_skip_header_check
+#pragma qt_sync_stop_processing
+#endif
+
 #ifndef QCOMPILERDETECTION_H
 #define QCOMPILERDETECTION_H
+
+#include <QtCore/qprocessordetection.h>
 
 /*
    The compiler, must be one of: (Q_CC_x)
@@ -41,6 +49,7 @@
 
 #if defined(__COVERITY__)
 #  define Q_CC_COVERITY
+#  define Q_COMPILER_COMPLAINS_ABOUT_RETURN_AFTER_UNREACHABLE
 #endif
 
 /* Symantec C++ is now Digital Mars */
@@ -62,6 +71,7 @@
 #  endif
 #  define Q_OUTOFLINE_TEMPLATE inline
 #  define Q_COMPILER_MANGLES_RETURN_TYPE
+#  define Q_COMPILER_MANGLES_ACCESS_SPECIFIER
 #  define Q_FUNC_INFO __FUNCSIG__
 #  define Q_ASSUME_IMPL(expr) __assume(expr)
 #  define Q_UNREACHABLE_IMPL() __assume(0)
@@ -225,7 +235,6 @@
               but it is not defined on older compilers like C Set 3.1 */
 #elif defined(__xlC__)
 #  define Q_CC_XLC
-#  define Q_FULL_TEMPLATE_INSTANTIATION
 #  if __xlC__ < 0x400
 #    error "Compiler not supported"
 #  elif __xlC__ >= 0x0600
@@ -441,13 +450,15 @@
 #  define __has_include_next(x)        0
 #endif
 
-// Kept around until all submodules have transitioned
-#define QT_HAS_BUILTIN(x)        __has_builtin(x)
-#define QT_HAS_FEATURE(x)        __has_feature(x)
-#define QT_HAS_ATTRIBUTE(x)      __has_attribute(x)
-#define QT_HAS_CPP_ATTRIBUTE(x)  __has_cpp_attribute(x)
-#define QT_HAS_INCLUDE(x)        __has_include(x)
-#define QT_HAS_INCLUDE_NEXT(x)   __has_include_next(x)
+/*
+   detecting ASAN can be helpful to disable slow tests
+   clang uses feature, gcc  defines __SANITIZE_ADDRESS__
+   unconditionally check both in case other compilers mirror
+   either of those options
+ */
+#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+#  define QT_ASAN_ENABLED
+#endif
 
 #ifdef __cplusplus
 # if __has_include(<version>) /* remove this check once Integrity, QNX have caught up */
@@ -1048,7 +1059,7 @@
  * "Weak overloads" - makes an otherwise confliciting overload weaker
  * (by making it a template)
  */
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
 #  define Q_WEAK_OVERLOAD template <typename = void>
 #else
 #  define Q_WEAK_OVERLOAD
@@ -1072,7 +1083,7 @@
  * The workaround: declare such functions as function templates.
  * (Obviously a function template does not need this marker.)
 */
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
 #  define QT_POST_CXX17_API_IN_EXPORTED_CLASS template <typename = void>
 #else
 #  define QT_POST_CXX17_API_IN_EXPORTED_CLASS
@@ -1135,6 +1146,20 @@
     QT_WARNING_POP
 #endif
 
+// The body must be a statement:
+#define Q_CAST_IGNORE_ALIGN(body) QT_WARNING_PUSH QT_WARNING_DISABLE_GCC("-Wcast-align") body QT_WARNING_POP
+
+// This macro can be used to calculate member offsets for types with a non standard layout.
+// It uses the fact that offsetof() is allowed to support those types since C++17 as an optional
+// feature. All our compilers do support this, but some issue a warning, so we wrap the offsetof()
+// call in a macro that disables the compiler warning.
+#define Q_OFFSETOF(Class, member) \
+    []() -> size_t { \
+        QT_WARNING_PUSH QT_WARNING_DISABLE_INVALID_OFFSETOF \
+        return offsetof(Class, member); \
+        QT_WARNING_POP \
+    }()
+
 /*
    Proper for-scoping in MIPSpro CC
 */
@@ -1149,18 +1174,6 @@
 #else
 #define qMove(x) (x)
 #endif
-
-#define Q_UNREACHABLE() \
-    do {\
-        Q_ASSERT_X(false, "Q_UNREACHABLE()", "Q_UNREACHABLE was reached");\
-        Q_UNREACHABLE_IMPL();\
-    } while (false)
-
-#define Q_ASSUME(Expr) \
-    [] (bool valueOfExpression) {\
-        Q_ASSERT_X(valueOfExpression, "Q_ASSUME()", "Assumption in Q_ASSUME(\"" #Expr "\") was not correct");\
-        Q_ASSUME_IMPL(valueOfExpression);\
-    }(Expr)
 
 #if defined(__cplusplus)
 #if __has_cpp_attribute(clang::fallthrough)
@@ -1200,5 +1213,155 @@
 #  undef QT_COMPILER_SUPPORTS_MIPS_DSP
 #  undef QT_COMPILER_SUPPORTS_MIPS_DSPR2
 #endif
+
+// Compiler version check
+#if defined(__cplusplus) && (__cplusplus < 201703L)
+#  ifdef Q_CC_MSVC
+#    error "Qt requires a C++17 compiler, and a suitable value for __cplusplus. On MSVC, you must pass the /Zc:__cplusplus option to the compiler."
+#  else
+#    error "Qt requires a C++17 compiler"
+#  endif
+#endif // __cplusplus
+
+#if defined(__cplusplus) && defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
+#  if Q_CC_MSVC < 1927
+     // Check below only works with 16.7 or newer
+#    error "Qt requires at least Visual Studio 2019 version 16.7 (VC++ version 14.27). Please upgrade."
+#  endif
+
+// On MSVC we require /permissive- set by user code. Check that we are
+// under its rules -- for instance, check that std::nullptr_t->bool is
+// not an implicit conversion, as per
+// https://docs.microsoft.com/en-us/cpp/overview/cpp-conformance-improvements?view=msvc-160#nullptr_t-is-only-convertible-to-bool-as-a-direct-initialization
+static_assert(!std::is_convertible_v<std::nullptr_t, bool>,
+              "On MSVC you must pass the /permissive- option to the compiler.");
+#endif
+
+#if defined(QT_BOOTSTRAPPED) || defined(QT_USE_PROTECTED_VISIBILITY) || !defined(__ELF__) || defined(__PIC__)
+// this is fine
+#elif defined(QT_REDUCE_RELOCATIONS)
+#  error "You must build your code with position independent code if Qt was configured with -reduce-relocations. "\
+         "Compile your code with -fPIC (and not with -fPIE)."
+#endif
+
+#ifdef Q_PROCESSOR_X86_32
+#  if defined(Q_CC_GNU)
+#    define QT_FASTCALL __attribute__((regparm(3)))
+#  elif defined(Q_CC_MSVC)
+#    define QT_FASTCALL __fastcall
+#  else
+#    define QT_FASTCALL
+#  endif
+#else
+#  define QT_FASTCALL
+#endif
+
+// enable gcc warnings for printf-style functions
+#if defined(Q_CC_GNU) && !defined(__INSURE__)
+#  if defined(Q_CC_MINGW) && !defined(Q_CC_CLANG)
+#    define Q_ATTRIBUTE_FORMAT_PRINTF(A, B) \
+         __attribute__((format(gnu_printf, (A), (B))))
+#  else
+#    define Q_ATTRIBUTE_FORMAT_PRINTF(A, B) \
+         __attribute__((format(printf, (A), (B))))
+#  endif
+#else
+#  define Q_ATTRIBUTE_FORMAT_PRINTF(A, B)
+#endif
+
+#ifdef Q_CC_MSVC
+#  define Q_NEVER_INLINE __declspec(noinline)
+#  define Q_ALWAYS_INLINE __forceinline
+#elif defined(Q_CC_GNU)
+#  define Q_NEVER_INLINE __attribute__((noinline))
+#  define Q_ALWAYS_INLINE inline __attribute__((always_inline))
+#else
+#  define Q_NEVER_INLINE
+#  define Q_ALWAYS_INLINE inline
+#endif
+
+//defines the type for the WNDPROC on windows
+//the alignment needs to be forced for sse2 to not crash with mingw
+#if defined(Q_OS_WIN)
+#  if defined(Q_CC_MINGW) && defined(Q_PROCESSOR_X86_32)
+#    define QT_ENSURE_STACK_ALIGNED_FOR_SSE __attribute__ ((force_align_arg_pointer))
+#  else
+#    define QT_ENSURE_STACK_ALIGNED_FOR_SSE
+#  endif
+#  define QT_WIN_CALLBACK CALLBACK QT_ENSURE_STACK_ALIGNED_FOR_SSE
+#endif
+
+#ifdef __cpp_conditional_explicit
+#define Q_IMPLICIT explicit(false)
+#else
+#define Q_IMPLICIT
+#endif
+
+#if defined(__cplusplus)
+
+#ifdef __cpp_constinit
+# if defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
+   // https://developercommunity.visualstudio.com/t/C:-constinit-for-an-optional-fails-if-/1406069
+#  define Q_CONSTINIT
+# else
+#  define Q_CONSTINIT constinit
+# endif
+#elif defined(__has_cpp_attribute) && __has_cpp_attribute(clang::require_constant_initialization)
+# define Q_CONSTINIT [[clang::require_constant_initialization]]
+#elif defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 1000
+# define Q_CONSTINIT __constinit
+#else
+# define Q_CONSTINIT
+#endif
+
+#ifndef Q_OUTOFLINE_TEMPLATE
+#  define Q_OUTOFLINE_TEMPLATE
+#endif
+#ifndef Q_INLINE_TEMPLATE
+#  define Q_INLINE_TEMPLATE inline
+#endif
+
+/*
+   Avoid some particularly useless warnings from some stupid compilers.
+   To get ALL C++ compiler warnings, define QT_CC_WARNINGS or comment out
+   the line "#define QT_NO_WARNINGS". See also QTBUG-26877.
+*/
+#if !defined(QT_CC_WARNINGS)
+#  define QT_NO_WARNINGS
+#endif
+#if defined(QT_NO_WARNINGS)
+#  if defined(Q_CC_MSVC)
+QT_WARNING_DISABLE_MSVC(4251) /* class 'type' needs to have dll-interface to be used by clients of class 'type2' */
+QT_WARNING_DISABLE_MSVC(4244) /* conversion from 'type1' to 'type2', possible loss of data */
+QT_WARNING_DISABLE_MSVC(4275) /* non - DLL-interface classkey 'identifier' used as base for DLL-interface classkey 'identifier' */
+QT_WARNING_DISABLE_MSVC(4514) /* unreferenced inline function has been removed */
+QT_WARNING_DISABLE_MSVC(4800) /* 'type' : forcing value to bool 'true' or 'false' (performance warning) */
+QT_WARNING_DISABLE_MSVC(4097) /* typedef-name 'identifier1' used as synonym for class-name 'identifier2' */
+QT_WARNING_DISABLE_MSVC(4706) /* assignment within conditional expression */
+QT_WARNING_DISABLE_MSVC(4355) /* 'this' : used in base member initializer list */
+QT_WARNING_DISABLE_MSVC(4710) /* function not inlined */
+QT_WARNING_DISABLE_MSVC(4530) /* C++ exception handler used, but unwind semantics are not enabled. Specify /EHsc */
+#  elif defined(Q_CC_BOR)
+#    pragma option -w-inl
+#    pragma option -w-aus
+#    pragma warn -inl
+#    pragma warn -pia
+#    pragma warn -ccc
+#    pragma warn -rch
+#    pragma warn -sig
+#  endif
+#endif
+
+#if !defined(QT_NO_EXCEPTIONS)
+#  if !defined(Q_MOC_RUN)
+#    if defined(Q_CC_GNU) && !defined(__cpp_exceptions)
+#      define QT_NO_EXCEPTIONS
+#    endif
+#  elif defined(QT_BOOTSTRAPPED)
+#    define QT_NO_EXCEPTIONS
+#  endif
+#endif
+
+#endif // __cplusplus
 
 #endif // QCOMPILERDETECTION_H

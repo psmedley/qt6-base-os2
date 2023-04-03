@@ -5,8 +5,6 @@
 
 #include <algorithm>
 
-QT_BEGIN_NAMESPACE
-
 namespace {
 
 QString peer_info(const QHostAddress &address, quint16 port)
@@ -213,11 +211,9 @@ void DtlsServer::decryptDatagram(QDtls *connection, const QByteArray &clientMess
 //! [14]
 void DtlsServer::shutdown()
 {
-    for (const auto &connection : qExchange(knownClients, {}))
+    for (const auto &connection : std::exchange(knownClients, {}))
         connection->shutdown(&serverSocket);
 
     serverSocket.close();
 }
 //! [14]
-
-QT_END_NAMESPACE

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_internal_add_example(addressbook)
 qt_internal_add_example(basicsortfiltermodel)
 qt_internal_add_example(chart)
@@ -20,6 +23,6 @@ qt_internal_add_example(storageview)
 if(QT_FEATURE_draganddrop)
     qt_internal_add_example(puzzle)
 endif()
-if(TARGET Qt::Xml)
+if(TARGET Qt6::Xml)
     qt_internal_add_example(simpledommodel)
 endif()

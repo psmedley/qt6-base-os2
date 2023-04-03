@@ -1,4 +1,5 @@
-# Generated from direct2d.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QWindowsDirect2DIntegrationPlugin Plugin:
@@ -21,7 +22,7 @@ qt_internal_add_plugin(QWindowsDirect2DIntegrationPlugin
         ../windows/qwindowsinternalmimedata.cpp ../windows/qwindowsinternalmimedata.h
         ../windows/qwindowskeymapper.cpp ../windows/qwindowskeymapper.h
         ../windows/qwindowsmenu.cpp ../windows/qwindowsmenu.h
-        ../windows/qwindowsmime.cpp ../windows/qwindowsmime.h
+        ../windows/qwindowsmimeregistry.cpp ../windows/qwindowsmimeregistry.h
         ../windows/qwindowsmousehandler.cpp ../windows/qwindowsmousehandler.h
         ../windows/qwindowsnativeinterface.cpp ../windows/qwindowsnativeinterface.h
         ../windows/qwindowsole.cpp ../windows/qwindowsole.h
@@ -44,6 +45,9 @@ qt_internal_add_plugin(QWindowsDirect2DIntegrationPlugin
         qwindowsdirect2dplatformpixmap.cpp qwindowsdirect2dplatformpixmap.h
         qwindowsdirect2dplatformplugin.cpp
         qwindowsdirect2dwindow.cpp qwindowsdirect2dwindow.h
+    NO_UNITY_BUILD_SOURCES
+        ../windows/qwindowspointerhandler.cpp
+        ../windows/qwindowsmousehandler.cpp
     DEFINES
         QT_NO_CAST_FROM_ASCII
         QT_NO_FOREACH
@@ -55,10 +59,10 @@ qt_internal_add_plugin(QWindowsDirect2DIntegrationPlugin
         Qt::Gui
         Qt::GuiPrivate
         advapi32
-        d2d1 # special case
+        d2d1
         d3d11
         dwmapi
-        dwrite # special case
+        dwrite
         dxgi
         dxguid
         gdi32
@@ -93,14 +97,8 @@ qt_internal_add_resource(QWindowsDirect2DIntegrationPlugin "openglblacklists"
         ${openglblacklists_resource_files}
 )
 
-#### Keys ignored in scope 1:.:.:direct2d.pro:<TRUE>:
-# OTHER_FILES = "direct2d.json"
-
 ## Scopes:
 #####################################################################
-
-#### Keys ignored in scope 2:.:.:direct2d.pro:NOT TARGET___equals____ss_QT_DEFAULT_QPA_PLUGIN:
-# PLUGIN_EXTENDS = "-"
 
 qt_internal_extend_target(QWindowsDirect2DIntegrationPlugin CONDITION QT_FEATURE_opengl AND NOT QT_FEATURE_dynamicgl
     LIBRARIES
@@ -214,8 +212,6 @@ qt_internal_extend_target(QWindowsDirect2DIntegrationPlugin CONDITION MINGW AND 
         uuid
 )
 
-# begin special case
 if (MINGW)
     set_source_files_properties(../windows/qwindowspointerhandler.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 endif()
-# end special case

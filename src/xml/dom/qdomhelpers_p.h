@@ -4,6 +4,7 @@
 #define QDOMHELPERS_P_H
 
 #include <qcoreapplication.h>
+#include <qdom.h>
 #include <private/qglobal_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -33,7 +34,7 @@ class QXmlStreamAttributes;
 class QDomBuilder
 {
 public:
-    QDomBuilder(QDomDocumentPrivate *d, QXmlStreamReader *r, bool namespaceProcessing);
+    QDomBuilder(QDomDocumentPrivate *d, QXmlStreamReader *r, QDomDocument::ParseOptions options);
     ~QDomBuilder();
 
     bool endDocument();
@@ -53,22 +54,20 @@ public:
                             const QString &notationName);
 
     void fatalError(const QString &message);
+    QDomDocument::ParseResult result() const { return parseResult; }
 
-    using ErrorInfo = std::tuple<QString, int, int>;
-    ErrorInfo error() const;
-
-    QString errorMsg;
-    int errorLine;
-    int errorColumn;
+    bool preserveSpacingOnlyNodes() const
+    { return parseOptions & QDomDocument::ParseOption::PreserveSpacingOnlyNodes; }
 
 private:
     QString dtdInternalSubset(const QString &dtd);
 
+    QDomDocument::ParseResult parseResult;
     QDomDocumentPrivate *doc;
     QDomNodePrivate *node;
     QXmlStreamReader *reader;
     QString entityName;
-    bool nsProcessing;
+    QDomDocument::ParseOptions parseOptions;
 };
 
 /**************************************************************
@@ -81,10 +80,10 @@ class QDomParser
 {
     Q_DECLARE_TR_FUNCTIONS(QDomParser)
 public:
-    QDomParser(QDomDocumentPrivate *d, QXmlStreamReader *r, bool namespaceProcessing);
+    QDomParser(QDomDocumentPrivate *d, QXmlStreamReader *r, QDomDocument::ParseOptions options);
 
     bool parse();
-    QDomBuilder::ErrorInfo errorInfo() const;
+    QDomDocument::ParseResult result() const { return domBuilder.result(); }
 
 private:
     bool parseProlog();

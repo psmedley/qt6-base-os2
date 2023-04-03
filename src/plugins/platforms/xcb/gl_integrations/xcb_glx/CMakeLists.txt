@@ -1,4 +1,5 @@
-# Generated from xcb_glx.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QXcbGlxIntegrationPlugin Plugin:
@@ -25,6 +26,8 @@ qt_internal_add_plugin(QXcbGlxIntegrationPlugin
         Qt::GuiPrivate
         Qt::XcbQpaPrivate
 )
+
+set_target_properties(QXcbGlxIntegrationPlugin PROPERTIES UNITY_BUILD OFF) # X11 define clashes
 
 ## Scopes:
 #####################################################################

@@ -9,6 +9,7 @@ QT_USE_NAMESPACE
 
 #if QT_WIDGETS_REMOVED_SINCE(6, 3)
 
+#if QT_CONFIG(menu)
 #include "qmenu.h"
 
 QAction *QMenu::addAction(const QString &text)
@@ -20,6 +21,7 @@ QAction *QMenu::addAction(const QIcon &icon, const QString &text)
 {
     return QWidget::addAction(icon, text);
 }
+#endif
 
 #if !QT_CONFIG(shortcut)
 // the overloads taking QKeySequence as a trailing argument are deprecated, not removed,
@@ -36,6 +38,7 @@ QAction *QMenu::addAction(const QIcon &icon, const QString &text,
 }
 #endif
 
+#if QT_CONFIG(toolbar)
 #include "qtoolbar.h"
 
 QAction *QToolBar::addAction(const QString &text)
@@ -59,7 +62,9 @@ QAction *QToolBar::addAction(const QIcon &icon, const QString &text,
 {
     return QWidget::addAction(icon, text, receiver, member);
 }
+#endif
 
+#if QT_CONFIG(menubar)
 #include "qmenubar.h"
 
 QAction *QMenuBar::addAction(const QString &text)
@@ -71,6 +76,7 @@ QAction *QMenuBar::addAction(const QString &text, const QObject *receiver, const
 {
     return QWidget::addAction(text, receiver, member);
 }
+#endif
 
 // #include <qotherheader.h>
 // // implement removed functions from qotherheader.h

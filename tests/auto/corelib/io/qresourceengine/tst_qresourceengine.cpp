@@ -284,7 +284,7 @@ void tst_QResourceEngine::checkStructure_data()
 
 
         info = QFileInfo(QFINDTESTDATA("testqrc/test/test/test2.txt"));
-        QTest::addRow("%s test1 text", qPrintable(root))        << QString(root + "test/test/test2.txt")
+        QTest::addRow("%s test2 text", qPrintable(root))        << QString(root + "test/test/test2.txt")
                                                   << QByteArray("def\n")
                                                   << QStringList()
                                                   << QStringList()
@@ -541,6 +541,15 @@ void tst_QResourceEngine::checkUnregisterResource()
     QVERIFY(QFile::exists(file_check));
     QVERIFY(QResource::unregisterResource(rcc_file, root));
     QVERIFY(!QFile::exists(file_check));
+    {
+        // QTBUG-86088
+        QVERIFY(QResource::registerResource(rcc_file, root));
+        QFile file(file_check);
+        QVERIFY(file.open(QFile::ReadOnly));
+        QVERIFY(!QResource::unregisterResource(rcc_file, root));
+        file.close();
+        QVERIFY(!QFile::exists(file_check));
+    }
     QVERIFY(QResource::registerResource(rcc_file, root));
     QVERIFY(QFile::exists(file_check));
     QFileInfo fileInfo(file_check);

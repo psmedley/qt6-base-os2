@@ -1,42 +1,101 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # This function can be used to add sources/libraries/etc. to the specified CMake target
 # if the provided CONDITION evaluates to true.
+# One-value Arguments:
+#   PRECOMPILED_HEADER
+#     Name of the precompiled header that is used for the target.
+# Multi-value Arguments:
+#   CONDITION
+#     The condition under which the target will be extended.
+#   CONDITION_INDEPENDENT_SOURCES
+#     Source files that should be added to the target unconditionally. Note that if target is Qt
+#     module, these files will raise a warning at configure time if the condition is not met.
+#   COMPILE_FLAGS
+#     Custom compilation flags.
+#   NO_PCH_SOURCES
+#     Skip the specified source files by PRECOMPILE_HEADERS feature.
 function(qt_internal_extend_target target)
+    if(NOT TARGET "${target}")
+        qt_internal_is_in_test_batch(in_batch ${target})
+        if(NOT in_batch)
+            message(FATAL_ERROR "Trying to extend a non-existing target \"${target}\".")
+        endif()
+        _qt_internal_test_batch_target_name(target)
+    endif()
+
     # Don't try to extend_target when cross compiling an imported host target (like a tool).
     qt_is_imported_target("${target}" is_imported)
     if(is_imported)
         return()
     endif()
 
-    if (NOT TARGET "${target}")
-        message(FATAL_ERROR "Trying to extend non-existing target \"${target}\".")
-    endif()
-    qt_parse_all_arguments(arg "qt_extend_target" "HEADER_MODULE" "PRECOMPILED_HEADER"
-        "CONDITION;${__default_public_args};${__default_private_args};${__default_private_module_args};COMPILE_FLAGS;NO_PCH_SOURCES" ${ARGN})
-    if ("x${arg_CONDITION}" STREQUAL x)
+    set(option_args
+        NO_UNITY_BUILD
+    )
+    set(single_args
+        PRECOMPILED_HEADER
+    )
+    set(multi_args
+        ${__default_public_args}
+        ${__default_private_args}
+        ${__default_private_module_args}
+        CONDITION
+        CONDITION_INDEPENDENT_SOURCES
+        COMPILE_FLAGS
+        NO_PCH_SOURCES
+    )
+
+    cmake_parse_arguments(PARSE_ARGV 1 arg
+        "${option_args}"
+        "${single_args}"
+        "${multi_args}"
+    )
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    if("x${arg_CONDITION}" STREQUAL "x")
         set(arg_CONDITION ON)
     endif()
 
     qt_evaluate_config_expression(result ${arg_CONDITION})
-    if (${result})
+    if(${result})
         if(QT_CMAKE_DEBUG_EXTEND_TARGET)
             message("qt_extend_target(${target} CONDITION ${arg_CONDITION} ...): Evaluated")
         endif()
         set(dbus_sources "")
         foreach(adaptor ${arg_DBUS_ADAPTOR_SOURCES})
-            qt_create_qdbusxml2cpp_command("${target}" "${adaptor}" ADAPTOR BASENAME "${arg_DBUS_ADAPTOR_BASENAME}" FLAGS "${arg_DBUS_ADAPTOR_FLAGS}")
+            qt_create_qdbusxml2cpp_command("${target}" "${adaptor}"
+                ADAPTOR
+                BASENAME "${arg_DBUS_ADAPTOR_BASENAME}"
+                FLAGS ${arg_DBUS_ADAPTOR_FLAGS}
+            )
             list(APPEND dbus_sources "${adaptor}")
         endforeach()
 
         foreach(interface ${arg_DBUS_INTERFACE_SOURCES})
-            qt_create_qdbusxml2cpp_command("${target}" "${interface}" INTERFACE BASENAME "${arg_DBUS_INTERFACE_BASENAME}" FLAGS "${arg_DBUS_INTERFACE_FLAGS}")
+            qt_create_qdbusxml2cpp_command("${target}" "${interface}"
+                INTERFACE
+                BASENAME "${arg_DBUS_INTERFACE_BASENAME}"
+                FLAGS ${arg_DBUS_INTERFACE_FLAGS}
+            )
             list(APPEND dbus_sources "${interface}")
         endforeach()
 
+        set(all_sources
+            ${arg_SOURCES}
+            ${dbus_sources}
+        )
+
         get_target_property(target_type ${target} TYPE)
         set(is_library FALSE)
-        if (${target_type} STREQUAL "STATIC_LIBRARY" OR ${target_type} STREQUAL "SHARED_LIBRARY")
+        set(is_interface_lib FALSE)
+        if(${target_type} STREQUAL "STATIC_LIBRARY" OR ${target_type} STREQUAL "SHARED_LIBRARY")
             set(is_library TRUE)
+        elseif(target_type STREQUAL "INTERFACE_LIBRARY")
+            set(is_interface_lib TRUE)
         endif()
+
         foreach(lib ${arg_PUBLIC_LIBRARIES} ${arg_LIBRARIES})
             # Automatically generate PCH for 'target' using public dependencies.
             # But only if 'target' is a library/module that does not specify its own PCH file.
@@ -55,25 +114,32 @@ function(qt_internal_extend_target target)
         # CMake versions less than 3.19 don't support adding the source files to the PRIVATE scope
         # of the INTERFACE libraries. These PRIVATE sources are only needed by IDEs to display
         # them in a project tree, so to avoid build issues and appearing the sources in
-        # INTERFACE_SOURCES property of HEADER_MODULE let's simply exclude them for compatibility
-        # with CMake versions less than 3.19.
-        if(NOT arg_HEADER_MODULE OR CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
-            target_sources("${target}" PRIVATE ${arg_SOURCES} ${dbus_sources})
-            if (arg_COMPILE_FLAGS)
-                set_source_files_properties(${arg_SOURCES} PROPERTIES
+        # INTERFACE_SOURCES property of INTERFACE_LIBRARY. Collect them inside the
+        # _qt_internal_target_sources property, since they can be useful in the source processing
+        # functions. The property itself is not exported and should only be used in the Qt internal
+        # build tree.
+        if(NOT is_interface_lib OR CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
+            target_sources("${target}" PRIVATE ${all_sources})
+            if(arg_COMPILE_FLAGS)
+                set_source_files_properties(${all_sources} PROPERTIES
                     COMPILE_FLAGS "${arg_COMPILE_FLAGS}")
             endif()
+        else()
+            set_property(TARGET ${target} APPEND PROPERTY
+                _qt_internal_target_sources ${all_sources})
         endif()
 
         set(public_visibility_option "PUBLIC")
         set(private_visibility_option "PRIVATE")
-        if(arg_HEADER_MODULE)
+        if(is_interface_lib)
             set(public_visibility_option "INTERFACE")
             set(private_visibility_option "INTERFACE")
         endif()
         target_include_directories("${target}"
                                    ${public_visibility_option} ${arg_PUBLIC_INCLUDE_DIRECTORIES}
                                    ${private_visibility_option} ${arg_INCLUDE_DIRECTORIES})
+        target_include_directories("${target}" SYSTEM
+                                   ${private_visibility_option} ${arg_SYSTEM_INCLUDE_DIRECTORIES})
         target_compile_definitions("${target}"
                                     ${public_visibility_option} ${arg_PUBLIC_DEFINES}
                                     ${private_visibility_option} ${arg_DEFINES})
@@ -87,10 +153,14 @@ function(qt_internal_extend_target target)
                             ${public_visibility_option} ${arg_PUBLIC_LINK_OPTIONS}
                             ${private_visibility_option} ${arg_LINK_OPTIONS})
 
-        if(NOT arg_HEADER_MODULE)
-            set_property (TARGET "${target}" APPEND PROPERTY
+        if(NOT is_interface_lib)
+            set_property(TARGET "${target}" APPEND PROPERTY
                 AUTOMOC_MOC_OPTIONS "${arg_MOC_OPTIONS}"
             )
+            # Plugin types associated to a module
+            if(NOT "x${arg_PLUGIN_TYPES}" STREQUAL "x")
+                qt_internal_add_plugin_types("${target}" "${arg_PLUGIN_TYPES}")
+            endif()
         endif()
 
         # When computing the private library dependencies, we need to check not only the known
@@ -139,6 +209,7 @@ function(qt_internal_extend_target target)
 
         qt_update_precompiled_header("${target}" "${arg_PRECOMPILED_HEADER}")
         qt_update_ignore_pch_source("${target}" "${arg_NO_PCH_SOURCES}")
+        qt_update_ignore_unity_build_sources("${target}" "${arg_NO_UNITY_BUILD_SOURCES}")
         ## Ignore objective-c files for PCH (not supported atm)
         qt_ignore_pch_obj_c_sources("${target}" "${arg_SOURCES}")
 
@@ -146,6 +217,21 @@ function(qt_internal_extend_target target)
         if(QT_CMAKE_DEBUG_EXTEND_TARGET)
             message("qt_extend_target(${target} CONDITION ${arg_CONDITION} ...): Skipped")
         endif()
+    endif()
+
+    if(arg_CONDITION_INDEPENDENT_SOURCES)
+        set_source_files_properties(${arg_CONDITION_INDEPENDENT_SOURCES} PROPERTIES
+            _qt_extend_target_condition "${arg_CONDITION}"
+            SKIP_AUTOGEN TRUE
+        )
+
+        qt_internal_get_target_sources_property(sources_property)
+        set_property(TARGET ${target} APPEND PROPERTY
+            ${sources_property} "${arg_CONDITION_INDEPENDENT_SOURCES}")
+    endif()
+
+    if(arg_NO_UNITY_BUILD)
+        set_target_properties(${target} PROPERTIES UNITY_BUILD OFF)
     endif()
 endfunction()
 
@@ -487,6 +573,39 @@ endif()
 
         set(properties_retrieved TRUE)
 
+        get_target_property(is_configure_time_target ${target} _qt_internal_configure_time_target)
+        if(is_configure_time_target)
+            # For Multi-config developer builds we should simply reuse IMPORTED_LOCATION of the
+            # target.
+            if(NOT QT_WILL_INSTALL AND QT_FEATURE_debug_and_release)
+                get_target_property(configure_time_target_install_location ${target}
+                    IMPORTED_LOCATION)
+            else()
+                get_target_property(configure_time_target_install_location ${target}
+                    _qt_internal_configure_time_target_install_location)
+                set(configure_time_target_install_location
+                    "$\{PACKAGE_PREFIX_DIR}/${configure_time_target_install_location}")
+            endif()
+            if(configure_time_target_install_location)
+                string(APPEND content "
+# Import configure-time executable ${full_target}
+if(NOT TARGET ${full_target})
+    set(_qt_imported_location \"${configure_time_target_install_location}\")
+    if(NOT EXISTS \"$\{_qt_imported_location}\")
+        message(FATAL_ERROR \"Unable to add configure time executable ${full_target}\"
+            \" $\{_qt_imported_location} doesn't exists\")
+    endif()
+    add_executable(${full_target} IMPORTED)
+    set_property(TARGET ${full_target} APPEND PROPERTY IMPORTED_CONFIGURATIONS ${default_cfg})
+    set_target_properties(${full_target} PROPERTIES IMPORTED_LOCATION_${uc_default_cfg}
+        \"$\{_qt_imported_location}\")
+    set_property(TARGET ${full_target} PROPERTY IMPORTED_GLOBAL TRUE)
+    unset(_qt_imported_location)
+endif()
+\n")
+            endif()
+        endif()
+
         # Non-prefix debug-and-release builds: add check for the existence of the debug binary of
         # the target.  It is not built by default.
         if(NOT QT_WILL_INSTALL AND QT_FEATURE_debug_and_release)
@@ -495,12 +614,12 @@ endif()
                 string(APPEND content "
 # ${full_target} is not built by default in the Debug configuration. Check existence.
 get_target_property(_qt_imported_location ${full_target} IMPORTED_LOCATION_DEBUG)
-if(NOT EXISTS \"$\\{_qt_imported_location}\")
+if(NOT EXISTS \"$\{_qt_imported_location}\")
     get_target_property(_qt_imported_configs ${full_target} IMPORTED_CONFIGURATIONS)
     list(REMOVE_ITEM _qt_imported_configs DEBUG)
-    set_property(TARGET ${full_target} PROPERTY IMPORTED_CONFIGURATIONS $\\{_qt_imported_configs})
+    set_property(TARGET ${full_target} PROPERTY IMPORTED_CONFIGURATIONS $\{_qt_imported_configs})
     set_property(TARGET ${full_target} PROPERTY IMPORTED_LOCATION_DEBUG)
-endif()\n\n")
+endif()\n")
             endif()
         endif()
 
@@ -509,6 +628,8 @@ endif()\n\n")
         if(target_type STREQUAL "SHARED_LIBRARY")
             if(WIN32)
                 set(write_implib TRUE)
+            elseif(WASM)
+                # Keep write_soname at FALSE
             else()
                 set(write_soname TRUE)
             endif()
@@ -523,12 +644,12 @@ endif()\n\n")
                 string(APPEND content "get_target_property(_qt_imported_soname ${full_target} IMPORTED_SONAME_${uc_release_cfg})\n")
             endif()
         endif()
-        string(APPEND content "get_target_property(_qt_imported_location_default ${full_target} IMPORTED_LOCATION_$\\{QT_DEFAULT_IMPORT_CONFIGURATION})\n")
+        string(APPEND content "get_target_property(_qt_imported_location_default ${full_target} IMPORTED_LOCATION_$\{QT_DEFAULT_IMPORT_CONFIGURATION})\n")
         if(write_implib)
-            string(APPEND content "get_target_property(_qt_imported_implib_default ${full_target} IMPORTED_IMPLIB_$\\{QT_DEFAULT_IMPORT_CONFIGURATION})\n")
+            string(APPEND content "get_target_property(_qt_imported_implib_default ${full_target} IMPORTED_IMPLIB_$\{QT_DEFAULT_IMPORT_CONFIGURATION})\n")
         endif()
         if(write_soname)
-            string(APPEND content "get_target_property(_qt_imported_soname_default ${full_target} IMPORTED_SONAME_$\\{QT_DEFAULT_IMPORT_CONFIGURATION})\n")
+            string(APPEND content "get_target_property(_qt_imported_soname_default ${full_target} IMPORTED_SONAME_$\{QT_DEFAULT_IMPORT_CONFIGURATION})\n")
         endif()
         foreach(config ${configurations_to_export} "")
             string(TOUPPER "${config}" ucconfig)
@@ -546,18 +667,18 @@ set_property(TARGET ${full_target} APPEND PROPERTY IMPORTED_CONFIGURATIONS ${ucc
             endif()
             string(APPEND content "
 if(_qt_imported_location${var_suffix})
-    set_property(TARGET ${full_target} PROPERTY IMPORTED_LOCATION${property_suffix} \"$\\{_qt_imported_location${var_suffix}}\")
+    set_property(TARGET ${full_target} PROPERTY IMPORTED_LOCATION${property_suffix} \"$\{_qt_imported_location${var_suffix}}\")
 endif()")
             if(write_implib)
                 string(APPEND content "
 if(_qt_imported_implib${var_suffix})
-    set_property(TARGET ${full_target} PROPERTY IMPORTED_IMPLIB${property_suffix} \"$\\{_qt_imported_implib${var_suffix}}\")
+    set_property(TARGET ${full_target} PROPERTY IMPORTED_IMPLIB${property_suffix} \"$\{_qt_imported_implib${var_suffix}}\")
 endif()")
             endif()
             if(write_soname)
                 string(APPEND content "
 if(_qt_imported_soname${var_suffix})
-    set_property(TARGET ${full_target} PROPERTY IMPORTED_SONAME${property_suffix} \"$\\{_qt_imported_soname${var_suffix}}\")
+    set_property(TARGET ${full_target} PROPERTY IMPORTED_SONAME${property_suffix} \"$\{_qt_imported_soname${var_suffix}}\")
 endif()")
             endif()
             string(APPEND content "\n")
@@ -610,7 +731,7 @@ function(qt_internal_create_tracepoints name tracepoints_file)
     set(header_filename "${provider_name}_tracepoints_p.h")
     set(header_path "${CMAKE_CURRENT_BINARY_DIR}/${header_filename}")
 
-    if(QT_FEATURE_lttng OR QT_FEATURE_etw)
+    if(QT_FEATURE_lttng OR QT_FEATURE_etw OR QT_FEATURE_ctf)
         set(source_path "${CMAKE_CURRENT_BINARY_DIR}/${provider_name}_tracepoints.cpp")
         qt_configure_file(OUTPUT "${source_path}"
             CONTENT "#define TRACEPOINT_CREATE_PROBES
@@ -624,6 +745,8 @@ function(qt_internal_create_tracepoints name tracepoints_file)
             target_link_libraries(${name} PRIVATE LTTng::UST)
         elseif(QT_FEATURE_etw)
             set(tracegen_arg "etw")
+        elseif(QT_FEATURE_ctf)
+            set(tracegen_arg "ctf")
         endif()
 
         if(NOT "${QT_HOST_PATH}" STREQUAL "")
@@ -641,6 +764,77 @@ function(qt_internal_create_tracepoints name tracepoints_file)
             VERBATIM)
         add_custom_target(${name}_tracepoints_header DEPENDS "${header_path}")
         add_dependencies(${name} ${name}_tracepoints_header)
+    else()
+        qt_configure_file(OUTPUT "${header_path}" CONTENT "#include <private/qtrace_p.h>\n")
+    endif()
+endfunction()
+
+function(qt_internal_generate_tracepoints name provider)
+    cmake_parse_arguments(arg "" "" "SOURCES" ${ARGN} )
+    set(provider_name ${provider})
+    string(PREPEND provider_name "qt")
+    set(tracepoint_filename "${provider_name}.tracepoints")
+    set(tracepoints_path "${CMAKE_CURRENT_BINARY_DIR}/${tracepoint_filename}")
+    set(header_filename "${provider_name}_tracepoints_p.h")
+    set(header_path "${CMAKE_CURRENT_BINARY_DIR}/${header_filename}")
+
+    if(QT_FEATURE_lttng OR QT_FEATURE_etw OR QT_FEATURE_ctf)
+
+        set(absolute_file_paths "")
+        foreach(file IN LISTS arg_SOURCES)
+            get_filename_component(absolute_file ${file} ABSOLUTE)
+            list(APPEND absolute_file_paths ${absolute_file})
+        endforeach()
+
+        if(NOT "${QT_HOST_PATH}" STREQUAL "")
+            qt_path_join(tracepointgen
+                "${QT_HOST_PATH}"
+                "${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_LIBEXECDIR}"
+                "tracepointgen")
+        else()
+            set(tracepointgen "${QT_CMAKE_EXPORT_NAMESPACE}::tracepointgen")
+        endif()
+
+        add_custom_command(OUTPUT "${tracepoints_path}"
+            COMMAND ${tracepointgen} ${provider_name} "${tracepoints_path}"  "I$<JOIN:$<TARGET_PROPERTY:${name},INCLUDE_DIRECTORIES>,;>" ${absolute_file_paths}
+            DEPENDS ${absolute_file_paths}
+            VERBATIM)
+        add_custom_target(${name}_${provider_name}_tracepoints_file DEPENDS "${tracepoints_path}")
+        add_dependencies(${name} ${name}_${provider_name}_tracepoints_file)
+
+            set(source_path "${CMAKE_CURRENT_BINARY_DIR}/${provider_name}_tracepoints.cpp")
+            qt_configure_file(OUTPUT "${source_path}"
+                CONTENT "#define TRACEPOINT_CREATE_PROBES
+    #define TRACEPOINT_DEFINE
+    #include \"${header_filename}\"")
+        target_sources(${name} PRIVATE "${source_path}")
+        target_compile_definitions(${name} PRIVATE Q_TRACEPOINT)
+
+        if(QT_FEATURE_lttng)
+            set(tracegen_arg "lttng")
+            target_link_libraries(${name} PRIVATE LTTng::UST)
+        elseif(QT_FEATURE_etw)
+            set(tracegen_arg "etw")
+        elseif(QT_FEATURE_ctf)
+            set(tracegen_arg "ctf")
+        endif()
+
+        if(NOT "${QT_HOST_PATH}" STREQUAL "")
+            qt_path_join(tracegen
+                "${QT_HOST_PATH}"
+                "${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_LIBEXECDIR}"
+                "tracegen")
+        else()
+            set(tracegen "${QT_CMAKE_EXPORT_NAMESPACE}::tracegen")
+        endif()
+
+        get_filename_component(tracepoints_filepath "${tracepoints_path}" ABSOLUTE)
+        add_custom_command(OUTPUT "${header_path}"
+            COMMAND ${tracegen} ${tracegen_arg} "${tracepoints_filepath}" "${header_path}"
+            DEPENDS "${tracepoints_path}"
+            VERBATIM)
+        add_custom_target(${name}_${provider_name}_tracepoints_header DEPENDS "${header_path}")
+        add_dependencies(${name} ${name}_${provider_name}_tracepoints_header)
     else()
         qt_configure_file(OUTPUT "${header_path}" CONTENT "#include <private/qtrace_p.h>\n")
     endif()
@@ -868,7 +1062,11 @@ endfunction()
 # qt_internal_add_global_definition function for a specific 'target'.
 function(qt_internal_undefine_global_definition target)
     if(NOT TARGET ${target})
-        message(FATAL_ERROR "${target} is not a target.")
+        qt_internal_is_in_test_batch(in_batch ${target})
+        if(NOT ${in_batch})
+            message(FATAL_ERROR "${target} is not a target.")
+        endif()
+        _qt_internal_test_batch_target_name(target)
     endif()
 
     if("${ARGN}" STREQUAL "")
@@ -895,4 +1093,26 @@ function(qt_internal_add_repo_local_defines target)
     if(DEFINED QT_EXTRA_INTERNAL_TARGET_DEFINES)
         target_compile_definitions("${target}" PRIVATE ${QT_EXTRA_INTERNAL_TARGET_DEFINES})
     endif()
+endfunction()
+
+# The function returns the value of the target's SOURCES property. The function takes into account
+# the limitation of the CMake version less than 3.19, that restricts to add non-interface sources
+# to an interface target.
+# Note: The function works correctly only if qt_internal_extend_target is used when adding source
+# files.
+function(qt_internal_get_target_sources out_var target)
+    qt_internal_get_target_sources_property(sources_property)
+    get_target_property(${out_var} ${target} ${sources_property})
+    set(${out_var} "${${out_var}}" PARENT_SCOPE)
+endfunction()
+
+# The function distinguishes what property supposed to store target sources, based on target TYPE
+# and the CMake version.
+function(qt_internal_get_target_sources_property out_var)
+    set(${out_var} "SOURCES")
+    get_target_property(target_type ${target} TYPE)
+    if(CMAKE_VERSION VERSION_LESS "3.19" AND target_type STREQUAL "INTERFACE_LIBRARY")
+        set(${out_var} "_qt_internal_target_sources")
+    endif()
+    set(${out_var} "${${out_var}}" PARENT_SCOPE)
 endfunction()

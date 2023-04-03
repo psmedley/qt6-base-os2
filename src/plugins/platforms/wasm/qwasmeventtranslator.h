@@ -33,8 +33,6 @@ public:
     explicit QWasmEventTranslator();
     ~QWasmEventTranslator();
 
-    static QCursor cursorForMode(QWasmCompositor::ResizeMode mode);
-
     TranslatedEvent translateKeyEvent(int emEventType, const EmscriptenKeyboardEvent *keyEvent);
 
 private:

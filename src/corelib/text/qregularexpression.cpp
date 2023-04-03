@@ -954,7 +954,7 @@ struct PcreJitStackFree
             pcre2_jit_stack_free_16(stack);
     }
 };
-static thread_local std::unique_ptr<pcre2_jit_stack_16, PcreJitStackFree> jitStacks;
+Q_CONSTINIT static thread_local std::unique_ptr<pcre2_jit_stack_16, PcreJitStackFree> jitStacks;
 }
 
 /*!
@@ -1354,10 +1354,7 @@ QRegularExpression::QRegularExpression(const QString &pattern, PatternOptions op
 
     \sa operator=()
 */
-QRegularExpression::QRegularExpression(const QRegularExpression &re)
-    : d(re.d)
-{
-}
+QRegularExpression::QRegularExpression(const QRegularExpression &re) noexcept = default;
 
 /*!
     \fn QRegularExpression::QRegularExpression(QRegularExpression &&re)
@@ -1386,11 +1383,7 @@ QT_DEFINE_QESDP_SPECIALIZATION_DTOR(QRegularExpressionPrivate)
     Assigns the regular expression \a re to this object, and returns a reference
     to the copy. Both the pattern and the pattern options are copied.
 */
-QRegularExpression &QRegularExpression::operator=(const QRegularExpression &re)
-{
-    d = re.d;
-    return *this;
-}
+QRegularExpression &QRegularExpression::operator=(const QRegularExpression &re) noexcept = default;
 
 /*!
     \fn void QRegularExpression::swap(QRegularExpression &other)
@@ -1588,11 +1581,6 @@ qsizetype QRegularExpression::patternErrorOffset() const
     The returned QRegularExpressionMatch object contains the results of the
     match.
 
-    \note The data referenced by \a subject should remain valid as long
-    as there are QRegularExpressionMatch objects using it. At the moment
-    Qt makes a (shallow) copy of the data, but this behavior may change
-    in a future version of Qt.
-
     \sa QRegularExpressionMatch, {normal matching}
 */
 QRegularExpressionMatch QRegularExpression::match(const QString &subject,
@@ -1610,8 +1598,25 @@ QRegularExpressionMatch QRegularExpression::match(const QString &subject,
     return QRegularExpressionMatch(*priv);
 }
 
+#if QT_DEPRECATED_SINCE(6, 8)
 /*!
     \since 6.0
+    \overload
+    \obsolete
+
+    Use matchView() instead.
+*/
+QRegularExpressionMatch QRegularExpression::match(QStringView subjectView,
+                                                  qsizetype offset,
+                                                  MatchType matchType,
+                                                  MatchOptions matchOptions) const
+{
+    return matchView(subjectView, offset, matchType, matchOptions);
+}
+#endif // QT_DEPRECATED_SINCE(6, 8)
+
+/*!
+    \since 6.5
     \overload
 
     Attempts to match the regular expression against the given \a subjectView
@@ -1626,10 +1631,10 @@ QRegularExpressionMatch QRegularExpression::match(const QString &subject,
 
     \sa QRegularExpressionMatch, {normal matching}
 */
-QRegularExpressionMatch QRegularExpression::match(QStringView subjectView,
-                                                  qsizetype offset,
-                                                  MatchType matchType,
-                                                  MatchOptions matchOptions) const
+QRegularExpressionMatch QRegularExpression::matchView(QStringView subjectView,
+                                                      qsizetype offset,
+                                                      MatchType matchType,
+                                                      MatchOptions matchOptions) const
 {
     d.data()->compilePattern();
     auto priv = new QRegularExpressionMatchPrivate(*this,
@@ -1650,11 +1655,6 @@ QRegularExpressionMatch QRegularExpression::match(QStringView subjectView,
     The returned QRegularExpressionMatchIterator is positioned before the
     first match result (if any).
 
-    \note The data referenced by \a subject should remain valid as long
-    as there are QRegularExpressionMatch objects using it. At the moment
-    Qt makes a (shallow) copy of the data, but this behavior may change
-    in a future version of Qt.
-
     \sa QRegularExpressionMatchIterator, {global matching}
 */
 QRegularExpressionMatchIterator QRegularExpression::globalMatch(const QString &subject,
@@ -1671,8 +1671,25 @@ QRegularExpressionMatchIterator QRegularExpression::globalMatch(const QString &s
     return QRegularExpressionMatchIterator(*priv);
 }
 
+#if QT_DEPRECATED_SINCE(6, 8)
 /*!
     \since 6.0
+    \overload
+    \obsolete
+
+    Use globalMatchView() instead.
+*/
+QRegularExpressionMatchIterator QRegularExpression::globalMatch(QStringView subjectView,
+                                                                qsizetype offset,
+                                                                MatchType matchType,
+                                                                MatchOptions matchOptions) const
+{
+    return globalMatchView(subjectView, offset, matchType, matchOptions);
+}
+#endif // QT_DEPRECATED_SINCE(6, 8)
+
+/*!
+    \since 6.5
     \overload
 
     Attempts to perform a global match of the regular expression against the
@@ -1689,16 +1706,16 @@ QRegularExpressionMatchIterator QRegularExpression::globalMatch(const QString &s
 
     \sa QRegularExpressionMatchIterator, {global matching}
 */
-QRegularExpressionMatchIterator QRegularExpression::globalMatch(QStringView subjectView,
-                                                                qsizetype offset,
-                                                                MatchType matchType,
-                                                                MatchOptions matchOptions) const
+QRegularExpressionMatchIterator QRegularExpression::globalMatchView(QStringView subjectView,
+                                                                    qsizetype offset,
+                                                                    MatchType matchType,
+                                                                    MatchOptions matchOptions) const
 {
     QRegularExpressionMatchIteratorPrivate *priv =
             new QRegularExpressionMatchIteratorPrivate(*this,
                                                        matchType,
                                                        matchOptions,
-                                                       match(subjectView, offset, matchType, matchOptions));
+                                                       matchView(subjectView, offset, matchType, matchOptions));
 
     return QRegularExpressionMatchIterator(*priv);
 }
@@ -2654,7 +2671,7 @@ QRegularExpressionMatch QRegularExpressionMatchIterator::next()
     }
 
     d.detach();
-    return qExchange(d->next, d->next.d.constData()->nextMatch());
+    return std::exchange(d->next, d->next.d.constData()->nextMatch());
 }
 
 /*!

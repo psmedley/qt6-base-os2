@@ -20,6 +20,7 @@
 #ifndef QT_NO_SESSIONMANAGER
 #include "qxcbsessionmanager.h"
 #endif
+#include "qxcbxsettings.h"
 
 #include <xcb/xcb.h>
 
@@ -324,6 +325,13 @@ QAbstractEventDispatcher *QXcbIntegration::createEventDispatcher() const
     return QXcbEventDispatcher::createEventDispatcher(connection());
 }
 
+using namespace Qt::Literals::StringLiterals;
+static const auto xsNetCursorBlink = "Net/CursorBlink"_ba;
+static const auto xsNetCursorBlinkTime = "Net/CursorBlinkTime"_ba;
+static const auto xsNetDoubleClickTime = "Net/DoubleClickTime"_ba;
+static const auto xsNetDoubleClickDistance = "Net/DoubleClickDistance"_ba;
+static const auto xsNetDndDragThreshold = "Net/DndDragThreshold"_ba;
+
 void QXcbIntegration::initialize()
 {
     const auto defaultInputContext = "compose"_L1;
@@ -337,6 +345,17 @@ void QXcbIntegration::initialize()
         m_inputContext.reset(QPlatformInputContextFactory::create(defaultInputContext));
 
     connection()->keyboard()->initialize();
+
+    auto notifyThemeChanged = [](QXcbVirtualDesktop *, const QByteArray &, const QVariant &, void *) {
+        QWindowSystemInterface::handleThemeChange();
+    };
+
+    auto *xsettings = connection()->primaryScreen()->xSettings();
+    xsettings->registerCallbackForProperty(xsNetCursorBlink, notifyThemeChanged, this);
+    xsettings->registerCallbackForProperty(xsNetCursorBlinkTime, notifyThemeChanged, this);
+    xsettings->registerCallbackForProperty(xsNetDoubleClickTime, notifyThemeChanged, this);
+    xsettings->registerCallbackForProperty(xsNetDoubleClickDistance, notifyThemeChanged, this);
+    xsettings->registerCallbackForProperty(xsNetDndDragThreshold, notifyThemeChanged, this);
 }
 
 void QXcbIntegration::moveToScreen(QWindow *window, int screen)
@@ -423,12 +442,30 @@ QPlatformTheme *QXcbIntegration::createPlatformTheme(const QString &name) const
     return QGenericUnixTheme::createUnixTheme(name);
 }
 
+#define RETURN_VALID_XSETTINGS(key) { \
+    auto value = connection()->primaryScreen()->xSettings()->setting(key); \
+    if (value.isValid()) return value; \
+}
+
 QVariant QXcbIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
 {
     switch (hint) {
-    case QPlatformIntegration::CursorFlashTime:
-    case QPlatformIntegration::KeyboardInputInterval:
+    case QPlatformIntegration::CursorFlashTime: {
+        bool ok = false;
+        // If cursor blinking is off, returns 0 to keep the cursor awlays display.
+        if (connection()->primaryScreen()->xSettings()->setting(xsNetCursorBlink).toInt(&ok) == 0 && ok)
+            return 0;
+
+        RETURN_VALID_XSETTINGS(xsNetCursorBlinkTime);
+        break;
+    }
     case QPlatformIntegration::MouseDoubleClickInterval:
+        RETURN_VALID_XSETTINGS(xsNetDoubleClickTime);
+        break;
+    case QPlatformIntegration::MouseDoubleClickDistance:
+        RETURN_VALID_XSETTINGS(xsNetDoubleClickDistance);
+        break;
+    case QPlatformIntegration::KeyboardInputInterval:
     case QPlatformIntegration::StartDragTime:
     case QPlatformIntegration::KeyboardAutoRepeatRate:
     case QPlatformIntegration::PasswordMaskDelay:
@@ -438,6 +475,8 @@ QVariant QXcbIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
         // TODO using various xcb, gnome or KDE settings
         break; // Not implemented, use defaults
     case QPlatformIntegration::StartDragDistance: {
+        RETURN_VALID_XSETTINGS(xsNetDndDragThreshold);
+
         // The default (in QPlatformTheme::defaultThemeHint) is 10 pixels, but
         // on a high-resolution screen it makes sense to increase it.
         qreal dpi = 100.0;

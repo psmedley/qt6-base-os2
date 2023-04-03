@@ -3,6 +3,7 @@
 
 #include <QtTest/private/qabstracttestlogger_p.h>
 #include <QtTest/qtestassert.h>
+#include <qbenchmark_p.h>
 #include <qtestresult_p.h>
 
 #include <QtCore/qbytearray.h>
@@ -222,6 +223,12 @@ void QAbstractTestLogger::stopLogging()
 {
 }
 
+void QAbstractTestLogger::addBenchmarkResults(const QList<QBenchmarkResult> &result)
+{
+    for (const auto &m : result)
+        addBenchmarkResult(m);
+}
+
 /*!
     \fn void QAbstractTestLogger::enterTestFunction(const char *function)
 
@@ -351,8 +358,7 @@ void QAbstractTestLogger::addMessage(QtMsgType type, const QMessageLogContext &c
         case QtWarningMsg: return QAbstractTestLogger::QWarning;
         case QtFatalMsg: return QAbstractTestLogger::QFatal;
         }
-        Q_UNREACHABLE();
-        return QAbstractTestLogger::QFatal;
+        Q_UNREACHABLE_RETURN(QAbstractTestLogger::QFatal);
     }();
 
     QString formattedMessage = qFormatLogMessage(type, context, message);

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Finish a preliminary .pc file.
 #
 # - Appends to each requirement the proper configuration postfix.

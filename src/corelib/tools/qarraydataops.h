@@ -213,6 +213,17 @@ public:
         --this->size;
     }
 
+    struct Span { T *begin; T *end; };
+
+    void copyRanges(std::initializer_list<Span> ranges)
+    {
+        auto it = this->begin();
+        std::for_each(ranges.begin(), ranges.end(), [&it](const auto &span) {
+            it = std::copy(span.begin, span.end, it);
+        });
+        this->size = std::distance(this->begin(), it);
+    }
+
     void assign(T *b, T *e, parameter_type t) noexcept
     {
         Q_ASSERT(b <= e);
@@ -905,11 +916,10 @@ public:
         DataPointer old;
 
         // points into range:
-        if (QtPrivate::q_points_into_range(b, this->begin(), this->end())) {
+        if (QtPrivate::q_points_into_range(b, *this))
             this->detachAndGrow(QArrayData::GrowsAtEnd, n, &b, &old);
-        } else {
+        else
             this->detachAndGrow(QArrayData::GrowsAtEnd, n, nullptr, nullptr);
-        }
         Q_ASSERT(this->freeSpaceAtEnd() >= n);
         // b might be updated so use [b, n)
         this->copyAppend(b, b + n);

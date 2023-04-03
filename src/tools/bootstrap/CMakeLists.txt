@@ -1,16 +1,19 @@
-# Generated from bootstrap.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## Bootstrap Module:
 #####################################################################
 
-# special case begin
 # The bootstrap library has a few manual tweaks compared to other
 # libraries.
 qt_add_library(Bootstrap STATIC)
-# special case end
+
+qt_internal_add_sync_header_dependencies(Bootstrap Core)
+
 qt_internal_extend_target(Bootstrap
     SOURCES
+        ../../corelib/global/qassert.cpp
         ../../corelib/global/qendian.cpp
         ../../corelib/global/qfloat16.cpp
         ../../corelib/global/qglobal.cpp
@@ -19,6 +22,7 @@ qt_internal_extend_target(Bootstrap
         ../../corelib/global/qnumeric.cpp
         ../../corelib/global/qoperatingsystemversion.cpp
         ../../corelib/global/qrandom.cpp
+        ../../corelib/global/qtenvironmentvariables.cpp
         ../../corelib/io/qabstractfileengine.cpp
         ../../corelib/io/qbuffer.cpp
         ../../corelib/io/qdebug.cpp
@@ -39,7 +43,6 @@ qt_internal_extend_target(Bootstrap
         ../../corelib/io/qstandardpaths.cpp
         ../../corelib/io/qtemporaryfile.cpp
         ../../corelib/kernel/qcoreapplication.cpp
-        ../../corelib/kernel/qcoreglobaldata.cpp
         ../../corelib/kernel/qiterable.cpp
         ../../corelib/kernel/qmetacontainer.cpp
         ../../corelib/kernel/qmetatype.cpp
@@ -61,6 +64,7 @@ qt_internal_extend_target(Bootstrap
         ../../corelib/text/qbytearray.cpp
         ../../corelib/text/qbytearraylist.cpp
         ../../corelib/text/qbytearraymatcher.cpp
+        ../../corelib/text/qlatin1stringmatcher.cpp
         ../../corelib/text/qlocale.cpp
         ../../corelib/text/qlocale_tools.cpp
         ../../corelib/text/qregularexpression.cpp
@@ -74,6 +78,7 @@ qt_internal_extend_target(Bootstrap
         ../../corelib/time/qgregoriancalendar.cpp
         ../../corelib/time/qlocaltime.cpp
         ../../corelib/time/qromancalendar.cpp
+        ../../corelib/time/qtimezone.cpp
         ../../corelib/tools/qarraydata.cpp
         ../../corelib/tools/qbitarray.cpp
         ../../corelib/tools/qcommandlineoption.cpp
@@ -85,12 +90,12 @@ qt_internal_extend_target(Bootstrap
     DEFINES
         HAVE_CONFIG_H
         QT_TYPESAFE_FLAGS
-    PUBLIC_DEFINES # special case
-        QT_VERSION_MAJOR=${PROJECT_VERSION_MAJOR} # special case
-        QT_VERSION_MINOR=${PROJECT_VERSION_MINOR} # special case
-        QT_VERSION_PATCH=${PROJECT_VERSION_PATCH} # special case
-        QT_VERSION_STR="${PROJECT_VERSION}" # special case
-        QT_USE_QSTRINGBUILDER # special case
+    PUBLIC_DEFINES
+        QT_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+        QT_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+        QT_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+        QT_VERSION_STR="${PROJECT_VERSION}"
+        QT_USE_QSTRINGBUILDER
         QT_BOOTSTRAPPED
         QT_NO_CAST_FROM_ASCII
         QT_NO_CAST_TO_ASCII
@@ -98,18 +103,12 @@ qt_internal_extend_target(Bootstrap
     INCLUDE_DIRECTORIES
         ..
         ../../3rdparty/tinycbor/src
-    PUBLIC_INCLUDE_DIRECTORIES  # special case
-        $<TARGET_PROPERTY:Core,INCLUDE_DIRECTORIES> # special case
-    PUBLIC_LIBRARIES  # special case
-        Qt::Platform # special case
+    PUBLIC_INCLUDE_DIRECTORIES
+        $<TARGET_PROPERTY:Core,INCLUDE_DIRECTORIES>
+        ../../corelib/global
+    PUBLIC_LIBRARIES
+        Qt::Platform
 )
-
-#### Keys ignored in scope 1:.:.:bootstrap.pro:<TRUE>:
-# INSTALLS = "lib"
-# MODULE_CONFIG = "gc_binaries"
-# MODULE_INCNAME = "QtCore" "QtXml"
-# _OPTION = "host_build"
-# lib.CONFIG = "dummy_install"
 
 ## Scopes:
 #####################################################################
@@ -132,6 +131,7 @@ qt_internal_extend_target(Bootstrap CONDITION WIN32
         ../../corelib/kernel/qcoreapplication_win.cpp
         ../../corelib/kernel/qwinregistry.cpp
         ../../corelib/plugin/qsystemlibrary.cpp
+        ../../corelib/kernel/qfunctions_win.cpp
     PUBLIC_LIBRARIES
         advapi32
         netapi32
@@ -217,7 +217,7 @@ qt_internal_extend_target(Bootstrap CONDITION CMAKE_CROSSCOMPILING OR NOT QT_FEA
     DEFINES
         PCRE2_CODE_UNIT_WIDTH=16
         PCRE2_DISABLE_JIT
-    PUBLIC_INCLUDE_DIRECTORIES  # special case
+    PUBLIC_INCLUDE_DIRECTORIES
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/pcre2/src>
 )
 
@@ -236,13 +236,9 @@ qt_internal_extend_target(Bootstrap CONDITION MINGW AND WIN32
         uuid
 )
 
-#### Keys ignored in scope 22:.:../../3rdparty/pcre2:../../3rdparty/pcre2/pcre2.pri:QT_FEATURE_intelcet:
-# QMAKE_CFLAGS = "$$QMAKE_CFLAGS_SHSTK"
-
-# special case begin
 target_link_libraries(Bootstrap PRIVATE PlatformCommonInternal)
 qt_internal_apply_gc_binaries(Bootstrap PUBLIC)
-set_target_properties(Bootstrap PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+set_target_properties(Bootstrap PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF UNITY_BUILD OFF)
 qt_internal_add_target_aliases(Bootstrap)
 qt_set_msvc_cplusplus_options(Bootstrap PUBLIC)
 qt_set_common_target_properties(Bootstrap)
@@ -260,4 +256,3 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.20.0" AND QT_FEATURE_debug_and_release
     set_property(TARGET Bootstrap
         PROPERTY EXCLUDE_FROM_ALL "$<NOT:$<CONFIG:${QT_MULTI_CONFIG_FIRST_CONFIG}>>")
 endif()
-# special case end

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Returns the platform-specific relative rpath base token, if it's supported.
 # If it's not supported, returns the string NO_KNOWN_RPATH_REL_BASE.
 function(qt_internal_get_relative_rpath_base_token out_var)
@@ -85,7 +88,12 @@ function(qt_apply_rpaths)
         return()
     endif()
 
-    qt_parse_all_arguments(arg "qt_apply_rpaths" "RELATIVE_RPATH" "TARGET;INSTALL_PATH" "" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 0 arg
+        "RELATIVE_RPATH"
+        "TARGET;INSTALL_PATH"
+        "")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
     if(NOT arg_TARGET)
         message(FATAL_ERROR "No target given to qt_apply_rpaths.")
     else()

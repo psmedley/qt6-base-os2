@@ -7,9 +7,7 @@
 
 #if QT_CONFIG(topleveldomain)
 
-#include "qurl.h"
 #include "QtCore/qfile.h"
-#include "QtCore/qfileinfo.h"
 #include "QtCore/qloggingcategory.h"
 #include "QtCore/qstandardpaths.h"
 #include "QtCore/qstring.h"
@@ -19,7 +17,7 @@
 #endif
 
 #if QT_CONFIG(publicsuffix_qt)
-#   include "qurltlds_p.h"
+#   include "psl_data.cpp"
 #endif
 
 // Defined in src/3rdparty/libpsl/src/lookup_string_in_fixed_set.c
@@ -214,4 +212,4 @@ Q_NETWORK_EXPORT bool qIsEffectiveTLD(QStringView domain)
 
 QT_END_NAMESPACE
 
-#endif
+#endif // QT_CONFIG(topleveldomain)

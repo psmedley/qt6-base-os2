@@ -393,7 +393,7 @@ QVariant QPlatformIntegration::styleHint(StyleHint hint) const
     case UseRtlExtensions:
         return QVariant(false);
     case SetFocusOnTouchRelease:
-        return QVariant(false);
+        return QPlatformTheme::defaultThemeHint(QPlatformTheme::SetFocusOnTouchRelease);
     case MousePressAndHoldInterval:
         return QPlatformTheme::defaultThemeHint(QPlatformTheme::MousePressAndHoldInterval);
     case TabFocusBehavior:
@@ -408,6 +408,14 @@ QVariant QPlatformIntegration::styleHint(StyleHint hint) const
         return QPlatformTheme::defaultThemeHint(QPlatformTheme::WheelScrollLines);
     case MouseQuickSelectionThreshold:
         return QPlatformTheme::defaultThemeHint(QPlatformTheme::MouseQuickSelectionThreshold);
+    case MouseDoubleClickDistance:
+        return QPlatformTheme::defaultThemeHint(QPlatformTheme::MouseDoubleClickDistance);
+    case FlickStartDistance:
+        return QPlatformTheme::defaultThemeHint(QPlatformTheme::FlickStartDistance);
+    case FlickMaximumVelocity:
+        return QPlatformTheme::defaultThemeHint(QPlatformTheme::FlickMaximumVelocity);
+    case FlickDeceleration:
+        return QPlatformTheme::defaultThemeHint(QPlatformTheme::FlickDeceleration);
     }
 
     return 0;
@@ -561,7 +569,21 @@ void QPlatformIntegration::setApplicationIcon(const QIcon &icon) const
     Q_UNUSED(icon);
 }
 
-#if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
+/*!
+    \since 6.5
+
+    Should set the application's badge to \a number.
+
+    If the number is 0 the badge should be cleared.
+
+    \sa QGuiApplication::setBadge()
+*/
+void QPlatformIntegration::setApplicationBadge(qint64 number)
+{
+    Q_UNUSED(number);
+}
+
+#if QT_CONFIG(vulkan) || defined(Q_QDOC)
 
 /*!
     Factory function for QPlatformVulkanInstance. The \a instance parameter is a

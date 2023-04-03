@@ -47,6 +47,8 @@
 
 #include <private/qdatetimeedit_p.h>
 
+#include <QtWidgets/private/qapplication_p.h>
+
 #ifdef Q_OS_WIN
 # include <qt_windows.h>
 #endif
@@ -404,8 +406,8 @@ void tst_QDateTimeEdit::initTestCase()
         qWarning("Running under locale %s/%s -- this test may generate failures due to language differences",
                  qPrintable(QLocale::languageToString(system.language())),
                  qPrintable(QLocale::territoryToString(system.territory())));
-    testWidget = new EditorDateEdit(0);
-    testFocusWidget = new QWidget(0);
+    testWidget = new EditorDateEdit(nullptr);
+    testFocusWidget = new QWidget(nullptr);
     testFocusWidget->resize(200, 100);
     testFocusWidget->show();
 }
@@ -456,142 +458,103 @@ void tst_QDateTimeEdit::constructor_qwidget()
 void tst_QDateTimeEdit::constructor_qdatetime_data()
 {
     QTest::addColumn<QDateTime>("parameter");
-    QTest::addColumn<QDateTime>("displayDateTime");
-    QTest::addColumn<QDate>("minimumDate");
-    QTest::addColumn<QTime>("minimumTime");
-    QTest::addColumn<QDate>("maximumDate");
-    QTest::addColumn<QTime>("maximumTime");
 
-    QTest::newRow("normal") << QDateTime(QDate(2004, 6, 16), QTime(13, 46, 32, 764))
-                            << QDateTime(QDate(2004, 6, 16), QTime(13, 46, 32, 764))
-                            << QDate(1752, 9, 14) << QTime(0, 0, 0, 0)
-                            << QDate(9999, 12, 31) << QTime(23, 59, 59, 999);
-
-    QTest::newRow("invalid") << QDateTime(QDate(9999, 99, 99), QTime(13, 46, 32, 764))
-                             << QDateTime(QDate(2000, 1, 1), QTime(0, 0, 0, 0))
-                             << QDate(1752, 9, 14) << QTime(0, 0, 0, 0)
-                             << QDate(9999, 12, 31) << QTime(23, 59, 59, 999);
+    QTest::newRow("normal") << QDateTime(QDate(2004, 6, 16), QTime(13, 46, 32, 764));
+    QTest::newRow("invalid") << QDateTime(QDate(9999, 99, 99), QTime(13, 46, 32, 764));
 }
 
 void tst_QDateTimeEdit::constructor_qdatetime()
 {
     QFETCH(QDateTime, parameter);
-    QFETCH(QDateTime, displayDateTime);
-    QFETCH(QDate, minimumDate);
-    QFETCH(QTime, minimumTime);
-    QFETCH(QDate, maximumDate);
-    QFETCH(QTime, maximumTime);
-
     testWidget->hide();
 
     QDateTimeEdit dte(parameter);
     dte.show();
-    QCOMPARE(dte.dateTime(), displayDateTime);
-    QCOMPARE(dte.minimumDate(), minimumDate);
-    QCOMPARE(dte.minimumTime(), minimumTime);
-    QCOMPARE(dte.maximumDate(), maximumDate);
-    QCOMPARE(dte.maximumTime(), maximumTime);
+    if (QByteArrayView(QTest::currentDataTag()) == "invalid")
+        QCOMPARE(dte.dateTime(), QDateTime(QDate(2000, 1, 1), QTime(0, 0)));
+    else
+        QCOMPARE(dte.dateTime(), parameter);
+    QCOMPARE(dte.minimumDate(), QDate(1752, 9, 14));
+    QCOMPARE(dte.minimumTime(), QTime(0, 0));
+    QCOMPARE(dte.maximumDate(), QDate(9999, 12, 31));
+    QCOMPARE(dte.maximumTime(), QTime(23, 59, 59, 999));
 }
 
 void tst_QDateTimeEdit::constructor_qdate_data()
 {
     QTest::addColumn<QDate>("parameter");
-    QTest::addColumn<QDateTime>("displayDateTime");
-    QTest::addColumn<QDate>("minimumDate");
-    QTest::addColumn<QTime>("minimumTime");
-    QTest::addColumn<QDate>("maximumDate");
-    QTest::addColumn<QTime>("maximumTime");
 
-    QTest::newRow("normal") << QDate(2004, 6, 16)
-                            << QDateTime(QDate(2004, 6, 16), QTime(0, 0, 0, 0))
-                            << QDate(1752, 9, 14) << QTime(0, 0, 0, 0)
-                            << QDate(9999, 12, 31) << QTime(23, 59, 59, 999);
-
-    QTest::newRow("invalid") << QDate(9999, 99, 99)
-                             << QDateTime(QDate(2000, 1, 1), QTime(0, 0, 0, 0))
-                             << QDate(1752, 9, 14) << QTime(0, 0, 0, 0)
-                             << QDate(9999, 12, 31) << QTime(23, 59, 59, 999);
+    QTest::newRow("normal") << QDate(2004, 6, 16);
+    QTest::newRow("invalid") << QDate(9999, 99, 99);
 }
 
 void tst_QDateTimeEdit::constructor_qdate()
 {
     QFETCH(QDate, parameter);
-    QFETCH(QDateTime, displayDateTime);
-    QFETCH(QDate, minimumDate);
-    QFETCH(QTime, minimumTime);
-    QFETCH(QDate, maximumDate);
-    QFETCH(QTime, maximumTime);
-
     testWidget->hide();
 
     {
         QDateTimeEdit dte(parameter);
         dte.show();
-        QCOMPARE(dte.dateTime(), displayDateTime);
-        QCOMPARE(dte.minimumDate(), minimumDate);
-        QCOMPARE(dte.minimumTime(), minimumTime);
-        QCOMPARE(dte.maximumDate(), maximumDate);
-        QCOMPARE(dte.maximumTime(), maximumTime);
+        if (QByteArrayView(QTest::currentDataTag()) == "invalid")
+            QCOMPARE(dte.dateTime(), QDateTime(QDate(2000, 1, 1), QTime(0, 0)));
+        else
+            QCOMPARE(dte.dateTime(), QDateTime(parameter, QTime(0, 0)));
+        QCOMPARE(dte.minimumDate(), QDate(1752, 9, 14));
+        QCOMPARE(dte.minimumTime(), QTime(0, 0));
+        QCOMPARE(dte.maximumDate(), QDate(9999, 12, 31));
+        QCOMPARE(dte.maximumTime(), QTime(23, 59, 59, 999));
     }
     {
         QDateEdit dte(parameter);
         dte.show();
-        QCOMPARE(dte.date(), displayDateTime.date());
-        QCOMPARE(dte.minimumDate(), minimumDate);
-        QCOMPARE(dte.minimumTime(), minimumTime);
-        QCOMPARE(dte.maximumDate(), maximumDate);
-        QCOMPARE(dte.maximumTime(), maximumTime);
+        if (QByteArrayView(QTest::currentDataTag()) == "invalid")
+            QCOMPARE(dte.date(), QDate(2000, 1, 1));
+        else
+            QCOMPARE(dte.date(), parameter);
+        QCOMPARE(dte.minimumDate(), QDate(1752, 9, 14));
+        QCOMPARE(dte.minimumTime(), QTime(0, 0));
+        QCOMPARE(dte.maximumDate(), QDate(9999, 12, 31));
+        QCOMPARE(dte.maximumTime(), QTime(23, 59, 59, 999));
     }
 }
 
 void tst_QDateTimeEdit::constructor_qtime_data()
 {
     QTest::addColumn<QTime>("parameter");
-    QTest::addColumn<QDateTime>("displayDateTime");
-    QTest::addColumn<QDate>("minimumDate");
-    QTest::addColumn<QTime>("minimumTime");
-    QTest::addColumn<QDate>("maximumDate");
-    QTest::addColumn<QTime>("maximumTime");
 
-    QTest::newRow("normal") << QTime(13, 46, 32, 764)
-                            << QDateTime(QDate(2000, 1, 1), QTime(13, 46, 32, 764))
-                            << QDate(2000, 1, 1) << QTime(0, 0, 0, 0)
-                            << QDate(2000, 1, 1) << QTime(23, 59, 59, 999);
-
-    QTest::newRow("invalid") << QTime(99, 99, 99, 5000)
-                             << QDateTime(QDate(2000, 1, 1), QTime(0, 0, 0, 0))
-                             << QDate(2000, 1, 1) << QTime(0, 0, 0, 0)
-                             << QDate(2000, 1, 1) << QTime(23, 59, 59, 999);
+    QTest::newRow("normal") << QTime(13, 46, 32, 764);
+    QTest::newRow("invalid") << QTime(99, 99, 99, 5000);
 }
 
 void tst_QDateTimeEdit::constructor_qtime()
 {
     QFETCH(QTime, parameter);
-    QFETCH(QDateTime, displayDateTime);
-    QFETCH(QDate, minimumDate);
-    QFETCH(QTime, minimumTime);
-    QFETCH(QDate, maximumDate);
-    QFETCH(QTime, maximumTime);
-
     testWidget->hide();
 
     {
         QDateTimeEdit dte(parameter);
         dte.show();
-        QCOMPARE(dte.dateTime(), displayDateTime);
-        QCOMPARE(dte.minimumDate(), minimumDate);
-        QCOMPARE(dte.minimumTime(), minimumTime);
-        QCOMPARE(dte.maximumDate(), maximumDate);
-        QCOMPARE(dte.maximumTime(), maximumTime);
+        if (QByteArrayView(QTest::currentDataTag()) == "invalid")
+            QCOMPARE(dte.dateTime(), QDateTime(QDate(2000, 1, 1), QTime(0, 0)));
+        else
+            QCOMPARE(dte.dateTime(), QDateTime(QDate(2000, 1, 1), parameter));
+        QCOMPARE(dte.minimumDate(), QDate(2000, 1, 1));
+        QCOMPARE(dte.minimumTime(), QTime(0, 0));
+        QCOMPARE(dte.maximumDate(), QDate(2000, 1, 1));
+        QCOMPARE(dte.maximumTime(), QTime(23, 59, 59, 999));
     }
     {
         QTimeEdit dte(parameter);
         dte.show();
-        QCOMPARE(dte.time(), displayDateTime.time());
-        QCOMPARE(dte.minimumDate(), minimumDate);
-        QCOMPARE(dte.minimumTime(), minimumTime);
-        QCOMPARE(dte.maximumDate(), maximumDate);
-        QCOMPARE(dte.maximumTime(), maximumTime);
+        if (QByteArrayView(QTest::currentDataTag()) == "invalid")
+            QCOMPARE(dte.time(), QTime(0, 0));
+        else
+            QCOMPARE(dte.time(), parameter);
+        QCOMPARE(dte.minimumDate(), QDate(2000, 1, 1));
+        QCOMPARE(dte.minimumTime(), QTime(0, 0));
+        QCOMPARE(dte.maximumDate(), QDate(2000, 1, 1));
+        QCOMPARE(dte.maximumTime(), QTime(23, 59, 59, 999));
     }
 }
 
@@ -862,7 +825,7 @@ void tst_QDateTimeEdit::selectAndScrollWithKeys()
     return;
 #endif
 
-    qApp->setActiveWindow(testWidget);
+    QApplicationPrivate::setActiveWindow(testWidget);
     testWidget->setDate(QDate(2004, 05, 11));
     testWidget->setDisplayFormat("dd/MM/yyyy");
     testWidget->show();
@@ -964,7 +927,7 @@ void tst_QDateTimeEdit::selectAndScrollWithKeys()
 
 void tst_QDateTimeEdit::backspaceKey()
 {
-    qApp->setActiveWindow(testWidget);
+    QApplicationPrivate::setActiveWindow(testWidget);
     testWidget->setDate(QDate(2004, 05, 11));
     testWidget->setDisplayFormat("d/MM/yyyy");
     testWidget->show();
@@ -1030,7 +993,7 @@ void tst_QDateTimeEdit::backspaceKey()
 
 void tst_QDateTimeEdit::deleteKey()
 {
-    qApp->setActiveWindow(testWidget);
+    QApplicationPrivate::setActiveWindow(testWidget);
     testWidget->setDate(QDate(2004, 05, 11));
     testWidget->setDisplayFormat("d/MM/yyyy");
 #ifdef Q_OS_MAC
@@ -1049,7 +1012,7 @@ void tst_QDateTimeEdit::deleteKey()
 
 void tst_QDateTimeEdit::tabKeyNavigation()
 {
-    qApp->setActiveWindow(testWidget);
+    QApplicationPrivate::setActiveWindow(testWidget);
     testWidget->setDate(QDate(2004, 05, 11));
     testWidget->setDisplayFormat("dd/MM/yyyy");
     testWidget->show();
@@ -1067,7 +1030,7 @@ void tst_QDateTimeEdit::tabKeyNavigation()
 
 void tst_QDateTimeEdit::tabKeyNavigationWithPrefix()
 {
-    qApp->setActiveWindow(testWidget);
+    QApplicationPrivate::setActiveWindow(testWidget);
     testWidget->setDate(QDate(2004, 05, 11));
     testWidget->setDisplayFormat("prefix dd/MM/yyyy");
 
@@ -1085,7 +1048,7 @@ void tst_QDateTimeEdit::tabKeyNavigationWithPrefix()
 
 void tst_QDateTimeEdit::tabKeyNavigationWithSuffix()
 {
-    qApp->setActiveWindow(testWidget);
+    QApplicationPrivate::setActiveWindow(testWidget);
     testWidget->setDate(QDate(2004, 05, 11));
     testWidget->setDisplayFormat("dd/MM/yyyy 'suffix'");
 
@@ -1101,7 +1064,7 @@ void tst_QDateTimeEdit::tabKeyNavigationWithSuffix()
 
 void tst_QDateTimeEdit::enterKey()
 {
-    qApp->setActiveWindow(testWidget);
+    QApplicationPrivate::setActiveWindow(testWidget);
     testWidget->setDate(QDate(2004, 5, 11));
     testWidget->setDisplayFormat("prefix d/MM/yyyy 'suffix'");
     testWidget->lineEdit()->setFocus();
@@ -1353,7 +1316,7 @@ void tst_QDateTimeEdit::editingRanged_data()
         << QDate(2010, 12, 30) << QTime()
         << QDate(2011, 1, 2) << QTime()
         << QString::fromLatin1("01012011")
-        << QDateTime(QDate(2011, 1, 1), QTime(), Qt::UTC);
+        << QDateTime(QDate(2011, 1, 1), QTime(), QTimeZone::UTC);
 }
 
 void tst_QDateTimeEdit::editingRanged()
@@ -1389,7 +1352,7 @@ void tst_QDateTimeEdit::editingRanged()
     });
 
     edit->show();
-    QApplication::setActiveWindow(edit.get());
+    QApplicationPrivate::setActiveWindow(edit.get());
     if (!QTest::qWaitForWindowActive(edit.get()))
         QSKIP("Failed to make window active, aborting");
     edit->setFocus();
@@ -3560,7 +3523,7 @@ void tst_QDateTimeEdit::timeSpec()
     QCOMPARE(edit.timeSpec(), Qt::LocalTime);
     const QDateTime utc = dt.toUTC();
     if (dt.time() != utc.time()) {
-        const QDateTime min(QDate(1999, 1, 1), QTime(1, 0, 0), Qt::LocalTime);
+        const QDateTime min(QDate(1999, 1, 1), QTime(1, 0));
         edit.setMinimumDateTime(min);
         QCOMPARE(edit.minimumTime(), min.time());
         if (useSetProperty) {
@@ -3590,51 +3553,31 @@ void tst_QDateTimeEdit::timeSpecBug()
 
 void tst_QDateTimeEdit::timeSpecInit()
 {
-    QDateTime utc(QDate(2000, 1, 1), QTime(12, 0, 0), Qt::UTC);
+    QDateTime utc(QDate(2000, 1, 1), QTime(12, 0), QTimeZone::UTC);
     QDateTimeEdit widget(utc);
     QCOMPARE(widget.dateTime(), utc);
 }
 
 void tst_QDateTimeEdit::setDateTime_data()
 {
+    QDateTime localNoon(QDate(2019, 12, 24), QTime(12, 0));
+    // TODO QTBUG-80417: port away from spec, to use QTimeZone instead.
     QTest::addColumn<Qt::TimeSpec>("spec");
-    QDateTime localNoon(QDate(2019, 12, 24), QTime(12, 0), Qt::LocalTime);
-#if 0 // Not yet supported
-    QTest::addColumn<int>("offset");
-    QTest::addColumn<QByteArray>("zoneName");
-
-    QTest::newRow("OffsetFromUTC/LocalTime")
-        << Qt::OffsetFromUTC << 7200 << ""
-        << localNoon << localNoon.toOffsetFromUtc(7200);
-#if QT_CONFIG(timezone)
-    QTest::newRow("TimeZone/LocalTime")
-        << Qt::TimeZone << 0 << "Europe/Berlin"
-        << localNoon << localNoon.toTimeZone(QTimeZone("Europe/Berlin"));
-#endif
-#endif // unsupported
     QTest::addColumn<QDateTime>("store");
     QTest::addColumn<QDateTime>("expect");
     QTest::newRow("LocalTime/LocalTime")
-        << Qt::LocalTime // << 0 << ""
-        << localNoon << localNoon;
+        << Qt::LocalTime << localNoon << localNoon;
     QTest::newRow("LocalTime/UTC")
-        << Qt::LocalTime // << 0 << ""
-        << localNoon.toUTC() << localNoon;
+        << Qt::LocalTime << localNoon.toUTC() << localNoon;
     QTest::newRow("UTC/LocalTime")
-        << Qt::UTC // << 0 << ""
-        << localNoon << localNoon.toUTC();
+        << Qt::UTC << localNoon << localNoon.toUTC();
     QTest::newRow("UTC/UTC")
-        << Qt::UTC // << 0 << ""
-        << localNoon.toUTC() << localNoon.toUTC();
+        << Qt::UTC << localNoon.toUTC() << localNoon.toUTC();
 }
 
 void tst_QDateTimeEdit::setDateTime()
 {
     QFETCH(const Qt::TimeSpec, spec);
-#if 0 // Not yet supported
-    QFETCH(const int, offset);
-    QFETCH(const QByteArray, zoneName);
-#endif // configuring the spec, when OffsetFromUTC or TimeZone
     QFETCH(const QDateTime, store);
     QFETCH(const QDateTime, expect);
     QDateTimeEdit editor;
@@ -3835,7 +3778,7 @@ void tst_QDateTimeEdit::focusNextPrevChild()
 void tst_QDateTimeEdit::taskQTBUG_12384_timeSpecShowTimeOnly()
 {
     QDateTime time = QDateTime::fromString("20100723 04:02:40", "yyyyMMdd hh:mm:ss");
-    time.setTimeSpec(Qt::UTC);
+    time.setTimeZone(QTimeZone::UTC);
 
     EditorDateEdit edit;
     edit.setDisplayFormat("hh:mm:ss");

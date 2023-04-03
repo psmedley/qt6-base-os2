@@ -6,13 +6,16 @@
 #include "qplatformdefs.h"
 #include "qnetworkcookie.h"
 #include "qsslconfiguration.h"
-#if QT_CONFIG(http) || defined(Q_CLANG_QDOC)
+#if QT_CONFIG(http) || defined(Q_QDOC)
+#include "qhttp1configuration.h"
 #include "qhttp2configuration.h"
 #include "private/http2protocol_p.h"
 #endif
-#include "QtCore/qshareddata.h"
-#include "QtCore/qlocale.h"
+
 #include "QtCore/qdatetime.h"
+#include "QtCore/qlocale.h"
+#include "QtCore/qshareddata.h"
+#include "QtCore/qtimezone.h"
 #include "QtCore/private/qtools_p.h"
 
 #include <ctype.h>
@@ -306,6 +309,13 @@ QT_IMPL_METATYPE_EXTERN_TAGGED(QNetworkRequest::RedirectPolicy, QNetworkRequest_
         This attribute is ignored if the Http2AllowedAttribute is not set.
         (This value was introduced in 6.3.)
 
+    \value UseCredentialsAttribute
+        Requests only, type: QMetaType::Bool (default: false)
+        Indicates if the underlying XMLHttpRequest cross-site Access-Control
+        requests should be made using credentials. Has no effect on
+        same-origin requests. This only affects the WebAssembly platform.
+        (This value was introduced in 6.5.)
+
     \value User
         Special type. Additional information can be passed in
         QVariants with types ranging from User to UserMax. The default
@@ -432,6 +442,7 @@ public:
 #endif
         peerVerifyName = other.peerVerifyName;
 #if QT_CONFIG(http)
+        h1Configuration = other.h1Configuration;
         h2Configuration = other.h2Configuration;
         decompressedSafetyCheckThreshold = other.decompressedSafetyCheckThreshold;
 #endif
@@ -447,6 +458,7 @@ public:
             maxRedirectsAllowed == other.maxRedirectsAllowed &&
             peerVerifyName == other.peerVerifyName
 #if QT_CONFIG(http)
+            && h1Configuration == other.h1Configuration
             && h2Configuration == other.h2Configuration
             && decompressedSafetyCheckThreshold == other.decompressedSafetyCheckThreshold
 #endif
@@ -463,6 +475,7 @@ public:
     int maxRedirectsAllowed;
     QString peerVerifyName;
 #if QT_CONFIG(http)
+    QHttp1Configuration h1Configuration;
     QHttp2Configuration h2Configuration;
     qint64 decompressedSafetyCheckThreshold = 10ll * 1024ll * 1024ll;
 #endif
@@ -846,7 +859,31 @@ void QNetworkRequest::setPeerVerifyName(const QString &peerName)
     d->peerVerifyName = peerName;
 }
 
-#if QT_CONFIG(http) || defined(Q_CLANG_QDOC)
+#if QT_CONFIG(http) || defined(Q_QDOC)
+/*!
+    \since 6.5
+
+    Returns the current parameters that QNetworkAccessManager is
+    using for the underlying HTTP/1 connection of this request.
+
+    \sa setHttp1Configuration
+*/
+QHttp1Configuration QNetworkRequest::http1Configuration() const
+{
+    return d->h1Configuration;
+}
+/*!
+    \since 6.5
+
+    Sets request's HTTP/1 parameters from \a configuration.
+
+    \sa http1Configuration, QNetworkAccessManager, QHttp1Configuration
+*/
+void QNetworkRequest::setHttp1Configuration(const QHttp1Configuration &configuration)
+{
+    d->h1Configuration = configuration;
+}
+
 /*!
     \since 5.14
 
@@ -932,9 +969,9 @@ void QNetworkRequest::setDecompressedSafetyCheckThreshold(qint64 threshold)
 {
     d->decompressedSafetyCheckThreshold = threshold;
 }
-#endif // QT_CONFIG(http) || defined(Q_CLANG_QDOC)
+#endif // QT_CONFIG(http) || defined(Q_QDOC)
 
-#if QT_CONFIG(http) || defined(Q_CLANG_QDOC) || defined (Q_OS_WASM)
+#if QT_CONFIG(http) || defined(Q_QDOC) || defined (Q_OS_WASM)
 /*!
     \since 5.15
 
@@ -968,7 +1005,7 @@ void QNetworkRequest::setTransferTimeout(int timeout)
 {
     d->transferTimeout = timeout;
 }
-#endif // QT_CONFIG(http) || defined(Q_CLANG_QDOC) || defined (Q_OS_WASM)
+#endif // QT_CONFIG(http) || defined(Q_QDOC) || defined (Q_OS_WASM)
 
 static QByteArray headerName(QNetworkRequest::KnownHeaders header)
 {
@@ -1046,7 +1083,7 @@ static QByteArray headerValue(QNetworkRequest::KnownHeaders header, const QVaria
         switch (value.userType()) {
             // Generate RFC 1123/822 dates:
         case QMetaType::QDate:
-            return QNetworkHeadersPrivate::toHttpDate(value.toDate().startOfDay(Qt::UTC));
+            return QNetworkHeadersPrivate::toHttpDate(value.toDate().startOfDay(QTimeZone::UTC));
         case QMetaType::QDateTime:
             return QNetworkHeadersPrivate::toHttpDate(value.toDateTime());
 
@@ -1487,7 +1524,7 @@ QDateTime QNetworkHeadersPrivate::fromHttpDate(const QByteArray &value)
 #endif // datestring
 
     if (dt.isValid())
-        dt.setTimeSpec(Qt::UTC);
+        dt.setTimeZone(QTimeZone::UTC);
     return dt;
 }
 

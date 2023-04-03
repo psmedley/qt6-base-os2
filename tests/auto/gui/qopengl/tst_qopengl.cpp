@@ -7,7 +7,9 @@
 #include <QtOpenGL/qopengltextureblitter.h>
 #include <QtOpenGL/QOpenGLVertexArrayObject>
 #include <QtOpenGL/QOpenGLBuffer>
-#include <QtOpenGL/QOpenGLFunctions_4_2_Core>
+#if !QT_CONFIG(opengles2)
+#  include <QtOpenGL/QOpenGLFunctions_4_2_Core>
+#endif
 #include <QtOpenGL/QOpenGLVersionFunctionsFactory>
 #include <QtGui/private/qopenglcontext_p.h>
 #include <QtGui/QOpenGLFunctions>
@@ -1589,6 +1591,13 @@ void tst_QOpenGL::bufferCreate()
     buf.bind();
     buf.allocate(128);
     QCOMPARE(buf.size(), 128);
+
+    {
+        QOpenGLBuffer moved = std::move(buf);
+        QCOMPARE_EQ(moved.isCreated(), true);
+        QCOMPARE_EQ(moved.size(), 128);
+        buf = std::move(moved);
+    }
 
     buf.release();
 

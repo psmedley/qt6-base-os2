@@ -1,4 +1,5 @@
-# Generated from texuploads.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## texuploads Binary:
@@ -8,7 +9,7 @@ qt_internal_add_manual_test(texuploads
     GUI
     SOURCES
         texuploads.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -35,7 +36,3 @@ qt_internal_add_resource(texuploads "texuploads"
     FILES
         ${texuploads_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:texuploads.pro:<TRUE>:
-# TEMPLATE = "app"

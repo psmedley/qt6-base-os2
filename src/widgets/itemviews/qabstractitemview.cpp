@@ -1709,6 +1709,12 @@ bool QAbstractItemView::viewportEvent(QEvent *event)
 {
     Q_D(QAbstractItemView);
     switch (event->type()) {
+    case QEvent::Paint:
+        // Similar to pre-painting in QAbstractItemView::event to update scrollbar
+        // visibility, make sure that all pending layout requests have been executed
+        // so that the view's data structures are up-to-date before rendering.
+        d->executePostedLayout();
+        break;
     case QEvent::HoverMove:
     case QEvent::HoverEnter:
         d->setHoverIndex(indexAt(static_cast<QHoverEvent*>(event)->position().toPoint()));
@@ -1793,9 +1799,11 @@ void QAbstractItemView::mousePressEvent(QMouseEvent *event)
     QPoint offset = d->offset();
     d->draggedPosition = pos + offset;
 
+#if QT_CONFIG(draganddrop)
     // update the pressed position when drag was enable
     if (d->dragEnabled)
         d->pressedPosition = d->draggedPosition;
+#endif
 
     if (!(command & QItemSelectionModel::Current)) {
         d->pressedPosition = pos + offset;
@@ -4134,13 +4142,21 @@ QItemSelectionModel::SelectionFlags QAbstractItemViewPrivate::multiSelectionComm
         case QEvent::MouseButtonPress:
             if (static_cast<const QMouseEvent*>(event)->button() == Qt::LeftButton) {
                 // since the press might start a drag, deselect only on release
-                if (!pressedAlreadySelected || !dragEnabled || !isIndexDragEnabled(index))
+                if (!pressedAlreadySelected
+#if QT_CONFIG(draganddrop)
+                        || !dragEnabled || !isIndexDragEnabled(index)
+#endif
+                        )
                     return QItemSelectionModel::Toggle|selectionBehaviorFlags(); // toggle
             }
             break;
         case QEvent::MouseButtonRelease:
             if (static_cast<const QMouseEvent*>(event)->button() == Qt::LeftButton) {
-                if (pressedAlreadySelected && dragEnabled && isIndexDragEnabled(index) && index == pressedIndex)
+                if (pressedAlreadySelected
+#if QT_CONFIG(draganddrop)
+                        && dragEnabled && isIndexDragEnabled(index)
+#endif
+                        && index == pressedIndex)
                     return QItemSelectionModel::Toggle|selectionBehaviorFlags();
                 return QItemSelectionModel::NoUpdate|selectionBehaviorFlags(); // finalize
             }
@@ -4188,7 +4204,10 @@ QItemSelectionModel::SelectionFlags QAbstractItemViewPrivate::extendedSelectionC
                 return QItemSelectionModel::NoUpdate;
             // since the press might start a drag, deselect only on release
             if (controlKeyPressed && !rightButtonPressed && pressedAlreadySelected
-                && dragEnabled && isIndexDragEnabled(index)) {
+#if QT_CONFIG(draganddrop)
+                && dragEnabled && isIndexDragEnabled(index)
+#endif
+                    ) {
                 return QItemSelectionModel::NoUpdate;
             }
             break;
@@ -4204,7 +4223,10 @@ QItemSelectionModel::SelectionFlags QAbstractItemViewPrivate::extendedSelectionC
                 && !shiftKeyPressed && !controlKeyPressed && (!rightButtonPressed || !index.isValid()))
                 return QItemSelectionModel::ClearAndSelect|selectionBehaviorFlags();
             if (index == pressedIndex && controlKeyPressed && !rightButtonPressed
-                && dragEnabled && isIndexDragEnabled(index)) {
+#if QT_CONFIG(draganddrop)
+                && dragEnabled && isIndexDragEnabled(index)
+#endif
+                    ) {
                 break;
             }
             return QItemSelectionModel::NoUpdate;
@@ -4668,6 +4690,7 @@ void QAbstractItemViewPrivate::selectAll(QItemSelectionModel::SelectionFlags com
     selectionModel->select(selection, command);
 }
 
+#if QT_CONFIG(draganddrop)
 QModelIndexList QAbstractItemViewPrivate::selectedDraggableIndexes() const
 {
     Q_Q(const QAbstractItemView);
@@ -4678,6 +4701,7 @@ QModelIndexList QAbstractItemViewPrivate::selectedDraggableIndexes() const
     indexes.removeIf(isNotDragEnabled);
     return indexes;
 }
+#endif
 
 /*!
     \reimp

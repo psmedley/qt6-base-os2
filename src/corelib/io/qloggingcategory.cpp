@@ -20,7 +20,8 @@ Q_GLOBAL_STATIC(QLoggingCategory, qtDefaultCategory, qtDefaultCategoryName)
 
     QLoggingCategory represents a certain logging category - identified by a
     string - at runtime. A category can be configured to enable or disable
-    logging of messages per message type.
+    logging of messages per message type. An exception are fatal messages,
+    which are always enabled.
 
     To check whether a message type is enabled or not, use one of these methods:
     \l isDebugEnabled(), \l isInfoEnabled(), \l isWarningEnabled(), and
@@ -38,6 +39,9 @@ Q_GLOBAL_STATIC(QLoggingCategory, qtDefaultCategory, qtDefaultCategoryName)
     conveniently declare and create QLoggingCategory objects:
 
     \snippet qloggingcategory/main.cpp 1
+
+    There is also the Q_DECLARE_EXPORTED_LOGGING_CATEGORY() macro in
+    order to use a logging category across library boundaries.
 
     Category names are free text; to configure categories using \l{Logging Rules}, their
     names should follow this convention:
@@ -76,7 +80,7 @@ Q_GLOBAL_STATIC(QLoggingCategory, qtDefaultCategory, qtDefaultCategoryName)
 
     If no argument is passed, all messages are logged. Only Qt internal categories
     which start with \c{qt} are handled differently: For these, only messages of type
-    \c QtInfoMsg, \c QtWarningMsg, and \c QtCriticalMsg are logged by default.
+    \c QtInfoMsg, \c QtWarningMsg, \c QtCriticalMsg, and \c QFatalMsg are logged by default.
 
     \note Logging categories are not affected by your C++ build configuration.
     That is, whether messages are printed does not change depending on whether
@@ -289,7 +293,7 @@ void QLoggingCategory::setEnabled(QtMsgType type, bool enable)
 
     Returns the object itself. This allows for both: a QLoggingCategory variable, and
     a factory method that returns a QLoggingCategory, to be used in \l qCDebug(),
-    \l qCWarning(), or \l qCCritical() macros.
+    \l qCWarning(), \l qCCritical(), or \l qCFatal() macros.
  */
 
 /*!
@@ -297,7 +301,7 @@ void QLoggingCategory::setEnabled(QtMsgType type, bool enable)
 
     Returns the object itself. This allows for both: a QLoggingCategory variable, and
     a factory method that returns a QLoggingCategory, to be used in \l qCDebug(),
-    \l qCWarning(), or \l qCCritical() macros.
+    \l qCWarning(), \l qCCritical(), or \l qCFatal() macros.
  */
 
 /*!
@@ -553,9 +557,49 @@ void QLoggingCategory::setFilterRules(const QString &rules)
 
     \sa qCritical()
 */
+
+/*!
+    \macro qCFatal(category)
+    \relates QLoggingCategory
+    \since 6.5
+
+    Returns an output stream for fatal messages in the logging category,
+    \a category.
+
+    If you are using the \b{default message handler}, the returned stream will abort
+    to create a core dump. On Windows, for debug builds, this function will
+    report a \c _CRT_ERROR enabling you to connect a debugger to the application.
+
+    Example:
+
+    \snippet qloggingcategory/main.cpp 16
+
+    \sa qFatal()
+*/
+
+/*!
+    \macro qCFatal(category, const char *message, ...)
+    \relates QLoggingCategory
+    \since 6.5
+
+    Logs a fatal message, \a message, in the logging category, \a category.
+    \a message may contain place holders to be replaced by additional arguments,
+    similar to the C printf() function.
+
+    Example:
+
+    \snippet qloggingcategory/main.cpp 17
+
+    If you are using the \b{default message handler}, this function will abort
+    to create a core dump. On Windows, for debug builds, this function will
+    report a \c _CRT_ERROR enabling you to connect a debugger to the application.
+
+    \sa qFatal()
+*/
+
 /*!
     \macro Q_DECLARE_LOGGING_CATEGORY(name)
-    \sa Q_LOGGING_CATEGORY()
+    \sa Q_LOGGING_CATEGORY(), Q_DECLARE_EXPORTED_LOGGING_CATEGORY()
     \relates QLoggingCategory
     \since 5.2
 
@@ -566,8 +610,31 @@ void QLoggingCategory::setFilterRules(const QString &rules)
 */
 
 /*!
+    \macro Q_DECLARE_EXPORTED_LOGGING_CATEGORY(name, EXPORT_MACRO)
+    \sa Q_LOGGING_CATEGORY(), Q_DECLARE_LOGGING_CATEGORY()
+    \relates QLoggingCategory
+    \since 6.5
+
+    Declares a logging category \a name. The macro can be used to declare
+    a common logging category shared in different parts of the program.
+
+    This works exactly like Q_DECLARE_LOGGING_CATEGORY(). However,
+    the logging category declared by this macro is additionally
+    qualified with \a EXPORT_MACRO. This is useful if the logging
+    category needs to be exported from a dynamic library.
+
+    For example:
+
+    \code
+    Q_DECLARE_EXPORTED_LOGGING_CATEGORY(lcCore, LIB_EXPORT_MACRO)
+    \endcode
+
+    This macro must be used outside of a class or function.
+*/
+
+/*!
     \macro Q_LOGGING_CATEGORY(name, string)
-    \sa Q_DECLARE_LOGGING_CATEGORY()
+    \sa Q_DECLARE_LOGGING_CATEGORY(), Q_DECLARE_EXPORTED_LOGGING_CATEGORY()
     \relates QLoggingCategory
     \since 5.2
 

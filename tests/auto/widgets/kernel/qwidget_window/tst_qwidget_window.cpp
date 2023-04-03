@@ -28,6 +28,8 @@
 
 #include <QtTest/private/qtesthelpers_p.h>
 
+#include <QtWidgets/private/qapplication_p.h>
+
 using namespace QTestPrivate;
 
 // Compare a window position that may go through scaling in the platform plugin with fuzz.
@@ -51,6 +53,7 @@ public:
     tst_QWidget_window();
 
 public slots:
+    void init();
     void initTestCase();
     void cleanupTestCase();
     void cleanup();
@@ -125,6 +128,11 @@ tst_QWidget_window::tst_QWidget_window() :
 
 void tst_QWidget_window::initTestCase()
 {
+}
+
+void tst_QWidget_window::init()
+{
+    QTest::failOnWarning(QRegularExpression(".*No such slot.*"));
 }
 
 void tst_QWidget_window::cleanupTestCase()
@@ -678,7 +686,7 @@ void tst_QWidget_window::tst_dnd()
 
     dndTestWidget.show();
     QVERIFY(QTest::qWaitForWindowExposed(&dndTestWidget));
-    qApp->setActiveWindow(&dndTestWidget);
+    QApplicationPrivate::setActiveWindow(&dndTestWidget);
     QVERIFY(QTest::qWaitForWindowActive(&dndTestWidget));
 
     QMimeData mimeData;

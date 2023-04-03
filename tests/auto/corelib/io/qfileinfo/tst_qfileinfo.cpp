@@ -190,6 +190,7 @@ private slots:
 
     void fileTimes_data();
     void fileTimes();
+    void setFileTimes();
     void fakeFileTimes_data();
     void fakeFileTimes();
 
@@ -1154,7 +1155,7 @@ void tst_QFileInfo::fileTimes()
     QDateTime birthTime, writeTime, metadataChangeTime, readTime;
 
     // --- Create file and write to it
-    beforeBirth = QDateTime::currentDateTime().addMSecs(-fsClockSkew);
+    beforeBirth = QDateTime::currentDateTimeUtc().addMSecs(-fsClockSkew);
     {
         QFile file(fileName);
         QVERIFY(file.open(QFile::WriteOnly | QFile::Text));
@@ -1164,7 +1165,7 @@ void tst_QFileInfo::fileTimes()
                  datePairString(birthTime, beforeBirth));
 
         QTest::qSleep(sleepTime);
-        beforeWrite = QDateTime::currentDateTime().addMSecs(-fsClockSkew);
+        beforeWrite = QDateTime::currentDateTimeUtc().addMSecs(-fsClockSkew);
         QTextStream ts(&file);
         ts << fileName << Qt::endl;
     }
@@ -1177,7 +1178,7 @@ void tst_QFileInfo::fileTimes()
 
     // --- Change the file's metadata
     QTest::qSleep(sleepTime);
-    beforeMetadataChange = QDateTime::currentDateTime().addMSecs(-fsClockSkew);
+    beforeMetadataChange = QDateTime::currentDateTimeUtc().addMSecs(-fsClockSkew);
     {
         QFile file(fileName);
         file.setPermissions(file.permissions());
@@ -1199,7 +1200,7 @@ void tst_QFileInfo::fileTimes()
 
     // --- Read the file
     QTest::qSleep(sleepTime);
-    beforeRead = QDateTime::currentDateTime().addMSecs(-fsClockSkew);
+    beforeRead = QDateTime::currentDateTimeUtc().addMSecs(-fsClockSkew);
     {
         QFile file(fileName);
         QVERIFY(file.open(QFile::ReadOnly | QFile::Text));
@@ -1233,6 +1234,21 @@ void tst_QFileInfo::fileTimes()
 
     QVERIFY2(readTime > beforeRead, datePairString(readTime, beforeRead));
     QVERIFY(writeTime < beforeRead);
+}
+
+void tst_QFileInfo::setFileTimes()
+{
+    QByteArray data("OLE\nOLE\nOLE");
+    QTemporaryFile file;
+
+    QVERIFY(file.open());
+    QCOMPARE(file.write(data), data.size());
+    QCOMPARE(file.size(), data.size());
+
+    const QDateTime before = QDateTime::currentDateTimeUtc().addMSecs(-5000);
+    QVERIFY(file.setFileTime(before, QFile::FileModificationTime));
+    const QDateTime mtime = file.fileTime(QFile::FileModificationTime).toUTC();
+    QCOMPARE(mtime, before);
 }
 
 void tst_QFileInfo::fakeFileTimes_data()

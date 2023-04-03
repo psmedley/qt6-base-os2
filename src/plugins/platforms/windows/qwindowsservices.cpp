@@ -1,7 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
-#define QT_NO_URL_CAST_FROM_STRING
 #include "qwindowsservices.h"
 #include <QtCore/qt_windows.h>
 
@@ -12,6 +11,7 @@
 #include <QtCore/qthread.h>
 
 #include <QtCore/private/qwinregistry_p.h>
+#include <QtCore/private/qfunctions_win_p.h>
 
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -34,11 +34,10 @@ public:
 
     void run() override
     {
-        if (SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE))) {
+        QComHelper comHelper;
+        if (comHelper.isValid())
             m_result = ShellExecute(nullptr, m_operation, m_file, m_parameters, nullptr,
                                     SW_SHOWNORMAL);
-            CoUninitialize();
-        }
     }
 
     HINSTANCE result() const { return m_result; }

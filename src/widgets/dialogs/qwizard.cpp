@@ -29,9 +29,8 @@
 #include "qstyleoption.h"
 #include "qvarlengtharray.h"
 #if defined(Q_OS_MACOS)
-#include <QtCore/QMetaMethod>
-#include <QtGui/QGuiApplication>
-#include <qpa/qplatformnativeinterface.h>
+#include <AppKit/AppKit.h>
+#include <QtGui/private/qcoregraphics_p.h>
 #elif QT_CONFIG(style_windowsvista)
 #include "qwizard_win_p.h"
 #include "qtimer.h"
@@ -129,8 +128,7 @@ static const char *changed_signal(int which)
     case 6: return SIGNAL(valueChanged(int));
     };
     static_assert(7 == NFallbackDefaultProperties);
-    Q_UNREACHABLE();
-    return nullptr;
+    Q_UNREACHABLE_RETURN(nullptr);
 }
 
 class QWizardDefaultProperty
@@ -417,8 +415,8 @@ public:
     }
 
     QSize minimumSizeHint() const override {
-        if (!pixmap(Qt::ReturnByValue).isNull())
-            return pixmap(Qt::ReturnByValue).deviceIndependentSize().toSize();
+        if (!pixmap().isNull())
+            return pixmap().deviceIndependentSize().toSize();
         return QFrame::minimumSizeHint();
     }
 
@@ -1331,11 +1329,11 @@ static QString object_name_for_button(QWizard::WizardButton which)
 {
     switch (which) {
     case QWizard::CommitButton:
-        return "qt_wizard_commit"_L1;
+        return u"qt_wizard_commit"_s;
     case QWizard::FinishButton:
-        return "qt_wizard_finish"_L1;
+        return u"qt_wizard_finish"_s;
     case QWizard::CancelButton:
-        return "qt_wizard_cancel"_L1;
+        return u"qt_wizard_cancel"_s;
     case QWizard::BackButton:
     case QWizard::NextButton:
     case QWizard::HelpButton:
@@ -1350,8 +1348,7 @@ static QString object_name_for_button(QWizard::WizardButton which)
     //case QWizard::NButtons:
         ;
     }
-    Q_UNREACHABLE();
-    return QString();
+    Q_UNREACHABLE_RETURN(QString());
 }
 
 bool QWizardPrivate::ensureButton(QWizard::WizardButton which) const
@@ -1725,23 +1722,19 @@ void QWizardPrivate::setStyle(QStyle *style)
 }
 
 #ifdef Q_OS_MACOS
-
 QPixmap QWizardPrivate::findDefaultBackgroundPixmap()
 {
-    QGuiApplication *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
-    if (!app)
-        return QPixmap();
-    QPlatformNativeInterface *platformNativeInterface = app->platformNativeInterface();
-    int at = platformNativeInterface->metaObject()->indexOfMethod("defaultBackgroundPixmapForQWizard()");
-    if (at == -1)
-        return QPixmap();
-    QMetaMethod defaultBackgroundPixmapForQWizard = platformNativeInterface->metaObject()->method(at);
-    QPixmap result;
-    if (!defaultBackgroundPixmapForQWizard.invoke(platformNativeInterface, Q_RETURN_ARG(QPixmap, result)))
-        return QPixmap();
-    return result;
-}
+    auto *keyboardAssistantURL = [NSWorkspace.sharedWorkspace
+        URLForApplicationWithBundleIdentifier:@"com.apple.KeyboardSetupAssistant"];
+    auto *keyboardAssistantBundle = [NSBundle bundleWithURL:keyboardAssistantURL];
+    auto *assistantBackground = [keyboardAssistantBundle imageForResource:@"Background"];
+    auto size = QSizeF::fromCGSize(assistantBackground.size);
+    static const QSizeF expectedSize(242, 414);
+    if (size == expectedSize)
+        return qt_mac_toQPixmap(assistantBackground, size);
 
+    return QPixmap();
+}
 #endif
 
 #if QT_CONFIG(style_windowsvista)
@@ -2847,7 +2840,7 @@ void QWizard::setPixmap(WizardPixmap which, const QPixmap &pixmap)
     Returns the pixmap set for role \a which.
 
     By default, the only pixmap that is set is the BackgroundPixmap on
-    \macos version 10.13 and earlier.
+    \macos.
 
     \sa QWizardPage::pixmap(), {Elements of a Wizard Page}
 */
@@ -3248,7 +3241,7 @@ void QWizard::paintEvent(QPaintEvent * event)
 #endif
 }
 
-#if defined(Q_OS_WIN) || defined(Q_CLANG_QDOC)
+#if defined(Q_OS_WIN) || defined(Q_QDOC)
 /*!
     \reimp
 */

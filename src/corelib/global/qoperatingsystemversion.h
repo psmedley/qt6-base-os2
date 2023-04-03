@@ -108,7 +108,7 @@ class Q_CORE_EXPORT QOperatingSystemVersion : public QOperatingSystemVersionBase
 {
 public:
     // ### Qt7: Remove. Keep synchronized with QOperatingSystemVersionBase::OSType until then!
-#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0) && !defined(QT_BOOTSTRAPPED)
     enum OSType {
         Unknown = 0,
         Windows,
@@ -126,7 +126,7 @@ public:
     // without breaking our BC promises. They must be fully inline but we cannot make that change
     // until Qt7
     // @note: New entries should be added after the if-def-ery until Qt 7!!
-#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0) && !defined(QT_BOOTSTRAPPED)
     static const QOperatingSystemVersion Windows7;
     static const QOperatingSystemVersion Windows8;
     static const QOperatingSystemVersion Windows8_1;
@@ -203,6 +203,10 @@ public:
     static constexpr QOperatingSystemVersionBase Windows11 { QOperatingSystemVersionBase::Windows, 10, 0, 22000 };
     static constexpr QOperatingSystemVersionBase Windows11_21H2 = Windows11;
     static constexpr QOperatingSystemVersionBase Windows11_22H2 { QOperatingSystemVersionBase::Windows, 10, 0, 22621 };
+
+    static constexpr QOperatingSystemVersionBase Android12 { QOperatingSystemVersionBase::Android, 12, 0 };
+    static constexpr QOperatingSystemVersionBase Android12L { QOperatingSystemVersionBase::Android, 12, 0 };
+    static constexpr QOperatingSystemVersionBase Android13 { QOperatingSystemVersionBase::Android, 13, 0 };
 
     static constexpr QOperatingSystemVersionBase MacOSVentura { QOperatingSystemVersionBase::MacOS, 13, 0 };
 

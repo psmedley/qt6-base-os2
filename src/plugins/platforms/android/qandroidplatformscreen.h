@@ -13,6 +13,7 @@
 #include <QWaitCondition>
 #include <QtCore/QJniObject>
 #include <qpa/qplatformscreen.h>
+#include <qpa/qplatformscreen_p.h>
 
 #include <android/native_window.h>
 
@@ -20,11 +21,13 @@ QT_BEGIN_NAMESPACE
 
 class QAndroidPlatformWindow;
 
-class QAndroidPlatformScreen: public QObject, public QPlatformScreen, public AndroidSurfaceClient
+class QAndroidPlatformScreen: public QObject,
+                              public QPlatformScreen, public AndroidSurfaceClient,
+                              public QNativeInterface::Private::QAndroidScreen
 {
     Q_OBJECT
 public:
-    QAndroidPlatformScreen();
+    QAndroidPlatformScreen(const QJniObject &displayObject);
     ~QAndroidPlatformScreen();
 
     QRect geometry() const override { return QRect(QPoint(), m_size); }
@@ -38,7 +41,6 @@ public:
     int currentMode() const override { return m_currentMode; }
     int preferredMode() const override { return m_currentMode; }
     qreal refreshRate() const override { return m_refreshRate; }
-
     inline QWindow *topWindow() const;
     QWindow *topLevelAt(const QPoint & p) const override;
 
@@ -51,6 +53,7 @@ public:
     void scheduleUpdate();
     void topWindowChanged(QWindow *w);
     int rasterSurfaces();
+    int displayId() const override;
 
 public slots:
     void setDirty(const QRect &rect);
@@ -78,6 +81,7 @@ protected:
     QString m_name;
     QList<Mode> m_modes;
     int m_currentMode = 0;
+    int m_displayId = -1;
 
 private:
     QDpi logicalDpi() const override;
@@ -94,7 +98,7 @@ private slots:
     void doRedraw(QImage *screenGrabImage = nullptr);
 
 private:
-    int m_id = -1;
+    int m_surfaceId = -1;
     QAtomicInt m_rasterSurfaces = 0;
     ANativeWindow* m_nativeSurface = nullptr;
     QWaitCondition m_surfaceWaitCondition;

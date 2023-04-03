@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 function(qt_update_precompiled_header target precompiled_header)
     if (precompiled_header AND BUILD_WITH_PCH)
         set_property(TARGET "${target}" APPEND PROPERTY "PRECOMPILE_HEADERS" "$<$<OR:$<COMPILE_LANGUAGE:CXX>,$<COMPILE_LANGUAGE:OBJCXX>>:${precompiled_header}>")
@@ -16,7 +19,9 @@ endfunction()
 
 function(qt_update_ignore_pch_source target sources)
     if (sources)
-        set_source_files_properties(${sources} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+        set_source_files_properties(${sources} PROPERTIES
+                                               SKIP_PRECOMPILE_HEADERS ON
+                                               SKIP_UNITY_BUILD_INCLUSION ON)
     endif()
 endfunction()
 

@@ -29,7 +29,9 @@
 #include "QtCore/qurl.h"
 #include "QtCore/qvariant.h"
 
+#if QT_CONFIG(cssparser)
 #include "private/qcssparser_p.h"
+#endif
 #include "private/qfragmentmap_p.h"
 #include "private/qobject_p.h"
 #include "private/qtextformat_p.h"
@@ -243,8 +245,8 @@ private:
 public:
     void documentChange(int from, int length);
 
-    inline void addCursor(QTextCursorPrivate *c) { cursors.insert(c); }
-    inline void removeCursor(QTextCursorPrivate *c) { cursors.remove(c); }
+    void addCursor(QTextCursorPrivate *c);
+    void removeCursor(QTextCursorPrivate *c);
 
     QTextFrame *frameAt(int pos) const;
     QTextFrame *rootFrame() const;

@@ -1,4 +1,5 @@
-# Generated from multiwindow_threaded.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## multiwindow_threaded Binary:
@@ -9,7 +10,8 @@ qt_internal_add_manual_test(multiwindow_threaded
     SOURCES
         multiwindow_threaded.cpp
         window.cpp window.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
+        Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
         Qt::Widgets
@@ -39,5 +41,4 @@ qt_internal_add_resource(multiwindow_threaded "multiwindow_threaded"
 )
 
 
-#### Keys ignored in scope 1:.:.:multiwindow_threaded.pro:<TRUE>:
 # TEMPLATE = "app"

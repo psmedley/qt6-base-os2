@@ -6,7 +6,7 @@
 \ingroup cmake-commands-qtcore
 
 \title qt_deploy_runtime_dependencies
-\target qt_deploy_runtime_dependencies
+\keyword qt6_deploy_runtime_dependencies
 
 \summary {Deploy Qt plugins, Qt and non-Qt libraries needed by an executable.}
 
@@ -17,7 +17,6 @@ can only be called from a deployment script. It cannot be called directly by the
 project during the configure stage.
 
 \cmakecommandsince 6.3
-\preliminarycmakecommand
 \note This command does not usually need to be called directly. It is used
       internally by other higher level commands, but projects wishing to
       implement more customized deployment logic may find it useful.
@@ -38,6 +37,13 @@ qt_deploy_runtime_dependencies(
     [VERBOSE]
     [NO_OVERWRITE]
     [NO_APP_STORE_COMPLIANCE]
+    [NO_TRANSLATIONS]
+    [PRE_INCLUDE_REGEXES regexes...]
+    [PRE_EXCLUDE_REGEXES regexes...]
+    [POST_INCLUDE_REGEXES regexes...]
+    [POST_EXCLUDE_REGEXES regexes...]
+    [POST_INCLUDE_FILES files...]
+    [POST_EXCLUDE_FILES files...]
 )
 \endcode
 
@@ -52,17 +58,16 @@ appropriate set of Qt plugins.
 
 This command only considers runtime dependencies for which linking
 relationships exist in the underlying binaries. It does not deploy QML modules,
-see \l{qt_deploy_qml_imports()} for that.
+see \l{qt6_deploy_qml_imports}{qt_deploy_qml_imports()} for that.
 
 \section1 Arguments
 
 The \c{EXECUTABLE} option must be provided.
 
-The \c{executable} argument should be a path to the executable file, relative to
-the base install location. For example, \c{bin/MyApp.exe}, or more dynamically
-\c{\${QT_DEPLOY_BIN_DIR}/$<TARGET_FILE_NAME:MyApp>}.
-Specifying raw target names not wrapped in a generator epxression like
-\c{<TARGET_FILE_NAME:>} is not supported.
+The \c{executable} argument should be the path to the executable file in the
+build directory. For example, \c{${CMAKE_CURRENT_BINARY_DIR}/MyApp.exe}, or more
+dynamically \c{$<TARGET_FILE:MyApp>}. Specifying raw target names not wrapped in
+a generator expression like \c{<TARGET_FILE:>} is not supported.
 
 For macOS app bundles, the \c{executable} argument should be a path to the
 bundle directory, relative to the base install location.
@@ -114,8 +119,28 @@ By default, if \c{executable} is a macOS app bundle, only Qt plugins and Qt
 libraries that comply with Apple's app store requirements are deployed. The
 \c{NO_APP_STORE_COMPLIANCE} option can be given to disable that constraint.
 
+On platforms other than macOS, Qt translations are automatically deployed. To
+inhibit this behavior, specify \c{NO_TRANSLATIONS}. Use
+\l{qt6_deploy_translations}{qt_deploy_translations()} to deploy translations
+in a customized way.
+
+On Linux, deploying runtime dependencies is based on CMake's
+\c{file(GET_RUNTIME_DEPENDENCIES)} command. The options \c{PRE_INCLUDE_REGEXES},
+\c{PRE_EXCLUDE_REGEXES}, \c{POST_INCLUDE_REGEXES}, \c{POST_EXCLUDE_REGEXES},
+\c{POST_INCLUDE_FILES}, and \c{POST_EXCLUDE_FILES} are only meaningful in this
+context and are forwarded unaltered to \c{file(GET_RUNTIME_DEPENDENCIES)}. See
+the documentation of that command for details.
+
+On Linux, runtime dependencies that are located in system library directories
+are not deployed by default. If \c{POST_EXCLUDE_REGEXES} is specified, this
+automatic exclusion is not performed.
+
+The default value of \c{POST_EXCLUDE_REGEXES} is constructed from the value of
+\l{QT_DEPLOY_IGNORED_LIB_DIRS}.
+
 \sa {qt6_generate_deploy_app_script}{qt_generate_deploy_app_script()},
-    qt_deploy_qt_conf(), qt_deploy_qml_imports()
+    {qt6_deploy_qt_conf}{qt_deploy_qt_conf()},
+    {qt6_deploy_qml_imports}{qt_deploy_qml_imports()}
 
 \section1 Example
 

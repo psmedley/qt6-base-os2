@@ -1,4 +1,5 @@
-# Generated from network_remote_stresstest.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_network_remote_stresstest Binary:
@@ -7,7 +8,7 @@
 qt_internal_add_manual_test(tst_network_remote_stresstest
     SOURCES
         tst_network_remote_stresstest.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Network
         Qt::NetworkPrivate

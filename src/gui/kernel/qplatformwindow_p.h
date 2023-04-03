@@ -20,6 +20,12 @@
 #include <QtCore/qrect.h>
 #include <QtCore/qnativeinterface.h>
 
+#if defined(Q_OS_UNIX)
+#include <any>
+
+struct wl_surface;
+#endif
+
 QT_BEGIN_NAMESPACE
 
 class QMargins;
@@ -35,7 +41,7 @@ public:
 
 namespace QNativeInterface::Private {
 
-#if defined(Q_OS_MACOS) || defined(Q_CLANG_QDOC)
+#if defined(Q_OS_MACOS) || defined(Q_QDOC)
 struct Q_GUI_EXPORT QCocoaWindow
 {
     QT_DECLARE_NATIVE_INTERFACE(QCocoaWindow, 1, QWindow)
@@ -44,7 +50,7 @@ struct Q_GUI_EXPORT QCocoaWindow
 };
 #endif
 
-#if QT_CONFIG(xcb) || defined(Q_CLANG_QDOC)
+#if QT_CONFIG(xcb) || defined(Q_QDOC)
 struct Q_GUI_EXPORT QXcbWindow
 {
     QT_DECLARE_NATIVE_INTERFACE(QXcbWindow, 1, QWindow)
@@ -76,7 +82,7 @@ struct Q_GUI_EXPORT QXcbWindow
 };
 #endif // xcb
 
-#if defined(Q_OS_WIN) || defined(Q_CLANG_QDOC)
+#if defined(Q_OS_WIN) || defined(Q_QDOC)
 struct Q_GUI_EXPORT QWindowsWindow
 {
     QT_DECLARE_NATIVE_INTERFACE(QWindowsWindow, 1, QWindow)
@@ -88,6 +94,33 @@ struct Q_GUI_EXPORT QWindowsWindow
     virtual void setCustomMargins(const QMargins &margins) = 0;
 };
 #endif // Q_OS_WIN
+
+#if defined(Q_OS_UNIX)
+struct Q_GUI_EXPORT QWaylandWindow : public QObject
+{
+    Q_OBJECT
+public:
+    QT_DECLARE_NATIVE_INTERFACE(QWaylandWindow, 1, QWindow)
+
+    virtual wl_surface *surface() const = 0;
+    virtual void setCustomMargins(const QMargins &margins) = 0;
+    virtual void requestXdgActivationToken(uint serial) = 0;
+    template<typename T>
+    T *surfaceRole() const
+    {
+        std::any anyRole = _surfaceRole();
+        auto role = std::any_cast<T *>(&anyRole);
+        return role ? *role : nullptr;
+    }
+Q_SIGNALS:
+    void surfaceCreated();
+    void surfaceDestroyed();
+    void xdgActivationTokenCreated(const QString &token);
+
+protected:
+    virtual std::any _surfaceRole() const = 0;
+};
+#endif
 
 } // QNativeInterface::Private
 

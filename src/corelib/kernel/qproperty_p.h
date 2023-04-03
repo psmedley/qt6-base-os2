@@ -18,8 +18,10 @@
 #include <private/qglobal_p.h>
 #include <qproperty.h>
 
+#include <qmetaobject.h>
 #include <qscopedpointer.h>
 #include <qscopedvaluerollback.h>
+#include <qvariant.h>
 #include <vector>
 #include <QtCore/QVarLengthArray>
 
@@ -46,13 +48,13 @@ public:
     Q_DISABLE_COPY(QBindingObserverPtr);
     void swap(QBindingObserverPtr &other) noexcept
     { qt_ptr_swap(d, other.d); }
-    QBindingObserverPtr(QBindingObserverPtr &&other) : d(std::exchange(other.d, nullptr)) {}
+    QBindingObserverPtr(QBindingObserverPtr &&other) noexcept : d(std::exchange(other.d, nullptr)) {}
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_MOVE_AND_SWAP(QBindingObserverPtr);
 
 
-    inline QBindingObserverPtr(QPropertyObserver *observer);
+    inline QBindingObserverPtr(QPropertyObserver *observer) noexcept;
     inline ~QBindingObserverPtr();
-    inline QPropertyBindingPrivate *binding() const;
+    inline QPropertyBindingPrivate *binding() const noexcept;
     inline QPropertyObserver *operator ->();
 };
 
@@ -361,16 +363,9 @@ public:
 
     void unlinkAndDeref();
 
-    void evaluateRecursive(PendingBindingObserverList &bindingObservers, QBindingStatus *status = nullptr);
+    bool evaluateRecursive(PendingBindingObserverList &bindingObservers, QBindingStatus *status = nullptr);
 
-    // ### TODO: remove as soon as declarative no longer needs this overload
-    void evaluateRecursive()
-    {
-        PendingBindingObserverList bindingObservers;
-        evaluateRecursive(bindingObservers);
-    }
-
-    void Q_ALWAYS_INLINE evaluateRecursive_inline(PendingBindingObserverList &bindingObservers, QBindingStatus *status);
+    bool Q_ALWAYS_INLINE evaluateRecursive_inline(PendingBindingObserverList &bindingObservers, QBindingStatus *status);
 
     void notifyRecursive();
     void notifyNonRecursive(const PendingBindingObserverList &bindingObservers);
@@ -589,7 +584,7 @@ public:
         return true;
     }
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
     template <typename Functor>
     QPropertyBinding<T> setBinding(Functor &&f,
                                    const QPropertyBindingSourceLocation &location = QT_PROPERTY_DEFAULT_BINDING_LOCATION,
@@ -792,13 +787,13 @@ struct QUntypedBindablePrivate
     }
 };
 
-inline void QPropertyBindingPrivate::evaluateRecursive_inline(PendingBindingObserverList &bindingObservers, QBindingStatus *status)
+inline bool QPropertyBindingPrivate::evaluateRecursive_inline(PendingBindingObserverList &bindingObservers, QBindingStatus *status)
 {
     if (updating) {
         error = QPropertyBindingError(QPropertyBindingError::BindingLoop);
         if (isQQmlPropertyBinding)
             errorCallBack(this);
-        return;
+        return false;
     }
 
     /*
@@ -828,10 +823,11 @@ inline void QPropertyBindingPrivate::evaluateRecursive_inline(PendingBindingObse
     // If there was not, we must not clear it, as that only should happen in notifyRecursive
     pendingNotify = pendingNotify || changed;
     if (!changed || !firstObserver)
-        return;
+        return changed;
 
     firstObserver.noSelfDependencies(this);
     firstObserver.evaluateBindings(bindingObservers, status);
+    return true;
 }
 
 template<QPropertyObserverPointer::Notify notifyPolicy>
@@ -904,7 +900,7 @@ inline QPropertyObserverNodeProtector::~QPropertyObserverNodeProtector()
     d.unlink_fast();
 }
 
-QBindingObserverPtr::QBindingObserverPtr(QPropertyObserver *observer) : d(observer)
+QBindingObserverPtr::QBindingObserverPtr(QPropertyObserver *observer) noexcept : d(observer)
 {
     Q_ASSERT(d);
     QPropertyObserverPointer{d}.binding()->addRef();
@@ -912,9 +908,40 @@ QBindingObserverPtr::QBindingObserverPtr(QPropertyObserver *observer) : d(observ
 
 QBindingObserverPtr::~QBindingObserverPtr() { if (d)  QPropertyObserverPointer{d}.binding()->deref(); }
 
-QPropertyBindingPrivate *QBindingObserverPtr::binding() const { return QPropertyObserverPointer{d}.binding(); }
+QPropertyBindingPrivate *QBindingObserverPtr::binding() const noexcept { return QPropertyObserverPointer{d}.binding(); }
 
 QPropertyObserver *QBindingObserverPtr::operator->() { return d; }
+
+namespace QtPrivate {
+class QPropertyAdaptorSlotObject : public QUntypedPropertyData, public QSlotObjectBase
+{
+    QPropertyBindingData bindingData_;
+    QObject *obj;
+    QMetaProperty metaProperty_;
+
+    static void impl(int which, QSlotObjectBase *this_, QObject *r, void **a, bool *ret);
+
+    QPropertyAdaptorSlotObject(QObject *o, const QMetaProperty& p);
+
+public:
+    static QPropertyAdaptorSlotObject *cast(QSlotObjectBase *ptr, int propertyIndex)
+    {
+        if (ptr->isImpl(&QPropertyAdaptorSlotObject::impl)) {
+            auto p = static_cast<QPropertyAdaptorSlotObject *>(ptr);
+            if (p->metaProperty_.propertyIndex() == propertyIndex)
+                return p;
+        }
+        return nullptr;
+    }
+
+    inline const QPropertyBindingData &bindingData() const { return bindingData_; }
+    inline QPropertyBindingData &bindingData() { return bindingData_; }
+    inline QObject *object() const { return obj; }
+    inline const QMetaProperty &metaProperty() const { return metaProperty_; }
+
+    friend class QT_PREPEND_NAMESPACE(QUntypedBindable);
+};
+}
 
 QT_END_NAMESPACE
 

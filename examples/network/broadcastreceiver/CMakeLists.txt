@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(broadcastreceiver LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -10,6 +11,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/network/broadcastreceiver")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Widgets)
+
+qt_standard_project_setup()
 
 qt_add_executable(broadcastreceiver
     main.cpp
@@ -21,11 +24,11 @@ set_target_properties(broadcastreceiver PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-target_link_libraries(broadcastreceiver PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Network
-    Qt::Widgets
+target_link_libraries(broadcastreceiver PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Widgets
 )
 
 install(TARGETS broadcastreceiver

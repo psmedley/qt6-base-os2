@@ -60,6 +60,13 @@ private slots:
     void eraseValidIteratorOnSharedMap();
     void removeElementsInMap();
     void toStdMap();
+
+    // Tests for deprecated APIs.
+#if QT_DEPRECATED_SINCE(6, 0)
+    void deprecatedInsertMulti();
+    void deprecatedIteratorApis();
+    void deprecatedInsert();
+#endif // QT_DEPRECATED_SINCE(6, 0)
 };
 
 struct IdentityTracker {
@@ -159,8 +166,8 @@ void tst_QMap::count()
     {
         MyMap map;
         MyMap map2( map );
-        QCOMPARE( map.count(), 0 );
-        QCOMPARE( map2.count(), 0 );
+        QCOMPARE( map.size(), 0 );
+        QCOMPARE( map2.size(), 0 );
         QCOMPARE( MyClass::count, int(0) );
         QCOMPARE(map.count("key"), 0);
         QCOMPARE(map.size(), 0);
@@ -169,9 +176,9 @@ void tst_QMap::count()
         QVERIFY(!map2.isDetached());
         // detach
         map2["Hallo"] = MyClass( "Fritz" );
-        QCOMPARE( map.count(), 0 );
         QCOMPARE( map.size(), 0 );
-        QCOMPARE( map2.count(), 1 );
+        QCOMPARE( map.size(), 0 );
+        QCOMPARE( map2.size(), 1 );
         QCOMPARE( map2.size(), 1 );
         QVERIFY(!map.isDetached());
 #ifndef Q_CC_SUN
@@ -183,11 +190,11 @@ void tst_QMap::count()
     {
         typedef QMap<QString, MyClass> Map;
         Map map;
-        QCOMPARE( map.count(), 0);
+        QCOMPARE( map.size(), 0);
         map.insert( "Torben", MyClass("Weis") );
-        QCOMPARE( map.count(), 1 );
+        QCOMPARE( map.size(), 1 );
         map.insert( "Claudia", MyClass("Sorg") );
-        QCOMPARE( map.count(), 2 );
+        QCOMPARE( map.size(), 2 );
         map.insert( "Lars", MyClass("Linzbach") );
         map.insert( "Matthias", MyClass("Ettrich") );
         map.insert( "Sue", MyClass("Paludo") );
@@ -195,7 +202,7 @@ void tst_QMap::count()
         map.insert( "Haavard", MyClass("Nord") );
         map.insert( "Arnt", MyClass("Gulbrandsen") );
         map.insert( "Paul", MyClass("Tvete") );
-        QCOMPARE( map.count(), 9 );
+        QCOMPARE( map.size(), 9 );
         map.insert( "Paul", MyClass("Tvete 1") );
         map.insert( "Paul", MyClass("Tvete 2") );
         map.insert( "Paul", MyClass("Tvete 3") );
@@ -203,69 +210,69 @@ void tst_QMap::count()
         map.insert( "Paul", MyClass("Tvete 5") );
         map.insert( "Paul", MyClass("Tvete 6") );
 
-        QCOMPARE( map.count(), 9 );
+        QCOMPARE( map.size(), 9 );
         QCOMPARE( map.count("Paul"), 1 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         Map map2( map );
-        QVERIFY( map2.count() == 9 );
+        QVERIFY( map2.size() == 9 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         map2.insert( "Kay", MyClass("Roemer") );
-        QVERIFY( map2.count() == 10 );
-        QVERIFY( map.count() == 9 );
+        QVERIFY( map2.size() == 10 );
+        QVERIFY( map.size() == 9 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 19 );
 #endif
 
         map2 = map;
-        QVERIFY( map.count() == 9 );
-        QVERIFY( map2.count() == 9 );
+        QVERIFY( map.size() == 9 );
+        QVERIFY( map2.size() == 9 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         map2.insert( "Kay", MyClass("Roemer") );
-        QVERIFY( map2.count() == 10 );
+        QVERIFY( map2.size() == 10 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 19 );
 #endif
 
         map2.clear();
-        QVERIFY( map.count() == 9 );
-        QVERIFY( map2.count() == 0 );
+        QVERIFY( map.size() == 9 );
+        QVERIFY( map2.size() == 0 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         map2 = map;
-        QVERIFY( map.count() == 9 );
-        QVERIFY( map2.count() == 9 );
+        QVERIFY( map.size() == 9 );
+        QVERIFY( map2.size() == 9 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         map2.clear();
-        QVERIFY( map.count() == 9 );
-        QVERIFY( map2.count() == 0 );
+        QVERIFY( map.size() == 9 );
+        QVERIFY( map2.size() == 0 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         map.remove( "Lars" );
-        QVERIFY( map.count() == 8 );
-        QVERIFY( map2.count() == 0 );
+        QVERIFY( map.size() == 8 );
+        QVERIFY( map2.size() == 0 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 8 );
 #endif
 
         map.remove( "Mist" );
-        QVERIFY( map.count() == 8 );
-        QVERIFY( map2.count() == 0 );
+        QVERIFY( map.size() == 8 );
+        QVERIFY( map2.size() == 0 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 8 );
 #endif
@@ -279,22 +286,22 @@ void tst_QMap::count()
 #ifndef Q_CC_SUN
         QVERIFY( MyClass::count == 1 );
 #endif
-        QVERIFY( map.count() == 1 );
+        QVERIFY( map.size() == 1 );
 
         (void)map["Torben"].str;
         (void)map["Lars"].str;
 #ifndef Q_CC_SUN
         QVERIFY( MyClass::count == 2 );
 #endif
-        QVERIFY( map.count() == 2 );
+        QVERIFY( map.size() == 2 );
 
         const Map& cmap = map;
         (void)cmap["Depp"].str;
 #ifndef Q_CC_SUN
         QVERIFY( MyClass::count == 2 );
 #endif
-        QVERIFY( map.count() == 2 );
-        QVERIFY( cmap.count() == 2 );
+        QVERIFY( map.size() == 2 );
+        QVERIFY( cmap.size() == 2 );
     }
     QCOMPARE( MyClass::count, 0 );
     {
@@ -311,8 +318,8 @@ void tst_QMap::count()
     {
         QMultiMap<int, MyClass> map;
         QMultiMap<int, MyClass> map2(map);
-        QCOMPARE(map.count(), 0);
-        QCOMPARE(map2.count(), 0);
+        QCOMPARE(map.size(), 0);
+        QCOMPARE(map2.size(), 0);
         QCOMPARE(MyClass::count, 0);
         QCOMPARE(map.count(1), 0);
         QCOMPARE(map.size(), 0);
@@ -322,26 +329,26 @@ void tst_QMap::count()
 
         // detach
         map2.insert(0, MyClass("value0"));
-        QCOMPARE(map.count(), 0);
         QCOMPARE(map.size(), 0);
-        QCOMPARE(map2.count(), 1);
+        QCOMPARE(map.size(), 0);
+        QCOMPARE(map2.size(), 1);
         QCOMPARE(map2.size(), 1);
         QVERIFY(!map.isDetached());
         QCOMPARE(MyClass::count, 1);
 
         map2.insert(1, MyClass("value1"));
         map2.insert(2, MyClass("value2"));
-        QCOMPARE(map2.count(), 3);
+        QCOMPARE(map2.size(), 3);
         QCOMPARE(MyClass::count, 3);
 
         map2.insert(0, MyClass("value0_1"));
         map2.insert(0, MyClass("value0_2"));
-        QCOMPARE(map2.count(), 5);
+        QCOMPARE(map2.size(), 5);
         QCOMPARE(map2.count(0), 3);
         QCOMPARE(MyClass::count, 5);
 
         map2.clear();
-        QCOMPARE(map2.count(), 0);
+        QCOMPARE(map2.size(), 0);
         QCOMPARE(MyClass::count, 0);
 
     }
@@ -872,7 +879,7 @@ void tst_QMap::constFind()
 
     for (i = 3; i < 10; ++i) {
         compareString = testString.arg(i);
-        map.insertMulti(4, compareString);
+        map.insert(4, compareString);
     }
 
     QMultiMap<int, QString>::const_iterator it = map.constFind(4);
@@ -978,7 +985,7 @@ void tst_QMap::lowerUpperBound()
 
     map.insert(3, "three");
     map.insert(7, "seven");
-    map.insertMulti(7, "seven_2");
+    map.insert(7, "seven_2");
 
     QCOMPARE(map.upperBound(0).key(), 1);
     QCOMPARE(map.upperBound(1).key(), 3);
@@ -1109,29 +1116,6 @@ void tst_QMap::iterators()
             QVERIFY(stlIt.value() == testString.arg(i));
     QCOMPARE(i, 100);
 
-    // Same but exercising deprecated APIs
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
-    stlIt = map.begin();
-    QCOMPARE(stlIt.value(), QLatin1String("Teststring 1"));
-
-    stlIt += 5;
-    QCOMPARE(stlIt.value(), QLatin1String("Teststring 6"));
-
-    stlIt++;
-    QCOMPARE(stlIt.value(), QLatin1String("Teststring 7"));
-
-    stlIt = stlIt - 3;
-    QCOMPARE(stlIt.value(), QLatin1String("Teststring 4"));
-
-    stlIt--;
-    QCOMPARE(stlIt.value(), QLatin1String("Teststring 3"));
-
-    for(stlIt = map.begin(), i = 1; stlIt != map.end(); ++stlIt, ++i)
-            QVERIFY(stlIt.value() == testString.arg(i));
-    QCOMPARE(i, 100);
-QT_WARNING_POP
-
     //STL-Style const-iterators
 
     QMap<int, QString>::const_iterator cstlIt = map.constBegin();
@@ -1152,29 +1136,6 @@ QT_WARNING_POP
     for(cstlIt = map.constBegin(), i = 1; cstlIt != map.constEnd(); ++cstlIt, ++i)
             QVERIFY(cstlIt.value() == testString.arg(i));
     QCOMPARE(i, 100);
-
-    // Same but exercising deprecated APIs
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
-    cstlIt = map.constBegin();
-    QCOMPARE(cstlIt.value(), QLatin1String("Teststring 1"));
-
-    cstlIt += 5;
-    QCOMPARE(cstlIt.value(), QLatin1String("Teststring 6"));
-
-    cstlIt++;
-    QCOMPARE(cstlIt.value(), QLatin1String("Teststring 7"));
-
-    cstlIt = cstlIt - 3;
-    QCOMPARE(cstlIt.value(), QLatin1String("Teststring 4"));
-
-    cstlIt--;
-    QCOMPARE(cstlIt.value(), QLatin1String("Teststring 3"));
-
-    for(cstlIt = map.constBegin(), i = 1; cstlIt != map.constEnd(); ++cstlIt, ++i)
-            QVERIFY(cstlIt.value() == testString.arg(i));
-    QCOMPARE(i, 100);
-QT_WARNING_POP
 
     //Java-Style iterators
 
@@ -1628,26 +1589,26 @@ void tst_QMap::qmultimap_specific()
     }
 
     QVERIFY(map1.contains(9, 99));
-    QCOMPARE(map1.count(), 45);
+    QCOMPARE(map1.size(), 45);
     map1.remove(9, 99);
     QVERIFY(!map1.contains(9, 99));
-    QCOMPARE(map1.count(), 44);
+    QCOMPARE(map1.size(), 44);
 
     map1.remove(9, 99);
     QVERIFY(!map1.contains(9, 99));
-    QCOMPARE(map1.count(), 44);
+    QCOMPARE(map1.size(), 44);
 
     map1.remove(1, 99);
-    QCOMPARE(map1.count(), 44);
+    QCOMPARE(map1.size(), 44);
 
     map1.insert(1, 99);
     map1.insert(1, 99);
 
-    QCOMPARE(map1.count(), 46);
+    QCOMPARE(map1.size(), 46);
     map1.remove(1, 99);
-    QCOMPARE(map1.count(), 44);
+    QCOMPARE(map1.size(), 44);
     map1.remove(1, 99);
-    QCOMPARE(map1.count(), 44);
+    QCOMPARE(map1.size(), 44);
 
     {
     QMultiMap<int, int>::const_iterator i = map1.constFind(1, 11);
@@ -1706,7 +1667,7 @@ void tst_QMap::qmultimap_specific()
     map2.insert(42, 1);
     map2.insert(10, 2);
     map2.insert(48, 3);
-    QCOMPARE(map1.count(), map2.count());
+    QCOMPARE(map1.size(), map2.size());
     QVERIFY(map1.remove(42,5));
     QVERIFY(map2.remove(42,5));
     QVERIFY(map1 == map2);
@@ -1828,7 +1789,7 @@ void tst_QMap::equal_range()
     QCOMPARE(cresult.first, cmap.find(2));
     QCOMPARE(cresult.second, cmap.find(4));
 
-    map.insertMulti(1, "another one");
+    map.insert(1, "another one");
 
     result = map.equal_range(1);
     QCOMPARE(result.first, map.find(1));
@@ -1847,7 +1808,7 @@ void tst_QMap::insert()
     map.insert("cs/key1", 1);
     map.insert("cs/key2", 2);
     map.insert("cs/key1", 3);
-    QCOMPARE(map.count(), 2);
+    QCOMPARE(map.size(), 2);
 
     QMap<int, int> intMap;
     for (int i = 0; i < 1000; ++i) {
@@ -1918,12 +1879,15 @@ void testDetachWhenInsert()
         dest.insert(3, 3);
         Map<int, int> destCopy = dest;
 
-        dest.insert(source);
+        if constexpr (std::is_same_v<decltype(dest), QMap<int, int>>)
+            dest.insert(source); // QMap
+        else
+            dest.unite(source); // QMultiMap
 
         QCOMPARE(source, referenceSource);
         QCOMPARE(dest, referenceDestination);
 
-        QCOMPARE(destCopy.count(), 1); // unchanged
+        QCOMPARE(destCopy.size(), 1); // unchanged
     }
 
     // copy insertion of shared map
@@ -1938,13 +1902,16 @@ void testDetachWhenInsert()
         dest.insert(3, 3);
         Map<int, int> destCopy = dest;
 
-        dest.insert(source);
+        if constexpr (std::is_same_v<decltype(dest), QMap<int, int>>)
+            dest.insert(source); // QMap
+        else
+            dest.unite(source); // QMultiMap
 
         QCOMPARE(source, referenceSource);
         QCOMPARE(sourceCopy, referenceSource);
 
         QCOMPARE(dest, referenceDestination);
-        QCOMPARE(destCopy.count(), 1); // unchanged
+        QCOMPARE(destCopy.size(), 1); // unchanged
     }
 
     // move insertion of non-shared map
@@ -1958,10 +1925,13 @@ void testDetachWhenInsert()
         dest.insert(3, 3);
         Map<int, int> destCopy = dest;
 
-        dest.insert(source);
+        if constexpr (std::is_same_v<decltype(dest), QMap<int, int>>)
+            dest.insert(source); // QMap
+        else
+            dest.unite(source); // QMultiMap
 
         QCOMPARE(dest, referenceDestination);
-        QCOMPARE(destCopy.count(), 1); // unchanged
+        QCOMPARE(destCopy.size(), 1); // unchanged
     }
 
     // move insertion of shared map
@@ -1976,12 +1946,15 @@ void testDetachWhenInsert()
         dest.insert(3, 3);
         Map<int, int> destCopy = dest;
 
-        dest.insert(std::move(source));
+        if constexpr (std::is_same_v<decltype(dest), QMap<int, int>>)
+            dest.insert(std::move(source)); // QMap
+        else
+            dest.unite(std::move(source)); // QMultiMap
 
         QCOMPARE(sourceCopy, referenceSource);
 
         QCOMPARE(dest, referenceDestination);
-        QCOMPARE(destCopy.count(), 1); // unchanged
+        QCOMPARE(destCopy.size(), 1); // unchanged
     }
 };
 
@@ -2012,7 +1985,7 @@ void tst_QMap::insertMap()
 
         map.insert(map2);
 
-        QCOMPARE(map.count(), 5);
+        QCOMPARE(map.size(), 5);
         for (int i = 0; i < 5; ++i)
             QCOMPARE(map[i], i);
     }
@@ -2027,7 +2000,7 @@ void tst_QMap::insertMap()
 
         map.insert(map2);
 
-        QCOMPARE(map.count(), 17);
+        QCOMPARE(map.size(), 17);
         for (int i = 0; i < 10; ++i) {
             // i * 3 == i except for i = 4, 8
             QCOMPARE(map[i * 3], (i && i % 4 == 0) ? i - (i / 4) : i);
@@ -2049,7 +2022,7 @@ void tst_QMap::insertMap()
         QMap<int, int> map2;
 
         map.insert(map2);
-        QCOMPARE(map.count(), 1);
+        QCOMPARE(map.size(), 1);
         QCOMPARE(map[1], 1);
     }
     {
@@ -2058,7 +2031,7 @@ void tst_QMap::insertMap()
         map2.insert(1, 1);
 
         map.insert(map2);
-        QCOMPARE(map.count(), 1);
+        QCOMPARE(map.size(), 1);
         QCOMPARE(map[1], 1);
 
         QMap<int, int> map3;
@@ -2074,7 +2047,7 @@ void tst_QMap::insertMap()
         // Test inserting into self, nothing should happen
         map.insert(map);
 
-        QCOMPARE(map.count(), 3);
+        QCOMPARE(map.size(), 3);
         for (int i = 0; i < 3; ++i)
             QCOMPARE(map[i], i);
     }
@@ -2092,7 +2065,7 @@ void tst_QMap::insertMap()
 
         map.insert(map2);
 
-        QCOMPARE(map.count(), 1);
+        QCOMPARE(map.size(), 1);
     }
 
     testDetachWhenInsert<QMap>();
@@ -2154,7 +2127,7 @@ void tst_QMap::checkMostLeftNode()
 void tst_QMap::initializerList()
 {
     QMap<int, QString> map = {{1, "bar"}, {1, "hello"}, {2, "initializer_list"}};
-    QCOMPARE(map.count(), 2);
+    QCOMPARE(map.size(), 2);
     QCOMPARE(map[1], QString("hello"));
     QCOMPARE(map[2], QString("initializer_list"));
 
@@ -2164,9 +2137,9 @@ void tst_QMap::initializerList()
     // QCOMPARE(stdm[1], QString("bar"));
 
     QMultiMap<QString, int> multiMap{{"il", 1}, {"il", 2}, {"il", 3}};
-    QCOMPARE(multiMap.count(), 3);
+    QCOMPARE(multiMap.size(), 3);
     QList<int> values = multiMap.values("il");
-    QCOMPARE(values.count(), 3);
+    QCOMPARE(values.size(), 3);
 
     QMap<int, int> emptyMap{};
     QVERIFY(emptyMap.isEmpty());
@@ -2248,48 +2221,48 @@ void tst_QMap::testInsertMultiWithHint()
 {
     QMultiMap<int, int> map;
 
-    map.insertMulti(map.end(), 64, 65);
+    map.insert(map.end(), 64, 65);
     map.insert(128, 129);
     map.insert(256, 257);
     sanityCheckTree(map, __LINE__);
 
-    map.insertMulti(map.end(), 512, 513);
-    map.insertMulti(map.end(), 512, 513 * 2);
+    map.insert(map.end(), 512, 513);
+    map.insert(map.end(), 512, 513 * 2);
     sanityCheckTree(map, __LINE__);
     QCOMPARE(map.size(), 5);
-    map.insertMulti(map.end(), 256, 258); // wrong hint
+    map.insert(map.end(), 256, 258); // wrong hint
     sanityCheckTree(map, __LINE__);
     QCOMPARE(map.size(), 6);
 
-    QMultiMap<int, int>::iterator i = map.insertMulti(map.constBegin(), 256, 259); // wrong hint
+    QMultiMap<int, int>::iterator i = map.insert(map.constBegin(), 256, 259); // wrong hint
     sanityCheckTree(map, __LINE__);
     QCOMPARE(map.size(), 7);
 
-    QMultiMap<int, int>::iterator j = map.insertMulti(map.constBegin(), 69, 66);
+    QMultiMap<int, int>::iterator j = map.insert(map.constBegin(), 69, 66);
     sanityCheckTree(map, __LINE__);
     QCOMPARE(map.size(), 8);
 
-    j = map.insertMulti(j, 68, 259);
+    j = map.insert(j, 68, 259);
     sanityCheckTree(map, __LINE__);
     QCOMPARE(map.size(), 9);
 
-    j = map.insertMulti(j, 67, 67);
+    j = map.insert(j, 67, 67);
     sanityCheckTree(map, __LINE__);
     QCOMPARE(map.size(), 10);
 
-    i = map.insertMulti(i, 256, 259);
+    i = map.insert(i, 256, 259);
     sanityCheckTree(map, __LINE__);
     QCOMPARE(map.size(), 11);
 
-    i = map.insertMulti(i, 256, 260);
+    i = map.insert(i, 256, 260);
     sanityCheckTree(map, __LINE__);
     QCOMPARE(map.size(), 12);
 
-    map.insertMulti(i, 64, 67);
+    map.insert(i, 64, 67);
     sanityCheckTree(map, __LINE__);
     QCOMPARE(map.size(), 13);
 
-    map.insertMulti(map.constBegin(), 20, 20);
+    map.insert(map.constBegin(), 20, 20);
     sanityCheckTree(map, __LINE__);
     QCOMPARE(map.size(), 14);
 }
@@ -2298,9 +2271,9 @@ void tst_QMap::eraseValidIteratorOnSharedMap()
 {
     QMultiMap<int, int> a, b;
     a.insert(10, 10);
-    a.insertMulti(10, 40);
-    a.insertMulti(10, 25);
-    a.insertMulti(10, 30);
+    a.insert(10, 40);
+    a.insert(10, 25);
+    a.insert(10, 30);
     a.insert(20, 20);
 
     QMultiMap<int, int>::iterator i = a.begin();
@@ -2325,8 +2298,8 @@ void tst_QMap::eraseValidIteratorOnSharedMap()
     // Border cases
     QMultiMap <QString, QString> ms1, ms2, ms3;
     ms1.insert("foo", "bar");
-    ms1.insertMulti("foo", "quux");
-    ms1.insertMulti("foo", "bar");
+    ms1.insert("foo", "quux");
+    ms1.insert("foo", "bar");
 
     QMultiMap <QString, QString>::iterator si = ms1.begin();
     ms2 = ms1;
@@ -2574,6 +2547,73 @@ void tst_QMap::toStdMap()
         {1, "value0"}, {1, "value1"}, {2, "value2"}, {3, "value3"} };
     toStdMapTestMethod<QMultiMap<int, QString>>(expectedMultiMap);
 }
+
+#if QT_DEPRECATED_SINCE(6, 0)
+void tst_QMap::deprecatedInsertMulti()
+{
+    QMultiMap<int, QString> referenceMap;
+    referenceMap.insert(1, "value1");
+    referenceMap.insert(2, "value2");
+    referenceMap.insert(3, "value3");
+    referenceMap.insert(1, "value1_2");
+    referenceMap.insert(referenceMap.find(2), 2, "value2_2");
+    referenceMap.insert(referenceMap.end(), 1, "value1_3");
+
+    QMultiMap<int, QString> deprecatedMap;
+QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
+    deprecatedMap.insertMulti(1, "value1");
+    deprecatedMap.insertMulti(2, "value2");
+    deprecatedMap.insertMulti(3, "value3");
+    deprecatedMap.insertMulti(1, "value1_2");
+    deprecatedMap.insertMulti(deprecatedMap.find(2), 2, "value2_2");
+    deprecatedMap.insertMulti(deprecatedMap.end(), 1, "value1_3");
+QT_WARNING_POP
+
+    QCOMPARE(deprecatedMap, referenceMap);
+}
+
+void tst_QMap::deprecatedIteratorApis()
+{
+    QMap<int, QString> map;
+    QString testString = "Teststring %1";
+    for (int i = 1; i < 100; ++i)
+        map.insert(i, testString.arg(i));
+
+    auto it = map.begin();
+    QCOMPARE(it.value(), QLatin1String("Teststring 1"));
+    QT_IGNORE_DEPRECATIONS(it += 5;)
+    QCOMPARE(it.value(), QLatin1String("Teststring 6"));
+    QT_IGNORE_DEPRECATIONS(it = it - 3;)
+    QCOMPARE(it.value(), QLatin1String("Teststring 3"));
+
+    auto cit = map.constBegin();
+    QCOMPARE(cit.value(), QLatin1String("Teststring 1"));
+    QT_IGNORE_DEPRECATIONS(cit += 5;)
+    QCOMPARE(cit.value(), QLatin1String("Teststring 6"));
+    QT_IGNORE_DEPRECATIONS(cit = cit - 3;)
+    QCOMPARE(cit.value(), QLatin1String("Teststring 3"));
+}
+
+void tst_QMap::deprecatedInsert()
+{
+    QMultiMap<int, QString> refMap;
+    refMap.insert(1, "value1");
+    refMap.insert(2, "value2");
+    refMap.insert(3, "value3");
+
+    QMultiMap<int, QString> depMap = refMap;
+
+    QMultiMap<int, QString> otherMap;
+    otherMap.insert(1, "value1_2");
+    otherMap.insert(3, "value3_2");
+    otherMap.insert(4, "value4");
+
+    refMap.unite(otherMap);
+    QT_IGNORE_DEPRECATIONS(depMap.insert(otherMap);)
+
+    QCOMPARE(refMap, depMap);
+}
+#endif // QT_DEPRECATED_SINCE(6, 0)
 
 QTEST_APPLESS_MAIN(tst_QMap)
 #include "tst_qmap.moc"

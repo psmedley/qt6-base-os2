@@ -6,6 +6,10 @@
 #ifndef QCONTAINERFWD_H
 #define QCONTAINERFWD_H
 
+#if 0
+#pragma qt_class(QtContainerFwd)
+#endif
+
 // std headers can unfortunately not be forward declared
 #include <utility>
 
@@ -23,9 +27,11 @@ template <typename T> class QSet;
 template <typename T> class QStack;
 template <typename T, qsizetype Prealloc = 256> class QVarLengthArray;
 template <typename T> class QList;
-#ifndef Q_CLANG_QDOC
+class QString;
+#ifndef Q_QDOC
 template<typename T> using QVector = QList<T>;
 using QStringList = QList<QString>;
+class QByteArray;
 using QByteArrayList = QList<QByteArray>;
 #else
 template<typename T> class QVector;

@@ -75,10 +75,18 @@ extern void qt_format_text(const QFont& font, const QRectF &_r,
     inFont(). You can also treat the character as a string, and use
     the string functions on it.
 
-    The string functions include horizontalAdvance(), to return the width of a
-    string in pixels (or points, for a printer), boundingRect(), to
-    return a rectangle large enough to contain the rendered string,
+    The string functions include horizontalAdvance(), to return the advance
+    width of a string in pixels (or points, for a printer), boundingRect(),
+    to return a rectangle large enough to contain the rendered string,
     and size(), to return the size of that rectangle.
+
+    \note The advance width can be different from the width of the actual
+    rendered text. It refers to the distance from the origin of the string to
+    where you would append additional characters. As text may have overhang
+    (in the case of an italic font for instance) or padding between
+    characters, the advance width can be either smaller or larger than the
+    actual rendering of the text. This is called the right bearing of the
+    text.
 
     Example:
     \snippet code/src_gui_text_qfontmetrics.cpp 0
@@ -478,7 +486,8 @@ static constexpr QLatin1Char s_variableLengthStringSeparator('\x9c');
 /*!
     Returns the horizontal advance in pixels of the first \a len characters of \a
     text. If \a len is negative (the default), the entire string is
-    used.
+    used. The entire length of \a text is analysed even if \a len is substantially
+    shorter.
 
     This is the distance appropriate for drawing a subsequent character
     after \a text.
@@ -1391,7 +1400,8 @@ qreal QFontMetricsF::rightBearing(QChar ch) const
 /*!
     Returns the horizontal advance in pixels of the first \a length characters of \a
     text. If \a length is negative (the default), the entire string is
-    used.
+    used. The entire length of \a text is analysed even if \a length is substantially
+    shorter.
 
     The advance is the distance appropriate for drawing a subsequent
     character after \a text.

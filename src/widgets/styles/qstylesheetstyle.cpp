@@ -437,14 +437,15 @@ struct QStyleSheetBoxData : public QSharedData
 struct QStyleSheetPaletteData : public QSharedData
 {
     QStyleSheetPaletteData(const QBrush &fg, const QBrush &sfg, const QBrush &sbg,
-                           const QBrush &abg)
+                           const QBrush &abg, const QBrush &pfg)
         : foreground(fg), selectionForeground(sfg), selectionBackground(sbg),
-          alternateBackground(abg) { }
+          alternateBackground(abg), placeholderForeground(pfg) { }
 
     QBrush foreground;
     QBrush selectionForeground;
     QBrush selectionBackground;
     QBrush alternateBackground;
+    QBrush placeholderForeground;
 };
 
 struct QStyleSheetGeometryData : public QSharedData
@@ -956,10 +957,10 @@ QRenderRule::QRenderRule(const QList<Declaration> &declarations, const QObject *
         bg = new QStyleSheetBackgroundData(brush, pixmap, repeat, alignment, origin, attachment, clip);
     }
 
-    QBrush sfg, fg;
+    QBrush sfg, fg, pfg;
     QBrush sbg, abg;
-    if (v.extractPalette(&fg, &sfg, &sbg, &abg))
-        pal = new QStyleSheetPaletteData(fg, sfg, sbg, abg);
+    if (v.extractPalette(&fg, &sfg, &sbg, &abg, &pfg))
+        pal = new QStyleSheetPaletteData(fg, sfg, sbg, abg, pfg);
 
     QIcon imgIcon;
     alignment = Qt::AlignCenter;
@@ -1486,6 +1487,8 @@ void QRenderRule::configurePalette(QPalette *p, QPalette::ColorGroup cg, const Q
         p->setBrush(cg, QPalette::HighlightedText, pal->selectionForeground);
     if (pal->alternateBackground.style() != Qt::NoBrush)
         p->setBrush(cg, QPalette::AlternateBase, pal->alternateBackground);
+    if (pal->placeholderForeground.style() != Qt::NoBrush)
+        p->setBrush(cg, QPalette::PlaceholderText, pal->placeholderForeground);
 }
 
 bool QRenderRule::hasModification() const
@@ -2167,7 +2170,7 @@ bool QStyleSheetStyle::hasStyleRule(const QObject *obj, int part) const
         return result;
     }
 
-    QString pseudoElement = QLatin1StringView(knownPseudoElements[part].name);
+    auto pseudoElement = QLatin1StringView(knownPseudoElements[part].name);
     for (int i = 0; i < rules.size(); i++) {
         const Selector& selector = rules.at(i).selectors.at(0);
         if (pseudoElement.compare(selector.pseudoElement(), Qt::CaseInsensitive) == 0) {
@@ -2568,8 +2571,9 @@ static quint64 extendedPseudoClass(const QWidget *w)
     } else
     if (const QPlainTextEdit *edit = qobject_cast<const QPlainTextEdit *>(w)) {
         pc |= (edit->isReadOnly() ? PseudoClass_ReadOnly : PseudoClass_Editable);
-    }
+    } else
 #endif
+    {}
     return pc;
 }
 
@@ -5099,7 +5103,7 @@ int QStyleSheetStyle::pixelMetric(PixelMetric m, const QStyleOption *opt, const 
         break;
 
     case PM_ScrollView_ScrollBarOverlap:
-        if (!rule.hasNativeBorder() || rule.hasBox())
+        if (!proxy()->styleHint(SH_ScrollBar_Transient, opt, w))
             return 0;
         break;
 #endif // QT_CONFIG(scrollbar)
@@ -5709,7 +5713,7 @@ int QStyleSheetStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWi
         case SH_TitleBar_ShowToolTipsOnButtons: s = "titlebar-show-tooltips-on-buttons"_L1; break;
         case SH_Widget_Animation_Duration: s = "widget-animation-duration"_L1; break;
         case SH_ScrollBar_Transient:
-            if (!rule.hasNativeBorder() || rule.hasBox())
+            if (!rule.hasNativeBorder() || rule.hasBox() || rule.hasDrawable())
                 return 0;
             break;
         default: break;

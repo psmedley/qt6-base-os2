@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #####################################################################
 ## tst_qprocess Test:
 #####################################################################
@@ -6,7 +9,7 @@ qt_internal_add_test(tst_qprocess
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../"
     SOURCES
         ../tst_qprocess.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Network
         Qt::TestPrivate
@@ -39,6 +42,3 @@ endif()
 if(WIN32)
     add_dependencies(tst_qprocess testProcessEchoGui testSetNamedPipeHandleState)
 endif()
-
-#### Keys ignored in scope 2:.:.:test.pro:WIN32:
-# TESTDATA = "../testBatFiles/*"

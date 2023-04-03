@@ -25,13 +25,11 @@ class QBenchmarkTimeMeasurer : public QBenchmarkMeasurerBase
 {
 public:
     void start() override;
-    qint64 checkpoint() override;
-    qint64 stop() override;
-    bool isMeasurementAccepted(qint64 measurement) override;
+    QList<Measurement> stop() override;
+    bool isMeasurementAccepted(Measurement measurement) override;
     int adjustIterationCount(int sugestion) override;
     int adjustMedianCount(int suggestion) override;
     bool needsWarmupIteration() override;
-    QTest::QBenchmarkMetric metricType() override;
 private:
     QElapsedTimer time;
 };
@@ -42,13 +40,11 @@ class QBenchmarkTickMeasurer : public QBenchmarkMeasurerBase
 {
 public:
     void start() override;
-    qint64 checkpoint() override;
-    qint64 stop() override;
-    bool isMeasurementAccepted(qint64 measurement) override;
+    QList<Measurement> stop() override;
+    bool isMeasurementAccepted(Measurement measurement) override;
     int adjustIterationCount(int) override;
     int adjustMedianCount(int suggestion) override;
     bool needsWarmupIteration() override;
-    QTest::QBenchmarkMetric metricType() override;
 private:
     CycleCounterTicks startTicks;
 };

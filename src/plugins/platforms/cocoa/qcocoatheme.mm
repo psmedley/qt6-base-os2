@@ -15,6 +15,7 @@
 #include "qcocoahelpers.h"
 
 #include <QtCore/qfileinfo.h>
+#include <QtCore/private/qcore_mac_p.h>
 #include <QtGui/private/qfont_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/private/qcoregraphics_p.h>
@@ -30,6 +31,7 @@
 #include "qcocoacolordialoghelper.h"
 #include "qcocoafiledialoghelper.h"
 #include "qcocoafontdialoghelper.h"
+#include "qcocoamessagedialog.h"
 
 #include <CoreServices/CoreServices.h>
 
@@ -250,13 +252,15 @@ void QCocoaTheme::handleSystemThemeChange()
 
 bool QCocoaTheme::usePlatformNativeDialog(DialogType dialogType) const
 {
-    if (dialogType == QPlatformTheme::FileDialog)
+    switch (dialogType) {
+    case QPlatformTheme::FileDialog:
+    case QPlatformTheme::ColorDialog:
+    case QPlatformTheme::FontDialog:
+    case QPlatformTheme::MessageDialog:
         return true;
-    if (dialogType == QPlatformTheme::ColorDialog)
-        return true;
-    if (dialogType == QPlatformTheme::FontDialog)
-        return true;
-    return false;
+    default:
+        return false;
+    }
 }
 
 QPlatformDialogHelper *QCocoaTheme::createPlatformDialogHelper(DialogType dialogType) const
@@ -268,6 +272,8 @@ QPlatformDialogHelper *QCocoaTheme::createPlatformDialogHelper(DialogType dialog
         return new QCocoaColorDialogHelper();
     case QPlatformTheme::FontDialog:
         return new QCocoaFontDialogHelper();
+    case QPlatformTheme::MessageDialog:
+        return new QCocoaMessageDialog;
     default:
         return nullptr;
     }
@@ -464,9 +470,9 @@ QVariant QCocoaTheme::themeHint(ThemeHint hint) const
     return QPlatformTheme::themeHint(hint);
 }
 
-QPlatformTheme::Appearance QCocoaTheme::appearance() const
+Qt::ColorScheme QCocoaTheme::colorScheme() const
 {
-    return qt_mac_applicationIsInDarkMode() ? Appearance::Dark : Appearance::Light;
+    return qt_mac_applicationIsInDarkMode() ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light;
 }
 
 QString QCocoaTheme::standardButtonText(int button) const

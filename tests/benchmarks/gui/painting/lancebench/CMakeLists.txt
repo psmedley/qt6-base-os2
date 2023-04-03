@@ -1,4 +1,5 @@
-# Generated from lancebench.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_bench_lancebench Binary:
@@ -10,7 +11,7 @@ qt_internal_add_benchmark(tst_bench_lancebench
         tst_lancebench.cpp
     INCLUDE_DIRECTORIES
         ../../../../baseline/shared
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
         Qt::Test
@@ -60,15 +61,10 @@ qt_internal_add_resource(tst_bench_lancebench "images"
         ${images_resource_files}
 )
 
-
-#### Keys ignored in scope 1:.:.:lancebench.pro:<TRUE>:
-# TEMPLATE = "app"
-# TESTDATA = "../../../../baseline/painting/scripts/*"
-
 ## Scopes:
 #####################################################################
 
 qt_internal_extend_target(tst_bench_lancebench CONDITION QT_FEATURE_opengl
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::OpenGL
 )

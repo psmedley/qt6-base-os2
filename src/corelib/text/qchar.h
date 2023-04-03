@@ -81,7 +81,7 @@ public:
     constexpr Q_IMPLICIT QChar(SpecialCharacter s) noexcept : ucs(char16_t(s)) {}
     constexpr Q_IMPLICIT QChar(QLatin1Char ch) noexcept : ucs(ch.unicode()) {}
     constexpr Q_IMPLICIT QChar(char16_t ch) noexcept : ucs(ch) {}
-#if defined(Q_OS_WIN) || defined(Q_CLANG_QDOC)
+#if defined(Q_OS_WIN) || defined(Q_QDOC)
     constexpr Q_IMPLICIT QChar(wchar_t ch) noexcept : ucs(char16_t(ch)) {}
 #endif
 
@@ -334,6 +334,10 @@ public:
         Script_Toto,
         Script_Vithkuqi,
 
+        // Unicode 15.0 additions
+        Script_Kawi,
+        Script_NagMundari,
+
         ScriptCount
     };
 
@@ -425,7 +429,8 @@ public:
         Unicode_12_0,
         Unicode_12_1,
         Unicode_13_0,
-        Unicode_14_0
+        Unicode_14_0,
+        Unicode_15_0,
     };
 
     inline Category category() const noexcept { return QChar::category(ucs); }

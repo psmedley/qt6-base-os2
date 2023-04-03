@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Creates and installs the following wrapper CMake scripts:
 # qt-make
 # qt-cmake-private
@@ -46,10 +49,10 @@ function(qt_internal_create_wrapper_scripts)
     set(__qt_cmake_extra "-G\"${CMAKE_GENERATOR}\"")
     if(generate_unix)
         configure_file("${CMAKE_CURRENT_SOURCE_DIR}/bin/qt-cmake.in"
-            "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-cmake-private" @ONLY
+            "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/qt-cmake-private" @ONLY
             NEWLINE_STYLE LF)
-        qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_BINDIR}/qt-cmake-private"
-               DESTINATION "${INSTALL_BINDIR}")
+        qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/qt-cmake-private"
+               DESTINATION "${INSTALL_LIBEXECDIR}")
     endif()
     if(generate_non_unix)
         configure_file("${CMAKE_CURRENT_SOURCE_DIR}/bin/qt-cmake.bat.in"
@@ -91,9 +94,15 @@ function(qt_internal_create_wrapper_scripts)
     # find_package(Qt...) to get all dependencies like examples do.
     # Instead a template CMakeLists.txt project is used which sets up all the necessary private bits
     # and then calls add_subdirectory on the provided project path.
-    set(__qt_cmake_standalone_test_bin_name "qt-cmake-standalone-test")
-    set(__qt_cmake_standalone_test_bin_path
-        "${INSTALL_BINDIR}/${__qt_cmake_standalone_test_bin_name}")
+    set(__qt_cmake_standalone_test_name "qt-cmake-standalone-test")
+    if(generate_unix)
+        set(__qt_cmake_standalone_test_libexec_path
+            "${INSTALL_LIBEXECDIR}/${__qt_cmake_standalone_test_name}")
+    endif()
+    if(generate_non_unix)
+        set(__qt_cmake_standalone_test_bin_path
+            "${INSTALL_BINDIR}/${__qt_cmake_standalone_test_name}")
+    endif()
 
     # Configuring a standalone test on iOS should use the Xcode generator, but qt-cmake-private uses
     # the generator that was used to build Qt itself (e.g. Ninja).
@@ -102,16 +111,19 @@ function(qt_internal_create_wrapper_scripts)
         set(__qt_cmake_private_path
             "${QT_STAGING_PREFIX}/${INSTALL_BINDIR}/qt-cmake")
     else()
-        set(__qt_cmake_private_path
-            "${QT_STAGING_PREFIX}/${INSTALL_BINDIR}/qt-cmake-private")
+        if(generate_unix)
+            set(__qt_cmake_private_path
+                "${QT_STAGING_PREFIX}/${INSTALL_LIBEXECDIR}/qt-cmake-private")
+        endif()
+        if(generate_non_unix)
+            set(__qt_cmake_private_path
+                "${QT_STAGING_PREFIX}/${INSTALL_BINDIR}/qt-cmake-private")
+        endif()
     endif()
 
     set(__qt_cmake_standalone_test_path
         "${__build_internals_install_dir}/${__build_internals_standalone_test_template_dir}")
 
-    get_filename_component(rel_base_path
-                           "${QT_STAGING_PREFIX}/${__qt_cmake_standalone_test_bin_path}"
-                           DIRECTORY)
     if(QT_WILL_INSTALL)
         # Need to prepend the staging prefix when doing prefix builds, because the build internals
         # install dir is relative in that case..
@@ -120,12 +132,16 @@ function(qt_internal_create_wrapper_scripts)
                     "${__qt_cmake_standalone_test_path}")
     endif()
 
-    file(RELATIVE_PATH __qt_cmake_private_relpath "${rel_base_path}"
-        "${__qt_cmake_private_path}")
-    file(RELATIVE_PATH __qt_cmake_standalone_test_relpath "${rel_base_path}"
-        "${__qt_cmake_standalone_test_path}")
-
     if(generate_unix)
+        get_filename_component(rel_base_path
+            "${QT_STAGING_PREFIX}/${__qt_cmake_standalone_test_libexec_path}"
+            DIRECTORY)
+
+        file(RELATIVE_PATH __qt_cmake_private_relpath "${rel_base_path}"
+            "${__qt_cmake_private_path}")
+        file(RELATIVE_PATH __qt_cmake_standalone_test_relpath "${rel_base_path}"
+            "${__qt_cmake_standalone_test_path}")
+
         set(__qt_cmake_standalone_test_os_prelude "#!/bin/sh")
         set(__qt_cmake_standalone_test_script_relpath "SCRIPT_DIR=`dirname $0`")
         string(PREPEND __qt_cmake_private_relpath "exec $SCRIPT_DIR/")
@@ -133,12 +149,21 @@ function(qt_internal_create_wrapper_scripts)
         set(__qt_cmake_standalone_passed_args "\"$@\" -DPWD=\"$PWD\"")
 
         configure_file("${CMAKE_CURRENT_SOURCE_DIR}/bin/qt-cmake-standalone-test.in"
-            "${QT_BUILD_DIR}/${__qt_cmake_standalone_test_bin_path}"
+            "${QT_BUILD_DIR}/${__qt_cmake_standalone_test_libexec_path}"
             NEWLINE_STYLE LF)
-        qt_install(PROGRAMS "${QT_BUILD_DIR}/${__qt_cmake_standalone_test_bin_path}"
-                   DESTINATION "${INSTALL_BINDIR}")
+        qt_install(PROGRAMS "${QT_BUILD_DIR}/${__qt_cmake_standalone_test_libexec_path}"
+                   DESTINATION "${INSTALL_LIBEXECDIR}")
     endif()
     if(generate_non_unix)
+        get_filename_component(rel_base_path
+            "${QT_STAGING_PREFIX}/${__qt_cmake_standalone_test_bin_path}"
+            DIRECTORY)
+
+        file(RELATIVE_PATH __qt_cmake_private_relpath "${rel_base_path}"
+            "${__qt_cmake_private_path}")
+        file(RELATIVE_PATH __qt_cmake_standalone_test_relpath "${rel_base_path}"
+            "${__qt_cmake_standalone_test_path}")
+
         set(__qt_cmake_standalone_test_os_prelude "@echo off")
         set(__qt_cmake_standalone_test_script_relpath "set SCRIPT_DIR=%~dp0")
         string(APPEND __qt_cmake_standalone_test_bin_path ".bat")
@@ -163,9 +188,9 @@ function(qt_internal_create_wrapper_scripts)
         set(__qt_configured_configs "${CMAKE_BUILD_TYPE}")
     endif()
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/bin/${__qt_cmake_install_script_name}.in"
-                   "${QT_BUILD_DIR}/${INSTALL_BINDIR}/${__qt_cmake_install_script_name}" @ONLY)
-    qt_install(FILES "${QT_BUILD_DIR}/${INSTALL_BINDIR}/${__qt_cmake_install_script_name}"
-               DESTINATION "${INSTALL_BINDIR}")
+                   "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/${__qt_cmake_install_script_name}" @ONLY)
+    qt_install(FILES "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/${__qt_cmake_install_script_name}"
+               DESTINATION "${INSTALL_LIBEXECDIR}")
 
     qt_internal_create_qt_configure_tests_wrapper_script()
     qt_internal_install_android_helper_scripts()
@@ -209,11 +234,11 @@ function(qt_internal_create_qt_configure_tests_wrapper_script)
     endif()
     if(generate_non_unix)
         configure_file("${CMAKE_CURRENT_SOURCE_DIR}/libexec/${script_name}.bat.in"
-            "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/${script_name}.bat" @ONLY
+            "${QT_BUILD_DIR}/${INSTALL_BINDIR}/${script_name}.bat" @ONLY
             NEWLINE_STYLE CRLF)
 
-        qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/${script_name}.bat"
-                   DESTINATION "${INSTALL_LIBEXECDIR}")
+        qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_BINDIR}/${script_name}.bat"
+                   DESTINATION "${INSTALL_BINDIR}")
     endif()
 endfunction()
 

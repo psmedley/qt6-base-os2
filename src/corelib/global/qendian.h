@@ -5,6 +5,10 @@
 #ifndef QENDIAN_H
 #define QENDIAN_H
 
+#if 0
+#pragma qt_class(QtEndian)
+#endif
+
 #include <QtCore/qfloat16.h>
 #include <QtCore/qglobal.h>
 
@@ -298,7 +302,7 @@ public:
     static constexpr T fromSpecial(T source) { return qFromBigEndian(source); }
 };
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template<typename T>
 class QLEInteger {
 public:

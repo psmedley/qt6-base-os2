@@ -1,4 +1,5 @@
-# Generated from floattexture.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## floattexture Binary:
@@ -8,7 +9,7 @@ qt_internal_add_manual_test(floattexture
     GUI
     SOURCES
         floattexture.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -37,5 +38,4 @@ qt_internal_add_resource(floattexture "floattexture"
 )
 
 
-#### Keys ignored in scope 1:.:.:floattexture.pro:<TRUE>:
 # TEMPLATE = "app"

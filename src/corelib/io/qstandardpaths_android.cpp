@@ -1,4 +1,4 @@
-// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2023 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qstandardpaths.h"
@@ -11,6 +11,9 @@
 #include <QDir>
 
 QT_BEGIN_NAMESPACE
+
+Q_DECLARE_JNI_CLASS(Environment, "android/os/Environment");
+Q_DECLARE_JNI_TYPE(File, "Ljava/io/File;");
 
 using namespace QNativeInterface;
 using namespace Qt::StringLiterals;
@@ -25,12 +28,54 @@ static QString testDir()
 
 static inline QString getAbsolutePath(const QJniObject &file)
 {
-    QJniObject path = file.callObjectMethod("getAbsolutePath",
-                                            "()Ljava/lang/String;");
+    QJniObject path = file.callMethod<jstring>("getAbsolutePath");
+
     if (!path.isValid())
         return QString();
 
     return path.toString();
+}
+
+/*
+ * The root of the external storage
+ *
+ */
+static QString getExternalStorageDirectory()
+{
+    QString &path = (*androidDirCache)[QStringLiteral("EXT_ROOT")];
+    if (!path.isEmpty())
+        return path;
+
+    QJniObject file = QJniObject::callStaticMethod<QtJniTypes::File>("android/os/Environment",
+                                                                     "getExternalStorageDirectory");
+    if (!file.isValid())
+        return QString();
+
+    return (path = getAbsolutePath(file));
+}
+
+/*
+ * Locations where applications can place user files shared by all apps (public).
+ * E.g., /storage/Music
+ */
+static QString getExternalStoragePublicDirectory(const char *directoryField)
+{
+    QString &path = (*androidDirCache)[QLatin1String(directoryField)];
+    if (!path.isEmpty())
+        return path;
+
+    QJniObject dirField = QJniObject::getStaticField<jstring>("android/os/Environment",
+                                                              directoryField);
+    if (!dirField.isValid())
+        return QString();
+
+    QJniObject file = QJniObject::callStaticMethod<QtJniTypes::File>("android/os/Environment",
+                                                            "getExternalStoragePublicDirectory",
+                                                            dirField.object<jstring>());
+    if (!file.isValid())
+        return QString();
+
+    return (path = getAbsolutePath(file));
 }
 
 /*
@@ -49,16 +94,13 @@ static QString getExternalFilesDir(const char *directoryField = nullptr)
 
     QJniObject dirField = QJniObject::fromString(""_L1);
     if (directoryField && strlen(directoryField) > 0) {
-        dirField = QJniObject::getStaticObjectField("android/os/Environment",
-                                                    directoryField,
-                                                    "Ljava/lang/String;");
+        dirField = QJniObject::getStaticField<QtJniTypes::Environment, jstring>(directoryField);
         if (!dirField.isValid())
             return QString();
     }
 
-    QJniObject file = appCtx.callObjectMethod("getExternalFilesDir",
-                                              "(Ljava/lang/String;)Ljava/io/File;",
-                                              dirField.object());
+    QJniObject file = appCtx.callMethod<QtJniTypes::File>("getExternalFilesDir",
+                                                          dirField.object<jstring>());
 
     if (!file.isValid())
         return QString();
@@ -80,8 +122,7 @@ static QString getExternalCacheDir()
     if (!appCtx.isValid())
         return QString();
 
-    QJniObject file = appCtx.callObjectMethod("getExternalCacheDir",
-                                              "()Ljava/io/File;");
+    QJniObject file = appCtx.callMethod<QtJniTypes::File>("getExternalCacheDir");
 
     if (!file.isValid())
         return QString();
@@ -102,8 +143,7 @@ static QString getCacheDir()
     if (!appCtx.isValid())
         return QString();
 
-    QJniObject file = appCtx.callObjectMethod("getCacheDir",
-                                              "()Ljava/io/File;");
+    QJniObject file = appCtx.callMethod<QtJniTypes::File>("getCacheDir");
     if (!file.isValid())
         return QString();
 
@@ -124,33 +164,42 @@ static QString getFilesDir()
     if (!appCtx.isValid())
         return QString();
 
-    QJniObject file = appCtx.callObjectMethod("getFilesDir",
-                                              "()Ljava/io/File;");
+    QJniObject file = appCtx.callMethod<QtJniTypes::File>("getFilesDir");
     if (!file.isValid())
         return QString();
 
     return (path = getAbsolutePath(file));
 }
 
+static QString getSdkBasedExternalDir(const char *directoryField = nullptr)
+{
+    return (QNativeInterface::QAndroidApplication::sdkVersion() >= 30)
+            ? getExternalFilesDir(directoryField)
+            : getExternalStoragePublicDirectory(directoryField);
+}
+
 QString QStandardPaths::writableLocation(StandardLocation type)
 {
     switch (type) {
     case QStandardPaths::MusicLocation:
-        return getExternalFilesDir("DIRECTORY_MUSIC");
+        return getSdkBasedExternalDir("DIRECTORY_MUSIC");
     case QStandardPaths::MoviesLocation:
-        return getExternalFilesDir("DIRECTORY_MOVIES");
+        return getSdkBasedExternalDir("DIRECTORY_MOVIES");
     case QStandardPaths::PicturesLocation:
-        return getExternalFilesDir("DIRECTORY_PICTURES");
+        return getSdkBasedExternalDir("DIRECTORY_PICTURES");
     case QStandardPaths::DocumentsLocation:
-        return getExternalFilesDir("DIRECTORY_DOCUMENTS");
+        return getSdkBasedExternalDir("DIRECTORY_DOCUMENTS");
     case QStandardPaths::DownloadLocation:
-        return getExternalFilesDir("DIRECTORY_DOWNLOADS");
+        return getSdkBasedExternalDir("DIRECTORY_DOWNLOADS");
     case QStandardPaths::GenericConfigLocation:
     case QStandardPaths::ConfigLocation:
     case QStandardPaths::AppConfigLocation:
         return getFilesDir() + testDir() + "/settings"_L1;
     case QStandardPaths::GenericDataLocation:
-        return getExternalFilesDir() + testDir();
+    {
+        return QAndroidApplication::sdkVersion() >= 30 ?
+                getExternalFilesDir() + testDir() : getExternalStorageDirectory() + testDir();
+    }
     case QStandardPaths::AppDataLocation:
     case QStandardPaths::AppLocalDataLocation:
         return getFilesDir() + testDir();
@@ -175,59 +224,53 @@ QString QStandardPaths::writableLocation(StandardLocation type)
 
 QStringList QStandardPaths::standardLocations(StandardLocation type)
 {
+    QStringList locations;
+
     if (type == MusicLocation) {
-        return QStringList() << writableLocation(type)
-                             << getExternalFilesDir("DIRECTORY_MUSIC")
-                             << getExternalFilesDir("DIRECTORY_PODCASTS")
-                             << getExternalFilesDir("DIRECTORY_NOTIFICATIONS")
-                             << getExternalFilesDir("DIRECTORY_ALARMS");
-    }
-
-    if (type == MoviesLocation) {
-        return QStringList() << writableLocation(type)
-                             << getExternalFilesDir("DIRECTORY_MOVIES");
-    }
-
-    if (type == PicturesLocation) {
-        return QStringList()  << writableLocation(type)
-                              << getExternalFilesDir("DIRECTORY_PICTURES");
-    }
-
-    if (type == DocumentsLocation) {
-        return QStringList() << writableLocation(type)
-                             << getExternalFilesDir("DIRECTORY_DOCUMENTS");
-    }
-
-    if (type == DownloadLocation) {
-        return QStringList() << writableLocation(type)
-                             << getExternalFilesDir("DIRECTORY_DOWNLOADS");
-    }
-
-    if (type == AppDataLocation || type == AppLocalDataLocation) {
-        return QStringList() << writableLocation(type)
-                             << getExternalFilesDir();
-    }
-
-    if (type == CacheLocation) {
-        return QStringList() << writableLocation(type)
-                             << getExternalCacheDir();
-    }
-
-    if (type == FontsLocation) {
+        locations << getExternalFilesDir("DIRECTORY_MUSIC");
+        // Place the public dirs before the app own dirs
+        if (QNativeInterface::QAndroidApplication::sdkVersion() < 30) {
+            locations << getExternalStoragePublicDirectory("DIRECTORY_PODCASTS")
+                      << getExternalStoragePublicDirectory("DIRECTORY_NOTIFICATIONS")
+                      << getExternalStoragePublicDirectory("DIRECTORY_ALARMS");
+        }
+        locations << getExternalFilesDir("DIRECTORY_PODCASTS")
+                  << getExternalFilesDir("DIRECTORY_NOTIFICATIONS")
+                  << getExternalFilesDir("DIRECTORY_ALARMS");
+    } else if (type == MoviesLocation) {
+        locations << getExternalFilesDir("DIRECTORY_MOVIES");
+    } else if (type == PicturesLocation) {
+        locations << getExternalFilesDir("DIRECTORY_PICTURES");
+    } else if (type == DocumentsLocation) {
+        locations << getExternalFilesDir("DIRECTORY_DOCUMENTS");
+    } else if (type == DownloadLocation) {
+        locations << getExternalFilesDir("DIRECTORY_DOWNLOADS");
+    } else if (type == AppDataLocation || type == AppLocalDataLocation) {
+        locations << getExternalFilesDir();
+    } else if (type == CacheLocation) {
+        locations << getExternalCacheDir();
+    } else if (type == FontsLocation) {
         QString &fontLocation = (*androidDirCache)[QStringLiteral("FONT_LOCATION")];
-        if (!fontLocation.isEmpty())
-            return QStringList(fontLocation);
-
-        const QByteArray ba = qgetenv("QT_ANDROID_FONT_LOCATION");
-        if (!ba.isEmpty())
-            return QStringList((fontLocation = QDir::cleanPath(QString::fromLocal8Bit(ba))));
-
-        // Don't cache the fallback, as we might just have been called before
-        // QT_ANDROID_FONT_LOCATION has been set.
-        return QStringList("/system/fonts"_L1);
+        if (!fontLocation.isEmpty()) {
+            locations << fontLocation;
+        } else {
+            const QByteArray ba = qgetenv("QT_ANDROID_FONT_LOCATION");
+            if (!ba.isEmpty()) {
+                locations << (fontLocation = QDir::cleanPath(QString::fromLocal8Bit(ba)));
+            } else {
+                // Don't cache the fallback, as we might just have been called before
+                // QT_ANDROID_FONT_LOCATION has been set.
+                locations << "/system/fonts"_L1;
+            }
+        }
     }
 
-    return QStringList(writableLocation(type));
+    const QString writable = writableLocation(type);
+    if (!writable.isEmpty())
+        locations.prepend(writable);
+
+    locations.removeDuplicates();
+    return locations;
 }
 
 QT_END_NAMESPACE

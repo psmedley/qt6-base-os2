@@ -226,15 +226,6 @@ void QComboBoxPrivate::_q_completerActivated(const QModelIndex &index)
         }
     }
 #endif
-
-#  ifdef QT_KEYPAD_NAVIGATION
-    if ( QApplicationPrivate::keypadNavigationEnabled()
-         && q->isEditable()
-         && q->completer()
-         && q->completer()->completionMode() == QCompleter::UnfilteredPopupCompletion ) {
-        q->setEditFocus(false);
-    }
-#  endif // QT_KEYPAD_NAVIGATION
 }
 #endif // QT_CONFIG(completer)
 
@@ -2568,17 +2559,6 @@ void QComboBox::showPopup()
         return;
 #endif // Q_OS_MAC
 
-#ifdef QT_KEYPAD_NAVIGATION
-#if QT_CONFIG(completer)
-    if (QApplicationPrivate::keypadNavigationEnabled() && d->completer) {
-        // editable combo box is line edit plus completer
-        setEditFocus(true);
-        d->completer->complete(); // show popup
-        return;
-    }
-#endif
-#endif
-
     // set current item and select it
     QItemSelectionModel::SelectionFlags selectionMode = QItemSelectionModel::ClearAndSelect;
     if (view()->selectionBehavior() == QAbstractItemView::SelectRows)
@@ -2783,10 +2763,6 @@ void QComboBox::showPopup()
 #endif
 
     container->update();
-#ifdef QT_KEYPAD_NAVIGATION
-    if (QApplicationPrivate::keypadNavigationEnabled())
-        view()->setEditFocus(true);
-#endif
     if (startTimer) {
         container->popupTimer.start();
         container->maybeIgnoreMouseButtonRelease = true;
@@ -2813,41 +2789,49 @@ void QComboBox::hidePopup()
     auto resetHidingPopup = qScopeGuard([d]{
         d->hidingPopup = false;
     });
-    if (d->container && d->container->isVisible()) {
+
+    if (!d->container || !d->container->isVisible())
+        return;
+
 #if QT_CONFIG(effects)
-        QSignalBlocker modelBlocker(d->model);
-        QSignalBlocker viewBlocker(d->container->itemView());
-        QSignalBlocker containerBlocker(d->container);
-        // Flash selected/triggered item (if any).
-        if (style()->styleHint(QStyle::SH_Menu_FlashTriggeredItem)) {
-            QItemSelectionModel *selectionModel = view() ? view()->selectionModel() : nullptr;
-            if (selectionModel && selectionModel->hasSelection()) {
-                QEventLoop eventLoop;
-                const QItemSelection selection = selectionModel->selection();
+    // Flash selected/triggered item (if any).
+    if (style()->styleHint(QStyle::SH_Menu_FlashTriggeredItem)) {
+        QItemSelectionModel *selectionModel = d->container->itemView()
+                                            ? d->container->itemView()->selectionModel() : nullptr;
+        if (selectionModel && selectionModel->hasSelection()) {
+            const QItemSelection selection = selectionModel->selection();
+
+            QTimer::singleShot(0, d->container, [d, selection, selectionModel]{
+                QSignalBlocker modelBlocker(d->model);
+                QSignalBlocker viewBlocker(d->container->itemView());
+                QSignalBlocker containerBlocker(d->container);
 
                 // Deselect item and wait 60 ms.
                 selectionModel->select(selection, QItemSelectionModel::Toggle);
-                QTimer::singleShot(60, &eventLoop, SLOT(quit()));
-                eventLoop.exec();
-
-                // Select item and wait 20 ms.
-                selectionModel->select(selection, QItemSelectionModel::Toggle);
-                QTimer::singleShot(20, &eventLoop, SLOT(quit()));
-                eventLoop.exec();
-            }
+                QTimer::singleShot(60, d->container, [d, selection, selectionModel]{
+                    QSignalBlocker modelBlocker(d->model);
+                    QSignalBlocker viewBlocker(d->container->itemView());
+                    QSignalBlocker containerBlocker(d->container);
+                    selectionModel->select(selection, QItemSelectionModel::Toggle);
+                    QTimer::singleShot(20, d->container, [d] {
+                        d->doHidePopup();
+                    });
+                });
+            });
         }
-
-        containerBlocker.unblock();
-        viewBlocker.unblock();
-        modelBlocker.unblock();
+    } else
 #endif // QT_CONFIG(effects)
-        d->container->hide();
+    {
+        d->doHidePopup();
     }
-#ifdef QT_KEYPAD_NAVIGATION
-    if (QApplicationPrivate::keypadNavigationEnabled() && isEditable() && hasFocus())
-        setEditFocus(true);
-#endif
-    d->_q_resetButton();
+}
+
+void QComboBoxPrivate::doHidePopup()
+{
+    if (container && container->isVisible())
+        container->hide();
+
+    _q_resetButton();
 }
 
 /*!
@@ -3053,9 +3037,7 @@ bool QComboBox::event(QEvent *event)
         break;
 #ifdef QT_KEYPAD_NAVIGATION
     case QEvent::EnterEditFocus:
-        if (!d->lineEdit)
-            setEditFocus(false); // We never want edit focus if we are not editable
-        else
+        if (d->lineEdit)
             d->lineEdit->event(event);  //so cursor starts
         break;
     case QEvent::LeaveEditFocus:
@@ -3234,10 +3216,12 @@ void QComboBox::keyPressEvent(QKeyEvent *e)
         break;
 #endif
     default:
+#if QT_CONFIG(shortcut)
         if (d->container && d->container->isVisible() && e->matches(QKeySequence::Cancel)) {
             hidePopup();
             e->accept();
         }
+#endif
 
         if (!d->lineEdit) {
             if (!e->text().isEmpty())

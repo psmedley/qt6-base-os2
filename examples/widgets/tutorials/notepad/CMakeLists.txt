@@ -1,8 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(notepad LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -15,6 +15,8 @@ find_package(Qt6
     OPTIONAL_COMPONENTS PrintSupport
 )
 
+qt_standard_project_setup()
+
 qt_add_executable(notepad
     main.cpp
     notepad.cpp notepad.h notepad.ui
@@ -25,11 +27,15 @@ set_target_properties(notepad PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-target_link_libraries(notepad PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
+target_link_libraries(notepad PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
 )
+
+if(TARGET Qt6::PrintSupport)
+    target_link_libraries(notepad PRIVATE Qt6::PrintSupport)
+endif()
 
 # Resources:
 set(notepad_resource_files
@@ -59,12 +65,6 @@ qt_add_resources(notepad "notepad"
     FILES
         ${notepad_resource_files}
 )
-
-if(TARGET Qt::PrintSupport)
-    target_link_libraries(notepad PUBLIC
-        Qt::PrintSupport
-    )
-endif()
 
 install(TARGETS notepad
     RUNTIME DESTINATION "${INSTALL_EXAMPLEDIR}"

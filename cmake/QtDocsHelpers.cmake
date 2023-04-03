@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # This function adds a dependency between a doc-generating target like 'generate_docs_Gui'
 # and the necessary tool target like 'qdoc'.
 #
@@ -25,7 +28,7 @@ function(qt_internal_add_docs)
     set(target ${ARGV0})
     set(doc_project ${ARGV1})
 
-    # If a target is not built (which can happen for tools when crosscompiling, we shouldn't try
+    # If a target is not built (which can happen for tools when crosscompiling), we shouldn't try
     # to generate docs.
     if(NOT TARGET "${target}")
         return()
@@ -137,6 +140,10 @@ function(qt_internal_add_docs)
     )
 
     add_dependencies(prepare_docs_${target} qattributionsscanner_${target})
+    if(NOT TARGET sync_all_public_headers)
+        add_custom_target(sync_all_public_headers)
+    endif()
+    add_dependencies(prepare_docs_${target} sync_all_public_headers)
 
     # generate docs target
     set(generate_qdoc_args

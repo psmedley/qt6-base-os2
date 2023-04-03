@@ -3,11 +3,11 @@
 
 #include <QtGui/qopenglcontext.h>
 #include <QtGui/private/qguiapplication_p.h>
-#include <QtGui/private/qwindowsmime_p.h>
 #include <qpa/qplatformopenglcontext.h>
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformwindow.h>
 #include <qpa/qplatformwindow_p.h>
+#include <qpa/qplatformscreen_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -88,6 +88,15 @@ QOpenGLContext *QNativeInterface::QWGLContext::fromNative(HGLRC context, HWND wi
 
 QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWindowsApplication);
 
+/*!
+    \class QNativeInterface::Private::QWindowsScreen
+    \since 6.5
+    \internal
+    \brief Native interface to QScreen, to be retrieved from QPlatformIntegration.
+    \inmodule QtGui
+    \ingroup native-interfaces
+*/
+QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWindowsScreen);
 /*!
     \enum QNativeInterface::Private::QWindowsApplication::TouchWindowTouchType
 
@@ -208,21 +217,21 @@ QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWindowsApplication);
 */
 
 /*!
-    \fn bool QNativeInterface::Private::QWindowsApplication::registerMime(QWindowsMime *mime)
+    \fn bool QNativeInterface::Private::QWindowsApplication::registerMime(QWindowsMimeConverter *mime)
     \internal
 
     Registers the converter \a mime to the system.
 
-    \sa QNativeInterface::Private::QWindowsMime, unregisterMime()
+    \sa QWindowsMimeConverter, unregisterMime()
 */
 
 /*!
-    \fn void QNativeInterface::Private::QWindowsApplication::unregisterMime(QWindowsMime *mime)
+    \fn void QNativeInterface::Private::QWindowsApplication::unregisterMime(QWindowsMimeConverter *mime)
     \internal
 
     Unregisters the converter \a mime from the system.
 
-    \sa QNativeInterface::Private::QWindowsMime, registerMime()
+    \sa QWindowsMimeConverter, registerMime()
 */
 
 /*!

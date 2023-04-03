@@ -42,7 +42,7 @@ static QOpenGLContext *global_share_context = nullptr;
 
 #ifndef QT_NO_DEBUG
 QHash<QOpenGLContext *, bool> QOpenGLContextPrivate::makeCurrentTracker;
-QMutex QOpenGLContextPrivate::makeCurrentTrackerMutex;
+Q_CONSTINIT QMutex QOpenGLContextPrivate::makeCurrentTrackerMutex;
 #endif
 
 /*!
@@ -362,10 +362,6 @@ bool QOpenGLContext::create()
 
 QOpenGLContextPrivate::~QOpenGLContextPrivate()
 {
-    //do not delete the QOpenGLContext handle here as it is deleted in
-    //QWidgetPrivate::deleteTLSysExtra()
-
-    delete versionFunctions;
 }
 
 void QOpenGLContextPrivate::adopt(QPlatformOpenGLContext *context)
@@ -403,23 +399,21 @@ void QOpenGLContextPrivate::adopt(QPlatformOpenGLContext *context)
 void QOpenGLContext::destroy()
 {
     Q_D(QOpenGLContext);
+
+    // Notify that the native context and the QPlatformOpenGLContext are going
+    // to go away.
     if (d->platformGLContext)
         emit aboutToBeDestroyed();
-    if (QOpenGLContext::currentContext() == this)
-        doneCurrent();
-    if (d->shareGroup)
-        d->shareGroup->d_func()->removeContext(this);
-    d->shareGroup = nullptr;
-    delete d->platformGLContext;
-    d->platformGLContext = nullptr;
-    delete d->functions;
-    d->functions = nullptr;
 
+    // Invoke callbacks for helpers and invalidate.
     if (d->textureFunctionsDestroyCallback) {
         d->textureFunctionsDestroyCallback();
         d->textureFunctionsDestroyCallback = nullptr;
     }
     d->textureFunctions = nullptr;
+
+    delete d->versionFunctions;
+    d->versionFunctions = nullptr;
 
     if (d->vaoHelperDestroyCallback) {
         Q_ASSERT(d->vaoHelper);
@@ -427,6 +421,25 @@ void QOpenGLContext::destroy()
         d->vaoHelperDestroyCallback = nullptr;
     }
     d->vaoHelper = nullptr;
+
+    // Tear down function wrappers.
+    delete d->versionFunctions;
+    d->versionFunctions = nullptr;
+
+    delete d->functions;
+    d->functions = nullptr;
+
+    // Clean up and destroy the native context machinery.
+    if (QOpenGLContext::currentContext() == this)
+        doneCurrent();
+
+    if (d->shareGroup)
+        d->shareGroup->d_func()->removeContext(this);
+
+    d->shareGroup = nullptr;
+
+    delete d->platformGLContext;
+    d->platformGLContext = nullptr;
 }
 
 /*!

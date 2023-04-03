@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
 
@@ -36,6 +37,8 @@ import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.InputDevice;
+import android.view.Display;
+import android.hardware.display.DisplayManager;
 import android.database.Cursor;
 import android.provider.DocumentsContract;
 
@@ -384,6 +387,29 @@ public class QtNative
                 view.setVisibility(visible ? View.VISIBLE : View.GONE);
             }
         });
+    }
+
+    public static Display getDisplay(int displayId)
+    {
+        Context context = getContext();
+        DisplayManager displayManager =
+                (DisplayManager)context.getSystemService(Context.DISPLAY_SERVICE);
+        if (displayManager != null) {
+            return displayManager.getDisplay(displayId);
+        }
+        return null;
+    }
+
+    public static List<Display> getAvailableDisplays()
+    {
+        Context context = getContext();
+        DisplayManager displayManager =
+                (DisplayManager)context.getSystemService(Context.DISPLAY_SERVICE);
+        if (displayManager != null) {
+            Display[] displays = displayManager.getDisplays();
+            return Arrays.asList(displays);
+        }
+        return new ArrayList<Display>();
     }
 
     public static boolean startApplication(String params, String mainLib) throws Exception
@@ -846,15 +872,7 @@ public class QtNative
 
     public static boolean hasClipboardText()
     {
-        try {
-            if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
-                ClipDescription primaryClipDescription = m_clipboardManager.getPrimaryClipDescription();
-                return primaryClipDescription.hasMimeType("text/*");
-            }
-        } catch (Exception e) {
-            Log.e(QtTAG, "Failed to get clipboard data", e);
-        }
-        return false;
+       return hasClipboardMimeType("text/plain");
     }
 
     private static String getClipboardText()
@@ -900,17 +918,27 @@ public class QtNative
         }
     }
 
-    public static boolean hasClipboardHtml()
+    private static boolean hasClipboardMimeType(String mimeType)
     {
-        try {
-            if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
-                ClipDescription primaryClipDescription = m_clipboardManager.getPrimaryClipDescription();
-                return primaryClipDescription.hasMimeType("text/html");
-            }
-        } catch (Exception e) {
-            Log.e(QtTAG, "Failed to get clipboard data", e);
+        if (m_clipboardManager == null)
+            return false;
+
+        ClipDescription description = m_clipboardManager.getPrimaryClipDescription();
+        // getPrimaryClipDescription can fail if the app does not have input focus
+        if (description == null)
+            return false;
+
+        for (int i = 0; i < description.getMimeTypeCount(); ++i) {
+            String itemMimeType = description.getMimeType(i);
+            if (itemMimeType.equals(mimeType))
+                return true;
         }
         return false;
+    }
+
+    public static boolean hasClipboardHtml()
+    {
+       return hasClipboardMimeType("text/html");
     }
 
     private static String getClipboardHtml()
@@ -939,15 +967,7 @@ public class QtNative
 
     public static boolean hasClipboardUri()
     {
-        try {
-            if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
-                ClipDescription primaryClipDescription = m_clipboardManager.getPrimaryClipDescription();
-                return primaryClipDescription.hasMimeType("text/uri-list");
-            }
-        } catch (Exception e) {
-            Log.e(QtTAG, "Failed to get clipboard data", e);
-        }
-        return false;
+       return hasClipboardMimeType("text/uri-list");
     }
 
     private static String[] getClipboardUris()
@@ -1197,6 +1217,9 @@ public class QtNative
                                                 double density, float refreshRate);
     public static native void handleOrientationChanged(int newRotation, int nativeOrientation);
     public static native void handleRefreshRateChanged(float refreshRate);
+    public static native void handleScreenAdded(int displayId);
+    public static native void handleScreenChanged(int displayId);
+    public static native void handleScreenRemoved(int displayId);
     // screen methods
     public static native void handleUiDarkModeChanged(int newUiMode);
 

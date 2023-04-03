@@ -143,6 +143,16 @@ QT_BEGIN_NAMESPACE
 
     \value ButtonPressKeys (QList<Qt::Key>) A list of keys that can be used to press buttons via keyboard input.
 
+    \value SetFocusOnTouchRelease (bool) Whether focus objects (line edits etc) should receive
+           input focus after a touch/mouse release.
+           This enum value has been added in Qt 6.5.
+
+    \value MouseCursorTheme (QString) Name of the mouse cursor theme.
+           This enum value has been added in Qt 6.5.
+
+    \value MouseCursorSize (QSize) Size of the mouse cursor.
+           This enum value has been added in Qt 6.5.
+
     \sa themeHint(), QStyle::pixelMetric()
 */
 
@@ -346,7 +356,7 @@ Q_GUI_EXPORT QPalette qt_fusionPalette()
 {
     auto theme = QGuiApplicationPrivate::platformTheme();
     const bool darkAppearance = theme
-                              ? theme->appearance() == QPlatformTheme::Appearance::Dark
+                              ? theme->colorScheme() == Qt::ColorScheme::Dark
                               : false;
     const QColor windowText = darkAppearance ? QColor(240, 240, 240) : Qt::black;
     const QColor backGround = darkAppearance ? QColor(50, 50, 50) : QColor(239, 239, 239);
@@ -426,9 +436,9 @@ QPlatformDialogHelper *QPlatformTheme::createPlatformDialogHelper(DialogType typ
     return nullptr;
 }
 
-QPlatformTheme::Appearance QPlatformTheme::appearance() const
+Qt::ColorScheme QPlatformTheme::colorScheme() const
 {
-    return Appearance::Unknown;
+    return Qt::ColorScheme::Unknown;
 }
 
 const QPalette *QPlatformTheme::palette(Palette type) const
@@ -507,6 +517,14 @@ QVariant QPlatformTheme::themeHint(ThemeHint hint) const
         return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::UiEffects);
     case QPlatformTheme::ShowShortcutsInContextMenus:
         return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::ShowShortcutsInContextMenus);
+    case QPlatformTheme::SetFocusOnTouchRelease:
+        return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::SetFocusOnTouchRelease);
+    case QPlatformTheme::FlickStartDistance:
+        return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::FlickStartDistance);
+    case QPlatformTheme::FlickMaximumVelocity:
+        return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::FlickMaximumVelocity);
+    case QPlatformTheme::FlickDeceleration:
+        return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::FlickDeceleration);
     default:
         return QPlatformTheme::defaultThemeHint(hint);
     }
@@ -605,6 +623,20 @@ QVariant QPlatformTheme::defaultThemeHint(ThemeHint hint)
         return false;
     case ButtonPressKeys:
         return QVariant::fromValue(QList<Qt::Key>({ Qt::Key_Space, Qt::Key_Select }));
+    case SetFocusOnTouchRelease:
+        return false;
+    case FlickStartDistance:
+        return QVariant(15);
+    case FlickMaximumVelocity:
+        return QVariant(2500);
+    case FlickDeceleration:
+        return QVariant(5000);
+    case MenuBarFocusOnAltPressRelease:
+        return false;
+    case MouseCursorTheme:
+        return QVariant(QString());
+    case MouseCursorSize:
+        return QVariant(QSize(16, 16));
     }
     return QVariant();
 }
@@ -789,7 +821,7 @@ QString QPlatformTheme::removeMnemonics(const QString &original)
     QString returnText(original.size(), u'\0');
     int finalDest = 0;
     int currPos = 0;
-    int l = original.length();
+    int l = original.size();
     while (l) {
         if (original.at(currPos) == u'&') {
             ++currPos;
@@ -826,6 +858,11 @@ unsigned QPlatformThemePrivate::currentKeyPlatforms()
         result |= KB_X11;
 #endif
     return result;
+}
+
+QString QPlatformTheme::name() const
+{
+    return d_func()->name;
 }
 
 QT_END_NAMESPACE

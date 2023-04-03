@@ -26,7 +26,7 @@ public:
 
     explicit QHostInfo(int lookupId = -1);
     QHostInfo(const QHostInfo &d);
-    QHostInfo(QHostInfo &&other) noexcept : d_ptr(qExchange(other.d_ptr, nullptr)) {}
+    QHostInfo(QHostInfo &&other) noexcept : d_ptr(std::exchange(other.d_ptr, nullptr)) {}
     QHostInfo &operator=(const QHostInfo &d);
     QHostInfo &operator=(QHostInfo &&other) noexcept { swap(other); return *this; }
     ~QHostInfo();
@@ -55,7 +55,7 @@ public:
     static QString localHostName();
     static QString localDomainName();
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     template<typename Functor>
     static int lookupHost(const QString &name, Functor functor);
     template<typename Functor>

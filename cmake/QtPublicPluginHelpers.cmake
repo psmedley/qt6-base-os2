@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Gets the qt plugin type of the given plugin into out_var_plugin_type.
 # Also sets out_var_has_plugin_type to TRUE or FALSE depending on whether the plugin type was found.
 function(__qt_internal_plugin_get_plugin_type
@@ -36,22 +39,32 @@ endfunction()
 #
 # The conditions are based on the various properties set in qt_import_plugins.
 
-# All the TARGET_PROPERTY genexes are evaluated in the context  of the currently linked target.
+# All the TARGET_PROPERTY genexes are evaluated in the context of the currently linked target,
+# unless the TARGET argument is given.
 #
 # The genex is saved into out_var.
 function(__qt_internal_get_static_plugin_condition_genex
          plugin_target_unprefixed
          out_var)
+    set(options)
+    set(oneValueArgs TARGET)
+    set(multiValueArgs)
+    cmake_parse_arguments(arg "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     set(plugin_target "${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_target_unprefixed}")
     set(plugin_target_versionless "Qt::${plugin_target_unprefixed}")
 
     get_target_property(_plugin_type "${plugin_target}" QT_PLUGIN_TYPE)
 
+    set(target_infix "")
+    if(arg_TARGET)
+        set(target_infix "${arg_TARGET},")
+    endif()
+
     set(_default_plugins_are_enabled
-        "$<NOT:$<STREQUAL:$<GENEX_EVAL:$<TARGET_PROPERTY:QT_DEFAULT_PLUGINS>>,0>>")
-    set(_manual_plugins_genex "$<GENEX_EVAL:$<TARGET_PROPERTY:QT_PLUGINS>>")
-    set(_no_plugins_genex "$<GENEX_EVAL:$<TARGET_PROPERTY:QT_NO_PLUGINS>>")
+        "$<NOT:$<STREQUAL:$<GENEX_EVAL:$<TARGET_PROPERTY:${target_infix}QT_DEFAULT_PLUGINS>>,0>>")
+    set(_manual_plugins_genex "$<GENEX_EVAL:$<TARGET_PROPERTY:${target_infix}QT_PLUGINS>>")
+    set(_no_plugins_genex "$<GENEX_EVAL:$<TARGET_PROPERTY:${target_infix}QT_NO_PLUGINS>>")
 
     # Plugin genex marker for prl processing.
     set(_is_plugin_marker_genex "$<BOOL:QT_IS_PLUGIN_GENEX>")
@@ -78,7 +91,7 @@ function(__qt_internal_get_static_plugin_condition_genex
             ">,"
             # Excludes both plugins targeted by EXCLUDE_BY_TYPE and not included in
             # INCLUDE_BY_TYPE.
-            "$<STREQUAL:,$<GENEX_EVAL:$<TARGET_PROPERTY:QT_PLUGINS_${_plugin_type}>>>"
+            "$<STREQUAL:,$<GENEX_EVAL:$<TARGET_PROPERTY:${target_infix}QT_PLUGINS_${_plugin_type}>>>"
         ">"
     )
 
@@ -87,7 +100,7 @@ function(__qt_internal_get_static_plugin_condition_genex
         "$<IN_LIST:"
             "${plugin_target},"
             "$<GENEX_EVAL:"
-                "$<TARGET_PROPERTY:QT_PLUGINS_${_plugin_type}>"
+                "$<TARGET_PROPERTY:${target_infix}QT_PLUGINS_${_plugin_type}>"
             ">"
         ">"
     )
@@ -95,7 +108,7 @@ function(__qt_internal_get_static_plugin_condition_genex
         "$<IN_LIST:"
             "${plugin_target_versionless},"
             "$<GENEX_EVAL:"
-                "$<TARGET_PROPERTY:QT_PLUGINS_${_plugin_type}>"
+                "$<TARGET_PROPERTY:${target_infix}QT_PLUGINS_${_plugin_type}>"
             ">"
         ">"
     )
@@ -103,7 +116,7 @@ function(__qt_internal_get_static_plugin_condition_genex
     # No point in linking the plugin initialization source file into static libraries. The
     # initialization symbol will be discarded by the linker when the static lib is linked into an
     # executable or shared library, because nothing is referencing the global static symbol.
-    set(type_genex "$<TARGET_PROPERTY:TYPE>")
+    set(type_genex "$<TARGET_PROPERTY:${target_infix}TYPE>")
     set(no_static_genex "$<NOT:$<STREQUAL:${type_genex},STATIC_LIBRARY>>")
 
     # Complete condition that defines whether a static plugin is linked
@@ -263,11 +276,15 @@ function(__qt_internal_collect_plugin_libraries plugin_targets out_var)
     set(plugins_to_link "")
 
     foreach(plugin_target ${plugin_targets})
+        set(plugin_target_versioned "${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_target}")
+        get_target_property(type "${plugin_target_versioned}" TYPE)
+        if(NOT type STREQUAL STATIC_LIBRARY)
+            continue()
+        endif()
+
         __qt_internal_get_static_plugin_condition_genex(
             "${plugin_target}"
             plugin_condition)
-
-        set(plugin_target_versioned "${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_target}")
 
         list(APPEND plugins_to_link "$<${plugin_condition}:${plugin_target_versioned}>")
     endforeach()
@@ -282,6 +299,12 @@ function(__qt_internal_collect_plugin_init_libraries plugin_targets out_var)
     set(plugin_inits_to_link "")
 
     foreach(plugin_target ${plugin_targets})
+        set(plugin_target_versioned "${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_target}")
+        get_target_property(type "${plugin_target_versioned}" TYPE)
+        if(NOT type STREQUAL STATIC_LIBRARY)
+            continue()
+        endif()
+
         __qt_internal_get_static_plugin_condition_genex(
             "${plugin_target}"
             plugin_condition)
@@ -293,6 +316,25 @@ function(__qt_internal_collect_plugin_init_libraries plugin_targets out_var)
     endforeach()
 
     set("${out_var}" "${plugin_inits_to_link}" PARENT_SCOPE)
+endfunction()
+
+# Collect a list of genexes to deploy plugin libraries.
+function(__qt_internal_collect_plugin_library_files target plugin_targets out_var)
+    set(library_files "")
+
+    foreach(plugin_target ${plugin_targets})
+        set(plugin_target_versioned "${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_target}")
+        __qt_internal_get_static_plugin_condition_genex(
+            "${plugin_target}"
+            plugin_condition
+            TARGET ${target}
+        )
+
+        set(target_genex "$<${plugin_condition}:${plugin_target_versioned}>")
+        list(APPEND library_files "$<$<BOOL:${target_genex}>:$<TARGET_FILE:${target_genex}>>")
+    endforeach()
+
+    set("${out_var}" "${library_files}" PARENT_SCOPE)
 endfunction()
 
 # Collects all plugin targets discovered by walking the dependencies of ${target}.
@@ -374,18 +416,56 @@ function(__qt_internal_collect_plugin_targets_from_dependencies_of_plugins targe
     set("${out_var}" "${plugin_targets}" PARENT_SCOPE)
 endfunction()
 
-# Main logic of finalizer mode.
-function(__qt_internal_apply_plugin_imports_finalizer_mode target)
-    # Nothing to do in a shared build.
-    if(QT6_IS_SHARED_LIBS_BUILD)
+# Generate plugin information files for deployment
+#
+# Arguments:
+# OUT_PLUGIN_TARGETS - Variable name to store the plugin targets that were collected with
+#                      __qt_internal_collect_plugin_targets_from_dependencies.
+function(__qt_internal_generate_plugin_deployment_info target)
+    set(no_value_options "")
+    set(single_value_options "OUT_PLUGIN_TARGETS")
+    set(multi_value_options "")
+    cmake_parse_arguments(PARSE_ARGV 0 arg
+        "${no_value_options}" "${single_value_options}" "${multi_value_options}"
+    )
+
+    __qt_internal_collect_plugin_targets_from_dependencies("${target}" plugin_targets)
+    if(NOT "${arg_OUT_PLUGIN_TARGETS}" STREQUAL "")
+        set("${arg_OUT_PLUGIN_TARGETS}" "${plugin_targets}" PARENT_SCOPE)
+    endif()
+
+    get_target_property(marked_for_deployment ${target} _qt_marked_for_deployment)
+    if(NOT marked_for_deployment)
         return()
     endif()
 
+    __qt_internal_collect_plugin_library_files(${target} "${plugin_targets}" plugins_files)
+    set(plugins_files "$<FILTER:${plugins_files},EXCLUDE,^$>")
+
+    _qt_internal_get_deploy_impl_dir(deploy_impl_dir)
+    set(file_path "${deploy_impl_dir}/${target}-plugins")
+    get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
+    if(is_multi_config)
+        string(APPEND file_path "-$<CONFIG>")
+    endif()
+    string(APPEND file_path ".cmake")
+
+    file(GENERATE
+        OUTPUT ${file_path}
+        CONTENT "set(__QT_DEPLOY_PLUGINS ${plugins_files})"
+    )
+endfunction()
+
+# Main logic of finalizer mode.
+function(__qt_internal_apply_plugin_imports_finalizer_mode target)
     # Process a target only once.
     get_target_property(processed ${target} _qt_plugin_finalizer_imports_processed)
     if(processed)
         return()
     endif()
+
+    __qt_internal_generate_plugin_deployment_info(${target}
+        OUT_PLUGIN_TARGETS plugin_targets)
 
     # By default if the project hasn't explicitly opted in or out, use finalizer mode.
     # The precondition for this is that qt_finalize_target was called (either explicitly by the user
@@ -400,7 +480,6 @@ function(__qt_internal_apply_plugin_imports_finalizer_mode target)
         return()
     endif()
 
-    __qt_internal_collect_plugin_targets_from_dependencies("${target}" plugin_targets)
     __qt_internal_collect_plugin_init_libraries("${plugin_targets}" init_libraries)
     __qt_internal_collect_plugin_libraries("${plugin_targets}" plugin_libraries)
 
@@ -467,8 +546,10 @@ macro(__qt_internal_include_plugin_packages target)
 
         list(APPEND "QT_ALL_PLUGINS_FOUND_BY_FIND_PACKAGE_${__plugin_type}" "${plugin_target}")
 
-        # Auto-linkage should be set up only for static library builds.
-        if(NOT QT6_IS_SHARED_LIBS_BUILD)
+        # Auto-linkage should be set up only for static plugins.
+        set(plugin_target_versioned "${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_target}")
+        get_target_property(type "${plugin_target_versioned}" TYPE)
+        if(type STREQUAL STATIC_LIBRARY)
             __qt_internal_add_static_plugin_linkage(
                 "${plugin_target}" "${__qt_${target}_plugin_module_target}")
             __qt_internal_add_static_plugin_import_macro(

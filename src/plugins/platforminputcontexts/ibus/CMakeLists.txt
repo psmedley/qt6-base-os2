@@ -1,4 +1,5 @@
-# Generated from ibus.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QIbusPlatformInputContextPlugin Plugin:
@@ -22,7 +23,3 @@ qt_internal_add_plugin(QIbusPlatformInputContextPlugin
         Qt::GuiPrivate
         XKB::XKB
 )
-
-#### Keys ignored in scope 1:.:.:ibus.pro:<TRUE>:
-# OTHER_FILES = "$$PWD/ibus.json"
-# PLUGIN_EXTENDS = "-"

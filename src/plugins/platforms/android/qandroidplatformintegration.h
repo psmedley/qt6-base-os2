@@ -14,6 +14,8 @@
 #include <qpa/qplatformopenglcontext.h>
 #include <qpa/qplatformoffscreensurface.h>
 #include <qpa/qplatformtheme.h>
+#include <private/qflatmap_p.h>
+#include <QtCore/qvarlengtharray.h>
 
 #include <EGL/egl.h>
 #include <memory>
@@ -75,6 +77,10 @@ public:
 
     QPlatformFontDatabase *fontDatabase() const override;
 
+    void handleScreenAdded(int displayId);
+    void handleScreenChanged(int displayId);
+    void handleScreenRemoved(int displayId);
+
 #ifndef QT_NO_CLIPBOARD
     QPlatformClipboard *clipboard() const override;
 #endif
@@ -104,8 +110,8 @@ public:
 
     void flushPendingUpdates();
 
-    static void setAppearance(QPlatformTheme::Appearance newAppearance);
-    static QPlatformTheme::Appearance appearance() { return m_appearance; }
+    static void setColorScheme(Qt::ColorScheme colorScheme);
+    static Qt::ColorScheme colorScheme() { return m_colorScheme; }
 #if QT_CONFIG(vulkan)
     QPlatformVulkanInstance *createPlatformVulkanInstance(QVulkanInstance *instance) const override;
 #endif
@@ -118,7 +124,7 @@ private:
 
     QThread *m_mainThread;
 
-    static QPlatformTheme::Appearance m_appearance;
+    static Qt::ColorScheme m_colorScheme;
 
     static QRect m_defaultAvailableGeometry;
     static QSize m_defaultPhysicalSize;
@@ -131,6 +137,17 @@ private:
     QPlatformFontDatabase *m_androidFDB;
     QAndroidPlatformNativeInterface *m_androidPlatformNativeInterface;
     QAndroidPlatformServices *m_androidPlatformServices;
+
+    // Handling the multiple screens connected. Every display is identified
+    // with an unique (autoincremented) displayID. The values of this ID will
+    // not repeat during the OS runtime. We use this value as the key in the
+    // storage of screens.
+    QFlatMap<int, QAndroidPlatformScreen *, std::less<int>
+            , QVarLengthArray<int, 10>
+            , QVarLengthArray<QAndroidPlatformScreen *, 10> > m_screens;
+    // ID of the primary display, in documentation it is said to be always 0,
+    // but nevertheless it is retrieved
+    int m_primaryDisplayId = 0;
 
 #ifndef QT_NO_CLIPBOARD
     QPlatformClipboard *m_androidPlatformClipboard;

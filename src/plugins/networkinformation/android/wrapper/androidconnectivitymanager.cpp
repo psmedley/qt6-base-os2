@@ -20,14 +20,15 @@ Q_GLOBAL_STATIC(AndroidConnectivityManagerInstance, androidConnManagerInstance)
 static const char networkInformationClass[] =
         "org/qtproject/qt/android/networkinformation/QtAndroidNetworkInformation";
 
-static void networkConnectivityChanged(JNIEnv *env, jobject obj, jobject enumValue)
+static void networkConnectivityChanged(JNIEnv *env, jobject obj, jint enumValue)
 {
     Q_UNUSED(env);
     Q_UNUSED(obj);
-    const jint value = QJniObject(enumValue).callMethod<jint>("ordinal");
-    const auto connectivity = static_cast<AndroidConnectivityManager::AndroidConnectivity>(value);
+    const auto connectivity =
+            static_cast<AndroidConnectivityManager::AndroidConnectivity>(enumValue);
     Q_EMIT androidConnManagerInstance->connManager->connectivityChanged(connectivity);
 }
+Q_DECLARE_JNI_NATIVE_METHOD(networkConnectivityChanged)
 
 static void genericInfoChanged(JNIEnv *env, jobject obj, jboolean captivePortal, jboolean metered)
 {
@@ -36,30 +37,26 @@ static void genericInfoChanged(JNIEnv *env, jobject obj, jboolean captivePortal,
     Q_EMIT androidConnManagerInstance->connManager->captivePortalChanged(captivePortal);
     Q_EMIT androidConnManagerInstance->connManager->meteredChanged(metered);
 }
+Q_DECLARE_JNI_NATIVE_METHOD(genericInfoChanged)
 
-static void transportMediumChangedCallback(JNIEnv *env, jobject obj, jobject enumValue)
+static void transportMediumChanged(JNIEnv *env, jobject obj, jint enumValue)
 {
     Q_UNUSED(env);
     Q_UNUSED(obj);
-    const jint value = QJniObject(enumValue).callMethod<jint>("ordinal");
-    const auto transport = static_cast<AndroidConnectivityManager::AndroidTransport>(value);
+    const auto transport = static_cast<AndroidConnectivityManager::AndroidTransport>(enumValue);
     emit androidConnManagerInstance->connManager->transportMediumChanged(transport);
 }
+Q_DECLARE_JNI_NATIVE_METHOD(transportMediumChanged)
+
+Q_DECLARE_JNI_TYPE(ConnectivityManager, "Landroid/net/ConnectivityManager;")
 
 AndroidConnectivityManager::AndroidConnectivityManager()
 {
     if (!registerNatives())
         return;
 
-    m_connectivityManager = QJniObject::callStaticObjectMethod(
-            networkInformationClass, "getConnectivityManager",
-            "(Landroid/content/Context;)Landroid/net/ConnectivityManager;",
-            QAndroidApplication::context());
-    if (!m_connectivityManager.isValid())
-        return;
-
     QJniObject::callStaticMethod<void>(networkInformationClass, "registerReceiver",
-                                       "(Landroid/content/Context;)V", QAndroidApplication::context());
+                                       QAndroidApplication::context());
 }
 
 AndroidConnectivityManager *AndroidConnectivityManager::getInstance()
@@ -71,36 +68,28 @@ AndroidConnectivityManager *AndroidConnectivityManager::getInstance()
             : nullptr;
 }
 
+bool AndroidConnectivityManager::isValid() const
+{
+    return registerNatives();
+}
+
 AndroidConnectivityManager::~AndroidConnectivityManager()
 {
     QJniObject::callStaticMethod<void>(networkInformationClass, "unregisterReceiver",
-                                       "(Landroid/content/Context;)V", QAndroidApplication::context());
+                                       QAndroidApplication::context());
 }
 
-bool AndroidConnectivityManager::registerNatives()
+bool AndroidConnectivityManager::registerNatives() const
 {
-    QJniEnvironment env;
-    QJniObject networkReceiver(networkInformationClass);
-    if (!networkReceiver.isValid())
-        return false;
-
-    const QByteArray connectivityEnumSig =
-            QByteArray("(L") + networkInformationClass + "$AndroidConnectivity;)V";
-    const QByteArray transportEnumSig =
-            QByteArray("(L") + networkInformationClass + "$Transport;)V";
-
-    jclass clazz = env->GetObjectClass(networkReceiver.object());
-    static JNINativeMethod methods[] = {
-        { "connectivityChanged", connectivityEnumSig.data(),
-          reinterpret_cast<void *>(networkConnectivityChanged) },
-        { "genericInfoChanged", "(ZZ)V",
-          reinterpret_cast<void *>(genericInfoChanged) },
-        { "transportMediumChanged", transportEnumSig.data(),
-          reinterpret_cast<void *>(transportMediumChangedCallback) },
-    };
-    const bool ret = (env->RegisterNatives(clazz, methods, std::size(methods)) == JNI_OK);
-    env->DeleteLocalRef(clazz);
-    return ret;
+    static const bool registered = []() {
+        QJniEnvironment env;
+        return env.registerNativeMethods(networkInformationClass, {
+            Q_JNI_NATIVE_METHOD(networkConnectivityChanged),
+            Q_JNI_NATIVE_METHOD(genericInfoChanged),
+            Q_JNI_NATIVE_METHOD(transportMediumChanged),
+        });
+    }();
+    return registered;
 }
 
 QT_END_NAMESPACE

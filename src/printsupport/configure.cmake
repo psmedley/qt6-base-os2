@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 
 
 #### Inputs
@@ -28,6 +31,11 @@ qt_feature("cupsjobwidget" PUBLIC PRIVATE
     CONDITION ( QT_FEATURE_buttongroup ) AND ( QT_FEATURE_calendarwidget ) AND ( QT_FEATURE_checkbox ) AND ( QT_FEATURE_combobox ) AND ( QT_FEATURE_cups ) AND ( QT_FEATURE_datetimeedit ) AND ( QT_FEATURE_groupbox ) AND ( QT_FEATURE_tablewidget )
 )
 qt_feature_definition("cupsjobwidget" "QT_NO_CUPSJOBWIDGET" NEGATE VALUE "1")
+qt_feature("cupspassworddialog" PRIVATE
+    SECTION "Widgets"
+    LABEL "CUPS password dialog"
+    CONDITION ( QT_FEATURE_dialogbuttonbox ) AND ( QT_FEATURE_formlayout ) AND ( QT_FEATURE_lineedit )
+)
 qt_feature("printer" PUBLIC
     SECTION "Painting"
     LABEL "QPrinter"
@@ -46,7 +54,7 @@ qt_feature("printdialog" PUBLIC
     SECTION "Dialogs"
     LABEL "QPrintDialog"
     PURPOSE "Provides a dialog widget for specifying printer configuration."
-    CONDITION ( QT_FEATURE_buttongroup ) AND ( QT_FEATURE_checkbox ) AND ( QT_FEATURE_combobox ) AND ( QT_FEATURE_dialog ) AND ( QT_FEATURE_datetimeedit ) AND ( QT_FEATURE_dialogbuttonbox ) AND ( QT_FEATURE_printer ) AND ( QT_FEATURE_radiobutton ) AND ( QT_FEATURE_spinbox ) AND ( QT_FEATURE_tabwidget ) AND ( QT_FEATURE_treeview )
+    CONDITION ( QT_FEATURE_buttongroup ) AND ( QT_FEATURE_checkbox ) AND ( QT_FEATURE_combobox ) AND ( QT_FEATURE_dialog ) AND ( QT_FEATURE_datetimeedit ) AND ( QT_FEATURE_dialogbuttonbox ) AND ( QT_FEATURE_formlayout ) AND ( QT_FEATURE_printer ) AND ( QT_FEATURE_radiobutton ) AND ( QT_FEATURE_spinbox ) AND ( QT_FEATURE_tabwidget ) AND ( QT_FEATURE_treeview )
 )
 qt_feature_definition("printdialog" "QT_NO_PRINTDIALOG" NEGATE VALUE "1")
 qt_feature("printpreviewdialog" PUBLIC

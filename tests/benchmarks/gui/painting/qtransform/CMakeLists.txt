@@ -1,4 +1,5 @@
-# Generated from qtransform.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_bench_qtransform Binary:
@@ -7,10 +8,7 @@
 qt_internal_add_benchmark(tst_bench_qtransform
     SOURCES
         tst_qtransform.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Test
 )
-
-#### Keys ignored in scope 1:.:.:qtransform.pro:<TRUE>:
-# TEMPLATE = "app"

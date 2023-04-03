@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 set(__GlobalConfig_path_suffix "${INSTALL_CMAKE_NAMESPACE}")
 qt_path_join(__GlobalConfig_build_dir ${QT_CONFIG_BUILD_DIR} ${__GlobalConfig_path_suffix})
 qt_path_join(__GlobalConfig_install_dir ${QT_CONFIG_INSTALL_DIR} ${__GlobalConfig_path_suffix})
@@ -87,14 +90,15 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/configure.cmake")
 
 qt_internal_get_first_osx_arch(__qt_osx_first_arch)
 set(__qt_apple_silicon_arches "arm64;arm64e")
-if((UIKIT AND NOT QT_UIKIT_SDK)
-        OR (MACOS AND QT_IS_MACOS_UNIVERSAL
-            AND __qt_osx_first_arch IN_LIST __qt_apple_silicon_arches))
-    set(QT_FORCE_FEATURE_sse2 ON CACHE INTERNAL "Force enable sse2 due to platform requirements.")
+if(MACOS AND QT_IS_MACOS_UNIVERSAL
+        AND __qt_osx_first_arch IN_LIST __qt_apple_silicon_arches)
+    # The test in configure.cmake will not be run, but we know that
+    # the compiler supports these intrinsics
+    set(QT_FORCE_FEATURE_x86intrin ON CACHE INTERNAL "Force-enable x86 intrinsics due to platform requirements.")
     set(__QtFeature_custom_enabled_cache_variables
-        TEST_subarch_sse2
-        FEATURE_sse2
-        QT_FEATURE_sse2)
+        TEST_x86intrin
+        FEATURE_x86intrin
+        QT_FEATURE_x86intrin)
 endif()
 
 if(MACOS AND QT_IS_MACOS_UNIVERSAL AND __qt_osx_first_arch STREQUAL "x86_64")
@@ -219,6 +223,7 @@ qt_copy_or_install(FILES
                    cmake/QtCompilerFlags.cmake
                    cmake/QtCompilerOptimization.cmake
                    cmake/QtConfigDependencies.cmake.in
+                   cmake/QtConfigureTimeExecutableCMakeLists.txt.in
                    cmake/QtDeferredDependenciesHelpers.cmake
                    cmake/QtDbusHelpers.cmake
                    cmake/QtDocsHelpers.cmake
@@ -234,6 +239,7 @@ qt_copy_or_install(FILES
                    cmake/QtGenerateExtPri.cmake
                    cmake/QtGenerateLibHelpers.cmake
                    cmake/QtGenerateLibPri.cmake
+                   cmake/QtGenerateVersionScript.cmake
                    cmake/QtGlobalStateHelpers.cmake
                    cmake/QtHeadersClean.cmake
                    cmake/QtInstallHelpers.cmake
@@ -241,6 +247,7 @@ qt_copy_or_install(FILES
                    cmake/QtLalrHelpers.cmake
                    cmake/QtModuleConfig.cmake.in
                    cmake/QtModuleDependencies.cmake.in
+                   cmake/QtModuleHeadersCheck.cmake
                    cmake/QtModuleHelpers.cmake
                    cmake/QtModuleToolsConfig.cmake.in
                    cmake/QtModuleToolsDependencies.cmake.in
@@ -256,6 +263,7 @@ qt_copy_or_install(FILES
                    cmake/QtPostProcess.cmake
                    cmake/QtPostProcessHelpers.cmake
                    cmake/QtPrecompiledHeadersHelpers.cmake
+                   cmake/QtUnityBuildHelpers.cmake
                    cmake/QtPriHelpers.cmake
                    cmake/QtPrlHelpers.cmake
                    cmake/QtPlatformTargetHelpers.cmake
@@ -281,6 +289,7 @@ qt_copy_or_install(FILES
                    cmake/QtWriteArgsFile.cmake
                    cmake/modulecppexports.h.in
                    cmake/modulecppexports_p.h.in
+                   cmake/qbatchedtestrunner.in.cpp
     DESTINATION "${__GlobalConfig_install_dir}"
 )
 
@@ -349,7 +358,6 @@ if(QT_WILL_INSTALL)
     endforeach()
 endif()
 
-# TODO: Check whether this is the right place to install these
 qt_copy_or_install(DIRECTORY "cmake/3rdparty" DESTINATION "${__GlobalConfig_install_dir}")
 
 # In prefix builds we also need to copy the files into the build config directory, so that the
@@ -402,4 +410,6 @@ qt_path_join(__qt_libexec_install_dir "${QT_INSTALL_DIR}" "${INSTALL_LIBEXECDIR}
 qt_copy_or_install(FILES coin/instructions/qmake/ensure_pro_file.cmake
     DESTINATION "${__qt_libexec_install_dir}")
 qt_copy_or_install(PROGRAMS "util/testrunner/qt-testrunner.py"
-                   DESTINATION "${__qt_libexec_install_dir}")
+    DESTINATION "${__qt_libexec_install_dir}")
+qt_copy_or_install(PROGRAMS "util/testrunner/sanitizer-testrunner.py"
+    DESTINATION "${__qt_libexec_install_dir}")

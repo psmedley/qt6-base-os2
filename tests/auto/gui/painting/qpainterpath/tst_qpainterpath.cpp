@@ -385,11 +385,11 @@ void tst_QPainterPath::contains_QRectF_data()
     QTest::newRow("inside 2 rects (winding)") << path << QRectF(51, 51, 48, 48) << true;
 
     path.addEllipse(0, 0, 150, 150);
-    QTest::newRow("topRight 2 rects") << path << QRectF(100, 25, 24, 24) << true;
-    QTest::newRow("bottomLeft 2 rects") << path << QRectF(25, 100, 24, 24) << true;
+    QTest::newRow("topRight rects+circle") << path << QRectF(100, 25, 24, 24) << true;
+    QTest::newRow("bottomLeft rects+circle") << path << QRectF(25, 100, 24, 24) << true;
 
     path.setFillRule(Qt::OddEvenFill);
-    QTest::newRow("inside 2 rects") << path << QRectF(50, 50, 49, 49) << false;
+    QTest::newRow("inside rects+circle") << path << QRectF(50, 50, 49, 49) << false;
 }
 
 void tst_QPainterPath::contains_QRectF()
@@ -893,17 +893,17 @@ void tst_QPainterPath::testArcMoveTo_data()
         QRectF(100, 100, 100, -100),
         QRectF(100, 100, -100, -100),
     };
+    constexpr qreal tinyAngle = 1e-10;
 
-    for (uint domain = 0; domain < sizeof rects / sizeof *rects; ++domain) {
-        const QByteArray dB = QByteArray::number(domain);
-        for (int i=-360; i<=360; ++i) {
-            QTest::newRow(("test " + dB + ' ' + QByteArray::number(i)).constData())
-                << rects[domain] << (qreal) i;
-        }
+    int index = 0;
+    for (const auto &rect : rects) {
+        for (int i = -360; i <= 360; ++i)
+            QTest::addRow("test %d %d", index, i) << rect << qreal(i);
 
         // test low angles
-        QTest::newRow("low angles 1") << rects[domain] << (qreal) 1e-10;
-        QTest::newRow("low angles 2") << rects[domain] << (qreal)-1e-10;
+        QTest::addRow("low +angle %d", index) << rect << tinyAngle;
+        QTest::addRow("low -angle %d", index) << rect << -tinyAngle;
+        ++index;
     }
 }
 
@@ -1220,38 +1220,65 @@ void tst_QPainterPath::testNaNandInfinites()
     QPointF p3 = QPointF(qQNaN(), 1);
     QPointF pInf = QPointF(qInf(), 1);
 
-    // all these operations with NaN/Inf should be ignored
-    // can't test operator>> reliably, as we can't create a path with NaN to << later
+    // All these operations with NaN/Inf should be ignored.
+    // Can't test operator>> reliably, as we can't create a path with NaN to << later.
+#ifdef QT_NO_DEBUG
+#  define WARNS(name)
+#else
+#  define WARNS(name) \
+    QTest::ignoreMessage(QtWarningMsg, "QPainterPath::" #name ": " \
+                         "Adding point with invalid coordinates, ignoring call")
+#endif
 
+    WARNS(moveTo);
     path1.moveTo(p1);
+    WARNS(moveTo);
     path1.moveTo(qSNaN(), qQNaN());
+    WARNS(moveTo);
     path1.moveTo(pInf);
 
+    WARNS(lineTo);
     path1.lineTo(p1);
+    WARNS(lineTo);
     path1.lineTo(qSNaN(), qQNaN());
+    WARNS(lineTo);
     path1.lineTo(pInf);
 
+    WARNS(cubicTo);
     path1.cubicTo(p1, p2, p3);
+    WARNS(cubicTo);
     path1.cubicTo(p1, QPointF(1, 1), QPointF(2, 2));
+    WARNS(cubicTo);
     path1.cubicTo(pInf, QPointF(10, 10), QPointF(5, 1));
 
+    WARNS(quadTo);
     path1.quadTo(p1, p2);
+    WARNS(quadTo);
     path1.quadTo(QPointF(1, 1), p3);
+    WARNS(quadTo);
     path1.quadTo(QPointF(1, 1), pInf);
 
+    WARNS(arcTo);
     path1.arcTo(QRectF(p1, p2), 5, 5);
+    WARNS(arcTo);
     path1.arcTo(QRectF(pInf, QPointF(1, 1)), 5, 5);
 
+    WARNS(addRect);
     path1.addRect(QRectF(p1, p2));
+    WARNS(addRect);
     path1.addRect(QRectF(pInf, QPointF(1, 1)));
 
+    WARNS(addEllipse);
     path1.addEllipse(QRectF(p1, p2));
+    WARNS(addEllipse);
     path1.addEllipse(QRectF(pInf, QPointF(1, 1)));
+
+#undef WARNS
 
     QCOMPARE(path1, path2);
 
     path1.lineTo(QPointF(1, 1));
-    QVERIFY(path1 != path2);
+    QCOMPARE_NE(path1, path2);
 }
 #endif // signaling_nan
 

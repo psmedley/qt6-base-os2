@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_add_executable(plugandpaint
     interfaces.h
     main.cpp
@@ -12,7 +15,7 @@ set_target_properties(plugandpaint PROPERTIES
 )
 
 target_link_libraries(plugandpaint PRIVATE
-    Qt::Widgets
+    Qt6::Widgets
     pnp_basictools
 )
 

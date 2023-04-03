@@ -51,7 +51,7 @@ public:
     }
 
     QExplicitlySharedDataPointerV2(QExplicitlySharedDataPointerV2 &&other) noexcept
-        : d(qExchange(other.d, nullptr))
+        : d(std::exchange(other.d, nullptr))
     {
     }
 
@@ -92,7 +92,7 @@ public:
 
     constexpr T *take() noexcept
     {
-        return qExchange(d, nullptr);
+        return std::exchange(d, nullptr);
     }
 
     bool isShared() const noexcept

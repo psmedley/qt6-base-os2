@@ -43,8 +43,9 @@
 #ifndef QT_NO_PICTURE
 #include <QtGui/qpicture.h>
 #endif
+#if QT_CONFIG(messagebox)
 #include <qmessagebox.h>
-#include <qdialogbuttonbox.h>
+#endif
 #include <qstyle.h>
 #include <qstyleoption.h>
 #include <qtextdocument.h>
@@ -63,7 +64,7 @@ using namespace Qt::StringLiterals;
 
 #if QT_CONFIG(accessibility)
 
-extern QList<QWidget*> childWidgets(const QWidget *widget);
+QWidgetList _q_ac_childWidgets(const QWidget *widget);
 
 QString qt_accStripAmp(const QString &text);
 QString qt_accHotKey(const QString &text);
@@ -402,10 +403,10 @@ QAccessible::Role QAccessibleDisplay::role() const
 #if QT_CONFIG(label)
     QLabel *l = qobject_cast<QLabel*>(object());
     if (l) {
-        if (!l->pixmap(Qt::ReturnByValue).isNull())
+        if (!l->pixmap().isNull())
             return QAccessible::Graphic;
 #ifndef QT_NO_PICTURE
-        if (!l->picture(Qt::ReturnByValue).isNull())
+        if (!l->picture().isNull())
             return QAccessible::Graphic;
 #endif
 #if QT_CONFIG(movie)
@@ -530,7 +531,7 @@ QSize QAccessibleDisplay::imageSize() const
 #endif
         return QSize();
 #if QT_CONFIG(label)
-    return label->pixmap(Qt::ReturnByValue).size();
+    return label->pixmap().size();
 #endif
 }
 
@@ -543,7 +544,7 @@ QPoint QAccessibleDisplay::imagePosition() const
 #endif
         return QPoint();
 #if QT_CONFIG(label)
-    if (label->pixmap(Qt::ReturnByValue).isNull())
+    if (label->pixmap().isNull())
         return QPoint();
 
     return QPoint(label->mapToGlobal(label->pos()));
@@ -606,7 +607,7 @@ QAccessibleGroupBox::relations(QAccessible::Relation match /* = QAccessible::All
             QAccessibleWidget::relations(match);
 
     if ((match & QAccessible::Labelled) && (!groupBox()->title().isEmpty())) {
-        const QList<QWidget*> kids = childWidgets(widget());
+        const QList<QWidget*> kids = _q_ac_childWidgets(widget());
         for (QWidget *kid : kids) {
             QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(kid);
             if (iface)
@@ -953,6 +954,7 @@ QWindowContainer *QAccessibleWindowContainer::container() const
     return static_cast<QWindowContainer *>(widget());
 }
 
+#if QT_CONFIG(messagebox)
 /*!
     \internal
     Implements QAccessibleWidget for QMessageBox
@@ -993,6 +995,7 @@ QString QAccessibleMessageBox::text(QAccessible::Text t) const
 
     return str;
 }
+#endif
 
 #endif // QT_CONFIG(accessibility)
 

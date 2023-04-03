@@ -160,7 +160,7 @@ const int pushButtonBevelRectOffsets[3] = {
 
 QVector<QPointer<QObject> > QMacStylePrivate::scrollBars;
 
-bool isDarkMode() { return QGuiApplicationPrivate::platformTheme()->appearance() == QPlatformTheme::Appearance::Dark; }
+bool isDarkMode() { return QGuiApplicationPrivate::platformTheme()->colorScheme() == Qt::ColorScheme::Dark; }
 
 // Title bar gradient colors for Lion were determined by inspecting PSDs exported
 // using CoreUI's CoreThemeDocument; there is no public API to retrieve them
@@ -2553,10 +2553,13 @@ int QMacStyle::pixelMetric(PixelMetric metric, const QStyleOption *opt, const QW
     case PM_ToolBarFrameWidth:
         ret = 1;
         break;
-    case PM_ScrollView_ScrollBarOverlap:
-        ret = [NSScroller preferredScrollerStyle] == NSScrollerStyleOverlay ?
-               pixelMetric(PM_ScrollBarExtent, opt, widget) : 0;
+    case PM_ScrollView_ScrollBarOverlap: {
+        const QStyle *realStyle = widget ? widget->style() : proxy();
+        ret = realStyle->styleHint(SH_ScrollBar_Transient, opt, widget)
+            ? realStyle->pixelMetric(PM_ScrollBarExtent, opt, widget)
+            : 0;
         break;
+    }
     default:
         ret = QCommonStyle::pixelMetric(metric, opt, widget);
         break;
@@ -5192,7 +5195,8 @@ void QMacStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComplex 
             const auto cocoaSize = d->effectiveAquaSizeConstrain(opt, widget);
             const CGFloat maxExpandScale = expandedKnobWidths[cocoaSize] / knobWidths[cocoaSize];
 
-            const bool isTransient = proxy()->styleHint(SH_ScrollBar_Transient, opt, widget);
+            const QStyle *realStyle = widget ? widget->style() : proxy();
+            const bool isTransient = realStyle->styleHint(SH_ScrollBar_Transient, opt, widget);
             if (!isTransient)
                 d->stopAnimation(opt->styleObject);
             bool wasActive = false;

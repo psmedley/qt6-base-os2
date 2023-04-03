@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 
 function(qt_internal_set_warnings_are_errors_flags target target_scope)
     set(flags "")
@@ -149,6 +152,7 @@ target_link_libraries(PlatformToolInternal INTERFACE PlatformAppInternal)
 
 qt_internal_add_global_definition(QT_NO_JAVA_STYLE_ITERATORS)
 qt_internal_add_global_definition(QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
+qt_internal_add_global_definition(QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH)
 
 if(WARNINGS_ARE_ERRORS)
     qt_internal_set_warnings_are_errors_flags(PlatformModuleInternal INTERFACE)
@@ -213,18 +217,6 @@ if(MSVC)
     )
 endif()
 
-if(UIKIT)
-    # Do what mkspecs/features/uikit/default_pre.prf does, aka enable sse2 for
-    # simulator_and_device_builds.
-    if(FEATURE_simulator_and_device)
-        # Setting the definition on PlatformCommonInternal behaves slightly differently from what
-        # is done in qmake land. This way the define is not propagated to tests, examples, or
-        # user projects built with qmake, but only modules, plugins and tools.
-        # TODO: Figure out if this ok or not (sounds ok to me).
-        target_compile_definitions(PlatformCommonInternal INTERFACE QT_COMPILER_SUPPORTS_SSE2)
-    endif()
-endif()
-
 if(WASM AND QT_FEATURE_sse2)
     target_compile_definitions(PlatformCommonInternal INTERFACE QT_COMPILER_SUPPORTS_SSE2)
 endif()
@@ -248,14 +240,17 @@ if (MSVC)
             )
         endif()
     endif()
-    if (MSVC_VERSION GREATER_EQUAL 1909 AND NOT CLANG)
+    if (MSVC_VERSION GREATER_EQUAL 1909 AND NOT CLANG) # MSVC 2017
         target_compile_options(PlatformCommonInternal INTERFACE
             -Zc:referenceBinding
+            -Zc:ternary
         )
     endif()
-    if (MSVC_VERSION GREATER_EQUAL 1919 AND NOT CLANG)
+    if (MSVC_VERSION GREATER_EQUAL 1919 AND NOT CLANG) # MSVC 2019
         target_compile_options(PlatformCommonInternal INTERFACE
             -Zc:externConstexpr
+            #-Zc:lambda # Buggy. TODO: Enable again when stable enough.
+            #-Zc:preprocessor # breaks build due to bug in default Windows SDK 10.0.19041
         )
     endif()
 
@@ -289,7 +284,7 @@ if(QT_FEATURE_intelcet)
         )
     else()
         target_compile_options(PlatformCommonInternal INTERFACE
-            -fcf-protection
+            -fcf-protection=full
         )
     endif()
 endif()

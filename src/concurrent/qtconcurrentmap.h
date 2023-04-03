@@ -4,9 +4,13 @@
 #ifndef QTCONCURRENT_MAP_H
 #define QTCONCURRENT_MAP_H
 
+#if 0
+#pragma qt_class(QtConcurrentMap)
+#endif
+
 #include <QtConcurrent/qtconcurrent_global.h>
 
-#if !defined(QT_NO_CONCURRENT) || defined(Q_CLANG_QDOC)
+#if !defined(QT_NO_CONCURRENT) || defined(Q_QDOC)
 
 #include <QtConcurrent/qtconcurrentmapkernel.h>
 #include <QtConcurrent/qtconcurrentreducekernel.h>
@@ -71,7 +75,7 @@ QFuture<ResultType> mappedReduced(Sequence &&sequence,
          std::forward<MapFunctor>(map), std::forward<ReduceFunctor>(reduce), options);
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Sequence, typename MapFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -93,7 +97,7 @@ QFuture<ResultType> mappedReduced(QThreadPool *pool,
             std::forward<ReduceFunctor>(reduce),
             ResultType(std::forward<InitialValueType>(initialValue)), options);
 }
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Sequence, typename MapFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -144,7 +148,7 @@ QFuture<ResultType> mappedReduced(Sequence &&sequence,
          std::forward<MapFunctor>(map), std::forward<ReduceFunctor>(reduce), options);
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename Sequence, typename MapFunctor, typename ReduceFunctor, typename ResultType,
           typename InitialValueType>
 #else
@@ -168,7 +172,7 @@ QFuture<ResultType> mappedReduced(QThreadPool *pool,
             ResultType(std::forward<InitialValueType>(initialValue)), options);
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename Sequence, typename MapFunctor, typename ReduceFunctor, typename ResultType,
           typename InitialValueType>
 #else
@@ -219,7 +223,7 @@ QFuture<ResultType> mappedReduced(Iterator begin,
          std::forward<ReduceFunctor>(reduce), options);
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Iterator, typename MapFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -242,7 +246,7 @@ QFuture<ResultType> mappedReduced(QThreadPool *pool,
          ResultType(std::forward<InitialValueType>(initialValue)), options);
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Iterator, typename MapFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -294,7 +298,7 @@ QFuture<ResultType> mappedReduced(Iterator begin,
          std::forward<ReduceFunctor>(reduce), options);
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename Iterator, typename MapFunctor, typename ReduceFunctor, typename ResultType,
           typename InitialValueType>
 #else
@@ -318,7 +322,7 @@ QFuture<ResultType> mappedReduced(QThreadPool *pool,
          ResultType(std::forward<InitialValueType>(initialValue)), options);
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename Iterator, typename MapFunctor, typename ReduceFunctor, typename ResultType,
           typename InitialValueType>
 #else
@@ -449,7 +453,7 @@ ResultType blockingMappedReduced(Sequence &&sequence,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Sequence, typename MapFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -473,7 +477,7 @@ ResultType blockingMappedReduced(QThreadPool *pool,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Sequence, typename MapFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -529,7 +533,7 @@ ResultType blockingMappedReduced(Sequence &&sequence,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename MapFunctor, typename ReduceFunctor, typename Sequence, typename ResultType,
           typename InitialValueType>
 #else
@@ -554,7 +558,7 @@ ResultType blockingMappedReduced(QThreadPool *pool,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename MapFunctor, typename ReduceFunctor, typename Sequence, typename ResultType,
           typename InitialValueType>
 #else
@@ -608,7 +612,7 @@ ResultType blockingMappedReduced(Iterator begin,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Iterator, typename MapFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -633,7 +637,7 @@ ResultType blockingMappedReduced(QThreadPool *pool,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename ResultType, typename Iterator, typename MapFunctor, typename ReduceFunctor,
           typename InitialValueType>
 #else
@@ -688,7 +692,7 @@ ResultType blockingMappedReduced(Iterator begin,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename Iterator, typename MapFunctor, typename ReduceFunctor, typename ResultType,
           typename InitialValueType>
 #else
@@ -713,7 +717,7 @@ ResultType blockingMappedReduced(QThreadPool *pool,
     return future.takeResult();
 }
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
 template <typename Iterator, typename MapFunctor, typename ReduceFunctor, typename ResultType,
           typename InitialValueType>
 #else

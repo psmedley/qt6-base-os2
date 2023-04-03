@@ -4,11 +4,17 @@
 #include "qwindowsapplication.h"
 #include "qwindowsclipboard.h"
 #include "qwindowscontext.h"
-#include "qwindowsmime.h"
+#include "qwindowsmimeregistry.h"
 #include "qwin10helpers.h"
 #include "qwindowsopengltester.h"
+#include "qwindowswindow.h"
+#include "qwindowsintegration.h"
+#include "qwindowstheme.h"
 
-#include <QtCore/QVariant>
+#include <QtCore/qvariant.h>
+#include <QtCore/private/qfunctions_win_p.h>
+
+#include <QtGui/qpalette.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -34,6 +40,11 @@ QWindowsApplication::WindowActivationBehavior QWindowsApplication::windowActivat
 void QWindowsApplication::setWindowActivationBehavior(WindowActivationBehavior behavior)
 {
     m_windowActivationBehavior = behavior;
+}
+
+void QWindowsApplication::setHasBorderInFullScreenDefault(bool border)
+{
+    QWindowsWindow::setHasBorderInFullScreenDefault(border);
 }
 
 bool QWindowsApplication::isTabletMode() const
@@ -76,13 +87,13 @@ void QWindowsApplication::setDarkModeHandling(QWindowsApplication::DarkModeHandl
     m_darkModeHandling = handling;
 }
 
-void QWindowsApplication::registerMime(QNativeInterface::Private::QWindowsMime *mime)
+void QWindowsApplication::registerMime(QWindowsMimeConverter *mime)
 {
     if (auto ctx = QWindowsContext::instance())
         ctx->mimeConverter().registerMime(mime);
 }
 
-void QWindowsApplication::unregisterMime(QNativeInterface::Private::QWindowsMime *mime)
+void QWindowsApplication::unregisterMime(QWindowsMimeConverter *mime)
 {
     if (auto ctx = QWindowsContext::instance())
         ctx->mimeConverter().unregisterMime(mime);
@@ -90,7 +101,7 @@ void QWindowsApplication::unregisterMime(QNativeInterface::Private::QWindowsMime
 
 int QWindowsApplication::registerMimeType(const QString &mime)
 {
-    return QWindowsMimeConverter::registerMimeType(mime);
+    return QWindowsMimeRegistry::registerMimeType(mime);
 }
 
 HWND QWindowsApplication::createMessageWindow(const QString &classNameTemplate,
@@ -130,6 +141,11 @@ QVariant QWindowsApplication::gpuList() const
     for (const auto &gpu : gpus)
         result.append(gpu.toVariant());
     return result;
+}
+
+void QWindowsApplication::lightSystemPalette(QPalette &result) const
+{
+    QWindowsTheme::populateLightSystemBasePalette(result);
 }
 
 QT_END_NAMESPACE

@@ -1,4 +1,5 @@
-# Generated from qtextpiecetable.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 if(WIN32)
     return()
@@ -15,11 +16,8 @@ qt_internal_add_test(tst_qtextpiecetable
     SOURCES
         ../qtextdocument/common.h
         tst_qtextpiecetable.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
 )
-
-#### Keys ignored in scope 1:.:.:qtextpiecetable.pro:<TRUE>:
-# _REQUIREMENTS = "!win32" "qtConfig(private_tests)"

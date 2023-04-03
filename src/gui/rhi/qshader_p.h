@@ -17,6 +17,7 @@
 
 #include <QtGui/qtguiglobal.h>
 #include <QtCore/qhash.h>
+#include <QtCore/qmap.h>
 #include <private/qshaderdescription_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -97,12 +98,22 @@ public:
         DxbcShader, // fxc
         MslShader,
         DxilShader, // dxc
-        MetalLibShader // xcrun metal + xcrun metallib
+        MetalLibShader, // xcrun metal + xcrun metallib
+        WgslShader
     };
 
     enum Variant {
         StandardShader = 0,
-        BatchableVertexShader
+        BatchableVertexShader,
+        UInt16IndexedVertexAsComputeShader,
+        UInt32IndexedVertexAsComputeShader,
+        NonIndexedVertexAsComputeShader
+    };
+
+    enum class SerializedFormatVersion {
+        Latest = 0,
+        Qt_6_5,
+        Qt_6_4
     };
 
     QShader();
@@ -124,10 +135,10 @@ public:
     void setShader(const QShaderKey &key, const QShaderCode &shader);
     void removeShader(const QShaderKey &key);
 
-    QByteArray serialized() const;
+    QByteArray serialized(SerializedFormatVersion version = SerializedFormatVersion::Latest) const;
     static QShader fromSerialized(const QByteArray &data);
 
-    using NativeResourceBindingMap = QHash<int, QPair<int, int> >; // binding -> native_binding[, native_binding]
+    using NativeResourceBindingMap = QMap<int, QPair<int, int> >; // binding -> native_binding[, native_binding]
     NativeResourceBindingMap nativeResourceBindingMap(const QShaderKey &key) const;
     void setResourceBindingMap(const QShaderKey &key, const NativeResourceBindingMap &map);
     void removeResourceBindingMap(const QShaderKey &key);
@@ -142,6 +153,14 @@ public:
     void setSeparateToCombinedImageSamplerMappingList(const QShaderKey &key,
                                                       const SeparateToCombinedImageSamplerMappingList &list);
     void removeSeparateToCombinedImageSamplerMappingList(const QShaderKey &key);
+
+    struct NativeShaderInfo {
+        int flags = 0;
+        QMap<int, int> extraBufferBindings;
+    };
+    NativeShaderInfo nativeShaderInfo(const QShaderKey &key) const;
+    void setNativeShaderInfo(const QShaderKey &key, const NativeShaderInfo &info);
+    void removeNativeShaderInfo(const QShaderKey &key);
 
 private:
     QShaderPrivate *d;
@@ -187,7 +206,9 @@ inline bool operator!=(const QShader &lhs, const QShader &rhs) noexcept
 }
 
 Q_GUI_EXPORT bool operator==(const QShaderVersion &lhs, const QShaderVersion &rhs) noexcept;
+Q_GUI_EXPORT bool operator<(const QShaderVersion &lhs, const QShaderVersion &rhs) noexcept;
 Q_GUI_EXPORT bool operator==(const QShaderKey &lhs, const QShaderKey &rhs) noexcept;
+Q_GUI_EXPORT bool operator<(const QShaderKey &lhs, const QShaderKey &rhs) noexcept;
 Q_GUI_EXPORT bool operator==(const QShaderCode &lhs, const QShaderCode &rhs) noexcept;
 
 inline bool operator!=(const QShaderVersion &lhs, const QShaderVersion &rhs) noexcept

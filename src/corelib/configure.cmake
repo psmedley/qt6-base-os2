@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 
 
 #### Inputs
@@ -23,7 +26,9 @@ qt_find_package(WrapSystemDoubleConversion
                 PROVIDED_TARGETS WrapSystemDoubleConversion::WrapSystemDoubleConversion
                 MODULE_NAME core QMAKE_LIB doubleconversion)
 qt_find_package(GLIB2 PROVIDED_TARGETS GLIB2::GLIB2 MODULE_NAME core QMAKE_LIB glib)
-qt_find_package(ICU COMPONENTS i18n uc data PROVIDED_TARGETS ICU::i18n ICU::uc ICU::data MODULE_NAME core QMAKE_LIB icu)
+qt_find_package(ICU 50.1 COMPONENTS i18n uc data PROVIDED_TARGETS ICU::i18n ICU::uc ICU::data
+    MODULE_NAME core QMAKE_LIB icu)
+
 if(QT_FEATURE_dlopen)
     qt_add_qmake_lib_dependency(icu libdl)
 endif()
@@ -31,8 +36,6 @@ qt_find_package(Libsystemd PROVIDED_TARGETS PkgConfig::Libsystemd MODULE_NAME co
 qt_find_package(WrapAtomic PROVIDED_TARGETS WrapAtomic::WrapAtomic MODULE_NAME core QMAKE_LIB libatomic)
 qt_find_package(Libb2 PROVIDED_TARGETS Libb2::Libb2 MODULE_NAME core QMAKE_LIB libb2)
 qt_find_package(WrapRt PROVIDED_TARGETS WrapRt::WrapRt MODULE_NAME core QMAKE_LIB librt)
-qt_find_package(LTTngUST PROVIDED_TARGETS LTTng::UST MODULE_NAME core QMAKE_LIB lttng-ust)
-qt_add_qmake_lib_dependency(lttng-ust libdl)
 qt_find_package(WrapSystemPCRE2 10.20 PROVIDED_TARGETS WrapSystemPCRE2::WrapSystemPCRE2 MODULE_NAME core QMAKE_LIB pcre2)
 set_package_properties(WrapPCRE2 PROPERTIES TYPE REQUIRED)
 if((QNX) OR QT_FIND_ALL_PACKAGES_ALWAYS)
@@ -223,22 +226,6 @@ int main(void)
 {
     /* BEGIN TEST: */
 futimens(-1, 0);
-    /* END TEST: */
-    return 0;
-}
-"# FIXME: qmake: ["# Block futimens() on Apple platforms unless it's available on ALL", '# deployment targets. This simplifies the logic at the call site', "# dramatically, as it isn't strictly needed compared to futimes().", 'darwin: QMAKE_CXXFLAGS += -Werror=unguarded-availability -Werror=unguarded-availability-new', 'CONFIG += warn_on']
-)
-
-# futimes
-qt_config_compile_test(futimes
-    LABEL "futimes()"
-    CODE
-"#include <sys/time.h>
-
-int main(void)
-{
-    /* BEGIN TEST: */
-futimes(-1, 0);
     /* END TEST: */
     return 0;
 }
@@ -575,10 +562,6 @@ qt_feature("futimens" PRIVATE
     LABEL "futimens()"
     CONDITION NOT WIN32 AND TEST_futimens
 )
-qt_feature("futimes" PRIVATE
-    LABEL "futimes()"
-    CONDITION NOT WIN32 AND NOT QT_FEATURE_futimens AND TEST_futimes
-)
 qt_feature("getauxval" PRIVATE
     LABEL "getauxval()"
     CONDITION LINUX AND TEST_getauxval
@@ -780,7 +763,13 @@ qt_feature("process" PUBLIC
     SECTION "File I/O"
     LABEL "QProcess"
     PURPOSE "Supports external process invocation."
-    CONDITION QT_FEATURE_processenvironment AND ( QT_FEATURE_thread OR NOT UNIX ) AND NOT UIKIT AND NOT INTEGRITY AND NOT VXWORKS AND NOT rtems
+    CONDITION QT_FEATURE_processenvironment
+              AND (QT_FEATURE_thread OR NOT UNIX)
+              AND NOT UIKIT
+              AND NOT INTEGRITY
+              AND NOT VXWORKS
+              AND NOT rtems
+              AND NOT WASM
 )
 qt_feature_definition("process" "QT_NO_PROCESS" NEGATE VALUE "1")
 qt_feature("processenvironment" PUBLIC
@@ -944,6 +933,12 @@ qt_feature("etw" PRIVATE
     ENABLE INPUT_trace STREQUAL 'etw' OR ( INPUT_trace STREQUAL 'yes' AND WIN32 )
     DISABLE INPUT_trace STREQUAL 'lttng' OR INPUT_trace STREQUAL 'no'
 )
+qt_feature("ctf" PRIVATE
+    LABEL "CTF"
+    AUTODETECT OFF
+    ENABLE INPUT_trace STREQUAL 'ctf'
+    DISABLE INPUT_trace STREQUAL 'etw' OR INPUT_trace STREQUAL 'no' OR INPUT_trace STREQUAL 'lttng'
+)
 qt_feature("forkfd_pidfd" PRIVATE
     LABEL "CLONE_PIDFD support in forkfd"
     CONDITION LINUX
@@ -958,6 +953,18 @@ qt_feature("cborstreamwriter" PUBLIC
     LABEL "CBOR stream writing"
     PURPOSE "Provides support for writing the CBOR binary format."
 )
+qt_feature("poll-exit-on-error" PRIVATE
+    LABEL "Poll exit on error"
+    AUTODETECT OFF
+    CONDITION UNIX
+    PURPOSE "Exit on error instead of just printing the error code and continue."
+)
+qt_feature("permissions" PUBLIC
+    SECTION "Utilities"
+    LABEL "Application permissions"
+    PURPOSE "Provides support for requesting user permission to access restricted data or APIs"
+    CONDITION APPLE OR ANDROID OR WASM
+)
 qt_configure_add_summary_section(NAME "Qt Core")
 qt_configure_add_summary_entry(ARGS "backtrace")
 qt_configure_add_summary_entry(ARGS "doubleconversion")
@@ -969,7 +976,7 @@ qt_configure_add_summary_entry(ARGS "mimetype-database")
 qt_configure_add_summary_entry(ARGS "cpp-winrt")
 qt_configure_add_summary_entry(
     TYPE "firstAvailableFeature"
-    ARGS "etw lttng"
+    ARGS "etw lttng ctf"
     MESSAGE "Tracing backend"
 )
 qt_configure_add_summary_section(NAME "Logging backends")
@@ -987,6 +994,7 @@ qt_configure_add_summary_entry(
     ARGS "forkfd_pidfd"
     CONDITION LINUX
 )
+qt_configure_add_summary_entry(ARGS "permissions")
 qt_configure_end_summary_section() # end of "Qt Core" section
 qt_configure_add_report_entry(
     TYPE NOTE
@@ -1016,5 +1024,5 @@ qt_configure_add_report_entry(
 qt_configure_add_report_entry(
     TYPE WARNING
     MESSAGE "Basic cpp/winrt support missing. Some features might not be available."
-    CONDITION MSVC AND NOT QT_FEATURE_cpp_winrt
+    CONDITION WIN32 AND NOT QT_FEATURE_cpp_winrt
 )

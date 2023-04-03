@@ -1,4 +1,5 @@
-# Generated from eglfs_emu.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QEglFSEmulatorIntegrationPlugin Plugin:
@@ -22,7 +23,3 @@ qt_internal_add_plugin(QEglFSEmulatorIntegrationPlugin
         Qt::Gui
         Qt::GuiPrivate
 )
-
-#### Keys ignored in scope 1:.:.:eglfs_emu.pro:<TRUE>:
-# DISTFILES = "eglfs_emu.json"
-# OTHER_FILES = "$$PWD/eglfs_emu.json"

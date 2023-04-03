@@ -1,4 +1,5 @@
-# Generated from evdevtouch.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QEvdevTouchScreenPlugin Plugin:
@@ -17,7 +18,3 @@ qt_internal_add_plugin(QEvdevTouchScreenPlugin
         Qt::GuiPrivate
         Qt::InputSupportPrivate
 )
-
-#### Keys ignored in scope 1:.:.:evdevtouch.pro:<TRUE>:
-# OTHER_FILES = "evdevtouch.json"
-# PLUGIN_EXTENDS = "-"

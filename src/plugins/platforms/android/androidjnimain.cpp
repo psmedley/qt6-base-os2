@@ -69,7 +69,7 @@ static sem_t m_exitSemaphore, m_terminateSemaphore;
 
 QHash<int, AndroidSurfaceClient *> m_surfaces;
 
-static QBasicMutex m_surfacesMutex;
+Q_CONSTINIT static QBasicMutex m_surfacesMutex;
 
 
 static QAndroidPlatformIntegration *m_androidPlatformIntegration = nullptr;
@@ -88,7 +88,7 @@ static const char m_qtTag[] = "Qt";
 static const char m_classErrorMsg[] = "Can't find class \"%s\"";
 static const char m_methodErrorMsg[] = "Can't find method \"%s%s\"";
 
-static QBasicAtomicInt startQtAndroidPluginCalled = Q_BASIC_ATOMIC_INITIALIZER(0);
+Q_CONSTINIT static QBasicAtomicInt startQtAndroidPluginCalled = Q_BASIC_ATOMIC_INITIALIZER(0);
 
 namespace QtAndroid
 {
@@ -755,10 +755,28 @@ static void handleRefreshRateChanged(JNIEnv */*env*/, jclass /*cls*/, jfloat ref
         m_androidPlatformIntegration->setRefreshRate(refreshRate);
 }
 
+static void handleScreenAdded(JNIEnv */*env*/, jclass /*cls*/, jint displayId)
+{
+    if (m_androidPlatformIntegration)
+        m_androidPlatformIntegration->handleScreenAdded(displayId);
+}
+
+static void handleScreenChanged(JNIEnv */*env*/, jclass /*cls*/, jint displayId)
+{
+    if (m_androidPlatformIntegration)
+        m_androidPlatformIntegration->handleScreenChanged(displayId);
+}
+
+static void handleScreenRemoved(JNIEnv */*env*/, jclass /*cls*/, jint displayId)
+{
+    if (m_androidPlatformIntegration)
+        m_androidPlatformIntegration->handleScreenRemoved(displayId);
+}
+
 static void handleUiDarkModeChanged(JNIEnv */*env*/, jobject /*thiz*/, jint newUiMode)
 {
-    QAndroidPlatformIntegration::setAppearance(
-        (newUiMode == 1 ) ? QPlatformTheme::Appearance::Dark : QPlatformTheme::Appearance::Light);
+    QAndroidPlatformIntegration::setColorScheme(
+        (newUiMode == 1 ) ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light);
 }
 
 static void onActivityResult(JNIEnv */*env*/, jclass /*cls*/,
@@ -795,7 +813,10 @@ static JNINativeMethod methods[] = {
     { "onActivityResult", "(IILandroid/content/Intent;)V", (void *)onActivityResult },
     { "onNewIntent", "(Landroid/content/Intent;)V", (void *)onNewIntent },
     { "onBind", "(Landroid/content/Intent;)Landroid/os/IBinder;", (void *)onBind },
-    { "handleRefreshRateChanged", "(F)V", (void *)handleRefreshRateChanged }
+    { "handleRefreshRateChanged", "(F)V", (void *)handleRefreshRateChanged },
+    { "handleScreenAdded", "(I)V", (void *)handleScreenAdded },
+    { "handleScreenChanged", "(I)V", (void *)handleScreenChanged },
+    { "handleScreenRemoved", "(I)V", (void *)handleScreenRemoved }
 };
 
 #define FIND_AND_CHECK_CLASS(CLASS_NAME) \

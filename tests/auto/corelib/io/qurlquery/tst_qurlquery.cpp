@@ -169,20 +169,50 @@ void tst_QUrlQuery::constructing()
     other.addQueryItem("a", "b");
     QVERIFY(!other.isEmpty());
     QVERIFY(other.isDetached());
-    QVERIFY(other != empty);
+    QCOMPARE_NE(other, empty);
     QVERIFY(!(other == empty));
 
+    // copy-construct
     QUrlQuery copy(other);
     QCOMPARE(copy, other);
 
     copy.clear();
     QVERIFY(copy.isEmpty());
-    QVERIFY(copy != other);
+    QCOMPARE_NE(copy, other);
 
+    // copy-assign
     copy = other;
     QVERIFY(!copy.isEmpty());
     QCOMPARE(copy, other);
 
+    // move-construct
+    QUrlQuery moved(std::move(other));
+    QCOMPARE(moved, copy);
+
+    // self move-assign
+    {
+        auto &self = moved; // prevent -Wself-move
+        moved = std::move(self);
+    }
+    QCOMPARE(moved, copy);
+
+    // self move-assign of moved-from (Hinnant Criterion)
+    {
+        auto &self = other; // prevent -Wself-move
+        other = std::move(self);
+    }
+    // shouldn't crash; here, or further down
+
+    // copy-assign to moved-from object
+    other = copy;
+    QCOMPARE(other, copy);
+    QCOMPARE(other, moved);
+
+    // move-assign
+    moved = std::move(other);
+    QCOMPARE(moved, copy);
+
+    // (move-)assign default-constructed
     copy = QUrlQuery();
     QVERIFY(copy.isEmpty());
 
@@ -245,7 +275,7 @@ void tst_QUrlQuery::addRemove()
         QVERIFY(allItems.contains(qItem("a", "b")));
         QVERIFY(allItems.contains(qItem("c", "d")));
 
-        QVERIFY(query != original);
+        QCOMPARE_NE(query, original);
         QVERIFY(!(query == original));
     }
 
@@ -292,7 +322,7 @@ void tst_QUrlQuery::addRemove()
         QVERIFY(allItems.contains(qItem("a", "b")));
         QVERIFY(allItems.contains(qItem("e", emptyButNotNull)));
 
-        QVERIFY(query != original);
+        QCOMPARE_NE(query, original);
         QVERIFY(!(query == original));
     }
 
@@ -506,12 +536,11 @@ void tst_QUrlQuery::reconstructQuery_data()
     baselist << qItem("a", "b") << qItem("c", "d");
     QTest::newRow("2-ab-cd") << "a=b&c=d" << baselist;
 
-    // the same entry multiply defined
+    // The same entry multiply defined
     QTest::newRow("2-a-a") << "a&a" << (QueryItems() << qItem("a", QString()) << qItem("a", QString()));
     QTest::newRow("2-ab-ab") << "a=b&a=b" << (QueryItems() << qItem("a", "b") << qItem("a", "b"));
     QTest::newRow("2-ab-ac") << "a=b&a=c" << (QueryItems() << qItem("a", "b") << qItem("a", "c"));
     QTest::newRow("2-ac-ab") << "a=c&a=b" << (QueryItems() << qItem("a", "c") << qItem("a", "b"));
-    QTest::newRow("2-ab-cd") << "a=b&c=d" << (QueryItems() << qItem("a", "b") << qItem("c", "d"));
     QTest::newRow("2-cd-ab") << "c=d&a=b" << (QueryItems() << qItem("c", "d") << qItem("a", "b"));
 
     QueryItems list2 = baselist + qItem("somekey", QString());

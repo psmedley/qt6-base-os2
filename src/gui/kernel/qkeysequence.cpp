@@ -24,7 +24,7 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
-#if defined(Q_OS_MACOS) || defined(Q_CLANG_QDOC)
+#if defined(Q_OS_MACOS) || defined(Q_QDOC)
 Q_CONSTINIT static bool qt_sequence_no_mnemonics = true;
 struct MacSpecialKey {
     int key;
@@ -164,9 +164,10 @@ void Q_GUI_EXPORT qt_set_sequence_auto_mnemonic(bool b) { qt_sequence_no_mnemoni
        for users of different languages. Translations are made in the
        "QShortcut" context.
     \li For hard-coded shortcuts, integer key codes can be specified with
-       a combination of values defined by the Qt::Key and Qt::Modifier enum
-       values. Each key code consists of a single Qt::Key value and zero or
-       more modifiers, such as Qt::SHIFT, Qt::CTRL, Qt::ALT and Qt::META.
+       a combination of values defined by the Qt::Key and Qt::KeyboardModifier
+       enum values. Each key code consists of a single Qt::Key value and zero
+       or more modifiers, such as Qt::ShiftModifier, Qt::ControlModifier,
+       Qt::AltModifier and Qt::MetaModifier.
     \endlist
 
     For example, \uicontrol{Ctrl P} might be a sequence used as a shortcut for
@@ -833,8 +834,8 @@ static_assert(QKeySequencePrivate::MaxKeyCount == 4, "Change docs and ctor impl 
     \a k3 and \a k4.
 
     The key codes are listed in Qt::Key and can be combined with
-    modifiers (see Qt::Modifier) such as Qt::SHIFT, Qt::CTRL,
-    Qt::ALT, or Qt::META.
+    modifiers (see Qt::KeyboardModifier) such as Qt::ShiftModifier,
+    Qt::ControlModifier, Qt::AltModifier, or Qt::MetaModifier.
 */
 QKeySequence::QKeySequence(int k1, int k2, int k3, int k4)
 {
@@ -930,11 +931,6 @@ bool QKeySequence::isEmpty() const
     For example, mnemonic("E&xit") returns \c{Qt::ALT+Qt::Key_X},
     mnemonic("&Quit") returns \c{ALT+Key_Q}, and mnemonic("Quit")
     returns an empty QKeySequence.
-
-    We provide a \l{accelerators.html}{list of common mnemonics}
-    in English. At the time of writing, Microsoft and Open Group do
-    not appear to have issued equivalent recommendations for other
-    languages.
 */
 QKeySequence QKeySequence::mnemonic(const QString &text)
 {
@@ -1073,20 +1069,20 @@ int QKeySequencePrivate::decodeString(QString accel, QKeySequence::SequenceForma
                 *gmodifs << QModifKeyName(Qt::META, QChar(kControlUnicode));
             *gmodifs << QModifKeyName(Qt::SHIFT, QChar(kShiftUnicode));
 #endif
-            *gmodifs << QModifKeyName(Qt::CTRL, "ctrl+"_L1)
-                     << QModifKeyName(Qt::SHIFT, "shift+"_L1)
-                     << QModifKeyName(Qt::ALT, "alt+"_L1)
-                     << QModifKeyName(Qt::META, "meta+"_L1)
-                     << QModifKeyName(Qt::KeypadModifier, "num+"_L1);
+            *gmodifs << QModifKeyName(Qt::CTRL, u"ctrl+"_s)
+                     << QModifKeyName(Qt::SHIFT, u"shift+"_s)
+                     << QModifKeyName(Qt::ALT, u"alt+"_s)
+                     << QModifKeyName(Qt::META, u"meta+"_s)
+                     << QModifKeyName(Qt::KeypadModifier, u"num+"_s);
         }
     } else {
         gmodifs = globalPortableModifs();
         if (gmodifs->isEmpty()) {
-            *gmodifs << QModifKeyName(Qt::CTRL, "ctrl+"_L1)
-                     << QModifKeyName(Qt::SHIFT, "shift+"_L1)
-                     << QModifKeyName(Qt::ALT, "alt+"_L1)
-                     << QModifKeyName(Qt::META, "meta+"_L1)
-                     << QModifKeyName(Qt::KeypadModifier, "num+"_L1);
+            *gmodifs << QModifKeyName(Qt::CTRL, u"ctrl+"_s)
+                     << QModifKeyName(Qt::SHIFT, u"shift+"_s)
+                     << QModifKeyName(Qt::ALT, u"alt+"_s)
+                     << QModifKeyName(Qt::META, u"meta+"_s)
+                     << QModifKeyName(Qt::KeypadModifier, u"num+"_s);
         }
     }
 

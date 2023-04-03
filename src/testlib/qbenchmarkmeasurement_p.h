@@ -16,6 +16,7 @@
 //
 
 #include <QtTest/qbenchmark.h>
+#include <QtCore/qlist.h>
 #include <QtCore/private/qglobal_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -23,17 +24,19 @@ QT_BEGIN_NAMESPACE
 class QBenchmarkMeasurerBase
 {
 public:
+    struct Measurement
+    {
+        qreal value;
+        QTest::QBenchmarkMetric metric;
+    };
     virtual ~QBenchmarkMeasurerBase() = default;
     virtual void init() {}
     virtual void start() = 0;
-    virtual qint64 checkpoint() = 0;
-    virtual qint64 stop() = 0;
-    virtual bool isMeasurementAccepted(qint64 measurement) = 0;
+    virtual QList<Measurement> stop() = 0;
+    virtual bool isMeasurementAccepted(Measurement m) = 0;
     virtual int adjustIterationCount(int suggestion) = 0;
     virtual int adjustMedianCount(int suggestion) = 0;
-    virtual bool repeatCount() { return true; }
     virtual bool needsWarmupIteration() { return false; }
-    virtual QTest::QBenchmarkMetric metricType() = 0;
 };
 
 QT_END_NAMESPACE

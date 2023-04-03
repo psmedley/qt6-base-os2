@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Defines the public Qt::Platform target, which serves as a dependency for all internal Qt target
 # as well as user projects consuming Qt.
 function(qt_internal_setup_public_platform_target)

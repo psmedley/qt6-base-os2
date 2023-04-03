@@ -1,4 +1,5 @@
-# Generated from qcursorhighdpi.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qcursorhighdpi Binary:
@@ -7,20 +8,17 @@
 qt_internal_add_manual_test(qcursorhighdpi
     SOURCES
         main.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
         Qt::Widgets
 )
 
-#### Keys ignored in scope 1:.:.:qcursorhighdpi.pro:<TRUE>:
-# TEMPLATE = "app"
-
 ## Scopes:
 #####################################################################
 
 qt_internal_extend_target(qcursorhighdpi CONDITION WIN32
-    PUBLIC_LIBRARIES
+    LIBRARIES
         user32
 )

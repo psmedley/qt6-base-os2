@@ -1,4 +1,5 @@
-# Generated from noninstanced.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## noninstanced Binary:
@@ -8,7 +9,7 @@ qt_internal_add_manual_test(noninstanced
     GUI
     SOURCES
         noninstanced.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -25,7 +26,3 @@ qt_internal_add_resource(noninstanced "noninstanced"
     FILES
         ${noninstanced_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:noninstanced.pro:<TRUE>:
-# TEMPLATE = "app"

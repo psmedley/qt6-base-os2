@@ -401,6 +401,8 @@ QDpi QHighDpiScaling::effectiveLogicalDpi(const QPlatformScreen *screen, qreal r
 */
 void QHighDpiScaling::initHighDpiScaling()
 {
+    qCDebug(lcHighDpi) << "Initializing high-DPI scaling";
+
     // Read environment variables
     static const char* envDebugStr = "environment variable set:";
     std::optional<int> envEnableHighDpiScaling = qEnvironmentVariableOptionalInt(enableHighDpiScalingEnvVar);
@@ -474,6 +476,9 @@ void QHighDpiScaling::initHighDpiScaling()
 
     // Set initial active state
     m_active = m_globalScalingActive || m_usePlatformPluginDpi;
+
+    qCDebug(lcHighDpi) << "Initialization done, high-DPI scaling is"
+                       << (m_active ? "active" : "inactive");
 }
 
 /*
@@ -482,8 +487,11 @@ void QHighDpiScaling::initHighDpiScaling()
 */
 void QHighDpiScaling::updateHighDpiScaling()
 {
+    qCDebug(lcHighDpi) << "Updating high-DPI scaling";
+
     // Apply screen factors from environment
     if (m_screenFactors.size() > 0) {
+        qCDebug(lcHighDpi) << "Applying screen factors" << m_screenFactors;
         int i = -1;
         const auto screens = QGuiApplication::screens();
         for (const auto &[name, factor] : m_screenFactors) {
@@ -515,6 +523,9 @@ void QHighDpiScaling::updateHighDpiScaling()
     }
 
     m_active = m_globalScalingActive || m_screenFactorSet || m_platformPluginDpiScalingActive;
+
+    qCDebug(lcHighDpi) << "Update done, high-DPI scaling is"
+                       << (m_active ? "active" : "inactive");
 }
 
 /*
@@ -522,6 +533,8 @@ void QHighDpiScaling::updateHighDpiScaling()
 */
 void QHighDpiScaling::setGlobalFactor(qreal factor)
 {
+    qCDebug(lcHighDpi) << "Setting global scale factor to" << factor;
+
     if (qFuzzyCompare(factor, m_factor))
         return;
     if (!QGuiApplication::allWindows().isEmpty())
@@ -532,7 +545,10 @@ void QHighDpiScaling::setGlobalFactor(qreal factor)
     m_active = m_globalScalingActive || m_screenFactorSet || m_platformPluginDpiScalingActive ;
     const auto screens = QGuiApplication::screens();
     for (QScreen *screen : screens)
-         screen->d_func()->updateHighDpi();
+        screen->d_func()->updateGeometry();
+
+    // FIXME: The geometry has been updated based on the new scale factor,
+    // but we don't emit any geometry change signals for the screens.
 }
 
 static const char scaleFactorProperty[] = "_q_scaleFactor";
@@ -542,6 +558,8 @@ static const char scaleFactorProperty[] = "_q_scaleFactor";
 */
 void QHighDpiScaling::setScreenFactor(QScreen *screen, qreal factor)
 {
+    qCDebug(lcHighDpi) << "Setting screen scale factor for" << screen << "to" << factor;
+
     if (!qFuzzyCompare(factor, qreal(1))) {
         m_screenFactorSet = true;
         m_active = true;
@@ -732,7 +750,20 @@ QHighDpiScaling::ScaleAndOrigin QHighDpiScaling::scaleAndOrigin(const QWindow *w
     return scaleAndOrigin(targetScreen, position);
 }
 
-#else
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug debug, const QHighDpiScaling::ScreenFactor &factor)
+{
+    const QDebugStateSaver saver(debug);
+    debug.nospace();
+    if (!factor.name.isEmpty())
+        debug << factor.name << "=";
+    debug << factor.factor;
+    return debug;
+}
+#endif
+
+#else // QT_NO_HIGHDPISCALING
+
 QHighDpiScaling::ScaleAndOrigin QHighDpiScaling::scaleAndOrigin(const QPlatformScreen *, QPoint *)
 {
     return { qreal(1), QPoint() };
@@ -747,7 +778,9 @@ QHighDpiScaling::ScaleAndOrigin QHighDpiScaling::scaleAndOrigin(const QWindow *,
 {
     return { qreal(1), QPoint() };
 }
-#endif //QT_NO_HIGHDPISCALING
+
+#endif // QT_NO_HIGHDPISCALING
+
 QT_END_NAMESPACE
 
 #include "moc_qhighdpiscaling_p.cpp"

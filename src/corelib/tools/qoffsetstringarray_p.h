@@ -63,6 +63,15 @@ public:
 
     constexpr int count() const { return int(m_offsets.size()) - 1; }
 
+    bool contains(QByteArrayView needle, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
+    {
+        for (qsizetype i = 0; i < count(); ++i) {
+            if (viewAt(i).compare(needle, cs) == 0)
+                return true;
+        }
+        return false;
+    }
+
 private:
     StaticString m_string;
     OffsetList m_offsets;
@@ -118,10 +127,10 @@ template <size_t KL, size_t VL> struct StaticMapEntry
 };
 
 template <typename StringExtractor, typename... T>
-constexpr auto qOffsetStringArray(StringExtractor extractString, const T &... entries)
+constexpr auto makeOffsetStringArray(StringExtractor extractString, const T &... entries)
 {
     constexpr size_t Count = sizeof...(T);
-    constexpr qsizetype StringLength = (sizeof(extractString(T{})) + ...);
+    constexpr size_t StringLength = (sizeof(extractString(T{})) + ...);
     using MinifiedOffsetType = decltype(QtPrivate::minifyValue<StringLength>());
 
     size_t offset = 0;
@@ -136,13 +145,13 @@ constexpr auto qOffsetStringArray(StringExtractor extractString, const T &... en
     std::array staticString = QtPrivate::makeStaticString<StringLength>(extractString, entries...);
     return QOffsetStringArray(staticString, minifiedOffsetList);
 }
-}
+} // namespace QtPrivate
 
 template<int ... Nx>
 constexpr auto qOffsetStringArray(const char (&...strings)[Nx]) noexcept
 {
     auto extractString = [](const auto &s) -> decltype(auto) { return s; };
-    return QtPrivate::qOffsetStringArray(extractString, QtPrivate::StaticString(strings)...);
+    return QtPrivate::makeOffsetStringArray(extractString, QtPrivate::StaticString(strings)...);
 }
 
 QT_WARNING_POP

@@ -6,7 +6,7 @@
 \ingroup cmake-commands-qtcore
 
 \title qt_finalize_target
-\target qt6_finalize_target
+\keyword qt6_finalize_target
 
 \summary {Handles various common platform-specific tasks associated with Qt targets.}
 
@@ -61,7 +61,7 @@ CMake version earlier than 3.21.
 \section2 WASM
 
 Create \c{${target}.html} (a target-specific \c{wasm_shell.html} file),
-\c{qtloader.js} and \c{qtlogo.svg} files in the \c{CMAKE_CURRENT_BINARY_DIR}.
+\c{qtloader.js}, and \c{qtlogo.svg} files in the \c{CMAKE_CURRENT_BINARY_DIR}.
 
 \section2 iOS
 

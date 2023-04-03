@@ -3,13 +3,15 @@
 
 /*!
     \example fortuneserver
-    \title Fortune Server Example
+    \title Fortune Server
+    \meta category {Networking}
+    \meta tags {tcp,network,server}
     \ingroup examples-network
     \brief Demonstrates how to create a server for a network service.
 
     This example is intended to be run alongside the
     \l{fortuneclient}{Fortune Client} example or the
-    \l{blockingfortuneclient}{Blocking Fortune Client Example}.
+    \l{blockingfortuneclient}{Blocking Fortune Client} example.
 
     \image fortuneserver-example.png Screenshot of the Fortune Server example
 
@@ -69,5 +71,5 @@
     will then close, which in turn will cause QObject::deleteLater() to delete
     it.
 
-    \sa {Fortune Client Example}, {Threaded Fortune Server Example}
+    \sa {Fortune Client}, {Threaded Fortune Server}
  */

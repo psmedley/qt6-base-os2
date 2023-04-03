@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 function(qt_print_feature_summary)
     if(QT_SUPERBUILD)
         qt_internal_set_message_log_level(message_log_level)
@@ -90,7 +93,13 @@ function(qt_print_build_instructions)
         "\nTo configure and build other Qt modules, you can use the following convenience script:
         ${local_install_prefix}/${INSTALL_BINDIR}/${configure_module_command}")
     list(APPEND msg "\nIf reconfiguration fails for some reason, try removing 'CMakeCache.txt' \
-from the build directory \n")
+from the build directory")
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24")
+        list(APPEND msg "Alternatively, you can add the --fresh flag to your CMake flags.\n")
+    else()
+        list(APPEND msg "\n")
+    endif()
+
     list(JOIN msg "\n" msg)
 
     if(NOT QT_INTERNAL_BUILD_INSTRUCTIONS_SHOWN)
@@ -98,6 +107,10 @@ from the build directory \n")
     endif()
 
     set(QT_INTERNAL_BUILD_INSTRUCTIONS_SHOWN "TRUE" CACHE STRING "" FORCE)
+
+    if(QT_SUPERBUILD)
+        qt_internal_save_previously_found_packages()
+    endif()
 endfunction()
 
 function(qt_configure_print_summary_helper summary_reports force_show)
@@ -105,8 +118,15 @@ function(qt_configure_print_summary_helper summary_reports force_show)
     # current log level.
     if(force_show)
         set(CMAKE_MESSAGE_LOG_LEVEL "STATUS")
+
+        # Need 2 flushes to ensure no interleaved input is printed due to a mix of message(STATUS)
+        # and message(NOTICE) calls.
+        execute_process(COMMAND ${CMAKE_COMMAND} -E echo " ")
+
+        message(STATUS "Configure summary:\n${summary_reports}")
+
+        execute_process(COMMAND ${CMAKE_COMMAND} -E echo " ")
     endif()
-    message(STATUS "Configure summary:\n${__qt_configure_reports}")
 endfunction()
 
 function(qt_configure_print_build_instructions_helper msg)
@@ -127,38 +147,31 @@ function(qt_configure_print_summary)
 
     # Show Qt-specific configuration summary.
     if(__qt_configure_reports)
-        # We want to show the the summary file and log level messages only on first configuration
-        # or when we detect a feature change, to keep most reconfiguration output as quiet as
-        # possible. Currently feature change detection is not entirely reliable.
+        # We want to show the configuration summary file and log level message only on
+        # first configuration or when we detect a feature change, to keep most
+        # reconfiguration output as quiet as possible.
+        # Currently feature change detection is not entirely reliable.
         if(NOT QT_INTERNAL_SUMMARY_INSTRUCTIONS_SHOWN OR features_possibly_changed)
-            message("")
+            set(force_show_summary TRUE)
             message(
+                "\n"
                 "-- Configuration summary shown below. It has also been written to"
                 " ${CMAKE_BINARY_DIR}/config.summary")
             message(
                 "-- Configure with --log-level=STATUS or higher to increase "
                 "CMake's message verbosity. "
                 "The log level does not persist across reconfigurations.")
-        endif()
-
-        # Need 2 flushes to ensure no interleaved input is printed due to a mix of message(STATUS)
-        # and message(NOTICE) calls.
-        execute_process(COMMAND ${CMAKE_COMMAND} -E echo " ")
-
-        # We want to show the configuration summary only on first configuration or when we detect
-        # a feature change, to keep most reconfiguration output as quiet as possible.
-        # Currently feature change detection is not entirely reliable.
-        if(NOT QT_INTERNAL_SUMMARY_INSTRUCTIONS_SHOWN OR features_possibly_changed)
-            set(force_show_summary TRUE)
         else()
             set(force_show_summary FALSE)
+            message(
+                "\n"
+                "-- Configuration summary has been written to"
+                " ${CMAKE_BINARY_DIR}/config.summary")
         endif()
 
         qt_configure_print_summary_helper(
-            "Configuration summary:\n${__qt_configure_reports}"
+            "${__qt_configure_reports}"
             ${force_show_summary})
-
-        execute_process(COMMAND ${CMAKE_COMMAND} -E echo " ")
 
         file(APPEND "${summary_file}" "${__qt_configure_reports}")
     endif()
@@ -300,9 +313,11 @@ function(qt_configure_add_summary_entry)
 endfunction()
 
 function(qt_configure_process_add_summary_entry)
-    qt_parse_all_arguments(arg "qt_configure_add_summary_entry"
+    cmake_parse_arguments(PARSE_ARGV 0 arg
         ""
-        "ARGS;TYPE;MESSAGE" "CONDITION" ${ARGN})
+        "ARGS;TYPE;MESSAGE"
+        "CONDITION")
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     if(NOT arg_TYPE)
         set(arg_TYPE "feature")
@@ -459,8 +474,11 @@ function(qt_configure_add_summary_section)
 endfunction()
 
 function(qt_configure_process_add_summary_section)
-    qt_parse_all_arguments(arg "qt_configure_add_summary_section"
-        "" "NAME" "" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 0 arg
+        ""
+        "NAME"
+        "")
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     qt_configure_add_report("${__qt_configure_indent}${arg_NAME}:")
     if(NOT DEFINED __qt_configure_indent)
@@ -492,9 +510,11 @@ function(qt_configure_add_report_error error)
 endfunction()
 
 function(qt_configure_process_add_report_entry)
-    qt_parse_all_arguments(arg "qt_configure_add_report_entry"
+    cmake_parse_arguments(PARSE_ARGV 0 arg
         ""
-        "TYPE;MESSAGE" "CONDITION" ${ARGN})
+        "TYPE;MESSAGE"
+        "CONDITION")
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     set(possible_types NOTE WARNING ERROR FATAL_ERROR)
     if(NOT "${arg_TYPE}" IN_LIST possible_types)

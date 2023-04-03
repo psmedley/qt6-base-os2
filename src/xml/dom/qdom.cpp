@@ -23,6 +23,7 @@
 #include <qxmlstream.h>
 #include <private/qduplicatetracker_p.h>
 #include <private/qstringiterator_p.h>
+#include <qvarlengtharray.h>
 
 #include <stdio.h>
 #include <limits>
@@ -2523,7 +2524,7 @@ QDomNamedNodeMapPrivate* QDomNamedNodeMapPrivate::clone(QDomNodePrivate* p)
 
     auto it = map.constBegin();
     for (; it != map.constEnd(); ++it) {
-        QDomNodePrivate *new_node = (*it)->cloneNode();
+        QDomNodePrivate *new_node = it.value()->cloneNode();
         new_node->setParent(p);
         m->setNamedItem(new_node);
     }
@@ -2539,16 +2540,16 @@ void QDomNamedNodeMapPrivate::clearMap()
     if (!appendToParent) {
         auto it = map.constBegin();
         for (; it != map.constEnd(); ++it)
-            if (!(*it)->ref.deref())
-                delete *it;
+            if (!it.value()->ref.deref())
+                delete it.value();
     }
     map.clear();
 }
 
 QDomNodePrivate* QDomNamedNodeMapPrivate::namedItem(const QString& name) const
 {
-    auto it = map.constFind(name);
-    return it == map.cend() ? nullptr : *it;
+    auto it = map.find(name);
+    return it == map.end() ? nullptr : it.value();
 }
 
 QDomNodePrivate* QDomNamedNodeMapPrivate::namedItemNS(const QString& nsURI, const QString& localName) const
@@ -2556,7 +2557,7 @@ QDomNodePrivate* QDomNamedNodeMapPrivate::namedItemNS(const QString& nsURI, cons
     auto it = map.constBegin();
     QDomNodePrivate *n;
     for (; it != map.constEnd(); ++it) {
-        n = *it;
+        n = it.value();
         if (!n->prefix.isNull()) {
             // node has a namespace
             if (n->namespaceURI == nsURI && n->name == localName)
@@ -2623,7 +2624,7 @@ QDomNodePrivate* QDomNamedNodeMapPrivate::item(int index) const
 {
     if (index >= length() || index < 0)
         return nullptr;
-    return *std::next(map.cbegin(), index);
+    return std::next(map.begin(), index).value();
 }
 
 int QDomNamedNodeMapPrivate::length() const
@@ -3069,11 +3070,11 @@ void QDomDocumentTypePrivate::save(QTextStream& s, int, int indent) const
 
         auto it2 = notations->map.constBegin();
         for (; it2 != notations->map.constEnd(); ++it2)
-            (*it2)->save(s, 0, indent);
+            it2.value()->save(s, 0, indent);
 
         auto it = entities->map.constBegin();
         for (; it != entities->map.constEnd(); ++it)
-            (*it)->save(s, 0, indent);
+            it.value()->save(s, 0, indent);
 
         s << ']';
     }
@@ -4026,31 +4027,82 @@ void QDomElementPrivate::save(QTextStream& s, int depth, int indent) const
 
     /* Write out attributes. */
     if (!m_attr->map.isEmpty()) {
+        /*
+         * To ensure that we always output attributes in a consistent
+         * order, sort the attributes before writing them into the
+         * stream. (Note that the order may be different than the one
+         * that e.g. we've read from a file, or the program order in
+         * which these attributes have been populated. We just want to
+         * guarantee reproducibile outputs.)
+         */
+        struct SavedAttribute {
+            QString prefix;
+            QString name;
+            QString encodedValue;
+        };
+
+        /* Gather all the attributes to save. */
+        QVarLengthArray<SavedAttribute, 8> attributesToSave;
+        attributesToSave.reserve(m_attr->map.size());
+
         QDuplicateTracker<QString> outputtedPrefixes;
-        auto it = m_attr->map.constBegin();
-        for (; it != m_attr->map.constEnd(); ++it) {
-            s << ' ';
-            if (it.value()->namespaceURI.isNull()) {
-                s << it.value()->name << "=\"" << encodeText(it.value()->value, true, true) << '\"';
-            } else {
-                s << it.value()->prefix << ':' << it.value()->name << "=\"" << encodeText(it.value()->value, true, true) << '\"';
-                /* This is a fix for 138243, as good as it gets.
-                 *
-                 * QDomElementPrivate::save() output a namespace declaration if
-                 * the element is in a namespace, no matter what. This function do as well, meaning
-                 * that we get two identical namespace declaration if we don't have the if-
-                 * statement below.
-                 *
-                 * This doesn't work when the parent element has the same prefix as us but
-                 * a different namespace. However, this can only occur by the user modifying the element,
-                 * and we don't do fixups by that anyway, and hence it's the user responsibility to not
-                 * arrive in those situations. */
-                if ((!it.value()->ownerNode ||
-                   it.value()->ownerNode->prefix != it.value()->prefix) &&
-                   !outputtedPrefixes.hasSeen(it.value()->prefix)) {
-                    s << " xmlns:" << it.value()->prefix << "=\"" << encodeText(it.value()->namespaceURI, true, true) << '\"';
-                }
+        for (const auto &[key, value] : std::as_const(m_attr->map).asKeyValueRange()) {
+            Q_UNUSED(key); /* We extract the attribute name from the value. */
+            bool mayNeedXmlNS = false;
+
+            SavedAttribute attr;
+            attr.name = value->name;
+            attr.encodedValue = encodeText(value->value, true, true);
+            if (!value->namespaceURI.isNull()) {
+                attr.prefix = value->prefix;
+                mayNeedXmlNS = true;
             }
+
+            attributesToSave.push_back(std::move(attr));
+
+            /*
+             * This is a fix for 138243, as good as it gets.
+             *
+             * QDomElementPrivate::save() output a namespace
+             * declaration if the element is in a namespace, no matter
+             * what. This function do as well, meaning that we get two
+             * identical namespace declaration if we don't have the if-
+             * statement below.
+             *
+             * This doesn't work when the parent element has the same
+             * prefix as us but a different namespace. However, this
+             * can only occur by the user modifying the element, and we
+             * don't do fixups by that anyway, and hence it's the user
+             * responsibility to avoid those situations.
+             */
+
+            if (mayNeedXmlNS
+                && ((!value->ownerNode || value->ownerNode->prefix != value->prefix)
+                    && !outputtedPrefixes.hasSeen(value->prefix)))
+            {
+                SavedAttribute nsAttr;
+                nsAttr.prefix = QStringLiteral("xmlns");
+                nsAttr.name = value->prefix;
+                nsAttr.encodedValue = encodeText(value->namespaceURI, true, true);
+                attributesToSave.push_back(std::move(nsAttr));
+            }
+        }
+
+        /* Sort the attributes by prefix and name. */
+        const auto savedAttributeComparator = [](const SavedAttribute &lhs, const SavedAttribute &rhs)
+        {
+            const int cmp = QString::compare(lhs.prefix, rhs.prefix);
+            return (cmp < 0) || ((cmp == 0) && (lhs.name < rhs.name));
+        };
+
+        std::sort(attributesToSave.begin(), attributesToSave.end(), savedAttributeComparator);
+
+        /* Actually stream the sorted attributes. */
+        for (const auto &attr : attributesToSave) {
+            s << ' ';
+            if (!attr.prefix.isEmpty())
+                s << attr.prefix << ':';
+            s << attr.name << "=\"" << attr.encodedValue << '\"';
         }
     }
 
@@ -5609,8 +5661,8 @@ void QDomDocumentPrivate::clear()
     QDomNodePrivate::clear();
 }
 
-bool QDomDocumentPrivate::setContent(QXmlStreamReader *reader, bool namespaceProcessing,
-                                     QString *errorMsg, int *errorLine, int *errorColumn)
+QDomDocument::ParseResult QDomDocumentPrivate::setContent(QXmlStreamReader *reader,
+                                                          QDomDocument::ParseOptions options)
 {
     clear();
     impl = new QDomImplementationPrivate;
@@ -5618,23 +5670,16 @@ bool QDomDocumentPrivate::setContent(QXmlStreamReader *reader, bool namespacePro
     type->ref.deref();
 
     if (!reader) {
-        qWarning("Failed to set content, XML reader is not initialized");
-        return false;
+        const auto error = u"Failed to set content, XML reader is not initialized"_s;
+        qWarning("%s", qPrintable(error));
+        return { error };
     }
 
-    QDomParser domParser(this, reader, namespaceProcessing);
+    QDomParser domParser(this, reader, options);
 
-    if (!domParser.parse()) {
-        if (errorMsg)
-            *errorMsg = std::get<0>(domParser.errorInfo());
-        if (errorLine)
-            *errorLine = std::get<1>(domParser.errorInfo());
-        if (errorColumn)
-            *errorColumn = std::get<2>(domParser.errorInfo());
-        return false;
-    }
-
-    return true;
+    if (!domParser.parse())
+        return domParser.result();
+    return {};
 }
 
 QDomNodePrivate* QDomDocumentPrivate::cloneNode(bool deep)
@@ -6038,25 +6083,29 @@ QDomDocument::~QDomDocument()
 {
 }
 
+#if QT_DEPRECATED_SINCE(6, 8)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
 /*!
     \overload
+    \deprecated [6.8] Use the overloads taking ParseOptions instead.
 
     This function reads the XML document from the string \a text, returning
     true if the content was successfully parsed; otherwise returns \c false.
     Since \a text is already a Unicode string, no encoding detection
     is done.
 */
-bool QDomDocument::setContent(const QString& text, bool namespaceProcessing, QString *errorMsg, int *errorLine, int *errorColumn)
+bool QDomDocument::setContent(const QString& text, bool namespaceProcessing,
+                              QString *errorMsg, int *errorLine, int *errorColumn)
 {
-    if (!impl)
-        impl = new QDomDocumentPrivate();
-
-    QXmlStreamReader streamReader(text);
-    streamReader.setNamespaceProcessing(namespaceProcessing);
-    return IMPL->setContent(&streamReader, namespaceProcessing, errorMsg, errorLine, errorColumn);
+    QXmlStreamReader reader(text);
+    reader.setNamespaceProcessing(namespaceProcessing);
+    return setContent(&reader, namespaceProcessing, errorMsg, errorLine, errorColumn);
 }
 
 /*!
+    \deprecated [6.8] Use the overload taking ParseOptions instead.
+
     This function parses the XML document from the byte array \a
     data and sets it as the content of the document. It tries to
     detect the encoding of the document as required by the XML
@@ -6085,6 +6134,7 @@ bool QDomDocument::setContent(const QString& text, bool namespaceProcessing, QSt
     QDomNode::prefix(), QDomNode::localName() and
     QDomNode::namespaceURI() return an empty string.
 
+//! [entity-refs]
     Entity references are handled as follows:
     \list
     \li References to internal general entities and character entities occurring in the
@@ -6099,22 +6149,41 @@ bool QDomDocument::setContent(const QString& text, bool namespaceProcessing, QSt
         occurs outside of the content is replaced with an empty string.
     \li Any unparsed entity reference is replaced with an empty string.
     \endlist
+//! [entity-refs]
 
     \sa QDomNode::namespaceURI(), QDomNode::localName(),
         QDomNode::prefix(), QString::isNull(), QString::isEmpty()
 */
-bool QDomDocument::setContent(const QByteArray &data, bool namespaceProcessing, QString *errorMsg, int *errorLine, int *errorColumn)
+bool QDomDocument::setContent(const QByteArray &data, bool namespaceProcessing,
+                              QString *errorMsg, int *errorLine, int *errorColumn)
 {
-    if (!impl)
-        impl = new QDomDocumentPrivate();
+    QXmlStreamReader reader(data);
+    reader.setNamespaceProcessing(namespaceProcessing);
+    return setContent(&reader, namespaceProcessing, errorMsg, errorLine, errorColumn);
+}
 
-    QXmlStreamReader streamReader(data);
-    streamReader.setNamespaceProcessing(namespaceProcessing);
-    return IMPL->setContent(&streamReader, namespaceProcessing, errorMsg, errorLine, errorColumn);
+static inline QDomDocument::ParseOptions toParseOptions(bool namespaceProcessing)
+{
+    return namespaceProcessing ? QDomDocument::ParseOption::UseNamespaceProcessing
+                               : QDomDocument::ParseOption::Default;
+}
+
+static inline void unpackParseResult(const QDomDocument::ParseResult &parseResult,
+                                     QString *errorMsg, int *errorLine, int *errorColumn)
+{
+    if (!parseResult) {
+        if (errorMsg)
+            *errorMsg = parseResult.errorMessage;
+        if (errorLine)
+            *errorLine = static_cast<int>(parseResult.errorLine);
+        if (errorColumn)
+            *errorColumn = static_cast<int>(parseResult.errorLine);
+    }
 }
 
 /*!
     \overload
+    \deprecated [6.8] Use the overload taking ParseOptions instead.
 
     This function reads the XML document from the IO device \a dev, returning
     true if the content was successfully parsed; otherwise returns \c false.
@@ -6124,29 +6193,17 @@ bool QDomDocument::setContent(const QByteArray &data, bool namespaceProcessing, 
     This will change in Qt 7, which will no longer open \a dev. Applications
     should therefore open the device themselves before calling setContent.
 */
-bool QDomDocument::setContent(QIODevice* dev, bool namespaceProcessing, QString *errorMsg, int *errorLine, int *errorColumn)
+bool QDomDocument::setContent(QIODevice* dev, bool namespaceProcessing,
+                              QString *errorMsg, int *errorLine, int *errorColumn)
 {
-    if (!impl)
-        impl = new QDomDocumentPrivate();
-
-#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
-    if (!dev->isOpen()) {
-        qWarning("QDomDocument called with unopened QIODevice. "
-                 "This will not be supported in future Qt versions.");
-        if (!dev->open(QIODevice::ReadOnly)) {
-            qWarning("QDomDocument::setContent: Failed to open device.");
-            return false;
-        }
-    }
-#endif
-
-    QXmlStreamReader streamReader(dev);
-    streamReader.setNamespaceProcessing(namespaceProcessing);
-    return IMPL->setContent(&streamReader, namespaceProcessing, errorMsg, errorLine, errorColumn);
+    ParseResult result = setContent(dev, toParseOptions(namespaceProcessing));
+    unpackParseResult(result, errorMsg, errorLine, errorColumn);
+    return bool(result);
 }
 
 /*!
     \overload
+    \deprecated [6.8] Use the overload returning ParseResult instead.
 
     This function reads the XML document from the string \a text, returning
     true if the content was successfully parsed; otherwise returns \c false.
@@ -6162,6 +6219,7 @@ bool QDomDocument::setContent(const QString& text, QString *errorMsg, int *error
 
 /*!
     \overload
+    \deprecated [6.8] Use the overload returning ParseResult instead.
 
     This function reads the XML document from the byte array \a buffer,
     returning true if the content was successfully parsed; otherwise returns
@@ -6176,7 +6234,7 @@ bool QDomDocument::setContent(const QByteArray& buffer, QString *errorMsg, int *
 
 /*!
     \overload
-    \deprecated
+    \deprecated [6.8] Use the overload returning ParseResult instead.
 
     This function reads the XML document from the IO device \a dev, returning
     true if the content was successfully parsed; otherwise returns \c false.
@@ -6191,6 +6249,7 @@ bool QDomDocument::setContent(QIODevice* dev, QString *errorMsg, int *errorLine,
 /*!
     \overload
     \since 5.15
+    \deprecated [6.8] Use the overload taking ParseOptions instead.
 
     This function reads the XML document from the QXmlStreamReader \a reader
     and parses it. Returns \c true if the content was successfully parsed;
@@ -6207,12 +6266,165 @@ bool QDomDocument::setContent(QIODevice* dev, QString *errorMsg, int *errorLine,
 
     \sa QXmlStreamReader
 */
-bool QDomDocument::setContent(QXmlStreamReader *reader, bool namespaceProcessing, QString *errorMsg,
-                              int *errorLine, int *errorColumn)
+bool QDomDocument::setContent(QXmlStreamReader *reader, bool namespaceProcessing,
+                              QString *errorMsg, int *errorLine, int *errorColumn)
+{
+    ParseResult result = setContent(reader, toParseOptions(namespaceProcessing));
+    unpackParseResult(result, errorMsg, errorLine, errorColumn);
+    return bool(result);
+}
+QT_WARNING_POP
+#endif // QT_DEPRECATED_SINCE(6, 8)
+
+/*!
+    \enum QDomDocument::ParseOption
+    \since 6.5
+
+    This enum describes the possible options that can be used when
+    parsing an XML document using the setContent() method.
+
+    \value Default No parse options are set.
+    \value UseNamespaceProcessing Namespace processing is enabled.
+    \value PreserveSpacingOnlyNodes Text nodes containing only spacing
+           characters are preserved.
+
+    \sa setContent()
+*/
+
+/*!
+    \struct QDomDocument::ParseResult
+    \since 6.5
+    \inmodule QtXml
+    \ingroup xml-tools
+    \brief The struct is used to store the result of QDomDocument::setContent().
+
+    The QDomDocument::ParseResult struct is used for storing the result of
+    QDomDocument::setContent(). If an error is found while parsing an XML
+    document, the message, line and column number of an error are stored in
+    \c ParseResult.
+
+    \sa QDomDocument::setContent()
+*/
+
+/*!
+    \variable QDomDocument::ParseResult::errorMessage
+
+    The field contains the text message of an error found by
+    QDomDocument::setContent() while parsing an XML document.
+
+    \sa QDomDocument::setContent()
+*/
+
+/*!
+    \variable QDomDocument::ParseResult::errorLine
+
+    The field contains the line number of an error found by
+    QDomDocument::setContent() while parsing an XML document.
+
+    \sa QDomDocument::setContent()
+*/
+
+/*!
+    \variable QDomDocument::ParseResult::errorColumn
+
+    The field contains the column number of an error found by
+    QDomDocument::setContent() while parsing an XML document.
+
+    \sa QDomDocument::setContent()
+*/
+
+/*!
+    \fn QDomDocument::ParseResult::operator bool() const
+
+    Returns \c true if an error is found by QDomDocument::setContent();
+    otherwise returns \c false.
+
+    \sa QDomDocument::setContent()
+*/
+
+/*!
+    \fn ParseResult QDomDocument::setContent(const QByteArray &data, ParseOptions options)
+    \fn ParseResult QDomDocument::setContent(QAnyStringView text, ParseOptions options)
+    \fn ParseResult QDomDocument::setContent(QIODevice *device, ParseOptions options)
+    \fn ParseResult QDomDocument::setContent(QXmlStreamReader *reader, ParseOptions options)
+
+    \since 6.5
+
+    This function parses the XML document from the byte array \a
+    data, string view \a text, IO \a device, or stream \a reader
+    and sets it as the content of the document. It tries to
+    detect the encoding of the document, in accordance with the
+    XML specification. Returns the result of parsing in ParseResult,
+    which explicitly converts to \c bool.
+
+    You can use the \a options parameter to specify different parsing
+    options, for example, to enable namespace processing, etc.
+
+    By default, namespace processing is disabled. If it's disabled, the
+    parser does no namespace processing when it reads the XML file. The
+    functions QDomNode::prefix(), QDomNode::localName() and
+    QDomNode::namespaceURI() return an empty string.
+
+    If namespace processing is enabled via the parse \a options, the parser
+    recognizes namespaces in the XML file and sets the prefix name, local
+    name and namespace URI to appropriate values. The functions
+    QDomNode::prefix(), QDomNode::localName() and QDomNode::namespaceURI()
+    return a string for all elements and attributes and return an empty
+    string if the element or attribute has no prefix.
+
+    Text nodes consisting only of whitespace are stripped and won't
+    appear in the QDomDocument. Since Qt 6.5, one can pass
+    QDomDocument::ParseOption::PreserveSpacingOnlyNodes as a parse
+    option, to specify that spacing-only text nodes must be preserved.
+
+    \include qdom.cpp entity-refs
+
+    \note The overload taking IO \a device will try to open it in read-only
+    mode if it is not already open. In that case, the caller is responsible
+    for calling close. This will change in Qt 7, which will no longer open
+    the IO \a device. Applications should therefore open the device themselves
+    before calling setContent().
+
+    \sa ParseResult, ParseOptions
+*/
+QDomDocument::ParseResult QDomDocument::setContentImpl(const QByteArray &data, ParseOptions options)
+{
+    QXmlStreamReader reader(data);
+    reader.setNamespaceProcessing(options.testFlag(ParseOption::UseNamespaceProcessing));
+    return setContent(&reader, options);
+}
+
+QDomDocument::ParseResult QDomDocument::setContent(QAnyStringView data, ParseOptions options)
+{
+    QXmlStreamReader reader(data);
+    reader.setNamespaceProcessing(options.testFlag(ParseOption::UseNamespaceProcessing));
+    return setContent(&reader, options);
+}
+
+QDomDocument::ParseResult QDomDocument::setContent(QIODevice *device, ParseOptions options)
+{
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
+    if (!device->isOpen()) {
+        qWarning("QDomDocument called with unopened QIODevice. "
+                 "This will not be supported in future Qt versions.");
+        if (!device->open(QIODevice::ReadOnly)) {
+            const auto error = u"QDomDocument::setContent: Failed to open device."_s;
+            qWarning("%s", qPrintable(error));
+            return { error };
+        }
+    }
+#endif
+
+    QXmlStreamReader reader(device);
+    reader.setNamespaceProcessing(options.testFlag(ParseOption::UseNamespaceProcessing));
+    return setContent(&reader, options);
+}
+
+QDomDocument::ParseResult QDomDocument::setContent(QXmlStreamReader *reader, ParseOptions options)
 {
     if (!impl)
         impl = new QDomDocumentPrivate();
-    return IMPL->setContent(reader, namespaceProcessing, errorMsg, errorLine, errorColumn);
+    return IMPL->setContent(reader, options);
 }
 
 /*!
@@ -6750,6 +6962,12 @@ QDomComment QDomNode::toComment() const
         return QDomComment(static_cast<QDomCommentPrivate *>(impl));
     return QDomComment();
 }
+
+/*!
+    \variable QDomNode::impl
+    \internal
+    Pointer to private data structure.
+*/
 
 QT_END_NAMESPACE
 

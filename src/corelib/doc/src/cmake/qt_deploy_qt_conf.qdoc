@@ -6,7 +6,7 @@
 \ingroup cmake-commands-qtcore
 
 \title qt_deploy_qt_conf
-\target qt_deploy_qt_conf
+\keyword qt6_deploy_qt_conf
 
 \summary {Write a qt.conf file at deployment time.}
 
@@ -17,7 +17,6 @@ only be called from a deployment script. It cannot be called directly by the
 project.
 
 \cmakecommandsince 6.3
-\preliminarycmakecommand
 \note This command does not usually need to be called directly. It is used
       internally by other higher level commands, but projects wishing to
       implement more customized deployment logic may find it useful.
@@ -58,16 +57,15 @@ variables can be used to dynamically specify a path relative to the deployment b
 as shown in the example below. This helps avoid hard-coding an absolute path.
 
 \sa {qt6_generate_deploy_app_script}{qt_generate_deploy_app_script()},
-    qt_deploy_runtime_dependencies()
+    {qt6_deploy_runtime_dependencies}{qt_deploy_runtime_dependencies()}
 
 \section1 Example
 
 \badcode
 # The following script must only be executed at install time
-set(deploy_script "${CMAKE_CURRENT_BINARY_DIR}/deploy_custom.cmake")
-
-file(GENERATE OUTPUT ${deploy_script} CONTENT "
-include(\"${QT_DEPLOY_SUPPORT}\")
+qt_generate_deploy_script(
+    OUTPUT_SCRIPT deploy_script
+    CONTENT "
 qt_deploy_qt_conf(\"\${QT_DEPLOY_PREFIX}/\${QT_DEPLOY_BIN_DIR}/qt.conf\"
     DATA_DIR \"./custom_data_dir\"
     TRANSLATIONS_DIR \"./custom_translations_dir\"

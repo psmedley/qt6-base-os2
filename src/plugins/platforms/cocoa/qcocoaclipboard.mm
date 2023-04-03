@@ -3,13 +3,15 @@
 
 #include "qcocoaclipboard.h"
 
+#include <QtGui/qutimimeconverter.h>
+
 #ifndef QT_NO_CLIPBOARD
 
 QT_BEGIN_NAMESPACE
 
 QCocoaClipboard::QCocoaClipboard()
-    :m_clipboard(new QMacPasteboard(kPasteboardClipboard, QMacInternalPasteboardMime::MIME_CLIP))
-    ,m_find(new QMacPasteboard(kPasteboardFind, QMacInternalPasteboardMime::MIME_CLIP))
+    :m_clipboard(new QMacPasteboard(kPasteboardClipboard, QUtiMimeConverter::HandlerScopeFlag::Clipboard))
+    ,m_find(new QMacPasteboard(kPasteboardFind, QUtiMimeConverter::HandlerScopeFlag::Clipboard))
 {
     connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, &QCocoaClipboard::handleApplicationStateChanged);
 }

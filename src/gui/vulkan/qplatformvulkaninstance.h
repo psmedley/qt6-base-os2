@@ -15,7 +15,7 @@
 
 #include <QtGui/qtguiglobal.h>
 
-#if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
+#if QT_CONFIG(vulkan) || defined(Q_QDOC)
 
 #include <qvulkaninstance.h>
 
@@ -45,6 +45,7 @@ public:
     virtual void presentAboutToBeQueued(QWindow *window);
     virtual void presentQueued(QWindow *window);
     virtual void setDebugFilters(const QList<QVulkanInstance::DebugFilter> &filters);
+    virtual void setDebugUtilsFilters(const QList<QVulkanInstance::DebugUtilsFilter> &filters);
 
 private:
     QScopedPointer<QPlatformVulkanInstancePrivate> d_ptr;
@@ -55,7 +56,7 @@ QT_END_NAMESPACE
 
 #endif // QT_CONFIG(vulkan)
 
-#if defined(Q_CLANG_QDOC)
+#if defined(Q_QDOC)
 /*
   The following include file did not exist for clang-qdoc running
   in macOS, but the classes are documented in qvulkanfunctions.cpp.
@@ -69,7 +70,7 @@ QT_END_NAMESPACE
 
 #include <QtGui/qtguiglobal.h>
 
-#if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
+#if QT_CONFIG(vulkan) || defined(Q_QDOC)
 
 #ifndef VK_NO_PROTOTYPES
 #define VK_NO_PROTOTYPES
@@ -112,8 +113,8 @@ private:
 
 QT_END_NAMESPACE
 
-#endif // QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
+#endif // QT_CONFIG(vulkan) || defined(Q_QDOC)
 #endif // QVULKANFUNCTIONS_H;
-#endif // Q_CLANG_QDOC
+#endif // Q_QDOC
 
 #endif // QPLATFORMVULKANINSTANCE_H

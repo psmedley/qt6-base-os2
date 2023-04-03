@@ -14,6 +14,7 @@
 //
 
 #include <QtGui/qtguiglobal.h>
+#include <QtCore/QObject>
 #include <QtCore/QScopedPointer>
 #if QT_CONFIG(shortcut)
 #  include <QtGui/QKeySequence>
@@ -87,7 +88,14 @@ public:
         InteractiveResizeAcrossScreens,
         ShowDirectoriesFirst,
         PreselectFirstFileInDirectory,
-        ButtonPressKeys
+        ButtonPressKeys,
+        SetFocusOnTouchRelease,
+        FlickStartDistance,
+        FlickMaximumVelocity,
+        FlickDeceleration,
+        MenuBarFocusOnAltPressRelease,
+        MouseCursorTheme,
+        MouseCursorSize
     };
     Q_ENUM(ThemeHint)
 
@@ -97,12 +105,7 @@ public:
         FontDialog,
         MessageDialog
     };
-
-    enum class Appearance {
-        Unknown = 0x0000,
-        Light = 0x0001,
-        Dark = 0x0002
-    };
+    Q_ENUM(DialogType);
 
     enum Palette {
         SystemPalette,
@@ -125,6 +128,7 @@ public:
         TextLineEditPalette,
         NPalettes
     };
+    Q_ENUM(Palette)
 
     enum Font {
         SystemFont,
@@ -243,6 +247,7 @@ public:
         // do not add any values below/greater than this
         CustomBase = 0xf0000000
     };
+    Q_ENUM(StandardPixmap)
 
     enum KeyboardSchemes
     {
@@ -253,6 +258,7 @@ public:
         GnomeKeyboardScheme,
         CdeKeyboardScheme
     };
+    Q_ENUM(KeyboardSchemes)
 
     enum UiEffect
     {
@@ -265,6 +271,7 @@ public:
         AnimateToolBoxUiEffect = 0x40,
         HoverEffect = 0x80
     };
+    Q_ENUM(UiEffect)
 
     enum IconOption {
         DontUseCustomDirectoryIcons = 0x01
@@ -286,7 +293,7 @@ public:
     virtual QPlatformSystemTrayIcon *createPlatformSystemTrayIcon() const;
 #endif
 
-    virtual Appearance appearance() const;
+    virtual Qt::ColorScheme colorScheme() const;
 
     virtual const QPalette *palette(Palette type = SystemPalette) const;
 
@@ -311,10 +318,14 @@ public:
     static QVariant defaultThemeHint(ThemeHint hint);
     static QString defaultStandardButtonText(int button);
     static QString removeMnemonics(const QString &original);
+    QString name() const;
 
 protected:
     explicit QPlatformTheme(QPlatformThemePrivate *priv);
     QScopedPointer<QPlatformThemePrivate> d_ptr;
+
+private:
+    friend class QPlatformThemeFactory;
 };
 
 QT_END_NAMESPACE

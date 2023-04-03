@@ -108,8 +108,6 @@ public:
     FolderIterator(const QString &path)
         : m_path(path)
     {
-        // Note that empty dirs in the assets dir before the build are not going to be
-        // included in the final apk, so no empty folders should expected to be listed.
         QJniObject files = QJniObject::callStaticObjectMethod(QtAndroid::applicationClass(),
                                                                             "listAssetContent",
                                                                             "(Landroid/content/res/AssetManager;Ljava/lang/String;)[Ljava/lang/String;",
@@ -163,7 +161,7 @@ private:
 };
 
 QCache<QString, QSharedPointer<FolderIterator>> FolderIterator::m_assetsCache(std::max(50, qEnvironmentVariableIntValue("QT_ANDROID_MAX_ASSETS_CACHE_SIZE")));
-QMutex FolderIterator::m_assetsCacheMutex;
+Q_CONSTINIT QMutex FolderIterator::m_assetsCacheMutex;
 
 class AndroidAbstractFileEngineIterator: public QAbstractFileEngineIterator
 {
@@ -352,13 +350,8 @@ public:
         } else {
             auto *assetDir = AAssetManager_openDir(m_assetManager, m_fileName.toUtf8());
             if (assetDir) {
-                if (AAssetDir_getNextFileName(assetDir)
-                        || (!FolderIterator::fromCache(m_fileName, false)->empty())) {
-                    // If AAssetDir_getNextFileName is not valid, it still can be a directory that
-                    // contains only other directories (no files). FolderIterator will not be called
-                    // on the directory containing files so it should not be too time consuming now.
+                if (AAssetDir_getNextFileName(assetDir))
                     m_assetInfo->type = AssetItem::Type::Folder;
-                }
                 AAssetDir_close(assetDir);
             }
         }
@@ -386,7 +379,7 @@ private:
 };
 
 QCache<QString, QSharedPointer<AssetItem>> AndroidAbstractFileEngine::m_assetsInfoCache(std::max(200, qEnvironmentVariableIntValue("QT_ANDROID_MAX_FILEINFO_ASSETS_CACHE_SIZE")));
-QMutex AndroidAbstractFileEngine::m_assetsInfoCacheMutex;
+Q_CONSTINIT QMutex AndroidAbstractFileEngine::m_assetsInfoCacheMutex;
 
 AndroidAssetsFileEngineHandler::AndroidAssetsFileEngineHandler()
 {

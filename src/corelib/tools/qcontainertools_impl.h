@@ -14,6 +14,8 @@
 #include <QtCore/qglobal.h>
 #include <QtCore/qtypeinfo.h>
 
+#include <QtCore/qxptype_traits.h>
+
 #include <cstring>
 #include <iterator>
 #include <memory>
@@ -37,6 +39,26 @@ static constexpr bool q_points_into_range(const T *p, const T *b, const T *e,
     return !less(p, b) && less(p, e);
 }
 
+/*!
+  \internal
+
+  Returns whether \a p is within container \a c. In its simplest form equivalent to:
+  c.data() <= p < c.data() + c.size()
+*/
+template <typename C, typename T>
+static constexpr bool q_points_into_range(const T &p, const C &c) noexcept
+{
+    static_assert(std::is_same_v<decltype(std::data(c)), T>);
+
+    // std::distance because QArrayDataPointer has a "qsizetype size"
+    // member but no size() function
+    return q_points_into_range(p, std::data(c),
+                               std::data(c) + std::distance(std::begin(c), std::end(c)));
+}
+
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_GCC("-Wmaybe-uninitialized")
+
 template <typename T, typename N>
 void q_uninitialized_move_if_noexcept_n(T* first, N n, T* out)
 {
@@ -59,6 +81,28 @@ void q_uninitialized_relocate_n(T* first, N n, T* out)
         q_uninitialized_move_if_noexcept_n(first, n, out);
         if constexpr (QTypeInfo<T>::isComplex)
             std::destroy_n(first, n);
+    }
+}
+
+QT_WARNING_POP
+
+/*!
+    \internal
+
+    A wrapper around std::rotate(), with an optimization for
+    Q_RELOCATABLE_TYPEs. We omit the return value, as it would be more work to
+    compute in the Q_RELOCATABLE_TYPE case and, unlike std::rotate on
+    ForwardIterators, callers can compute the result in constant time
+    themselves.
+*/
+template <typename T>
+void q_rotate(T *first, T *mid, T *last)
+{
+    if constexpr (QTypeInfo<T>::isRelocatable) {
+        const auto cast = [](T *p) { return reinterpret_cast<uchar*>(p); };
+        std::rotate(cast(first), cast(mid), cast(last));
+    } else {
+        std::rotate(first, mid, last);
     }
 }
 
@@ -203,43 +247,25 @@ void reserveIfForwardIterator(Container *c, ForwardIterator f, ForwardIterator l
     c->reserve(static_cast<typename Container::size_type>(std::distance(f, l)));
 }
 
-template <typename Iterator, typename = std::void_t<>>
-struct AssociativeIteratorHasKeyAndValue : std::false_type
-{
-};
+template <typename Iterator>
+using KeyAndValueTest = decltype(
+    std::declval<Iterator &>().key(),
+    std::declval<Iterator &>().value()
+);
 
 template <typename Iterator>
-struct AssociativeIteratorHasKeyAndValue<
-        Iterator,
-        std::void_t<decltype(std::declval<Iterator &>().key()),
-                    decltype(std::declval<Iterator &>().value())>
-    >
-    : std::true_type
-{
-};
-
-template <typename Iterator, typename = std::void_t<>, typename = std::void_t<>>
-struct AssociativeIteratorHasFirstAndSecond : std::false_type
-{
-};
-
-template <typename Iterator>
-struct AssociativeIteratorHasFirstAndSecond<
-        Iterator,
-        std::void_t<decltype(std::declval<Iterator &>()->first),
-                    decltype(std::declval<Iterator &>()->second)>
-    >
-    : std::true_type
-{
-};
+using FirstAndSecondTest = decltype(
+    std::declval<Iterator &>()->first,
+    std::declval<Iterator &>()->second
+);
 
 template <typename Iterator>
 using IfAssociativeIteratorHasKeyAndValue =
-    typename std::enable_if<AssociativeIteratorHasKeyAndValue<Iterator>::value, bool>::type;
+    std::enable_if_t<qxp::is_detected_v<KeyAndValueTest, Iterator>, bool>;
 
 template <typename Iterator>
 using IfAssociativeIteratorHasFirstAndSecond =
-    typename std::enable_if<AssociativeIteratorHasFirstAndSecond<Iterator>::value, bool>::type;
+    std::enable_if_t<qxp::is_detected_v<FirstAndSecondTest, Iterator>, bool>;
 
 template <typename T, typename U>
 using IfIsNotSame =

@@ -198,7 +198,7 @@ QJsonValue::QJsonValue(const QString &s)
  */
 
 /*!
-    Creates a value of type String, with value \a s.
+    Creates a value of type String, with the Latin-1 string viewed by \a s.
  */
 QJsonValue::QJsonValue(QLatin1StringView s)
     : value(s)
@@ -248,15 +248,12 @@ QJsonValue::~QJsonValue() = default;
 /*!
     Creates a copy of \a other.
  */
-QJsonValue::QJsonValue(const QJsonValue &other)
-    : value(other.value)
-{
-}
+QJsonValue::QJsonValue(const QJsonValue &other) noexcept = default;
 
 /*!
     Assigns the value stored in \a other to this object.
  */
-QJsonValue &QJsonValue::operator =(const QJsonValue &other)
+QJsonValue &QJsonValue::operator =(const QJsonValue &other) noexcept
 {
     QJsonValue copy(other);
     swap(copy);
@@ -1101,8 +1098,7 @@ size_t qHash(const QJsonValue &value, size_t seed)
     case QJsonValue::Undefined:
         return seed;
     }
-    Q_UNREACHABLE();
-    return 0;
+    Q_UNREACHABLE_RETURN(0);
 }
 
 #if !defined(QT_NO_DEBUG_STREAM) && !defined(QT_JSON_READONLY)

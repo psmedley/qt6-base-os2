@@ -33,7 +33,10 @@ public:
     QPlatformWindow *createPlatformWindow(QWindow *window) const override;
     QPlatformBackingStore *createPlatformBackingStore(QWindow *window) const override;
 
+#if QT_CONFIG(opengl)
     QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const override;
+#endif
+
     QPlatformOffscreenSurface *createPlatformOffscreenSurface(QOffscreenSurface *surface) const override;
 
     QPlatformFontDatabase *fontDatabase() const override;
@@ -57,6 +60,8 @@ public:
 #endif
 
     void beep() const override;
+
+    void setApplicationBadge(qint64 number) override;
 
     static QIOSIntegration *instance();
 

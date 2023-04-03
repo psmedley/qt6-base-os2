@@ -116,6 +116,80 @@ template<> struct TypeDefinition<QQuaternion> { static const bool IsAvailable = 
 template<> struct TypeDefinition<QIcon> { static const bool IsAvailable = false; };
 #endif
 
+template <typename T> inline bool isInterfaceFor(const QtPrivate::QMetaTypeInterface *iface)
+{
+    // typeId for built-in types are fixed and require no registration
+    static_assert(QMetaTypeId2<T>::IsBuiltIn, "This function only works for built-in types");
+    static constexpr int typeId = QtPrivate::BuiltinMetaType<T>::value;
+    return iface->typeId.loadRelaxed() == typeId;
+}
+
+template <typename FPointer>
+inline bool checkMetaTypeFlagOrPointer(const QtPrivate::QMetaTypeInterface *iface, FPointer ptr, QMetaType::TypeFlag Flag)
+{
+    // helper to the isXxxConstructible & isDestructible functions below: a
+    // meta type has the trait if the trait is trivial or we have the pointer
+    // to perform the operation
+    Q_ASSERT(!isInterfaceFor<void>(iface));
+    Q_ASSERT(iface->size);
+    return ptr != nullptr || (iface->flags & Flag) == 0;
+}
+
+inline bool isDefaultConstructible(const QtPrivate::QMetaTypeInterface *iface) noexcept
+{
+    return checkMetaTypeFlagOrPointer(iface, iface->defaultCtr, QMetaType::NeedsConstruction);
+}
+
+inline bool isCopyConstructible(const QtPrivate::QMetaTypeInterface *iface) noexcept
+{
+    return checkMetaTypeFlagOrPointer(iface, iface->copyCtr, QMetaType::NeedsCopyConstruction);
+}
+
+inline bool isMoveConstructible(const QtPrivate::QMetaTypeInterface *iface) noexcept
+{
+    return checkMetaTypeFlagOrPointer(iface, iface->moveCtr, QMetaType::NeedsMoveConstruction);
+}
+
+inline bool isDestructible(const QtPrivate::QMetaTypeInterface *iface) noexcept
+{
+    return checkMetaTypeFlagOrPointer(iface, iface->dtor, QMetaType::NeedsDestruction);
+}
+
+inline void defaultConstruct(const QtPrivate::QMetaTypeInterface *iface, void *where)
+{
+    Q_ASSERT(isDefaultConstructible(iface));
+    if (iface->defaultCtr)
+        iface->defaultCtr(iface, where);
+    else
+        memset(where, 0, iface->size);
+}
+
+inline void copyConstruct(const QtPrivate::QMetaTypeInterface *iface, void *where, const void *copy)
+{
+    Q_ASSERT(isCopyConstructible(iface));
+    if (iface->copyCtr)
+        iface->copyCtr(iface, where, copy);
+    else
+        memcpy(where, copy, iface->size);
+}
+
+inline void construct(const QtPrivate::QMetaTypeInterface *iface, void *where, const void *copy)
+{
+    if (copy)
+        copyConstruct(iface, where, copy);
+    else
+        defaultConstruct(iface, where);
+}
+
+inline void destruct(const QtPrivate::QMetaTypeInterface *iface, void *where)
+{
+    Q_ASSERT(isDestructible(iface));
+    if (iface->dtor)
+        iface->dtor(iface, where);
+}
+
+const char *typedefNameForType(const QtPrivate::QMetaTypeInterface *type_d);
+
 template<typename T>
 static const QT_PREPEND_NAMESPACE(QtPrivate::QMetaTypeInterface) *getInterfaceFromType()
 {
@@ -129,7 +203,6 @@ static const QT_PREPEND_NAMESPACE(QtPrivate::QMetaTypeInterface) *getInterfaceFr
     case QMetaType::MetaTypeName:                                                                  \
         return QtMetaTypePrivate::getInterfaceFromType<RealName>();
 
-const char *typedefNameForType(const QtPrivate::QMetaTypeInterface *type_d);
 } //namespace QtMetaTypePrivate
 
 QT_END_NAMESPACE

@@ -1,4 +1,5 @@
-# Generated from qtpaths.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qtpaths App:
@@ -14,6 +15,7 @@ qt_internal_add_tool(${target_name}
     DEFINES
         QT_NO_FOREACH
         QTPATHS_VERSION_STR="2.0"
+        QT_VERSION_STR="${PROJECT_VERSION}"
 )
 qt_internal_return_unless_building_tools()
 

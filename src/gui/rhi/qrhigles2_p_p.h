@@ -20,9 +20,10 @@
 #include "qshaderdescription_p.h"
 #include <qopengl.h>
 #include <QByteArray>
-#include <QSurface>
-
+#include <QWindow>
+#include <QPointer>
 #include <QtCore/private/qduplicatetracker_p.h>
+#include <optional>
 
 QT_BEGIN_NAMESPACE
 
@@ -30,7 +31,7 @@ class QOpenGLExtensions;
 
 struct QGles2Buffer : public QRhiBuffer
 {
-    QGles2Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
+    QGles2Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, quint32 size);
     ~QGles2Buffer();
     void destroy() override;
     bool create() override;
@@ -38,7 +39,7 @@ struct QGles2Buffer : public QRhiBuffer
     char *beginFullDynamicBufferUpdateForCurrentFrame() override;
     void endFullDynamicBufferUpdateForCurrentFrame() override;
 
-    int nonZeroSize = 0;
+    quint32 nonZeroSize = 0;
     GLuint buffer = 0;
     GLenum targetForDataOps;
     QByteArray data;
@@ -173,6 +174,8 @@ struct QGles2RenderTargetData
 {
     QGles2RenderTargetData(QRhiImplementation *) { }
 
+    bool isValid() const { return rp != nullptr; }
+
     QGles2RenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
     float dpr = 1;
@@ -181,6 +184,7 @@ struct QGles2RenderTargetData
     int dsAttCount = 0;
     bool srgbUpdateAndBlend = false;
     QRhiRenderTargetAttachmentTracker::ResIdList currentResIdList;
+    std::optional<QRhiSwapChain::StereoTargetBuffer> stereoTarget;
 };
 
 struct QGles2SwapChainRenderTarget : public QRhiSwapChainRenderTarget
@@ -232,8 +236,8 @@ struct QGles2UniformDescription
     QShaderDescription::VariableType type;
     int glslLocation;
     int binding;
-    uint offset;
-    int size;
+    quint32 offset;
+    quint32 size;
     int arrayDim;
 };
 
@@ -399,6 +403,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 GLuint fbo;
                 bool srgb;
                 int colorAttCount;
+                bool stereo;
+                QRhiSwapChain::StereoTargetBuffer stereoTarget;
             } bindFramebuffer;
             struct {
                 GLenum target;
@@ -690,6 +696,7 @@ struct QGles2SwapChain : public QRhiSwapChain
 
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
+    QRhiRenderTarget *currentFrameRenderTarget(StereoTargetBuffer targetBuffer) override;
 
     QSize surfacePixelSize() override;
     bool isFormatSupported(Format f) override;
@@ -697,9 +704,13 @@ struct QGles2SwapChain : public QRhiSwapChain
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool createOrResize() override;
 
+    void initSwapChainRenderTarget(QGles2SwapChainRenderTarget *rt);
+
     QSurface *surface = nullptr;
     QSize pixelSize;
     QGles2SwapChainRenderTarget rt;
+    QGles2SwapChainRenderTarget rtLeft;
+    QGles2SwapChainRenderTarget rtRight;
     QGles2CommandBuffer cb;
     int frameCount = 0;
 };
@@ -717,7 +728,7 @@ public:
     QRhiShaderResourceBindings *createShaderResourceBindings() override;
     QRhiBuffer *createBuffer(QRhiBuffer::Type type,
                              QRhiBuffer::UsageFlags usage,
-                             int size) override;
+                             quint32 size) override;
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
                                          int sampleCount,
@@ -807,7 +818,7 @@ public:
     int resourceLimit(QRhi::ResourceLimit limit) const override;
     const QRhiNativeHandles *nativeHandles() override;
     QRhiDriverInfo driverInfo() const override;
-    QRhiMemAllocStats graphicsMemoryAllocationStatistics() override;
+    QRhiStats statistics() override;
     bool makeThreadLocalNativeContextCurrent() override;
     void releaseCachedResources() override;
     bool isDeviceLost() const override;
@@ -816,6 +827,7 @@ public:
     void setPipelineCacheData(const QByteArray &data) override;
 
     bool ensureContext(QSurface *surface = nullptr) const;
+    QSurface *evaluateFallbackSurface() const;
     void executeDeferredReleases();
     void trackedBufferBarrier(QGles2CommandBuffer *cbD, QGles2Buffer *bufD, QGles2Buffer::Access access);
     void trackedImageBarrier(QGles2CommandBuffer *cbD, QGles2Texture *texD, QGles2Texture::Access access);
@@ -879,11 +891,25 @@ public:
     bool importedContext = false;
     QSurfaceFormat requestedFormat;
     QSurface *fallbackSurface = nullptr;
-    QWindow *maybeWindow = nullptr;
+    QPointer<QWindow> maybeWindow = nullptr;
     QOpenGLContext *maybeShareContext = nullptr;
     mutable bool needsMakeCurrentDueToSwap = false;
     QOpenGLExtensions *f = nullptr;
     void (QOPENGLF_APIENTRYP glPolygonMode) (GLenum, GLenum) = nullptr;
+    void(QOPENGLF_APIENTRYP glTexImage1D)(GLenum, GLint, GLint, GLsizei, GLint, GLenum, GLenum,
+                                          const void *) = nullptr;
+    void(QOPENGLF_APIENTRYP glTexStorage1D)(GLenum, GLint, GLenum, GLsizei) = nullptr;
+    void(QOPENGLF_APIENTRYP glTexSubImage1D)(GLenum, GLint, GLint, GLsizei, GLenum, GLenum,
+                                             const GLvoid *) = nullptr;
+    void(QOPENGLF_APIENTRYP glCopyTexSubImage1D)(GLenum, GLint, GLint, GLint, GLint,
+                                                 GLsizei) = nullptr;
+    void(QOPENGLF_APIENTRYP glCompressedTexImage1D)(GLenum, GLint, GLenum, GLsizei, GLint, GLsizei,
+                                                    const GLvoid *) = nullptr;
+    void(QOPENGLF_APIENTRYP glCompressedTexSubImage1D)(GLenum, GLint, GLint, GLsizei, GLenum,
+                                                       GLsizei, const GLvoid *) = nullptr;
+    void(QOPENGLF_APIENTRYP glFramebufferTexture1D)(GLenum, GLenum, GLenum, GLuint,
+                                                    GLint) = nullptr;
+
     uint vao = 0;
     struct Caps {
         Caps()
@@ -933,7 +959,9 @@ public:
               programBinary(false),
               texture3D(false),
               tessellation(false),
-              geometryShader(false)
+              geometryShader(false),
+              texture1D(false),
+              hasDrawBuffersFunc(false)
         { }
         int ctxMajor;
         int ctxMinor;
@@ -984,6 +1012,8 @@ public:
         uint texture3D : 1;
         uint tessellation : 1;
         uint geometryShader : 1;
+        uint texture1D : 1;
+        uint hasDrawBuffersFunc : 1;
     } caps;
     QGles2SwapChain *currentSwapChain = nullptr;
     QSet<GLint> supportedCompressedFormats;

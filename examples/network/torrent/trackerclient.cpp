@@ -54,18 +54,16 @@ void TrackerClient::timerEvent(QTimerEvent *event)
 
 void TrackerClient::fetchPeerList()
 {
+    if (metaInfo.announceUrl().isEmpty())
+        return;
     QUrl url(metaInfo.announceUrl());
 
     // Base the query on announce url to include a passkey (if any)
     QUrlQuery query(url);
 
     // Percent encode the hash
-    QByteArray infoHash = torrentDownloader->infoHash();
-    QByteArray encodedSum;
-    for (int i = 0; i < infoHash.size(); ++i) {
-        encodedSum += '%';
-        encodedSum += QByteArray::number(infoHash[i], 16).right(2).rightJustified(2, '0');
-    }
+    const QByteArray infoHash = torrentDownloader->infoHash();
+    const QByteArray encodedSum = infoHash.toPercentEncoding();
 
     bool seeding = (torrentDownloader->state() == TorrentClient::Seeding);
 
@@ -155,7 +153,7 @@ void TrackerClient::httpRequestDone(QNetworkReply *reply)
         // Mandatory item
         if (requestIntervalTimer != -1)
             killTimer(requestIntervalTimer);
-        requestIntervalTimer = startTimer(dict.value("interval").toInt() * 1000);
+        requestIntervalTimer = startTimer(std::chrono::seconds(dict.value("interval").toInt()));
     }
 
     if (dict.contains("peers")) {

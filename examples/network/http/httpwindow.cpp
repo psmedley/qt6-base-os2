@@ -1,4 +1,4 @@
-// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2023 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 #include "httpwindow.h"
@@ -23,7 +23,6 @@ ProgressDialog::ProgressDialog(const QUrl &url, QWidget *parent)
   : QProgressDialog(parent)
 {
     setWindowTitle(tr("Download Progress"));
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setLabelText(tr("Downloading %1.").arg(url.toDisplayString()));
     setMinimum(0);
     setValue(0);
@@ -42,17 +41,20 @@ HttpWindow::HttpWindow(QWidget *parent)
     , statusLabel(new QLabel(tr("Please enter the URL of a file you want to download.\n\n"), this))
     , urlLineEdit(new QLineEdit(defaultUrl))
     , downloadButton(new QPushButton(tr("Download")))
-    , launchCheckBox(new QCheckBox("Launch file"))
+    , launchCheckBox(new QCheckBox(tr("Launch file")))
     , defaultFileLineEdit(new QLineEdit(defaultFileName))
     , downloadDirectoryLineEdit(new QLineEdit)
 {
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
-    setWindowTitle(tr("HTTP"));
+    setWindowTitle(tr("HTTP Client"));
 
     //! [qnam-auth-required-1]
     connect(&qnam, &QNetworkAccessManager::authenticationRequired,
             this, &HttpWindow::slotAuthenticationRequired);
     //! [qnam-auth-required-1]
+#if QT_CONFIG(networkproxy)
+    connect(&qnam, &QNetworkAccessManager::proxyAuthenticationRequired,
+            this, &HttpWindow::slotProxyAuthenticationRequired);
+#endif
 
     QFormLayout *formLayout = new QFormLayout;
     urlLineEdit->setClearButtonEnabled(true);
@@ -142,19 +144,18 @@ void HttpWindow::downloadFile()
     bool useDirectory = !downloadDirectory.isEmpty() && QFileInfo(downloadDirectory).isDir();
     if (useDirectory)
         fileName.prepend(downloadDirectory + '/');
+
     if (QFile::exists(fileName)) {
-        if (QMessageBox::question(this, tr("Overwrite Existing File"),
-                                  tr("There already exists a file called %1%2."
-                                     " Overwrite?")
-                                     .arg(fileName,
-                                          useDirectory
-                                           ? QString()
-                                           : QStringLiteral(" in the current directory")),
-                                     QMessageBox::Yes | QMessageBox::No,
-                                     QMessageBox::No)
-            == QMessageBox::No) {
+        QString alreadyExists = useDirectory
+                ? tr("There already exists a file called %1. Overwrite?")
+                : tr("There already exists a file called %1 in the current directory. "
+                     "Overwrite?");
+        QMessageBox::StandardButton response = QMessageBox::question(this,
+                tr("Overwrite Existing File"),
+                alreadyExists.arg(QDir::toNativeSeparators(fileName)),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (response == QMessageBox::No)
             return;
-        }
         QFile::remove(fileName);
     }
 
@@ -272,11 +273,34 @@ void HttpWindow::sslErrors(const QList<QSslError> &errors)
         errorString += error.errorString();
     }
 
-    if (QMessageBox::warning(this, tr("SSL Errors"),
-                             tr("One or more SSL errors has occurred:\n%1").arg(errorString),
-                             QMessageBox::Ignore | QMessageBox::Abort) == QMessageBox::Ignore) {
+    if (QMessageBox::warning(this, tr("TLS Errors"),
+                             tr("One or more TLS errors has occurred:\n%1").arg(errorString),
+                             QMessageBox::Ignore | QMessageBox::Abort)
+        == QMessageBox::Ignore) {
         reply->ignoreSslErrors();
     }
 }
 //! [sslerrors-2]
+#endif
+
+#if QT_CONFIG(networkproxy)
+void HttpWindow::slotProxyAuthenticationRequired(const QNetworkProxy &proxy, QAuthenticator *authenticator)
+{
+    QDialog authenticationDialog;
+    Ui::Dialog ui;
+    ui.setupUi(&authenticationDialog);
+    authenticationDialog.adjustSize();
+    ui.siteDescription->setText(tr("A network proxy at %1 is requesting credentials for realm: %2")
+                                        .arg(proxy.hostName(), authenticator->realm()));
+
+    // If the user passed credentials in the URL to http_proxy or similar they may be available to
+    // us. Otherwise this will just leave the fields empty
+    ui.userEdit->setText(proxy.user());
+    ui.passwordEdit->setText(proxy.password());
+
+    if (authenticationDialog.exec() == QDialog::Accepted) {
+        authenticator->setUser(ui.userEdit->text());
+        authenticator->setPassword(ui.passwordEdit->text());
+    }
+}
 #endif

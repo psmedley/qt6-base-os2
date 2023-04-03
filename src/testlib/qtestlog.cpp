@@ -67,8 +67,8 @@ static void saveCoverageTool(const char * appname, bool testfailed, bool install
 #endif
 }
 
-static QElapsedTimer elapsedFunctionTime;
-static QElapsedTimer elapsedTotalTime;
+Q_CONSTINIT static QElapsedTimer elapsedFunctionTime;
+Q_CONSTINIT static QElapsedTimer elapsedTotalTime;
 
 #define FOREACH_TEST_LOGGER for (const auto &logger : std::as_const(*QTest::loggers()))
 
@@ -164,10 +164,8 @@ namespace QTest {
                 // remove the item from the list
                 if (last)
                     last->next = list->next;
-                else if (list->next)
-                    ignoreResultList = list->next;
                 else
-                    ignoreResultList = nullptr;
+                    ignoreResultList = list->next;
 
                 delete list;
                 return true;
@@ -181,7 +179,7 @@ namespace QTest {
 
     static bool handleFailOnWarning(const QMessageLogContext &context, const QString &message)
     {
-        // failOnWarnings can be called multiple times per test function, so let
+        // failOnWarning can be called multiple times per test function, so let
         // each call cause a failure if required.
         for (const auto &pattern : failOnWarningList) {
             if (pattern.metaType() == QMetaType::fromType<QString>()) {
@@ -473,10 +471,10 @@ void QTestLog::addSkip(const char *msg, const char *file, int line)
         logger->addIncident(QAbstractTestLogger::Skip, msg, file, line);
 }
 
-void QTestLog::addBenchmarkResult(const QBenchmarkResult &result)
+void QTestLog::addBenchmarkResults(const QList<QBenchmarkResult> &results)
 {
     FOREACH_TEST_LOGGER
-        logger->addBenchmarkResult(result);
+        logger->addBenchmarkResults(results);
 }
 
 void QTestLog::startLogging()

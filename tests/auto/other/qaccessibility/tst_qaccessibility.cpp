@@ -18,9 +18,13 @@
 #include <qpa/qplatformnativeinterface.h>
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformaccessibility.h>
+#ifdef Q_OS_WIN
+#include <QtCore/private/qfunctions_win_p.h>
+#endif
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/private/qhighdpiscaling_p.h>
 
+#include <QtWidgets/private/qapplication_p.h>
 #include <QtWidgets/private/qdialog_p.h>
 
 #if defined(Q_OS_WIN) && defined(interface)
@@ -915,7 +919,7 @@ void tst_QAccessibility::applicationTest()
 
     QWidget widget;
     widget.show();
-    qApp->setActiveWindow(&widget);
+    QApplicationPrivate::setActiveWindow(&widget);
     QVERIFY(QTest::qWaitForWindowActive(&widget));
 
     QAccessibleInterface *widgetIface = QAccessible::queryAccessibleInterface(&widget);
@@ -942,7 +946,7 @@ void tst_QAccessibility::mainWindowTest()
     auto mw = mwHolder.get();
     mw->resize(300, 200);
     mw->show(); // triggers layout
-    qApp->setActiveWindow(mw);
+    QApplicationPrivate::setActiveWindow(mw);
 
     QLatin1String name = QLatin1String("I am the main window");
     mw->setWindowTitle(name);
@@ -1959,7 +1963,7 @@ void tst_QAccessibility::mdiSubWindowTest()
     {
     QMdiArea mdiArea;
     mdiArea.show();
-    qApp->setActiveWindow(&mdiArea);
+    QApplicationPrivate::setActiveWindow(&mdiArea);
     QVERIFY(QTest::qWaitForWindowActive(&mdiArea));
 
 
@@ -2027,7 +2031,7 @@ void tst_QAccessibility::mdiSubWindowTest()
     testWindow->setEnabled(false);
     QVERIFY(interface->state().disabled);
     testWindow->setEnabled(true);
-    qApp->setActiveWindow(&mdiArea);
+    QApplicationPrivate::setActiveWindow(&mdiArea);
     mdiArea.setActiveSubWindow(testWindow);
     testWindow->setFocus();
     QVERIFY(testWindow->isAncestorOf(qApp->focusWidget()));
@@ -3865,14 +3869,14 @@ void tst_QAccessibility::bridgeTest()
     POINT pt{nativePos.x(), nativePos.y()};
 
     // Initialize COM stuff.
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    QVERIFY(SUCCEEDED(hr));
+    QComHelper comHelper;
+    QVERIFY(comHelper.isValid());
 
     // Get UI Automation interface.
     const GUID CLSID_CUIAutomation_test{0xff48dba4, 0x60ef, 0x4201,
                                         {0xaa,0x87, 0x54,0x10,0x3e,0xef,0x59,0x4e}};
     IUIAutomation *automation = nullptr;
-    hr = CoCreateInstance(CLSID_CUIAutomation_test, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&automation));
+    HRESULT hr = CoCreateInstance(CLSID_CUIAutomation_test, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&automation));
     QVERIFY(SUCCEEDED(hr));
 
     // Get button element from UI Automation using point.
@@ -3975,7 +3979,6 @@ void tst_QAccessibility::bridgeTest()
     controlWalker->Release();
     windowElement->Release();
     automation->Release();
-    CoUninitialize();
 
     QTestAccessibility::clearEvents();
 #endif

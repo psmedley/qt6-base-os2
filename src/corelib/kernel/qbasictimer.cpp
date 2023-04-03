@@ -33,10 +33,10 @@ QT_BEGIN_NAMESPACE
     can maintain a list of basic timers by holding them in container
     that supports move-only types, e.g. std::vector.
 
-    The \l{widgets/wiggly}{Wiggly} example uses QBasicTimer to repaint
-    a widget at regular intervals.
+    The \l{widgets/tetrix}{Tetrix} example uses QBasicTimer to control
+    the rate at which pieces fall.
 
-    \sa QTimer, QTimerEvent, QObject::timerEvent(), Timers, {Wiggly Example}
+    \sa QTimer, QTimerEvent, QObject::timerEvent(), Timers, {Affine Transformations}
 */
 
 
@@ -104,7 +104,13 @@ QT_BEGIN_NAMESPACE
 /*!
     \fn void QBasicTimer::start(int msec, QObject *object)
 
-    Starts (or restarts) the timer with a \a msec milliseconds timeout. The
+    \obsolete Use chrono overload instead.
+*/
+
+/*!
+    \since 6.5
+
+    Starts (or restarts) the timer with a \a duration timeout. The
     timer will be a Qt::CoarseTimer. See Qt::TimerType for information on the
     different timer types.
 
@@ -112,15 +118,23 @@ QT_BEGIN_NAMESPACE
 
     \sa stop(), isActive(), QObject::timerEvent(), Qt::CoarseTimer
  */
-void QBasicTimer::start(int msec, QObject *obj)
+void QBasicTimer::start(std::chrono::milliseconds duration, QObject *object)
 {
-    start(msec, Qt::CoarseTimer, obj);
+    start(duration, Qt::CoarseTimer, object);
 }
 
 /*!
+    \fn QBasicTimer::start(int msec, Qt::TimerType timerType, QObject *obj)
     \overload
+    \obsolete
 
-    Starts (or restarts) the timer with a \a msec milliseconds timeout and the
+    Use chrono overload instead.
+*/
+
+/*!
+    \since 6.5
+
+    Starts (or restarts) the timer with a \a duration timeout and the
     given \a timerType. See Qt::TimerType for information on the different
     timer types.
 
@@ -128,10 +142,10 @@ void QBasicTimer::start(int msec, QObject *obj)
 
     \sa stop(), isActive(), QObject::timerEvent(), Qt::TimerType
  */
-void QBasicTimer::start(int msec, Qt::TimerType timerType, QObject *obj)
+void QBasicTimer::start(std::chrono::milliseconds duration, Qt::TimerType timerType, QObject *obj)
 {
     QAbstractEventDispatcher *eventDispatcher = QAbstractEventDispatcher::instance();
-    if (Q_UNLIKELY(msec < 0)) {
+    if (Q_UNLIKELY(duration.count() < 0)) {
         qWarning("QBasicTimer::start: Timers cannot have negative timeouts");
         return;
     }
@@ -145,7 +159,7 @@ void QBasicTimer::start(int msec, Qt::TimerType timerType, QObject *obj)
     }
     stop();
     if (obj)
-        id = eventDispatcher->registerTimer(msec, timerType, obj);
+        id = eventDispatcher->registerTimer(duration.count(), timerType, obj);
 }
 
 /*!

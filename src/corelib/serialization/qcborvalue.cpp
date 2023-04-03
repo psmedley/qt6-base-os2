@@ -17,6 +17,8 @@
 
 #include <qendian.h>
 #include <qlocale.h>
+#include <qdatetime.h>
+#include <qtimezone.h>
 #include <private/qbytearray_p.h>
 #include <private/qnumeric_p.h>
 #include <private/qsimd_p.h>
@@ -798,7 +800,7 @@ static QCborValue::Type convertToExtendedType(QCborContainerPrivate *d)
                 ok = convertDoubleTo(round(e.fpvalue() * 1000), &msecs);
             }
             if (ok)
-                dt = QDateTime::fromMSecsSinceEpoch(msecs, Qt::UTC);
+                dt = QDateTime::fromMSecsSinceEpoch(msecs, QTimeZone::UTC);
         }
         if (dt.isValid()) {
             QByteArray text = dt.toString(Qt::ISODateWithMs).toLatin1();
@@ -1741,8 +1743,8 @@ QCborValue::QCborValue(QStringView s)
 /*!
     \overload
 
-    Creates a QCborValue with string value \a s. The value can later be
-    retrieved using toString().
+    Creates a QCborValue with the Latin-1 string viewed by \a s.
+    The value can later be retrieved using toString().
 
     \sa toString(), isString(), isByteArray()
  */
@@ -1807,7 +1809,7 @@ QCborValue::QCborValue(QCborTag tag, const QCborValue &tv)
 /*!
     Copies the contents of \a other into this object.
  */
-QCborValue::QCborValue(const QCborValue &other)
+QCborValue::QCborValue(const QCborValue &other) noexcept
     : n(other.n), container(other.container), t(other.t)
 {
     if (container)
@@ -1901,7 +1903,7 @@ void QCborValue::dispose()
 /*!
     Replaces the contents of this QCborObject with a copy of \a other.
  */
-QCborValue &QCborValue::operator=(const QCborValue &other)
+QCborValue &QCborValue::operator=(const QCborValue &other) noexcept
 {
     n = other.n;
     assignContainer(container, other.container);

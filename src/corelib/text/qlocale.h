@@ -369,6 +369,13 @@ public:
         Zulu = 327,
         Kaingang = 328,
         Nheengatu = 329,
+        Haryanvi = 330,
+        NorthernFrisian = 331,
+        Rajasthani = 332,
+        Moksha = 333,
+        TokiPona = 334,
+        Pijin = 335,
+        Obolo = 336,
 
         Afan = Oromo,
         Bengali = Bangla,
@@ -390,7 +397,7 @@ public:
         Uigur = Uyghur,
         Walamo = Wolaytta,
 
-        LastLanguage = Nheengatu
+        LastLanguage = Obolo
     };
 
     enum Script : ushort {
@@ -856,6 +863,7 @@ public:
     Q_ENUM(MeasurementSystem)
 
     enum FormatType { LongFormat, ShortFormat, NarrowFormat };
+    Q_ENUM(FormatType)
     enum NumberOption {
         DefaultNumberOptions = 0x0,
         OmitGroupSeparator = 0x01,
@@ -866,6 +874,7 @@ public:
         RejectTrailingZeroesAfterDot = 0x20
     };
     Q_DECLARE_FLAGS(NumberOptions, NumberOption)
+    Q_FLAG(NumberOptions)
 
     enum FloatingPointPrecisionOption {
         FloatingPointShortest = -128
@@ -896,9 +905,9 @@ public:
     explicit QLocale(QStringView name);
     QLocale(Language language, Territory territory);
     QLocale(Language language, Script script = AnyScript, Territory territory = AnyTerritory);
-    QLocale(const QLocale &other);
+    QLocale(const QLocale &other) noexcept;
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QLocale)
-    QLocale &operator=(const QLocale &other);
+    QLocale &operator=(const QLocale &other) noexcept;
     ~QLocale();
 
     void swap(QLocale &other) noexcept { d.swap(other.d); }
@@ -1062,6 +1071,7 @@ public:
         AnyLanguageCode = -1
     };
     Q_DECLARE_FLAGS(LanguageCodeTypes, LanguageCodeType)
+    Q_FLAG(LanguageCodeTypes)
 
 #if QT_CORE_REMOVED_SINCE(6, 3)
     static QString languageToCode(Language language);

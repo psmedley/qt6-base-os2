@@ -1,4 +1,5 @@
-# Generated from opengl.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## OpenGL Module:
@@ -25,6 +26,7 @@ qt_internal_add_module(OpenGL
         qopengltextureglyphcache.cpp qopengltextureglyphcache_p.h
         qopengltexturehelper.cpp qopengltexturehelper_p.h
         qopengltextureuploader.cpp qopengltextureuploader_p.h
+        qopengltimerquery.h
         qopenglversionfunctions.cpp qopenglversionfunctions.h qopenglversionfunctions_p.h
         qopenglversionfunctionsfactory.cpp qopenglversionfunctionsfactory.h
         qopenglversionprofile.cpp qopenglversionprofile.h
@@ -45,6 +47,14 @@ qt_internal_add_module(OpenGL
         Qt::GuiPrivate
     GENERATE_CPP_EXPORTS
 )
+
+# qDebug()<< ambiguities
+set_source_files_properties(qopengltextureblitter.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
+if(APPLE)
+    set_source_files_properties(qopenglversionfunctionsfactory.cpp
+                                PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+endif()
 
 ## Scopes:
 #####################################################################
@@ -83,7 +93,7 @@ qt_internal_extend_target(OpenGL CONDITION NOT QT_FEATURE_opengles2
         qopenglfunctions_4_5_compatibility.cpp qopenglfunctions_4_5_compatibility.h
         qopenglfunctions_4_5_core.cpp qopenglfunctions_4_5_core.h
         qopenglqueryhelper_p.h
-        qopengltimerquery.cpp qopengltimerquery.h
+        qopengltimerquery.cpp
 )
 
 qt_internal_extend_target(OpenGL CONDITION QT_FEATURE_vulkan
@@ -101,9 +111,12 @@ qt_internal_extend_target(OpenGL CONDITION QT_FEATURE_egl
         qopenglcompositorbackingstore.cpp qopenglcompositorbackingstore_p.h
 )
 
-
-qt_internal_create_tracepoints(OpenGL qtopengl.tracepoints)
+qt_internal_generate_tracepoints(OpenGL opengl
+    SOURCES
+        qopenglframebufferobject.cpp
+        qopenglpaintengine.cpp
+        qopengltexturecache.cpp
+)
 qt_internal_add_docs(OpenGL
     doc/qtopengl.qdocconf
 )
-

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 if(WIN32 AND QT_FEATURE_networklistmanager)
     add_subdirectory(networklistmanager)
 endif()

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Initial autogen setup for a target to specify certain CMake properties which are common
 # to all autogen tools. Also enable AUTOMOC by default.
 function(qt_autogen_tools_initial_setup target)
@@ -58,7 +61,8 @@ endfunction()
 
 # This function adds or removes additional AUTOGEN tools to a target: AUTOMOC/UIC/RCC
 function(qt_autogen_tools target)
-    qt_parse_all_arguments(arg "qt_autogen_tools" "" "" "${__default_private_args}" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "${__default_private_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     if(arg_ENABLE_AUTOGEN_TOOLS)
         foreach(tool ${arg_ENABLE_AUTOGEN_TOOLS})
@@ -91,7 +95,7 @@ function(qt_manual_moc result)
             "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}" outfile)
         list(APPEND moc_files "${outfile}")
 
-        set(moc_parameters_file "${outfile}_parameters$<$<BOOL:$<CONFIGURATION>>:_$<CONFIGURATION>>")
+        set(moc_parameters_file "${outfile}_parameters$<$<BOOL:$<CONFIG>>:_$<CONFIG>>")
         set(moc_parameters ${arg_FLAGS} -o "${outfile}" "${infile}")
 
         foreach(dir IN ITEMS ${arg_INCLUDE_DIRECTORIES})

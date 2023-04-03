@@ -110,11 +110,14 @@ QFlags<Qt::KeyboardModifier> getForEvent<EmscriptenKeyboardEvent>(
 struct Q_CORE_EXPORT Event
 {
     EventType type;
+    emscripten::val target = emscripten::val::undefined();
 };
 
 struct Q_CORE_EXPORT MouseEvent : public Event
 {
-    QPoint point;
+    QPoint localPoint;
+    QPoint pointInPage;
+    QPoint pointInViewport;
     Qt::MouseButton mouseButton;
     Qt::MouseButtons mouseButtons;
     QFlags<Qt::KeyboardModifier> modifiers;

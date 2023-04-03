@@ -9,7 +9,6 @@
 #include "qhash.h"
 #include "qsocketnotifier.h"
 #include "qthread.h"
-#include "qelapsedtimer.h"
 
 #include "qeventdispatcher_unix_p.h"
 #include <private/qthread_p.h>
@@ -466,7 +465,9 @@ bool QEventDispatcherUNIX::processEvents(QEventLoop::ProcessEventsFlags flags)
 
     switch (qt_safe_poll(d->pollfds.data(), d->pollfds.size(), tm)) {
     case -1:
-        perror("qt_safe_poll");
+        qErrnoWarning("qt_safe_poll");
+        if (QT_CONFIG(poll_exit_on_error))
+            abort();
         break;
     case 0:
         break;

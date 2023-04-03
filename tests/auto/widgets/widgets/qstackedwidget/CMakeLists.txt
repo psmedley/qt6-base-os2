@@ -1,4 +1,5 @@
-# Generated from qstackedwidget.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qstackedwidget Test:
@@ -7,7 +8,8 @@
 qt_internal_add_test(tst_qstackedwidget
     SOURCES
         tst_qstackedwidget.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
+        Qt::WidgetsPrivate
 )

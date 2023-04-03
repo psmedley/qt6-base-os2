@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Blake2 contains a reference implementation, libb2 is a more efficient
 # implementation of a subset of Blake2 functions and should be preferred.
 # This Find module only searches for libb2 for that reason.
@@ -10,7 +13,7 @@ endif()
 find_package(PkgConfig QUIET)
 
 if(PkgConfig_FOUND)
-    pkg_check_modules(Libb2 libb2 IMPORTED_TARGET)
+    pkg_check_modules(Libb2 IMPORTED_TARGET "libb2")
 
     if (TARGET PkgConfig::Libb2)
         add_library(Libb2::Libb2 INTERFACE IMPORTED)

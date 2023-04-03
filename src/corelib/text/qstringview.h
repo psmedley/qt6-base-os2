@@ -10,6 +10,7 @@
 #include <QtCore/qstringalgorithms.h>
 
 #include <string>
+#include <QtCore/q20type_traits.h>
 
 #if defined(Q_OS_DARWIN) || defined(Q_QDOC)
 Q_FORWARD_DECLARE_CF_TYPE(CFString);
@@ -22,6 +23,9 @@ class QString;
 class QStringView;
 class QRegularExpression;
 class QRegularExpressionMatch;
+#ifdef Q_QDOC
+class QUtf8StringView;
+#endif
 
 namespace QtPrivate {
 template <typename Char>
@@ -33,7 +37,7 @@ struct IsCompatibleCharTypeHelper
                              (std::is_same<Char, wchar_t>::value && sizeof(wchar_t) == sizeof(QChar))> {};
 template <typename Char>
 struct IsCompatibleCharType
-    : IsCompatibleCharTypeHelper<typename std::remove_cv<typename std::remove_reference<Char>::type>::type> {};
+    : IsCompatibleCharTypeHelper<q20::remove_cvref_t<Char>> {};
 
 template <typename Pointer>
 struct IsCompatiblePointerHelper : std::false_type {};
@@ -42,7 +46,7 @@ struct IsCompatiblePointerHelper<Char*>
     : IsCompatibleCharType<Char> {};
 template <typename Pointer>
 struct IsCompatiblePointer
-    : IsCompatiblePointerHelper<typename std::remove_cv<typename std::remove_reference<Pointer>::type>::type> {};
+    : IsCompatiblePointerHelper<q20::remove_cvref_t<Pointer>> {};
 
 template <typename T, typename Enable = void>
 struct IsContainerCompatibleWithQStringView : std::false_type {};
@@ -136,21 +140,26 @@ private:
     { return str; }
 
 public:
-    constexpr QStringView() noexcept
-        : m_size(0), m_data(nullptr) {}
+    constexpr QStringView() noexcept {}
     constexpr QStringView(std::nullptr_t) noexcept
         : QStringView() {}
 
     template <typename Char, if_compatible_char<Char> = true>
     constexpr QStringView(const Char *str, qsizetype len)
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0) || defined(QT_BOOTSTRAPPED)
+        : m_data(castHelper(str)),
+          m_size((Q_ASSERT(len >= 0), Q_ASSERT(str || !len), len))
+#else
         : m_size((Q_ASSERT(len >= 0), Q_ASSERT(str || !len), len)),
-          m_data(castHelper(str)) {}
+          m_data(castHelper(str))
+#endif
+    {}
 
     template <typename Char, if_compatible_char<Char> = true>
     constexpr QStringView(const Char *f, const Char *l)
         : QStringView(f, l - f) {}
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     template <typename Char, size_t N>
     constexpr QStringView(const Char (&array)[N]) noexcept;
 
@@ -163,7 +172,7 @@ public:
         : QStringView(str, str ? lengthHelperPointer(str) : 0) {}
 #endif
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     QStringView(const QString &str) noexcept;
 #else
     template <typename String, if_compatible_qstring_like<String> = true>
@@ -254,6 +263,7 @@ public:
     [[nodiscard]] int compare(QStringView other, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
     { return QtPrivate::compareStrings(*this, other, cs); }
     [[nodiscard]] inline int compare(QLatin1StringView other, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
+    [[nodiscard]] inline int compare(QUtf8StringView other, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
     [[nodiscard]] constexpr int compare(QChar c) const noexcept
     { return size() >= 1 ? compare_single_char_helper(*utf16() - c.unicode()) : -1; }
     [[nodiscard]] int compare(QChar c, Qt::CaseSensitivity cs) const noexcept
@@ -419,8 +429,13 @@ public:
     [[nodiscard]] constexpr QChar first() const { return front(); }
     [[nodiscard]] constexpr QChar last()  const { return back(); }
 private:
-    qsizetype m_size;
-    const storage_type *m_data;
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0) || defined(QT_BOOTSTRAPPED)
+    const storage_type *m_data = nullptr;
+    qsizetype m_size = 0;
+#else
+    qsizetype m_size = 0;
+    const storage_type *m_data = nullptr;
+#endif
 
     constexpr int compare_single_char_helper(int diff) const noexcept
     { return diff ? diff : size() > 1 ? 1 : 0; }

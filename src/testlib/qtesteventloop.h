@@ -36,7 +36,7 @@ public:
 
     inline static QTestEventLoop &instance()
     {
-        static QPointer<QTestEventLoop> testLoop;
+        Q_CONSTINIT static QPointer<QTestEventLoop> testLoop;
         if (testLoop.isNull())
             testLoop = new QTestEventLoop(QCoreApplication::instance());
         return *static_cast<QTestEventLoop *>(testLoop);
@@ -60,7 +60,7 @@ inline void QTestEventLoop::enterLoopMSecs(int ms)
     Q_ASSERT(!loop);
     _timeout = false;
 
-    if (QTest::runningTest() && QTest::currentTestFailed())
+    if (QTest::runningTest() && QTest::currentTestResolved())
         return;
 
     QEventLoop l;

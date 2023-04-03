@@ -107,13 +107,13 @@ private:
     StateResult result = { 0, OverriddenByEnvironment };
 #ifdef QT_BOOTSTRAPPED
     Q_UNUSED(which);
-    Q_UNREACHABLE();
+    Q_UNREACHABLE_RETURN(result);
 #else
     // can't use qEnvironmentVariableIntValue (reentrancy)
     const char *seedstr = getenv("QT_HASH_SEED");
     if (seedstr) {
         auto r = qstrntoll(seedstr, strlen(seedstr), 10);
-        if (r.endptr == seedstr + strlen(seedstr)) {
+        if (r.used > 0 && size_t(r.used) == strlen(seedstr)) {
             if (r.result) {
                 // can't use qWarning here (reentrancy)
                 fprintf(stderr, "QT_HASH_SEED: forced seed value is not 0; ignored.\n");
@@ -133,8 +133,8 @@ private:
             result.requestedSeed = x.data[i];
     }
     result.state = JustInitialized;
-#endif
     return result;
+#endif
 }
 
 inline HashSeedStorage::StateResult HashSeedStorage::state(int which)
@@ -1436,7 +1436,7 @@ size_t qHash(double key, size_t seed) noexcept
     }
 }
 
-#if !defined(Q_OS_DARWIN) || defined(Q_CLANG_QDOC)
+#if !defined(Q_OS_DARWIN) || defined(Q_QDOC)
 /*! \relates QHash
     \since 5.3
 
@@ -1679,10 +1679,15 @@ size_t qHash(long double key, size_t seed) noexcept
 
     The two-arguments overloads take an unsigned integer that should be used to
     seed the calculation of the hash function. This seed is provided by QHash
-    in order to prevent a family of \l{algorithmic complexity attacks}. If both
-    a one-argument and a two-arguments overload are defined for a key type,
-    the latter is used by QHash (note that you can simply define a
-    two-arguments version, and use a default value for the seed parameter).
+    in order to prevent a family of \l{algorithmic complexity attacks}.
+
+    \note In Qt 6 it is possible to define a \c{qHash()} overload
+    taking only one argument; support for this is deprecated. Starting
+    with Qt 7, it will be mandatory to use a two-arguments overload. If
+    both a one-argument and a two-arguments overload are defined for a
+    key type, the latter is used by QHash (note that you can simply
+    define a two-arguments version, and use a default value for the
+    seed parameter).
 
     The second way to provide a hashing function is by specializing
     the \c{std::hash} class for the key type \c{K}, and providing a
@@ -3912,5 +3917,37 @@ size_t qHash(long double key, size_t seed) noexcept
 
     Returns the number of elements removed, if any.
 */
+
+#ifdef QT_HAS_CONSTEXPR_BITOPS
+namespace QHashPrivate {
+static_assert(qPopulationCount(SpanConstants::NEntries) == 1,
+        "NEntries must be a power of 2 for bucketForHash() to work.");
+
+// ensure the size of a Span does not depend on the template parameters
+using Node1 = Node<int, int>;
+static_assert(sizeof(Span<Node1>) == sizeof(Span<Node<char, void *>>));
+static_assert(sizeof(Span<Node1>) == sizeof(Span<Node<qsizetype, QHashDummyValue>>));
+static_assert(sizeof(Span<Node1>) == sizeof(Span<Node<QString, QVariant>>));
+static_assert(sizeof(Span<Node1>) > SpanConstants::NEntries);
+static_assert(qNextPowerOfTwo(sizeof(Span<Node1>)) == SpanConstants::NEntries * 2);
+
+// ensure allocations are always a power of two, at a minimum NEntries,
+// obeying the fomula
+//   qNextPowerOfTwo(2 * N);
+// without overflowing
+static constexpr size_t NEntries = SpanConstants::NEntries;
+static_assert(GrowthPolicy::bucketsForCapacity(1) == NEntries);
+static_assert(GrowthPolicy::bucketsForCapacity(NEntries / 2 + 0) == NEntries);
+static_assert(GrowthPolicy::bucketsForCapacity(NEntries / 2 + 1) == 2 * NEntries);
+static_assert(GrowthPolicy::bucketsForCapacity(NEntries * 1 - 1) == 2 * NEntries);
+static_assert(GrowthPolicy::bucketsForCapacity(NEntries * 1 + 0) == 4 * NEntries);
+static_assert(GrowthPolicy::bucketsForCapacity(NEntries * 1 + 1) == 4 * NEntries);
+static_assert(GrowthPolicy::bucketsForCapacity(NEntries * 2 - 1) == 4 * NEntries);
+static_assert(GrowthPolicy::bucketsForCapacity(NEntries * 2 + 0) == 8 * NEntries);
+static_assert(GrowthPolicy::bucketsForCapacity(SIZE_MAX / 4) == SIZE_MAX / 2 + 1);
+static_assert(GrowthPolicy::bucketsForCapacity(SIZE_MAX / 2) == SIZE_MAX);
+static_assert(GrowthPolicy::bucketsForCapacity(SIZE_MAX) == SIZE_MAX);
+}
+#endif
 
 QT_END_NAMESPACE

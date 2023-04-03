@@ -31,8 +31,10 @@ private Q_SLOTS:
     void toMSecsSinceEpochTz();
     void setDate();
     void setTime();
+#if QT_DEPRECATED_SINCE(6, 9)
     void setTimeSpec();
     void setOffsetFromUtc();
+#endif
     void setMSecsSinceEpoch();
     void setMSecsSinceEpochTz();
     void toString();
@@ -42,8 +44,10 @@ private Q_SLOTS:
     void addDaysTz();
     void addMSecs();
     void addMSecsTz();
+#if QT_DEPRECATED_SINCE(6, 9)
     void toTimeSpec();
     void toOffsetFromUtc();
+#endif
     void daysTo();
     void msecsTo();
     void equivalent();
@@ -228,6 +232,9 @@ void tst_QDateTime::setTime()
     }
 }
 
+#if QT_DEPRECATED_SINCE(6, 9)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
 void tst_QDateTime::setTimeSpec()
 {
     const auto list = daily(JULIAN_DAY_2010, JULIAN_DAY_2020);
@@ -245,6 +252,8 @@ void tst_QDateTime::setOffsetFromUtc()
             test.setOffsetFromUtc(3600);
     }
 }
+QT_WARNING_POP
+#endif // 6.9 deprecation
 
 void tst_QDateTime::setMSecsSinceEpoch()
 {
@@ -333,6 +342,9 @@ void tst_QDateTime::addMSecsTz()
     }
 }
 
+#if QT_DEPRECATED_SINCE(6, 9)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
 void tst_QDateTime::toTimeSpec()
 {
     const auto list = daily(JULIAN_DAY_2010, JULIAN_DAY_2020);
@@ -350,6 +362,8 @@ void tst_QDateTime::toOffsetFromUtc()
             test.toOffsetFromUtc(3600);
     }
 }
+QT_WARNING_POP
+#endif
 
 void tst_QDateTime::daysTo()
 {
@@ -390,7 +404,7 @@ void tst_QDateTime::equivalentUtc()
 {
     bool result = false;
     const QDateTime other = QDateTime::fromMSecsSinceEpoch(
-        qint64(JULIAN_DAY_2010 - JULIAN_DAY_1970) * MSECS_PER_DAY, Qt::UTC);
+        qint64(JULIAN_DAY_2010 - JULIAN_DAY_1970) * MSECS_PER_DAY, QTimeZone::UTC);
     const auto list = daily(JULIAN_DAY_2010, JULIAN_DAY_2020);
     QBENCHMARK {
         for (const QDateTime &test : list)
@@ -416,7 +430,7 @@ void tst_QDateTime::lessThanUtc()
 {
     bool result = false;
     const QDateTime other = QDateTime::fromMSecsSinceEpoch(
-        qint64(JULIAN_DAY_2010 - JULIAN_DAY_1970) * MSECS_PER_DAY, Qt::UTC);
+        qint64(JULIAN_DAY_2010 - JULIAN_DAY_1970) * MSECS_PER_DAY, QTimeZone::UTC);
     const auto list = daily(JULIAN_DAY_2010, JULIAN_DAY_2020);
     QBENCHMARK {
         for (const QDateTime &test : list)
@@ -500,7 +514,7 @@ void tst_QDateTime::fromMSecsSinceEpoch()
     const int end = JULIAN_DAY_2020 - JULIAN_DAY_1970;
     QBENCHMARK {
         for (int jd = start; jd < end; ++jd)
-            QDateTime::fromMSecsSinceEpoch(jd * MSECS_PER_DAY, Qt::LocalTime);
+            QDateTime::fromMSecsSinceEpoch(jd * MSECS_PER_DAY);
     }
 }
 
@@ -510,7 +524,7 @@ void tst_QDateTime::fromMSecsSinceEpochUtc()
     const int end = JULIAN_DAY_2020 - JULIAN_DAY_1970;
     QBENCHMARK {
         for (int jd = start; jd < end; ++jd)
-            QDateTime::fromMSecsSinceEpoch(jd * MSECS_PER_DAY, Qt::UTC);
+            QDateTime::fromMSecsSinceEpoch(jd * MSECS_PER_DAY, QTimeZone::UTC);
     }
 }
 

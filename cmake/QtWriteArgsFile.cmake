@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # This script writes its arguments to the file determined by OUT_FILE.
 # Each argument appears on a separate line.
 # This is used for writing the config.opt file.

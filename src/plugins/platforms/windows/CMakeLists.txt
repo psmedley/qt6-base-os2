@@ -1,4 +1,5 @@
-# Generated from windows.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QWindowsIntegrationPlugin Plugin:
@@ -7,7 +8,7 @@
 qt_internal_add_plugin(QWindowsIntegrationPlugin
     OUTPUT_NAME qwindows
     PLUGIN_TYPE platforms
-    DEFAULT_IF ${QT_QPA_DEFAULT_PLATFORM} MATCHES windows # special case
+    DEFAULT_IF ${QT_QPA_DEFAULT_PLATFORM} MATCHES windows
     SOURCES
         main.cpp
         qtwindowsglobal.h
@@ -26,7 +27,7 @@ qt_internal_add_plugin(QWindowsIntegrationPlugin
         qwindowsinternalmimedata.cpp qwindowsinternalmimedata.h
         qwindowskeymapper.cpp qwindowskeymapper.h
         qwindowsmenu.cpp qwindowsmenu.h
-        qwindowsmime.cpp qwindowsmime.h
+        qwindowsmimeregistry.cpp qwindowsmimeregistry.h
         qwindowsmousehandler.cpp qwindowsmousehandler.h
         qwindowsnativeinterface.cpp qwindowsnativeinterface.h
         qwindowsole.cpp qwindowsole.h
@@ -65,6 +66,10 @@ qt_internal_add_plugin(QWindowsIntegrationPlugin
         runtimeobject
 )
 
+# Duplicated symbols
+set_source_files_properties(qwindowspointerhandler.cpp qwindowsmousehandler.cpp
+                            PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
 # Resources:
 set_source_files_properties("openglblacklists/default.json"
     PROPERTIES QT_RESOURCE_ALIAS "default.json"
@@ -80,10 +85,6 @@ qt_internal_add_resource(QWindowsIntegrationPlugin "openglblacklists"
         ${openglblacklists_resource_files}
 )
 
-
-#### Keys ignored in scope 1:.:.:windows.pro:<TRUE>:
-# OTHER_FILES = "windows.json"
-
 ## Scopes:
 #####################################################################
 
@@ -94,9 +95,6 @@ qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION QT_FEATURE_opengl
     LIBRARIES
         Qt::OpenGLPrivate
 )
-
-#### Keys ignored in scope 3:.:.:windows.pro:NOT TARGET___equals____ss_QT_DEFAULT_QPA_PLUGIN:
-# PLUGIN_EXTENDS = "-"
 
 qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION QT_FEATURE_opengl AND NOT QT_FEATURE_dynamicgl
     LIBRARIES
@@ -202,8 +200,6 @@ qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION MINGW AND QT_FEATU
         uuid
 )
 
-# begin special case
 if (MINGW)
     set_source_files_properties(qwindowspointerhandler.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 endif()
-# end special case

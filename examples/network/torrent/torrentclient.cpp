@@ -14,6 +14,7 @@
 #include <QNetworkInterface>
 
 #include <algorithm>
+#include <chrono>
 
 // These constants could also be configurable by the user.
 static const int ServerMinPort = 6881;
@@ -23,10 +24,10 @@ static const int MaxBlocksInProgress = 5;
 static const int MaxBlocksInMultiMode = 2;
 static const int MaxConnectionPerPeer = 1;
 static const int RateControlWindowLength = 10;
-static const int RateControlTimerDelay = 1000;
+static const std::chrono::seconds RateControlTimerDelay(1);
 static const int MinimumTimeBeforeRevisit = 30;
 static const int MaxUploads = 4;
-static const int UploadScheduleInterval = 10000;
+static const std::chrono::seconds UploadScheduleInterval(10);
 
 struct TorrentPiece {
     QBitArray completedBlocks;
@@ -207,6 +208,10 @@ TorrentClient::TorrentClient(QObject *parent)
 
 TorrentClient::~TorrentClient()
 {
+    auto rateController = RateController::instance();
+    const auto childSockets = findChildren<PeerWireClient *>(Qt::FindDirectChildrenOnly);
+    for (PeerWireClient *socket : childSockets)
+        rateController->removeSocket(socket);
     qDeleteAll(d->peers);
     qDeleteAll(d->pendingPieces);
     delete d;
@@ -1023,13 +1028,7 @@ void TorrentClient::peerWireBytesReceived(qint64 size)
 
 int TorrentClient::blocksLeftForPiece(const TorrentPiece *piece) const
 {
-    int blocksLeft = 0;
-    int completedBlocksSize = piece->completedBlocks.size();
-    for (int i = 0; i < completedBlocksSize; ++i) {
-        if (!piece->completedBlocks.testBit(i))
-            ++blocksLeft;
-    }
-    return blocksLeft;
+    return piece->completedBlocks.count(false);
 }
 
 void TorrentClient::scheduleUploads()

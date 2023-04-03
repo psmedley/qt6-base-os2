@@ -38,6 +38,8 @@
 #include <QFileDialog>
 #include <QFileSystemModel>
 
+#include <QtWidgets/private/qapplication_p.h>
+
 #if defined(Q_OS_UNIX)
 #include <unistd.h> // for pathconf() on OS X
 #ifdef QT_BUILD_INTERNAL
@@ -420,13 +422,9 @@ void tst_QFiledialog::completer_data()
 
     QDir dir = QDir::root();
 #ifdef Q_OS_ANDROID
-    // Android 11 and above doesn't allow accessing root filesystem as before,
-    // so let's opt int for the app's home.
-    if (QNativeInterface::QAndroidApplication::sdkVersion() >= 30) {
-        const auto homePaths = QStandardPaths::standardLocations(QStandardPaths::HomeLocation);
-        QVERIFY(!homePaths.isEmpty());
-        dir = QDir(homePaths.first());
-    }
+    const auto homePaths = QStandardPaths::standardLocations(QStandardPaths::HomeLocation);
+    QVERIFY(!homePaths.isEmpty());
+    dir = QDir(homePaths.first());
 #endif
 
     QFileInfoList list = dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
@@ -1118,7 +1116,7 @@ void tst_QFiledialog::focus()
     QFileDialog fd;
     fd.setDirectory(QDir::currentPath());
     fd.show();
-    QApplication::setActiveWindow(&fd);
+    QApplicationPrivate::setActiveWindow(&fd);
     QVERIFY(QTest::qWaitForWindowActive(&fd));
     QCOMPARE(fd.isVisible(), true);
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget*>(&fd));

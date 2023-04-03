@@ -18,6 +18,7 @@
 #include "qplatformdefs.h"
 #include <QtCore/qglobal.h>
 #include <QtCore/qdatetime.h>
+#include <QtCore/qtimezone.h>
 #include <QtCore/private/qabstractfileengine_p.h>
 
 // Platform-specific includes
@@ -207,7 +208,7 @@ private:
     MetaDataFlags knownFlagsMask;
     MetaDataFlags entryFlags;
 
-    qint64 size_;
+    qint64 size_ = 0;
 
     // Platform-specific data goes here:
 #if defined(Q_OS_WIN)
@@ -218,13 +219,13 @@ private:
     FILETIME lastWriteTime_;
 #else
     // msec precision
-    qint64 accessTime_;
-    qint64 birthTime_;
-    qint64 metadataChangeTime_;
-    qint64 modificationTime_;
+    qint64 accessTime_ = 0;
+    qint64 birthTime_ = 0;
+    qint64 metadataChangeTime_ = 0;
+    qint64 modificationTime_ = 0;
 
-    uint userId_;
-    uint groupId_;
+    uint userId_ = (uint) -2;
+    uint groupId_ = (uint) -2;
 #endif
 
 };
@@ -243,13 +244,29 @@ inline bool QFileSystemMetaData::isAlias() const                    { return fal
 
 #if defined(Q_OS_UNIXLIKE)
 inline QDateTime QFileSystemMetaData::birthTime() const
-{ return birthTime_ ? QDateTime::fromMSecsSinceEpoch(birthTime_, Qt::UTC) :  QDateTime(); }
+{
+    return birthTime_
+        ? QDateTime::fromMSecsSinceEpoch(birthTime_, QTimeZone::UTC)
+        : QDateTime();
+}
 inline QDateTime QFileSystemMetaData::metadataChangeTime() const
-{ return metadataChangeTime_ ? QDateTime::fromMSecsSinceEpoch(metadataChangeTime_, Qt::UTC) :  QDateTime(); }
+{
+    return metadataChangeTime_
+        ? QDateTime::fromMSecsSinceEpoch(metadataChangeTime_, QTimeZone::UTC)
+        : QDateTime();
+}
 inline QDateTime QFileSystemMetaData::modificationTime() const
-{ return modificationTime_ ? QDateTime::fromMSecsSinceEpoch(modificationTime_, Qt::UTC) :  QDateTime(); }
+{
+    return modificationTime_
+        ? QDateTime::fromMSecsSinceEpoch(modificationTime_, QTimeZone::UTC)
+        : QDateTime();
+}
 inline QDateTime QFileSystemMetaData::accessTime() const
-{ return accessTime_ ? QDateTime::fromMSecsSinceEpoch(accessTime_, Qt::UTC) :  QDateTime(); }
+{
+    return accessTime_
+        ? QDateTime::fromMSecsSinceEpoch(accessTime_, QTimeZone::UTC)
+        : QDateTime();
+}
 
 inline uint QFileSystemMetaData::userId() const                     { return userId_; }
 inline uint QFileSystemMetaData::groupId() const                    { return groupId_; }

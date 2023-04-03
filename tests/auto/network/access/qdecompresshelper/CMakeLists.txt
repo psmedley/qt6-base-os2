@@ -1,4 +1,5 @@
-# Generated from qdecompresshelper.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qdecompresshelper Test:
@@ -11,10 +12,7 @@ qt_internal_add_test(tst_qdecompresshelper
         tst_qdecompresshelper.cpp
         zstandard.rcc.cpp
     DEFINES
-        SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} # special case
-    PUBLIC_LIBRARIES
+        SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+    LIBRARIES
         Qt::NetworkPrivate
 )
-
-#### Keys ignored in scope 1:.:.:qdecompresshelper.pro:<TRUE>:
-# TEMPLATE = "app"

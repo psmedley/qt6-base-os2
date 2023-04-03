@@ -1,7 +1,10 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 find_package(PkgConfig QUIET)
-pkg_check_modules(PC_GSSAPI QUIET krb5-gssapi)
+pkg_check_modules(PC_GSSAPI QUIET "krb5-gssapi")
 if (NOT PC_GSSAPI_FOUND)
-    pkg_check_modules(PC_GSSAPI QUIET mit-krb5-gssapi)
+    pkg_check_modules(PC_GSSAPI QUIET "mit-krb5-gssapi")
 endif()
 
 find_path(GSSAPI_INCLUDE_DIRS

@@ -16,6 +16,8 @@
 
 #include "qc14n.h"
 
+using namespace Qt::StringLiterals;
+
 Q_DECLARE_METATYPE(QXmlStreamReader::ReadElementTextBehaviour)
 
 static const char *const catalogFile = "XML-Test-Suite/xmlconf/finalCatalog.xml";
@@ -558,6 +560,7 @@ private slots:
     void setEntityResolver();
     void readFromQBuffer() const;
     void readFromQBufferInvalid() const;
+    void readFromLatin1String() const;
     void readNextStartElement() const;
     void readElementText() const;
     void readElementText_data() const;
@@ -578,6 +581,7 @@ private slots:
     void invalidStringCharacters_data() const;
     void invalidStringCharacters() const;
     void hasError() const;
+    void readBack_data() const;
     void readBack() const;
     void roundTrip() const;
     void roundTrip_data() const;
@@ -642,7 +646,7 @@ void tst_QXmlStream::reportFailures() const
 
 void tst_QXmlStream::reportFailures_data()
 {
-    const int len = m_handler.failures.count();
+    const int len = m_handler.failures.size();
 
     QTest::addColumn<bool>("isError");
     QTest::addColumn<QString>("description");
@@ -679,7 +683,7 @@ void tst_QXmlStream::checkBaseline_data() const
     QTest::addColumn<QString>("expected");
     QTest::addColumn<QString>("output");
 
-    const int len = m_handler.missedBaselines.count();
+    const int len = m_handler.missedBaselines.size();
 
     for(int i = 0; i < len; ++i)
     {
@@ -708,7 +712,7 @@ void tst_QXmlStream::reportSuccess_data() const
 {
     QTest::addColumn<bool>("isError");
 
-    const int len = m_handler.successes.count();
+    const int len = m_handler.successes.size();
 
     for (int i = 0; i < len; ++i) {
         const QByteArray testName = QByteArray::number(i) + ". " + m_handler.successes.at(i).toLatin1();
@@ -1097,6 +1101,25 @@ void tst_QXmlStream::readFromQBufferInvalid() const
     }
 
     QVERIFY(reader.hasError());
+}
+
+void tst_QXmlStream::readFromLatin1String() const
+{
+    const auto in = "<a>M\xE5rten</a>"_L1;
+    {
+        QXmlStreamReader reader(in);
+        QVERIFY(reader.readNextStartElement());
+        QString text = reader.readElementText();
+        QCOMPARE(text, "M\xE5rten"_L1);
+    }
+    // Same as above, but with addData()
+    {
+        QXmlStreamReader reader;
+        reader.addData(in);
+        QVERIFY(reader.readNextStartElement());
+        QString text = reader.readElementText();
+        QCOMPARE(text, "M\xE5rten"_L1);
+    }
 }
 
 void tst_QXmlStream::readNextStartElement() const
@@ -1638,35 +1661,57 @@ void tst_QXmlStream::invalidStringCharacters_data() const
     //
 }
 
-static bool isValidSingleTextChar(const ushort c)
+static bool isValidSingleTextChar(char32_t c)
 {
-    // Conforms to https://www.w3.org/TR/REC-xml/#NT-Char - except for the high range, which is done
-    // with surrogates.
+    // Conforms to https://www.w3.org/TR/REC-xml/#NT-Char
     // Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
-    static const QPair<ushort, ushort> validRanges[] = {
-        QPair<ushort, ushort>(0x9, 0xb),
-        QPair<ushort, ushort>(0xd, 0xe),
-        QPair<ushort, ushort>(0x20, 0xd800),
-        QPair<ushort, ushort>(0xe000, 0xfffe)
+    constexpr struct { char32_t lo, hi; } validRanges[] = {
+        {0x9, 0xA},
+        {0xD, 0xD},
+        {0x20, 0xD7ff},
+        {0xE000, 0xFFFD},
+        {0x1'0000, 0x10'FFFF},
     };
 
-    for (const QPair<ushort, ushort> &range : validRanges) {
-        if (c >= range.first && c < range.second)
+    for (const auto range : validRanges) {
+        if (c >= range.lo && c <= range.hi)
             return true;
     }
     return false;
 }
 
+void tst_QXmlStream::readBack_data() const
+{
+    QTest::addColumn<int>("plane");
+
+    // Check all 17 Unicode planes. Split into separate executions lest the
+    // test function times out in asan builds.
+
+    for (int i = 0; i < 17; ++i)
+        QTest::addRow("plane-%02d", i) << i;
+}
+
 void tst_QXmlStream::readBack() const
 {
-    QBuffer buffer;
+    QFETCH(const int, plane);
 
-    for (ushort c = 0; c < std::numeric_limits<ushort>::max(); ++c) {
+    constexpr qsizetype MaxChunkSizeWhenEncoding = 512; // from qxmlstream.cpp
+    QBuffer buffer;
+    QString text = QString(513, 'a'); // one longer than the internal conversion buffer
+
+    for (char16_t i = 0; i < (std::numeric_limits<char16_t>::max)(); ++i) {
+
+        const char32_t c = (plane << 16) + i;
+
+        // end chunk in invalid character, split surrogates:
+        const auto pair = QChar::fromUcs4(c);
+        text.resize(MaxChunkSizeWhenEncoding + 1 - pair.size());
+        text += pair;
 
         QVERIFY(buffer.open(QIODevice::WriteOnly|QIODevice::Truncate));
         QXmlStreamWriter writer(&buffer);
         writer.writeStartDocument();
-        writer.writeTextElement("a", QString(QChar(c)));
+        writer.writeTextElement("a", text);
         writer.writeEndDocument();
         buffer.close();
 

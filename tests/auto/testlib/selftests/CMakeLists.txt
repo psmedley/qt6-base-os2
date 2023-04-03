@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # The whole file is written manually.
 
 include(../../../../src/testlib/selfcover.cmake)
@@ -18,7 +21,7 @@ qt_internal_add_test(tst_selftests
     SOURCES
         tst_selftests.cpp
         catch.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::TestPrivate
     TESTDATA ${qmake_expected_files_resource_files}
     BUILTIN_TESTDATA

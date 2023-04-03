@@ -51,7 +51,6 @@
     "qnamespace.h" => "Qt",
     "qnumeric.h" => "QtNumeric",
     "qvulkanfunctions.h" => "QVulkanFunctions,QVulkanDeviceFunctions",
-    "qgl.h" => "QGL",
     "qtsqlglobal.h" => "QSql",
     "qssl.h" => "QSsl",
     "qtest.h" => "QTest",
@@ -76,8 +75,7 @@
 @qpa_headers = ( qr/^qplatform/, qr/^qwindowsystem/ );
 my @internal_zlib_headers = ( "crc32.h", "deflate.h", "gzguts.h", "inffast.h", "inffixed.h", "inflate.h", "inftrees.h", "trees.h", "zutil.h" );
 my @zlib_headers = ( "zconf.h", "zlib.h" );
-my @internal_qtnetwork_headers = ( "qurltlds_p.h" );
-@ignore_headers = ( @internal_zlib_headers, @internal_qtnetwork_headers );
+@ignore_headers = ( @internal_zlib_headers );
 @ignore_for_include_check = ( "qsystemdetection.h", "qcompilerdetection.h", "qprocessordetection.h", @zlib_headers);
 @ignore_for_qt_begin_namespace_check = ( "qt_windows.h", "qt_os2.h", @zlib_headers);
 %inject_headers = (

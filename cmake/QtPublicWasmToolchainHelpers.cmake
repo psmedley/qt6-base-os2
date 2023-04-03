@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Assuming EMSDK == /path/emsdk
 #
 # Then we expect /path/emsdk/.emscripten file to contain the following line
@@ -50,7 +53,7 @@ endfunction()
 
 function(__qt_internal_get_emcc_recommended_version out_var)
     # This version of Qt needs this version of emscripten.
-    set(QT_EMCC_RECOMMENDED_VERSION "3.1.14")
+    set(QT_EMCC_RECOMMENDED_VERSION "3.1.25")
     set(${out_var} "${QT_EMCC_RECOMMENDED_VERSION}" PARENT_SCOPE)
 endfunction()
 

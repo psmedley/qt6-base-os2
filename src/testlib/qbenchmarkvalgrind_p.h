@@ -41,13 +41,11 @@ class QBenchmarkCallgrindMeasurer : public QBenchmarkMeasurerBase
 {
 public:
     void start() override;
-    qint64 checkpoint() override;
-    qint64 stop() override;
-    bool isMeasurementAccepted(qint64 measurement) override;
+    QList<Measurement> stop() override;
+    bool isMeasurementAccepted(Measurement measurement) override;
     int adjustIterationCount(int) override;
     int adjustMedianCount(int) override;
     bool needsWarmupIteration() override;
-    QTest::QBenchmarkMetric metricType() override;
 };
 
 QT_END_NAMESPACE

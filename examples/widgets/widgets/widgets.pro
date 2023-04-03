@@ -3,15 +3,12 @@ SUBDIRS       = analogclock \
                 calculator \
                 calendarwidget \
                 charactermap \
-                codeeditor \
                 digitalclock \
-                elidedlabel \
                 groupbox \
                 icons \
                 imageviewer \
                 lineedits \
                 movie \
-                mousebuttons \
                 scribble \
                 shapedclock \
                 sliders \
@@ -22,5 +19,4 @@ SUBDIRS       = analogclock \
                 tetrix \
                 tooltips \
                 validators \
-                wiggly \
                 windowflags

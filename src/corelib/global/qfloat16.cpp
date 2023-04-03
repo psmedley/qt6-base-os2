@@ -7,7 +7,10 @@
 #include <cmath> // for fpclassify()'s return values
 
 #include <QtCore/qdatastream.h>
+#include <QtCore/qmetatype.h>
+#include <QtCore/qtextstream.h>
 
+QT_DECL_METATYPE_EXTERN(qfloat16, Q_CORE_EXPORT)
 QT_BEGIN_NAMESPACE
 
 QT_IMPL_METATYPE_EXTERN(qfloat16)
@@ -394,6 +397,19 @@ QDataStream &operator>>(QDataStream &ds, qfloat16 &f)
     return ds >> f.b16;
 }
 #endif
+
+QTextStream &operator>>(QTextStream &ts, qfloat16 &f16)
+{
+    float f;
+    ts >> f;
+    f16 = qfloat16(f);
+    return ts;
+}
+
+QTextStream &operator<<(QTextStream &ts, qfloat16 f)
+{
+    return ts << float(f);
+}
 
 QT_END_NAMESPACE
 

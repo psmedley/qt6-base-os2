@@ -27,6 +27,8 @@
 #include <qpa/qplatformtheme.h>
 #include <qpa/qplatformintegration.h>
 
+#include <QtWidgets/private/qapplication_p.h>
+
 using namespace QTestPrivate;
 
 Q_DECLARE_METATYPE(Qt::Key);
@@ -482,7 +484,7 @@ void tst_QMenu::focus()
     QPushButton button("Push me", &window);
     centerOnScreen(&window);
     window.show();
-    qApp->setActiveWindow(&window);
+    QApplicationPrivate::setActiveWindow(&window);
 
     QVERIFY(button.hasFocus());
     QCOMPARE(QApplication::focusWidget(), (QWidget *)&button);
@@ -526,7 +528,7 @@ void tst_QMenu::overrideMenuAction()
     m->addAction(aQuit);
 
     w.show();
-    QApplication::setActiveWindow(&w);
+    QApplicationPrivate::setActiveWindow(&w);
     w.setFocus();
     QVERIFY(QTest::qWaitForWindowActive(&w));
     QVERIFY(w.hasFocus());
@@ -1604,7 +1606,7 @@ void tst_QMenu::transientParent()
     QWindow *topLevel = window.windowHandle();
     QVERIFY(topLevel);
 
-    QApplication::setActiveWindow(&window);
+    QApplicationPrivate::setActiveWindow(&window);
     window.setFocus();
     QVERIFY(QTest::qWaitForWindowActive(&window));
     QVERIFY(window.hasFocus());

@@ -13,7 +13,7 @@
 
 QT_BEGIN_NAMESPACE
 
-namespace {
+namespace QtPrivate {
 // Fixed column matrix, stores items as [i11, i12, i21, i22...],
 // with FORTRAN-style index operator(r, c).
 template <class T, int NumColumns>
@@ -67,8 +67,6 @@ void FixedColumnMatrix<T, NumColumns>::storageIndexToPosition(int idx, int *rowP
 // RowWrapPolicy
 const uint DefaultFieldGrowthPolicy = 255;
 const uint DefaultRowWrapPolicy = 255;
-
-enum { ColumnCount = 2 };
 
 // -- our data structure for our items
 // This owns the QLayoutItem
@@ -152,7 +150,7 @@ class QFormLayoutPrivate : public QLayoutPrivate
     Q_DECLARE_PUBLIC(QFormLayout)
 
 public:
-    typedef FixedColumnMatrix<QFormLayoutItem *, ColumnCount> ItemMatrix;
+    using ItemMatrix = QtPrivate::FixedColumnMatrix<QFormLayoutItem *, 2>;
 
     QFormLayoutPrivate();
     ~QFormLayoutPrivate() { }

@@ -1,4 +1,5 @@
-# special case skip regeneration
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 # We need to include the features of a few modules before they are actually declared.
 # The feature values are used as conditions for deciding whether bundled 3rd party libraries
@@ -12,12 +13,15 @@ if(QT_FEATURE_gui)
     qt_feature_evaluate_features("${CMAKE_CURRENT_SOURCE_DIR}/gui/configure.cmake")
 endif()
 
+add_subdirectory(tools/syncqt)
+
 function(find_or_build_bootstrap_names)
     if (QT_WILL_BUILD_TOOLS)
         add_subdirectory(tools/bootstrap)  # bootstrap library
     endif()
     add_subdirectory(tools/moc)
     add_subdirectory(tools/rcc)
+    add_subdirectory(tools/tracepointgen)
     add_subdirectory(tools/tracegen)
     add_subdirectory(tools/cmake_automoc_parser)
 endfunction()
@@ -39,6 +43,9 @@ endif()
 qt_install_3rdparty_library_wrap_config_extra_file(BundledZLIB)
 
 add_subdirectory(corelib)
+if (QT_FEATURE_ctf AND QT_FEATURE_library)
+    add_subdirectory(corelib/tracing)
+endif()
 
 # Needs to be after corelib, because some of them reference Core.
 add_subdirectory(3rdparty)

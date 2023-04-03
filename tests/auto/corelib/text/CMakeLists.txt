@@ -1,4 +1,5 @@
-# Generated from text.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 add_subdirectory(qanystringview)
 add_subdirectory(qbytearray)
@@ -10,6 +11,7 @@ add_subdirectory(qbytearrayview)
 add_subdirectory(qbytedatabuffer)
 add_subdirectory(qchar)
 add_subdirectory(qcollator)
+add_subdirectory(qlatin1stringmatcher)
 add_subdirectory(qlatin1stringview)
 add_subdirectory(qregularexpression)
 add_subdirectory(qstring)

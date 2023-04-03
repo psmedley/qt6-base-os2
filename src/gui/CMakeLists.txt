@@ -1,10 +1,6 @@
-# Generated from gui.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
-#####################################################################
-## Gui Module:
-#####################################################################
-
-# special case begin
 qt_find_package(X11_XCB)
 qt_find_package(WrapHarfbuzz PROVIDED_TARGETS WrapHarfbuzz::WrapHarfbuzz)
 qt_find_package(WrapPNG PROVIDED_TARGETS WrapPNG::WrapPNG)
@@ -45,19 +41,25 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}
     set_source_files_properties(../3rdparty/md4c/md4c.c PROPERTIES COMPILE_FLAGS "-Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers -Wno-missing-braces")
 endif()
 
+# Silence AUTOMOC warning 'No relevant classes found. No output generated.'
+if (NOT UNIX)
+    set_source_files_properties(kernel/qplatformwindow_p.h
+                                PROPERTIES SKIP_AUTOMOC TRUE)
+endif()
+
 unset(qmake_module_config)
 if(QT_FEATURE_opengl)
     list(APPEND qmake_module_config opengl)
 endif()
 
-# special case end
-
 qt_internal_add_module(Gui
     PLUGIN_TYPES accessiblebridge platforms platforms/darwin xcbglintegrations platformthemes platforminputcontexts generic iconengines imageformats egldeviceintegrations
-    FEATURE_DEPENDENCIES  # special case:
-        Qt::Network # special case:
-    QMAKE_MODULE_CONFIG "${qmake_module_config}" # special case
+    FEATURE_DEPENDENCIES
+        Qt::Network
+    QMAKE_MODULE_CONFIG "${qmake_module_config}"
     SOURCES
+        accessible/qaccessible.h
+        accessible/qplatformaccessibility.h
         image/qabstractfileiconengine.cpp image/qabstractfileiconengine_p.h
         image/qabstractfileiconprovider.cpp image/qabstractfileiconprovider.h image/qabstractfileiconprovider_p.h
         image/qbitmap.cpp image/qbitmap.h
@@ -100,6 +102,7 @@ qt_internal_add_module(Gui
         kernel/qkeymapper.cpp kernel/qkeymapper_p.h
         kernel/qoffscreensurface.cpp kernel/qoffscreensurface.h kernel/qoffscreensurface_p.h
         kernel/qoffscreensurface_platform.h
+        kernel/qopenglcontext.h
         kernel/qpaintdevicewindow.cpp kernel/qpaintdevicewindow.h kernel/qpaintdevicewindow_p.h
         kernel/qpalette.cpp kernel/qpalette.h
         kernel/qpixelformat.cpp kernel/qpixelformat.h
@@ -117,6 +120,7 @@ qt_internal_add_module(Gui
         kernel/qplatformmenu.cpp kernel/qplatformmenu.h kernel/qplatformmenu_p.h
         kernel/qplatformnativeinterface.cpp kernel/qplatformnativeinterface.h
         kernel/qplatformoffscreensurface.cpp kernel/qplatformoffscreensurface.h
+        kernel/qplatformopenglcontext.h
         kernel/qplatformscreen.cpp kernel/qplatformscreen.h kernel/qplatformscreen_p.h
         kernel/qplatformservices.cpp kernel/qplatformservices.h
         kernel/qplatformsessionmanager.cpp kernel/qplatformsessionmanager.h
@@ -131,7 +135,7 @@ qt_internal_add_module(Gui
         kernel/qrasterwindow.cpp kernel/qrasterwindow.h
         kernel/qscreen.cpp kernel/qscreen.h kernel/qscreen_p.h
         kernel/qsessionmanager.cpp kernel/qsessionmanager.h kernel/qsessionmanager_p.h
-        kernel/qstylehints.cpp kernel/qstylehints.h
+        kernel/qstylehints.cpp kernel/qstylehints.h kernel/qstylehints_p.h
         kernel/qsurface.cpp kernel/qsurface.h
         kernel/qsurfaceformat.cpp kernel/qsurfaceformat.h
         kernel/qtestsupport_gui.cpp kernel/qtestsupport_gui.h
@@ -146,6 +150,10 @@ qt_internal_add_module(Gui
         math3d/qvector3d.h
         math3d/qvector4d.h
         math3d/qvectornd.cpp math3d/qvectornd.h
+        opengl/qopengl.h
+        opengl/qopenglext.h
+        opengl/qopenglfunctions.h
+        opengl/qopenglextrafunctions.h
         painting/qbackingstore.cpp painting/qbackingstore.h
         painting/qbackingstoredefaultcompositor.cpp painting/qbackingstoredefaultcompositor_p.h
         painting/qbackingstorerhisupport.cpp painting/qbackingstorerhisupport_p.h
@@ -260,7 +268,7 @@ qt_internal_add_module(Gui
     DEFINES
         QT_NO_FOREACH
         QT_NO_USING_NAMESPACE
-        QT_QPA_DEFAULT_PLATFORM_NAME="${QT_QPA_DEFAULT_PLATFORM}" # special case
+        QT_QPA_DEFAULT_PLATFORM_NAME="${QT_QPA_DEFAULT_PLATFORM}"
     INCLUDE_DIRECTORIES
         ../3rdparty/VulkanMemoryAllocator
     LIBRARIES
@@ -269,11 +277,13 @@ qt_internal_add_module(Gui
         Qt::Core
     PRIVATE_MODULE_INTERFACE
         Qt::CorePrivate
-    NO_PCH_SOURCES # special case
-        "painting/qdrawhelper.cpp" # special case
+    NO_PCH_SOURCES
+        "painting/qdrawhelper.cpp"
     PRECOMPILED_HEADER
         "kernel/qt_gui_pch.h"
     GENERATE_CPP_EXPORTS
+    QPA_HEADER_FILTERS
+        "(^|/)qplatform.+\\.h$|(^|/)qwindowsystem.+\\.h$"
 )
 
 # Resources:
@@ -284,6 +294,13 @@ set(qpdf_resource_files
     "../3rdparty/icc/sRGB2014.icc"
     "painting/qpdfa_metadata.xml"
 )
+
+set_source_files_properties(painting/qdrawhelper.cpp # NO_PCH_SOURCES
+                            PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
+if(WIN32 OR (UNIX AND NOT APPLE))
+    set_target_properties(Gui PROPERTIES UNITY_BUILD OFF) # X11 define clashes/Windows oddities.
+endif()
 
 qt_internal_add_resource(Gui "qpdf"
     PREFIX
@@ -307,21 +324,11 @@ if(QT_FEATURE_reduce_relocations AND UNIX AND GCC)
                         "LINKER:--dynamic-list=${CMAKE_CURRENT_LIST_DIR}/QtGui.dynlist")
 endif()
 
-# special case begin
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_standarditemmodel
     SOURCES
         itemmodels/qstandarditemmodel.cpp itemmodels/qstandarditemmodel.h itemmodels/qstandarditemmodel_p.h
 )
-# special case end
 
-
-#### Keys ignored in scope 1:.:.:gui.pro:<TRUE>:
-# QMAKE_LIBS = "$$QMAKE_LIBS_GUI"
-
-## Scopes:
-#####################################################################
-
-# special case begin
 # With qmake, gui's opengl.pri used CONFIG += opengl, where opengl.prf
 # used direct public linkage against either libGLESv2 or libGL, depending
 # on the opengl _feature_. This is done by hand now here (where the
@@ -344,25 +351,19 @@ if(QT_FEATURE_opengl)
         target_link_libraries(Gui PUBLIC WrapOpenGL::WrapOpenGL)
     endif()
 endif()
-# special case end
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_opengl
     SOURCES
-        kernel/qopenglcontext.cpp kernel/qopenglcontext.h kernel/qopenglcontext_p.h
+        kernel/qopenglcontext.cpp kernel/qopenglcontext_p.h
         kernel/qopenglcontext_platform.h
-        kernel/qplatformopenglcontext.cpp kernel/qplatformopenglcontext.h
-        opengl/qopengl.cpp opengl/qopengl.h opengl/qopengl_p.h
-        opengl/qopenglext.h
+        kernel/qplatformopenglcontext.cpp
+        opengl/qopengl.cpp opengl/qopengl_p.h
         opengl/qopenglextensions_p.h
-        opengl/qopenglextrafunctions.h
-        opengl/qopenglfunctions.cpp opengl/qopenglfunctions.h
+        opengl/qopenglfunctions.cpp
         opengl/qopenglprogrambinarycache.cpp opengl/qopenglprogrambinarycache_p.h
         rhi/qrhigles2.cpp rhi/qrhigles2_p.h
         rhi/qrhigles2_p_p.h
 )
-
-#### Keys ignored in scope 2:.:.:gui.pro:QT_FEATURE_opengl:
-# MODULE_CONFIG = "opengl"
 
 qt_internal_extend_target(Gui CONDITION MACOS
     SOURCES
@@ -380,7 +381,8 @@ qt_internal_extend_target(Gui CONDITION APPLE
         painting/qcoregraphics.mm painting/qcoregraphics_p.h
         painting/qrasterbackingstore.cpp painting/qrasterbackingstore_p.h
         painting/qrhibackingstore.cpp painting/qrhibackingstore_p.h
-        platform/darwin/qmacmime.mm platform/darwin/qmacmime_p.h
+        platform/darwin/qmacmimeregistry.mm platform/darwin/qmacmimeregistry_p.h
+        platform/darwin/qutimimeconverter.mm platform/darwin/qutimimeconverter.h
         platform/darwin/qapplekeymapper.mm platform/darwin/qapplekeymapper_p.h
         text/coretext/qcoretextfontdatabase.mm text/coretext/qcoretextfontdatabase_p.h
         text/coretext/qfontengine_coretext.mm text/coretext/qfontengine_coretext_p.h
@@ -400,10 +402,10 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_animation
 
 qt_internal_extend_target(Gui CONDITION WIN32
     SOURCES
-        image/qpixmap_win.cpp
+        image/qpixmap_win.cpp image/qpixmap_win_p.h
         kernel/qwindowdefs_win.h
         platform/windows/qwindowsguieventdispatcher.cpp platform/windows/qwindowsguieventdispatcher_p.h
-        platform/windows/qwindowsmime_p.h
+        platform/windows/qwindowsmimeconverter.h platform/windows/qwindowsmimeconverter.cpp
         platform/windows/qwindowsnativeinterface.cpp
         rhi/cs_tdr_p.h
         rhi/qrhid3d11.cpp rhi/qrhid3d11_p.h
@@ -423,72 +425,31 @@ qt_internal_extend_target(Gui CONDITION WIN32
         d3d11
         dxgi
         dxguid
+        dcomp
 )
 
-#### Keys ignored in scope 7:.:.:gui.pro:WIN32:
-# CMAKE_WINDOWS_BUILD = "True"
-
-# special case begin
 if(QT_FEATURE_egl)
     qt_find_package(EGL)
 endif()
-# special case end
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_egl
     SOURCES
         opengl/platform/egl/qeglconvenience.cpp opengl/platform/egl/qeglconvenience_p.h
         opengl/platform/egl/qeglstreamconvenience.cpp opengl/platform/egl/qeglstreamconvenience_p.h
         opengl/platform/egl/qt_egl_p.h
-# special case begin
     LIBRARIES
-        EGL::EGL # special case
-# special case end
+        EGL::EGL
 )
-
-#### Keys ignored in scope 8:.:.:gui.pro:QT_FEATURE_egl:
-# CMAKE_EGL_LIBS = "$$cmakeProcessLibs($$QMAKE_LIBS_EGL)"
-
-#### Keys ignored in scope 9:.:.:gui.pro:NOT QMAKE_LIBDIR_EGL_ISEMPTY:
-# CMAKE_EGL_LIBDIR = "$$cmakeTargetPath($$QMAKE_LIBDIR_EGL)"
-
-#### Keys ignored in scope 10:.:.:gui.pro:QT_FEATURE_opengles2:
-# CMAKE_GL_HEADER_NAME = "GLES2/gl2.h"
-# CMAKE_OPENGL_INCDIRS = "$$cmakePortablePaths($$QMAKE_INCDIR_OPENGL_ES2)"
-# CMAKE_OPENGL_LIBS = "$$cmakeProcessLibs($$QMAKE_LIBS_OPENGL_ES2)"
-# CMAKE_QT_OPENGL_IMPLEMENTATION = "GLESv2"
-
-#### Keys ignored in scope 11:.:.:gui.pro:NOT QMAKE_INCDIR_OPENGL_ES2_ISEMPTY:
-# CMAKE_GL_INCDIRS = "$$cmakeTargetPaths($$QMAKE_INCDIR_OPENGL_ES2)"
-
-#### Keys ignored in scope 12:.:.:gui.pro:NOT QMAKE_LIBDIR_OPENGL_ES2_ISEMPTY:
-# CMAKE_OPENGL_LIBDIR = "$$cmakePortablePaths($$QMAKE_LIBDIR_OPENGL_ES2)"
-
-#### Keys ignored in scope 14:.:.:gui.pro:QT_FEATURE_opengl:
-# CMAKE_GL_HEADER_NAME = "GL/gl.h"
-# CMAKE_OPENGL_INCDIRS = "$$cmakePortablePaths($$QMAKE_INCDIR_OPENGL)"
-# CMAKE_QT_OPENGL_IMPLEMENTATION = "GL"
-
-#### Keys ignored in scope 15:.:.:gui.pro:NOT QMAKE_INCDIR_OPENGL_ISEMPTY:
-# CMAKE_GL_INCDIRS = "$$cmakeTargetPaths($$QMAKE_INCDIR_OPENGL)"
-
-#### Keys ignored in scope 16:.:.:gui.pro:NOT QT_FEATURE_dynamicgl:
-# CMAKE_OPENGL_LIBS = "$$cmakeProcessLibs($$QMAKE_LIBS_OPENGL)"
-
-#### Keys ignored in scope 17:.:.:gui.pro:NOT QMAKE_LIBDIR_OPENGL_ISEMPTY:
-# CMAKE_OPENGL_LIBDIR = "$$cmakePortablePaths($$QMAKE_LIBDIR_OPENGL)"
-
-#### Keys ignored in scope 18:.:.:gui.pro:APPLE:
-# CMAKE_GL_HEADER_NAME = "gl.h"
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_accessibility
     SOURCES
-        accessible/qaccessible.cpp accessible/qaccessible.h accessible/qaccessible_base.h
+        accessible/qaccessible.cpp accessible/qaccessible_base.h
         accessible/qaccessiblebridge.cpp accessible/qaccessiblebridge.h
         accessible/qaccessiblebridgeutils.cpp accessible/qaccessiblebridgeutils_p.h
         accessible/qaccessiblecache.cpp accessible/qaccessiblecache_p.h
         accessible/qaccessibleobject.cpp accessible/qaccessibleobject.h
         accessible/qaccessibleplugin.cpp accessible/qaccessibleplugin.h
-        accessible/qplatformaccessibility.cpp accessible/qplatformaccessibility.h
+        accessible/qplatformaccessibility.cpp
 )
 
 qt_internal_extend_target(Gui CONDITION APPLE AND QT_FEATURE_accessibility
@@ -528,7 +489,6 @@ qt_internal_extend_target(Gui CONDITION atspi_accessibility
         accessible/linux/qspiaccessiblebridge.cpp accessible/linux/qspiaccessiblebridge_p.h
         accessible/linux/qspiapplicationadaptor.cpp accessible/linux/qspiapplicationadaptor_p.h
         accessible/linux/qspidbuscache.cpp accessible/linux/qspidbuscache_p.h
-# special case begin
     DBUS_ADAPTOR_SOURCES
         accessible/linux/dbusxml/Cache.xml
         accessible/linux/dbusxml/DeviceEventController.xml
@@ -539,7 +499,6 @@ qt_internal_extend_target(Gui CONDITION atspi_accessibility
         accessible/linux/dbusxml/Socket.xml
     DBUS_INTERFACE_FLAGS
         "-i" "QtGui/private/qspi_struct_marshallers_p.h"
-# special case end
 )
 
 if(atspi_accessibility)
@@ -579,9 +538,6 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_png
     LIBRARIES
         WrapPNG::WrapPNG
 )
-
-#### Keys ignored in scope 40:.:image:image/image.pri:WIN32 AND MINGW:
-# GCC_VERSION = "$${QMAKE_GCC_MAJOR_VERSION}.$${QMAKE_GCC_MINOR_VERSION}.$${QMAKE_GCC_PATCH_VERSION}"
 
 qt_internal_extend_target(Gui CONDITION ((QT_FEATURE_png) AND (WIN32 AND MINGW)) AND (GCC_VERSION___equals___8.1.0)
     COMPILE_OPTIONS
@@ -647,7 +603,7 @@ qt_internal_extend_target(Gui CONDITION ANDROID
         platform/android/qandroidnativeinterface.cpp
 )
 
-qt_internal_extend_target(Gui CONDITION ANDROID AND (TEST_architecture_arch STREQUAL arm64 OR TEST_architecture_arch STREQUAL arm) # special case
+qt_internal_extend_target(Gui CONDITION ANDROID AND (TEST_architecture_arch STREQUAL arm64 OR TEST_architecture_arch STREQUAL arm)
     SOURCES
         image/qimage_neon.cpp
         painting/qdrawhelper_neon.cpp painting/qdrawhelper_neon_p.h
@@ -665,14 +621,12 @@ qt_internal_extend_target(Gui CONDITION ANDROID AND (TEST_architecture_arch STRE
         QT_COMPILER_SUPPORTS_SSSE3 QT_COMPILER_SUPPORTS_SSSE3
 )
 
-# special case begin
 if (MINGW AND CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL 8.1.0)
   # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=86048
   set_source_files_properties(image/qpnghandler.cpp
     PROPERTIES COMPILE_OPTIONS -fno-reorder-blocks-and-partition
   )
 endif()
-# special case end
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_harfbuzz
     SOURCES
@@ -681,15 +635,10 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_harfbuzz
         WrapHarfbuzz::WrapHarfbuzz
 )
 
-# special case begin
-# Replicate what src/3rdparty/harfbuzz-ng/harfbuzz-ng.pro does, which is link CoreText
-# when targeting uikit.
-
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_harfbuzz AND UIKIT
     LIBRARIES
         ${FWCoreText}
 )
-# special case end
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_textodfwriter
     SOURCES
@@ -737,7 +686,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_freetype
         WrapFreetype::WrapFreetype
 )
 
-qt_internal_extend_target(Gui CONDITION QT_FEATURE_freetype AND UNIX AND NOT APPLE
+qt_internal_extend_target(Gui CONDITION UNIX AND NOT APPLE
     SOURCES
         text/unix/qgenericunixfontdatabase_p.h
 )
@@ -778,12 +727,12 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_direct2d AND QT_FEATURE_direc
     SOURCES
         text/windows/qwindowsdirectwritefontdatabase.cpp text/windows/qwindowsdirectwritefontdatabase_p.h
     LIBRARIES
-        dwrite # special case
+        dwrite
 )
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_direct2d AND QT_FEATURE_directwrite AND WIN32 AND NOT QT_FEATURE_directwrite3
     LIBRARIES
-        dwrite # special case
+        dwrite
 )
 
 qt_internal_extend_target(Gui CONDITION MINGW AND WIN32
@@ -849,7 +798,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_opengles2
         opengl/qopengles2ext.h
 )
 
-qt_internal_extend_target(Gui CONDITION QT_FEATURE_egl AND QT_FEATURE_opengl
+qt_internal_extend_target(Gui CONDITION QT_FEATURE_egl AND QT_FEATURE_opengl AND NOT WASM
     SOURCES
         opengl/platform/egl/qeglpbuffer.cpp opengl/platform/egl/qeglpbuffer_p.h
         opengl/platform/egl/qeglplatformcontext.cpp opengl/platform/egl/qeglplatformcontext_p.h
@@ -879,7 +828,6 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_filesystemmodel
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_vulkan
     SOURCES
         rhi/qrhivulkan.cpp rhi/qrhivulkan_p.h
-        rhi/qrhivulkan_p_p.h
         rhi/qrhivulkanext_p.h
         vulkan/qbasicvulkanplatforminstance.cpp vulkan/qbasicvulkanplatforminstance_p.h
         vulkan/qplatformvulkaninstance.cpp vulkan/qplatformvulkaninstance.h
@@ -893,8 +841,6 @@ if(QT_FEATURE_vulkan)
         Gui WrapVulkanHeaders::WrapVulkanHeaders)
 endif()
 
-#### Keys ignored in scope 111:.:vulkan:vulkan/vulkan.pri:QT_FEATURE_vkgen:
-# special case begin
 # We must always generate syncqt-injected header files,
 # because we added a custom command earlier for those for framework builds.
 set(vulkan_fun "qvulkanfunctions.h")
@@ -945,32 +891,10 @@ add_custom_command(
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
     VERBATIM
 )
-# special case end
-
-#### Keys ignored in scope 68:.:vulkan:vulkan/vulkan.pri:QT_FEATURE_vkgen:
-# QMAKE_EXTRA_COMPILERS = "qvkgen_h" "qvkgen_ph" "qvkgen_pimpl"
-# QMAKE_QVKGEN_INPUT = "vulkan/vk.xml"
-# QMAKE_QVKGEN_LICENSE_HEADER = "$$QT_SOURCE_TREE/header.LGPL"
-# qvkgen_h.commands = "$$QMAKE_QVKGEN" "${QMAKE_FILE_IN}" "$$shell_quote($$QMAKE_QVKGEN_LICENSE_HEADER)" "${QMAKE_FILE_OUT_PATH}/${QMAKE_FILE_OUT_BASE}"
-# qvkgen_h.input = "QMAKE_QVKGEN_INPUT"
-# qvkgen_h.output = "$$OUT_PWD/vulkan/qvulkanfunctions.h"
-# qvkgen_ph.commands = "$$escape_expand(\\n)"
-# qvkgen_ph.depends = "$$OUT_PWD/vulkan/qvulkanfunctions.h"
-# qvkgen_ph.input = "QMAKE_QVKGEN_INPUT"
-# qvkgen_ph.output = "$$OUT_PWD/vulkan/qvulkanfunctions_p.h"
-# qvkgen_pimpl.commands = "$$escape_expand(\\n)"
-# qvkgen_pimpl.depends = "$$OUT_PWD/vulkan/qvulkanfunctions_p.h"
-# qvkgen_pimpl.input = "QMAKE_QVKGEN_INPUT"
-# qvkgen_pimpl.output = "$$OUT_PWD/vulkan/qvulkanfunctions_p.cpp"
-
-#### Keys ignored in scope 112:.:vulkan:vulkan/vulkan.pri:QT_FEATURE_vulkan:
-# qvkgen_h.variable_out = "HEADERS"
-
-#### Keys ignored in scope 113:.:vulkan:vulkan/vulkan.pri:else:
-# qvkgen_h.CONFIG = "target_predeps" "no_link"
 
 qt_internal_extend_target(Gui CONDITION WASM
     SOURCES
+        platform/wasm/qlocalfileapi.cpp platform/wasm/qlocalfileapi_p.h
         platform/wasm/qwasmlocalfileaccess.cpp platform/wasm/qwasmlocalfileaccess_p.h
 )
 
@@ -1038,10 +962,8 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_xkbcommon AND UNIX
         platform/unix/qxkbcommon_3rdparty.cpp
     LIBRARIES
         XKB::XKB
-# special case begin
     PRIVATE_MODULE_INTERFACE
         XKB::XKB
-# special case end
 )
 
 qt_internal_extend_target(Gui CONDITION IOS OR MACOS
@@ -1052,7 +974,7 @@ qt_internal_extend_target(Gui CONDITION IOS OR MACOS
         ${FWMetal}
 )
 
-qt_internal_extend_target(Gui # special case CONDITION NOT GCC OR NOT QT_COMPILER_VERSION_MAJOR STREQUAL 5 # source subtraction gone wrong
+qt_internal_extend_target(Gui
     SOURCES
         painting/qdrawhelper.cpp painting/qdrawhelper_neon_p.h
     NO_PCH_SOURCES
@@ -1065,12 +987,13 @@ qt_internal_extend_target(Gui CONDITION (QT_FEATURE_eglfs OR QT_FEATURE_xcb)
         util/qedidvendortable_p.h
 )
 
-
-qt_internal_create_tracepoints(Gui qtgui.tracepoints)
+qt_internal_generate_tracepoints(Gui gui
+    SOURCES
+        image/qimage.cpp image/qimagereader.cpp image/qpixmap.cpp kernel/qguiapplication.cpp
+        text/qfontdatabase.cpp
+)
 qt_internal_add_docs(Gui
     doc/qtgui.qdocconf
 )
 
-# special case begin
 qt_internal_add_optimize_full_flags()
-# special case end

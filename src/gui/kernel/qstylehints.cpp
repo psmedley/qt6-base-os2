@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <qstylehints.h>
+#include "qstylehints_p.h"
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformtheme.h>
 #include <private/qguiapplication_p.h>
@@ -42,25 +43,6 @@ static inline QVariant themeableHint(QPlatformTheme::ThemeHint th)
     }
     return QPlatformTheme::defaultThemeHint(th);
 }
-
-class QStyleHintsPrivate : public QObjectPrivate
-{
-    Q_DECLARE_PUBLIC(QStyleHints)
-public:
-    int m_mouseDoubleClickInterval = -1;
-    int m_mousePressAndHoldInterval = -1;
-    int m_startDragDistance = -1;
-    int m_startDragTime = -1;
-    int m_keyboardInputInterval = -1;
-    int m_cursorFlashTime = -1;
-    int m_tabFocusBehavior = -1;
-    int m_uiEffects = -1;
-    int m_showShortcutsInContextMenus = -1;
-    int m_wheelScrollLines = -1;
-    int m_mouseQuickSelectionThreshold = -1;
-    int m_mouseDoubleClickDistance = -1;
-    int m_touchDoubleTapDistance = -1;
-};
 
 /*!
     \class QStyleHints
@@ -122,7 +104,7 @@ int QStyleHints::mouseDoubleClickDistance() const
     Q_D(const QStyleHints);
     return d->m_mouseDoubleClickDistance >= 0 ?
                 d->m_mouseDoubleClickDistance :
-                themeableHint(QPlatformTheme::MouseDoubleClickDistance).toInt();
+                themeableHint(QPlatformTheme::MouseDoubleClickDistance, QPlatformIntegration::MouseDoubleClickDistance).toInt();
 }
 
 /*!
@@ -137,6 +119,18 @@ int QStyleHints::touchDoubleTapDistance() const
     return d->m_touchDoubleTapDistance >= 0 ?
                 d->m_touchDoubleTapDistance :
                 themeableHint(QPlatformTheme::TouchDoubleTapDistance).toInt();
+}
+
+/*!
+    \property QStyleHints::colorScheme
+    \brief the color scheme of the platform theme.
+    \sa Qt::ColorScheme
+    \since 6.5
+*/
+Qt::ColorScheme QStyleHints::colorScheme() const
+{
+    Q_D(const QStyleHints);
+    return d->colorScheme();
 }
 
 /*!
@@ -285,14 +279,27 @@ int QStyleHints::keyboardInputInterval() const
            themeableHint(QPlatformTheme::KeyboardInputInterval, QPlatformIntegration::KeyboardInputInterval).toInt();
 }
 
+#if QT_DEPRECATED_SINCE(6, 5)
 /*!
     \property QStyleHints::keyboardAutoRepeatRate
     \brief the rate, in events per second,  in which additional repeated key
     presses will automatically be generated if a key is being held down.
+    \deprecated [6.5] Use keyboardAutoRepeatRateF() instead
 */
 int QStyleHints::keyboardAutoRepeatRate() const
 {
     return themeableHint(QPlatformTheme::KeyboardAutoRepeatRate, QPlatformIntegration::KeyboardAutoRepeatRate).toInt();
+}
+#endif
+
+/*!
+    \property QStyleHints::keyboardAutoRepeatRateF
+    \brief the rate, in events per second, in which additional repeated key
+    presses will automatically be generated if a key is being held down.
+*/
+qreal QStyleHints::keyboardAutoRepeatRateF() const
+{
+    return themeableHint(QPlatformTheme::KeyboardAutoRepeatRate, QPlatformIntegration::KeyboardAutoRepeatRate).toReal();
 }
 
 /*!
@@ -439,7 +446,7 @@ bool QStyleHints::useRtlExtensions() const
 */
 bool QStyleHints::setFocusOnTouchRelease() const
 {
-    return hint(QPlatformIntegration::SetFocusOnTouchRelease).toBool();
+    return themeableHint(QPlatformTheme::SetFocusOnTouchRelease, QPlatformIntegration::SetFocusOnTouchRelease).toBool();
 }
 
 /*!
@@ -581,6 +588,27 @@ int QStyleHints::mouseQuickSelectionThreshold() const
     if (d->m_mouseQuickSelectionThreshold >= 0)
         return d->m_mouseQuickSelectionThreshold;
     return themeableHint(QPlatformTheme::MouseQuickSelectionThreshold, QPlatformIntegration::MouseQuickSelectionThreshold).toInt();
+}
+
+/*!
+   \internal
+   QStyleHintsPrivate::setColorScheme - set a new color scheme.
+   Set \a colorScheme as the new color scheme of the QStyleHints.
+   The colorSchemeChanged signal will be emitted if present and new color scheme differ.
+ */
+void QStyleHintsPrivate::setColorScheme(Qt::ColorScheme colorScheme)
+{
+    if (m_colorScheme == colorScheme)
+        return;
+    m_colorScheme = colorScheme;
+    Q_Q(QStyleHints);
+    emit q->colorSchemeChanged(colorScheme);
+}
+
+QStyleHintsPrivate *QStyleHintsPrivate::get(QStyleHints *q)
+{
+    Q_ASSERT(q);
+    return q->d_func();
 }
 
 QT_END_NAMESPACE

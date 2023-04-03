@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 define_property(TARGET
     PROPERTY
         QT_PLUGINS
@@ -104,4 +107,14 @@ define_property(TARGET
         "Specifies the qml module's version."
     FULL_DOCS
         "Specifies the qml module's version."
+)
+
+define_property(GLOBAL
+    PROPERTY
+        QT_TARGETS_FOLDER
+    BRIEF_DOCS
+        "Name of the FOLDER for targets internally created by AUTOGEN and Qt's CMake API."
+    FULL_DOCS
+        "This property is used to initialize AUTOGEN_TARGETS_FOLDER and the FOLDER property of
+        internal targets created by Qt's CMake commands."
 )

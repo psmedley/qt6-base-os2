@@ -58,9 +58,7 @@ extern QClipboard *qt_clipboard;
 typedef QHash<QByteArray, QFont> FontHash;
 Q_WIDGETS_EXPORT FontHash *qt_app_fonts_hash();
 
-#define QApplicationPrivateBase QGuiApplicationPrivate
-
-class Q_WIDGETS_EXPORT QApplicationPrivate : public QApplicationPrivateBase
+class Q_WIDGETS_EXPORT QApplicationPrivate : public QGuiApplicationPrivate
 {
     Q_DECLARE_PUBLIC(QApplication)
 public:
@@ -86,7 +84,8 @@ public:
 #endif
 
     //modality
-    bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = nullptr) const override;
+    Qt::WindowModality defaultModality() const override;
+    bool windowNeverBlocked(QWindow *window) const override;
     static bool isBlockedByModal(QWidget *widget);
     static bool modalState();
     static bool tryModalHelper(QWidget *widget, QWidget **rettop = nullptr);
@@ -104,6 +103,8 @@ public:
     void init();
     void initialize();
     void process_cmdline();
+
+    static void setActiveWindow(QWidget* act);
 
     static bool inPopupMode();
     bool popupActive() override { return inPopupMode(); }

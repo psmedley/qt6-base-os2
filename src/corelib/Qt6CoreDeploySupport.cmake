@@ -1,11 +1,12 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # NOTE: This code should only ever be executed in script mode. It expects to be
 #       used either as part of an install(CODE) call or called by a script
 #       invoked via cmake -P as a POST_BUILD step.
 
 cmake_minimum_required(VERSION 3.16...3.21)
 
-# This function is currently in Technical Preview.
-# Its signature and behavior might change.
 function(qt6_deploy_qt_conf qt_conf_absolute_path)
     set(no_value_options "")
     set(single_value_options
@@ -102,8 +103,178 @@ if(NOT __QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     endfunction()
 endif()
 
-# This function is currently in Technical Preview.
-# Its signature and behavior might change.
+# Copied from QtCMakeHelpers.cmake
+function(_qt_internal_re_escape out_var str)
+    string(REGEX REPLACE "([][+.*()^])" "\\\\\\1" regex "${str}")
+    set(${out_var} ${regex} PARENT_SCOPE)
+endfunction()
+
+function(_qt_internal_set_rpath)
+    if(NOT CMAKE_HOST_UNIX OR CMAKE_HOST_APPLE)
+        message(WARNING "_qt_internal_set_rpath is not implemented on this platform.")
+        return()
+    endif()
+
+    set(no_value_options "")
+    set(single_value_options FILE NEW_RPATH)
+    set(multi_value_options "")
+    cmake_parse_arguments(PARSE_ARGV 0 arg
+        "${no_value_options}" "${single_value_options}" "${multi_value_options}"
+    )
+    if(__QT_DEPLOY_USE_PATCHELF)
+        message(STATUS "Setting runtime path of '${arg_FILE}' to '${arg_NEW_RPATH}'.")
+        execute_process(
+            COMMAND ${__QT_DEPLOY_PATCHELF_EXECUTABLE} --set-rpath "${arg_NEW_RPATH}" "${arg_FILE}"
+            RESULT_VARIABLE process_result
+        )
+        if(NOT process_result EQUAL "0")
+            if(process_result MATCHES "^[0-9]+$")
+                message(FATAL_ERROR "patchelf failed with exit code ${process_result}.")
+            else()
+                message(FATAL_ERROR "patchelf failed: ${process_result}.")
+            endif()
+        endif()
+    else()
+        # Warning: file(RPATH_SET) is CMake-internal API.
+        file(RPATH_SET
+            FILE "${arg_FILE}"
+            NEW_RPATH "${arg_NEW_RPATH}"
+        )
+    endif()
+endfunction()
+
+# Store the platform-dependent $ORIGIN marker in out_var.
+function(_qt_internal_get_rpath_origin out_var)
+    if(__QT_DEPLOY_SYSTEM_NAME STREQUAL "Darwin")
+        set(rpath_origin "@loader_path")
+    else()
+        set(rpath_origin "$ORIGIN")
+    endif()
+    set(${out_var} ${rpath_origin} PARENT_SCOPE)
+endfunction()
+
+function(_qt_internal_generic_deployqt)
+    set(no_value_options
+        NO_TRANSLATIONS
+        VERBOSE
+    )
+    set(single_value_options
+        LIB_DIR
+        PLUGINS_DIR
+    )
+    set(file_GRD_options
+        EXECUTABLES
+        LIBRARIES
+        MODULES
+        PRE_INCLUDE_REGEXES
+        PRE_EXCLUDE_REGEXES
+        POST_INCLUDE_REGEXES
+        POST_EXCLUDE_REGEXES
+        POST_INCLUDE_FILES
+        POST_EXCLUDE_FILES
+    )
+    set(multi_value_options ${file_GRD_options})
+    cmake_parse_arguments(PARSE_ARGV 0 arg
+        "${no_value_options}" "${single_value_options}" "${multi_value_options}"
+    )
+
+    if(arg_VERBOSE OR __QT_DEPLOY_VERBOSE)
+        set(verbose TRUE)
+    endif()
+
+    # Make input file paths absolute
+    foreach(var IN ITEMS EXECUTABLES LIBRARIES MODULES)
+        string(PREPEND var arg_)
+        set(abspaths "")
+        foreach(path IN LISTS ${var})
+            get_filename_component(abspath "${path}" REALPATH BASE_DIR "${QT_DEPLOY_PREFIX}")
+            list(APPEND abspaths "${abspath}")
+        endforeach()
+        set(${var} "${abspaths}")
+    endforeach()
+
+    # We need to get the runtime dependencies of plugins too.
+    list(APPEND arg_MODULES ${__QT_DEPLOY_PLUGINS})
+
+    # Forward the arguments that are exactly the same for file(GET_RUNTIME_DEPENDENCIES).
+    set(file_GRD_args "")
+    foreach(var IN LISTS file_GRD_options)
+        if(NOT "${arg_${var}}" STREQUAL "")
+            list(APPEND file_GRD_args ${var} ${arg_${var}})
+        endif()
+    endforeach()
+
+    # Compile a list of regular expressions that represent ignored library directories.
+    if("${arg_POST_EXCLUDE_REGEXES}" STREQUAL "")
+        set(regexes "")
+        foreach(path IN LISTS QT_DEPLOY_IGNORED_LIB_DIRS)
+            _qt_internal_re_escape(path_rex "${path}")
+            list(APPEND regexes "^${path_rex}")
+        endforeach()
+        if(regexes)
+            list(APPEND file_GRD_args POST_EXCLUDE_REGEXES ${regexes})
+        endif()
+    endif()
+
+    # Get the runtime dependencies recursively.
+    file(GET_RUNTIME_DEPENDENCIES
+        ${file_GRD_args}
+        RESOLVED_DEPENDENCIES_VAR resolved
+        UNRESOLVED_DEPENDENCIES_VAR unresolved
+        CONFLICTING_DEPENDENCIES_PREFIX conflicting
+    )
+    if(verbose)
+        message("file(GET_RUNTIME_DEPENDENCIES ${file_args})")
+        foreach(file IN LISTS resolved)
+            message("    resolved: ${file}")
+        endforeach()
+        foreach(file IN LISTS unresolved)
+            message("    unresolved: ${file}")
+        endforeach()
+        foreach(file IN LISTS conflicting_FILENAMES)
+            message("    conflicting: ${file}")
+            message("    with ${conflicting_${file}}")
+        endforeach()
+    endif()
+
+    # Deploy the Qt libraries.
+    file(INSTALL ${resolved}
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/${arg_LIB_DIR}"
+        FOLLOW_SYMLINK_CHAIN
+    )
+
+    # Determine the runtime path origin marker if necessary.
+    if(__QT_DEPLOY_MUST_ADJUST_PLUGINS_RPATH)
+        _qt_internal_get_rpath_origin(rpath_origin)
+    endif()
+
+    # Deploy the Qt plugins.
+    foreach(file_path IN LISTS __QT_DEPLOY_PLUGINS)
+        file(RELATIVE_PATH destination
+            "${__QT_DEPLOY_QT_INSTALL_PREFIX}/${__QT_DEPLOY_QT_INSTALL_PLUGINS}"
+            "${file_path}"
+        )
+        get_filename_component(destination "${destination}" DIRECTORY)
+        string(PREPEND destination "${CMAKE_INSTALL_PREFIX}/${arg_PLUGINS_DIR}/")
+        file(INSTALL ${file_path} DESTINATION ${destination})
+
+        if(__QT_DEPLOY_MUST_ADJUST_PLUGINS_RPATH)
+            get_filename_component(file_name ${file_path} NAME)
+            file(RELATIVE_PATH rel_lib_dir "${destination}"
+                "${QT_DEPLOY_PREFIX}/${QT_DEPLOY_LIB_DIR}")
+            _qt_internal_set_rpath(
+                FILE "${destination}/${file_name}"
+                NEW_RPATH "${rpath_origin}/${rel_lib_dir}"
+            )
+        endif()
+    endforeach()
+
+    # Deploy translations.
+    if(NOT arg_NO_TRANSLATIONS)
+        qt6_deploy_translations()
+    endif()
+endfunction()
+
 function(qt6_deploy_runtime_dependencies)
 
     if(NOT __QT_DEPLOY_TOOL)
@@ -115,6 +286,7 @@ function(qt6_deploy_runtime_dependencies)
         VERBOSE
         NO_OVERWRITE
         NO_APP_STORE_COMPLIANCE   # TODO: Might want a better name
+        NO_TRANSLATIONS
     )
     set(single_value_options
         EXECUTABLE
@@ -122,6 +294,16 @@ function(qt6_deploy_runtime_dependencies)
         LIB_DIR
         PLUGINS_DIR
         QML_DIR
+    )
+    set(file_GRD_options
+        # The following include/exclude options are only used if the "generic deploy tool" is
+        # used. The options are what file(GET_RUNTIME_DEPENDENCIES) supports.
+        PRE_INCLUDE_REGEXES
+        PRE_EXCLUDE_REGEXES
+        POST_INCLUDE_REGEXES
+        POST_EXCLUDE_REGEXES
+        POST_INCLUDE_FILES
+        POST_EXCLUDE_FILES
     )
     set(multi_value_options
         # These ADDITIONAL_... options are based on what file(GET_RUNTIME_DEPENDENCIES)
@@ -132,6 +314,7 @@ function(qt6_deploy_runtime_dependencies)
         ADDITIONAL_EXECUTABLES
         ADDITIONAL_LIBRARIES
         ADDITIONAL_MODULES
+        ${file_GRD_options}
     )
     cmake_parse_arguments(PARSE_ARGV 0 arg
         "${no_value_options}" "${single_value_options}" "${multi_value_options}"
@@ -170,7 +353,7 @@ function(qt6_deploy_runtime_dependencies)
             set(arg_EXECUTABLE "${CMAKE_MATCH_1}")
         endif()
     elseif(arg_GENERATE_QT_CONF)
-        get_filename_component(exe_dir "${arg_EXECUTABLE}" DIRECTORY)
+        set(exe_dir "${QT_DEPLOY_BIN_DIR}")
         if(exe_dir STREQUAL "" OR exe_dir STREQUAL ".")
             set(exe_dir ".")
             set(prefix  ".")
@@ -199,6 +382,8 @@ function(qt6_deploy_runtime_dependencies)
             list(APPEND tool_options --verbose 2)
         elseif(__QT_DEPLOY_SYSTEM_NAME STREQUAL Darwin)
             list(APPEND tool_options -verbose=3)
+        else()
+            list(APPEND tool_options VERBOSE)
         endif()
     endif()
 
@@ -210,6 +395,9 @@ function(qt6_deploy_runtime_dependencies)
         )
         if(NOT arg_NO_OVERWRITE)
             list(APPEND tool_options --force)
+        endif()
+        if(arg_NO_TRANSLATIONS)
+            list(APPEND tool_options --no-translations)
         endif()
     elseif(__QT_DEPLOY_SYSTEM_NAME STREQUAL Darwin)
         set(extra_binaries_option "-executable=")
@@ -225,10 +413,43 @@ function(qt6_deploy_runtime_dependencies)
     # for debugging purposes. It may be removed at any time without warning.
     list(APPEND tool_options ${__qt_deploy_tool_extra_options})
 
+    if(__QT_DEPLOY_TOOL STREQUAL "GRD")
+        message(STATUS "Running generic Qt deploy tool on ${arg_EXECUTABLE}")
+
+        # Construct the EXECUTABLES, LIBRARIES and MODULES arguments.
+        list(APPEND tool_options EXECUTABLES ${arg_EXECUTABLE})
+        if(NOT "${arg_ADDITIONAL_EXECUTABLES}" STREQUAL "")
+            list(APPEND tool_options ${arg_ADDITIONAL_EXECUTABLES})
+        endif()
+        foreach(file_type LIBRARIES MODULES)
+            if("${arg_ADDITIONAL_${file_type}}" STREQUAL "")
+                continue()
+            endif()
+            list(APPEND tool_options ${file_type} ${arg_ADDITIONAL_${file_type}})
+        endforeach()
+
+        # Forward the arguments that are exactly the same for file(GET_RUNTIME_DEPENDENCIES).
+        foreach(var IN LISTS file_GRD_options)
+            if(NOT "${arg_${var}}" STREQUAL "")
+                list(APPEND tool_options ${var} ${arg_${var}})
+            endif()
+        endforeach()
+
+        if(arg_NO_TRANSLATIONS)
+            list(APPEND tool_options NO_TRANSLATIONS)
+        endif()
+
+        _qt_internal_generic_deployqt(
+            EXECUTABLE "${arg_EXECUTABLE}"
+            LIB_DIR "${arg_LIB_DIR}"
+            PLUGINS_DIR "${arg_PLUGINS_DIR}"
+            ${tool_options}
+        )
+        return()
+    endif()
+
     # Both windeployqt and macdeployqt don't differentiate between the different
     # types of binaries, so we merge the lists and treat them all the same.
-    # A purely CMake-based implementation would need to treat them differently
-    # because of how file(GET_RUNTIME_DEPENDENCIES) works.
     set(additional_binaries
         ${arg_ADDITIONAL_EXECUTABLES}
         ${arg_ADDITIONAL_LIBRARIES}
@@ -269,3 +490,147 @@ function(_qt_internal_show_skip_runtime_deploy_message qt_build_type_string)
         "this target platform (${__QT_DEPLOY_SYSTEM_NAME}, ${qt_build_type_string})."
     )
 endfunction()
+
+# This function is currently in Technical Preview.
+# Its signature and behavior might change.
+function(qt6_deploy_translations)
+    set(no_value_options VERBOSE)
+    set(single_value_options
+        LCONVERT
+    )
+    set(multi_value_options
+        CATALOGS
+        LOCALES
+    )
+    cmake_parse_arguments(PARSE_ARGV 0 arg
+        "${no_value_options}" "${single_value_options}" "${multi_value_options}"
+    )
+
+    set(verbose OFF)
+    if(arg_VERBOSE OR __QT_DEPLOY_VERBOSE)
+        set(verbose ON)
+    endif()
+
+    if(arg_CATALOGS)
+        set(catalogs ${arg_CATALOGS})
+    else()
+        set(catalogs qt qtbase)
+
+        # Find the translations that belong to the Qt modules that are used by the project.
+        # "Used by the project" means just all modules that are pulled in via find_package for now.
+        set(modules ${__QT_DEPLOY_ALL_MODULES_FOUND_VIA_FIND_PACKAGE})
+
+        set(module_catalog_mapping
+            "Bluetooth|Nfc" qtconnectivity
+            "Help" qt_help
+            "Multimedia(Widgets|QuickPrivate)?" qtmultimedia
+            "Qml|Quick" qtdeclarative
+            "SerialPort" qtserialport
+            "WebEngine" qtwebengine
+            "WebSockets" qtwebsockets
+        )
+        list(LENGTH module_catalog_mapping max_i)
+        math(EXPR max_i "${max_i} - 1")
+        foreach(module IN LISTS modules)
+            foreach(i RANGE 0 ${max_i} 2)
+                list(GET module_catalog_mapping ${i} module_rex)
+                if(NOT module MATCHES "^${module_rex}")
+                    continue()
+                endif()
+                math(EXPR k "${i} + 1")
+                list(GET module_catalog_mapping ${k} catalog)
+                list(APPEND catalogs ${catalog})
+            endforeach()
+        endforeach()
+    endif()
+
+    get_filename_component(qt_translations_dir "${__QT_DEPLOY_QT_INSTALL_TRANSLATIONS}" ABSOLUTE
+        BASE_DIR "${__QT_DEPLOY_QT_INSTALL_PREFIX}"
+    )
+    set(locales ${arg_LOCALES})
+    if(NOT locales)
+        file(GLOB locales RELATIVE "${qt_translations_dir}" "${qt_translations_dir}/*.qm")
+        list(TRANSFORM locales REPLACE "\\.qm$" "")
+        list(TRANSFORM locales REPLACE "^qt_help" "qt-help")
+        list(TRANSFORM locales REPLACE "^[^_]+" "")
+        list(TRANSFORM locales REPLACE "^_" "")
+        list(REMOVE_DUPLICATES locales)
+    endif()
+
+    # Ensure existence of the output directory.
+    set(output_dir "${QT_DEPLOY_PREFIX}/${QT_DEPLOY_TRANSLATIONS_DIR}")
+    if(NOT EXISTS "${output_dir}")
+        file(MAKE_DIRECTORY "${output_dir}")
+    endif()
+
+    # Locate lconvert.
+    if(arg_LCONVERT)
+        set(lconvert "${arg_LCONVERT}")
+    else()
+        set(lconvert "${__QT_DEPLOY_QT_INSTALL_PREFIX}/${__QT_DEPLOY_QT_INSTALL_BINS}/lconvert")
+        if(CMAKE_HOST_WIN32)
+            string(APPEND lconvert ".exe")
+        endif()
+        if(NOT EXISTS ${lconvert})
+            message(STATUS "lconvert was not found. Skipping deployment of translations.")
+            return()
+        endif()
+    endif()
+
+    # Find the .qm files for the selected locales
+    if(verbose)
+        message(STATUS "Looking for translations in ${qt_translations_dir}")
+    endif()
+    foreach(locale IN LISTS locales)
+        set(qm_files "")
+        foreach(catalog IN LISTS catalogs)
+            set(qm_file "${catalog}_${locale}.qm")
+            if(EXISTS "${qt_translations_dir}/${qm_file}")
+                list(APPEND qm_files ${qm_file})
+            endif()
+        endforeach()
+
+        if(NOT qm_files)
+            message(WARNING "No translations found for requested locale '${locale}'.")
+            continue()
+        endif()
+
+        if(verbose)
+            foreach(qm_file IN LISTS qm_files)
+                message(STATUS "found translation file: ${qm_file}")
+            endforeach()
+        endif()
+
+        # Merge the .qm files into one qt_${locale}.qm file.
+        set(output_file_name "qt_${locale}.qm")
+        set(output_file_path "${output_dir}/${output_file_name}")
+        message(STATUS "Creating: ${output_file_path}")
+        set(extra_options)
+        if(verbose)
+            list(APPEND extra_options COMMAND_ECHO STDOUT)
+        endif()
+        execute_process(
+            COMMAND ${lconvert} -if qm -o ${output_file_path} ${qm_files}
+            WORKING_DIRECTORY ${qt_translations_dir}
+            RESULT_VARIABLE process_result
+            ${extra_options}
+        )
+        if(NOT process_result EQUAL "0")
+            if(process_result MATCHES "^[0-9]+$")
+                message(WARNING "lconvert failed with exit code ${process_result}.")
+            else()
+                message(WARNING "lconvert failed: ${process_result}.")
+            endif()
+        endif()
+    endforeach()
+endfunction()
+
+if(NOT __QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
+    function(qt_deploy_translations)
+        if(__QT_DEFAULT_MAJOR_VERSION EQUAL 6)
+            qt6_deploy_translations(${ARGV})
+        else()
+            message(FATAL_ERROR "qt_deploy_translations() is only available in Qt 6.")
+        endif()
+    endfunction()
+endif()

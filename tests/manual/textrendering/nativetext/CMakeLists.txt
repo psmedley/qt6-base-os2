@@ -1,4 +1,5 @@
-# Generated from nativetext.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## nativetext Binary:
@@ -7,7 +8,7 @@
 qt_internal_add_manual_test(nativetext
     SOURCES
         main.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
@@ -18,7 +19,7 @@ qt_internal_add_manual_test(nativetext
 #####################################################################
 
 qt_internal_extend_target(nativetext CONDITION APPLE
-    PUBLIC_LIBRARIES
+    LIBRARIES
         ${FWAppKit}
         ${FWCoreGraphics}
         ${FWFoundation}

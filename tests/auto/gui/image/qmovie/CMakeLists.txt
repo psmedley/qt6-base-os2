@@ -1,4 +1,5 @@
-# Generated from qmovie.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qmovie Test:
@@ -13,7 +14,7 @@ list(APPEND test_data ${test_data_glob})
 qt_internal_add_test(tst_qmovie
     SOURCES
         tst_qmovie.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
     TESTDATA ${test_data}
 )
@@ -32,16 +33,11 @@ qt_internal_add_resource(tst_qmovie "resources"
         ${resources_resource_files}
 )
 
-
-#### Keys ignored in scope 1:.:.:qmovie.pro:<TRUE>:
-# MOC_DIR = "tmp"
-# QT_FOR_CONFIG = "gui-private"
-
 ## Scopes:
 #####################################################################
 
 qt_internal_extend_target(tst_qmovie CONDITION TARGET Qt::Widgets
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Widgets
 )
 

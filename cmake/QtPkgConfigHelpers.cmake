@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 function(qt_internal_collect_direct_target_dependencies target targets_out_var)
     __qt_internal_walk_libs("${target}" "${targets_out_var}" _rcc_objects
                             "qt_direct_targets_dict" "direct_targets")

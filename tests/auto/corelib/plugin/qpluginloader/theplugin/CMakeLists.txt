@@ -1,10 +1,13 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_internal_add_cmake_library(theplugin
     MODULE
     INSTALL_DIRECTORY "${INSTALL_TESTSDIR}/tst_qpluginloader/bin"
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../bin"
     SOURCES
         theplugin.cpp theplugin.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Core
 )
 qt_autogen_tools_initial_setup(theplugin)
@@ -16,7 +19,7 @@ if (UNIX AND NOT APPLE)
         OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../bin"
         SOURCES
             theoldplugin.cpp theoldplugin.h
-        PUBLIC_LIBRARIES
+        LIBRARIES
             Qt::Core
     )
     qt_autogen_tools_initial_setup(theoldplugin)

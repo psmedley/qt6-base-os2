@@ -1,4 +1,5 @@
-# Generated from xdgdesktopportal.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QXdgDesktopPortalThemePlugin Plugin:
@@ -19,6 +20,3 @@ qt_internal_add_plugin(QXdgDesktopPortalThemePlugin
         Qt::Gui
         Qt::GuiPrivate
 )
-
-#### Keys ignored in scope 1:.:.:xdgdesktopportal.pro:<TRUE>:
-# PLUGIN_EXTENDS = "-"

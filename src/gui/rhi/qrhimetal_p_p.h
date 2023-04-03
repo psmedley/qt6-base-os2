@@ -28,7 +28,7 @@ struct QMetalBufferData;
 
 struct QMetalBuffer : public QRhiBuffer
 {
-    QMetalBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
+    QMetalBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, quint32 size);
     ~QMetalBuffer();
     void destroy() override;
     bool create() override;
@@ -41,6 +41,9 @@ struct QMetalBuffer : public QRhiBuffer
     int lastActiveFrameSlot = -1;
     friend class QRhiMetal;
     friend struct QMetalShaderResourceBindings;
+
+    static constexpr int WorkBufPoolUsage = 1 << 8;
+    static_assert(WorkBufPoolUsage > QRhiBuffer::StorageBuffer);
 };
 
 struct QMetalRenderBufferData;
@@ -204,6 +207,7 @@ struct QMetalShaderResourceBindings : public QRhiShaderResourceBindings
 };
 
 struct QMetalGraphicsPipelineData;
+struct QMetalCommandBuffer;
 
 struct QMetalGraphicsPipeline : public QRhiGraphicsPipeline
 {
@@ -211,6 +215,13 @@ struct QMetalGraphicsPipeline : public QRhiGraphicsPipeline
     ~QMetalGraphicsPipeline();
     void destroy() override;
     bool create() override;
+
+    void makeActiveForCurrentRenderPassEncoder(QMetalCommandBuffer *cbD);
+    void setupAttachmentsInMetalRenderPassDescriptor(void *metalRpDesc, QMetalRenderPassDescriptor *rpD);
+    void setupMetalDepthStencilDescriptor(void *metalDsDesc);
+    void mapStates();
+    bool createVertexFragmentPipeline();
+    bool createTessellationPipelines(const QShader &tessVert, const QShader &tesc, const QShader &tese, const QShader &tessFrag);
 
     QMetalGraphicsPipelineData *d;
     uint generation = 0;
@@ -256,14 +267,14 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     QRhiRenderTarget *currentTarget;
 
     // per-pass (render or compute command encoder) volatile (cached) state
-    QRhiGraphicsPipeline *currentGraphicsPipeline;
-    QRhiComputePipeline *currentComputePipeline;
+    QMetalGraphicsPipeline *currentGraphicsPipeline;
+    QMetalComputePipeline *currentComputePipeline;
     uint currentPipelineGeneration;
-    QRhiShaderResourceBindings *currentGraphicsSrb;
-    QRhiShaderResourceBindings *currentComputeSrb;
+    QMetalShaderResourceBindings *currentGraphicsSrb;
+    QMetalShaderResourceBindings *currentComputeSrb;
     uint currentSrbGeneration;
     int currentResSlot;
-    QRhiBuffer *currentIndexBuffer;
+    QMetalBuffer *currentIndexBuffer;
     quint32 currentIndexOffset;
     QRhiCommandBuffer::IndexFormat currentIndexFormat;
     int currentCullMode;
@@ -318,6 +329,7 @@ public:
     ~QRhiMetal();
 
     static bool probe(QRhiMetalInitParams *params);
+    static QRhiSwapChainProxyData updateSwapChainProxyData(QWindow *window);
 
     bool create(QRhi::Flags flags) override;
     void destroy() override;
@@ -327,7 +339,7 @@ public:
     QRhiShaderResourceBindings *createShaderResourceBindings() override;
     QRhiBuffer *createBuffer(QRhiBuffer::Type type,
                              QRhiBuffer::UsageFlags usage,
-                             int size) override;
+                             quint32 size) override;
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
                                          int sampleCount,
@@ -417,7 +429,7 @@ public:
     int resourceLimit(QRhi::ResourceLimit limit) const override;
     const QRhiNativeHandles *nativeHandles() override;
     QRhiDriverInfo driverInfo() const override;
-    QRhiMemAllocStats graphicsMemoryAllocationStatistics() override;
+    QRhiStats statistics() override;
     bool makeThreadLocalNativeContextCurrent() override;
     void releaseCachedResources() override;
     bool isDeviceLost() const override;
@@ -434,7 +446,7 @@ public:
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForSlot(QMetalBuffer *bufD, int slot);
     void executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD);
-    static const int SUPPORTED_STAGES = 3;
+    static const int SUPPORTED_STAGES = 5;
     void enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD,
                                        QMetalCommandBuffer *cbD,
                                        int dynamicOffsetCount,
@@ -442,13 +454,43 @@ public:
                                        bool offsetOnlyChange,
                                        const QShader::NativeResourceBindingMap *nativeResourceBindingMaps[SUPPORTED_STAGES]);
     int effectiveSampleCount(int sampleCount) const;
+    struct TessDrawArgs {
+        QMetalCommandBuffer *cbD;
+        enum {
+            NonIndexed,
+            U16Indexed,
+            U32Indexed
+        } type;
+        struct NonIndexedArgs {
+            quint32 vertexCount;
+            quint32 instanceCount;
+            quint32 firstVertex;
+            quint32 firstInstance;
+        };
+        struct IndexedArgs {
+            quint32 indexCount;
+            quint32 instanceCount;
+            quint32 firstIndex;
+            qint32 vertexOffset;
+            quint32 firstInstance;
+            void *indexBuffer;
+        };
+        union {
+            NonIndexedArgs draw;
+            IndexedArgs drawIndexed;
+        };
+    };
+    void tessellatedDraw(const TessDrawArgs &args);
 
+    QRhi::Flags rhiFlags;
     bool importedDevice = false;
     bool importedCmdQueue = false;
     QMetalSwapChain *currentSwapChain = nullptr;
     QSet<QMetalSwapChain *> swapchains;
     QRhiMetalNativeHandles nativeHandlesStruct;
     QRhiDriverInfo driverInfoStruct;
+    quint32 osMajor = 0;
+    quint32 osMinor = 0;
 
     struct {
         int maxTextureSize = 4096;

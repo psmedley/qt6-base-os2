@@ -1,6 +1,5 @@
-# Generated from qlogging.pro.
-# This file is almost completely custom written
-# special case skip regeneration
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 qt_internal_add_executable(qlogging_helper
     NO_INSTALL
@@ -18,12 +17,10 @@ set_target_properties(qlogging_helper PROPERTIES CXX_VISIBILITY_PRESET default)
 qt_internal_add_test(tst_qlogging SOURCES tst_qlogging.cpp
     DEFINES
         QT_MESSAGELOGCONTEXT
-        QT_DISABLE_DEPRECATED_BEFORE=0
         HELPER_BINARY="${CMAKE_CURRENT_BINARY_DIR}/qlogging_helper"
 )
 
 qt_internal_add_test(tst_qmessagelogger SOURCES tst_qmessagelogger.cpp
     DEFINES
         QT_MESSAGELOGCONTEXT
-        QT_DISABLE_DEPRECATED_BEFORE=0
 )

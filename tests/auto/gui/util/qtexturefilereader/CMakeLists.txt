@@ -1,4 +1,5 @@
-# Generated from qtexturefilereader.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qtexturefilereader Test:
@@ -18,7 +19,7 @@ set(qtexturefilereader_resource_files
 qt_internal_add_test(tst_qtexturefilereader
     SOURCES
         tst_qtexturefilereader.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
     TESTDATA ${qtexturefilereader_resource_files}

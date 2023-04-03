@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 
 set(java_sources
     jar/src/org/qtproject/qt/android/networkinformation/QtAndroidNetworkInformation.java

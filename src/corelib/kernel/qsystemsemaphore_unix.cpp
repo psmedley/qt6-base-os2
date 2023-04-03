@@ -7,7 +7,7 @@
 #include <qdebug.h>
 #include <qcoreapplication.h>
 
-#ifndef QT_NO_SYSTEMSEMAPHORE
+#if QT_CONFIG(systemsemaphore)
 
 #include <sys/types.h>
 #ifndef QT_POSIX_IPC
@@ -20,16 +20,6 @@
 #include "private/qcore_unix_p.h"
 
 QT_BEGIN_NAMESPACE
-
-QSystemSemaphorePrivate::QSystemSemaphorePrivate() :
-#ifndef QT_POSIX_IPC
-    unix_key(-1), semaphore(-1), createdFile(false),
-#else
-    semaphore(SEM_FAILED),
-#endif // QT_POSIX_IPC
-    createdSemaphore(false), error(QSystemSemaphore::NoError)
-{
-}
 
 void QSystemSemaphorePrivate::setErrorString(const QString &function)
 {
@@ -70,4 +60,4 @@ void QSystemSemaphorePrivate::setErrorString(const QString &function)
 
 QT_END_NAMESPACE
 
-#endif // QT_NO_SYSTEMSEMAPHORE
+#endif // QT_CONFIG(systemsemaphore)

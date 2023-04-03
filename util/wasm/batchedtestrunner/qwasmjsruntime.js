@@ -145,8 +145,7 @@ export class CompiledModule {
                 params.arguments = parameters?.args;
                 let data = '';
                 params.print = (out) => {
-                    if (parameters?.printStdout === true)
-                        console.log(out);
+                    parameters?.onStdout?.(out);
                     data += `${out}\n`;
                 };
                 params.printErr = () => { };
@@ -167,7 +166,7 @@ export class CompiledModule {
         const instanceParams = {};
         instanceParams.instantiateWasm = async (imports, onDone) => {
             try {
-                onDone(await WebAssembly.instantiate(this.#wasm, imports));
+                onDone(await WebAssembly.instantiate(this.#wasm, imports), this.#wasm);
             } catch (e) {
                 params?.onInstantiationError?.(e);
             }

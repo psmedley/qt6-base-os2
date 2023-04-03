@@ -3569,8 +3569,8 @@ def write_module(cm_fh: IO[str], scope: Scope, *, indent: int = 0) -> str:
         scope._has_private_module = True
     if "header_module" in scope.get("CONFIG"):
         extra.append("HEADER_MODULE")
-    if "metatypes" in scope.get("CONFIG") or "qmltypes" in scope.get("CONFIG"):
-        extra.append("GENERATE_METATYPES")
+    if not("metatypes" in scope.get("CONFIG") or "qmltypes" in scope.get("CONFIG")):
+        extra.append("NO_GENERATE_METATYPES")
 
     module_config = scope.get("MODULE_CONFIG")
     if len(module_config):
@@ -4666,7 +4666,7 @@ def create_top_level_cmake_conf():
     conf_file_name = ".cmake.conf"
     try:
         with open(conf_file_name, "x") as file:
-            file.write('set(QT_REPO_MODULE_VERSION "6.4.3")\n')
+            file.write('set(QT_REPO_MODULE_VERSION "6.5.0")\n')
     except FileExistsError:
         pass
 

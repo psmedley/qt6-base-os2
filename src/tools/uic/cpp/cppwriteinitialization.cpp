@@ -669,7 +669,7 @@ void WriteInitialization::acceptWidget(DomWidget *node)
 
     const DomPropertyMap attributes = propertyMap(node->elementAttribute());
 
-    const QString pageDefaultString = "Page"_L1;
+    const QString pageDefaultString = u"Page"_s;
 
     if (cwi->extends(parentClass, "QMainWindow")) {
         if (cwi->extends(className, "QMenuBar")) {
@@ -781,10 +781,10 @@ void WriteInitialization::acceptWidget(DomWidget *node)
     };
 
     static const QStringList trees = {
-        "QTreeView"_L1, "QTreeWidget"_L1
+        u"QTreeView"_s, u"QTreeWidget"_s
     };
     static const QStringList tables = {
-        "QTableView"_L1, "QTableWidget"_L1
+        u"QTableView"_s, u"QTableWidget"_s
     };
 
     if (cwi->extendsOneOf(className, trees)) {
@@ -864,7 +864,7 @@ void WriteInitialization::addButtonGroup(const DomWidget *buttonNode, const QStr
     const QString groupName = m_driver->findOrInsertButtonGroup(group);
     // Create on demand
     if (!m_buttonGroups.contains(groupName)) {
-        const QString className = "QButtonGroup"_L1;
+        const QString className = u"QButtonGroup"_s;
         m_output << m_indent;
         if (createGroupOnTheFly)
             m_output << className << " *";
@@ -1002,7 +1002,7 @@ static inline QString formLayoutRole(int column, int colspan)
 
 static QString layoutAddMethod(DomLayoutItem::Kind kind, const QString &layoutClass)
 {
-    const QString methodPrefix = layoutClass == "QFormLayout"_L1 ? "set"_L1 : "add"_L1;
+    const auto methodPrefix = layoutClass == "QFormLayout"_L1 ? "set"_L1 : "add"_L1;
     switch (kind) {
     case DomLayoutItem::Widget:
         return methodPrefix + "Widget"_L1;
@@ -1237,8 +1237,8 @@ void WriteInitialization::writeProperties(const QString &varName,
             continue;
         }
         static const QStringList currentIndexWidgets = {
-            "QComboBox"_L1, "QStackedWidget"_L1,
-            "QTabWidget"_L1, "QToolBox"_L1
+            u"QComboBox"_s, u"QStackedWidget"_s,
+            u"QTabWidget"_s, u"QToolBox"_s
         };
         if (propertyName == "currentIndex"_L1 // set currentIndex later
             && (m_uic->customWidgetsInfo()->extendsOneOf(className, currentIndexWidgets))) {
@@ -1273,9 +1273,9 @@ void WriteInitialization::writeProperties(const QString &varName,
         } else if (propertyName == "orientation"_L1
                     && m_uic->customWidgetsInfo()->extends(className, "Line")) {
             // Line support
-            QString shape = "QFrame::HLine"_L1;
+            QString shape = u"QFrame::HLine"_s;
             if (p->elementEnum() == "Qt::Vertical"_L1)
-                shape = "QFrame::VLine"_L1;
+                shape = u"QFrame::VLine"_s;
 
             m_output << m_indent << varName << language::derefPointer << "setFrameShape("
                 << language::enumValue(shape) << ')' << language::eol;
@@ -1930,7 +1930,7 @@ QString WriteInitialization::writeBrushInitialization(const DomBrush *brush)
 
 void WriteInitialization::writeBrush(const DomBrush *brush, const QString &brushName)
 {
-    QString style = "SolidPattern"_L1;
+    QString style = u"SolidPattern"_s;
     if (brush->hasAttributeBrushStyle())
         style = brush->attributeBrushStyle();
 
@@ -2048,7 +2048,8 @@ QString WriteInitialization::iconCall(const DomProperty *icon)
 
 QString WriteInitialization::pixCall(const DomProperty *p) const
 {
-    QString type, s;
+    QLatin1StringView type;
+    QString s;
     switch (p->kind()) {
     case DomProperty::IconSet:
         type = "QIcon"_L1;
@@ -2067,23 +2068,22 @@ QString WriteInitialization::pixCall(const DomProperty *p) const
     return pixCall(type, s);
 }
 
-QString WriteInitialization::pixCall(const QString &t, const QString &text) const
+QString WriteInitialization::pixCall(QLatin1StringView t, const QString &text) const
 {
-    QString type = t;
-    if (text.isEmpty()) {
-        type += "()"_L1;
-        return type;
-    }
+    if (text.isEmpty())
+        return t % "()"_L1;
 
-    QTextStream str(&type);
+    QString result;
+    QTextStream str(&result);
+    str << t;
     str << '(';
-    QString pixFunc = m_uic->pixmapFunction();
+    const QString pixFunc = m_uic->pixmapFunction();
     if (pixFunc.isEmpty())
         str << language::qstring(text, m_dindent);
     else
         str << pixFunc << '(' << language::charliteral(text, m_dindent) << ')';
     str << ')';
-    return type;
+    return result;
 }
 
 void WriteInitialization::initializeComboBox(DomWidget *w)

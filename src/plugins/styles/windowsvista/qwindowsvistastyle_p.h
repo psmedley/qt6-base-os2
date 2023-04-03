@@ -16,12 +16,12 @@
 //
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
-#include "qwindowsxpstyle_p.h"
+#include <QtWidgets/private/qwindowsstyle_p.h>
 
 QT_BEGIN_NAMESPACE
 
 class QWindowsVistaStylePrivate;
-class QWindowsVistaStyle : public QWindowsXPStyle
+class QWindowsVistaStyle : public QWindowsStyle
 {
     Q_OBJECT
 public:
@@ -58,6 +58,7 @@ public:
     void polish(QWidget *widget) override;
     void unpolish(QWidget *widget) override;
     void polish(QPalette &pal) override;
+    void polish(QApplication *app) override;
 
 private:
     Q_DISABLE_COPY_MOVE(QWindowsVistaStyle)

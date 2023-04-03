@@ -1,4 +1,5 @@
-# Generated from plugin2.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## plugin2 Generic Library:
@@ -10,7 +11,7 @@ qt_internal_add_cmake_library(tst_qfactoryloader_plugin2
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../bin"
     SOURCES
         plugin2.cpp plugin2.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Core
 )
 

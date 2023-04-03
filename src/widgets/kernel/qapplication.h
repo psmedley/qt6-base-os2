@@ -78,7 +78,11 @@ public:
     static QWidget *focusWidget();
 
     static QWidget *activeWindow();
+
+#if QT_DEPRECATED_SINCE(6,4)
+    QT_DEPRECATED_VERSION_X_6_4("Use QWidget::activateWindow() instead.")
     static void setActiveWindow(QWidget* act);
+#endif
 
     static QWidget *widgetAt(const QPoint &p);
     static inline QWidget *widgetAt(int x, int y) { return widgetAt(QPoint(x, y)); }
@@ -125,12 +129,12 @@ Q_SIGNALS:
 
 public:
     QString styleSheet() const;
+    bool autoSipEnabled() const;
 public Q_SLOTS:
 #ifndef QT_NO_STYLE_STYLESHEET
     void setStyleSheet(const QString& sheet);
 #endif
     void setAutoSipEnabled(const bool enabled);
-    bool autoSipEnabled() const;
     static void closeAllWindows();
     static void aboutQt();
 

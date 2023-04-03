@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 function(qt_internal_clear_qt_repo_known_modules)
     set(QT_REPO_KNOWN_MODULES "" CACHE INTERNAL "Known current repo Qt modules" FORCE)
 endfunction()
@@ -29,6 +32,26 @@ endmacro()
 # hold a list of plug-in types (e.G. "imageformats;bearer")
 function(qt_internal_clear_qt_repo_known_plugin_types)
     set(QT_REPO_KNOWN_PLUGIN_TYPES "" CACHE INTERNAL "Known current repo Qt plug-in types" FORCE)
+endfunction()
+
+function(qt_internal_add_plugin_types target plugin_types)
+    # Update the variable containing the list of plugins for the given plugin type
+    foreach(plugin_type ${plugin_types})
+        qt_get_sanitized_plugin_type("${plugin_type}" plugin_type)
+        set_property(TARGET "${target}" APPEND PROPERTY MODULE_PLUGIN_TYPES "${plugin_type}")
+        qt_internal_add_qt_repo_known_plugin_types("${plugin_type}")
+    endforeach()
+
+    # Save the non-sanitized plugin type values for qmake consumption via .pri files.
+    set_property(TARGET "${target}"
+                 APPEND PROPERTY QMAKE_MODULE_PLUGIN_TYPES "${plugin_types}")
+
+    # Export the plugin types.
+    get_property(export_properties TARGET ${target} PROPERTY EXPORT_PROPERTIES)
+    if(NOT MODULE_PLUGIN_TYPES IN_LIST export_properties)
+        set_property(TARGET ${target} APPEND PROPERTY
+            EXPORT_PROPERTIES MODULE_PLUGIN_TYPES)
+    endif()
 endfunction()
 
 function(qt_internal_add_qt_repo_known_plugin_types)

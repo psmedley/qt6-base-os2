@@ -42,8 +42,10 @@ private slots:
     void mirroredChar();
     void decomposition();
     void script();
+#if !defined(Q_OS_WASM)
     void normalization_data();
     void normalization();
+#endif // !defined(Q_OS_WASM)
     void normalization_manual();
     void normalizationCorrections();
     void unicodeVersion();
@@ -64,9 +66,9 @@ void tst_QChar::fromUcs4_data()
         QTest::addRow("0x%08X", ucs4) << ucs4;
     };
 
-    row(0x2f868);
-    row(0x1D157);
-    row(0x1D157);
+    row(0x2f868); // a CJK Compatibility Ideograph
+    row(0x11139); // Chakma digit 3
+    row(0x1D157); // Musical Symbol Void Notehead
 }
 
 void tst_QChar::fromUcs4()
@@ -759,6 +761,8 @@ void tst_QChar::script()
     QVERIFY(QChar::script(0xe0100) == QChar::Script_Inherited);
 }
 
+// wasm is limited in reading filesystems, so omit this test for now
+#if !defined(Q_OS_WASM)
 void tst_QChar::normalization_data()
 {
     QTest::addColumn<QStringList>("columns");
@@ -881,6 +885,7 @@ void tst_QChar::normalization()
         // #################
 
 }
+#endif // !defined(Q_OS_WASM)
 
 void tst_QChar::normalization_manual()
 {

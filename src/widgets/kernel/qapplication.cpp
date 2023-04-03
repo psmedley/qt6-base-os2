@@ -50,10 +50,10 @@
 #endif
 #if QT_CONFIG(accessibility)
 #include <QtGui/qaccessible_base.h>
+#include "private/qaccessiblewidgetfactory_p.h"
 #endif
 
 #include "private/qkeymapper_p.h"
-#include "private/qaccessiblewidgetfactory_p.h"
 
 #include <qthread.h>
 #include <private/qthread_p.h>
@@ -80,6 +80,10 @@
 
 #include <qtwidgets_tracepoints_p.h>
 
+#ifdef Q_OS_MACOS
+#include <QtCore/private/qcore_mac_p.h>
+#endif
+
 #include <algorithm>
 #include <iterator>
 
@@ -95,6 +99,13 @@ static void initResources()
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
+
+Q_TRACE_PREFIX(qtwidgets,
+   "#include <qcoreevent.h>"
+);
+Q_TRACE_METADATA(qtwidgets, "ENUM { AUTO, RANGE User ... MaxUser } QEvent::Type;");
+Q_TRACE_POINT(qtwidgets, QApplication_notify_entry, QObject *receiver, QEvent *event, QEvent::Type type);
+Q_TRACE_POINT(qtwidgets, QApplication_notify_exit, bool consumed, bool filtered);
 
 // Helper macro for static functions to check on the existence of the application class.
 #define CHECK_QAPP_INSTANCE(...) \
@@ -112,7 +123,7 @@ QApplicationPrivate *QApplicationPrivate::self = nullptr;
 bool QApplicationPrivate::autoSipEnabled = true;
 
 QApplicationPrivate::QApplicationPrivate(int &argc, char **argv)
-    : QApplicationPrivateBase(argc, argv)
+    : QGuiApplicationPrivate(argc, argv)
 {
     application_type = QApplicationPrivate::Gui;
 
@@ -772,35 +783,49 @@ QWidget *QApplication::widgetAt(const QPoint &p)
 */
 bool QApplication::compressEvent(QEvent *event, QObject *receiver, QPostEventList *postedEvents)
 {
-    if ((event->type() == QEvent::UpdateRequest
-          || event->type() == QEvent::LayoutRequest
-          || event->type() == QEvent::Resize
-          || event->type() == QEvent::Move
-          || event->type() == QEvent::LanguageChange)) {
-        for (QPostEventList::const_iterator it = postedEvents->constBegin(); it != postedEvents->constEnd(); ++it) {
-            const QPostEvent &cur = *it;
-            if (cur.receiver != receiver || cur.event == nullptr || cur.event->type() != event->type())
-                continue;
-            if (cur.event->type() == QEvent::LayoutRequest
-                 || cur.event->type() == QEvent::UpdateRequest) {
-                ;
-            } else if (cur.event->type() == QEvent::Resize) {
-                static_cast<QResizeEvent *>(cur.event)->m_size =
-                    static_cast<const QResizeEvent *>(event)->size();
-            } else if (cur.event->type() == QEvent::Move) {
-                static_cast<QMoveEvent *>(cur.event)->m_pos =
-                    static_cast<const QMoveEvent *>(event)->pos();
-            } else if (cur.event->type() == QEvent::LanguageChange) {
-                ;
-            } else {
-                continue;
-            }
-            delete event;
-            return true;
-        }
-        return false;
+    // Only compress the following events:
+    const QEvent::Type type = event->type();
+    switch (type) {
+    case QEvent::UpdateRequest:
+    case QEvent::LayoutRequest:
+    case QEvent::Resize:
+    case QEvent::Move:
+    case QEvent::LanguageChange:
+        break;
+    default:
+        return QGuiApplication::compressEvent(event, receiver, postedEvents);
     }
-    return QGuiApplication::compressEvent(event, receiver, postedEvents);
+
+    for (const auto &postedEvent : std::as_const(*postedEvents)) {
+
+        // Continue, unless a valid event of the same type exists for the same receiver
+        if (postedEvent.receiver != receiver
+            || !postedEvent.event
+            || postedEvent.event->type() != type) {
+            continue;
+        }
+
+        // Handle type specific compression
+        switch (type) {
+        case QEvent::Resize:
+            static_cast<QResizeEvent *>(postedEvent.event)->m_size =
+                static_cast<const QResizeEvent *>(event)->size();
+            break;
+        case QEvent::Move:
+            static_cast<QMoveEvent *>(postedEvent.event)->m_pos =
+                static_cast<const QMoveEvent *>(event)->pos();
+            break;
+        case QEvent::UpdateRequest:
+        case QEvent::LanguageChange:
+        case QEvent::LayoutRequest:
+            break;
+        default:
+            continue;
+        }
+        delete event;
+        return true;
+    }
+    return false;
 }
 
 /*!
@@ -1747,6 +1772,7 @@ void QApplicationPrivate::notifyLayoutDirectionChange()
 
 /*!
     \fn void QApplication::setActiveWindow(QWidget* active)
+    \deprecated Use QWidget::activateWindow() instead.
 
     Sets the active window to the \a active widget in response to a system
     event. The function is called from the platform specific event handlers.
@@ -1763,7 +1789,14 @@ void QApplicationPrivate::notifyLayoutDirectionChange()
 
     \sa activeWindow(), QWidget::activateWindow()
 */
+#if QT_DEPRECATED_SINCE(6,5)
 void QApplication::setActiveWindow(QWidget* act)
+{
+    QApplicationPrivate::setActiveWindow(act);
+}
+#endif
+
+void QApplicationPrivate::setActiveWindow(QWidget* act)
 {
     QWidget* window = act?act->window():nullptr;
 
@@ -1781,8 +1814,8 @@ void QApplication::setActiveWindow(QWidget* act)
     QWidgetList toBeDeactivated;
 
     if (QApplicationPrivate::active_window) {
-        if (style()->styleHint(QStyle::SH_Widget_ShareActivation, nullptr, QApplicationPrivate::active_window)) {
-            const QWidgetList list = topLevelWidgets();
+        if (QApplication::style()->styleHint(QStyle::SH_Widget_ShareActivation, nullptr, QApplicationPrivate::active_window)) {
+            const QWidgetList list = QApplication::topLevelWidgets();
             for (auto *w : list) {
                 if (w->isVisible() && w->isActiveWindow())
                     toBeDeactivated.append(w);
@@ -1803,8 +1836,8 @@ void QApplication::setActiveWindow(QWidget* act)
     QApplicationPrivate::active_window = window;
 
     if (QApplicationPrivate::active_window) {
-        if (style()->styleHint(QStyle::SH_Widget_ShareActivation, nullptr, QApplicationPrivate::active_window)) {
-            const QWidgetList list = topLevelWidgets();
+        if (QApplication::style()->styleHint(QStyle::SH_Widget_ShareActivation, nullptr, QApplicationPrivate::active_window)) {
+            const QWidgetList list = QApplication::topLevelWidgets();
             for (auto *w : list) {
                 if (w->isVisible() && w->isActiveWindow())
                     toBeActivated.append(w);
@@ -1822,14 +1855,14 @@ void QApplication::setActiveWindow(QWidget* act)
 
     for (int i = 0; i < toBeActivated.size(); ++i) {
         QWidget *w = toBeActivated.at(i);
-        sendSpontaneousEvent(w, &windowActivate);
-        sendSpontaneousEvent(w, &activationChange);
+        QApplication::sendSpontaneousEvent(w, &windowActivate);
+        QApplication::sendSpontaneousEvent(w, &activationChange);
     }
 
     for(int i = 0; i < toBeDeactivated.size(); ++i) {
         QWidget *w = toBeDeactivated.at(i);
-        sendSpontaneousEvent(w, &windowDeactivate);
-        sendSpontaneousEvent(w, &activationChange);
+        QApplication::sendSpontaneousEvent(w, &windowDeactivate);
+        QApplication::sendSpontaneousEvent(w, &activationChange);
     }
 
     if (QApplicationPrivate::popupWidgets == nullptr) { // !inPopupMode()
@@ -1892,7 +1925,7 @@ void QApplicationPrivate::notifyActiveWindowChange(QWindow *previous)
 #endif
     QWindow *focusWindow = QGuiApplicationPrivate::focus_window;
     QWidget *focusWidget = qt_tlw_for_window(focusWindow);
-    QApplication::setActiveWindow(focusWidget);
+    QApplicationPrivate::setActiveWindow(focusWidget);
     // QTBUG-37126, Active X controls may set the focus on native child widgets.
     if (focusWindow && focusWidget && focusWindow != focusWidget->windowHandle()) {
         if (QWidgetWindow *widgetWindow = qobject_cast<QWidgetWindow *>(focusWindow))
@@ -2158,80 +2191,16 @@ bool QApplicationPrivate::isBlockedByModal(QWidget *widget)
     return window && self->isWindowBlocked(window);
 }
 
-bool QApplicationPrivate::isWindowBlocked(QWindow *window, QWindow **blockingWindow) const
+Qt::WindowModality QApplicationPrivate::defaultModality() const
 {
-    QWindow *unused = nullptr;
-    if (Q_UNLIKELY(!window)) {
-        qWarning().nospace() << "window == 0 passed.";
-        return false;
-    }
-    if (!blockingWindow)
-        blockingWindow = &unused;
+    return Qt::ApplicationModal;
+}
 
-    if (modalWindowList.isEmpty()) {
-        *blockingWindow = nullptr;
-        return false;
-    }
+bool QApplicationPrivate::windowNeverBlocked(QWindow *window) const
+{
     QWidget *popupWidget = QApplication::activePopupWidget();
     QWindow *popupWindow = popupWidget ? popupWidget->windowHandle() : nullptr;
-    if (popupWindow == window || (!popupWindow && QWindowPrivate::get(window)->isPopup())) {
-        *blockingWindow = nullptr;
-        return false;
-    }
-
-    for (int i = 0; i < modalWindowList.size(); ++i) {
-        QWindow *modalWindow = modalWindowList.at(i);
-
-        // A window is not blocked by another modal window if the two are
-        // the same, or if the window is a child of the modal window.
-        if (window == modalWindow || modalWindow->isAncestorOf(window, QWindow::IncludeTransients)) {
-            *blockingWindow = nullptr;
-            return false;
-        }
-
-        Qt::WindowModality windowModality = modalWindow->modality();
-        if (windowModality == Qt::NonModal) {
-            // If modality type hasn't been set on the modalWindow's widget, as
-            // when waiting for a native dialog, use ApplicationModal.
-            windowModality = Qt::ApplicationModal;
-        }
-
-        switch (windowModality) {
-        case Qt::ApplicationModal:
-            if (modalWindow != window) {
-                *blockingWindow = modalWindow;
-                return true;
-            }
-            break;
-        case Qt::WindowModal:
-        {
-            QWindow *w = window;
-            do {
-                QWindow *m = modalWindow;
-                do {
-                    if (m == w) {
-                        *blockingWindow = m;
-                        return true;
-                    }
-                    QWindow *p = m->parent();
-                    if (!p)
-                        p = m->transientParent();
-                    m = p;
-                } while (m);
-                QWindow *p = w->parent();
-                if (!p)
-                    p = w->transientParent();
-                w = p;
-            } while (w);
-            break;
-        }
-        default:
-            Q_ASSERT_X(false, "QApplication", "internal error, a modal window cannot be modeless");
-            break;
-        }
-    }
-    *blockingWindow = nullptr;
-    return false;
+    return popupWindow == window || (!popupWindow && QWindowPrivate::get(window)->isPopup());
 }
 
 /*!\internal
@@ -3083,8 +3052,8 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                 )
                 QDragManager::self()->setCurrentTarget(nullptr, e->type() == QEvent::Drop);
             break;
-#endif
         }
+#endif // QT_CONFIG(draganddrop)
         case QEvent::TouchBegin: {
             // Note: TouchUpdate and TouchEnd events are never propagated
             QMutableTouchEvent *touchEvent = QMutableTouchEvent::from(static_cast<QTouchEvent *>(e));

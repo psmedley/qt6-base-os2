@@ -1,7 +1,5 @@
 # Copyright (C) 2022 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
-
-# Generated from qt-client-raster.pro.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qt-client-raster Binary:
@@ -15,6 +13,3 @@ qt_internal_add_manual_test(qt-client-raster
     LIBRARIES
         Qt::Gui
 )
-
-#### Keys ignored in scope 1:.:.:qt-client-raster.pro:<TRUE>:
-# TEMPLATE = "app"

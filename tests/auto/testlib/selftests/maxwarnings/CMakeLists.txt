@@ -1,21 +1,20 @@
-# Generated from maxwarnings.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## maxwarnings Binary:
 #####################################################################
 
 qt_internal_add_executable(maxwarnings
-    NO_INSTALL # special case
-    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # special case
+    NO_INSTALL
+    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     SOURCES
         maxwarnings.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Test
 )
 
 ## Scopes:
 #####################################################################
 
-# special case begin
 qt_internal_apply_testlib_coverage_options(maxwarnings)
-# special case end

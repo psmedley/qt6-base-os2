@@ -40,6 +40,8 @@
 
 #include <QtTest/private/qtesthelpers_p.h>
 
+#include <QtWidgets/private/qapplication_p.h>
+
 using namespace QTestPrivate;
 
 Q_DECLARE_METATYPE(ExpectedValueDescription)
@@ -246,6 +248,8 @@ private slots:
 #ifndef QT_NO_CURSOR
     void QTBUG_7438_cursor();
 #endif
+    void resizeContentsOnItemDrag_data();
+    void resizeContentsOnItemDrag();
 
 public slots:
     void dummySlot() {}
@@ -2135,7 +2139,7 @@ void tst_QGraphicsView::sendEvent()
 
     QGraphicsView view(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&view));
@@ -2203,7 +2207,7 @@ void tst_QGraphicsView::wheelEvent()
     // Assign a view.
     QGraphicsView view(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&view));
@@ -2440,7 +2444,7 @@ void tst_QGraphicsView::viewportUpdateMode()
 
     // Show the view, and initialize our test.
     view.show();
-    qApp->setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QTRY_VERIFY(!view.lastUpdateRegions.isEmpty());
@@ -2523,7 +2527,7 @@ void tst_QGraphicsView::viewportUpdateMode2()
     const QMargins margins = view.contentsMargins();
     view.resize(200 + margins.left() + margins.right(), 200 + margins.top() + margins.bottom());
     toplevel.show();
-    qApp->setActiveWindow(&toplevel);
+    QApplicationPrivate::setActiveWindow(&toplevel);
     QVERIFY(QTest::qWaitForWindowExposed(&toplevel));
     QVERIFY(QTest::qWaitForWindowActive(&toplevel));
     QTRY_VERIFY(view.painted);
@@ -3167,7 +3171,7 @@ void tst_QGraphicsView::task172231_untransformableItems()
 
     view.scale(2, 1);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&view));
@@ -3229,7 +3233,7 @@ void tst_QGraphicsView::task187791_setSceneCausesUpdate()
     QGraphicsScene scene(0, 0, 200, 200);
     QGraphicsView view(&scene);
     view.show();
-    qApp->setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     EventSpy updateSpy(view.viewport(), QEvent::Paint);
@@ -3315,7 +3319,7 @@ void tst_QGraphicsView::task207546_focusCrash()
     widget.layout()->addWidget(gr2);
     widget.show();
     widget.activateWindow();
-    QApplication::setActiveWindow(&widget);
+    QApplicationPrivate::setActiveWindow(&widget);
     QVERIFY(QTest::qWaitForWindowActive(&widget));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&widget));
     widget.focusNextPrevChild(true);
@@ -3407,7 +3411,7 @@ void tst_QGraphicsView::task239729_noViewUpdate()
     QCOMPARE(spy.count(), 0);
 
     view->show();
-    qApp->setActiveWindow(view);
+    QApplicationPrivate::setActiveWindow(view);
     QVERIFY(QTest::qWaitForWindowActive(view));
 
     QTRY_VERIFY(spy.count() >= 1);
@@ -4035,7 +4039,7 @@ void tst_QGraphicsView::exposeRegion()
     CustomView view;
     view.setScene(&scene);
     view.show();
-    qApp->setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
@@ -4109,7 +4113,7 @@ void tst_QGraphicsView::update()
     QVERIFY(QTest::qWaitForWindowExposed(&toplevel));
 
 
-    QApplication::setActiveWindow(&toplevel);
+    QApplicationPrivate::setActiveWindow(&toplevel);
     QApplication::processEvents();
     QTRY_COMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&toplevel));
 
@@ -4191,7 +4195,7 @@ void tst_QGraphicsView::update2()
     view.setFrameStyle(0);
     view.resize(200, 200);
     view.show();
-    qApp->setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QTRY_VERIFY(rect->numPaints > 0);
@@ -4261,7 +4265,7 @@ void tst_QGraphicsView::update_ancestorClipsChildrenToShape()
 
     CustomView view(&scene);
     view.show();
-    qApp->setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QTRY_VERIFY(view.painted);
@@ -4315,7 +4319,7 @@ void tst_QGraphicsView::update_ancestorClipsChildrenToShape2()
 
     CustomView view(&scene);
     view.show();
-    qApp->setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QTRY_VERIFY(view.painted);
@@ -4376,7 +4380,7 @@ void tst_QGraphicsView::inputMethodSensitivity()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&view));
@@ -4474,7 +4478,7 @@ void tst_QGraphicsView::inputContextReset()
     QVERIFY(view.testAttribute(Qt::WA_InputMethodEnabled));
 
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&view));
@@ -4622,7 +4626,7 @@ void tst_QGraphicsView::task255529_transformationAnchorMouseAndViewportMargins()
     VpGraphicsView view(&scene);
     view.setWindowFlags(Qt::X11BypassWindowManagerHint);
     view.show();
-    qApp->setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     const bool isActiveWindow = QTest::qWaitForWindowActive(&view);
     if (!isActiveWindow)
@@ -4793,7 +4797,7 @@ void tst_QGraphicsView::QTBUG_5859_exposedRect()
     QGraphicsView view(&scene);
     view.scale(4.15, 4.15);
     view.showNormal();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
@@ -4865,7 +4869,7 @@ void tst_QGraphicsView::hoverLeave()
     scene.addItem(item);
 
     view.showNormal();
-    qApp->setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     QWindow *viewWindow = view.window()->windowHandle();
@@ -4944,7 +4948,7 @@ void tst_QGraphicsView::QTBUG_70255_scrollTo()
     view.centerOn(0, 0);
 
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     if (!QTest::qWaitForWindowExposed(&view) || !QTest::qWaitForWindowActive(&view))
         QSKIP("Failed to show and activate window");
 
@@ -4956,6 +4960,112 @@ void tst_QGraphicsView::QTBUG_70255_scrollTo()
 
     point = view.mapFromScene(0, 0);
     QCOMPARE(point, QPoint(0, -500));
+}
+
+void tst_QGraphicsView::resizeContentsOnItemDrag_data()
+{
+    QTest::addColumn<Qt::Alignment>("alignment");
+    QTest::addColumn<Qt::Orientation>("orientation");
+    QTest::addRow("Center right") << Qt::Alignment(Qt::AlignCenter) << Qt::Horizontal;
+    QTest::addRow("Center down") << Qt::Alignment(Qt::AlignCenter) << Qt::Vertical;
+    QTest::addRow("BottomLeft right") << (Qt::AlignBottom | Qt::AlignLeft) << Qt::Horizontal;
+    QTest::addRow("TopRight down") << (Qt::AlignTop | Qt::AlignRight) << Qt::Vertical;
+}
+
+void tst_QGraphicsView::resizeContentsOnItemDrag()
+{
+    QFETCH(Qt::Alignment, alignment);
+    QFETCH(Qt::Orientation, orientation);
+
+    QGraphicsView view;
+    QGraphicsScene scene;
+    view.setFixedSize(200, 200);
+    view.setScene(&scene);
+
+    view.setAlignment(alignment);
+
+    class MovableItem : public QGraphicsEllipseItem
+    {
+    public:
+        using QGraphicsEllipseItem::QGraphicsEllipseItem;
+
+        QList<QPointF> scenePositions;
+
+    protected:
+        void mousePressEvent(QGraphicsSceneMouseEvent *event) override
+        {
+            scenePositions << event->scenePos();
+        }
+        void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override
+        {
+            scenePositions << event->scenePos();
+            QGraphicsEllipseItem::mouseMoveEvent(event);
+        }
+    };
+
+    MovableItem item(-10, -10, 20, 20);
+    item.setFlags(QGraphicsItem::ItemIsMovable);
+    scene.addItem(&item);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // Position the item near the relevant edge of the view, with a few pixels
+    // to go until the scrollbars should be showing.
+    if (orientation == Qt::Horizontal)
+        item.setPos(view.width() - item.rect().width() - 5, 0);
+    else
+        item.setPos(0, view.height() - item.rect().height() - 5);
+    QApplication::processEvents(); // queued connection  used to trigger recalculateContentSize
+    QPoint mousePos = view.mapFromScene(item.pos());
+
+    QTest::mousePress(view.viewport(), Qt::LeftButton, {}, mousePos);
+    QCOMPARE(item.scenePositions.count(), 1);
+    QCOMPARE(item.scenePositions.takeLast(), view.mapToScene(mousePos));
+
+    auto lastItemPos = item.pos();
+    auto lastScenePos = view.mapToScene(mousePos);
+    int overshoot = 0;
+    const QScrollBar *scrollBar = orientation == Qt::Horizontal
+                                ? view.horizontalScrollBar()
+                                : view.verticalScrollBar();
+    // Drag the item until the scroll bars become visible, and then for a few more pixels.
+    // Verify that the item doesn't jump when the scrollbar shows.
+    while (overshoot < 10) {
+        if (orientation == Qt::Horizontal)
+            mousePos.rx() += 1;
+        else
+            mousePos.ry() += 1;
+        QTest::mouseMove(view.viewport(), mousePos);
+        QApplication::processEvents(); // queued connection used to trigger recalculateContentSize
+        const bool scrollbarAvailable = scrollBar->maximum() > scrollBar->minimum();
+        bool allowMoreEvents = false;
+        if (scrollbarAvailable) {
+            if (!overshoot) {
+                QTRY_VERIFY(scrollBar->isVisible());
+                // scrollbar becoming visible triggers event replay, so we get more than one
+                allowMoreEvents = true;
+            }
+            ++overshoot;
+        }
+        if (allowMoreEvents)
+            QCOMPARE_GE(item.scenePositions.count(), 1);
+        else
+            QCOMPARE(item.scenePositions.count(), 1);
+        const auto scenePos = item.scenePositions.takeLast();
+        item.scenePositions.clear();
+
+        const auto same = orientation == Qt::Horizontal ? &QPointF::y : &QPointF::x;
+        const auto moved = orientation == Qt::Horizontal ? &QPointF::x : &QPointF::y;
+        QCOMPARE((item.pos().*same)(), (lastItemPos.*same)());
+        QCOMPARE_GE((item.pos().*moved)() - (lastItemPos.*moved)(), 1);
+        QCOMPARE_LE((item.pos().*moved)() - (lastItemPos.*moved)(), 2);
+        lastItemPos = item.pos();
+
+        QCOMPARE((scenePos.*same)(), (lastScenePos.*same)());
+        QCOMPARE_GE((scenePos.*moved)() - (lastScenePos.*moved)(), 1);
+        QCOMPARE_LE((scenePos.*moved)() - (lastScenePos.*moved)(), 2);
+        lastScenePos = scenePos;
+    }
 }
 
 QTEST_MAIN(tst_QGraphicsView)

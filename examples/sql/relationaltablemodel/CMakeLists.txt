@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(relationaltablemodel LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -10,6 +11,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/sql/relationaltablemodel")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Sql Widgets)
+
+qt_standard_project_setup()
 
 qt_add_executable(relationaltablemodel
     ../connection.h
@@ -21,11 +24,11 @@ set_target_properties(relationaltablemodel PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-target_link_libraries(relationaltablemodel PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Sql
-    Qt::Widgets
+target_link_libraries(relationaltablemodel PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Sql
+    Qt6::Widgets
 )
 
 install(TARGETS relationaltablemodel

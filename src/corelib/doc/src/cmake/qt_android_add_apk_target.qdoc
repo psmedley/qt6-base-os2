@@ -6,14 +6,14 @@
 \ingroup cmake-commands-qtcore
 
 \title qt_android_add_apk_target
-\target qt6_android_add_apk_target
+\keyword qt6_android_add_apk_target
 
 \summary {Defines a build target that runs androiddeployqt to produce an APK.}
 
 \include cmake-find-package-core.qdocinc
 
 \cmakecommandsince 6.0
-\preliminarycmakecommand
+\warning This command is deprecated since Qt 6.5. Use \l qt_add_executable instead.
 \cmakecommandandroidonly
 
 \section1 Synopsis

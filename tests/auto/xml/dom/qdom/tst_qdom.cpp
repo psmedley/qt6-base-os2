@@ -30,6 +30,11 @@ private slots:
     void namespacedAttributes() const;
     void setContent_data();
     void setContent();
+    void setContentOverloads();
+    void parseOptions();
+    void spacingOnlyNodes_data() const;
+    void spacingOnlyNodes() const;
+    void parseResult();
     void toString_01_data();
     void toString_01();
     void toString_02_data();
@@ -173,7 +178,11 @@ void tst_QDom::setContent()
 
     QDomDocument domDoc;
     QXmlStreamReader reader(doc);
-    QVERIFY(domDoc.setContent(&reader, true));
+#if QT_DEPRECATED_SINCE(6, 8)
+    QT_IGNORE_DEPRECATIONS(domDoc.setContent(&reader, true);)
+#else
+    QVERIFY(domDoc.setContent(&reader, QDomDocument::ParseOption::UseNamespaceProcessing));
+#endif // QT_DEPRECATED_SINCE(6, 8)
 
     QString eRes;
     QTextStream ts( &eRes, QIODevice::WriteOnly );
@@ -187,6 +196,190 @@ void tst_QDom::setContent()
     QVERIFY( domDoc1.setContent( doc ) );
     QVERIFY( domDoc2.setContent( eRes ) );
     QVERIFY( compareDocuments( domDoc1, domDoc2 ) );
+
+    // Test overload taking a QAnyStringView
+    QDomDocument domFromStringView;
+    QStringView stringView(doc);
+    QVERIFY(domFromStringView.setContent(stringView));
+    QVERIFY(compareDocuments(domFromStringView, domDoc));
+
+    // Test overload taking a QByteArray
+    QDomDocument domFromByteArary;
+    QByteArray byteArray = doc.toUtf8();
+    QVERIFY(domFromByteArary.setContent(byteArray));
+    QVERIFY(compareDocuments(domFromByteArary, domDoc));
+
+    // Test overload taking a QIODevice
+    QDomDocument domFromIODevice;
+    QBuffer buffer(&byteArray);
+    QVERIFY(buffer.open(QIODevice::ReadOnly));
+    QVERIFY(domFromIODevice.setContent(&buffer));
+    QVERIFY(compareDocuments(domFromIODevice, domDoc));
+}
+
+void tst_QDom::setContentOverloads()
+{
+    QDomDocument doc;
+    QString errorMessage;
+
+    QByteArray data("<a>test</a>");
+    QString text = QString::fromLatin1(data);
+    QXmlStreamReader reader(data);
+
+    QBuffer buffer(&data);
+    QVERIFY(buffer.open(QIODevice::ReadOnly));
+
+    QVERIFY(doc.setContent(data));
+    QVERIFY(doc.setContent(data.data()));
+    QVERIFY(doc.setContent(text));
+    QVERIFY(doc.setContent(&reader));
+    QVERIFY(doc.setContent(&buffer));
+    buffer.reset();
+
+    // With parse options
+    QVERIFY(doc.setContent(data, QDomDocument::ParseOption::Default));
+    QVERIFY(doc.setContent(data.data(), QDomDocument::ParseOption::Default));
+    QVERIFY(doc.setContent(text, QDomDocument::ParseOption::Default));
+    QVERIFY(doc.setContent(&reader, QDomDocument::ParseOption::Default));
+    QVERIFY(doc.setContent(&buffer, QDomDocument::ParseOption::Default));
+    buffer.reset();
+
+#if QT_DEPRECATED_SINCE(6, 8)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
+    // With output param
+    QVERIFY(doc.setContent(data, &errorMessage));
+    QVERIFY(doc.setContent(text, &errorMessage));
+    QVERIFY(doc.setContent(&buffer, &errorMessage));
+    buffer.reset();
+    // There's no setContent(QXmlStreamReader *, QString *, int *, int *) overload
+    // QVERIFY(doc.setContent(&reader, &errorMessage));
+
+    // With namespace processing param
+    QVERIFY(doc.setContent(data, false));
+    QVERIFY(doc.setContent(text, false));
+    QVERIFY(doc.setContent(&reader, false));
+    QVERIFY(doc.setContent(&buffer, false));
+    buffer.reset();
+
+    // With namespace processing and output params
+    QVERIFY(doc.setContent(data, false, &errorMessage));
+    QVERIFY(doc.setContent(text, false, &errorMessage));
+    QVERIFY(doc.setContent(&reader, false, &errorMessage));
+    QVERIFY(doc.setContent(&buffer, false, &errorMessage));
+    buffer.reset();
+QT_WARNING_POP
+#endif // QT_DEPRECATED_SINCE(6, 8)
+}
+
+void tst_QDom::parseOptions()
+{
+    QString input = u"<doc xmlns:ns='http://example.com/'>"
+                    "<ns:nested/>"
+                    "</doc>"_s;
+    {
+        QDomDocument document;
+        QVERIFY(document.setContent(input, QDomDocument::ParseOption::Default));
+        const QDomElement docElement = document.firstChildElement("doc");
+        QVERIFY(!docElement.isNull());
+        const QDomElement nestedElement = docElement.firstChildElement();
+        QCOMPARE(nestedElement.nodeName(), "ns:nested");
+        QVERIFY(!nestedElement.isNull());
+        QVERIFY(nestedElement.localName().isEmpty());
+        QVERIFY(nestedElement.prefix().isEmpty());
+        QVERIFY(nestedElement.namespaceURI().isEmpty());
+    }
+    {
+        QDomDocument document;
+        QVERIFY(document.setContent(input, QDomDocument::ParseOption::UseNamespaceProcessing));
+        const QDomElement docElement = document.firstChildElement("doc");
+        QVERIFY(!docElement.isNull());
+        const QDomElement nestedElement = docElement.firstChildElement("nested");
+        QVERIFY(!nestedElement.isNull());
+        QCOMPARE(nestedElement.nodeName(), "ns:nested");
+        QCOMPARE(nestedElement.localName(), "nested");
+        QCOMPARE(nestedElement.prefix(), "ns");
+        QCOMPARE(nestedElement.namespaceURI(), "http://example.com/");
+    }
+}
+
+void tst_QDom::spacingOnlyNodes_data() const
+{
+    QTest::addColumn<QString>("input");
+    QTest::addColumn<QString>("expected");
+    QTest::addColumn<QDomDocument::ParseOption>("options");
+
+    QTest::newRow("spacing-only-remove")
+            << u"<a> \t \n \r</a>"_s
+            << u"<a/>"_s
+            << QDomDocument::ParseOption::Default;
+    // \r is translated to \n, see https://www.w3.org/TR/xml11/#sec-line-ends
+    QTest::newRow("spacing-only-preserve")
+            << u"<a> \t \n \r</a>"_s
+            << u"<a> \t \n \n</a>"_s
+            << QDomDocument::ParseOption::PreserveSpacingOnlyNodes;
+    QTest::newRow("mixed-text-remove")
+            << u"<a> abc \t \n \r</a>"_s
+            << u"<a> abc \t \n \n</a>"_s
+            << QDomDocument::ParseOption::Default;
+    QTest::newRow("mixed-text-preserve")
+            << u"<a> abc \t \n \r</a>"_s
+            << u"<a> abc \t \n \n</a>"_s
+            << QDomDocument::ParseOption::PreserveSpacingOnlyNodes;
+
+    // QDomDocument treats all chacarcters below as spaces (see QTBUG-105348)
+    static constexpr char16_t spaces[] = {
+        QChar::Space, QChar::Tabulation, QChar::LineFeed,
+        QChar::CarriageReturn, QChar::Nbsp,
+        0x2002, // EN SPACE
+        0x2003, // EM SPACE
+        0x2009  // THIN SPACE
+    };
+
+    for (char16_t space : spaces) {
+        QTest::addRow("spacing-remove-u%04x", space)
+                << u"<a>"_s + space + u"</a>"_s
+                << u"<a/>"_s
+                << QDomDocument::ParseOption::Default;
+
+        // \r is translated to \n, see https://www.w3.org/TR/xml11/#sec-line-ends
+        char16_t expected = (space == QChar::CarriageReturn) ? char16_t(QChar::LineFeed) : space;
+        QTest::addRow("spacing-preserve-u%04x", space)
+                << u"<a>"_s + space + u"</a>"_s
+                << u"<a>"_s + expected + u"</a>"_s
+                << QDomDocument::ParseOption::PreserveSpacingOnlyNodes;
+    }
+}
+
+void tst_QDom::spacingOnlyNodes() const
+{
+    QFETCH(QString, input);
+    QFETCH(QString, expected);
+    QFETCH(QDomDocument::ParseOption, options);
+
+    QDomDocument doc;
+    QVERIFY(doc.setContent(input, options));
+    QCOMPARE(doc.toString(-1), expected);
+}
+
+void tst_QDom::parseResult()
+{
+    QString input = u"<doc xmlns:b='http://example.com/'>"
+                    "<b:element/>"_s;
+
+    QDomDocument document;
+    QDomDocument::ParseResult result = document.setContent(input);
+    QVERIFY(!result);
+    QVERIFY(!result.errorMessage.isEmpty());
+    QVERIFY(result.errorLine);
+    QVERIFY(result.errorColumn);
+
+    input.append("</doc>");
+    result = document.setContent(input);
+    QVERIFY(result);
+    QVERIFY(result.errorMessage.isEmpty());
+    QVERIFY(!result.errorLine);
+    QVERIFY(!result.errorColumn);
 }
 
 void tst_QDom::toString_01_data()
@@ -225,13 +418,11 @@ void tst_QDom::toString_01()
     QVERIFY2(f.open(QIODevice::ReadOnly), qPrintable(QString::fromLatin1("Failed to open file %1, file error: %2").arg(fileName).arg(f.error())));
 
     QDomDocument doc;
-    QString errorMsg;
-    int errorLine;
-    int errorCol;
-
-    QVERIFY(doc.setContent( &f, &errorMsg, &errorLine, &errorCol )); /*,
-        QString("QDomDocument::setContent() failed: %1 in line %2, column %3")
-                        .arg( errorMsg ).arg( errorLine ).arg( errorCol )); */
+    QDomDocument::ParseResult result = doc.setContent(&f, QDomDocument::ParseOption::Default);
+    QVERIFY2(result,
+             qPrintable(u"QDomDocument::setContent() failed (%1:%2): %3"_s.arg(result.errorLine)
+                                .arg(result.errorColumn)
+                                .arg(result.errorMessage)));
     // test toString()'s invariant with different indenting depths
     for ( int i=0; i<5; i++ ) {
         QString toStr = doc.toString( i );
@@ -491,17 +682,14 @@ void tst_QDom::saveWithSerialization() const
     QVERIFY(readDevice.open(QIODevice::ReadOnly));
 
     QDomDocument result;
+    QDomDocument::ParseResult parseResult =
+            result.setContent(&readDevice, QDomDocument::ParseOption::Default);
 
-    QString msg;
-    int line = 0;
-    int column = 0;
-
-    QVERIFY2(result.setContent(&readDevice, &msg, &line, &column),
+    QVERIFY2(parseResult,
              qPrintable(QString::fromLatin1("Failed: line %2, column %3: %4, content: %5")
-                                            .arg(QString::number(line),
-                                                 QString::number(column),
-                                                 msg,
-                                                 QString::fromUtf8(storage))));
+                                .arg(QString::number(parseResult.errorLine),
+                                     QString::number(parseResult.errorColumn),
+                                     parseResult.errorMessage, QString::fromUtf8(storage))));
     if (!compareDocuments(doc, result))
     {
         QCOMPARE(doc.toString(), result.toString());
@@ -1400,12 +1588,10 @@ void tst_QDom::nonBMPCharacters()
             [invalidDataPolicy] { QDomImplementation::setInvalidDataPolicy(invalidDataPolicy); });
     QDomImplementation::setInvalidDataPolicy(QDomImplementation::DropInvalidChars);
 
-    const QString input = u"<text>Supplementary Plane: 𝄞 😂 🀄 🀶 🃪 🃋</text>"_qs;
+    const QString input = u"<text>Supplementary Plane: 𝄞 😂 🀄 🀶 🃪 🃋</text>"_s;
 
-    QString errorMsg;
     QDomDocument doc;
-    doc.setContent(input, &errorMsg);
-    QVERIFY(errorMsg.isEmpty());
+    QVERIFY(doc.setContent(input, QDomDocument::ParseOption::Default));
     QCOMPARE(doc.toString(-1), input);
 }
 
@@ -1447,10 +1633,8 @@ void tst_QDom::roundTripCDATA() const
 {
     const QString input = u"<?xml version='1.0' encoding='UTF-8'?>\n"
                           "<content><![CDATA[]]></content>\n"_s;
-    QString errorMsg;
     QDomDocument doc;
-    QVERIFY(doc.setContent(input, false, &errorMsg));
-    QVERIFY(errorMsg.isEmpty());
+    QVERIFY(doc.setContent(input, QDomDocument::ParseOption::Default));
     QCOMPARE(doc.toString(), input);
 }
 
@@ -1462,7 +1646,7 @@ void tst_QDom::normalizeEndOfLine() const
     QVERIFY(buffer.open(QIODevice::ReadOnly));
 
     QDomDocument doc;
-    QVERIFY(doc.setContent(&buffer, true));
+    QVERIFY(doc.setContent(&buffer, QDomDocument::ParseOption::UseNamespaceProcessing));
 
     const QString expected(QLatin1String("<a>\nc\nc\na\na</a>"));
 
@@ -1479,7 +1663,7 @@ void tst_QDom::normalizeAttributes() const
     QVERIFY(buffer.open(QIODevice::ReadOnly));
 
     QDomDocument doc;
-    QVERIFY(doc.setContent(&buffer, true));
+    QVERIFY(doc.setContent(&buffer, QDomDocument::ParseOption::UseNamespaceProcessing));
     QCOMPARE(doc.documentElement().attribute(QLatin1String("attribute")), QString::fromLatin1("a a"));
 }
 
@@ -1523,17 +1707,18 @@ void tst_QDom::serializeNamespaces() const
     QDomDocument doc;
     QByteArray ba(input);
     QXmlStreamReader streamReader(input);
-    QVERIFY(doc.setContent(&streamReader, true));
+    QVERIFY(doc.setContent(&streamReader, QDomDocument::ParseOption::UseNamespaceProcessing));
     const QByteArray serialized(doc.toByteArray());
 
     QDomDocument doc2;
-    QVERIFY(doc2.setContent(doc.toString(), true));
+    QVERIFY(doc2.setContent(doc.toString(), QDomDocument::ParseOption::UseNamespaceProcessing));
 
     /* Here we test that it roundtrips. */
     QVERIFY(isDeepEqual(doc2, doc));
 
     QDomDocument doc3;
-    QVERIFY(doc3.setContent(QString::fromLatin1(serialized.constData()), true));
+    QVERIFY(doc3.setContent(QString::fromLatin1(serialized.constData()),
+                            QDomDocument::ParseOption::UseNamespaceProcessing));
 
     QVERIFY(isDeepEqual(doc3, doc));
 }
@@ -1559,7 +1744,7 @@ void tst_QDom::flagUndeclaredNamespace() const
     QDomDocument doc;
     QByteArray ba(input);
     QXmlStreamReader streamReader(ba);
-    QVERIFY(!doc.setContent(&streamReader, true));
+    QVERIFY(!doc.setContent(&streamReader, QDomDocument::ParseOption::UseNamespaceProcessing));
 }
 
 void tst_QDom::indentComments() const
@@ -1624,7 +1809,7 @@ void tst_QDom::checkLiveness() const
 void tst_QDom::reportDuplicateAttributes() const
 {
     QDomDocument dd;
-    bool isSuccess = dd.setContent(QLatin1String("<test x=\"1\" x=\"2\"/>"));
+    bool isSuccess = bool(dd.setContent(QLatin1String("<test x=\"1\" x=\"2\"/>")));
     QVERIFY2(!isSuccess, "Duplicate attributes are well-formedness errors, and should be reported as such.");
 }
 
@@ -1641,12 +1826,12 @@ void tst_QDom::namespacedAttributes() const
         "</xan:td>\n";
 
     QDomDocument one("document");
-    QString error;
-    bool docParsed = one.setContent(QByteArray(xml), true, &error);
-    QVERIFY2(docParsed, qPrintable(error));
+    QDomDocument::ParseResult result =
+            one.setContent(QByteArray(xml), QDomDocument::ParseOption::UseNamespaceProcessing);
+    QVERIFY2(result, qPrintable(result.errorMessage));
     QDomDocument two("document2");
-    docParsed = two.setContent(one.toByteArray(2), true, &error);
-    QVERIFY2(docParsed, qPrintable(error));
+    result = two.setContent(one.toByteArray(2), QDomDocument::ParseOption::UseNamespaceProcessing);
+    QVERIFY2(result, qPrintable(result.errorMessage));
 
     QVERIFY(isDeepEqual(one, two));
 }
@@ -1764,7 +1949,7 @@ void tst_QDom::germanUmlautToFile() const
     QString name(QLatin1String("german"));
     name += QChar(0xFC);
     name += QLatin1String("umlaut");
-    QCOMPARE(name.length(), 13);
+    QCOMPARE(name.size(), 13);
 
     QDomDocument d("test");
     d.appendChild(d.createElement(name));
@@ -1783,7 +1968,7 @@ void tst_QDom::germanUmlautToFile() const
 
     const QByteArray in(inFile.readAll());
     /* Check that it was wwritten out correctly. */
-    QCOMPARE(in.length(), 34);
+    QCOMPARE(in.size(), 34);
     QCOMPARE(in, baseline.toUtf8());
     inFile.close();
 
@@ -1808,7 +1993,8 @@ void tst_QDom::crashInSetContent() const
     QDomImplementation::setInvalidDataPolicy(QDomImplementation::ReturnNullNode);
     QDomDocument docImport;
 
-    QCOMPARE(docImport.setContent(QLatin1String("<a:>text</a:>"), true), false);
+    QVERIFY(!docImport.setContent(QLatin1String("<a:>text</a:>"),
+                                  QDomDocument::ParseOption::UseNamespaceProcessing));
     QVERIFY(docImport.setContent(QLatin1String("<?xml version=\"1.0\"?><e/>")));
 }
 
@@ -1823,24 +2009,17 @@ void tst_QDom::doubleNamespaceDeclarations() const
     QVERIFY(file.open(QIODevice::ReadOnly));
 
     QXmlStreamReader streamReader(&file);
-    QVERIFY(doc.setContent(&streamReader, true));
+    QVERIFY(doc.setContent(&streamReader, QDomDocument::ParseOption::UseNamespaceProcessing));
 
-    // tst_QDom relies on a specific QHash ordering, see QTBUG-25071
     QString docAsString = doc.toString(0);
-    QVERIFY(docAsString == QString::fromLatin1("<a>\n<b p:c=\"\" xmlns:p=\"NS\" p:d=\"\"/>\n</a>\n") ||
-            docAsString == QString::fromLatin1("<a>\n<b p:c=\"\" p:d=\"\" xmlns:p=\"NS\"/>\n</a>\n") ||
-            docAsString == QString::fromLatin1("<a>\n<b p:d=\"\" p:c=\"\" xmlns:p=\"NS\"/>\n</a>\n") ||
-            docAsString == QString::fromLatin1("<a>\n<b p:d=\"\" xmlns:p=\"NS\" p:c=\"\"/>\n</a>\n") ||
-            docAsString == QString::fromLatin1("<a>\n<b xmlns:p=\"NS\" p:c=\"\" p:d=\"\"/>\n</a>\n") ||
-            docAsString == QString::fromLatin1("<a>\n<b xmlns:p=\"NS\" p:d=\"\" p:c=\"\"/>\n</a>\n")
-            );
+    QCOMPARE(docAsString, "<a>\n<b p:c=\"\" p:d=\"\" xmlns:p=\"NS\"/>\n</a>\n");
 }
 
 void tst_QDom::setContentQXmlReaderOverload() const
 {
     QDomDocument doc;
     QXmlStreamReader streamReader(QByteArray("<e/>"));
-    doc.setContent(&streamReader, true);
+    doc.setContent(&streamReader, QDomDocument::ParseOption::UseNamespaceProcessing);
     QCOMPARE(doc.documentElement().nodeName(), QString::fromLatin1("e"));
 }
 
@@ -1892,7 +2071,7 @@ void tst_QDom::setContentWhitespace() const
 
     QDomDocument domDoc;
 
-    QCOMPARE(domDoc.setContent(doc), expectedValidity);
+    QCOMPARE(bool(domDoc.setContent(doc)), expectedValidity);
 
     if(expectedValidity)
         QCOMPARE(domDoc.documentElement().nodeName(), QString::fromLatin1("e"));
@@ -1946,7 +2125,7 @@ void tst_QDom::setContentUnopenedQIODevice() const
 
     // Note: the check below is expected to fail in Qt 7.
     // Fix the test and remove the obsolete code from setContent().
-    QVERIFY(doc.setContent(&buffer, true));
+    QVERIFY(doc.setContent(&buffer, QDomDocument::ParseOption::UseNamespaceProcessing));
     QCOMPARE(doc.toString().trimmed(), data);
 }
 
@@ -2052,7 +2231,7 @@ void tst_QDom::DTDInternalSubset() const
     QFETCH( QString, internalSubset );
     QXmlStreamReader reader(doc);
     QDomDocument document;
-    QVERIFY(document.setContent(&reader, true));
+    QVERIFY(document.setContent(&reader, QDomDocument::ParseOption::UseNamespaceProcessing));
 
     QCOMPARE(document.doctype().internalSubset(), internalSubset);
 }

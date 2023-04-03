@@ -22,7 +22,7 @@ QT_BEGIN_NAMESPACE
 
 struct QNullBuffer : public QRhiBuffer
 {
-    QNullBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
+    QNullBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, quint32 size);
     ~QNullBuffer();
     void destroy() override;
     bool create() override;
@@ -183,7 +183,7 @@ public:
     QRhiShaderResourceBindings *createShaderResourceBindings() override;
     QRhiBuffer *createBuffer(QRhiBuffer::Type type,
                              QRhiBuffer::UsageFlags usage,
-                             int size) override;
+                             quint32 size) override;
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
                                          int sampleCount,
@@ -273,7 +273,7 @@ public:
     int resourceLimit(QRhi::ResourceLimit limit) const override;
     const QRhiNativeHandles *nativeHandles() override;
     QRhiDriverInfo driverInfo() const override;
-    QRhiMemAllocStats graphicsMemoryAllocationStatistics() override;
+    QRhiStats statistics() override;
     bool makeThreadLocalNativeContextCurrent() override;
     void releaseCachedResources() override;
     bool isDeviceLost() const override;

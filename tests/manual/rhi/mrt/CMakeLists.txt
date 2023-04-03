@@ -1,4 +1,5 @@
-# Generated from mrt.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## mrt Binary:
@@ -8,7 +9,7 @@ qt_internal_add_manual_test(mrt
     GUI
     SOURCES
         mrt.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -33,7 +34,3 @@ qt_internal_add_resource(mrt "mrt"
     FILES
         ${mrt_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:mrt.pro:<TRUE>:
-# TEMPLATE = "app"

@@ -9,6 +9,8 @@
 #include <QtCore/private/qobject_p.h>
 #include <QtCore/qscopeguard.h>
 
+#include <QtCore/private/qfunctions_win_p.h>
+
 QT_BEGIN_NAMESPACE
 
 // Declared in qnetworklistmanagerevents.h
@@ -68,7 +70,7 @@ public:
     {
         return QNetworkInformation::Features(QNetworkInformation::Feature::Reachability
                                              | QNetworkInformation::Feature::CaptivePortal
-#ifdef SUPPORTS_WINRT
+#if QT_CONFIG(cpp_winrt)
                                              | QNetworkInformation::Feature::TransportMedium
 #endif
                                              );
@@ -82,12 +84,13 @@ private:
     void setConnectivity(NLM_CONNECTIVITY newConnectivity);
     void checkCaptivePortal();
 
+    QComHelper comHelper;
+
     ComPtr<QNetworkListManagerEvents> managerEvents;
 
     NLM_CONNECTIVITY connectivity = NLM_CONNECTIVITY_DISCONNECTED;
 
     bool monitoring = false;
-    bool comInitFailed = false;
 };
 
 class QNetworkListManagerNetworkInformationBackendFactory : public QNetworkInformationBackendFactory
@@ -121,12 +124,9 @@ public:
 
 QNetworkListManagerNetworkInformationBackend::QNetworkListManagerNetworkInformationBackend()
 {
-    auto hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    if (FAILED(hr)) {
-        qCWarning(lcNetInfoNLM) << "Failed to initialize COM:" << errorStringFromHResult(hr);
-        comInitFailed = true;
+    if (!comHelper.isValid())
         return;
-    }
+
     managerEvents = new QNetworkListManagerEvents();
     connect(managerEvents.Get(), &QNetworkListManagerEvents::connectivityChanged, this,
             &QNetworkListManagerNetworkInformationBackend::setConnectivity);
@@ -140,8 +140,6 @@ QNetworkListManagerNetworkInformationBackend::QNetworkListManagerNetworkInformat
 
 QNetworkListManagerNetworkInformationBackend::~QNetworkListManagerNetworkInformationBackend()
 {
-    if (comInitFailed)
-        return;
     stop();
 }
 
@@ -164,11 +162,8 @@ void QNetworkListManagerNetworkInformationBackend::checkCaptivePortal()
 
 bool QNetworkListManagerNetworkInformationBackend::event(QEvent *event)
 {
-    if (event->type() == QEvent::ThreadChange && monitoring) {
-        stop();
-        QMetaObject::invokeMethod(this, &QNetworkListManagerNetworkInformationBackend::start,
-                                  Qt::QueuedConnection);
-    }
+    if (event->type() == QEvent::ThreadChange)
+        qFatal("Moving QNetworkListManagerNetworkInformationBackend to different thread is not supported");
 
     return QObject::event(event);
 }
@@ -177,15 +172,9 @@ bool QNetworkListManagerNetworkInformationBackend::start()
 {
     Q_ASSERT(!monitoring);
 
-    if (comInitFailed) {
-        auto hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-        if (FAILED(hr)) {
-            qCWarning(lcNetInfoNLM) << "Failed to initialize COM:" << errorStringFromHResult(hr);
-            comInitFailed = true;
-            return false;
-        }
-        comInitFailed = false;
-    }
+    if (!comHelper.isValid())
+        return false;
+
     if (!managerEvents)
         managerEvents = new QNetworkListManagerEvents();
 
@@ -202,9 +191,6 @@ void QNetworkListManagerNetworkInformationBackend::stop()
         monitoring = false;
         managerEvents.Reset();
     }
-
-    CoUninitialize();
-    comInitFailed = true; // we check this value in start() to see if we need to re-initialize
 }
 
 QT_END_NAMESPACE

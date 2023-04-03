@@ -34,6 +34,12 @@ Q_FORWARD_DECLARE_CF_TYPE(CFData);
 Q_FORWARD_DECLARE_OBJC_CLASS(NSData);
 #endif
 
+#if defined(Q_OS_WASM) || defined(Q_QDOC)
+namespace emscripten {
+    class val;
+}
+#endif
+
 QT_BEGIN_NAMESPACE
 
 class QString;
@@ -173,7 +179,7 @@ public:
     void truncate(qsizetype pos);
     void chop(qsizetype n);
 
-#if !defined(Q_CLANG_QDOC)
+#if !defined(Q_QDOC)
     [[nodiscard]] QByteArray toLower() const &
     { return toLower_helper(*this); }
     [[nodiscard]] QByteArray toLower() &&
@@ -233,6 +239,11 @@ public:
     { return insert(i, QByteArrayView(s, len)); }
 
     QByteArray &remove(qsizetype index, qsizetype len);
+    QByteArray &removeAt(qsizetype pos)
+    { return size_t(pos) < size_t(size()) ? remove(pos, 1) : *this; }
+    QByteArray &removeFirst() { return !isEmpty() ? remove(0, 1) : *this; }
+    QByteArray &removeLast() { return !isEmpty() ? remove(size() - 1, 1) : *this; }
+
     template <typename Predicate>
     QByteArray &removeIf(Predicate pred)
     {
@@ -274,15 +285,15 @@ public:
     friend inline bool operator==(const QByteArray &a1, const QByteArray &a2) noexcept
     { return QByteArrayView(a1) == QByteArrayView(a2); }
     friend inline bool operator==(const QByteArray &a1, const char *a2) noexcept
-    { return a2 ? QtPrivate::compareMemory(a1, a2) == 0 : a1.isEmpty(); }
+    { return QByteArrayView(a1) == QByteArrayView(a2); }
     friend inline bool operator==(const char *a1, const QByteArray &a2) noexcept
-    { return a1 ? QtPrivate::compareMemory(a1, a2) == 0 : a2.isEmpty(); }
+    { return QByteArrayView(a1) == QByteArrayView(a2); }
     friend inline bool operator!=(const QByteArray &a1, const QByteArray &a2) noexcept
     { return !(a1==a2); }
     friend inline bool operator!=(const QByteArray &a1, const char *a2) noexcept
-    { return a2 ? QtPrivate::compareMemory(a1, a2) != 0 : !a1.isEmpty(); }
+    { return QByteArrayView(a1) != QByteArrayView(a2); }
     friend inline bool operator!=(const char *a1, const QByteArray &a2) noexcept
-    { return a1 ? QtPrivate::compareMemory(a1, a2) != 0 : !a2.isEmpty(); }
+    { return QByteArrayView(a1) != QByteArrayView(a2); }
     friend inline bool operator<(const QByteArray &a1, const QByteArray &a2) noexcept
     { return QtPrivate::compareMemory(QByteArrayView(a1), QByteArrayView(a2)) < 0; }
     friend inline bool operator<(const QByteArray &a1, const char *a2) noexcept
@@ -382,6 +393,11 @@ public:
     NSData *toRawNSData() const Q_DECL_NS_RETURNS_AUTORELEASED;
 #endif
 
+#if defined(Q_OS_WASM) || defined(Q_QDOC)
+    static QByteArray fromEcmaUint8Array(emscripten::val uint8array);
+    emscripten::val toEcmaUint8Array();
+#endif
+
     typedef char *iterator;
     typedef const char *const_iterator;
     typedef iterator Iterator;
@@ -429,6 +445,7 @@ public:
     { prepend(a); }
     void shrink_to_fit() { squeeze(); }
     iterator erase(const_iterator first, const_iterator last);
+    inline iterator erase(const_iterator it) { return erase(it, it + 1); }
 
     static QByteArray fromStdString(const std::string &s);
     std::string toStdString() const;
@@ -541,15 +558,21 @@ inline int QByteArray::compare(QByteArrayView a, Qt::CaseSensitivity cs) const n
                                      qstrnicmp(data(), size(), a.data(), a.size());
 }
 #if !defined(QT_USE_QSTRINGBUILDER)
-inline const QByteArray operator+(const QByteArray &a1, const QByteArray &a2)
+inline QByteArray operator+(const QByteArray &a1, const QByteArray &a2)
 { return QByteArray(a1) += a2; }
-inline const QByteArray operator+(const QByteArray &a1, const char *a2)
+inline QByteArray operator+(QByteArray &&lhs, const QByteArray &rhs)
+{ return std::move(lhs += rhs); }
+inline QByteArray operator+(const QByteArray &a1, const char *a2)
 { return QByteArray(a1) += a2; }
-inline const QByteArray operator+(const QByteArray &a1, char a2)
+inline QByteArray operator+(QByteArray &&lhs, const char *rhs)
+{ return std::move(lhs += rhs); }
+inline QByteArray operator+(const QByteArray &a1, char a2)
 { return QByteArray(a1) += a2; }
-inline const QByteArray operator+(const char *a1, const QByteArray &a2)
+inline QByteArray operator+(QByteArray &&lhs, char rhs)
+{ return std::move(lhs += rhs); }
+inline QByteArray operator+(const char *a1, const QByteArray &a2)
 { return QByteArray(a1) += a2; }
-inline const QByteArray operator+(char a1, const QByteArray &a2)
+inline QByteArray operator+(char a1, const QByteArray &a2)
 { return QByteArray(&a1, 1) += a2; }
 #endif // QT_USE_QSTRINGBUILDER
 

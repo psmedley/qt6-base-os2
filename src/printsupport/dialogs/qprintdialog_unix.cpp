@@ -83,7 +83,7 @@ Print dialog class declarations
                              Layout in qprintpropertieswidget.ui
 */
 
-static void initResources()
+static void _q_pdu_initResources()
 {
     Q_INIT_RESOURCE(qprintdialog);
 }
@@ -322,7 +322,7 @@ void QPrintPropertiesDialog::reject()
 
 void QPrintPropertiesDialog::accept()
 {
-#if QT_CONFIG(cups)
+#if QT_CONFIG(cups) && QT_CONFIG(messagebox)
     if (widget.pageSetup->hasPpdConflict()) {
         widget.tabs->setCurrentWidget(widget.tabPage);
         const QMessageBox::StandardButton answer = QMessageBox::warning(this, tr("Page Setup Conflicts"),
@@ -584,7 +584,7 @@ QPrintDialogPrivate::QPrintDialogPrivate()
     : top(nullptr), bottom(nullptr), buttons(nullptr), collapseButton(nullptr),
       explicitDuplexMode(QPrint::DuplexAuto)
 {
-    initResources();
+    _q_pdu_initResources();
 }
 
 QPrintDialogPrivate::~QPrintDialogPrivate()
@@ -990,7 +990,7 @@ int QPrintDialog::exec()
 void QPrintDialog::accept()
 {
     Q_D(QPrintDialog);
-#if QT_CONFIG(cups)
+#if QT_CONFIG(cups) && QT_CONFIG(messagebox)
     if (d->options.pagesRadioButton->isChecked() && printer()->pageRanges().isEmpty()) {
         QMessageBox::critical(this, tr("Invalid Pages Definition"),
                               tr("%1 does not follow the correct syntax. Please use ',' to separate "

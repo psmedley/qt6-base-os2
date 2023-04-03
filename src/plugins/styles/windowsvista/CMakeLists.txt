@@ -1,4 +1,5 @@
-# Generated from windowsvista.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QWindowsVistaStylePlugin Plugin:
@@ -11,8 +12,9 @@ qt_internal_add_plugin(QWindowsVistaStylePlugin
         main.cpp
         qwindowsvistastyle.cpp qwindowsvistastyle_p.h
         qwindowsvistastyle_p_p.h
-        qwindowsxpstyle.cpp qwindowsxpstyle_p.h
-        qwindowsxpstyle_p_p.h
+        qwindowsvistaanimation.cpp qwindowsvistaanimation_p.h
+        qwindowsthemedata.cpp qwindowsthemedata_p.h
+
     LIBRARIES
         gdi32
         user32
@@ -21,6 +23,3 @@ qt_internal_add_plugin(QWindowsVistaStylePlugin
         Qt::Gui
         Qt::WidgetsPrivate
 )
-
-#### Keys ignored in scope 1:.:.:windowsvista.pro:<TRUE>:
-# DISTFILES = "windowsvistastyle.json"

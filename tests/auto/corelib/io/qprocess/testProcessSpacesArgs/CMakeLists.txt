@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 add_executable(nospace main.cpp)
 
 add_executable(onespace main.cpp)

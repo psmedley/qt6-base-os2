@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(composition LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -11,11 +12,9 @@ set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/widgets/painting/composition")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 
+qt_standard_project_setup()
+
 qt_add_executable(composition
-    # remove files from ../shared
-    #../shared/arthurstyle.cpp ../shared/arthurstyle.h
-    #../shared/arthurwidgets.cpp ../shared/arthurwidgets.h
-    #../shared/hoverpoints.cpp ../shared/hoverpoints.h
     composition.cpp composition.h
     main.cpp
 )
@@ -25,18 +24,14 @@ set_target_properties(composition PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-target_include_directories(composition PUBLIC
-    ../shared
-)
-
 if(NOT TARGET painting_shared::painting_shared)
     include(../shared/use_lib.cmake)
 endif()
 
-target_link_libraries(composition PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
+target_link_libraries(composition PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
     painting_shared::painting_shared
 )
 
@@ -101,17 +96,6 @@ qt_add_resources(composition "composition"
     FILES
         ${composition_resource_files}
 )
-
-# remove files from ../shared
-#if(QT_FEATURE_opengl)
-    #target_sources(affine PUBLIC
-        #../shared/fbopaintdevice.cpp ../shared/fbopaintdevice.h
-    #)
-
-    #target_link_libraries(affine PUBLIC
-        #Qt::OpenGL
-    #)
-#endif()
 
 install(TARGETS composition
     RUNTIME DESTINATION "${INSTALL_EXAMPLEDIR}"

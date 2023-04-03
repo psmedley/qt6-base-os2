@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(downloadmanager LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -11,15 +12,17 @@ set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/network/downloadmanager")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Network)
 
+qt_standard_project_setup()
+
 qt_add_executable(downloadmanager
     downloadmanager.cpp downloadmanager.h
     main.cpp
     textprogressbar.cpp textprogressbar.h
 )
 
-target_link_libraries(downloadmanager PUBLIC
-    Qt::Core
-    Qt::Network
+target_link_libraries(downloadmanager PRIVATE
+    Qt6::Core
+    Qt6::Network
 )
 
 install(TARGETS downloadmanager

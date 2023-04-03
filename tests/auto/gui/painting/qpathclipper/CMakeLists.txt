@@ -1,4 +1,5 @@
-# Generated from qpathclipper.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 if(NOT QT_FEATURE_private_tests)
     return()
@@ -14,18 +15,15 @@ qt_internal_add_test(tst_qpathclipper
         tst_qpathclipper.cpp
     INCLUDE_DIRECTORIES
         .
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
-
-#### Keys ignored in scope 1:.:.:qpathclipper.pro:<TRUE>:
-# _REQUIREMENTS = "qtConfig(private_tests)"
 
 ## Scopes:
 #####################################################################
 
 qt_internal_extend_target(tst_qpathclipper CONDITION UNIX AND NOT APPLE AND NOT HAIKU AND NOT INTEGRITY
-    PUBLIC_LIBRARIES
+    LIBRARIES
         m
 )

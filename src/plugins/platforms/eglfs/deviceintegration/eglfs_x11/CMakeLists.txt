@@ -1,4 +1,5 @@
-# Generated from eglfs_x11.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QEglFSX11IntegrationPlugin Plugin:
@@ -25,5 +26,4 @@ qt_internal_add_plugin(QEglFSX11IntegrationPlugin
         XCB::XCB
 )
 
-#### Keys ignored in scope 1:.:.:eglfs_x11.pro:<TRUE>:
-# OTHER_FILES = "$$PWD/eglfs_x11.json"
+set_target_properties(QEglFSX11IntegrationPlugin PROPERTIES UNITY_BUILD OFF) # X11 define clashes

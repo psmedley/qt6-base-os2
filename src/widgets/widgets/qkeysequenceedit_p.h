@@ -42,9 +42,11 @@ public:
     QLineEdit *lineEdit;
     QKeySequence keySequence;
     int keyNum;
+    int maximumSequenceLength = QKeySequencePrivate::MaxKeyCount;
     QKeyCombination key[QKeySequencePrivate::MaxKeyCount];
     int prevKey;
     int releaseTimer;
+    QList<QKeyCombination> finishingKeyCombinations;
 };
 
 QT_END_NAMESPACE

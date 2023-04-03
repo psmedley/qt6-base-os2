@@ -1,11 +1,14 @@
-// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2022 The Qt Company Ltd.
 // Copyright (C) 2019 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QFOREACH_H
 #define QFOREACH_H
 
-#include <QtCore/qglobal.h>
+#include <QtCore/qtclasshelpermacros.h>
+#include <QtCore/qtconfigmacros.h>
+#include <QtCore/qtdeprecationmarkers.h>
+#include <QtCore/qttypetraits.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -20,31 +23,13 @@ namespace QtPrivate {
 
 template <typename T>
 class QForeachContainer {
-    Q_DISABLE_COPY(QForeachContainer)
+    Q_DISABLE_COPY_MOVE(QForeachContainer)
 public:
     QForeachContainer(const T &t) : c(t), i(std::as_const(c).begin()), e(std::as_const(c).end()) {}
     QForeachContainer(T &&t) : c(std::move(t)), i(std::as_const(c).begin()), e(std::as_const(c).end())  {}
 
-    QForeachContainer(QForeachContainer &&other)
-        : c(std::move(other.c)),
-          i(std::as_const(c).begin()),
-          e(std::as_const(c).end()),
-          control(std::move(other.control))
-    {
-    }
-
-    QForeachContainer &operator=(QForeachContainer &&other)
-    {
-        c = std::move(other.c);
-        i = std::as_const(c).begin();
-        e = std::as_const(c).end();
-        control = std::move(other.control);
-        return *this;
-    }
-
     T c;
     typename T::const_iterator i, e;
-    int control = 1;
 };
 
 // Containers that have a detach function are considered shared, and are OK in a foreach loop

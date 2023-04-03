@@ -45,6 +45,7 @@ public:
 
     inline const QMetaObject *enclosingMetaObject() const { return mobj; }
 
+#if QT_VERSION <= QT_VERSION_CHECK(7, 0, 0)
     bool invoke(QObject *object,
                 Qt::ConnectionType connectionType,
                 QGenericReturnArgument returnValue,
@@ -76,7 +77,7 @@ public:
     }
     inline bool invoke(QObject *object,
                        Qt::ConnectionType connectionType,
-                       QGenericArgument val0 = QGenericArgument(nullptr),
+                       QGenericArgument val0,
                        QGenericArgument val1 = QGenericArgument(),
                        QGenericArgument val2 = QGenericArgument(),
                        QGenericArgument val3 = QGenericArgument(),
@@ -91,7 +92,7 @@ public:
                       val0, val1, val2, val3, val4, val5, val6, val7, val8, val9);
     }
     inline bool invoke(QObject *object,
-                       QGenericArgument val0 = QGenericArgument(nullptr),
+                       QGenericArgument val0,
                        QGenericArgument val1 = QGenericArgument(),
                        QGenericArgument val2 = QGenericArgument(),
                        QGenericArgument val3 = QGenericArgument(),
@@ -118,7 +119,7 @@ public:
                         QGenericArgument val8 = QGenericArgument(),
                         QGenericArgument val9 = QGenericArgument()) const;
     inline bool invokeOnGadget(void *gadget,
-                               QGenericArgument val0 = QGenericArgument(nullptr),
+                               QGenericArgument val0,
                                QGenericArgument val1 = QGenericArgument(),
                                QGenericArgument val2 = QGenericArgument(),
                                QGenericArgument val3 = QGenericArgument(),
@@ -131,6 +132,78 @@ public:
     {
         return invokeOnGadget(gadget, QGenericReturnArgument(),
                               val0, val1, val2, val3, val4, val5, val6, val7, val8, val9);
+    }
+#endif
+
+    template <typename... Args>
+#ifdef Q_QDOC
+    bool
+#else
+    QtPrivate::Invoke::IfNotOldStyleArgs<bool, Args...>
+#endif
+    invoke(QObject *obj, Qt::ConnectionType c, QMetaMethodReturnArgument r,
+           Args &&... arguments) const
+    {
+        auto h = QtPrivate::invokeMethodHelper(r, std::forward<Args>(arguments)...);
+        return invokeImpl(*this, obj, c, h.parameterCount(), h.parameters.data(),
+                          h.typeNames.data(), h.metaTypes.data());
+    }
+
+    template <typename... Args>
+#ifdef Q_QDOC
+    bool
+#else
+    QtPrivate::Invoke::IfNotOldStyleArgs<bool, Args...>
+#endif
+    invoke(QObject *obj, Qt::ConnectionType c, Args &&... arguments) const
+    {
+        return invoke(obj, c, QMetaMethodReturnArgument{}, std::forward<Args>(arguments)...);
+    }
+
+    template <typename... Args>
+#ifdef Q_QDOC
+    bool
+#else
+    QtPrivate::Invoke::IfNotOldStyleArgs<bool, Args...>
+#endif
+    invoke(QObject *obj, QMetaMethodReturnArgument r, Args &&... arguments) const
+    {
+        return invoke(obj, Qt::AutoConnection, r, std::forward<Args>(arguments)...);
+    }
+
+    template <typename... Args>
+#ifdef Q_QDOC
+    bool
+#else
+    QtPrivate::Invoke::IfNotOldStyleArgs<bool, Args...>
+#endif
+    invoke(QObject *obj, Args &&... arguments) const
+    {
+        return invoke(obj, Qt::AutoConnection, std::forward<Args>(arguments)...);
+    }
+
+    template <typename... Args>
+#ifdef Q_QDOC
+    bool
+#else
+    QtPrivate::Invoke::IfNotOldStyleArgs<bool, Args...>
+#endif
+    invokeOnGadget(void *gadget, QMetaMethodReturnArgument r, Args &&... arguments) const
+    {
+        auto h = QtPrivate::invokeMethodHelper(r, std::forward<Args>(arguments)...);
+        return invokeImpl(*this, gadget, Qt::ConnectionType(-1), h.parameterCount(),
+                          h.parameters.data(), h.typeNames.data(), h.metaTypes.data());
+    }
+
+    template <typename... Args>
+#ifdef Q_QDOC
+    bool
+#else
+    QtPrivate::Invoke::IfNotOldStyleArgs<bool, Args...>
+#endif
+    invokeOnGadget(void *gadget, Args &&... arguments) const
+    {
+        return invokeOnGadget(gadget, QMetaMethodReturnArgument{}, std::forward<Args>(arguments)...);
     }
 
     inline bool isValid() const { return mobj != nullptr; }
@@ -146,10 +219,14 @@ public:
     }
 
 private:
+    static bool invokeImpl(QMetaMethod self, void *target, Qt::ConnectionType, qsizetype paramCount,
+                           const void *const *parameters, const char *const *typeNames,
+                           const QtPrivate::QMetaTypeInterface *const *metaTypes);
     static QMetaMethod fromSignalImpl(const QMetaObject *, void **);
     static QMetaMethod fromRelativeMethodIndex(const QMetaObject *mobj, int index);
     static QMetaMethod fromRelativeConstructorIndex(const QMetaObject *mobj, int index);
 
+protected:
     struct Data {
         enum { Size = 6 };
 
@@ -163,13 +240,14 @@ private:
 
         const uint *d;
     };
+private:
     constexpr QMetaMethod(const QMetaObject *metaObject, const Data &data_)
         : mobj(metaObject), data(data_)
     {}
+protected:
 
     const QMetaObject *mobj;
     Data data;
-    friend class QMetaMethodPrivate;
     friend struct QMetaObject;
     friend struct QMetaObjectPrivate;
     friend class QObject;

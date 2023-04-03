@@ -1,4 +1,5 @@
-# Generated from libinput.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QLibInputPlugin Plugin:
@@ -17,7 +18,3 @@ qt_internal_add_plugin(QLibInputPlugin
         Qt::GuiPrivate
         Qt::InputSupportPrivate
 )
-
-#### Keys ignored in scope 1:.:.:libinput.pro:<TRUE>:
-# OTHER_FILES = "libinput.json"
-# PLUGIN_EXTENDS = "-"

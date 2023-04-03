@@ -4,6 +4,8 @@
 
 #include <QTest>
 #include <QFloat16>
+#include <QMetaType>
+#include <QTextStream>
 
 #include <math.h>
 
@@ -41,6 +43,8 @@ private slots:
     void properties();
     void limits();
     void mantissaOverflow();
+    void dataStream();
+    void textStream();
 };
 
 void tst_qfloat16::fuzzyCompare_data()
@@ -301,7 +305,7 @@ void tst_qfloat16::promotionTests()
     QCOMPARE(sizeof(double),sizeof(qfloat16(1.f)*1));
     QCOMPARE(sizeof(double),sizeof(qfloat16(1.f)/1));
 
-    QCOMPARE(QString::number(1.f),QString::number(qfloat16(1.f)));
+    QCOMPARE(QString::number(1.f),QString::number(double(qfloat16(1.f))));
 }
 
 void tst_qfloat16::arithOps_data()
@@ -624,11 +628,66 @@ void tst_qfloat16::mantissaOverflow()
     float f;
     memcpy(&f, &in, 4);
 
-    qfloat16 f16 = f;
+    qfloat16 f16 = qfloat16(f);
     qfloat16 f16s[1];
     qFloatToFloat16(f16s, &f, 1);
     QCOMPARE(f16, f16s[0]);
     QVERIFY(qIsNaN(f16));
+}
+
+void tst_qfloat16::dataStream()
+{
+    QByteArray ba;
+    QDataStream ds(&ba, QIODevice::ReadWrite);
+    ds << qfloat16(1.5) << qfloat16(-1);
+    QCOMPARE(ba.size(), 4);
+    QCOMPARE(ds.status(), QDataStream::Ok);
+    QCOMPARE(ba, QByteArray("\x3e\0\xbc\0", 4));
+
+    ds.device()->seek(0);
+    ds.resetStatus();
+    ds.setByteOrder(QDataStream::LittleEndian);
+    ds << qfloat16(0) << qfloat16(-1);
+    QCOMPARE(ds.status(), QDataStream::Ok);
+    QCOMPARE(ba, QByteArray("\0\0\0\xbc", 4));
+
+    ds.device()->seek(0);
+    ds.resetStatus();
+    qfloat16 zero = 1;
+    ds >> zero;
+    QCOMPARE(ds.status(), QDataStream::Ok);
+    QCOMPARE(zero, qfloat16(0));
+
+    ds.device()->seek(0);
+    ds.resetStatus();
+    QMetaType mt = QMetaType(QMetaType::Float16);
+    QVERIFY(mt.save(ds, &zero));
+
+    ds.device()->seek(0);
+    ds.resetStatus();
+    zero = -1;
+    QVERIFY(mt.load(ds, &zero));
+    QCOMPARE(zero, qfloat16(0));
+}
+
+void tst_qfloat16::textStream()
+{
+    QString buffer;
+    {
+        QTextStream ts(&buffer);
+        ts << qfloat16(0) << Qt::endl << qfloat16(1.5);
+        QCOMPARE(ts.status(), QTextStream::Ok);
+    }
+    QCOMPARE(buffer, "0\n1.5");
+
+    {
+        QTextStream ts(&buffer);
+        qfloat16 zero = qfloat16(-2.5), threehalves = 1234;
+        ts >> zero >> threehalves;
+        QCOMPARE(ts.status(), QTextStream::Ok);
+        QCOMPARE(zero, qfloat16(0));
+        QCOMPARE(threehalves, 1.5);
+    }
 }
 
 QTEST_APPLESS_MAIN(tst_qfloat16)

@@ -1,5 +1,6 @@
-# special case begin
-# special case skip regeneration
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 if (NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     return()
 endif()
@@ -106,6 +107,8 @@ if(WIN32)
         target_compile_definitions(EntryPointPrivate INTERFACE QT_NEEDS_QMAIN)
         qt_internal_extend_target(EntryPointImplementation DEFINES QT_NEEDS_QMAIN)
     endif()
+
+    qt_internal_add_sync_header_dependencies(EntryPointImplementation Core)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
@@ -145,5 +148,3 @@ qt_internal_export_additional_targets_file(
     TARGETS ${export_targets}
     EXPORT_NAME_PREFIX ${export_name_prefix}
     CONFIG_INSTALL_DIR "${config_install_dir}")
-
-# special case end

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generate deployment tool json
 
 # Locate newest Android sdk build tools revision
@@ -69,6 +72,17 @@ function(qt6_android_generate_deployment_settings target)
     set_target_properties(${target} PROPERTIES
         _qt_is_android_generate_deployment_settings_called TRUE
     )
+
+    get_target_property(android_executable_finalizer_called
+        ${target} _qt_android_executable_finalizer_called)
+
+    if(android_executable_finalizer_called)
+        # Don't show deprecation when called by our own function implementations.
+    else()
+        message(DEPRECATION
+            "Calling qt_android_generate_deployment_settings directly is deprecated since Qt 6.5. "
+            "Use qt_add_executable instead.")
+    endif()
 
     get_target_property(target_type ${target} TYPE)
 
@@ -324,6 +338,16 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
 endif()
 
 function(qt6_android_apply_arch_suffix target)
+    get_target_property(called_from_qt_impl
+        ${target} _qt_android_apply_arch_suffix_called_from_qt_impl)
+    if(called_from_qt_impl)
+        # Don't show deprecation when called by our own function implementations.
+    else()
+        message(DEPRECATION
+            "Calling qt_android_apply_arch_suffix directly is deprecated since Qt 6.5. "
+            "Use qt_add_executable or qt_add_library instead.")
+    endif()
+
     get_target_property(target_type ${target} TYPE)
     if (target_type STREQUAL "SHARED_LIBRARY" OR target_type STREQUAL "MODULE_LIBRARY")
         set_property(TARGET "${target}" PROPERTY SUFFIX "_${CMAKE_ANDROID_ARCH_ABI}.so")
@@ -344,6 +368,17 @@ function(qt6_android_add_apk_target target)
     get_property(apk_targets GLOBAL PROPERTY _qt_apk_targets)
     if("${target}" IN_LIST apk_targets)
         return()
+    endif()
+
+    get_target_property(android_executable_finalizer_called
+        ${target} _qt_android_executable_finalizer_called)
+
+    if(android_executable_finalizer_called)
+        # Don't show deprecation when called by our own function implementations.
+    else()
+        message(DEPRECATION
+            "Calling qt_android_add_apk_target directly is deprecated since Qt 6.5. "
+            "Use qt_add_executable instead.")
     endif()
 
     get_target_property(deployment_file ${target} QT_ANDROID_DEPLOYMENT_SETTINGS_FILE)
@@ -536,6 +571,7 @@ function(qt6_android_add_apk_target target)
 
     set_property(GLOBAL APPEND PROPERTY _qt_apk_targets ${target})
     _qt_internal_collect_apk_dependencies_defer()
+    _qt_internal_collect_apk_imported_dependencies_defer("${target}")
 endfunction()
 
 function(_qt_internal_create_global_android_targets)
@@ -611,6 +647,7 @@ function(_qt_internal_collect_apk_dependencies)
     get_property(apk_targets GLOBAL PROPERTY _qt_apk_targets)
 
     _qt_internal_collect_buildsystem_shared_libraries(libs "${CMAKE_SOURCE_DIR}")
+    list(REMOVE_DUPLICATES libs)
 
     if(NOT TARGET qt_internal_plugins)
         add_custom_target(qt_internal_plugins)
@@ -656,6 +693,81 @@ function(_qt_internal_collect_buildsystem_shared_libraries out_var subdir)
     foreach(dir IN LISTS subdirs)
         _qt_internal_collect_buildsystem_shared_libraries(result_inner "${dir}")
     endforeach()
+    list(APPEND result ${result_inner})
+    set(${out_var} "${result}" PARENT_SCOPE)
+endfunction()
+
+# This function collects all imported shared libraries that might be dependencies for
+# the main apk targets. The actual collection is deferred until the target's directory scope
+# is processed.
+# The function requires CMake 3.21 or later.
+function(_qt_internal_collect_apk_imported_dependencies_defer target)
+    # User opted-out of the functionality.
+    if(QT_NO_COLLECT_IMPORTED_TARGET_APK_DEPS)
+        return()
+    endif()
+
+    get_target_property(target_source_dir "${target}" SOURCE_DIR)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.21")
+        cmake_language(EVAL CODE "cmake_language(DEFER DIRECTORY \"${target_source_dir}\"
+            CALL _qt_internal_collect_apk_imported_dependencies \"${target}\")")
+    endif()
+endfunction()
+
+# This function collects imported shared libraries that might be dependencies for
+# the main apk targets. It stores their locations on a custom target property for the given target.
+# The function requires CMake 3.21 or later.
+function(_qt_internal_collect_apk_imported_dependencies target)
+    # User opted-out the functionality
+    if(QT_NO_COLLECT_IMPORTED_TARGET_APK_DEPS)
+        return()
+    endif()
+
+    get_target_property(target_source_dir "${target}" SOURCE_DIR)
+    _qt_internal_collect_imported_shared_libraries_recursive(libs "${target_source_dir}")
+    list(REMOVE_DUPLICATES libs)
+
+    foreach(lib IN LISTS libs)
+        list(APPEND extra_library_dirs "$<TARGET_FILE_DIR:${lib}>")
+    endforeach()
+
+    set_property(TARGET "${target}" APPEND PROPERTY
+        _qt_android_extra_library_dirs "${extra_library_dirs}"
+    )
+endfunction()
+
+# This function recursively walks the current directory and its parent directories to collect
+# imported shared library targets.
+# The recursion goes upwards instead of downwards because imported targets are usually not global,
+# and we can't call get_target_property() on a target which is not available in the current
+# directory or parent scopes.
+# We also can't cache parent directories because the imported targets in a parent directory
+# might change in-between collection calls.
+# The function requires CMake 3.21 or later.
+function(_qt_internal_collect_imported_shared_libraries_recursive out_var subdir)
+    set(result "")
+
+    get_directory_property(imported_targets DIRECTORY "${subdir}" IMPORTED_TARGETS)
+    foreach(imported_target IN LISTS imported_targets)
+        get_target_property(target_type "${imported_target}" TYPE)
+        if(target_type STREQUAL "SHARED_LIBRARY" OR target_type STREQUAL "MODULE_LIBRARY")
+            # If the target has the _qt_package_version property set, it means it's an
+            # 'official' qt target like a module or plugin, so we don't want to add it
+            # to the list of extra paths to scan for in androiddeployqt, because they are
+            # already handled via the regular 'qt' code path in the androiddeployqt.
+            # Thus this will pick up only non-qt 3rd party targets.
+            get_target_property(qt_package_version "${imported_target}" _qt_package_version)
+            if(NOT qt_package_version)
+                list(APPEND result "${imported_target}")
+            endif()
+        endif()
+    endforeach()
+
+    get_directory_property(parent_dir DIRECTORY "${subdir}" PARENT_DIRECTORY)
+    if(parent_dir)
+        _qt_internal_collect_imported_shared_libraries_recursive(result_inner "${parent_dir}")
+    endif()
+
     list(APPEND result ${result_inner})
     set(${out_var} "${result}" PARENT_SCOPE)
 endfunction()
@@ -1119,7 +1231,35 @@ endfunction()
 # package for the executable 'target'. The function is added to the finalizer list of the Core
 # module and is executed implicitly when configuring user projects.
 function(_qt_internal_android_executable_finalizer target)
+    set_property(TARGET ${target} PROPERTY _qt_android_executable_finalizer_called TRUE)
+
+    _qt_internal_expose_android_package_source_dir_to_ide(${target})
+
     _qt_internal_configure_android_multiabi_target("${target}")
     qt6_android_generate_deployment_settings("${target}")
     qt6_android_add_apk_target("${target}")
+endfunction()
+
+function(_qt_internal_expose_android_package_source_dir_to_ide target)
+    get_target_property(android_package_source_dir ${target} QT_ANDROID_PACKAGE_SOURCE_DIR)
+    if(android_package_source_dir)
+        get_target_property(target_source_dir ${target} SOURCE_DIR)
+        if(NOT IS_ABSOLUTE "${android_package_source_dir}")
+            string(JOIN "/" android_package_source_dir
+                "${target_source_dir}"
+                "${android_package_source_dir}"
+            )
+        endif()
+
+        if(EXISTS "${android_package_source_dir}")
+            file(GLOB_RECURSE android_package_sources
+                RELATIVE "${target_source_dir}"
+                "${android_package_source_dir}/*"
+            )
+        endif()
+
+        foreach(f IN LISTS android_package_sources)
+            _qt_internal_expose_source_file_to_ide(${target} "${f}")
+        endforeach()
+    endif()
 endfunction()

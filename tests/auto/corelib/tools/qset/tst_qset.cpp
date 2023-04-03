@@ -232,27 +232,39 @@ void tst_QSet::squeeze()
     set.squeeze();
     QVERIFY(set.capacity() < 100);
 
-    for (int i = 0; i < 512; ++i)
+    for (int i = 0; i < 500; ++i)
         set.insert(i);
-    QVERIFY(set.capacity() == 512);
+    QCOMPARE(set.size(), 500);
+
+    // squeezed capacity for 500 elements
+    qsizetype capacity = set.capacity();    // current implementation: 512
+    QCOMPARE_GE(capacity, set.size());
 
     set.reserve(50000);
-    QVERIFY(set.capacity() >= 50000);
+    QVERIFY(set.capacity() >= 50000);       // current implementation: 65536
 
     set.squeeze();
-    QVERIFY(set.capacity() == 512);
+    QCOMPARE(set.capacity(), capacity);
 
+    // removing elements does not shed capacity
     set.remove(499);
-    QVERIFY(set.capacity() == 512);
+    QCOMPARE(set.capacity(), capacity);
 
     set.insert(499);
-    QVERIFY(set.capacity() == 512);
+    QCOMPARE(set.capacity(), capacity);
 
-    set.insert(1000);
-    QVERIFY(set.capacity() == 1024);
+    // grow it beyond the current capacity
+    for (int i = set.size(); i <= capacity; ++i)
+        set.insert(i);
+    QCOMPARE(set.size(), capacity + 1);
+    QCOMPARE_GT(set.capacity(), capacity + 1);// current implementation: 2 * capacity (1024)
 
     for (int i = 0; i < 500; ++i)
         set.remove(i);
+
+    // removing elements does not shed capacity
+    QCOMPARE_GT(set.capacity(), capacity + 1);
+
     set.squeeze();
     QVERIFY(set.capacity() < 100);
 }
@@ -1039,23 +1051,33 @@ void tst_QSet::qhash()
     //
     {
         // create some deterministic initial state:
-        qSetGlobalQHashSeed(0);
+        QHashSeed::setDeterministicGlobalSeed();
 
         QSet<int> s1;
         s1.reserve(4);
         s1 << 400 << 300 << 200 << 100;
 
-        // also change the seed:
-        qSetGlobalQHashSeed(0x10101010);
+        int retries = 128;
+        while (--retries >= 0) {
+            // reset the global seed to something different
+            QHashSeed::resetRandomGlobalSeed();
 
-        QSet<int> s2;
-        s2.reserve(100); // provoke different bucket counts
-        s2 << 100 << 200 << 300 << 400; // and insert elements in different order, too
+            QSet<int> s2;
+            s2.reserve(100); // provoke different bucket counts
+            s2 << 100 << 200 << 300 << 400; // and insert elements in different order, too
+            QVERIFY(s1.capacity() != s2.capacity());
 
-        QVERIFY(s1.capacity() != s2.capacity());
-        QCOMPARE(s1, s2);
-        QVERIFY(!std::equal(s1.cbegin(), s1.cend(), s2.cbegin())); // verify that the order _is_ different
-        QCOMPARE(qHash(s1), qHash(s2));
+            // see if we got a _different_ order
+            if (std::equal(s1.cbegin(), s1.cend(), s2.cbegin()))
+                continue;
+
+            // check if the two QHashes still compare equal and produce the
+            // same hash, despite containing elements in different orders
+            QCOMPARE(s1, s2);
+            QCOMPARE(qHash(s1), qHash(s2));
+        }
+        QVERIFY2(retries != 0, "Could not find a QSet with a different order of elements even "
+                               "after a lot of retries. This is unlikely, but possible.");
     }
 
     //
@@ -1087,7 +1109,7 @@ void tst_QSet::intersects()
     s1 << 200;
     QVERIFY(s1.intersects(s2));
 
-    qSetGlobalQHashSeed(0x10101010);
+    QHashSeed::resetRandomGlobalSeed();
     QSet<int> s3;
     s3 << 500;
     QVERIFY(!s1.intersects(s3));

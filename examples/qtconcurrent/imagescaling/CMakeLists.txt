@@ -1,8 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(imagescaling LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -11,6 +11,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/qtconcurrent/imagescaling")
 
 find_package(Qt6 REQUIRED COMPONENTS Concurrent Core Gui Network Widgets)
+
+qt_standard_project_setup()
 
 qt_add_executable(imagescaling
     downloaddialog.cpp downloaddialog.h downloaddialog.ui
@@ -23,12 +25,12 @@ set_target_properties(imagescaling PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-target_link_libraries(imagescaling PUBLIC
-    Qt::Concurrent
-    Qt::Core
-    Qt::Gui
-    Qt::Network
-    Qt::Widgets
+target_link_libraries(imagescaling PRIVATE
+    Qt6::Concurrent
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Widgets
 )
 
 install(TARGETS imagescaling

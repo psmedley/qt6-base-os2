@@ -61,9 +61,19 @@ void QOpenGLTextureCacheWrapper::cleanupTexturesForPixmapData(QPlatformPixmap *p
     cleanupTexturesForCacheKey(pmd->cacheKey());
 }
 
+static quint64 cacheSize()
+{
+    bool ok = false;
+    const int envCacheSize = qEnvironmentVariableIntValue("QT_OPENGL_TEXTURE_CACHE_SIZE", &ok);
+    if (ok)
+        return envCacheSize;
+
+    return 1024 * 1024; // 1024 MB cache default
+}
+
 QOpenGLTextureCache::QOpenGLTextureCache(QOpenGLContext *ctx)
     : QOpenGLSharedResource(ctx->shareGroup())
-    , m_cache(256 * 1024) // 256 MB cache
+    , m_cache(cacheSize())
 {
 }
 
@@ -121,9 +131,12 @@ GLuint QOpenGLTextureCache::bindTexture(QOpenGLContext *context, const QImage &i
     return id;
 }
 
+Q_TRACE_POINT(qtopengl, QOpenGLTextureCache_bindTexture_entry, QOpenGLContext *context, qint64 key, const unsigned char *image, int options);
+Q_TRACE_POINT(qtopengl, QOpenGLTextureCache_bindTexture_exit);
+
 GLuint QOpenGLTextureCache::bindTexture(QOpenGLContext *context, qint64 key, const QImage &image, QOpenGLTextureUploader::BindOptions options)
 {
-    Q_TRACE_SCOPE(QOpenGLTextureCache_bindTexture, context, key, image, options);
+    Q_TRACE_SCOPE(QOpenGLTextureCache_bindTexture, context, key, image.bits(), options);
 
     GLuint id;
     QOpenGLFunctions *funcs = context->functions();

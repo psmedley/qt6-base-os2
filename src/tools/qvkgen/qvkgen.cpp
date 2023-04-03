@@ -12,7 +12,8 @@
 static const QStringList VERSIONS = {
     QStringLiteral("VK_VERSION_1_0"), // must be the first and always present
     QStringLiteral("VK_VERSION_1_1"),
-    QStringLiteral("VK_VERSION_1_2")
+    QStringLiteral("VK_VERSION_1_2"),
+    QStringLiteral("VK_VERSION_1_3")
 };
 
 class VkSpecParser
@@ -324,9 +325,13 @@ bool genVulkanFunctionsH(const QList<VkSpecParser::Command> &commands,
 "#ifndef QVULKANFUNCTIONS_H\n"
 "#define QVULKANFUNCTIONS_H\n"
 "\n"
+"#if 0\n"
+"#pragma qt_no_master_include\n"
+"#endif\n"
+"\n"
 "#include <QtGui/qtguiglobal.h>\n"
 "\n"
-"#if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)\n"
+"#if QT_CONFIG(vulkan) || defined(Q_QDOC)\n"
 "\n"
 "#ifndef VK_NO_PROTOTYPES\n"
 "#define VK_NO_PROTOTYPES\n"
@@ -371,7 +376,7 @@ bool genVulkanFunctionsH(const QList<VkSpecParser::Command> &commands,
 "\n"
 "QT_END_NAMESPACE\n"
 "\n"
-"#endif // QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)\n"
+"#endif // QT_CONFIG(vulkan) || defined(Q_QDOC)\n"
 "\n"
 "#endif // QVULKANFUNCTIONS_H\n";
 

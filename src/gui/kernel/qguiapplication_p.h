@@ -188,7 +188,10 @@ public:
     static void showModalWindow(QWindow *window);
     static void hideModalWindow(QWindow *window);
     static void updateBlockedStatus(QWindow *window);
-    virtual bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = nullptr) const;
+
+    virtual Qt::WindowModality defaultModality() const;
+    virtual bool windowNeverBlocked(QWindow *window) const;
+    bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = nullptr) const;
     virtual bool popupActive() { return false; }
     virtual bool closeAllPopups() { return false; }
 
@@ -202,6 +205,28 @@ public:
         Q_GUI_EXPORT QPoint toPoint() const noexcept;
 
         constexpr void reset() noexcept { *this = QLastCursorPosition{}; }
+
+        // QGuiApplicationPrivate::lastCursorPosition is used for mouse-move detection
+        // but even QPointF's qFuzzCompare on doubles is too precise, and causes move-noise
+        // e.g. on macOS (see QTBUG-111170). So we specialize the equality operators here
+        // to use single-point precision.
+        friend constexpr bool operator==(const QLastCursorPosition &p1, const QPointF &p2) noexcept
+        {
+            return qFuzzyCompare(float(p1.x()), float(p2.x()))
+                && qFuzzyCompare(float(p1.y()), float(p2.y()));
+        }
+        friend constexpr bool operator!=(const QLastCursorPosition &p1, const QPointF &p2) noexcept
+        {
+            return !(p1 == p2);
+        }
+        friend constexpr bool operator==(const QPointF &p1, const QLastCursorPosition &p2) noexcept
+        {
+            return p2 == p1;
+        }
+        friend constexpr bool operator!=(const QPointF &p1, const QLastCursorPosition &p2) noexcept
+        {
+            return !(p2 == p1);
+        }
 
     private:
         QPointF thePoint;
@@ -310,6 +335,8 @@ private:
 
     friend class QDragManager;
 
+    static Qt::ColorScheme colorScheme();
+
     static QGuiApplicationPrivate *self;
     static int m_fakeMouseSourcePointId;
 #ifdef Q_OS_WIN
@@ -328,11 +355,12 @@ private:
 
 // ----------------- QNativeInterface -----------------
 
+class QWindowsMimeConverter;
+
 namespace QNativeInterface::Private {
 
-#if defined(Q_OS_WIN) || defined(Q_CLANG_QDOC)
+#if defined(Q_OS_WIN) || defined(Q_QDOC)
 
-class QWindowsMime;
 
 struct Q_GUI_EXPORT QWindowsApplication
 {
@@ -364,6 +392,8 @@ struct Q_GUI_EXPORT QWindowsApplication
     virtual WindowActivationBehavior windowActivationBehavior() const = 0;
     virtual void setWindowActivationBehavior(WindowActivationBehavior behavior) = 0;
 
+    virtual void setHasBorderInFullScreenDefault(bool border) = 0;
+
     virtual bool isTabletMode() const = 0;
 
     virtual bool isWinTabEnabled() const = 0;
@@ -374,8 +404,8 @@ struct Q_GUI_EXPORT QWindowsApplication
     virtual DarkModeHandling darkModeHandling() const = 0;
     virtual void setDarkModeHandling(DarkModeHandling handling) = 0;
 
-    virtual void registerMime(QWindowsMime *mime) = 0;
-    virtual void unregisterMime(QWindowsMime *mime) = 0;
+    virtual void registerMime(QWindowsMimeConverter *mime) = 0;
+    virtual void unregisterMime(QWindowsMimeConverter *mime) = 0;
 
     virtual int registerMimeType(const QString &mime) = 0;
 
@@ -388,6 +418,8 @@ struct Q_GUI_EXPORT QWindowsApplication
 
     virtual QVariant gpu() const = 0; // internal, used by qtdiag
     virtual QVariant gpuList() const = 0;
+
+    virtual void lightSystemPalette(QPalette &pal) const = 0;
 };
 #endif // Q_OS_WIN
 

@@ -778,45 +778,44 @@ static void showSystemMenu(QWindow* w)
     if (!menu)
         return; // no menu for this window
 
-#define enabled (MF_BYCOMMAND | MF_ENABLED)
-#define disabled (MF_BYCOMMAND | MF_GRAYED)
+#define enabled (MF_BYCOMMAND | MFS_ENABLED)
+#define disabled (MF_BYCOMMAND | MFS_GRAYED)
 
-    EnableMenuItem(menu, SC_MINIMIZE, (topLevel->flags() & Qt::WindowMinimizeButtonHint)?enabled:disabled);
-    bool maximized = IsZoomed(topLevelHwnd);
+    EnableMenuItem(menu, SC_MINIMIZE, (topLevel->flags() & Qt::WindowMinimizeButtonHint) ? enabled : disabled);
+    const bool maximized = IsZoomed(topLevelHwnd);
 
-    EnableMenuItem(menu, SC_MAXIMIZE, ! (topLevel->flags() & Qt::WindowMaximizeButtonHint) || maximized?disabled:enabled);
+    EnableMenuItem(menu, SC_MAXIMIZE, !(topLevel->flags() & Qt::WindowMaximizeButtonHint) || maximized ? disabled : enabled);
 
     // We should _not_ check with the setFixedSize(x,y) case here, since Windows is not able to check
     // this and our menu here would be out-of-sync with the menu produced by mouse-click on the
     // System Menu, or right-click on the title bar.
-    EnableMenuItem(menu, SC_SIZE, (topLevel->flags() & Qt::MSWindowsFixedSizeDialogHint) || maximized?disabled:enabled);
-    EnableMenuItem(menu, SC_MOVE, maximized?disabled:enabled);
+    EnableMenuItem(menu, SC_SIZE, (topLevel->flags() & Qt::MSWindowsFixedSizeDialogHint) || maximized ? disabled : enabled);
+    EnableMenuItem(menu, SC_MOVE, maximized ? disabled : enabled);
     EnableMenuItem(menu, SC_CLOSE, enabled);
+    EnableMenuItem(menu, SC_RESTORE, maximized ? enabled : disabled);
 
     // Highlight the first entry in the menu, this is what native Win32 applications usually do.
-    MENUITEMINFOW restoreItem;
-    SecureZeroMemory(&restoreItem, sizeof(restoreItem));
-    restoreItem.cbSize = sizeof(restoreItem);
-    restoreItem.fMask = MIIM_STATE;
-    restoreItem.fState = MFS_HILITE | (maximized ? MFS_ENABLED : MFS_GRAYED);
-    SetMenuItemInfoW(menu, SC_RESTORE, FALSE, &restoreItem);
+    HiliteMenuItem(topLevelHwnd, menu, SC_RESTORE, MF_BYCOMMAND | MFS_HILITE);
 
     // Set bold on close menu item
-    MENUITEMINFO closeItem;
-    closeItem.cbSize = sizeof(MENUITEMINFO);
-    closeItem.fMask = MIIM_STATE;
-    closeItem.fState = MFS_DEFAULT;
-    SetMenuItemInfo(menu, SC_CLOSE, FALSE, &closeItem);
+    SetMenuDefaultItem(menu, SC_CLOSE, FALSE);
 
 #undef enabled
 #undef disabled
+
     const QPoint pos = QHighDpi::toNativePixels(topLevel->geometry().topLeft(), topLevel);
     const int titleBarOffset = isSystemMenuOffsetNeeded(topLevel->flags()) ? getTitleBarHeight(topLevelHwnd) : 0;
     const int ret = TrackPopupMenuEx(menu,
-                               TPM_LEFTALIGN  | TPM_TOPALIGN | TPM_NONOTIFY | TPM_RETURNCMD,
+                               TPM_LEFTALIGN | TPM_TOPALIGN | TPM_NONOTIFY | TPM_RETURNCMD,
                                pos.x(), pos.y() + titleBarOffset,
                                topLevelHwnd,
                                nullptr);
+
+    // Remove the highlight of the restore menu item, otherwise when the user right-clicks
+    // on the title bar, the popuped system menu will also highlight the restore item, which
+    // is not appropriate, it should only be highlighted if the menu is brought up by keyboard.
+    HiliteMenuItem(topLevelHwnd, menu, SC_RESTORE, MF_BYCOMMAND | MFS_UNHILITE);
+
     if (ret)
         qWindowsWndProc(topLevelHwnd, WM_SYSCOMMAND, WPARAM(ret), 0);
 }

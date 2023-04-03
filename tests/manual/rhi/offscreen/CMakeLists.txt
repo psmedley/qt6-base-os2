@@ -1,4 +1,5 @@
-# Generated from offscreen.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## offscreen Binary:
@@ -7,7 +8,7 @@
 qt_internal_add_manual_test(offscreen
     SOURCES
         offscreen.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -30,7 +31,3 @@ qt_internal_add_resource(offscreen "offscreen"
     FILES
         ${offscreen_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:offscreen.pro:<TRUE>:
-# TEMPLATE = "app"

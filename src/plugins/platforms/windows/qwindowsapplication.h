@@ -17,6 +17,8 @@ public:
     WindowActivationBehavior windowActivationBehavior() const override;
     void setWindowActivationBehavior(WindowActivationBehavior behavior) override;
 
+    void setHasBorderInFullScreenDefault(bool border) override;
+
     bool isTabletMode() const override;
 
     bool isWinTabEnabled() const override;
@@ -26,8 +28,8 @@ public:
     DarkModeHandling darkModeHandling() const override;
     void setDarkModeHandling(DarkModeHandling handling) override;
 
-    void registerMime(QNativeInterface::Private::QWindowsMime *mime) override;
-    void unregisterMime(QNativeInterface::Private::QWindowsMime *mime) override;
+    void registerMime(QWindowsMimeConverter *mime) override;
+    void unregisterMime(QWindowsMimeConverter *mime) override;
 
     int registerMimeType(const QString &mime) override;
 
@@ -40,6 +42,8 @@ public:
 
     QVariant gpu() const override;
     QVariant gpuList() const override;
+
+    void lightSystemPalette(QPalette &palette) const override;
 
 private:
     WindowActivationBehavior m_windowActivationBehavior = DefaultActivateWindow;

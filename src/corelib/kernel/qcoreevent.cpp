@@ -14,6 +14,9 @@
 
 QT_BEGIN_NAMESPACE
 
+Q_TRACE_POINT(qtcore, QEvent_ctor, QEvent *event, QEvent::Type type);
+Q_TRACE_POINT(qtcore, QEvent_dtor, QEvent *event, QEvent::Type type);
+
 /*!
     \class QEvent
     \inmodule QtCore
@@ -264,7 +267,7 @@ QEvent::QEvent(Type type)
     : t(type), m_reserved(0),
       m_inputEvent(false), m_pointerEvent(false), m_singlePointEvent(false)
 {
-    Q_TRACE(QEvent_ctor, this, t);
+    Q_TRACE(QEvent_ctor, this, type);
 }
 
 /*!

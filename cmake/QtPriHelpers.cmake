@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Extracts the 3rdparty libraries for the module ${module_name}
 # and stores the information in cmake language in
 # ${output_root_dir}/$<CONFIG>/${output_file_name}.
@@ -11,7 +14,7 @@ function(qt_generate_qmake_libraries_pri_content module_name output_root_dir out
     set(implicit_include_dirs_regex "")
     foreach(dir ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
         qt_re_escape(regex "${dir}")
-        list(APPEND implicit_include_dirs_regex ${regex})
+        list(APPEND implicit_include_dirs_regex "^${regex}$")
     endforeach()
     list(JOIN implicit_include_dirs_regex "|" implicit_include_dirs_regex)
 
@@ -254,7 +257,7 @@ endfunction()
 
 # Generates module .pri files for consumption by qmake
 function(qt_generate_module_pri_file target)
-    set(flags INTERNAL_MODULE HEADER_MODULE NO_PRIVATE_MODULE)
+    set(flags INTERNAL_MODULE NO_PRIVATE_MODULE)
     set(options)
     set(multiopts)
     cmake_parse_arguments(arg "${flags}" "${options}" "${multiopts}" ${ARGN})
@@ -263,7 +266,13 @@ function(qt_generate_module_pri_file target)
     set(pri_files)
 
     set(property_prefix)
-    if(arg_HEADER_MODULE)
+
+    get_target_property(target_type ${target} TYPE)
+    set(is_interface_lib FALSE)
+    if(target_type STREQUAL "INTERFACE_LIBRARY")
+        set(is_interface_lib TRUE)
+    endif()
+    if(is_interface_lib)
         set(property_prefix "INTERFACE_")
     endif()
 
@@ -314,13 +323,15 @@ function(qt_generate_module_pri_file target)
        list(APPEND module_internal_config staticlib)
     endif()
 
-    # TODO: Add the value 'ltcg' to module_internal_config if LTCG is turned on.
+    if(QT_FEATURE_ltcg)
+        list(APPEND module_internal_config ltcg)
+    endif()
 
     list(JOIN module_internal_config " " joined_module_internal_config)
 
     get_target_property(config_module_name ${target} _qt_config_module_name)
     get_target_property(qmake_module_config ${target} ${property_prefix}QT_QMAKE_MODULE_CONFIG)
-    if (arg_HEADER_MODULE)
+    if (is_interface_lib)
         list(APPEND qmake_module_config "no_link")
     endif()
     if(qmake_module_config)
@@ -344,7 +355,7 @@ ${framework_base_path}/${fw_private_module_header_dir}")
 $$QT_MODULE_INCLUDE_BASE/${module_versioned_inner_include_dir}")
     endif()
 
-    if(arg_HEADER_MODULE)
+    if(is_interface_lib)
         set(module_name_in_pri "")
     else()
         get_target_property(module_name_in_pri ${target} OUTPUT_NAME)
@@ -368,7 +379,7 @@ $$QT_MODULE_INCLUDE_BASE/${module_versioned_inner_include_dir}")
     qt_path_join(target_path ${QT_BUILD_DIR} ${INSTALL_MKSPECSDIR}/modules)
 
     unset(private_module_frameworks)
-    if(arg_HEADER_MODULE)
+    if(is_interface_lib)
         set(module_plugin_types "")
     else()
         get_target_property(module_plugin_types ${target} QMAKE_MODULE_PLUGIN_TYPES)
@@ -452,7 +463,7 @@ ${module_pri_extra_content}
         set(private_pri_file_name "qt_lib_${config_module_name}_private.pri")
 
         set(private_module_dependencies "")
-        if(NOT arg_HEADER_MODULE)
+        if(NOT is_interface_lib)
             qt_get_direct_module_dependencies(${target}Private private_module_dependencies)
         endif()
         list(JOIN private_module_dependencies " " private_module_dependencies)
@@ -535,7 +546,7 @@ QT.${config_module_name}_private.disabled_features = ${disabled_private_features
         # add_dependencies has no effect when adding interface libraries. So need to add the
         # '_lib_pri' targets to ALL to make sure that the related rules executed.
         unset(add_pri_target_to_all)
-        if(arg_HEADER_MODULE)
+        if(is_interface_lib)
             set(add_pri_target_to_all ALL)
         endif()
         add_custom_target(${target}_lib_pri ${add_pri_target_to_all}
@@ -594,12 +605,21 @@ endfunction()
 #   - generic
 #   - platform, if the plugin is not the default QPA plugin
 # Otherwise, this variable is empty.
-function(qt_generate_plugin_pri_file target pri_file_var)
+function(qt_generate_plugin_pri_file target)
     get_target_property(plugin_name ${target} OUTPUT_NAME)
     get_target_property(plugin_type ${target} QT_PLUGIN_TYPE)
     get_target_property(qmake_plugin_type ${target} QT_QMAKE_PLUGIN_TYPE)
     get_target_property(default_plugin ${target} QT_DEFAULT_PLUGIN)
     get_target_property(plugin_class_name ${target} QT_PLUGIN_CLASS_NAME)
+    get_target_property(plugin_pri_extra_content ${target} QT_PLUGIN_PRI_EXTRA_CONTENT)
+
+    foreach(var plugin_pri_extra_content)
+        if(${var} STREQUAL "${var}-NOTFOUND")
+            set(${var} "")
+        else()
+            string(REPLACE ";" "\n" ${var} "${${var}}")
+        endif()
+    endforeach()
 
     set(plugin_extends "")
     if(NOT default_plugin)
@@ -616,16 +636,28 @@ function(qt_generate_plugin_pri_file target pri_file_var)
     list(REMOVE_DUPLICATES plugin_deps)
     list(JOIN plugin_deps " " plugin_deps)
 
+    list(APPEND module_config v2)
+    get_target_property(target_type ${target} TYPE)
+    if(target_type STREQUAL "STATIC_LIBRARY")
+       list(APPEND module_config staticlib)
+    endif()
+    list(JOIN module_config " " module_config)
+
     qt_path_join(pri_target_path ${QT_BUILD_DIR} ${INSTALL_MKSPECSDIR}/modules)
     qt_path_join(pri_file "${pri_target_path}" "qt_plugin_${plugin_name}.pri")
-    qt_configure_file(OUTPUT "${pri_file}"
-                      CONTENT "QT_PLUGIN.${plugin_name}.TYPE = ${qmake_plugin_type}
+
+    set(content "QT_PLUGIN.${plugin_name}.TYPE = ${qmake_plugin_type}
 QT_PLUGIN.${plugin_name}.EXTENDS = ${plugin_extends}
 QT_PLUGIN.${plugin_name}.DEPENDS = ${plugin_deps}
 QT_PLUGIN.${plugin_name}.CLASS_NAME = ${plugin_class_name}
+QT_PLUGIN.${plugin_name}.module_config = ${module_config}
 QT_PLUGINS += ${plugin_name}
-")
-    set(${pri_file_var} "${pri_file}" PARENT_SCOPE)
+${plugin_pri_extra_content}"
+)
+
+    file(GENERATE OUTPUT "${pri_file}" CONTENT "${content}")
+
+    qt_install(FILES "${pri_file}" DESTINATION "${INSTALL_MKSPECSDIR}/modules")
 endfunction()
 
 # Creates mkspecs/qconfig.pri which contains public global features among other things.

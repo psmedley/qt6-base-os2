@@ -1,4 +1,5 @@
-# Generated from tst.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qpluginloader Test:
@@ -55,16 +56,16 @@ qt_internal_extend_target(tst_qpluginloader CONDITION QT_FEATURE_private_tests
 )
 
 qt_internal_extend_target(tst_qpluginloader CONDITION CMAKE_BUILD_TYPE STREQUAL Debug AND WIN32 AND debug_and_release
-    PUBLIC_LIBRARIES
+    LIBRARIES
         # Remove: L../staticplugin/debug
 )
 
 qt_internal_extend_target(tst_qpluginloader CONDITION WIN32 AND debug_and_release AND NOT CMAKE_BUILD_TYPE STREQUAL Debug
-    PUBLIC_LIBRARIES
+    LIBRARIES
         # Remove: L../staticplugin/release
 )
 
 qt_internal_extend_target(tst_qpluginloader CONDITION UNIX OR NOT debug_and_release
-    PUBLIC_LIBRARIES
+    LIBRARIES
         # Remove: L../staticplugin
 )

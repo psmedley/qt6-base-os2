@@ -1,19 +1,19 @@
-# qt_configure_file(OUTPUT output-file <INPUT input-file | CONTENT content>)
-# input-file is relative to ${CMAKE_CURRENT_SOURCE_DIR}
-# output-file is relative to ${CMAKE_CURRENT_BINARY_DIR}
-#
-# This function is similar to file(GENERATE OUTPUT) except it writes the content
-# to the file at configure time, rather than at generate time. Once CMake 3.18 is released, it can
-# use file(CONFIGURE) in its implementation. Until then, it  uses configure_file() with a generic
-# input file as source, when used with the CONTENT signature.
-function(qt_configure_file)
-    qt_parse_all_arguments(arg "qt_configure_file" "" "OUTPUT;INPUT;CONTENT" "" ${ARGN})
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
+# The common implementation of qt_configure_file functionality.
+macro(qt_configure_file_impl)
     if(NOT arg_OUTPUT)
         message(FATAL_ERROR "No output file provided to qt_configure_file.")
     endif()
 
-    if(arg_CONTENT)
+    # We use this check for the cases when the specified CONTENT is empty. The value of arg_CONTENT
+    # is undefined, but we still want to create a file with empty content.
+    if(NOT "CONTENT" IN_LIST arg_KEYWORDS_MISSING_VALUES)
+        if(arg_INPUT)
+            message(WARNING "Both CONTENT and INPUT are specified. CONTENT will be used to generate"
+                " output")
+        endif()
         set(template_name "QtFileConfigure.txt.in")
         # When building qtbase, use the source template file.
         # Otherwise use the installed file (basically wherever Qt6 package is found).
@@ -31,16 +31,43 @@ function(qt_configure_file)
     endif()
 
     configure_file("${input_file}" "${arg_OUTPUT}" @ONLY)
+endmacro()
+
+# qt_configure_file(OUTPUT output-file <INPUT input-file | CONTENT content>)
+# input-file is relative to ${CMAKE_CURRENT_SOURCE_DIR}
+# output-file is relative to ${CMAKE_CURRENT_BINARY_DIR}
+#
+# This function is similar to file(GENERATE OUTPUT) except it writes the content
+# to the file at configure time, rather than at generate time.
+#
+# TODO: Once we require 3.18+, this can use file(CONFIGURE) in its implementation,
+# or maybe its usage can be replaced by file(CONFIGURE). Until then, it  uses
+# configure_file() with a generic input file as source, when used with the CONTENT
+# signature.
+function(qt_configure_file)
+    cmake_parse_arguments(PARSE_ARGV 0 arg "" "OUTPUT;INPUT;CONTENT" "")
+    qt_configure_file_impl()
 endfunction()
 
 # A version of cmake_parse_arguments that makes sure all arguments are processed and errors out
 # with a message about ${type} having received unknown arguments.
+#
+# TODO: Remove when all usage of qt_parse_all_arguments were replaced by
+# cmake_parse_all_arguments(PARSEARGV) instances
 macro(qt_parse_all_arguments result type flags options multiopts)
     cmake_parse_arguments(${result} "${flags}" "${options}" "${multiopts}" ${ARGN})
     if(DEFINED ${result}_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "Unknown arguments were passed to ${type} (${${result}_UNPARSED_ARGUMENTS}).")
     endif()
 endmacro()
+
+# Checks whether any unparsed arguments have been passed to the function at the call site.
+# Use this right after `cmake_parse_arguments`.
+function(_qt_internal_validate_all_args_are_parsed prefix)
+    if(DEFINED ${prefix}_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR "Unknown arguments: (${${prefix}_UNPARSED_ARGUMENTS})")
+    endif()
+endfunction()
 
 # Print all variables defined in the current scope.
 macro(qt_debug_print_variables)
@@ -98,8 +125,7 @@ endfunction()
 # Parameters:
 #   out_var: result of remove all arguments specified by ARGS_TO_REMOVE from ALL_ARGS
 #   ARGS_TO_REMOVE: Arguments to remove.
-#   ALL_ARGS: All arguments supplied to cmake_parse_arguments or
-#   qt_parse_all_arguments
+#   ALL_ARGS: All arguments supplied to cmake_parse_arguments
 #   from which ARGS_TO_REMOVE should be removed from. We require all the
 #   arguments or we can't properly identify the range of the arguments detailed
 #   in ARGS_TO_REMOVE.
@@ -113,7 +139,7 @@ endfunction()
 #   bar(target BAR.... WWW...)
 #
 #   function(foo target)
-#       qt_parse_all_arguments(arg "" "" "BAR;ZZZ;WWW ${ARGV})
+#       cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "BAR;ZZZ;WWW")
 #       qt_remove_args(forward_args
 #           ARGS_TO_REMOVE ${target} ZZZ
 #           ALL_ARGS ${target} BAR ZZZ WWW

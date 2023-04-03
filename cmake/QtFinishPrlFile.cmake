@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Finish a preliminary .prl file.
 #
 # - Replaces occurrences of the build libdir with $$[QT_INSTALL_LIBDIR].

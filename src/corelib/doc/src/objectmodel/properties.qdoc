@@ -44,14 +44,21 @@
     specified. It is for reading the property value. Ideally, a const function
     is used for this purpose, and it must return either the property's type or a
     const reference to that type. e.g., QWidget::focus is a read-only
-    property with \c READ function, QWidget::hasFocus().
+    property with \c READ function, QWidget::hasFocus(). If a \c BINDABLE is
+    specified, you can write \c{READ default} to have the \c READ accessor
+    generated from the \c BINDABLE.
 
     \li A \c WRITE accessor function is optional. It is for setting the
     property value. It must return void and must take exactly one
     argument, either of the property's type or a pointer or reference
     to that type. e.g., QWidget::enabled has the \c WRITE function
     QWidget::setEnabled().  Read-only properties do not need \c WRITE
-    functions. e.g., QWidget::focus has no \c WRITE function.
+    functions. e.g., QWidget::focus has no \c WRITE function. If you specify
+    both a \c BINDABLE and \c{WRITE default}, a \c WRITE accessor will be
+    generated from the \c BINDABLE. The generated \c WRITE accessor will \e not
+    explicitly emit any signal declared with \c NOTIFY. You should register
+    the signal as change handler to the \c BINDABLE, for example using
+    \l{Q_OBJECT_BINDABLE_PROPERTY}.
 
     \li A \c MEMBER variable association is required if no \c READ accessor
     function is specified. This makes the given member variable
@@ -75,8 +82,9 @@
     which must be of the same type as the property. The parameter will take the
     new value of the property. The \c NOTIFY signal should only be emitted when
     the property has really been changed, to avoid bindings being unnecessarily
-    re-evaluated in QML, for example. Qt emits automatically that signal when
-    needed for MEMBER properties that do not have an explicit setter.
+    re-evaluated in QML, for example. The signal is emitted automatically when
+    the property is changed via the Qt API (QObject::setProperty,
+    QMetaProperty, etc.), but not when the MEMBER is changed directly.
 
     \li A \c REVISION number or \c REVISION() macro is optional. If included,
     it defines the property and its notifier signal to be used in a particular

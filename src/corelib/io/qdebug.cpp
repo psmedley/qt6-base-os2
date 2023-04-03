@@ -239,7 +239,7 @@ static inline void putEscapedString(QTextStreamPrivate *d, const Char *begin, si
         }
 
         // print as an escape sequence (maybe, see below for surrogate pairs)
-        int buflen = 2;
+        qsizetype buflen = 2;
         ushort buf[sizeof "\\U12345678" - 1];
         buf[0] = '\\';
 
@@ -761,6 +761,24 @@ QDebug &QDebug::resetFormat()
 /*!
     \fn QDebug &QDebug::operator<<(QTextStreamManipulator m)
     \internal
+*/
+
+/*!
+    \since 6.5
+    \fn template <typename Char, typename...Args> QDebug &QDebug::operator<<(const std::basic_string<Char, Args...> &s)
+    \fn template <typename Char, typename...Args> QDebug &QDebug::operator<<(std::basic_string_view<Char, Args...> s)
+
+    Writes the string or string-view \a s to the stream and returns a reference
+    to the stream.
+
+    These operators only participate in overload resolution if \c Char is one of
+    \list
+    \li char
+    \li char8_t (C++20 only)
+    \li char16_t
+    \li char32_t
+    \li wchar_t
+    \endlist
 */
 
 /*!

@@ -34,14 +34,14 @@ void QFreeTypeFontDatabase::populateFontDatabase()
         return;
     }
 
-    QStringList nameFilters;
-    nameFilters << "*.ttf"_L1
-                << "*.ttc"_L1
-                << "*.pfa"_L1
-                << "*.pfb"_L1
-                << "*.otf"_L1;
+    static const QString nameFilters[] = {
+        u"*.ttf"_s,
+        u"*.pfa"_s,
+        u"*.pfb"_s,
+        u"*.otf"_s,
+    };
 
-    const auto fis = dir.entryInfoList(nameFilters, QDir::Files);
+    const auto fis = dir.entryInfoList(QStringList::fromReadOnlyData(nameFilters), QDir::Files);
     for (const QFileInfo &fi : fis) {
         const QByteArray file = QFile::encodeName(fi.absoluteFilePath());
         QFreeTypeFontDatabase::addTTFile(QByteArray(), file);
@@ -55,7 +55,7 @@ QFontEngine *QFreeTypeFontDatabase::fontEngine(const QFontDef &fontDef, void *us
     faceId.filename = QFile::encodeName(fontfile->fileName);
     faceId.index = fontfile->indexValue;
 
-    return QFontEngineFT::create(fontDef, faceId);
+    return QFontEngineFT::create(fontDef, faceId, fontfile->data);
 }
 
 QFontEngine *QFreeTypeFontDatabase::fontEngine(const QByteArray &fontData, qreal pixelSize,
@@ -191,9 +191,11 @@ QStringList QFreeTypeFontDatabase::addTTFile(const QByteArray &fontData, const Q
         }
 
         QString family = QString::fromLatin1(face->family_name);
-        FontFile *fontFile = new FontFile;
-        fontFile->fileName = QFile::decodeName(file);
-        fontFile->indexValue = index;
+        FontFile *fontFile = new FontFile{
+            QFile::decodeName(file),
+            index,
+            fontData
+        };
 
         QString styleName = QString::fromLatin1(face->style_name);
 

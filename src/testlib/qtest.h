@@ -5,6 +5,10 @@
 #ifndef QTEST_H
 #define QTEST_H
 
+#if 0
+#pragma qt_class(QTest)
+#endif
+
 #include <QtTest/qttestglobal.h>
 #include <QtTest/qtestcase.h>
 #include <QtTest/qtestdata.h>
@@ -201,6 +205,19 @@ template<> inline char *toString(const QVariant &v)
     vstring.append(')');
 
     return qstrdup(vstring.constData());
+}
+
+template<> inline char *toString(const QPartialOrdering &o)
+{
+    if (o == QPartialOrdering::Less)
+        return qstrdup("Less");
+    if (o == QPartialOrdering::Equivalent)
+        return qstrdup("Equivalent");
+    if (o == QPartialOrdering::Greater)
+        return qstrdup("Greater");
+    if (o == QPartialOrdering::Unordered)
+        return qstrdup("Unordered");
+    return qstrdup("<invalid>");
 }
 
 namespace Internal {
@@ -578,6 +595,7 @@ struct QtCoverageScanner
 #define TESTLIB_SELFCOVERAGE_START(name)
 #endif
 
+#if !defined(QTEST_BATCH_TESTS)
 // Internal (but used by some testlib selftests to hack argc and argv).
 // Tests should normally implement initMain() if they have set-up to do before
 // instantiating the test class.
@@ -591,6 +609,30 @@ int main(int argc, char *argv[]) \
     QTEST_SET_MAIN_SOURCE_PATH \
     return QTest::qExec(&tc, argc, argv); \
 }
+#else
+// BATCHED_TEST_NAME is defined for each test in a batch in cmake. Some odd
+// targets, like snippets, don't define it though. Play safe by providing a
+// default value.
+#if !defined(BATCHED_TEST_NAME)
+#define BATCHED_TEST_NAME "other"
+#endif
+#define QTEST_MAIN_WRAPPER(TestObject, ...) \
+\
+void qRegister##TestObject() \
+{ \
+    auto runTest = [](int argc, char** argv) -> int { \
+        TESTLIB_SELFCOVERAGE_START(TestObject) \
+        QT_PREPEND_NAMESPACE(QTest::Internal::callInitMain)<TestObject>(); \
+        __VA_ARGS__ \
+        TestObject tc; \
+        QTEST_SET_MAIN_SOURCE_PATH \
+        return QTest::qExec(&tc, argc, argv); \
+    }; \
+    QTest::qRegisterTestCase(BATCHED_TEST_NAME, runTest); \
+} \
+\
+Q_CONSTRUCTOR_FUNCTION(qRegister##TestObject)
+#endif
 
 // For when you don't even want a QApplication:
 #define QTEST_APPLESS_MAIN(TestObject) QTEST_MAIN_WRAPPER(TestObject)

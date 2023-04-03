@@ -1,4 +1,5 @@
-# Generated from app.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## app Binary:
@@ -6,10 +7,10 @@
 
 qt_internal_add_executable(app
     GUI
-    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # special case
+    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     SOURCES
         main.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )

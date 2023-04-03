@@ -21,10 +21,13 @@
 #include "QtCore/qatomic.h"
 #include "QtCore/qdatetime.h"
 #include "QtCore/qshareddata.h"
+#include "QtCore/qtimezone.h"
 
 #if QT_CONFIG(timezone)
 #include "qtimezone.h"
 #endif
+
+#include <chrono>
 
 QT_BEGIN_NAMESPACE
 
@@ -60,7 +63,6 @@ public:
         ValidDate           = 0x02,
         ValidTime           = 0x04,
         ValidDateTime       = 0x08,
-        ValidWhenMask       = ValidDate | ValidTime | ValidDateTime,
 
         TimeSpecMask        = 0x30,
 
@@ -87,12 +89,8 @@ public:
             : when(w), offset(o), dst(d), valid(v) {}
     };
 
-    static QDateTime::Data create(QDate toDate, QTime toTime, Qt::TimeSpec toSpec,
-                                  int offsetSeconds);
-
+    static QDateTime::Data create(QDate toDate, QTime toTime, const QTimeZone &timeZone);
 #if QT_CONFIG(timezone)
-    static QDateTime::Data create(QDate toDate, QTime toTime, const QTimeZone & timeZone);
-
     static ZoneState zoneStateAtMillis(const QTimeZone &zone, qint64 millis, DaylightStatus dst);
 #endif // timezone
 
@@ -104,22 +102,21 @@ public:
     StatusFlags m_status = StatusFlag(Qt::LocalTime << TimeSpecShift);
     qint64 m_msecs = 0;
     int m_offsetFromUtc = 0;
-#if QT_CONFIG(timezone)
     QTimeZone m_timeZone;
-#endif // timezone
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QDateTimePrivate::StatusFlags)
 
 namespace QtPrivate {
 namespace DateTimeConstants {
-constexpr qint64 MINS_PER_HOUR = 60;
+using namespace std::chrono;
+constexpr qint64 SECS_PER_MIN = minutes::period::num;
+constexpr qint64 SECS_PER_HOUR = hours::period::num;
+constexpr qint64 SECS_PER_DAY = SECS_PER_HOUR * 24; // std::chrono::days is C++20
 
-constexpr qint64 SECS_PER_MIN = 60;
-constexpr qint64 SECS_PER_HOUR = SECS_PER_MIN * MINS_PER_HOUR;
-constexpr qint64 SECS_PER_DAY = SECS_PER_HOUR * 24;
+constexpr qint64 MINS_PER_HOUR = std::ratio_divide<hours::period, minutes::period>::num;
 
-constexpr qint64 MSECS_PER_SEC = 1000;
+constexpr qint64 MSECS_PER_SEC = milliseconds::period::den;
 constexpr qint64 MSECS_PER_MIN = SECS_PER_MIN * MSECS_PER_SEC;
 constexpr qint64 MSECS_PER_HOUR = SECS_PER_HOUR * MSECS_PER_SEC;
 constexpr qint64 MSECS_PER_DAY = SECS_PER_DAY * MSECS_PER_SEC;

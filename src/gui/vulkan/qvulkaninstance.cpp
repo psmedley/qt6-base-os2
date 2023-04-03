@@ -104,7 +104,7 @@ QT_BEGIN_NAMESPACE
     \note It is up to the component creating the external instance to ensure
     the necessary extensions are enabled on it. These are: \c{VK_KHR_surface},
     the WSI-specific \c{VK_KHR_*_surface} that is appropriate for the platform
-    in question, and \c{VK_EXT_debug_report} in case QVulkanInstance's debug
+    in question, and \c{VK_EXT_debug_utils} in case QVulkanInstance's debug
     output redirection is desired.
 
     \section1 Accessing Core Vulkan Commands
@@ -205,7 +205,8 @@ QT_BEGIN_NAMESPACE
     This enum describes the flags that can be passed to setFlags(). These control
     the behavior of create().
 
-    \value NoDebugOutputRedirect Disables Vulkan debug output (\c{VK_EXT_debug_report}) redirection to qDebug.
+    \value NoDebugOutputRedirect Disables Vulkan debug output (\c{VK_EXT_debug_utils}) redirection to qDebug.
+    \value [since 6.5] NoPortabilityDrivers Disables enumerating physical devices marked as Vulkan Portability.
 */
 
 bool QVulkanInstancePrivate::ensureVulkan()
@@ -425,7 +426,7 @@ QVersionNumber QVulkanInstance::supportedApiVersion() const
 
     \note \a existingVkInstance must have at least \c{VK_KHR_surface} and the
     appropriate WSI-specific \c{VK_KHR_*_surface} extensions enabled. To ensure
-    debug output redirection is functional, \c{VK_EXT_debug_report} is needed as
+    debug output redirection is functional, \c{VK_EXT_debug_utils} is needed as
     well.
 
     \note This function can only be called before create() and has no effect if
@@ -484,7 +485,8 @@ void QVulkanInstance::setLayers(const QByteArrayList &layers)
     VK_KHR_win32_surface) will always be added automatically, no need to
     include them in this list.
 
-    \note \c VK_KHR_portability_enumeration is added automatically.
+    \note \c VK_KHR_portability_enumeration is added automatically unless the
+    NoPortabilityDrivers flag is set. This value was introduced in Qt 6.5.
 
     \note This function can only be called before create() and has no effect if
     called afterwards.
@@ -543,9 +545,10 @@ void QVulkanInstance::setApiVersion(const QVersionNumber &vulkanVersion)
     The Vulkan instance and library is available as long as this
     QVulkanInstance exists, or until destroy() is called.
 
-    The VkInstance is always created with the flag
+    By default the VkInstance is created with the flag
     \l{https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkInstanceCreateFlagBits.html}{VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR}
-    set. This means that Vulkan Portability physical devices get enumerated as well.
+    set. This means that Vulkan Portability physical devices get enumerated as
+    well. If this is not desired, set the NoPortabilityDrivers flag.
  */
 bool QVulkanInstance::create()
 {
@@ -564,6 +567,7 @@ bool QVulkanInstance::create()
         d_ptr->errorCode = VK_SUCCESS;
         d_ptr->funcs.reset(new QVulkanFunctions(this));
         d_ptr->platformInst->setDebugFilters(d_ptr->debugFilters);
+        d_ptr->platformInst->setDebugUtilsFilters(d_ptr->debugUtilsFilters);
         return true;
     }
 
@@ -818,12 +822,28 @@ void QVulkanInstance::presentQueued(QWindow *window)
 /*!
     \typedef QVulkanInstance::DebugFilter
 
-    Typedef for debug filtering callback functions.
+    Typedef for debug filtering callback functions, with the following signature:
+
+    \code
+    bool myDebugFilter(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object,
+                       size_t location, int32_t messageCode, const char *pLayerPrefix, const char *pMessage)
+    \endcode
+
+    Returning \c true suppresses the printing of the message.
+
+    \note Starting with Qt 6.5 \c{VK_EXT_debug_utils} is used instead of the
+    deprecated \c{VK_EXT_debug_report}. The callback signature is based on
+    VK_EXT_debug_report. Therefore, not all arguments can be expected to be
+    valid anymore. Avoid relying on arguments other than \c pMessage, \c
+    messageCode, and \c object. Applications wishing to access all the callback
+    data as specified in VK_EXT_debug_utils should migrate to DebugUtilsFilter.
 
     \sa installDebugOutputFilter(), removeDebugOutputFilter()
  */
 
 /*!
+    \overload
+
     Installs a \a filter function that is called for every Vulkan debug
     message. When the callback returns \c true, the message is stopped (filtered
     out) and will not appear on the debug output.
@@ -845,6 +865,8 @@ void QVulkanInstance::installDebugOutputFilter(DebugFilter filter)
 }
 
 /*!
+    \overload
+
     Removes a \a filter function previously installed by
     installDebugOutputFilter().
 
@@ -857,6 +879,84 @@ void QVulkanInstance::removeDebugOutputFilter(DebugFilter filter)
     d_ptr->debugFilters.removeOne(filter);
     if (d_ptr->platformInst)
         d_ptr->platformInst->setDebugFilters(d_ptr->debugFilters);
+}
+
+/*!
+    \typedef QVulkanInstance::DebugUtilsFilter
+
+    Typedef for debug filtering callback functions, with the following signature:
+
+    \code
+    std::function<bool(DebugMessageSeverityFlags severity, DebugMessageTypeFlags type, const void *message)>;
+    \endcode
+
+    The \c message argument is a pointer to the
+    VkDebugUtilsMessengerCallbackDataEXT structure. Refer to the documentation
+    of \c{VK_EXT_debug_utils} for details. The Qt headers do not use the real
+    type in order to avoid introducing a dependency on post-1.0 Vulkan headers.
+
+    Returning \c true suppresses the printing of the message.
+
+    \sa installDebugOutputFilter(), removeDebugOutputFilter()
+    \since 6.5
+ */
+
+/*!
+    \enum QVulkanInstance::DebugMessageSeverityFlag
+    \since 6.5
+
+    \value VerboseSeverity
+    \value InfoSeverity
+    \value WarningSeverity
+    \value ErrorSeverity
+ */
+
+/*!
+    \enum QVulkanInstance::DebugMessageTypeFlag
+    \since 6.5
+
+    \value GeneralMessage
+    \value ValidationMessage
+    \value PerformanceMessage
+ */
+
+/*!
+    Installs a \a filter function that is called for every Vulkan debug
+    message. When the callback returns \c true, the message is stopped (filtered
+    out) and will not appear on the debug output.
+
+    \note Filtering is only effective when NoDebugOutputRedirect is not
+    \l{setFlags()}{set}. Installing filters has no effect otherwise.
+
+    \note This function can be called before create().
+
+    \sa clearDebugOutputFilters()
+    \since 6.5
+ */
+void QVulkanInstance::installDebugOutputFilter(DebugUtilsFilter filter)
+{
+    d_ptr->debugUtilsFilters.append(filter);
+    if (d_ptr->platformInst)
+        d_ptr->platformInst->setDebugUtilsFilters(d_ptr->debugUtilsFilters);
+}
+
+/*!
+    Removes all filter functions installed previously by
+    installDebugOutputFilter().
+
+    \note This function can be called before create().
+
+    \sa installDebugOutputFilter()
+    \since 6.5
+ */
+void QVulkanInstance::clearDebugOutputFilters()
+{
+    d_ptr->debugFilters.clear();
+    d_ptr->debugUtilsFilters.clear();
+    if (d_ptr->platformInst) {
+        d_ptr->platformInst->setDebugFilters(d_ptr->debugFilters);
+        d_ptr->platformInst->setDebugUtilsFilters(d_ptr->debugUtilsFilters);
+    }
 }
 
 #ifndef QT_NO_DEBUG_STREAM

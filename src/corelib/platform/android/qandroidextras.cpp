@@ -451,7 +451,7 @@ QJniObject QAndroidServiceConnection::handle() const
  */
 
 
-static QBasicAtomicInteger<uint> nextUniqueActivityRequestCode = Q_BASIC_ATOMIC_INITIALIZER(0);
+Q_CONSTINIT static QBasicAtomicInteger<uint> nextUniqueActivityRequestCode = Q_BASIC_ATOMIC_INITIALIZER(0);
 
 // Get a unique activity request code.
 static int uniqueActivityRequestCode()
@@ -1036,60 +1036,12 @@ QtAndroidPrivate::PermissionResult resultFromAndroid(jint value)
 using PendingPermissionRequestsHash
             = QHash<int, QSharedPointer<QPromise<QtAndroidPrivate::PermissionResult>>>;
 Q_GLOBAL_STATIC(PendingPermissionRequestsHash, g_pendingPermissionRequests);
-static QBasicMutex g_pendingPermissionRequestsMutex;
+Q_CONSTINIT static QBasicMutex g_pendingPermissionRequestsMutex;
 
 static int nextRequestCode()
 {
-    static QBasicAtomicInt counter = Q_BASIC_ATOMIC_INITIALIZER(0);
+    Q_CONSTINIT static QBasicAtomicInt counter = Q_BASIC_ATOMIC_INITIALIZER(0);
     return counter.fetchAndAddRelaxed(1);
-}
-
-static QStringList nativeStringsFromPermission(QtAndroidPrivate::PermissionType permission)
-{
-    static const auto precisePerm = QStringLiteral("android.permission.ACCESS_FINE_LOCATION");
-    static const auto coarsePerm = QStringLiteral("android.permission.ACCESS_COARSE_LOCATION");
-    static const auto backgroundPerm =
-            QStringLiteral("android.permission.ACCESS_BACKGROUND_LOCATION");
-
-    switch (permission) {
-    case QtAndroidPrivate::Location:
-        return {coarsePerm};
-    case QtAndroidPrivate::PreciseLocation:
-        return {precisePerm};
-    case QtAndroidPrivate::BackgroundLocation:
-        // Keep the background permission first to be able to use .first()
-        // in checkPermission because it takes single permission
-        if (QtAndroidPrivate::androidSdkVersion() >= 29)
-            return {backgroundPerm, coarsePerm};
-        return {coarsePerm};
-    case QtAndroidPrivate::PreciseBackgroundLocation:
-        // Keep the background permission first to be able to use .first()
-        // in checkPermission because it takes single permission
-        if (QtAndroidPrivate::androidSdkVersion() >= 29)
-            return {backgroundPerm, precisePerm};
-        return {precisePerm};
-    case QtAndroidPrivate::Camera:
-        return {QStringLiteral("android.permission.CAMERA")};
-    case QtAndroidPrivate::Microphone:
-        return {QStringLiteral("android.permission.RECORD_AUDIO")};
-    case QtAndroidPrivate::Bluetooth:
-        return { QStringLiteral("android.permission.BLUETOOTH") };
-    case QtAndroidPrivate::BodySensors:
-        return {QStringLiteral("android.permission.BODY_SENSORS")};
-    case QtAndroidPrivate::PhysicalActivity:
-        return {QStringLiteral("android.permission.ACTIVITY_RECOGNITION")};
-    case QtAndroidPrivate::Contacts:
-        return {QStringLiteral("android.permission.READ_CONTACTS"),
-                QStringLiteral("android.permission.WRITE_CONTACTS")};
-    case QtAndroidPrivate::Storage:
-        return {QStringLiteral("android.permission.READ_EXTERNAL_STORAGE"),
-                QStringLiteral("android.permission.WRITE_EXTERNAL_STORAGE")};
-    case QtAndroidPrivate::Calendar:
-        return {QStringLiteral("android.permission.READ_CALENDAR"),
-                QStringLiteral("android.permission.WRITE_CALENDAR")};
-    }
-
-    return {};
 }
 
 /*!
@@ -1124,6 +1076,7 @@ static void sendRequestPermissionsResult(JNIEnv *env, jobject *obj, jint request
         request->addResult(result, i);
     }
 
+    QtAndroidPrivate::releaseAndroidDeadlockProtector();
     request->finish();
 }
 
@@ -1140,6 +1093,12 @@ requestPermissionsInternal(const QStringList &permissions)
     if (QtAndroidPrivate::androidSdkVersion() < 23) {
         for (int i = 0; i < permissions.size(); ++i)
             promise->addResult(QtAndroidPrivate::checkPermission(permissions.at(i)).result(), i);
+        promise->finish();
+        return future;
+    }
+
+    if (!QtAndroidPrivate::acquireAndroidDeadlockProtector()) {
+        promise->addResult(QtAndroidPrivate::Denied);
         promise->finish();
         return future;
     }
@@ -1178,64 +1137,21 @@ requestPermissionsInternal(const QStringList &permissions)
 QFuture<QtAndroidPrivate::PermissionResult>
 QtAndroidPrivate::requestPermission(const QString &permission)
 {
+    return requestPermissions({permission});
+}
+
+QFuture<QtAndroidPrivate::PermissionResult>
+QtAndroidPrivate::requestPermissions(const QStringList &permissions)
+{
     // avoid the uneccessary call and response to an empty permission string
-    if (permission.size() > 0)
-        return requestPermissionsInternal({permission});
+    if (permissions.size() > 0)
+        return requestPermissionsInternal(permissions);
 
     QPromise<QtAndroidPrivate::PermissionResult> promise;
     QFuture<QtAndroidPrivate::PermissionResult> future = promise.future();
     promise.start();
     promise.addResult(QtAndroidPrivate::Denied);
     promise.finish();
-    return future;
-}
-
-static bool isBackgroundLocationApi29(QtAndroidPrivate::PermissionType permission)
-{
-    return QNativeInterface::QAndroidApplication::sdkVersion() >= 29
-            && (permission == QtAndroidPrivate::BackgroundLocation
-                || permission == QtAndroidPrivate::PreciseBackgroundLocation);
-}
-
-/*!
-    \preliminary
-
-    Requests the \a permission and returns a QFuture representing the
-    result of the request.
-
-    \since 6.2
-    \sa checkPermission()
-*/
-QFuture<QtAndroidPrivate::PermissionResult>
-QtAndroidPrivate::requestPermission(QtAndroidPrivate::PermissionType permission)
-{
-    QSharedPointer<QPromise<QtAndroidPrivate::PermissionResult>> promise;
-    promise.reset(new QPromise<QtAndroidPrivate::PermissionResult>());
-    QFuture<QtAndroidPrivate::PermissionResult> future = promise->future();
-    promise->start();
-    const auto nativePermissions = nativeStringsFromPermission(permission);
-
-    if (nativePermissions.size() > 0 && QtAndroidPrivate::acquireAndroidDeadlockProtector()) {
-        requestPermissionsInternal(nativePermissions).then(
-                    [promise, permission](QFuture<QtAndroidPrivate::PermissionResult> future) {
-            auto AuthorizedCount = future.results().count(QtAndroidPrivate::Authorized);
-            if (AuthorizedCount > 0) {
-                if (isBackgroundLocationApi29(permission))
-                    promise->addResult(future.resultAt(0), 0);
-                else
-                    promise->addResult(QtAndroidPrivate::Authorized, 0);
-            } else {
-                promise->addResult(QtAndroidPrivate::Denied, 0);
-            }
-            QtAndroidPrivate::releaseAndroidDeadlockProtector();
-            promise->finish();
-        });
-
-        return future;
-    }
-
-    promise->addResult(QtAndroidPrivate::Denied);
-    promise->finish();
     return future;
 }
 
@@ -1264,30 +1180,6 @@ QtAndroidPrivate::checkPermission(const QString &permission)
         promise.addResult(QtAndroidPrivate::Denied);
     }
 
-    promise.finish();
-    return future;
-}
-
-/*!
-    \preliminary
-    Checks whether this process has the named \a permission and returns a QFuture
-    representing the result of the check.
-
-    \since 6.2
-    \sa requestPermission()
-*/
-QFuture<QtAndroidPrivate::PermissionResult>
-QtAndroidPrivate::checkPermission(QtAndroidPrivate::PermissionType permission)
-{
-    const auto nativePermissions = nativeStringsFromPermission(permission);
-
-    if (nativePermissions.size() > 0)
-        return checkPermission(nativePermissions.first());
-
-    QPromise<QtAndroidPrivate::PermissionResult> promise;
-    QFuture<QtAndroidPrivate::PermissionResult> future = promise.future();
-    promise.start();
-    promise.addResult(QtAndroidPrivate::Denied);
     promise.finish();
     return future;
 }

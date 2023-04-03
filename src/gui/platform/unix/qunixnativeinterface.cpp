@@ -3,7 +3,9 @@
 
 #include <QtGui/private/qtguiglobal_p.h>
 
-#include <QtGui/private/qopenglcontext_p.h>
+#if QT_CONFIG(opengl)
+#  include <QtGui/private/qopenglcontext_p.h>
+#endif
 #include <QtGui/private/qguiapplication_p.h>
 
 #include <qpa/qplatformopenglcontext.h>
@@ -121,6 +123,22 @@ QOpenGLContext *QNativeInterface::QGLXContext::fromNative(GLXContext visualBased
     \return the EGLDisplay associated with the underlying EGLContext.
 */
 
+
+/*!
+    \fn void QNativeInterface::QEGLContext::invalidateContext()
+    \since 6.5
+    \brief Marks the context as invalid
+
+    If this context is used by the Qt Quick scenegraph, this will trigger the
+    SceneGraph to destroy this context and create a new one.
+
+    Similarly to QPlatformWindow::invalidateSurface(),
+    this function can only be expected to have an effect on certain platforms,
+    such as eglfs.
+
+    \sa QOpenGLContext::isValid(), QPlatformWindow::invalidateSurface()
+*/
+
 QT_DEFINE_NATIVE_INTERFACE(QEGLContext);
 QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QEGLIntegration);
 
@@ -212,5 +230,72 @@ QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWebOSScreen);
 QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QEvdevKeyMapper);
 
 #endif // QT_CONFIG(evdev)
+
+#if defined(Q_OS_UNIX)
+
+/*!
+    \class QNativeInterface::QWaylandApplication
+    \since 6.5
+    \brief Native interface to a Wayland application.
+
+    Accessed through QGuiApplication::nativeInterface().
+    \inmodule QtGui
+    \ingroup native-interfaces
+    \ingroup native-interfaces-qguiapplication
+*/
+/*!
+    \fn wl_display *QNativeInterface::QWaylandApplication::display() const
+    \return the wl_display that the application is using.
+*/
+/*!
+    \fn wl_compositor *QNativeInterface::QWaylandApplication::compositor() const
+    \return the wl_compositor that the application is using.
+*/
+/*!
+    \fn wl_keyboard *QNativeInterface::QWaylandApplication::keyboard() const
+    \return the wl_keyboard belonging to seat() if available.
+*/
+/*!
+    \fn wl_pointer *QNativeInterface::QWaylandApplication::pointer() const
+    \return the wl_pointer belonging to seat() if available.
+*/
+/*!
+    \fn wl_touch *QNativeInterface::QWaylandApplication::touch() const
+    \return the wl_touch belonging to seat() if available.
+*/
+/*!
+    \fn uint *QNativeInterface::QWaylandApplication::lastInputSerial() const
+    \return the serial of the last input event on any seat.
+*/
+/*!
+    \fn wl_seat *QNativeInterface::QWaylandApplication::lastInputSeat() const
+    \return the seat on which the last input event happened.
+*/
+
+QT_DEFINE_NATIVE_INTERFACE(QWaylandApplication);
+
+/*!
+    \class QNativeInterface::Private::QWaylandScreen
+    \since 6.5
+    \internal
+    \brief Native interface to QPlatformScreen.
+    \inmodule QtGui
+    \ingroup native-interfaces
+*/
+
+QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWaylandScreen);
+
+/*!
+    \class QNativeInterface::QWaylandWindow
+    \since 6.5
+    \internal
+    \brief Native interface to a Wayland window.
+    \inmodule QtGui
+    \ingroup native-interfaces
+*/
+
+QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QWaylandWindow);
+
+#endif // Q_OS_UNIX
 
 QT_END_NAMESPACE

@@ -394,26 +394,26 @@ static int parsePosixTime(const char *begin, const char *end)
     const int maxHour = 137; // POSIX's extended range.
     auto r = qstrntoll(begin, end - begin, 10);
     hour = r.result;
-    if (!r.ok() || hour < -maxHour || hour > maxHour || r.endptr > begin + 2)
+    if (!r.ok() || hour < -maxHour || hour > maxHour || r.used > 2)
         return INT_MIN;
-    begin = r.endptr;
+    begin += r.used;
     if (begin < end && *begin == ':') {
         // minutes
         ++begin;
         r = qstrntoll(begin, end - begin, 10);
         min = r.result;
-        if (!r.ok() || min < 0 || min > 59 || r.endptr > begin + 2)
+        if (!r.ok() || min < 0 || min > 59 || r.used > 2)
             return INT_MIN;
 
-        begin = r.endptr;
+        begin += r.used;
         if (begin < end && *begin == ':') {
             // seconds
             ++begin;
             r = qstrntoll(begin, end - begin, 10);
             sec = r.result;
-            if (!r.ok() || sec < 0 || sec > 59 || r.endptr > begin + 2)
+            if (!r.ok() || sec < 0 || sec > 59 || r.used > 2)
                 return INT_MIN;
-            begin = r.endptr;
+            begin += r.used;
         }
     }
 
@@ -484,7 +484,7 @@ PosixZone PosixZone::parse(const char *&pos, const char *end)
     Q_ASSERT(pos < end);
 
     if (*pos == '<') {
-        nameBegin = pos + 1;    // skip the '<'
+        ++nameBegin;    // skip the '<'
         nameEnd = nameBegin;
         while (nameEnd < end && *nameEnd != '>') {
             // POSIX says only alphanumeric, but we allow anything
@@ -492,7 +492,6 @@ PosixZone PosixZone::parse(const char *&pos, const char *end)
         }
         pos = nameEnd + 1;      // skip the '>'
     } else {
-        nameBegin = pos;
         nameEnd = nameBegin;
         while (nameEnd < end && asciiIsLetter(*nameEnd))
             ++nameEnd;
@@ -632,20 +631,22 @@ static QList<QTimeZonePrivate::Data> calculatePosixTransitions(const QByteArray 
     Q_ASSERT(startYear <= endYear);
 
     for (int year = startYear; year <= endYear; ++year) {
-        // Note: std and dst, despite being QDateTime(,, Qt::UTC), have the
+        // Note: std and dst, despite being QDateTime(,, UTC), have the
         // date() and time() of the *zone*'s description of the transition
         // moments; the atMSecsSinceEpoch values computed from them are
         // correctly offse to be UTC-based.
 
         QTimeZonePrivate::Data dstData; // Transition to DST
-        QDateTime dst(calculatePosixDate(dstDateRule, year).startOfDay(Qt::UTC).addSecs(dstTime));
+        QDateTime dst(calculatePosixDate(dstDateRule, year)
+                      .startOfDay(QTimeZone::UTC).addSecs(dstTime));
         dstData.atMSecsSinceEpoch = dst.toMSecsSinceEpoch() - stdZone.offset * 1000;
         dstData.offsetFromUtc = dstZone.offset;
         dstData.standardTimeOffset = stdZone.offset;
         dstData.daylightTimeOffset = dstZone.offset - stdZone.offset;
         dstData.abbreviation = dstZone.name;
         QTimeZonePrivate::Data stdData; // Transition to standard time
-        QDateTime std(calculatePosixDate(stdDateRule, year).startOfDay(Qt::UTC).addSecs(stdTime));
+        QDateTime std(calculatePosixDate(stdDateRule, year)
+                      .startOfDay(QTimeZone::UTC).addSecs(stdTime));
         stdData.atMSecsSinceEpoch = std.toMSecsSinceEpoch() - dstZone.offset * 1000;
         stdData.offsetFromUtc = stdZone.offset;
         stdData.standardTimeOffset = stdZone.offset;
@@ -656,16 +657,16 @@ static QList<QTimeZonePrivate::Data> calculatePosixTransitions(const QByteArray 
             // Handle the special case of fixed state, which may be represented
             // by fake transitions at start and end of each year:
             if (dstData.atMSecsSinceEpoch < stdData.atMSecsSinceEpoch) {
-                if (dst <= QDate(year, 1, 1).startOfDay(Qt::UTC)
-                    && std >= QDate(year, 12, 31).endOfDay(Qt::UTC)) {
+                if (dst <= QDate(year, 1, 1).startOfDay(QTimeZone::UTC)
+                    && std >= QDate(year, 12, 31).endOfDay(QTimeZone::UTC)) {
                     // Permanent DST:
                     dstData.atMSecsSinceEpoch = lastTranMSecs;
                     result << dstData;
                     return result;
                 }
             } else {
-                if (std <= QDate(year, 1, 1).startOfDay(Qt::UTC)
-                    && dst >= QDate(year, 12, 31).endOfDay(Qt::UTC)) {
+                if (std <= QDate(year, 1, 1).startOfDay(QTimeZone::UTC)
+                    && dst >= QDate(year, 12, 31).endOfDay(QTimeZone::UTC)) {
                     // Permanent Standard time, perversely described:
                     stdData.atMSecsSinceEpoch = lastTranMSecs;
                     result << stdData;
@@ -1094,7 +1095,7 @@ QTimeZonePrivate::Data QTzTimeZonePrivate::dataFromRule(QTzTransitionRule rule,
 
 QList<QTimeZonePrivate::Data> QTzTimeZonePrivate::getPosixTransitions(qint64 msNear) const
 {
-    const int year = QDateTime::fromMSecsSinceEpoch(msNear, Qt::UTC).date().year();
+    const int year = QDateTime::fromMSecsSinceEpoch(msNear, QTimeZone::UTC).date().year();
     // The Data::atMSecsSinceEpoch of the single entry if zone is constant:
     qint64 atTime = tranCache().isEmpty() ? msNear : tranCache().last().atMSecsSinceEpoch;
     return calculatePosixTransitions(cached_data.m_posixRule, year - 1, year + 1, atTime);

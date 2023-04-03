@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_internal_add_plugin(QGlibNetworkInformationPlugin
     OUTPUT_NAME qglib
     CLASS_NAME QGlibNetworkInformationBackendFactory

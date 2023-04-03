@@ -20,9 +20,9 @@ struct Tracepoint
 
     struct Field
     {
-        enum BackendType {
-            Array,
+        enum Type {
             Sequence,
+            Boolean,
             Integer,
             IntegerHex,
             Float,
@@ -32,13 +32,18 @@ struct Tracepoint
             QtByteArray,
             QtUrl,
             QtRect,
+            QtSize,
+            QtRectF,
+            QtSizeF,
+            EnumeratedType,
+            FlagType,
             Unknown
         };
-
-        BackendType backendType;
+        Type backendType;
         QString paramType;
         QString name;
         int arrayLen;
+        int enumValueSize;
         QString seqLen;
     };
 
@@ -47,17 +52,41 @@ struct Tracepoint
     QList<Field> fields;
 };
 
+struct TraceEnum {
+    QString name;
+    struct EnumValue {
+        QString name;
+        int value;
+        int range;
+    };
+    QList<EnumValue> values;
+    int valueSize;
+};
+
+struct TraceFlags {
+    QString name;
+    struct FlagValue {
+        QString name;
+        int value;
+    };
+    QList<FlagValue> values;
+};
+
+Q_DECLARE_TYPEINFO(TraceEnum, Q_RELOCATABLE_TYPE);
+Q_DECLARE_TYPEINFO(TraceFlags, Q_RELOCATABLE_TYPE);
+Q_DECLARE_TYPEINFO(Tracepoint::Argument, Q_RELOCATABLE_TYPE);
+Q_DECLARE_TYPEINFO(Tracepoint::Field, Q_RELOCATABLE_TYPE);
+Q_DECLARE_TYPEINFO(Tracepoint, Q_RELOCATABLE_TYPE);
+
 struct Provider
 {
     QString name;
     QList<Tracepoint> tracepoints;
     QStringList prefixText;
+    QList<TraceEnum> enumerations;
+    QList<TraceFlags> flags;
 };
 
 Provider parseProvider(const QString &filename);
-
-Q_DECLARE_TYPEINFO(Tracepoint::Argument, Q_RELOCATABLE_TYPE);
-Q_DECLARE_TYPEINFO(Tracepoint::Field, Q_RELOCATABLE_TYPE);
-Q_DECLARE_TYPEINFO(Tracepoint, Q_RELOCATABLE_TYPE);
 
 #endif // PROVIDER_H

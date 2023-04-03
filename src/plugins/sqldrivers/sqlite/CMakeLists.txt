@@ -1,4 +1,5 @@
-# Generated from sqlite.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QSQLiteDriverPlugin Plugin:
@@ -19,10 +20,6 @@ qt_internal_add_plugin(QSQLiteDriverPlugin
         Qt::SqlPrivate
 )
 
-#### Keys ignored in scope 1:.:.:sqlite.pro:<TRUE>:
-# OTHER_FILES = "sqlite.json"
-# QT_FOR_CONFIG = "sqldrivers-private"
-
 ## Scopes:
 #####################################################################
 
@@ -31,7 +28,6 @@ qt_internal_extend_target(QSQLiteDriverPlugin CONDITION QT_FEATURE_system_sqlite
         SQLite::SQLite3
 )
 
-# special case begin
 if (NOT QT_FEATURE_system_sqlite)
     # On newer compilers compiling sqlite.c produces warnings
     qt_disable_warnings(QSQLiteDriverPlugin)
@@ -40,7 +36,6 @@ endif()
 if(QT_FEATURE_system_sqlite)
     qt_internal_force_macos_intel_arch(QSQLiteDriverPlugin)
 endif()
-# special case end
 
 qt_internal_extend_target(QSQLiteDriverPlugin CONDITION NOT QT_FEATURE_system_sqlite
     SOURCES
@@ -49,8 +44,11 @@ qt_internal_extend_target(QSQLiteDriverPlugin CONDITION NOT QT_FEATURE_system_sq
         SQLITE_ENABLE_COLUMN_METADATA
         SQLITE_ENABLE_FTS3
         SQLITE_ENABLE_FTS3_PARENTHESIS
+        SQLITE_ENABLE_FTS4
         SQLITE_ENABLE_FTS5
+        SQLITE_ENABLE_GEOPOLY
         SQLITE_ENABLE_JSON1
+        SQLITE_ENABLE_MATH_FUNCTIONS
         SQLITE_ENABLE_RTREE
         SQLITE_OMIT_COMPLETE
     INCLUDE_DIRECTORIES

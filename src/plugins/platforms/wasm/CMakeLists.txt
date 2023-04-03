@@ -1,4 +1,5 @@
-# Generated from wasm.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QWasmIntegrationPlugin Plugin:
@@ -6,14 +7,18 @@
 
 qt_internal_add_plugin(QWasmIntegrationPlugin
     OUTPUT_NAME qwasm
-    DEFAULT_IF ${QT_QPA_DEFAULT_PLATFORM} MATCHES wasm # special case
+    DEFAULT_IF ${QT_QPA_DEFAULT_PLATFORM} MATCHES wasm
     PLUGIN_TYPE platforms
     STATIC
     SOURCES
         main.cpp
+        qwasmaccessibility.cpp qwasmaccessibility.h
+        qwasmbase64iconstore.cpp qwasmbase64iconstore.h
         qwasmclipboard.cpp qwasmclipboard.h
         qwasmcompositor.cpp qwasmcompositor.h
+        qwasmcssstyle.cpp qwasmcssstyle.h
         qwasmcursor.cpp qwasmcursor.h
+        qwasmdom.cpp qwasmdom.h
         qwasmevent.cpp qwasmevent.h
         qwasmeventdispatcher.cpp qwasmeventdispatcher.h
         qwasmeventtranslator.cpp qwasmeventtranslator.h
@@ -28,8 +33,11 @@ qt_internal_add_plugin(QWasmIntegrationPlugin
         qwasmstylepixmaps_p.h
         qwasmtheme.cpp qwasmtheme.h
         qwasmwindow.cpp qwasmwindow.h
+        qwasmwindowclientarea.cpp qwasmwindowclientarea.h
+        qwasmwindownonclientarea.cpp qwasmwindownonclientarea.h
         qwasminputcontext.cpp qwasminputcontext.h
         qwasmdrag.cpp qwasmdrag.h
+        qwasmwindowstack.cpp qwasmwindowstack.h
     DEFINES
         QT_EGL_NO_X11
         QT_NO_FOREACH
@@ -55,6 +63,7 @@ qt_internal_add_resource(QWasmIntegrationPlugin "wasmfonts"
     FILES
         ${wasmfonts_resource_files}
 )
+
 qt_internal_extend_target(QWasmIntegrationPlugin CONDITION QT_FEATURE_opengl
     SOURCES
         qwasmbackingstore.cpp qwasmbackingstore.h
@@ -63,13 +72,28 @@ qt_internal_extend_target(QWasmIntegrationPlugin CONDITION QT_FEATURE_opengl
         Qt::OpenGLPrivate
 )
 
-#### Keys ignored in scope 4:.:.:wasm.pro:NOT TARGET___equals____ss_QT_DEFAULT_QPA_PLUGIN:
 # PLUGIN_EXTENDS = "-"
 
 set(wasm_support_files
     wasm_shell.html
     qtloader.js
-    qtlogo.svg
+    resources/qtlogo.svg
+)
+
+set(wasmwindow_resource_files
+    "resources/maximize.svg"
+    "resources/qtlogo.svg"
+    "resources/restore.svg"
+    "resources/x.svg"
+)
+
+qt_internal_add_resource(QWasmIntegrationPlugin "wasmwindow"
+    PREFIX
+        "/wasm-window"
+    BASE
+        "resources"
+    FILES
+        ${wasmwindow_resource_files}
 )
 
 qt_path_join(destination ${QT_INSTALL_DIR} "plugins/platforms")

@@ -76,6 +76,8 @@ private slots:
 
     void reserveShared();
     void reserveLessThanCurrentAmount();
+    void reserveKeepCapacity_data();
+    void reserveKeepCapacity();
 
     void QTBUG98265();
 
@@ -904,16 +906,31 @@ class QGlobalQHashSeedResetter
     int oldSeed;
 public:
     // not entirely correct (may lost changes made by another thread between the query
-    // of the old and the setting of the new seed), but qSetGlobalQHashSeed doesn't
+    // of the old and the setting of the new seed), but setHashSeed() can't
     // return the old value, so this is the best we can do:
     explicit QGlobalQHashSeedResetter(int newSeed)
-        : oldSeed(qGlobalQHashSeed())
+        : oldSeed(getHashSeed())
     {
-        qSetGlobalQHashSeed(newSeed);
+        setHashSeed(newSeed);
     }
     ~QGlobalQHashSeedResetter()
     {
-        qSetGlobalQHashSeed(oldSeed);
+        setHashSeed(oldSeed);
+    }
+
+private:
+    // The functions are implemented to replace the deprecated
+    // qGlobalQHashSeed() and qSetGlobalQHashSeed()
+    static int getHashSeed()
+    {
+        return int(QHashSeed::globalSeed() & INT_MAX);
+    }
+    static void setHashSeed(int seed)
+    {
+        if (seed == 0)
+            QHashSeed::setDeterministicGlobalSeed();
+        else
+            QHashSeed::resetRandomGlobalSeed();
     }
 };
 
@@ -2676,6 +2693,40 @@ void tst_QHash::reserveLessThanCurrentAmount()
         for (int i = 0; i < 1000; ++i)
             QCOMPARE(hash.values(i), QList<int>({ i * 10 + 1, i * 10 }));
     }
+}
+
+void tst_QHash::reserveKeepCapacity_data()
+{
+    QTest::addColumn<qsizetype>("requested");
+    auto addRow = [](qsizetype requested) {
+        QTest::addRow("%td", ptrdiff_t(requested)) << requested;
+    };
+
+    QHash<int, int> testHash = {{1, 1}};
+    qsizetype minCapacity = testHash.capacity();
+    addRow(minCapacity - 1);
+    addRow(minCapacity + 0);
+    addRow(minCapacity + 1);
+    addRow(2 * minCapacity - 1);
+    addRow(2 * minCapacity + 0);
+    addRow(2 * minCapacity + 1);
+}
+
+void tst_QHash::reserveKeepCapacity()
+{
+    QFETCH(qsizetype, requested);
+
+    QHash<qsizetype, qsizetype> hash;
+    hash.reserve(requested);
+    qsizetype initialCapacity = hash.capacity();
+    QCOMPARE_GE(initialCapacity, requested);
+
+    // insert this many elements into the hash
+    for (qsizetype i = 0; i < requested; ++i)
+        hash.insert(i, i);
+
+    // it mustn't have increased capacity after inserting the elements
+    QCOMPARE(hash.capacity(), initialCapacity);
 }
 
 void tst_QHash::QTBUG98265()

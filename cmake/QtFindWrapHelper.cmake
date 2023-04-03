@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Creates an imported wrapper target that links against either a Qt bundled package
 # or a system package.
 #

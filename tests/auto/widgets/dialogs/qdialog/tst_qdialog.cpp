@@ -21,7 +21,8 @@
 #include <private/qguiapplication_p.h>
 #include <qpa/qplatformtheme.h>
 #include <qpa/qplatformtheme_p.h>
-#include <qpa/qplatformintegration.h>
+
+#include <QtWidgets/private/qapplication_p.h>
 
 QT_FORWARD_DECLARE_CLASS(QDialog)
 
@@ -134,7 +135,7 @@ void tst_QDialog::defaultButtons()
     pushThree->setAutoDefault(false);
 
     testWidget.show();
-    QApplication::setActiveWindow(&testWidget);
+    QApplicationPrivate::setActiveWindow(&testWidget);
     QVERIFY(QTest::qWaitForWindowExposed(&testWidget));
 
     push->setDefault(true);

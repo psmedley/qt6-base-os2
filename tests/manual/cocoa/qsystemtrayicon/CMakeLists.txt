@@ -1,4 +1,5 @@
-# Generated from qsystemtrayicon.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qsystemtrayicon Binary:
@@ -10,7 +11,7 @@ qt_internal_add_manual_test(qsystemtrayicon
         main.cpp
     INCLUDE_DIRECTORIES
         .
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )
@@ -32,7 +33,3 @@ qt_internal_add_resource(qsystemtrayicon "icons"
     FILES
         ${icons_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:qsystemtrayicon.pro:<TRUE>:
-# TEMPLATE = "app"

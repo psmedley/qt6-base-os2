@@ -12,23 +12,26 @@
 #include <qtextstream.h>
 #include <qdebug.h>
 
-static void writeCtfMacro(QTextStream &stream, const Tracepoint::Field &field)
+static void writeCtfMacro(QTextStream &stream, const Provider &provider, const Tracepoint::Field &field)
 {
     const QString &paramType = field.paramType;
     const QString &name = field.name;
     const QString &seqLen = field.seqLen;
     const int arrayLen = field.arrayLen;
 
-    switch (field.backendType) {
-    case Tracepoint::Field::Array:
+    if (arrayLen > 0) {
         stream << "ctf_array(" <<paramType << ", "
                << name << ", " << name << ", " << arrayLen << ")";
         return;
+    }
+
+    switch (field.backendType) {
     case Tracepoint::Field::Sequence:
         stream << "ctf_sequence(" << paramType
             << ", " << name << ", " << name
             << ", unsigned int, "  << seqLen << ")";
         return;
+    case Tracepoint::Field::Boolean:
     case Tracepoint::Field::Integer:
         stream << "ctf_integer(" << paramType << ", " << name << ", " << name << ")";
         return;
@@ -43,17 +46,14 @@ static void writeCtfMacro(QTextStream &stream, const Tracepoint::Field &field)
         stream << "ctf_string(" << name << ", " << name << ")";
         return;
     case Tracepoint::Field::QtString:
-        stream << "ctf_sequence(const ushort, " << name << ", "
-               << name << ".utf16(), unsigned int, " << name << ".size())";
+        stream << "ctf_string(" << name << ", " << name << ".toUtf8().constData())";
         return;
     case Tracepoint::Field::QtByteArray:
         stream << "ctf_sequence(const char, " << name << ", "
                << name << ".constData(), unsigned int, " << name << ".size())";
         return;
     case Tracepoint::Field::QtUrl:
-        stream << "ctf_sequence(const char, " << name << ", "
-               << name << ".toEncoded().constData(), unsigned int, "
-               << name << ".toEncoded().size())";
+        stream << "ctf_string(" << name << ", " << name << ".toString().toUtf8().constData())";
         return;
     case Tracepoint::Field::QtRect:
         stream << "ctf_integer(int, x, " << name << ".x()) "
@@ -61,9 +61,29 @@ static void writeCtfMacro(QTextStream &stream, const Tracepoint::Field &field)
                << "ctf_integer(int, width, " << name << ".width()) "
                << "ctf_integer(int, height, " << name << ".height()) ";
         return;
+    case Tracepoint::Field::QtSizeF:
+        stream << "ctf_float(int, width, " << name << ".width()) "
+               << "ctf_float(int, height, " << name << ".height()) ";
+        return;
+    case Tracepoint::Field::QtRectF:
+        stream << "ctf_float(int, x, " << name << ".x()) "
+               << "ctf_float(int, y, " << name << ".y()) "
+               << "ctf_float(int, width, " << name << ".width()) "
+               << "ctf_float(int, height, " << name << ".height()) ";
+        return;
+    case Tracepoint::Field::QtSize:
+        stream << "ctf_integer(int, width, " << name << ".width()) "
+               << "ctf_integer(int, height, " << name << ".height()) ";
+        return;
+    case Tracepoint::Field::EnumeratedType:
+        stream << "ctf_enum(" << provider.name << ", " << typeToTypeName(paramType) << ", int, " << name << ", " << name << ") ";
+        return;
+    case Tracepoint::Field::FlagType:
+        stream << "ctf_sequence(const char , " << name << ", "
+               << name << ".constData(), unsigned int, " << name << ".size())";
+        return;
     case Tracepoint::Field::Unknown:
-        justified_worry("Cannot deduce CTF type for '%s %s'", qPrintable(paramType),
-                        qPrintable(name));
+        panic("Cannot deduce CTF type for '%s %s", qPrintable(paramType), qPrintable(name));
         break;
     }
 }
@@ -111,12 +131,12 @@ static void writeEpilogue(QTextStream &stream, const QString &fileName)
 }
 
 static void writeWrapper(QTextStream &stream,
-        const Tracepoint &tracepoint, const QString &providerName)
+        const Tracepoint &tracepoint, const Provider &provider)
 {
     const QString argList = formatFunctionSignature(tracepoint.args);
-    const QString paramList = formatParameterList(tracepoint.args, LTTNG);
+    const QString paramList = formatParameterList(provider, tracepoint.args, tracepoint.fields, LTTNG);
     const QString &name = tracepoint.name;
-    const QString includeGuard = QStringLiteral("TP_%1_%2").arg(providerName).arg(name).toUpper();
+    const QString includeGuard = QStringLiteral("TP_%1_%2").arg(provider.name).arg(name).toUpper();
 
     /* prevents the redefinion of the inline wrapper functions
      * once LTTNG recursively includes this header file
@@ -129,17 +149,17 @@ static void writeWrapper(QTextStream &stream,
 
     stream << "inline void trace_" << name << "(" << argList << ")\n"
            << "{\n"
-           << "    tracepoint(" << providerName << ", " << name << paramList << ");\n"
+           << "    tracepoint(" << provider.name << ", " << name << paramList << ");\n"
            << "}\n";
 
     stream << "inline void do_trace_" << name << "(" << argList << ")\n"
            << "{\n"
-           << "    do_tracepoint(" << providerName << ", " << name << paramList << ");\n"
+           << "    do_tracepoint(" << provider.name << ", " << name << paramList << ");\n"
            << "}\n";
 
     stream << "inline bool trace_" << name << "_enabled()\n"
            << "{\n"
-           << "    return tracepoint_enabled(" << providerName << ", " << name << ");\n"
+           << "    return tracepoint_enabled(" << provider.name << ", " << name << ");\n"
            << "}\n";
 
     stream << "} // namespace QtPrivate\n"
@@ -147,7 +167,7 @@ static void writeWrapper(QTextStream &stream,
            << "#endif // " << includeGuard << "\n\n";
 }
 
-static void writeTracepoint(QTextStream &stream,
+static void writeTracepoint(QTextStream &stream, const Provider &provider,
         const Tracepoint &tracepoint, const QString &providerName)
 {
     stream  << "TRACEPOINT_EVENT(\n"
@@ -157,8 +177,13 @@ static void writeTracepoint(QTextStream &stream,
 
     const char *comma = nullptr;
 
-    for (const Tracepoint::Argument &arg : tracepoint.args) {
-        stream << comma << arg.type << ", " << arg.name;
+    for (int i = 0; i < tracepoint.args.size(); i++) {
+        const auto &arg = tracepoint.args[i];
+        const auto &field = tracepoint.fields[i];
+        if (field.backendType == Tracepoint::Field::FlagType)
+            stream << comma << "QByteArray, " << arg.name;
+        else
+            stream << comma << arg.type << ", " << arg.name;
         comma = ", ";
     }
 
@@ -169,18 +194,82 @@ static void writeTracepoint(QTextStream &stream,
 
     for (const Tracepoint::Field &f : tracepoint.fields) {
         stream << newline;
-        writeCtfMacro(stream, f);
+        writeCtfMacro(stream, provider, f);
         newline = "\n        ";
     }
 
     stream << ")\n)\n\n";
 }
 
+static void writeEnums(QTextStream &stream, const Provider &provider)
+{
+    for (const auto &e : provider.enumerations) {
+        stream << "TRACEPOINT_ENUM(\n"
+               << "    " << provider.name << ",\n"
+               << "    " << typeToTypeName(e.name) << ",\n"
+               << "    TP_ENUM_VALUES(\n";
+        QList<int> handledValues;
+        for (const auto &v : e.values) {
+            if (v.range > 0) {
+                stream << "        ctf_enum_range(\"" << v.name << "\", " << v.value << ", " << v.range << ")\n";
+            } else if (!handledValues.contains(v.value)) {
+                stream << "        ctf_enum_value(\"" << aggregateListValues(v.value, e.values) << "\", " << v.value << ")\n";
+                handledValues.append(v.value);
+            }
+        }
+        stream << "    )\n)\n\n";
+    }
+}
+
+static void writeFlags(QTextStream &stream, const Provider &provider)
+{
+    for (const auto &f : provider.flags) {
+        stream << "TRACEPOINT_ENUM(\n"
+               << "    " << provider.name << ",\n"
+               << "    " << typeToTypeName(f.name) << ",\n"
+               << "    TP_ENUM_VALUES(\n";
+        QList<int> handledValues;
+        for (const auto &v : f.values) {
+            if (!handledValues.contains(v.value)) {
+                stream << "        ctf_enum_value(\"" << aggregateListValues(v.value, f.values) << "\", " << v.value << ")\n";
+                handledValues.append(v.value);
+            }
+        }
+        stream << "    )\n)\n\n";
+    }
+
+    // converters
+    const QString includeGuard = QStringLiteral("TP_%1_CONVERTERS").arg(provider.name).toUpper();
+    stream << "\n"
+           << "#ifndef " << includeGuard << "\n"
+           << "#define " << includeGuard << "\n";
+    stream << "QT_BEGIN_NAMESPACE\n";
+    stream << "namespace QtPrivate {\n";
+    for (const auto &f : provider.flags) {
+        stream << "inline QByteArray trace_convert_" << typeToTypeName(f.name) << "(" << f.name << " val)\n";
+        stream << "{\n";
+        stream << "    QByteArray ret;\n";
+        stream << "    if (val == 0) { ret.append((char)0); return ret; }\n";
+
+        for (const auto &v : f.values) {
+            if (!v.value)
+                continue;
+            stream << "    if (val & " << (1 << (v.value - 1)) << ") { ret.append((char)" << v.value << "); };\n";
+        }
+        stream << "    return ret;\n";
+        stream << "}\n";
+
+    }
+    stream << "} // namespace QtPrivate\n"
+           << "QT_END_NAMESPACE\n\n"
+           << "#endif // " << includeGuard << "\n\n";
+}
+
 static void writeTracepoints(QTextStream &stream, const Provider &provider)
 {
     for (const Tracepoint &t : provider.tracepoints) {
-        writeTracepoint(stream, t, provider.name);
-        writeWrapper(stream, t, provider.name);
+        writeTracepoint(stream, provider, t, provider.name);
+        writeWrapper(stream, t, provider);
     }
 }
 
@@ -191,6 +280,9 @@ void writeLttng(QFile &file, const Provider &provider)
     const QString fileName = QFileInfo(file.fileName()).fileName();
 
     writePrologue(stream, fileName, provider);
+    writeEnums(stream, provider);
+    writeFlags(stream, provider);
     writeTracepoints(stream, provider);
     writeEpilogue(stream, fileName);
 }
+

@@ -1,4 +1,5 @@
-# Generated from chip.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## chip Binary:
@@ -11,7 +12,7 @@ qt_internal_add_benchmark(chip
         main.cpp
         mainwindow.cpp mainwindow.h
         view.cpp view.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
 )
 
@@ -32,17 +33,10 @@ qt_internal_add_resource(chip "images"
         ${images_resource_files}
 )
 
-
-#### Keys ignored in scope 1:.:.:chip.pro:<TRUE>:
-# INSTALLS = "target" "sources"
-# sources.files = "$$SOURCES" "$$HEADERS" "$$RESOURCES" "*.png" "*.pro" "*.html" "*.doc" "images"
-# sources.path = "$$[QT_INSTALL_EXAMPLES]/graphicsview/chip"
-# target.path = "$$[QT_INSTALL_EXAMPLES]/graphicsview/chip"
-
 ## Scopes:
 #####################################################################
 
 qt_internal_extend_target(chip CONDITION TARGET Qt::OpenGL
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::OpenGL
 )

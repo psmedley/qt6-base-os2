@@ -74,8 +74,6 @@ struct QFileDialogArgs
     QFileDialog::Options options = {};
 };
 
-#define UrlRole (Qt::UserRole + 1)
-
 class Q_WIDGETS_EXPORT QFileDialogPrivate : public QDialogPrivate
 {
     Q_DECLARE_PUBLIC(QFileDialog)
@@ -259,6 +257,8 @@ private:
     virtual void helperPrepareShow(QPlatformDialogHelper *) override;
     virtual void helperDone(QDialog::DialogCode, QPlatformDialogHelper *) override;
 
+    void itemNotFound(const QString &fileName, QFileDialog::FileMode mode);
+    bool itemAlreadyExists(const QString &fileName);
     Q_DISABLE_COPY_MOVE(QFileDialogPrivate)
 };
 

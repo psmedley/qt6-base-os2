@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generate a qt_ext_XXX.pri file.
 #
 # - Replaces occurrences of the build libdir with $$[QT_INSTALL_LIBDIR/get].

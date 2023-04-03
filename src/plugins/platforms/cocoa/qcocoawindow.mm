@@ -1093,28 +1093,14 @@ void QCocoaWindow::setMask(const QRegion &region)
     }
 }
 
-bool QCocoaWindow::setKeyboardGrabEnabled(bool grab)
+bool QCocoaWindow::setKeyboardGrabEnabled(bool)
 {
-    qCDebug(lcQpaWindow) << "QCocoaWindow::setKeyboardGrabEnabled" << window() << grab;
-    if (!isContentView())
-        return false;
-
-    if (grab && ![m_view.window isKeyWindow])
-        [m_view.window makeKeyWindow];
-
-    return true;
+    return false; // FIXME (QTBUG-106597)
 }
 
-bool QCocoaWindow::setMouseGrabEnabled(bool grab)
+bool QCocoaWindow::setMouseGrabEnabled(bool)
 {
-    qCDebug(lcQpaWindow) << "QCocoaWindow::setMouseGrabEnabled" << window() << grab;
-    if (!isContentView())
-        return false;
-
-    if (grab && ![m_view.window isKeyWindow])
-        [m_view.window makeKeyWindow];
-
-    return true;
+    return false; // FIXME (QTBUG-106597)
 }
 
 WId QCocoaWindow::winId() const
@@ -1549,11 +1535,6 @@ void QCocoaWindow::recreateWindowIfNeeded()
         setOpacity(opacity);
 
     setMask(QHighDpi::toNativeLocalRegion(window()->mask(), window()));
-
-    // top-level QWindows may have an attached NSToolBar, call
-    // update function which will attach to the NSWindow.
-    if (!parentWindow && !isEmbeddedView)
-        updateNSToolbar();
 }
 
 void QCocoaWindow::requestUpdate()
@@ -1843,16 +1824,6 @@ void QCocoaWindow::registerTouch(bool enable)
         m_view.allowedTouchTypes &= ~NSTouchTypeMaskIndirect;
 }
 
-void QCocoaWindow::setContentBorderThickness(int topThickness, int bottomThickness)
-{
-    m_topContentBorderThickness = topThickness;
-    m_bottomContentBorderThickness = bottomThickness;
-    bool enable = (topThickness > 0 || bottomThickness > 0);
-    m_drawContentBorderGradient = enable;
-
-    applyContentBorderThickness();
-}
-
 void QCocoaWindow::registerContentBorderArea(quintptr identifier, int upper, int lower)
 {
     m_contentBorderAreas.insert(identifier, BorderRange(identifier, upper, lower));
@@ -1924,21 +1895,6 @@ void QCocoaWindow::applyContentBorderThickness(NSWindow *window)
     [window setAutorecalculatesContentBorderThickness:NO forEdge:NSMinYEdge];
 
     [[[window contentView] superview] setNeedsDisplay:YES];
-}
-
-void QCocoaWindow::updateNSToolbar()
-{
-    if (!isContentView())
-        return;
-
-    NSToolbar *toolbar = QCocoaIntegration::instance()->toolbar(window());
-    const NSWindow *window = m_view.window;
-
-    if (window.toolbar == toolbar)
-       return;
-
-    window.toolbar = toolbar;
-    window.showsToolbarButton = YES;
 }
 
 bool QCocoaWindow::testContentBorderAreaPosition(int position) const

@@ -103,7 +103,7 @@
    \snippet code/src_qtestlib_qtestcase.cpp 2
 
    When comparing floating-point types (\c float, \c double, and \c qfloat16),
-   \l {qFuzzyCompare()} is used for finite values. If \l {<QtGlobal>::}{qFuzzyIsNull()}
+   \l {qFuzzyCompare()} is used for finite values. If \l {<QtNumeric>::}{qFuzzyIsNull()}
    is true for both values, they are also considered equal. Infinities
    match if they have the same sign, and any NaN as actual value matches
    with any NaN as expected value (even though NaN != NaN, even when
@@ -113,7 +113,7 @@
    can be passed as expected value:
    \snippet code/src_qtestlib_qtestcase.cpp 34
 
-   Note that using initializer lists requires a defining a helper macro
+   Note that using initializer lists requires defining a helper macro
    to prevent the preprocessor from interpreting the commas as macro argument
    delimiters:
    \snippet code/src_qtestlib_qtestcase.cpp 35
@@ -1260,7 +1260,16 @@
     on a \a widget.  The position of the release is defined by \a pos;
     the default position is the center of the widget. If \a delay is
     specified, the test will wait for the specified amount of
-    milliseconds before releasing the button.
+    milliseconds before releasing the button; otherwise, it will wait for a
+    default amount of time (1 ms), which can be overridden via
+    \l {Testing Options}{command-line arguments}.
+
+    \note If you wish to test a double-click by sending events individually,
+    specify a short delay, greater than the default, on both mouse release events.
+    The total of the delays for the press, release, press and release must be
+    less than QStyleHints::mouseDoubleClickInterval(). But if you don't need
+    to check state between events, it's better to use QTest::mouseDClick().
+    \snippet code/src_qtestlib_qtestcase_snippet.cpp 35
 
     \sa QTest::mousePress(), QTest::mouseClick()
 */
@@ -1273,7 +1282,16 @@
     on a \a window.  The position of the release is defined by \a pos;
     the default position is the center of the window. If \a delay is
     specified, the test will wait for the specified amount of
-    milliseconds before releasing the button.
+    milliseconds before releasing the button; otherwise, it will wait for a
+    default amount of time (1 ms), which can be overridden via
+    \l {Testing Options}{command-line arguments}.
+
+    \note If you wish to test a double-click by sending events individually,
+    specify a short delay, greater than the default, on both mouse release events.
+    The total of the delays for the press, release, press and release must be
+    less than QStyleHints::mouseDoubleClickInterval(). But if you don't need
+    to check state between events, it's better to use QTest::mouseDClick().
+    \snippet code/src_qtestlib_qtestcase_snippet.cpp 35
 
     \sa QTest::mousePress(), QTest::mouseClick()
 */
@@ -1594,6 +1612,13 @@
     \since 5.5
 
     Returns a textual representation of size policy \a sp.
+*/
+
+/*!
+    \fn char *QTest::toString(const QKeySequence &ks)
+    \overload
+    \since 6.5
+    Returns a textual representation of the key sequence \a ks.
 */
 
 /*!

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qmake.pro.
 
 #####################################################################
@@ -12,6 +15,9 @@ qt_add_library(QtLibraryInfo OBJECT
     propertyprinter.cpp propertyprinter.h
     qmakelibraryinfo.cpp qmakelibraryinfo.h
 )
+
+qt_internal_add_sync_header_dependencies(QtLibraryInfo Core)
+
 set_target_properties(QtLibraryInfo PROPERTIES
     COMPILE_OPTIONS $<TARGET_PROPERTY:Qt::Core,INTERFACE_COMPILE_OPTIONS>
     COMPILE_DEFINITIONS $<TARGET_PROPERTY:Qt::Core,INTERFACE_COMPILE_DEFINITIONS>
@@ -34,6 +40,7 @@ target_compile_definitions(QtLibraryInfo PUBLIC
     QT_BUILD_QMAKE
     QT_USE_QSTRINGBUILDER
     QT_NO_FOREACH
+    QT_VERSION_STR="${PROJECT_VERSION}"
     QT_HOST_MKSPEC="${QT_QMAKE_HOST_MKSPEC}"
     QT_TARGET_MKSPEC="${QT_QMAKE_TARGET_MKSPEC}"
     QT_HOST_DATADIR="${hostdatadir}"
@@ -126,6 +133,7 @@ set_target_properties(${target_name} PROPERTIES
     AUTOMOC OFF
     AUTORCC OFF
     AUTOUIC OFF
+    UNITY_BUILD OFF
 )
 
 qt_internal_apply_gc_binaries(${target_name} PRIVATE) # special case

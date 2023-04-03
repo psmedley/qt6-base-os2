@@ -6,7 +6,7 @@
 \ingroup cmake-commands-qtcore
 
 \title qt_add_executable
-\target qt6_add_executable
+\keyword qt6_add_executable
 
 \summary {Creates and finalizes an application target of a platform-specific type.}
 
@@ -110,5 +110,5 @@ for finalizing the target by adding the \c{MANUAL_FINALIZATION} keyword.
 
 \snippet cmake-macros/examples.cmake qt_add_executable_deferred
 
-\include cmake-android-qt-finalize-project-warning.cmake
+\include cmake-android-qt-finalize-project-warning.qdocinc
 */

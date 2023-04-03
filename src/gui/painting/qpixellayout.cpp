@@ -212,8 +212,7 @@ inline void QT_FASTCALL storePixel<QPixelLayout::BPP24>(uchar *dest, int index, 
 template <QPixelLayout::BPP bpp> static
 inline uint QT_FASTCALL fetchPixel(const uchar *, int)
 {
-    Q_UNREACHABLE();
-    return 0;
+    Q_UNREACHABLE_RETURN(0);
 }
 
 template <>
@@ -2227,7 +2226,7 @@ static void QT_FASTCALL storeRGBX16FFromRGBA32F(uchar *dest, const QRgbaFloat32 
     QRgbaFloat16 *d = reinterpret_cast<QRgbaFloat16 *>(dest) + index;
     for (int i = 0; i < count; ++i) {
         auto s = src[i].unpremultiplied();
-        d[i] = QRgbaFloat16{ s.r, s.g, s.b, 1.0f };
+        d[i] = QRgbaFloat16{ qfloat16(s.r), qfloat16(s.g), qfloat16(s.b), qfloat16(1.0f) };
     }
 }
 
@@ -2237,7 +2236,7 @@ static void QT_FASTCALL storeRGBA16FFromRGBA32F(uchar *dest, const QRgbaFloat32 
     QRgbaFloat16 *d = reinterpret_cast<QRgbaFloat16 *>(dest) + index;
     for (int i = 0; i < count; ++i) {
         auto s = src[i].unpremultiplied();
-        d[i] = QRgbaFloat16{ s.r, s.g, s.b, s.a };
+        d[i] = QRgbaFloat16{ qfloat16(s.r), qfloat16(s.g), qfloat16(s.b), qfloat16(s.a) };
     }
 }
 

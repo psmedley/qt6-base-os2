@@ -26,23 +26,19 @@ public:
     ~QBenchmarkPerfEventsMeasurer();
     void init() override;
     void start() override;
-    qint64 checkpoint() override;
-    qint64 stop() override;
-    bool isMeasurementAccepted(qint64 measurement) override;
+    QList<Measurement> stop() override;
+    bool isMeasurementAccepted(Measurement measurement) override;
     int adjustIterationCount(int suggestion) override;
     int adjustMedianCount(int suggestion) override;
-    bool repeatCount() override { return true; }
     bool needsWarmupIteration() override { return true; }
-    QTest::QBenchmarkMetric metricType() override;
 
     static bool isAvailable();
-    static QTest::QBenchmarkMetric metricForEvent(quint32 type, quint64 event_id);
     static void setCounter(const char *name);
     static void listCounters();
 private:
-    int fd = -1;
+    QList<int> fds;
 
-    qint64 readValue();
+    Measurement readValue(qsizetype idx = 0);
 };
 
 QT_END_NAMESPACE

@@ -13,7 +13,7 @@
 
 #include <QtCore/qpropertyprivate.h>
 
-#if __has_include(<source_location>) && __cplusplus >= 202002L && !defined(Q_CLANG_QDOC)
+#if __has_include(<source_location>) && __cplusplus >= 202002L && !defined(Q_QDOC)
 #include <source_location>
 #if defined(__cpp_lib_source_location)
 #define QT_SOURCE_LOCATION_NAMESPACE std
@@ -31,7 +31,7 @@
 #endif
 #endif
 
-#if __has_include(<experimental/source_location>) && !defined(Q_CLANG_QDOC)
+#if __has_include(<experimental/source_location>) && !defined(Q_QDOC)
 #include <experimental/source_location>
 #if !defined(QT_PROPERTY_COLLECT_BINDING_LOCATION)
 #if defined(__cpp_lib_experimental_source_location)
@@ -349,7 +349,7 @@ public:
     explicit QProperty(const QPropertyBinding<T> &binding)
         : QProperty()
     { setBinding(binding); }
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
     template <typename Functor>
     explicit QProperty(Functor &&f, const QPropertyBindingSourceLocation &location = QT_PROPERTY_DEFAULT_BINDING_LOCATION,
                        typename std::enable_if_t<std::is_invocable_r_v<T, Functor&>> * = nullptr)
@@ -432,7 +432,7 @@ public:
         return true;
     }
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
     template <typename Functor>
     QPropertyBinding<T> setBinding(Functor &&f,
                                    const QPropertyBindingSourceLocation &location = QT_PROPERTY_DEFAULT_BINDING_LOCATION,
@@ -597,6 +597,60 @@ enum Reason { InvalidInterface, NonBindableInterface, ReadOnlyInterface };
 Q_CORE_EXPORT void printUnsuitableBindableWarning(QAnyStringView prefix, Reason reason);
 Q_CORE_EXPORT void printMetaTypeMismatch(QMetaType actual, QMetaType expected);
 }
+
+namespace PropertyAdaptorSlotObjectHelpers {
+Q_CORE_EXPORT void getter(const QUntypedPropertyData *d, void *value);
+Q_CORE_EXPORT void setter(QUntypedPropertyData *d, const void *value);
+Q_CORE_EXPORT QUntypedPropertyBinding getBinding(const QUntypedPropertyData *d);
+Q_CORE_EXPORT bool bindingWrapper(QMetaType type, QUntypedPropertyData *d,
+                                  QtPrivate::QPropertyBindingFunction binding,
+                                  QUntypedPropertyData *temp, void *value);
+Q_CORE_EXPORT QUntypedPropertyBinding setBinding(QUntypedPropertyData *d,
+                                                 const QUntypedPropertyBinding &binding,
+                                                 QPropertyBindingWrapper wrapper);
+Q_CORE_EXPORT void setObserver(const QUntypedPropertyData *d, QPropertyObserver *observer);
+
+template<typename T>
+bool bindingWrapper(QMetaType type, QUntypedPropertyData *d,
+                    QtPrivate::QPropertyBindingFunction binding)
+{
+    struct Data : QPropertyData<T>
+    {
+        void *data() { return &this->val; }
+    } temp;
+    return bindingWrapper(type, d, binding, &temp, temp.data());
+}
+
+template<typename T>
+QUntypedPropertyBinding setBinding(QUntypedPropertyData *d, const QUntypedPropertyBinding &binding)
+{
+    return setBinding(d, binding, &bindingWrapper<T>);
+}
+
+template<typename T>
+QUntypedPropertyBinding makeBinding(const QUntypedPropertyData *d,
+                                    const QPropertyBindingSourceLocation &location)
+{
+    return Qt::makePropertyBinding(
+            [d]() -> T {
+                T r;
+                getter(d, &r);
+                return r;
+            },
+            location);
+}
+
+template<class T>
+inline constexpr QBindableInterface iface = {
+    &getter,
+    &setter,
+    &getBinding,
+    &setBinding<T>,
+    &makeBinding<T>,
+    &setObserver,
+    &QMetaType::fromType<T>,
+};
+}
 }
 
 class QUntypedBindable
@@ -608,6 +662,9 @@ protected:
     constexpr QUntypedBindable(QUntypedPropertyData *d, const QtPrivate::QBindableInterface *i)
         : data(d), iface(i)
     {}
+
+    Q_CORE_EXPORT explicit QUntypedBindable(QObject* obj, const QMetaProperty &property, const QtPrivate::QBindableInterface *i);
+    Q_CORE_EXPORT explicit QUntypedBindable(QObject* obj, const char* property, const QtPrivate::QBindableInterface *i);
 
 public:
     constexpr QUntypedBindable() = default;
@@ -745,6 +802,12 @@ public:
         }
     }
 
+    explicit QBindable(QObject *obj, const QMetaProperty &property)
+        : QUntypedBindable(obj, property, &QtPrivate::PropertyAdaptorSlotObjectHelpers::iface<T>) {}
+
+    explicit QBindable(QObject *obj, const char *property)
+        : QUntypedBindable(obj, property, &QtPrivate::PropertyAdaptorSlotObjectHelpers::iface<T>) {}
+
     QPropertyBinding<T> makeBinding(const QPropertyBindingSourceLocation &location = QT_PROPERTY_DEFAULT_BINDING_LOCATION) const
     {
         return static_cast<QPropertyBinding<T> &&>(QUntypedBindable::makeBinding(location));
@@ -774,7 +837,7 @@ public:
 #endif
         return QPropertyBinding<T>();
     }
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
     template <typename Functor>
     QPropertyBinding<T> setBinding(Functor &&f,
                                    const QPropertyBindingSourceLocation &location = QT_PROPERTY_DEFAULT_BINDING_LOCATION,
@@ -876,7 +939,7 @@ public:
         return QBindable<T>(aliasedProperty(), iface).setBinding(newBinding);
     }
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
     template <typename Functor>
     QPropertyBinding<T> setBinding(Functor &&f,
                                    const QPropertyBindingSourceLocation &location = QT_PROPERTY_DEFAULT_BINDING_LOCATION,
@@ -966,7 +1029,7 @@ public:
     explicit QObjectBindableProperty(const QPropertyBinding<T> &binding)
         : QObjectBindableProperty()
     { setBinding(binding); }
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
     template <typename Functor>
     explicit QObjectBindableProperty(Functor &&f, const QPropertyBindingSourceLocation &location = QT_PROPERTY_DEFAULT_BINDING_LOCATION,
                        typename std::enable_if_t<std::is_invocable_r_v<T, Functor&>> * = nullptr)
@@ -1059,7 +1122,7 @@ public:
         return true;
     }
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
     template <typename Functor>
     QPropertyBinding<T> setBinding(Functor &&f,
                                    const QPropertyBindingSourceLocation &location = QT_PROPERTY_DEFAULT_BINDING_LOCATION,

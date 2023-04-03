@@ -48,6 +48,8 @@
 
 #include <QtTest/private/qtesthelpers_p.h>
 
+#include <QtWidgets/private/qapplication_p.h>
+
 using namespace QTestPrivate;
 
 class tst_QComboBox : public QObject
@@ -452,11 +454,19 @@ void tst_QComboBox::setEditable()
 
 void tst_QComboBox::setPalette()
 {
-#ifdef Q_OS_MAC
-    if (QApplication::style()->inherits("QMacStyle")) {
-        QSKIP("This test doesn't make sense for pixmap-based styles");
-    }
-#endif
+    // If (a) Palettes are pixmap based and/or (b) contain color groups/roles which the
+    // resolve mask prevents from being copied, the direct comparison of the inherited
+    // palette and the parent palette will fail.
+    // To prevent that, set a simple gray system palette for QComboBox and QLineEdit
+    const QPalette comboBoxPalette = qApp->palette("QComboBox");
+    const QPalette lineEditPalette = qApp->palette("QLineEdit");
+    auto guard = qScopeGuard([&]{
+        qApp->setPalette(comboBoxPalette, "QComboBox");
+        qApp->setPalette(lineEditPalette, "QLineEdit");
+    });
+    qApp->setPalette(QPalette(Qt::gray), "QComboBox");
+    qApp->setPalette(QPalette(Qt::gray), "QLineEdit");
+
     TestWidget topLevel;
     topLevel.show();
     QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
@@ -464,16 +474,15 @@ void tst_QComboBox::setPalette()
     QPalette pal = testWidget->palette();
     pal.setColor(QPalette::Base, Qt::red);
     testWidget->setPalette(pal);
-    testWidget->setEditable(!testWidget->isEditable());
+    testWidget->setEditable(true);
 
     pal.setColor(QPalette::Base, Qt::blue);
     testWidget->setPalette(pal);
 
-    const QObjectList comboChildren = testWidget->children();
-    for (int i = 0; i < comboChildren.size(); ++i) {
-        QObject *o = comboChildren.at(i);
-        if (o->isWidgetType()) {
-            QCOMPARE(((QWidget*)o)->palette(), pal);
+    const QObjectList &comboChildren = testWidget->children();
+    for (auto *child : comboChildren) {
+        if (auto *widget = qobject_cast<QWidget *>(child)) {
+            QCOMPARE(widget->palette(), pal);
         }
     }
 
@@ -836,7 +845,7 @@ void tst_QComboBox::autoCompletionCaseSensitivity()
     TestWidget topLevel;
     topLevel.show();
     QComboBox *testWidget = topLevel.comboBox();
-    qApp->setActiveWindow(&topLevel);
+    QApplicationPrivate::setActiveWindow(&topLevel);
     testWidget->setFocus();
     QVERIFY(QTest::qWaitForWindowActive(&topLevel));
     QCOMPARE(qApp->focusWidget(), (QWidget *)testWidget);
@@ -2009,7 +2018,7 @@ void tst_QComboBox::flaggedItems()
     comboBox.setView(&listWidget);
     comboBox.move(200, 200);
     comboBox.show();
-    QApplication::setActiveWindow(&comboBox);
+    QApplicationPrivate::setActiveWindow(&comboBox);
     comboBox.activateWindow();
     comboBox.setFocus();
     QVERIFY(QTest::qWaitForWindowActive(&comboBox));
@@ -2438,7 +2447,7 @@ void tst_QComboBox::task247863_keyBoardSelection()
   combo.addItem( QLatin1String("111"));
   combo.addItem( QLatin1String("222"));
   combo.show();
-  QApplication::setActiveWindow(&combo);
+  QApplicationPrivate::setActiveWindow(&combo);
   QTRY_COMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&combo));
 
   QSignalSpy spy(&combo, &QComboBox::activated);
@@ -2464,7 +2473,7 @@ void tst_QComboBox::task220195_keyBoardSelection2()
     combo.addItem( QLatin1String("foo2"));
     combo.addItem( QLatin1String("foo3"));
     combo.show();
-    QApplication::setActiveWindow(&combo);
+    QApplicationPrivate::setActiveWindow(&combo);
     QVERIFY(QTest::qWaitForWindowActive(&combo));
 
     combo.setCurrentIndex(-1);
@@ -2750,7 +2759,7 @@ void tst_QComboBox::keyBoardNavigationWithMouse()
 
     combo.move(200, 200);
     combo.showNormal();
-    QApplication::setActiveWindow(&combo);
+    QApplicationPrivate::setActiveWindow(&combo);
     QVERIFY(QTest::qWaitForWindowActive(&combo));
 
     QCOMPARE(combo.currentText(), QLatin1String("0"));
@@ -2806,7 +2815,7 @@ void tst_QComboBox::task_QTBUG_1071_changingFocusEmitsActivated()
     layout.addWidget(&edit);
 
     w.show();
-    QApplication::setActiveWindow(&w);
+    QApplicationPrivate::setActiveWindow(&w);
     QVERIFY(QTest::qWaitForWindowActive(&w));
     cb.clearEditText();
     cb.setFocus();
@@ -3426,7 +3435,7 @@ void tst_QComboBox::task_QTBUG_52027_mapCompleterIndex()
     QCOMPARE(spy.size(), 0);
     cbox.move(200, 200);
     cbox.show();
-    QApplication::setActiveWindow(&cbox);
+    QApplicationPrivate::setActiveWindow(&cbox);
     QVERIFY(QTest::qWaitForWindowActive(&cbox));
 
     QTest::keyClicks(&cbox, "foobar2");
@@ -3452,7 +3461,7 @@ void tst_QComboBox::task_QTBUG_52027_mapCompleterIndex()
         cbox.activateWindow();
     }
 
-    QApplication::setActiveWindow(&cbox);
+    QApplicationPrivate::setActiveWindow(&cbox);
     QVERIFY(QTest::qWaitForWindowActive(&cbox));
 
     QTest::keyClicks(&cbox, "foobar1");
@@ -3520,7 +3529,7 @@ void tst_QComboBox::checkEmbeddedLineEditWhenStyleSheetIsSet()
     layout->addWidget(comboBox);
     topLevel.show();
     comboBox->setEditable(true);
-    QApplication::setActiveWindow(&topLevel);
+    QApplicationPrivate::setActiveWindow(&topLevel);
     QVERIFY(QTest::qWaitForWindowActive(&topLevel));
 
     QImage grab = comboBox->grab().toImage();

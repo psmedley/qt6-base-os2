@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(hellogles3 LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -10,6 +11,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/opengl/hellogles3")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui OpenGL)
+
+qt_standard_project_setup()
 
 qt_add_executable(hellogles3
     ../hellogl2/logo.cpp ../hellogl2/logo.h
@@ -22,10 +25,10 @@ set_target_properties(hellogles3 PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-target_link_libraries(hellogles3 PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::OpenGL
+target_link_libraries(hellogles3 PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::OpenGL
 )
 
 # Resources:

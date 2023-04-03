@@ -26,6 +26,7 @@
 #include <QtGui/qguiapplication.h>
 #include <qdebug.h>
 
+#include <QtGui/private/qmacmimeregistry_p.h>
 #include <QtGui/private/qcoregraphics_p.h>
 
 #if QT_CONFIG(vulkan)
@@ -64,47 +65,14 @@ QPlatformNativeInterface::NativeResourceForIntegrationFunction QCocoaNativeInter
         return NativeResourceForIntegrationFunction(QCocoaNativeInterface::registerTouchWindow);
     if (resource.toLower() == "setembeddedinforeignview")
         return NativeResourceForIntegrationFunction(QCocoaNativeInterface::setEmbeddedInForeignView);
-    if (resource.toLower() == "setcontentborderthickness")
-        return NativeResourceForIntegrationFunction(QCocoaNativeInterface::setContentBorderThickness);
     if (resource.toLower() == "registercontentborderarea")
         return NativeResourceForIntegrationFunction(QCocoaNativeInterface::registerContentBorderArea);
     if (resource.toLower() == "setcontentborderareaenabled")
         return NativeResourceForIntegrationFunction(QCocoaNativeInterface::setContentBorderAreaEnabled);
-    if (resource.toLower() == "setnstoolbar")
-        return NativeResourceForIntegrationFunction(QCocoaNativeInterface::setNSToolbar);
     if (resource.toLower() == "testcontentborderposition")
         return NativeResourceForIntegrationFunction(QCocoaNativeInterface::testContentBorderPosition);
 
     return nullptr;
-}
-
-QPixmap QCocoaNativeInterface::defaultBackgroundPixmapForQWizard()
-{
-    // Note: starting with macOS 10.14, the KeyboardSetupAssistant app bundle no
-    // longer contains the "Background.png" image. This function then returns a
-    // null pixmap.
-    const int ExpectedImageWidth = 242;
-    const int ExpectedImageHeight = 414;
-    QCFType<CFArrayRef> urls = LSCopyApplicationURLsForBundleIdentifier(
-        CFSTR("com.apple.KeyboardSetupAssistant"), nullptr);
-    if (urls && CFArrayGetCount(urls) > 0) {
-        CFURLRef url = (CFURLRef)CFArrayGetValueAtIndex(urls, 0);
-        QCFType<CFBundleRef> bundle = CFBundleCreate(kCFAllocatorDefault, url);
-        if (bundle) {
-            url = CFBundleCopyResourceURL(bundle, CFSTR("Background"), CFSTR("png"), nullptr);
-            if (url) {
-                QCFType<CGImageSourceRef> imageSource = CGImageSourceCreateWithURL(url, nullptr);
-                QCFType<CGImageRef> image = CGImageSourceCreateImageAtIndex(imageSource, 0, nullptr);
-                if (image) {
-                    int width = CGImageGetWidth(image);
-                    int height = CGImageGetHeight(image);
-                    if (width == ExpectedImageWidth && height == ExpectedImageHeight)
-                        return QPixmap::fromImage(qt_mac_toQImage(image));
-                }
-            }
-        }
-    }
-    return QPixmap();
 }
 
 void QCocoaNativeInterface::clearCurrentThreadCocoaEventDispatcherInterruptFlag()
@@ -120,7 +88,7 @@ void QCocoaNativeInterface::onAppFocusWindowChanged(QWindow *window)
 
 void QCocoaNativeInterface::registerDraggedTypes(const QStringList &types)
 {
-    qt_mac_registerDraggedTypes(types);
+    QMacMimeRegistry::registerDraggedTypes(types);
 }
 
 void QCocoaNativeInterface::setEmbeddedInForeignView(QPlatformWindow *window, bool embedded)
@@ -138,16 +106,6 @@ void QCocoaNativeInterface::registerTouchWindow(QWindow *window,  bool enable)
     QCocoaWindow *cocoaWindow = static_cast<QCocoaWindow *>(window->handle());
     if (cocoaWindow)
         cocoaWindow->registerTouch(enable);
-}
-
-void QCocoaNativeInterface::setContentBorderThickness(QWindow *window, int topThickness, int bottomThickness)
-{
-    if (!window)
-        return;
-
-    QCocoaWindow *cocoaWindow = static_cast<QCocoaWindow *>(window->handle());
-    if (cocoaWindow)
-        cocoaWindow->setContentBorderThickness(topThickness, bottomThickness);
 }
 
 void QCocoaNativeInterface::registerContentBorderArea(QWindow *window, quintptr identifier, int upper, int lower)
@@ -168,15 +126,6 @@ void QCocoaNativeInterface::setContentBorderAreaEnabled(QWindow *window, quintpt
     QCocoaWindow *cocoaWindow = static_cast<QCocoaWindow *>(window->handle());
     if (cocoaWindow)
         cocoaWindow->setContentBorderAreaEnabled(identifier, enable);
-}
-
-void QCocoaNativeInterface::setNSToolbar(QWindow *window, void *nsToolbar)
-{
-    QCocoaIntegration::instance()->setToolbar(window, static_cast<NSToolbar *>(nsToolbar));
-
-    QCocoaWindow *cocoaWindow = static_cast<QCocoaWindow *>(window->handle());
-    if (cocoaWindow)
-        cocoaWindow->updateNSToolbar();
 }
 
 bool QCocoaNativeInterface::testContentBorderPosition(QWindow *window, int position)

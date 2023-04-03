@@ -64,6 +64,17 @@ QT_WARNING_DISABLE_MSVC(4723)
         return QImage(); \
     }
 
+Q_TRACE_PREFIX(qtgui,
+   "#include <qimagereader.h>"
+);
+
+Q_TRACE_METADATA(qtgui,
+"ENUM { } QImage::Format;" \
+"FLAGS { } Qt::ImageConversionFlags;"
+);
+
+Q_TRACE_PARAM_REPLACE(Qt::AspectRatioMode, int);
+Q_TRACE_PARAM_REPLACE(Qt::TransformationMode, int);
 
 static QImage rotated90(const QImage &src);
 static QImage rotated180(const QImage &src);
@@ -71,7 +82,7 @@ static QImage rotated270(const QImage &src);
 
 static int next_qimage_serial_number()
 {
-    static QBasicAtomicInt serial = Q_BASIC_ATOMIC_INITIALIZER(0);
+    Q_CONSTINIT static QBasicAtomicInt serial = Q_BASIC_ATOMIC_INITIALIZER(0);
     return 1 + serial.fetchAndAddRelaxed(1);
 }
 
@@ -95,7 +106,7 @@ QImageData::QImageData()
     Creates a new image data.
     Returns \nullptr if invalid parameters are give or anything else failed.
 */
-QImageData * QImageData::create(const QSize &size, QImage::Format format)
+QImageData * Q_TRACE_INSTRUMENT(qtgui) QImageData::create(const QSize &size, QImage::Format format)
 {
     if (size.isEmpty() || format <= QImage::Format_Invalid || format >= QImage::NImageFormats)
         return nullptr;                             // invalid parameter(s)
@@ -1183,7 +1194,7 @@ static void copyMetadata(QImage *dst, const QImage &src)
 
     \sa QImage()
 */
-QImage QImage::copy(const QRect& r) const
+QImage Q_TRACE_INSTRUMENT(qtgui) QImage::copy(const QRect& r) const
 {
     Q_TRACE_SCOPE(QImage_copy, r);
     if (!d)
@@ -1913,7 +1924,7 @@ void QImage::fill(const QColor &color)
         if (!hasAlphaChannel())
             a = 1.0f;
         if (depth() == 64) {
-            QRgbaFloat16 c16{r, g, b, a};
+            QRgbaFloat16 c16{qfloat16(r), qfloat16(g), qfloat16(b), qfloat16(a)};
             if (d->format == Format_RGBA16FPx4_Premultiplied)
                 c16 = c16.premultiplied();
             qt_rectfill<QRgbaFloat16>(reinterpret_cast<QRgbaFloat16 *>(d->data), c16,
@@ -1999,11 +2010,11 @@ void QImage::invertPixels(InvertMode mode)
         qfloat16 *p = reinterpret_cast<qfloat16 *>(d->data);
         qfloat16 *end = reinterpret_cast<qfloat16 *>(d->data + d->nbytes);
         while (p < end) {
-            p[0] = 1.0f - p[0];
-            p[1] = 1.0f - p[1];
-            p[2] = 1.0f - p[2];
+            p[0] = qfloat16(1) - p[0];
+            p[1] = qfloat16(1) - p[1];
+            p[2] = qfloat16(1) - p[2];
             if (mode == InvertRgba)
-                p[3] = 1.0f - p[3];
+                p[3] = qfloat16(1) - p[3];
             p += 4;
         }
     } else if (format() >= QImage::Format_RGBX32FPx4 && format() <= QImage::Format_RGBA32FPx4_Premultiplied) {
@@ -2806,7 +2817,7 @@ void QImage::setPixelColor(int x, int y, const QColor &color)
         color.getRgbF(&r, &g, &b, &a);
         if (d->format == Format_RGBX16FPx4)
             a = 1.0f;
-        QRgbaFloat16 c16f{r, g, b, a};
+        QRgbaFloat16 c16f{qfloat16(r), qfloat16(g), qfloat16(b), qfloat16(a)};
         if (d->format == Format_RGBA16FPx4_Premultiplied)
             c16f = c16f.premultiplied();
         ((QRgbaFloat16 *)s)[x] = c16f;
@@ -2981,7 +2992,7 @@ bool QImage::isGrayscale() const
     \sa isNull(), {QImage#Image Transformations}{Image
     Transformations}
 */
-QImage QImage::scaled(const QSize& s, Qt::AspectRatioMode aspectMode, Qt::TransformationMode mode) const
+QImage Q_TRACE_INSTRUMENT(qtgui) QImage::scaled(const QSize& s, Qt::AspectRatioMode aspectMode, Qt::TransformationMode mode) const
 {
     if (!d) {
         qWarning("QImage::scaled: Image is a null image");
@@ -3018,7 +3029,7 @@ QImage QImage::scaled(const QSize& s, Qt::AspectRatioMode aspectMode, Qt::Transf
 
     \sa {QImage#Image Transformations}{Image Transformations}
 */
-QImage QImage::scaledToWidth(int w, Qt::TransformationMode mode) const
+QImage Q_TRACE_INSTRUMENT(qtgui) QImage::scaledToWidth(int w, Qt::TransformationMode mode) const
 {
     if (!d) {
         qWarning("QImage::scaleWidth: Image is a null image");
@@ -3048,7 +3059,7 @@ QImage QImage::scaledToWidth(int w, Qt::TransformationMode mode) const
 
     \sa {QImage#Image Transformations}{Image Transformations}
 */
-QImage QImage::scaledToHeight(int h, Qt::TransformationMode mode) const
+QImage Q_TRACE_INSTRUMENT(qtgui) QImage::scaledToHeight(int h, Qt::TransformationMode mode) const
 {
     if (!d) {
         qWarning("QImage::scaleHeight: Image is a null image");
@@ -3081,7 +3092,7 @@ QImage QImage::scaledToHeight(int h, Qt::TransformationMode mode) const
     \sa createHeuristicMask(), {QImage#Image Transformations}{Image
     Transformations}
 */
-QImage QImage::createAlphaMask(Qt::ImageConversionFlags flags) const
+QImage Q_TRACE_INSTRUMENT(qtgui) QImage::createAlphaMask(Qt::ImageConversionFlags flags) const
 {
     if (!d || d->format == QImage::Format_RGB32)
         return QImage();
@@ -3533,7 +3544,7 @@ static inline void rgbSwapped_generic(int width, int height, const QImage *src, 
 /*!
     \internal
 */
-QImage QImage::rgbSwapped_helper() const
+QImage Q_TRACE_INSTRUMENT(qtgui) QImage::rgbSwapped_helper() const
 {
     if (isNull())
         return *this;
@@ -4766,12 +4777,15 @@ static QImage rotated270(const QImage &image)
     Transformations}
 */
 
-QImage QImage::transformed(const QTransform &matrix, Qt::TransformationMode mode ) const
+QImage Q_TRACE_INSTRUMENT(qtgui) QImage::transformed(const QTransform &matrix, Qt::TransformationMode mode ) const
 {
     if (!d)
         return QImage();
 
-    Q_TRACE_SCOPE(QImage_transformed, matrix, mode);
+    Q_TRACE_PARAM_REPLACE(const QTransform &, double[9]);
+    Q_TRACE_SCOPE(QImage_transformed, QList<double>({matrix.m11(), matrix.m12(), matrix.m13(),
+                                                  matrix.m21(), matrix.m22(), matrix.m23(),
+                                                  matrix.m31(), matrix.m32(), matrix.m33()}).data(), mode);
 
     // source image data
     const int ws = width();

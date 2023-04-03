@@ -1,4 +1,5 @@
-# Generated from tableview-span-navigation.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tableview-span-navigation Binary:
@@ -10,10 +11,7 @@ qt_internal_add_manual_test(tableview-span-navigation
         main.cpp
     INCLUDE_DIRECTORIES
         .
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )
-
-#### Keys ignored in scope 1:.:.:tableview-span-navigation.pro:<TRUE>:
-# TEMPLATE = "app"

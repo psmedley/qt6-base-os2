@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #
 # Self contained Platform Settings for Android
 #
@@ -33,7 +36,7 @@ function(qt_get_android_sdk_jar_for_api api out_jar_location)
 endfunction()
 
 # Minimum recommend android SDK api version
-set(QT_ANDROID_API_VERSION "android-31")
+set(QT_ANDROID_API_VERSION "android-33")
 
 function(qt_internal_sort_android_platforms out_var)
     if(CMAKE_VERSION GREATER_EQUAL 3.18)
@@ -200,6 +203,7 @@ function(qt_internal_android_test_arguments target out_test_runner out_test_argu
         "--skip-install-root"
         "--make" "${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target ${target}_make_apk"
         "--apk" "${apk_dir}/${target}.apk"
+        "--timeout" "-1"
         "--verbose"
         PARENT_SCOPE
     )

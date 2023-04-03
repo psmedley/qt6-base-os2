@@ -10,13 +10,14 @@
 #include <QtCore/qatomic.h>
 #include <QtCore/qbytearray.h>
 #include <QtCore/qcompare.h>
-#include <QtCore/qscopeguard.h>
 #include <QtCore/qdatastream.h>
+#include <QtCore/qfloat16.h>
+#include <QtCore/qhashfunctions.h>
 #include <QtCore/qiterable.h>
 #ifndef QT_NO_QOBJECT
 #include <QtCore/qobjectdefs.h>
 #endif
-#include <QtCore/qhashfunctions.h>
+#include <QtCore/qscopeguard.h>
 
 #include <array>
 #include <new>
@@ -24,6 +25,8 @@
 #include <list>
 #include <map>
 #include <functional>
+#include <optional>
+#include <QtCore/q20type_traits.h>
 
 #ifdef Bool
 #error qmetatype.h must be included before any header file that defines Bool
@@ -119,6 +122,7 @@ inline constexpr int qMetaTypeId();
     F(QCborValue, 53, QCborValue) \
     F(QCborArray, 54, QCborArray) \
     F(QCborMap, 55, QCborMap) \
+    F(Float16, 63, qfloat16) \
     QT_FOR_EACH_STATIC_ITEMMODEL_CLASS(F)
 
 #define QT_FOR_EACH_STATIC_CORE_POINTER(F)\
@@ -225,6 +229,20 @@ struct QMetaObject;
 namespace QtPrivate
 {
 
+class QMetaTypeInterface;
+
+// MSVC is the only supported compiler that includes the type of a variable in
+// its mangled form, so it's not binary-compatible to drop the const in
+// QMetaTypeInterfaceWrapper::metaType for it, which means we must keep the
+// mutable field until Qt 7.
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0) || defined(QT_BOOTSTRAPPED) || !defined(Q_CC_MSVC)
+#  define QMTI_MUTABLE
+using NonConstMetaTypeInterface = QMetaTypeInterface;
+#else
+#  define QMTI_MUTABLE mutable
+using NonConstMetaTypeInterface = const QMetaTypeInterface;
+#endif
+
 class QMetaTypeInterface
 {
 public:
@@ -232,7 +250,7 @@ public:
     ushort alignment;
     uint size;
     uint flags;
-    mutable QBasicAtomicInt typeId;
+    QMTI_MUTABLE QBasicAtomicInt typeId;
 
     using MetaObjectFn = const QMetaObject *(*)(const QMetaTypeInterface *);
     MetaObjectFn metaObjectFn;
@@ -261,6 +279,7 @@ public:
     using LegacyRegisterOp = void (*)();
     LegacyRegisterOp legacyRegisterOp;
 };
+#undef QMTI_MUTABLE
 
 /*!
     This template is used for implicit conversion from type From to type To.
@@ -293,14 +312,14 @@ To convertImplicit(const From& from)
 
 class Q_CORE_EXPORT QMetaType {
 public:
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
     // The code that actually gets compiled.
     enum Type {
         // these are merged with QVariant
         QT_FOR_EACH_STATIC_TYPE(QT_DEFINE_METATYPE_ID)
 
         FirstCoreType = Bool,
-        LastCoreType = QVariantPair,
+        LastCoreType = Float16,
         FirstGuiType = QFont,
         LastGuiType = QColorSpace,
         FirstWidgetsType = QSizePolicy,
@@ -329,9 +348,10 @@ public:
         QByteArrayList = 49, QObjectStar = 39, SChar = 40,
         Void = 43,
         Nullptr = 51,
-        QVariantMap = 8, QVariantList = 9, QVariantHash = 28,
+        QVariantMap = 8, QVariantList = 9, QVariantHash = 28, QVariantPair = 58,
         QCborSimpleType = 52, QCborValue = 53, QCborArray = 54, QCborMap = 55,
         Char16 = 56, Char32 = 57,
+        Int128 = 59, UInt128 = 60, Float128 = 61, BFloat16 = 62, Float16 = 63,
 
         // Gui types
         QFont = 0x1000, QPixmap = 0x1001, QBrush = 0x1002, QColor = 0x1003, QPalette = 0x1004,
@@ -342,8 +362,8 @@ public:
 
         // Widget types
         QSizePolicy = 0x2000,
-        LastCoreType = Char32,
-        LastGuiType = QColorSpace,
+
+        // Start-point for client-code types:
         User = 65536
     };
 #endif
@@ -366,6 +386,9 @@ public:
         IsPointer = 0x800,
         IsQmlList =0x1000, // used in the QML engine to recognize QQmlListProperty<T> and list<T>
         IsConst = 0x2000,
+        // since 6.5:
+        NeedsCopyConstruction = 0x4000,
+        NeedsMoveConstruction = 0x8000,
     };
     Q_DECLARE_FLAGS(TypeFlags, TypeFlag)
 
@@ -411,6 +434,11 @@ public:
 
     bool isValid() const;
     bool isRegistered() const;
+    void registerType() const
+    {
+        // "register" is a reserved keyword
+        registerHelper();
+    }
 #if QT_CORE_REMOVED_SINCE(6, 1) || defined(Q_QDOC)
     int id() const;
 #else
@@ -419,12 +447,7 @@ public:
     int id(int = 0) const
     {
         // keep in sync with the version in removed_api.cpp
-        if (d_ptr) {
-            if (int id = d_ptr->typeId.loadRelaxed())
-                return id;
-            return idHelper();
-        }
-        return 0;
+        return registerHelper();
     }
 #endif
     constexpr qsizetype sizeOf() const;
@@ -440,6 +463,10 @@ public:
     QPartialOrdering compare(const void *lhs, const void *rhs) const;
     bool equals(const void *lhs, const void *rhs) const;
 
+    bool isDefaultConstructible() const noexcept { return d_ptr && isDefaultConstructible(d_ptr); }
+    bool isCopyConstructible() const noexcept { return d_ptr && isCopyConstructible(d_ptr); }
+    bool isMoveConstructible() const noexcept { return d_ptr && isMoveConstructible(d_ptr); }
+    bool isDestructible() const noexcept { return d_ptr && isDestructible(d_ptr); }
     bool isEqualityComparable() const;
     bool isOrdered() const;
 
@@ -475,9 +502,10 @@ public:
     }
     friend bool operator!=(QMetaType a, QMetaType b) { return !(a == b); }
 
-public:
-
 #ifndef QT_NO_DEBUG_STREAM
+private:
+    friend Q_CORE_EXPORT QDebug operator<<(QDebug d, QMetaType m);
+public:
     bool debugStream(QDebug& dbg, const void *rhs);
     bool hasRegisteredDebugStreamOperator() const;
 
@@ -577,7 +605,14 @@ public:
         auto converter = [function = std::move(function)](const void *from, void *to) -> bool {
             const From *f = static_cast<const From *>(from);
             To *t = static_cast<To *>(to);
-            *t = function(*f);
+            auto &&r = function(*f);
+            if constexpr (std::is_same_v<q20::remove_cvref_t<decltype(r)>, std::optional<To>>) {
+                if (!r)
+                    return false;
+                *t = *std::forward<decltype(r)>(r);
+            } else {
+                *t = std::forward<decltype(r)>(r);
+            }
             return true;
         };
         return registerConverterImpl<From, To>(std::move(converter), fromType, toType);
@@ -686,7 +721,7 @@ public:
 
     static bool hasRegisteredMutableViewFunction(QMetaType fromType, QMetaType toType);
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
     template<typename, bool> friend struct QtPrivate::SequentialValueTypeIsMetaType;
     template<typename, bool> friend struct QtPrivate::AssociativeValueTypeIsMetaType;
     template<typename, bool> friend struct QtPrivate::IsMetaTypePair;
@@ -706,7 +741,28 @@ public:
     const QtPrivate::QMetaTypeInterface *iface() const { return d_ptr; }
 
 private:
+    static bool isDefaultConstructible(const QtPrivate::QMetaTypeInterface *) noexcept Q_DECL_PURE_FUNCTION;
+    static bool isCopyConstructible(const QtPrivate::QMetaTypeInterface *) noexcept Q_DECL_PURE_FUNCTION;
+    static bool isMoveConstructible(const QtPrivate::QMetaTypeInterface *) noexcept Q_DECL_PURE_FUNCTION;
+    static bool isDestructible(const QtPrivate::QMetaTypeInterface *) noexcept Q_DECL_PURE_FUNCTION;
+
+#if QT_CORE_REMOVED_SINCE(6, 5)
     int idHelper() const;
+#endif
+    static int registerHelper(const QtPrivate::QMetaTypeInterface *iface);
+    int registerHelper() const
+    {
+        // keep in sync with the QMetaType::id() version in removed_api.cpp
+        if (d_ptr) {
+            if (int id = d_ptr->typeId.loadRelaxed())
+                return id;
+            return registerHelper(d_ptr);
+        }
+        return 0;
+    }
+
+    friend int qRegisterMetaType(QMetaType meta);
+
     friend class QVariant;
     const QtPrivate::QMetaTypeInterface *d_ptr = nullptr;
 };
@@ -805,6 +861,16 @@ namespace QtPrivate
     template <typename T> struct MetatypeDecay<const T>     { using type = T; };
     template <typename T> struct MetatypeDecay<const T &>   { using type = T; };
 
+    template <typename T> struct IsPointerDeclaredOpaque  :
+            std::disjunction<std::is_member_pointer<T>,
+                             std::is_function<std::remove_pointer_t<T>>>
+    {};
+    template <> struct IsPointerDeclaredOpaque<void *>      : std::true_type {};
+    template <> struct IsPointerDeclaredOpaque<const void *> : std::true_type {};
+
+    // Note: this does not check that T = U* isn't pointing to a
+    // forward-declared type. You may want to combine with
+    // checkTypeIsSuitableForMetaType().
     template<typename T>
     struct IsPointerToTypeDerivedFromQObject
     {
@@ -839,7 +905,6 @@ namespace QtPrivate
         static yes_type checkType(const QObject* );
 #endif
         static no_type checkType(...);
-        static_assert(sizeof(T), "Type argument of Q_PROPERTY or Q_DECLARE_METATYPE(T*) must be fully defined");
         enum { Value = sizeof(checkType(static_cast<T*>(nullptr))) == sizeof(yes_type) };
     };
 
@@ -857,6 +922,9 @@ namespace QtPrivate
             IsGadgetOrDerivedFrom = true
         };
     };
+
+    template <typename T>
+    using IsRealGadget = std::bool_constant<IsGadgetHelper<T>::IsRealGadget>;
 
     template<typename T, typename Enable = void>
     struct IsPointerToGadgetHelper { enum { IsRealGadget = false, IsGadgetOrDerivedFrom = false }; };
@@ -903,7 +971,12 @@ namespace QtPrivate
         static constexpr const QMetaObject *metaObjectFunction(const QMetaTypeInterface *) { return &T::staticMetaObject; }
     };
     template<typename T>
-    struct MetaObjectForType<T, typename std::enable_if<IsGadgetHelper<T>::IsGadgetOrDerivedFrom>::type>
+    struct MetaObjectForType<T, std::enable_if_t<
+        std::disjunction_v<
+            std::bool_constant<IsGadgetHelper<T>::IsGadgetOrDerivedFrom>,
+            std::is_base_of<QObject, T>
+        >
+    >>
     {
         static constexpr const QMetaObject *value() { return &T::staticMetaObject; }
         static constexpr const QMetaObject *metaObjectFunction(const QMetaTypeInterface *) { return &T::staticMetaObject; }
@@ -1095,12 +1168,28 @@ namespace QtPrivate
     };
 #endif
 
+    template <typename X> static constexpr bool checkTypeIsSuitableForMetaType()
+    {
+        using T = typename MetatypeDecay<X>::type;
+        static_assert(is_complete<T, void>::value || std::is_void_v<T>,
+                "Meta Types must be fully defined");
+        static_assert(!std::is_reference_v<T>,
+                "Meta Types cannot be non-const references or rvalue references.");
+        if constexpr (std::is_pointer_v<T> && !IsPointerDeclaredOpaque<T>::value) {
+            using Pointed = std::remove_pointer_t<T>;
+            static_assert(is_complete<Pointed, void>::value,
+                    "Pointer Meta Types must either point to fully-defined types "
+                    "or be declared with Q_DECLARE_OPAQUE_POINTER(T *)");
+        }
+        return true;
+    }
+
     Q_CORE_EXPORT bool isBuiltinType(const QByteArray &type);
 } // namespace QtPrivate
 
 template <typename T, int =
     QtPrivate::IsPointerToTypeDerivedFromQObject<T>::Value ? QMetaType::PointerToQObject :
-    QtPrivate::IsGadgetHelper<T>::IsRealGadget             ? QMetaType::IsGadget :
+    QtPrivate::IsRealGadget<T>::value                      ? QMetaType::IsGadget :
     QtPrivate::IsPointerToGadgetHelper<T>::IsRealGadget    ? QMetaType::PointerToGadget :
     QtPrivate::IsQEnumHelper<T>::Value                     ? QMetaType::IsEnumeration : 0>
 struct QMetaTypeIdQObject
@@ -1161,8 +1250,10 @@ namespace QtPrivate {
     struct QMetaTypeTypeFlags
     {
         enum { Flags = (QTypeInfo<T>::isRelocatable ? QMetaType::RelocatableType : 0)
-                     | (QTypeInfo<T>::isComplex ? QMetaType::NeedsConstruction : 0)
-                     | (QTypeInfo<T>::isComplex ? QMetaType::NeedsDestruction : 0)
+                     | ((!std::is_default_constructible_v<T> || !QTypeInfo<T>::isValueInitializationBitwiseZero) ? QMetaType::NeedsConstruction : 0)
+                     | (!std::is_trivially_destructible_v<T> ? QMetaType::NeedsDestruction : 0)
+                     | (!std::is_trivially_copy_constructible_v<T> ? QMetaType::NeedsCopyConstruction : 0)
+                     | (!std::is_trivially_move_constructible_v<T> ? QMetaType::NeedsMoveConstruction : 0)
                      | (IsPointerToTypeDerivedFromQObject<T>::Value ? QMetaType::PointerToQObject : 0)
                      | (IsSharedPointerToTypeDerivedFromQObject<T>::Value ? QMetaType::SharedPointerToQObject : 0)
                      | (IsWeakPointerToTypeDerivedFromQObject<T>::Value ? QMetaType::WeakPointerToQObject : 0)
@@ -1284,6 +1375,9 @@ template <typename T>
 inline constexpr int qMetaTypeId()
 {
     if constexpr (bool(QMetaTypeId2<T>::IsBuiltIn)) {
+        // this has the same result as the below code, but avoids asking the
+        // compiler to load a global variable whose value we know at compile
+        // time
         return QMetaTypeId2<T>::MetaType;
     } else {
         return QMetaType::fromType<T>().id();
@@ -1295,6 +1389,11 @@ inline constexpr int qRegisterMetaType()
 {
     int id = qMetaTypeId<T>();
     return id;
+}
+
+inline int qRegisterMetaType(QMetaType meta)
+{
+    return meta.registerHelper();
 }
 
 #ifndef QT_NO_QOBJECT
@@ -1387,11 +1486,8 @@ struct QMetaTypeIdQObject<T, QMetaType::IsEnumeration>
 
 #define Q_DECLARE_OPAQUE_POINTER(POINTER)                               \
     QT_BEGIN_NAMESPACE namespace QtPrivate {                            \
-        template <>                                                     \
-        struct IsPointerToTypeDerivedFromQObject<POINTER >              \
-        {                                                               \
-            enum { Value = false };                                     \
-        };                                                              \
+    template <> struct IsPointerDeclaredOpaque<POINTER>                 \
+        : std::true_type {};                                            \
     } QT_END_NAMESPACE                                                  \
     /**/
 
@@ -1403,6 +1499,7 @@ struct QMetaTypeIdQObject<T, QMetaType::IsEnumeration>
     struct QMetaTypeId< TYPE >                                          \
     {                                                                   \
         enum { Defined = 1 };                                           \
+        static_assert(QtPrivate::checkTypeIsSuitableForMetaType<TYPE>());   \
         static int qt_metatype_id()                                     \
             {                                                           \
                 Q_CONSTINIT static QBasicAtomicInt metatype_id = Q_BASIC_ATOMIC_INITIALIZER(0); \
@@ -2292,10 +2389,11 @@ class QMetaTypeForType
 {
 public:
     static constexpr decltype(typenameHelper<S>()) name = typenameHelper<S>();
+    static constexpr unsigned Flags = QMetaTypeTypeFlags<S>::Flags;
 
     static constexpr QMetaTypeInterface::DefaultCtrFn getDefaultCtr()
     {
-        if constexpr (std::is_default_constructible_v<S>) {
+        if constexpr (std::is_default_constructible_v<S> && !QTypeInfo<S>::isValueInitializationBitwiseZero) {
             return [](const QMetaTypeInterface *, void *addr) { new (addr) S(); };
         } else {
             return nullptr;
@@ -2304,7 +2402,7 @@ public:
 
     static constexpr QMetaTypeInterface::CopyCtrFn getCopyCtr()
     {
-        if constexpr (std::is_copy_constructible_v<S>) {
+        if constexpr (std::is_copy_constructible_v<S> && !std::is_trivially_copy_constructible_v<S>) {
             return [](const QMetaTypeInterface *, void *addr, const void *other) {
                 new (addr) S(*reinterpret_cast<const S *>(other));
             };
@@ -2315,7 +2413,7 @@ public:
 
     static constexpr QMetaTypeInterface::MoveCtrFn getMoveCtr()
     {
-        if constexpr (std::is_move_constructible_v<S>) {
+        if constexpr (std::is_move_constructible_v<S> && !std::is_trivially_move_constructible_v<S>) {
             return [](const QMetaTypeInterface *, void *addr, void *other) {
                 new (addr) S(std::move(*reinterpret_cast<S *>(other)));
             };
@@ -2356,11 +2454,17 @@ public:
 template<typename T>
 struct QMetaTypeInterfaceWrapper
 {
-    static inline constexpr const QMetaTypeInterface metaType = {
+    // if the type ID for T is known at compile-time, then we can declare
+    // the QMetaTypeInterface object const; otherwise, we declare it as
+    // non-const and the .typeId is updated by QMetaType::idHelper().
+    static constexpr bool IsConstMetaTypeInterface = !!BuiltinMetaType<T>::value;
+    using InterfaceType = std::conditional_t<IsConstMetaTypeInterface, const QMetaTypeInterface, NonConstMetaTypeInterface>;
+
+    static inline InterfaceType metaType = {
         /*.revision=*/ 0,
         /*.alignment=*/ alignof(T),
         /*.size=*/ sizeof(T),
-        /*.flags=*/ QMetaTypeTypeFlags<T>::Flags,
+        /*.flags=*/ QMetaTypeForType<T>::Flags,
         /*.typeId=*/ BuiltinMetaType<T>::value,
         /*.metaObjectFn=*/ MetaObjectForType<T>::metaObjectFunction,
         /*.name=*/ QMetaTypeForType<T>::getName(),
@@ -2464,6 +2568,7 @@ struct TypeAndForceComplete
 template<typename T>
 constexpr const QMetaTypeInterface *qMetaTypeInterfaceForType()
 {
+    // don't check the type is suitable here
     using Ty = typename MetatypeDecay<T>::type;
     return &QMetaTypeInterfaceWrapper<Ty>::metaType;
 }
@@ -2476,13 +2581,18 @@ constexpr const QMetaTypeInterface *qTryMetaTypeInterfaceForType()
     using Ty = typename MetatypeDecay<T>::type;
     using Tz = qRemovePointerLike_t<Ty>;
 
-    if constexpr (ForceComplete::value) {
+    if constexpr (std::is_void_v<Tz>) {
+        // early out to avoid expanding the rest of the templates
+        return &QMetaTypeInterfaceWrapper<Ty>::metaType;
+    } else if constexpr (ForceComplete::value) {
+        checkTypeIsSuitableForMetaType<Ty>();
         return &QMetaTypeInterfaceWrapper<Ty>::metaType;
     } else if constexpr (std::is_reference_v<Tz>) {
         return nullptr;
     } else if constexpr (!is_complete<Tz, Unique>::value) {
         return nullptr;
     } else {
+        // don't check the type is suitable here
         return &QMetaTypeInterfaceWrapper<Ty>::metaType;
     }
 }
@@ -2492,6 +2602,7 @@ constexpr const QMetaTypeInterface *qTryMetaTypeInterfaceForType()
 template<typename T>
 constexpr QMetaType QMetaType::fromType()
 {
+    QtPrivate::checkTypeIsSuitableForMetaType<T>();
     return QMetaType(QtPrivate::qMetaTypeInterfaceForType<T>());
 }
 

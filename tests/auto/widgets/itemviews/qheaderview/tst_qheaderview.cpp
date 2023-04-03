@@ -12,6 +12,7 @@
 #include <QTest>
 #include <QTreeWidget>
 #include <QtWidgets/private/qheaderview_p.h>
+#include <QtWidgets/private/qapplication_p.h>
 
 using BoolList = QList<bool>;
 using IntList = QList<int>;
@@ -1612,7 +1613,7 @@ void tst_QHeaderView::focusPolicy()
 
     widget.show();
     widget.setFocus(Qt::OtherFocusReason);
-    QApplication::setActiveWindow(&widget);
+    QApplicationPrivate::setActiveWindow(&widget);
     widget.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&widget));
     QVERIFY(widget.hasFocus());
@@ -2841,10 +2842,6 @@ void tst_QHeaderView::calculateAndCheck(int cppline, const int precalced_compare
 
     int sum_visual = 0;
     int sum_logical = 0;
-    int sum_size = 0;
-    int sum_hidden_size = 0;
-    int sum_lookup_visual = 0;
-    int sum_lookup_logical = 0;
 
     int chk_visual = 1;
     int chk_logical = 1;
@@ -2864,7 +2861,6 @@ void tst_QHeaderView::calculateAndCheck(int cppline, const int precalced_compare
 
         sum_visual += visual;
         sum_logical += logical;
-        sum_size += ssize;
 
         if (visual >= 0) {
             chk_visual %= p2;
@@ -2884,7 +2880,6 @@ void tst_QHeaderView::calculateAndCheck(int cppline, const int precalced_compare
         if (view->isSectionHidden(i)) {
             view->showSection(i);
             int hiddensize = view->sectionSize(i);
-            sum_hidden_size += hiddensize;
             chk_hidden_size %= p2;
             chk_hidden_size += ( (hiddensize + 1) * (i + 1) * p1);
             // (hiddensize + 1) in the above to differ between hidden and size 0
@@ -2903,8 +2898,6 @@ void tst_QHeaderView::calculateAndCheck(int cppline, const int precalced_compare
     for (int u = 0; u < max_lookup_count; ++u) {
         int visu = view->visualIndexAt(u);
         int logi = view->logicalIndexAt(u);
-        sum_lookup_visual += logi;
-        sum_lookup_logical += visu;
         chk_lookup_visual %= p2;
         chk_lookup_visual *= ( (u + 1) * p1 * (visu + 2));
         chk_lookup_logical %= p2;
@@ -3380,7 +3373,7 @@ void tst_QHeaderView::stretchAndRestoreLastSection()
     const int someOtherSectionSize = 40;
     const int biggerSizeThanAnySection = 50;
 
-    QVERIFY(QTest::qWaitForWindowExposed(&tv));
+    QVERIFY(QTest::qWaitForWindowActive(&tv));
 
     QHeaderView &header = *tv.horizontalHeader();
     // set minimum size before resizeSections() is called
@@ -3609,7 +3602,7 @@ void tst_QHeaderView::statusTips()
     headerView.setGeometry(QRect(QPoint(QGuiApplication::primaryScreen()->geometry().center() - QPoint(250, 250)),
                            QSize(500, 500)));
     headerView.show();
-    QApplication::setActiveWindow(&headerView);
+    QApplicationPrivate::setActiveWindow(&headerView);
     QVERIFY(QTest::qWaitForWindowActive(&headerView));
 
     // Ensure it is moved away first and then moved to the relevant section

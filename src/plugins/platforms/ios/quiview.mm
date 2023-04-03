@@ -82,7 +82,10 @@ inline ulong getTimeStamp(UIEvent *event)
 
 + (Class)layerClass
 {
+#if QT_CONFIG(opengl)
     return [CAEAGLLayer class];
+#endif
+    return [super layerClass];
 }
 
 - (instancetype)initWithQIOSWindow:(QT_PREPEND_NAMESPACE(QIOSWindow) *)window
@@ -98,11 +101,9 @@ inline ulong getTimeStamp(UIEvent *event)
         // handled by the UIView. Scroll gestures, even those coming from touch devices,
         // such as trackpads will still be received as they are not touch events
         m_scrollGestureRecognizer.allowedTouchTypes = [NSArray array];
-#if QT_IOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__IPHONE_13_4)
         if (@available(ios 13.4, *)) {
             m_scrollGestureRecognizer.allowedScrollTypesMask = UIScrollTypeMaskAll;
         }
-#endif
         m_scrollGestureRecognizer.maximumNumberOfTouches = 0;
         m_lastScrollDelta = CGPointZero;
         m_lastScrollCursorPos = CGPointZero;
@@ -115,6 +116,7 @@ inline ulong getTimeStamp(UIEvent *event)
 - (instancetype)initWithFrame:(CGRect)frame
 {
     if ((self = [super initWithFrame:frame])) {
+#if QT_CONFIG(opengl)
         if ([self.layer isKindOfClass:[CAEAGLLayer class]]) {
             // Set up EAGL layer
             CAEAGLLayer *eaglLayer = static_cast<CAEAGLLayer *>(self.layer);
@@ -124,6 +126,7 @@ inline ulong getTimeStamp(UIEvent *event)
                 kEAGLDrawablePropertyColorFormat: kEAGLColorFormatRGBA8
             };
         }
+#endif
 
         if (isQtApplication())
             self.hidden = YES;
@@ -756,10 +759,8 @@ inline ulong getTimeStamp(UIEvent *event)
     ulong qt_timestamp = time_stamp * 1000;
 
     Qt::KeyboardModifiers qt_modifierFlags = Qt::NoModifier;
-#if QT_IOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__IPHONE_13_4)
     if (@available(ios 13.4, *))
         qt_modifierFlags = QAppleKeyMapper::fromUIKitModifiers(recognizer.modifierFlags);
-#endif
 
     if (recognizer.state == UIGestureRecognizerStateBegan)
         // locationInView: doesn't return the cursor position at the time of the wheel event,

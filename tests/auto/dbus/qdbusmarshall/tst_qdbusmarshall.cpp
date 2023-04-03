@@ -569,8 +569,8 @@ void tst_QDBusMarshall::sendComplex_data()
     QTest::newRow("empty-lldtmap") << QVariant::fromValue(lldtmap) << "a{x((iii)(iiii)i)}"
             << "[Argument: a{x((iii)(iiii)i)} {}]";
     lldtmap[0] = QDateTime();
-    lldtmap[1] = QDateTime(QDate(1970, 1, 1), QTime(0, 0, 1), Qt::UTC);
-    lldtmap[1150629776] = QDateTime(QDate(2006, 6, 18), QTime(11, 22, 56), Qt::UTC);
+    lldtmap[1] = QDateTime(QDate(1970, 1, 1), QTime(0, 0, 1), QTimeZone::UTC);
+    lldtmap[1150629776] = QDateTime(QDate(2006, 6, 18), QTime(11, 22, 56), QTimeZone::UTC);
     QTest::newRow("lldtmap") << QVariant::fromValue(lldtmap) << "a{x((iii)(iiii)i)}"
             << "[Argument: a{x((iii)(iiii)i)} {0 = [Argument: ((iii)(iiii)i) [Argument: (iii) 0, 0, 0], [Argument: (iiii) -1, -1, -1, -1], 0], 1 = [Argument: ((iii)(iiii)i) [Argument: (iii) 1970, 1, 1], [Argument: (iiii) 0, 0, 1, 0], 1], 1150629776 = [Argument: ((iii)(iiii)i) [Argument: (iii) 2006, 6, 18], [Argument: (iiii) 11, 22, 56, 0], 1]}]";
 
@@ -713,14 +713,14 @@ void tst_QDBusMarshall::sendArgument_data()
                                      << QVariant::fromValue(QVariant::fromValue(QDBusVariant(1)));
 
     arg = QDBusArgument();
-    arg.beginArray(QVariant::Int);
+    arg.beginArray(QMetaType::Int);
     arg << 1 << 2 << 3 << -4;
     arg.endArray();
     QTest::newRow("array-of-int") << QVariant::fromValue(arg) << "ai" << int(QDBusArgument::ArrayType)
                                   << QVariant::fromValue(arg);
 
     arg = QDBusArgument();
-    arg.beginMap(QVariant::Int, QVariant::UInt);
+    arg.beginMap(QMetaType::Int, QMetaType::UInt);
     arg.beginMapEntry();
     arg << 1 << 2U;
     arg.endMapEntry();
@@ -962,7 +962,7 @@ void tst_QDBusMarshall::sendCallErrors_data()
             << (QVariantList() << QLocale::c())
             << "org.freedesktop.DBus.Error.Failed"
             << "Marshalling failed: Unregistered type QLocale passed in arguments"
-            << "QDBusMarshaller: type `QLocale' (18) is not registered with D-BUS. Use qDBusRegisterMetaType to register it";
+            << "QDBusMarshaller: type 'QLocale' (18) is not registered with D-BUS. Use qDBusRegisterMetaType to register it";
 
     // this type is known to the meta type system, but not registered with D-Bus
     qRegisterMetaType<UnregisteredType>();
@@ -970,7 +970,7 @@ void tst_QDBusMarshall::sendCallErrors_data()
             << (QVariantList() << QVariant::fromValue(UnregisteredType()))
             << "org.freedesktop.DBus.Error.Failed"
             << "Marshalling failed: Unregistered type UnregisteredType passed in arguments"
-            << QString("QDBusMarshaller: type `UnregisteredType' (%1) is not registered with D-BUS. Use qDBusRegisterMetaType to register it")
+            << QString("QDBusMarshaller: type 'UnregisteredType' (%1) is not registered with D-BUS. Use qDBusRegisterMetaType to register it")
             .arg(qMetaTypeId<UnregisteredType>());
 
     QTest::newRow("invalid-object-path-arg") << serviceName << objectPath << interfaceName << "ping"

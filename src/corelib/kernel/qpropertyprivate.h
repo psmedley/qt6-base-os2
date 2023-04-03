@@ -82,7 +82,7 @@ public:
         reset(o);
         return *this;
     }
-    QPropertyBindingPrivatePtr(QPropertyBindingPrivatePtr &&o) noexcept : d(qExchange(o.d, nullptr)) {}
+    QPropertyBindingPrivatePtr(QPropertyBindingPrivatePtr &&o) noexcept : d(std::exchange(o.d, nullptr)) {}
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_MOVE_AND_SWAP(QPropertyBindingPrivatePtr)
 
     operator bool () const noexcept { return d != nullptr; }
@@ -194,8 +194,7 @@ struct BindingFunctionVTable
                     return true;
                 } else {
                     // Our code will never instantiate this
-                    Q_UNREACHABLE();
-                    return false;
+                    Q_UNREACHABLE_RETURN(false);
                 }
             },
             /*destroy*/[](void *f){ static_cast<Callable *>(f)->~Callable(); },

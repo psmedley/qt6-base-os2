@@ -18,6 +18,7 @@
 #include "qrhi_p.h"
 #include <QBitArray>
 #include <QAtomicInt>
+#include <QElapsedTimer>
 #include <QLoggingCategory>
 #include <QtCore/qset.h>
 #include <QtCore/qvarlengtharray.h>
@@ -42,7 +43,7 @@ public:
     virtual QRhiShaderResourceBindings *createShaderResourceBindings() = 0;
     virtual QRhiBuffer *createBuffer(QRhiBuffer::Type type,
                                      QRhiBuffer::UsageFlags usage,
-                                     int size) = 0;
+                                     quint32 size) = 0;
     virtual QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                                  const QSize &pixelSize,
                                                  int sampleCount,
@@ -131,7 +132,7 @@ public:
     virtual int resourceLimit(QRhi::ResourceLimit limit) const = 0;
     virtual const QRhiNativeHandles *nativeHandles() = 0;
     virtual QRhiDriverInfo driverInfo() const = 0;
-    virtual QRhiMemAllocStats graphicsMemoryAllocationStatistics() = 0;
+    virtual QRhiStats statistics() = 0;
     virtual bool makeThreadLocalNativeContextCurrent() = 0;
     virtual void releaseCachedResources() = 0;
     virtual bool isDeviceLost() const = 0;
@@ -201,6 +202,24 @@ public:
         return (quint32(implType) << 24) | ver;
     }
 
+    void pipelineCreationStart()
+    {
+        pipelineCreationTimer.start();
+    }
+
+    void pipelineCreationEnd()
+    {
+        accumulatedPipelineCreationTime += pipelineCreationTimer.elapsed();
+    }
+
+    qint64 totalPipelineCreationTime() const
+    {
+        return accumulatedPipelineCreationTime;
+    }
+
+    QRhiVertexInputAttribute::Format shaderDescVariableFormatToVertexInputFormat(QShaderDescription::VariableType type) const;
+    quint32 byteSizePerVertexForVertexInputFormat(QRhiVertexInputAttribute::Format format) const;
+
     QRhi *q;
 
     static const int MAX_SHADER_CACHE_ENTRIES = 128;
@@ -219,6 +238,8 @@ private:
     QSet<QRhiResource *> pendingDeleteResources;
     QVarLengthArray<QRhi::CleanupCallback, 4> cleanupCallbacks;
     QVarLengthArray<QRhi::GpuFrameTimeCallback, 4> gpuFrameTimeCallbacks;
+    QElapsedTimer pipelineCreationTimer;
+    qint64 accumulatedPipelineCreationTime = 0;
 
     friend class QRhi;
     friend class QRhiResourceUpdateBatchPrivate;
@@ -279,10 +300,10 @@ struct QRhiBufferDataPrivate
     QRhiBufferDataPrivate() { }
     ~QRhiBufferDataPrivate() { delete[] largeData; }
     int ref = 1;
-    int size = 0;
-    int largeAlloc = 0;
+    quint32 size = 0;
+    quint32 largeAlloc = 0;
     char *largeData = nullptr;
-    static constexpr int SMALL_DATA_SIZE = 1024;
+    static constexpr quint32 SMALL_DATA_SIZE = 1024;
     char data[SMALL_DATA_SIZE];
 };
 
@@ -317,11 +338,11 @@ public:
     {
         return d->size <= QRhiBufferDataPrivate::SMALL_DATA_SIZE ? d->data : d->largeData;
     }
-    int size() const
+    quint32 size() const
     {
         return d->size;
     }
-    void assign(const char *s, int size)
+    void assign(const char *s, quint32 size)
     {
         if (!d) {
             d = new QRhiBufferDataPrivate;
@@ -358,12 +379,12 @@ public:
         };
         Type type;
         QRhiBuffer *buf;
-        int offset;
+        quint32 offset;
         QRhiBufferData data;
-        int readSize;
+        quint32 readSize;
         QRhiBufferReadbackResult *result;
 
-        static BufferOp dynamicUpdate(QRhiBuffer *buf, int offset, int size, const void *data)
+        static BufferOp dynamicUpdate(QRhiBuffer *buf, quint32 offset, quint32 size, const void *data)
         {
             BufferOp op = {};
             op.type = DynamicUpdate;
@@ -374,7 +395,7 @@ public:
             return op;
         }
 
-        static void changeToDynamicUpdate(BufferOp *op, QRhiBuffer *buf, int offset, int size, const void *data)
+        static void changeToDynamicUpdate(BufferOp *op, QRhiBuffer *buf, quint32 offset, quint32 size, const void *data)
         {
             op->type = DynamicUpdate;
             op->buf = buf;
@@ -383,7 +404,7 @@ public:
             op->data.assign(reinterpret_cast<const char *>(data), effectiveSize);
         }
 
-        static BufferOp staticUpload(QRhiBuffer *buf, int offset, int size, const void *data)
+        static BufferOp staticUpload(QRhiBuffer *buf, quint32 offset, quint32 size, const void *data)
         {
             BufferOp op = {};
             op.type = StaticUpload;
@@ -394,7 +415,7 @@ public:
             return op;
         }
 
-        static void changeToStaticUpload(BufferOp *op, QRhiBuffer *buf, int offset, int size, const void *data)
+        static void changeToStaticUpload(BufferOp *op, QRhiBuffer *buf, quint32 offset, quint32 size, const void *data)
         {
             op->type = StaticUpload;
             op->buf = buf;
@@ -403,7 +424,7 @@ public:
             op->data.assign(reinterpret_cast<const char *>(data), effectiveSize);
         }
 
-        static BufferOp read(QRhiBuffer *buf, int offset, int size, QRhiBufferReadbackResult *result)
+        static BufferOp read(QRhiBuffer *buf, quint32 offset, quint32 size, QRhiBufferReadbackResult *result)
         {
             BufferOp op = {};
             op.type = Read;
@@ -766,6 +787,15 @@ bool QRhiRenderTargetAttachmentTracker::isUpToDate(const QRhiTextureRenderTarget
     ResIdList resIdList;
     updateResIdList<TexType, RenderBufferType>(desc, &resIdList);
     return resIdList == currentResIdList;
+}
+
+template<typename T>
+inline T *qrhi_objectFromProxyData(QRhiSwapChainProxyData *pd, QWindow *window, QRhi::Implementation impl, uint objectIndex)
+{
+    Q_ASSERT(objectIndex < std::size(pd->reserved));
+    if (!pd->reserved[objectIndex]) // // was not set, no other choice, do it here, whatever thread this is
+        *pd = QRhi::updateSwapChainProxyData(impl, window);
+    return static_cast<T *>(pd->reserved[objectIndex]);
 }
 
 QT_END_NAMESPACE

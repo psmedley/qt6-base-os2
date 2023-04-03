@@ -73,6 +73,8 @@ The following table describes the mapping of configure options to CMake argument
 |                                       |                                                   | custom build steps for moc, uic, and rcc.                       |
 |                                       |                                                   | This lacks support in CMake.                                    |
 | -ccache                               | -DQT_USE_CCACHE=ON                                |                                                                 |
+| -unity-build                          | -DQT_UNITY_BUILD=ON                               |                                                                 |
+| -unity-build-batch-size <int>         | -DQT_UNITY_BUILD_BATCH_SIZE=<int>                 |                                                                 |
 | -make-tool <tool>                     | n/a                                               |                                                                 |
 | -mp                                   | n/a                                               |                                                                 |
 | -warnings-are-errors                  | -DWARNINGS_ARE_ERRORS=ON                          |                                                                 |
@@ -98,7 +100,7 @@ The following table describes the mapping of configure options to CMake argument
 | -android-javac-source                 | -DQT_ANDROID_JAVAC_SOURCE=7                       | Set the javac build source version.                             |
 | -android-javac-target                 | -DQT_ANDROID_JAVAC_TARGET=7                       | Set the javac build target version.                             |
 | -skip <repo>,...,<repo_n>             | -DBUILD_<repo>=OFF                                |                                                                 |
-| -submodules <repo>,...,<repo_n>       | -QT_BUILD_SUBMODULES=<repo>;...;<repo>            |                                                                 |
+| -submodules <repo>,...,<repo_n>       | -DQT_BUILD_SUBMODULES=<repo>;...;<repo>            |                                                                 |
 | -make <part>                          | -DQT_BUILD_TESTS=ON                               | A way to turn on tools explicitly is missing. If tests/examples |
 |                                       | -DQT_BUILD_EXAMPLES=ON                            | are enabled, you can disable their building as part of the      |
 |                                       |                                                   | 'all' target by also passing -DQT_BUILD_TESTS_BY_DEFAULT=OFF or |
@@ -169,3 +171,6 @@ The following table describes the mapping of configure options to CMake argument
 | -libjpeg                              | -DFEATURE_libjpeg=ON                              |                                                                 |
 | -sql-<driver>                         | -DFEATURE_sql_<driver>=ON                         |                                                                 |
 | -sqlite [qt/system]                   | -DFEATURE_system_sqlite=OFF/ON                    |                                                                 |
+| -disable-deprecated-up-to <hex_version> | -DQT_DISABLE_DEPRECATED_UP_TO=<hex_version>     |                                                                 |
+| -mimetype-database-compression <type> | -DINPUT_mimetype_database_compression=<type>      | Sets the compression type for mime type database. Supported     |
+|                                       |                                                   | types: gzip, zstd, none.                                        |

@@ -7,7 +7,9 @@
 #include "qtexttable.h"
 #include "qtextlist.h"
 #include "qtextengine_p.h"
+#if QT_CONFIG(cssparser)
 #include "private/qcssutil_p.h"
+#endif
 #include "private/qguiapplication_p.h"
 
 #include "qabstracttextdocumentlayout_p.h"
@@ -1209,8 +1211,7 @@ static inline QTextFormat::Property borderPropertyForEdge(QCss::Edge edge)
     case QCss::RightEdge:
         return QTextFormat::TableCellRightBorder;
     default:
-        Q_UNREACHABLE();
-        return QTextFormat::UserProperty;
+        Q_UNREACHABLE_RETURN(QTextFormat::UserProperty);
     }
 }
 
@@ -1226,8 +1227,7 @@ static inline QTextFormat::Property borderStylePropertyForEdge(QCss::Edge edge)
     case QCss::RightEdge:
         return QTextFormat::TableCellRightBorderStyle;
     default:
-        Q_UNREACHABLE();
-        return QTextFormat::UserProperty;
+        Q_UNREACHABLE_RETURN(QTextFormat::UserProperty);
     }
 }
 
@@ -1243,8 +1243,7 @@ static inline QCss::Edge adjacentEdge(QCss::Edge edge)
     case QCss::LeftEdge:
         return QCss::RightEdge;
     default:
-        Q_UNREACHABLE();
-        return QCss::NumEdges;
+        Q_UNREACHABLE_RETURN(QCss::NumEdges);
     }
 }
 
@@ -1323,8 +1322,7 @@ static inline bool sharesAxis(const QTextTableCell &cell, QCss::Edge edge,
         return cell.column() + cell.columnSpan() ==
                 competingCell.column() + (competingCellEdge == QCss::LeftEdge ? 0 : competingCell.columnSpan());
     default:
-        Q_UNREACHABLE();
-        return false;
+        Q_UNREACHABLE_RETURN(false);
     }
 }
 

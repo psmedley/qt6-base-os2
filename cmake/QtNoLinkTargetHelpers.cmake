@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 function(qt_create_nolink_target target dependee_target)
     if(NOT TARGET "${target}")
         message(FATAL_ERROR "${target} does not exist when trying to build a nolink target.")

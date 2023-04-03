@@ -294,10 +294,10 @@ void tst_QApplication::alert()
     QApplication::alert(&widget, -1);
     QApplication::alert(&widget, 250);
     widget2.activateWindow();
-    QApplication::setActiveWindow(&widget2);
+    QApplicationPrivate::setActiveWindow(&widget2);
     QApplication::alert(&widget, 0);
     widget.activateWindow();
-    QApplication::setActiveWindow(&widget);
+    QApplicationPrivate::setActiveWindow(&widget);
     QApplication::alert(&widget, 200);
 }
 
@@ -886,6 +886,7 @@ void tst_QApplication::closeAllWindows()
 {
     int argc = 0;
     QApplication app(argc, nullptr);
+    app.setAttribute(Qt::AA_DontUseNativeDialogs, true);
 
     // create some windows
     new QWidget;
@@ -1124,7 +1125,7 @@ void tst_QApplication::libraryPaths_qt_plugin_path_2()
             << QCoreApplication::applicationDirPath();
         QVERIFY(isPathListIncluded(QCoreApplication::libraryPaths(), expected));
 
-        qputenv("QT_PLUGIN_PATH", QByteArray());
+        qputenv("QT_PLUGIN_PATH", nullptr);
     }
 }
 #endif
@@ -1546,7 +1547,7 @@ void tst_QApplication::setActiveWindow()
     delete pb2;
 
     w->show();
-    QApplication::setActiveWindow(w); // needs this on twm (focus follows mouse)
+    QApplicationPrivate::setActiveWindow(w); // needs this on twm (focus follows mouse)
     QVERIFY(pb1->hasFocus());
     delete w;
 }
@@ -1611,7 +1612,7 @@ void tst_QApplication::focusWidget()
         QTextEdit te;
         te.show();
 
-        QApplication::setActiveWindow(&te);
+        QApplicationPrivate::setActiveWindow(&te);
         QVERIFY(QTest::qWaitForWindowActive(&te));
 
         const auto focusWidget = QApplication::focusWidget();
@@ -1627,7 +1628,7 @@ void tst_QApplication::focusWidget()
         QTextEdit te(&w);
         w.show();
 
-        QApplication::setActiveWindow(&w);
+        QApplicationPrivate::setActiveWindow(&w);
         QVERIFY(QTest::qWaitForWindowActive(&w));
 
         const auto focusWidget = QApplication::focusWidget();
@@ -1663,7 +1664,7 @@ void tst_QApplication::focusChanged()
     QCOMPARE(spy.size(), 0);
 
     parent1.show();
-    QApplication::setActiveWindow(&parent1); // needs this on twm (focus follows mouse)
+    QApplicationPrivate::setActiveWindow(&parent1); // needs this on twm (focus follows mouse)
     QCOMPARE(spy.size(), 1);
     QCOMPARE(spy.at(0).size(), 2);
     old = qvariant_cast<QWidget*>(spy.at(0).at(0));
@@ -1712,7 +1713,7 @@ void tst_QApplication::focusChanged()
     hbox2.addWidget(&pb2);
 
     parent2.show();
-    QApplication::setActiveWindow(&parent2); // needs this on twm (focus follows mouse)
+    QApplicationPrivate::setActiveWindow(&parent2); // needs this on twm (focus follows mouse)
     QVERIFY(spy.size() > 0); // one for deactivation, one for activation on Windows
     old = qvariant_cast<QWidget*>(spy.at(spy.size()-1).at(0));
     now = qvariant_cast<QWidget*>(spy.at(spy.size()-1).at(1));
@@ -1820,7 +1821,7 @@ void tst_QApplication::focusChanged()
     }
 
     parent1.activateWindow();
-    QApplication::setActiveWindow(&parent1); // needs this on twm (focus follows mouse)
+    QApplicationPrivate::setActiveWindow(&parent1); // needs this on twm (focus follows mouse)
     QVERIFY(spy.size() == 1 || spy.size() == 2); // one for deactivation, one for activation on Windows
 
     //on windows, the change of focus is made in 2 steps
@@ -2602,7 +2603,7 @@ void tst_QApplication::staticFunctions()
     QApplication::activeModalWidget();
     QApplication::focusWidget();
     QApplication::activeWindow();
-    QApplication::setActiveWindow(nullptr);
+    QApplicationPrivate::setActiveWindow(nullptr);
     QApplication::widgetAt(QPoint(0, 0));
     QApplication::topLevelAt(QPoint(0, 0));
     QTest::ignoreMessage(QtWarningMsg, "Must construct a QApplication first.");

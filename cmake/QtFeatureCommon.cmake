@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 function(qt_feature_normalize_name name out_var)
     # Normalize the feature name to something CMake can deal with.
     if(name MATCHES "c\\+\\+")

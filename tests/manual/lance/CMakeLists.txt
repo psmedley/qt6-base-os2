@@ -1,4 +1,5 @@
-# Generated from lance.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## lance Binary:
@@ -13,7 +14,7 @@ qt_internal_add_manual_test(lance
     INCLUDE_DIRECTORIES
         .
         ../../baseline/shared
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
@@ -74,14 +75,10 @@ qt_internal_add_resource(lance "images"
         ${images_resource_files}
 )
 
-
-#### Keys ignored in scope 1:.:.:lance.pro:<TRUE>:
-# TEMPLATE = "app"
-
 ## Scopes:
 #####################################################################
 
 qt_internal_extend_target(lance CONDITION TARGET Qt::OpenGL
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::OpenGL
 )

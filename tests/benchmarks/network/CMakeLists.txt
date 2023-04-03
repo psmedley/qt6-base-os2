@@ -1,6 +1,6 @@
-# Generated from network.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
-# special case begin
 # SSL library include path is not propagated with private tests which results in
 # test not being able to find the ssl header when they are not in the standard
 # include paths
@@ -13,7 +13,6 @@ if (QT_FEATURE_private_tests)
         include_directories($<TARGET_PROPERTY:WrapOpenSSLHeaders::WrapOpenSSLHeaders,INTERFACE_INCLUDE_DIRECTORIES>)
     endif()
 endif()
-# special case end
 
 add_subdirectory(access)
 add_subdirectory(kernel)

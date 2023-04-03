@@ -562,7 +562,9 @@ public class QtActivityDelegate
     private final DisplayManager.DisplayListener displayListener = new DisplayManager.DisplayListener()
     {
         @Override
-        public void onDisplayAdded(int displayId) { }
+        public void onDisplayAdded(int displayId) {
+            QtNative.handleScreenAdded(displayId);
+        }
 
         private boolean isSimilarRotation(int r1, int r2)
         {
@@ -589,10 +591,13 @@ public class QtActivityDelegate
 
             float refreshRate = display.getRefreshRate();
             QtNative.handleRefreshRateChanged(refreshRate);
+            QtNative.handleScreenChanged(displayId);
         }
 
         @Override
-        public void onDisplayRemoved(int displayId) { }
+        public void onDisplayRemoved(int displayId) {
+            QtNative.handleScreenRemoved(displayId);
+        }
     };
 
     public boolean updateActivity(Activity activity)
@@ -716,7 +721,7 @@ public class QtActivityDelegate
                                         "Droid Sans Mono;Droid Sans;Droid Sans Fallback");
         QtNative.setEnvironmentVariable("QT_ANDROID_FONTS_SERIF", "Droid Serif");
         QtNative.setEnvironmentVariable("HOME", m_activity.getFilesDir().getAbsolutePath());
-        QtNative.setEnvironmentVariable("TMPDIR", m_activity.getFilesDir().getAbsolutePath());
+        QtNative.setEnvironmentVariable("TMPDIR", m_activity.getCacheDir().getAbsolutePath());
         QtNative.setEnvironmentVariable("QT_ANDROID_FONTS",
                                         "Roboto;Droid Sans;Droid Sans Fallback");
         QtNative.setEnvironmentVariable("QT_ANDROID_APP_ICON_SIZE",

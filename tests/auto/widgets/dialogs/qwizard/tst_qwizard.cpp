@@ -17,6 +17,8 @@
 #include <QSignalSpy>
 #include <QOperatingSystemVersion>
 
+#include <QtWidgets/private/qapplication_p.h>
+
 Q_DECLARE_METATYPE(QWizard::WizardButton);
 
 static QImage grabWidget(QWidget *window)
@@ -396,7 +398,7 @@ void tst_QWizard::setPixmap()
     QVERIFY(wizard.pixmap(QWizard::BannerPixmap).isNull());
     QVERIFY(wizard.pixmap(QWizard::LogoPixmap).isNull());
     QVERIFY(wizard.pixmap(QWizard::WatermarkPixmap).isNull());
-    if (QOperatingSystemVersion::current() <= QOperatingSystemVersion::MacOSHighSierra)
+    if (QOperatingSystemVersion::currentType() == QOperatingSystemVersion::MacOS)
         QVERIFY(!wizard.pixmap(QWizard::BackgroundPixmap).isNull());
     else
         QVERIFY(wizard.pixmap(QWizard::BackgroundPixmap).isNull());
@@ -404,7 +406,7 @@ void tst_QWizard::setPixmap()
     QVERIFY(page->pixmap(QWizard::BannerPixmap).isNull());
     QVERIFY(page->pixmap(QWizard::LogoPixmap).isNull());
     QVERIFY(page->pixmap(QWizard::WatermarkPixmap).isNull());
-    if (QOperatingSystemVersion::current() <= QOperatingSystemVersion::MacOSHighSierra)
+    if (QOperatingSystemVersion::currentType() == QOperatingSystemVersion::MacOS)
         QVERIFY(!wizard.pixmap(QWizard::BackgroundPixmap).isNull());
     else
         QVERIFY(page->pixmap(QWizard::BackgroundPixmap).isNull());
@@ -978,7 +980,7 @@ void tst_QWizard::setOption_IgnoreSubTitles()
     // Check that subtitles are shown when they should (i.e.,
     // they're set and IgnoreSubTitles is off).
 
-    qApp->setActiveWindow(0); // ensure no focus rectangle around cancel button
+    QApplicationPrivate::setActiveWindow(0); // ensure no focus rectangle around cancel button
     QImage i11 = grabWidget(&wizard1);
     QImage i21 = grabWidget(&wizard2);
     QVERIFY(i11 != i21);

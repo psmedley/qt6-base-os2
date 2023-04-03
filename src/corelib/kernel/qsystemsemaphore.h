@@ -11,12 +11,13 @@
 QT_BEGIN_NAMESPACE
 
 
-#ifndef QT_NO_SYSTEMSEMAPHORE
+#if QT_CONFIG(systemsemaphore)
 
 class QSystemSemaphorePrivate;
 
 class Q_CORE_EXPORT QSystemSemaphore
 {
+    Q_GADGET
     Q_DECLARE_TR_FUNCTIONS(QSystemSemaphore)
 public:
     enum AccessMode
@@ -24,6 +25,7 @@ public:
         Open,
         Create
     };
+    Q_ENUM(AccessMode)
 
     enum SystemSemaphoreError
     {
@@ -53,7 +55,7 @@ private:
     QScopedPointer<QSystemSemaphorePrivate> d;
 };
 
-#endif // QT_NO_SYSTEMSEMAPHORE
+#endif // QT_CONFIG(systemsemaphore)
 
 QT_END_NAMESPACE
 

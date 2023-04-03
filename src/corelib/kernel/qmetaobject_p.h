@@ -23,10 +23,13 @@
 #ifndef QT_NO_QOBJECT
 #include <private/qobject_p.h> // For QObjectPrivate::Connection
 #endif
+#include <private/qtools_p.h>
 #include <QtCore/qvarlengtharray.h>
 
 QT_BEGIN_NAMESPACE
 // ### TODO - QTBUG-87869: wrap in a proper Q_NAMESPACE and use scoped enums, to avoid name clashes
+
+using namespace QtMiscUtils;
 
 enum PropertyFlags {
     Invalid = 0x00000000,
@@ -131,7 +134,38 @@ Q_DECLARE_TYPEINFO(QArgumentType, Q_RELOCATABLE_TYPE);
 
 typedef QVarLengthArray<QArgumentType, 10> QArgumentTypeArray;
 
-class QMetaMethodPrivate;
+namespace { class QMetaMethodPrivate; }
+class QMetaMethodInvoker : public QMetaMethod
+{
+    QMetaMethodInvoker() = delete;
+
+public:
+    enum class InvokeFailReason : int {
+        // negative values mean a match was found but the invocation failed
+        // (and a warning has been printed)
+        ReturnTypeMismatch = -1,
+        DeadLockDetected = -2,
+        CallViaVirtualFailed = -3,  // no warning
+        ConstructorCallOnObject = -4,
+        ConstructorCallWithoutResult = -5,
+        ConstructorCallFailed = -6, // no warning
+
+        CouldNotQueueParameter = -0x1000,
+
+        // zero is success
+        None = 0,
+
+        // positive values mean the parameters did not match
+        TooFewArguments,
+        FormalParameterMismatch = 0x1000,
+    };
+
+    // shadows the public function
+    static InvokeFailReason Q_CORE_EXPORT
+    invokeImpl(QMetaMethod self, void *target, Qt::ConnectionType, qsizetype paramCount,
+               const void *const *parameters, const char *const *typeNames,
+               const QtPrivate::QMetaTypeInterface *const *metaTypes);
+};
 
 struct QMetaObjectPrivate
 {
@@ -140,7 +174,8 @@ struct QMetaObjectPrivate
     // revision 9 is Qt 6.0: It adds the metatype of properties and methods
     // revision 10 is Qt 6.2: The metatype of the metaobject is stored in the metatypes array
     //                        and metamethods store a flag stating whether they are const
-    enum { OutputRevision = 10 }; // Used by moc, qmetaobjectbuilder and qdbus
+    // revision 11 is Qt 6.5: The metatype for void is stored in the metatypes array
+    enum { OutputRevision = 11 }; // Used by moc, qmetaobjectbuilder and qdbus
     enum { IntsPerMethod = QMetaMethod::Data::Size };
     enum { IntsPerEnum = QMetaEnum::Data::Size };
     enum { IntsPerProperty = QMetaProperty::Data::Size };
@@ -233,11 +268,7 @@ enum { MetaObjectPrivateFieldCount = sizeof(QMetaObjectPrivate) / sizeof(int) };
 // mirrored in moc's utils.h
 static inline bool is_ident_char(char s)
 {
-    return ((s >= 'a' && s <= 'z')
-            || (s >= 'A' && s <= 'Z')
-            || (s >= '0' && s <= '9')
-            || s == '_'
-       );
+    return isAsciiLetterOrNumber(s) || s == '_';
 }
 
 static inline bool is_space(char s)

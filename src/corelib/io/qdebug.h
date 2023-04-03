@@ -5,6 +5,10 @@
 #ifndef QDEBUG_H
 #define QDEBUG_H
 
+#if 0
+#pragma qt_class(QtDebug)
+#endif
+
 #include <QtCore/qcontainerfwd.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qstring.h>
@@ -12,10 +16,12 @@
 #include <QtCore/qsharedpointer.h>
 
 // all these have already been included by various headers above, but don't rely on indirect includes:
-#include <vector>
 #include <list>
 #include <map>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #if !defined(QT_LEAN_HEADERS) || QT_LEAN_HEADERS < 1
 #  include <QtCore/qlist.h>
@@ -66,7 +72,7 @@ public:
     explicit QDebug(QString *string) : stream(new Stream(string)) {}
     explicit QDebug(QtMsgType t) : stream(new Stream(t)) {}
     QDebug(const QDebug &o) : stream(o.stream) { ++stream->ref; }
-    QDebug(QDebug &&other) noexcept : stream{qExchange(other.stream, nullptr)} {}
+    QDebug(QDebug &&other) noexcept : stream{std::exchange(other.stream, nullptr)} {}
     inline QDebug &operator=(const QDebug &other);
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_MOVE_AND_SWAP(QDebug)
     ~QDebug();
@@ -102,6 +108,7 @@ public:
     inline QDebug &operator<<(unsigned long t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(qint64 t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(quint64 t) { stream->ts << t; return maybeSpace(); }
+    inline QDebug &operator<<(qfloat16 t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(float t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(double t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(const char* t) { stream->ts << QString::fromUtf8(t); return maybeSpace(); }
@@ -121,6 +128,66 @@ public:
 
     inline QDebug &operator<<(QTextStreamManipulator m)
     { stream->ts << m; return *this; }
+
+#ifdef Q_QDOC
+    template <typename Char, typename...Args>
+    QDebug &operator<<(const std::basic_string<Char, Args...> &s);
+
+    template <typename Char, typename...Args>
+    QDebug &operator<<(std::basic_string_view<Char, Args...> s);
+#else
+    template <typename...Args>
+    QDebug &operator<<(const std::basic_string<char, Args...> &s)
+    { return *this << QUtf8StringView(s); }
+
+    template <typename...Args>
+    QDebug &operator<<(std::basic_string_view<char, Args...> s)
+    { return *this << QUtf8StringView(s); }
+
+#ifdef __cpp_char8_t
+    template <typename...Args>
+    QDebug &operator<<(const std::basic_string<char8_t, Args...> &s)
+    { return *this << QUtf8StringView(s); }
+
+    template <typename...Args>
+    QDebug &operator<<(std::basic_string_view<char8_t, Args...> s)
+    { return *this << QUtf8StringView(s); }
+#endif // __cpp_char8_t
+
+    template <typename...Args>
+    QDebug &operator<<(const std::basic_string<char16_t, Args...> &s)
+    { return *this << QStringView(s); }
+
+    template <typename...Args>
+    QDebug &operator<<(std::basic_string_view<char16_t, Args...> s)
+    { return *this << QStringView(s); }
+
+    template <typename...Args>
+    QDebug &operator<<(const std::basic_string<wchar_t, Args...> &s)
+    {
+        if constexpr (sizeof(wchar_t) == 2)
+            return *this << QStringView(s);
+        else
+            return *this << QString::fromWCharArray(s.data(), s.size()); // ### optimize
+    }
+
+    template <typename...Args>
+    QDebug &operator<<(std::basic_string_view<wchar_t, Args...> s)
+    {
+        if constexpr (sizeof(wchar_t) == 2)
+            return *this << QStringView(s);
+        else
+            return *this << QString::fromWCharArray(s.data(), s.size()); // ### optimize
+    }
+
+    template <typename...Args>
+    QDebug &operator<<(const std::basic_string<char32_t, Args...> &s)
+    { return *this << QString::fromUcs4(s.data(), s.size()); }
+
+    template <typename...Args>
+    QDebug &operator<<(std::basic_string_view<char32_t, Args...> s)
+    { return *this << QString::fromUcs4(s.data(), s.size()); }
+#endif // !Q_QDOC
 
     template <typename T>
     static QString toString(T &&object)
@@ -211,7 +278,7 @@ template<typename Container, typename ...T>
 using QDebugIfHasDebugStreamContainer =
     std::enable_if_t<std::conjunction_v<QTypeTraits::has_ostream_operator_container<QDebug, Container, T>...>, QDebug>;
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
 
 template<typename T>
 inline QDebugIfHasDebugStreamContainer<QList<T>, T> operator<<(QDebug debug, const QList<T> &vec)
@@ -235,6 +302,12 @@ template <typename T, typename Alloc>
 inline QDebugIfHasDebugStream<T> operator<<(QDebug debug, const std::list<T, Alloc> &vec)
 {
     return QtPrivate::printSequentialContainer(debug, "std::list", vec);
+}
+
+template <typename T>
+inline QDebugIfHasDebugStream<T> operator<<(QDebug debug, std::initializer_list<T> list)
+{
+    return QtPrivate::printSequentialContainer(debug, "std::initializer_list", list);
 }
 
 template <typename Key, typename T, typename Compare, typename Alloc>
@@ -344,7 +417,7 @@ QDebug operator<<(QDebug debug, const std::pair<T1, T2> &pair);
 template <typename T>
 QDebug operator<<(QDebug debug, const QContiguousCache<T> &cache);
 
-#endif // Q_CLANG_QDOC
+#endif // Q_QDOC
 
 template <class T>
 inline QDebug operator<<(QDebug debug, const QSharedPointer<T> &ptr)
@@ -373,7 +446,7 @@ void qt_QMetaEnum_flagDebugOperator(QDebug &debug, size_t sizeofT, Int value)
     debug.resetFormat();
     debug.nospace() << "QFlags(" << Qt::hex << Qt::showbase;
     bool needSeparator = false;
-    for (uint i = 0; i < sizeofT * 8; ++i) {
+    for (size_t i = 0; i < sizeofT * 8; ++i) {
         if (value & (Int(1) << i)) {
             if (needSeparator)
                 debug << '|';

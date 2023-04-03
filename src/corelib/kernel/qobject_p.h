@@ -179,6 +179,9 @@ public:
 
     virtual std::string flagsForDumping() const;
 
+    QtPrivate::QPropertyAdaptorSlotObject *
+    getPropertyAdaptorSlotObject(const QMetaProperty &property);
+
 public:
     mutable ExtraData *extraData; // extra data set by the user
     // This atomic requires acquire/release semantics in a few places,
@@ -240,6 +243,7 @@ inline void QObjectPrivate::disconnectNotify(const QMetaMethod &signal)
 }
 
 namespace QtPrivate {
+inline const QObject *getQObject(const QObjectPrivate *d) { return d->q_func(); }
 
 template <typename Func>
 struct FunctionStorageByValue
@@ -319,7 +323,7 @@ inline QMetaObject::Connection QObjectPrivate::connect(const typename QtPrivate:
         types = QtPrivate::ConnectionTypes<typename SignalType::Arguments>::types();
 
     return QObject::connectImpl(sender, reinterpret_cast<void **>(&signal),
-        receiverPrivate->q_ptr, reinterpret_cast<void **>(&slot),
+        QtPrivate::getQObject(receiverPrivate), reinterpret_cast<void **>(&slot),
         new QtPrivate::QPrivateSlotObject<Func2, typename QtPrivate::List_Left<typename SignalType::Arguments, SlotType::ArgumentCount>::Value,
                                         typename SignalType::ReturnType>(slot),
         type, types, &SignalType::Object::staticMetaObject);

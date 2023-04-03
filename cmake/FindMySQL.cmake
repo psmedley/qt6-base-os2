@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #.rst:
 # FindMySQL
 # ---------
@@ -40,7 +43,7 @@ if(NOT DEFINED MySQL_ROOT)
     find_package(PkgConfig QUIET)
 endif()
 if(PkgConfig_FOUND AND NOT DEFINED MySQL_ROOT)
-    pkg_check_modules(PC_MySQL QUIET mysqlclient)
+    pkg_check_modules(PC_MySQL QUIET "mysqlclient")
     set(MySQL_include_dir_hints ${PC_MySQL_INCLUDEDIR})
     set(MySQL_library_hints ${PC_MySQL_LIBDIR})
     set(MySQL_library_hints_debug "")

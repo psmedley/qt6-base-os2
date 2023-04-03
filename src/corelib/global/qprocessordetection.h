@@ -2,8 +2,11 @@
 // Copyright (C) 2016 Intel Corporation.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
-#ifndef QGLOBAL_H
-# include <QtCore/qglobal.h>
+
+#if 0
+#pragma qt_class(QtProcessorDetection)
+#pragma qt_sync_skip_header_check
+#pragma qt_sync_stop_processing
 #endif
 
 #ifndef QPROCESSORDETECTION_H
@@ -48,8 +51,8 @@
 
     Alpha is bi-endian, use endianness auto-detection implemented below.
 */
-// #elif defined(__alpha__) || defined(_M_ALPHA)
-// #  define Q_PROCESSOR_ALPHA
+#if defined(__alpha__) || defined(_M_ALPHA)
+#  define Q_PROCESSOR_ALPHA
 // Q_BYTE_ORDER not defined, use endianness auto-detection
 
 /*
@@ -58,7 +61,7 @@
     ARM is bi-endian, detect using __ARMEL__ or __ARMEB__, falling back to
     auto-detection implemented below.
 */
-#if defined(__arm__) || defined(__TARGET_ARCH_ARM) || defined(_M_ARM) || defined(_M_ARM64) || defined(__aarch64__) || defined(__ARM64__)
+#elif defined(__arm__) || defined(__TARGET_ARCH_ARM) || defined(_M_ARM) || defined(_M_ARM64) || defined(__aarch64__) || defined(__ARM64__)
 #  if defined(__aarch64__) || defined(__ARM64__) || defined(_M_ARM64)
 #    define Q_PROCESSOR_ARM_64
 #    define Q_PROCESSOR_WORDSIZE 8
@@ -140,6 +143,15 @@
 // #  define Q_BYTE_ORDER Q_LITTLE_ENDIAN
 
 /*
+    PA-RISC family, no revisions or variants
+
+    PA-RISC is big-endian.
+*/
+#elif defined(__hppa__)
+#  define Q_PROCESSOR_HPPA
+#  define Q_BYTE_ORDER Q_BIG_ENDIAN
+
+/*
     X86 family, known variants: 32- and 64-bit
 
     X86 is little-endian.
@@ -186,6 +198,29 @@
 #  define Q_PROCESSOR_IA64
 #  define Q_PROCESSOR_WORDSIZE   8
 // Q_BYTE_ORDER not defined, use endianness auto-detection
+
+/*
+    LoongArch family, known variants: 32- and 64-bit
+
+    LoongArch is little-endian.
+*/
+#elif defined(__loongarch__)
+#  define Q_PROCESSOR_LOONGARCH
+#  if __loongarch_grlen == 64
+#    define Q_PROCESSOR_LOONGARCH_64
+#  else
+#    define Q_PROCESSOR_LOONGARCH_32
+#  endif
+#  define Q_BYTE_ORDER Q_LITTLE_ENDIAN
+
+/*
+    Motorola 68000 family, no revisions or variants
+
+    M68K is big-endian.
+*/
+#elif defined(__m68k__)
+#  define Q_PROCESSOR_M68K
+#  define Q_BYTE_ORDER Q_BIG_ENDIAN
 
 /*
     MIPS family, known revisions: I, II, III, IV, 32, 64
@@ -306,6 +341,8 @@
 #  define Q_PROCESSOR_WORDSIZE 8
 #ifdef QT_COMPILER_SUPPORTS_SSE2
 #  define Q_PROCESSOR_X86 6   // enables SIMD support
+# define Q_PROCESSOR_X86_64 // wasm64
+#  define Q_PROCESSOR_WASM_64
 #endif
 
 #endif

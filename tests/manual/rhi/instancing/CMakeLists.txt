@@ -1,4 +1,5 @@
-# Generated from instancing.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## instancing Binary:
@@ -8,7 +9,7 @@ qt_internal_add_manual_test(tst_manual_instancing
     GUI
     SOURCES
         instancing.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -25,7 +26,3 @@ qt_internal_add_resource(tst_manual_instancing "instancing"
     FILES
         ${instancing_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:instancing.pro:<TRUE>:
-# TEMPLATE = "app"

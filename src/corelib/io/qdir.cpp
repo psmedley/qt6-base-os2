@@ -21,9 +21,8 @@
 #include "qfilesystemengine_p.h"
 #include <qstringbuilder.h>
 
-#ifdef QT_BUILD_CORE_LIB
-#  include "qresource.h"
-#  include "private/qcoreglobaldata_p.h"
+#ifndef QT_BOOTSTRAPPED
+# include "qreadwritelock.h"
 #endif
 
 #include <algorithm>
@@ -87,16 +86,8 @@ QDirPrivate::QDirPrivate(const QString &path, const QStringList &nameFilters_, Q
 {
     setPath(path.isEmpty() ? QString::fromLatin1(".") : path);
 
-    bool empty = nameFilters.isEmpty();
-    if (!empty) {
-        empty = true;
-        for (int i = 0; i < nameFilters.size(); ++i) {
-            if (!nameFilters.at(i).isEmpty()) {
-                empty = false;
-                break;
-            }
-        }
-    }
+    auto isEmpty = [](const auto &e) { return e.isEmpty(); };
+    const bool empty = std::all_of(nameFilters.cbegin(), nameFilters.cend(), isEmpty);
     if (empty)
         nameFilters = QStringList(QString::fromLatin1("*"));
 }
@@ -235,8 +226,8 @@ bool QDirSortItemComparator::operator()(const QDirSortItem &n1, const QDirSortIt
         // find timezones, which is incredibly expensive. As we aren't
         // presenting these to the user, we don't care (at all) about the
         // local timezone, so force them to UTC to avoid that conversion.
-        firstModified.setTimeSpec(Qt::UTC);
-        secondModified.setTimeSpec(Qt::UTC);
+        firstModified.setTimeZone(QTimeZone::UTC);
+        secondModified.setTimeZone(QTimeZone::UTC);
 
         r = firstModified.msecsTo(secondModified);
         break;
@@ -284,7 +275,7 @@ bool QDirSortItemComparator::operator()(const QDirSortItem &n1, const QDirSortIt
     return r < 0;
 }
 
-inline void QDirPrivate::sortFileList(QDir::SortFlags sort, QFileInfoList &l,
+inline void QDirPrivate::sortFileList(QDir::SortFlags sort, const QFileInfoList &l,
                                       QStringList *names, QFileInfoList *infos)
 {
     // names and infos are always empty lists or 0 here
@@ -294,8 +285,8 @@ inline void QDirPrivate::sortFileList(QDir::SortFlags sort, QFileInfoList &l,
             if (infos)
                 *infos = l;
             if (names) {
-                for (int i = 0; i < n; ++i)
-                    names->append(l.at(i).fileName());
+                for (const QFileInfo &fi : l)
+                    names->append(fi.fileName());
             }
         } else {
             QScopedArrayPointer<QDirSortItem> si(new QDirSortItem[n]);
@@ -495,8 +486,8 @@ inline void QDirPrivate::initFileEngine()
 
     \snippet code/src_corelib_io_qdir.cpp 4
 
-    (We could also use the static convenience function
-    QFile::exists().)
+    (We could also use one of the static convenience functions
+    QFileInfo::exists() or QFile::exists().)
 
     Traversing directories and reading a file:
 
@@ -511,7 +502,8 @@ inline void QDirPrivate::initFileEngine()
 
     \include android-content-uri-limitations.qdocinc
 
-    \sa QFileInfo, QFile, QFileDialog, QCoreApplication::applicationDirPath(), {Find Files Example}
+    \sa QFileInfo, QFile, QFileDialog, QCoreApplication::applicationDirPath(),
+        {Fetch More Example}
 */
 
 /*!
@@ -696,7 +688,7 @@ static qsizetype drivePrefixLength(QStringView path)
     } else if (path.startsWith("//"_L1)) {
         // UNC path; use its //server/share part as "drive" - it's as sane a
         // thing as we can do.
-        for (int i = 2; i-- > 0; ) { // Scan two "path fragments":
+        for (int i = 0 ; i < 2 ; ++i) { // Scan two "path fragments":
             while (drive < size && path.at(drive).unicode() == '/')
                 drive++;
             if (drive >= size) {
@@ -1056,7 +1048,17 @@ void QDir::setNameFilters(const QStringList &nameFilters)
     d->nameFilters = nameFilters;
 }
 
-#ifdef QT_BUILD_CORE_LIB
+#ifndef QT_BOOTSTRAPPED
+
+namespace {
+struct DirSearchPaths {
+    mutable QReadWriteLock mutex;
+    QHash<QString, QStringList> paths;
+};
+}
+
+Q_GLOBAL_STATIC(DirSearchPaths, dirSearchPaths)
+
 /*!
     \since 4.3
 
@@ -1084,19 +1086,19 @@ void QDir::setSearchPaths(const QString &prefix, const QStringList &searchPaths)
         return;
     }
 
-    for (int i = 0; i < prefix.size(); ++i) {
-        if (!prefix.at(i).isLetterOrNumber()) {
+    for (QChar ch : prefix) {
+        if (!ch.isLetterOrNumber()) {
             qWarning("QDir::setSearchPaths: Prefix can only contain letters or numbers");
             return;
         }
     }
 
-    QWriteLocker lock(&QCoreGlobalData::instance()->dirSearchPathsLock);
-    QHash<QString, QStringList> &paths = QCoreGlobalData::instance()->dirSearchPaths;
+    DirSearchPaths &conf = *dirSearchPaths;
+    const QWriteLocker lock(&conf.mutex);
     if (searchPaths.isEmpty()) {
-        paths.remove(prefix);
+        conf.paths.remove(prefix);
     } else {
-        paths.insert(prefix, searchPaths);
+        conf.paths.insert(prefix, searchPaths);
     }
 }
 
@@ -1112,8 +1114,9 @@ void QDir::addSearchPath(const QString &prefix, const QString &path)
     if (path.isEmpty())
         return;
 
-    QWriteLocker lock(&QCoreGlobalData::instance()->dirSearchPathsLock);
-    QCoreGlobalData::instance()->dirSearchPaths[prefix] += path;
+    DirSearchPaths &conf = *dirSearchPaths;
+    const QWriteLocker lock(&conf.mutex);
+    conf.paths[prefix] += path;
 }
 
 /*!
@@ -1125,11 +1128,15 @@ void QDir::addSearchPath(const QString &prefix, const QString &path)
 */
 QStringList QDir::searchPaths(const QString &prefix)
 {
-    QReadLocker lock(&QCoreGlobalData::instance()->dirSearchPathsLock);
-    return QCoreGlobalData::instance()->dirSearchPaths.value(prefix);
+    if (!dirSearchPaths.exists())
+        return QStringList();
+
+    const DirSearchPaths &conf = *dirSearchPaths;
+    const QReadLocker lock(&conf.mutex);
+    return conf.paths.value(prefix);
 }
 
-#endif // QT_BUILD_CORE_LIB
+#endif // QT_BOOTSTRAPPED
 
 /*!
     Returns the value set by setFilter()
@@ -1284,9 +1291,12 @@ void QDir::setSorting(SortFlags sort)
 
     Equivalent to entryList().count().
 
+    \note In Qt versions prior to 6.5, this function returned \c{uint}, not
+    \c{qsizetype}.
+
     \sa operator[](), entryList()
 */
-uint QDir::count() const
+qsizetype QDir::count(QT6_IMPL_NEW_OVERLOAD) const
 {
     Q_D(const QDir);
     d->initFileLists(*this);
@@ -1298,9 +1308,11 @@ uint QDir::count() const
     names. Equivalent to entryList().at(index).
     \a pos must be a valid index position in the list (i.e., 0 <= pos < count()).
 
+    \note In Qt versions prior to 6.5, \a pos was an \c{int}, not \c{qsizetype}.
+
     \sa count(), entryList()
 */
-QString QDir::operator[](int pos) const
+QString QDir::operator[](qsizetype pos) const
 {
     Q_D(const QDir);
     d->initFileLists(*this);
@@ -1899,7 +1911,7 @@ bool QDir::exists(const QString &name) const
         qWarning("QDir::exists: Empty or null file name");
         return false;
     }
-    return QFile::exists(filePath(name));
+    return QFileInfo::exists(filePath(name));
 }
 
 /*!
@@ -2392,59 +2404,6 @@ QStringList QDir::nameFiltersFromString(const QString &nameFilter)
 {
     return QDirPrivate::splitFilters(nameFilter);
 }
-
-/*!
-    \macro void Q_INIT_RESOURCE(name)
-    \relates QDir
-
-    Initializes the resources specified by the \c .qrc file with the
-    specified base \a name. Normally, when resources are built as part
-    of the application, the resources are loaded automatically at
-    startup. The Q_INIT_RESOURCE() macro is necessary on some platforms
-    for resources stored in a static library.
-
-    For example, if your application's resources are listed in a file
-    called \c myapp.qrc, you can ensure that the resources are
-    initialized at startup by adding this line to your \c main()
-    function:
-
-    \snippet code/src_corelib_io_qdir.cpp 13
-
-    If the file name contains characters that cannot be part of a valid C++ function name
-    (such as '-'), they have to be replaced by the underscore character ('_').
-
-    \note This macro cannot be used in a namespace. It should be called from
-    main(). If that is not possible, the following workaround can be used
-    to init the resource \c myapp from the function \c{MyNamespace::myFunction}:
-
-    \snippet code/src_corelib_io_qdir.cpp 14
-
-    \sa Q_CLEANUP_RESOURCE(), {The Qt Resource System}
-*/
-
-/*!
-    \since 4.1
-    \macro void Q_CLEANUP_RESOURCE(name)
-    \relates QDir
-
-    Unloads the resources specified by the \c .qrc file with the base
-    name \a name.
-
-    Normally, Qt resources are unloaded automatically when the
-    application terminates, but if the resources are located in a
-    plugin that is being unloaded, call Q_CLEANUP_RESOURCE() to force
-    removal of your resources.
-
-    \note This macro cannot be used in a namespace. Please see the
-    Q_INIT_RESOURCE documentation for a workaround.
-
-    Example:
-
-    \snippet code/src_corelib_io_qdir.cpp 15
-
-    \sa Q_INIT_RESOURCE(), {The Qt Resource System}
-*/
-
 
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug debug, QDir::Filters filters)

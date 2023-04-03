@@ -161,6 +161,9 @@ gbm_surface *QEglFSKmsGbmScreen::createSurface(EGLConfig eglConfig)
 
 void QEglFSKmsGbmScreen::resetSurface()
 {
+    m_flipPending = false;
+    m_gbm_bo_current = nullptr;
+    m_gbm_bo_next = nullptr;
     m_gbm_surface = nullptr;
 }
 
@@ -430,9 +433,13 @@ void QEglFSKmsGbmScreen::flip()
         }
     }
 
+    if (device()->hasAtomicSupport()) {
 #if QT_CONFIG(drm_atomic)
-    device()->threadLocalAtomicCommit(this);
+        if (!device()->threadLocalAtomicCommit(this)) {
+            return;
+        }
 #endif
+    }
 
     gbmRelease.dismiss();
 }

@@ -23,7 +23,11 @@ class tst_QMessageBox : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase_data();
+    void init();
+
     void sanityTest();
+    void baseClassSetVisible();
     void defaultButton();
     void escapeButton();
     void clickedButton();
@@ -129,6 +133,22 @@ void ExecCloseHelper::timerEvent(QTimerEvent *te)
     }
 }
 
+void tst_QMessageBox::initTestCase_data()
+{
+    QTest::addColumn<bool>("useNativeDialog");
+    QTest::newRow("widget") << false;
+    if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme()) {
+        if (theme->usePlatformNativeDialog(QPlatformTheme::MessageDialog))
+            QTest::newRow("native") << true;
+    }
+}
+
+void tst_QMessageBox::init()
+{
+    QFETCH_GLOBAL(bool, useNativeDialog);
+    qApp->setAttribute(Qt::AA_DontUseNativeDialogs, !useNativeDialog);
+}
+
 void tst_QMessageBox::cleanup()
 {
     QTRY_VERIFY(QApplication::topLevelWidgets().isEmpty()); // OS X requires TRY
@@ -153,6 +173,15 @@ void tst_QMessageBox::sanityTest()
     ExecCloseHelper closeHelper;
     closeHelper.start(ExecCloseHelper::CloseWindow, &msgBox);
     msgBox.exec();
+}
+
+void tst_QMessageBox::baseClassSetVisible()
+{
+    QMessageBox msgBox;
+    msgBox.setText("Hello World");
+    msgBox.QDialog::setVisible(true);
+    QCOMPARE(msgBox.isVisible(), true);
+    msgBox.close();
 }
 
 void tst_QMessageBox::button()
@@ -416,6 +445,8 @@ QT_WARNING_DISABLE_DEPRECATED
     QCOMPARE(ret, int(QMessageBox::Yes));
     QVERIFY(closeHelper.done());
 
+#if QT_DEPRECATED_SINCE(6, 2)
+    // The overloads below are valid only before 6.2
     closeHelper.start(Qt::Key_Enter);
     ret = QMessageBox::information(nullptr, "title", "text", QMessageBox::Yes, QMessageBox::No | QMessageBox::Default);
     QCOMPARE(ret, int(QMessageBox::No));
@@ -448,22 +479,21 @@ QT_WARNING_DISABLE_DEPRECATED
         QCOMPARE(ret, 1);
         QVERIFY(closeHelper.done());
     }
+#endif // QT_DEPRECATED_SINCE(6, 2)
 QT_WARNING_POP
 }
 
 void tst_QMessageBox::instanceSourceCompat()
 {
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
-     QMessageBox mb("Application name here",
-                    "Saving the file will overwrite the original file on the disk.\n"
-                    "Do you really want to save?",
-                    QMessageBox::Information,
-                    QMessageBox::Yes | QMessageBox::Default,
-                    QMessageBox::No,
-                    QMessageBox::Cancel | QMessageBox::Escape);
-    mb.setButtonText(QMessageBox::Yes, "Save");
-    mb.setButtonText(QMessageBox::No, "Discard");
+    QMessageBox mb(QMessageBox::Information,
+                   "Application name here",
+                   "Saving the file will overwrite the original file on the disk.\n"
+                   "Do you really want to save?",
+                   QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+    mb.setDefaultButton(QMessageBox::Yes);
+    mb.setEscapeButton(QMessageBox::Cancel);
+    mb.button(QMessageBox::Yes)->setText("Save");
+    mb.button(QMessageBox::No)->setText("Discard");
     mb.addButton("&Revert", QMessageBox::RejectRole);
     mb.addButton("&Zoo", QMessageBox::ActionRole);
 
@@ -479,11 +509,14 @@ QT_WARNING_DISABLE_DEPRECATED
     closeHelper.start(QKeyCombination(Qt::ALT | Qt::Key_Z).toCombined(), &mb);
     QCOMPARE(mb.exec(), 1);
 #endif
-QT_WARNING_POP
 }
 
 void tst_QMessageBox::detailsText()
 {
+    QFETCH_GLOBAL(bool, useNativeDialog);
+    if (useNativeDialog)
+         QSKIP("Native dialogs do not propagate expose events");
+
     QMessageBox box;
     QString text("This is the details text.");
     box.setDetailedText(text);
@@ -497,6 +530,10 @@ void tst_QMessageBox::detailsText()
 
 void tst_QMessageBox::detailsButtonText()
 {
+    QFETCH_GLOBAL(bool, useNativeDialog);
+    if (useNativeDialog)
+         QSKIP("Native dialogs do not propagate expose events");
+
     QMessageBox box;
     box.setDetailedText("bla");
     box.open();
@@ -518,6 +555,10 @@ void tst_QMessageBox::detailsButtonText()
 
 void tst_QMessageBox::expandDetailsWithoutMoving() // QTBUG-32473
 {
+    QFETCH_GLOBAL(bool, useNativeDialog);
+    if (useNativeDialog)
+         QSKIP("Native dialogs do not propagate expose events");
+
     tst_ResizingMessageBox box;
     box.setDetailedText("bla");
     box.show();
@@ -557,6 +598,7 @@ void tst_QMessageBox::incorrectDefaultButton()
     QMessageBox::question(nullptr, "", "I've been hit!",QFlag(QMessageBox::Ok | QMessageBox::Cancel),QMessageBox::Save);
     QVERIFY(closeHelper.done());
 
+#if QT_DEPRECATED_SINCE(6, 2)
     closeHelper.start(Qt::Key_Escape);
     QTest::ignoreMessage(QtWarningMsg, "QDialogButtonBox::createButton: Invalid ButtonRole, button not added");
     QTest::ignoreMessage(QtWarningMsg, "QDialogButtonBox::createButton: Invalid ButtonRole, button not added");
@@ -566,6 +608,7 @@ QT_WARNING_DISABLE_DEPRECATED
     QMessageBox::question(nullptr, "", "I've been hit!",QMessageBox::Ok | QMessageBox::Cancel,QMessageBox::Save | QMessageBox::Cancel,QMessageBox::Ok);
 QT_WARNING_POP
     QVERIFY(closeHelper.done());
+#endif
 }
 
 void tst_QMessageBox::updateSize()
@@ -615,6 +658,10 @@ Q_DECLARE_METATYPE(RoleSet);
 
 void tst_QMessageBox::acceptedRejectedSignals()
 {
+    QFETCH_GLOBAL(bool, useNativeDialog);
+    if (useNativeDialog)
+         QSKIP("Native dialogs do not propagate expose events");
+
     QMessageBox messageBox(QMessageBox::Information, "Test window", "Test text");
 
     QFETCH(ButtonsCreator, buttonsCreator);

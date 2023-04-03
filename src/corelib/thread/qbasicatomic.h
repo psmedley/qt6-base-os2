@@ -7,19 +7,7 @@
 #ifndef QBASICATOMIC_H
 #define QBASICATOMIC_H
 
-#if defined(QT_BOOTSTRAPPED)
-#  include <QtCore/qatomic_bootstrap.h>
-
-// If C++11 atomics are supported, use them!
-// Note that constexpr support is sometimes disabled in QNX or INTEGRITY builds,
-// but their libraries have <atomic>.
-#elif defined(Q_COMPILER_ATOMICS)
-#  include <QtCore/qatomic_cxx11.h>
-
-// No fallback
-#else
-#  error "Qt requires C++11 support"
-#endif
+#include <QtCore/qatomic_cxx11.h>
 
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_MSVC(4522)
@@ -34,8 +22,6 @@ QT_END_NAMESPACE
 #endif
 
 // New atomics
-
-#define QT_BASIC_ATOMIC_HAS_CONSTRUCTORS
 
 template <typename T>
 class QBasicAtomicInteger
@@ -167,13 +153,11 @@ public:
     { return fetchAndXorOrdered(v) ^ v; }
 
 
-#ifdef QT_BASIC_ATOMIC_HAS_CONSTRUCTORS
     QBasicAtomicInteger() = default;
     constexpr QBasicAtomicInteger(T value) noexcept : _q_value(value) {}
     QBasicAtomicInteger(const QBasicAtomicInteger &) = delete;
     QBasicAtomicInteger &operator=(const QBasicAtomicInteger &) = delete;
     QBasicAtomicInteger &operator=(const QBasicAtomicInteger &) volatile = delete;
-#endif
 };
 typedef QBasicAtomicInteger<int> QBasicAtomicInt;
 
@@ -264,13 +248,11 @@ public:
     Type operator-=(qptrdiff valueToSub) noexcept
     { return fetchAndSubOrdered(valueToSub) - valueToSub; }
 
-#ifdef QT_BASIC_ATOMIC_HAS_CONSTRUCTORS
     QBasicAtomicPointer() = default;
     constexpr QBasicAtomicPointer(Type value) noexcept : _q_value(value) {}
     QBasicAtomicPointer(const QBasicAtomicPointer &) = delete;
     QBasicAtomicPointer &operator=(const QBasicAtomicPointer &) = delete;
     QBasicAtomicPointer &operator=(const QBasicAtomicPointer &) volatile = delete;
-#endif
 };
 
 #ifndef Q_BASIC_ATOMIC_INITIALIZER

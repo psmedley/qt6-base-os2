@@ -1,4 +1,5 @@
-# Generated from qimagereader.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qimagereader Binary:
@@ -8,7 +9,7 @@ qt_internal_add_manual_test(qimagereader
     GUI
     SOURCES
         main.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )

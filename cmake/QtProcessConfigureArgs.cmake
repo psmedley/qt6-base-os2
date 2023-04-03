@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # This script reads Qt configure arguments from config.opt,
 # translates the arguments to CMake arguments and calls CMake.
 #
@@ -37,6 +40,12 @@ endfunction()
 function(warn_in_per_repo_build arg)
     if(NOT TOP_LEVEL)
         message(WARNING "Command line option ${arg} is only effective in top-level builds")
+    endif()
+endfunction()
+
+function(is_valid_qt_hex_version arg version)
+    if(NOT version MATCHES "^0x[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]$")
+        message(FATAL_ERROR "Incorrect version ${version} specified for ${arg}")
     endif()
 endfunction()
 
@@ -122,6 +131,17 @@ while(NOT "${configure_args}" STREQUAL "")
         set(cmake_file_api FALSE)
     elseif(arg STREQUAL "-verbose")
         list(APPEND cmake_args "--log-level=STATUS")
+    elseif(arg STREQUAL "-disable-deprecated-up-to")
+        list(POP_FRONT configure_args version)
+        is_valid_qt_hex_version("${arg}" "${version}")
+        push("-DQT_DISABLE_DEPRECATED_UP_TO=${version}")
+    elseif(arg STREQUAL "-unity-build")
+        push("-DQT_UNITY_BUILD=ON")
+        # QT_UNITY_BUILD_BATCH_SIZE will be set to 8, CMake's default.
+    elseif(arg STREQUAL "-unity-build-batch-size")
+        list(POP_FRONT configure_args unity_build_batch_size)
+        is_non_empty_valid_arg("${arg}" "${unity_build_batch_size}")
+        push("-DQT_UNITY_BUILD_BATCH_SIZE=${unity_build_batch_size}")
     elseif(arg STREQUAL "--")
         # Everything after this argument will be passed to CMake verbatim.
         list(APPEND cmake_args "${configure_args}")
@@ -131,6 +151,15 @@ while(NOT "${configure_args}" STREQUAL "")
     endif()
 endwhile()
 
+if(FRESH_REQUESTED)
+    push("-DQT_INTERNAL_FRESH_REQUESTED:BOOL=TRUE")
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24")
+        push("--fresh")
+    else()
+        file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/CMakeCache.txt"
+                            "${CMAKE_BINARY_DIR}/CMakeFiles")
+    endif()
+endif()
 
 ####################################################################################################
 # Define functions/macros that are called in configure.cmake files

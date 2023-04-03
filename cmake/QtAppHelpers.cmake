@@ -1,12 +1,20 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # This function creates a CMake target for a Qt internal app.
 # Such projects had a load(qt_app) command.
 function(qt_internal_add_app target)
-    qt_parse_all_arguments(arg
-        "qt_internal_add_app"
-        "NO_INSTALL;INSTALL_VERSIONED_LINK"
+    cmake_parse_arguments(PARSE_ARGV 1 arg
+        "NO_INSTALL;INSTALL_VERSIONED_LINK;EXCEPTIONS"
         "${__default_target_info_args};INSTALL_DIR"
-        "${__default_private_args}"
-        ${ARGN})
+        "${__default_private_args};PUBLIC_LIBRARIES"
+    )
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    set(exceptions "")
+    if(arg_EXCEPTIONS)
+        set(exceptions EXCEPTIONS)
+    endif()
 
     if(DEFINED arg_INSTALL_DIR)
         set(forward_install_dir INSTALL_DIRECTORY ${arg_INSTALL_DIR})
@@ -21,11 +29,20 @@ function(qt_internal_add_app target)
         set(no_install NO_INSTALL)
     endif()
 
+    if(arg_PUBLIC_LIBRARIES)
+        message(WARNING
+            "qt_internal_add_app's PUBLIC_LIBRARIES option is deprecated, and will be removed in "
+            "a future Qt version. Use the LIBRARIES option instead.")
+    endif()
+
+    qt_internal_library_deprecation_level(deprecation_define)
+
     qt_internal_add_executable("${target}"
         QT_APP
         DELAY_RC
         DELAY_TARGET_INFO
         OUTPUT_DIRECTORY "${output_directory}"
+        ${exceptions}
         ${no_install}
         ${forward_install_dir}
         SOURCES ${arg_SOURCES}
@@ -33,7 +50,11 @@ function(qt_internal_add_app target)
             ${arg_INCLUDE_DIRECTORIES}
         DEFINES
             ${arg_DEFINES}
-        LIBRARIES ${arg_LIBRARIES} Qt::PlatformAppInternal
+            ${deprecation_define}
+        LIBRARIES
+            ${arg_LIBRARIES}
+            ${arg_PUBLIC_LIBRARIES}
+            Qt::PlatformAppInternal
         COMPILE_OPTIONS ${arg_COMPILE_OPTIONS}
         LINK_OPTIONS ${arg_LINK_OPTIONS}
         MOC_OPTIONS ${arg_MOC_OPTIONS}
@@ -62,7 +83,8 @@ function(qt_internal_add_app target)
 
     # Install versioned link if requested.
     if(NOT arg_NO_INSTALL AND arg_INSTALL_VERSIONED_LINK)
-        qt_internal_install_versioned_link("${arg_INSTALL_DIR}" ${target})
+        qt_internal_install_versioned_link(WORKING_DIRECTORY "${arg_INSTALL_DIR}"
+        TARGETS ${target})
     endif()
 
     qt_add_list_file_finalizer(qt_internal_finalize_app ${target})

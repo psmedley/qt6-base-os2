@@ -6,9 +6,11 @@
 
 #include <QtCore/private/qglobal_p.h>
 #include <qstringconverter.h>
+#include <private/qstringconverter_p.h>
 #include <qthreadpool.h>
 
 #include <array>
+#include <numeric>
 
 using namespace Qt::StringLiterals;
 
@@ -129,6 +131,8 @@ private slots:
     void convertUtf8CharByChar();
     void roundtrip_data();
     void roundtrip();
+
+    void convertL1U8();
 
 #if QT_CONFIG(icu)
     void roundtripIcu_data();
@@ -354,7 +358,7 @@ void tst_QStringConverter::roundtrip_data()
     QTest::addColumn<QStringView>("utf16");
     QTest::addColumn<QStringConverter::Encoding>("code");
 
-    for (const auto code : codes) {
+    for (const auto &code : codes) {
         for (const TestString &s : testStrings) {
             // rules:
             // 1) don't pass the null character to the System codec
@@ -425,6 +429,18 @@ void tst_QStringConverter::roundtrip()
     QStringDecoder back2(code, flag);
     decoded = back2.decode(out2.encode(uniString));
     QCOMPARE(decoded, uniString);
+}
+
+void tst_QStringConverter::convertL1U8()
+{
+    {
+        std::array<char, 256> latin1;
+        std::iota(latin1.data(), latin1.data() + latin1.size(), uchar(0));
+        std::array<char, 512> utf8;
+        auto out = QUtf8::convertFromLatin1(utf8.data(), QLatin1StringView{latin1.data(), latin1.size()});
+        QCOMPARE(QString::fromLatin1(latin1.data(), latin1.size()),
+                 QString::fromUtf8(utf8.data(), out - utf8.data()));
+    }
 }
 
 #if QT_CONFIG(icu)
@@ -1806,7 +1822,7 @@ void tst_QStringConverter::roundtripBom_data()
     QTest::addColumn<QStringView>("utf16");
     QTest::addColumn<QStringConverter::Encoding>("code");
 
-    for (const auto code : codes) {
+    for (const auto &code : codes) {
         if (size_t(code.code) >= encodedBoms.size())
             break;
         if (code.limitation != FullUnicode)
@@ -2115,7 +2131,7 @@ void tst_QStringConverter::utfHeaders()
         QVERIFY(decode.isValid());
 
         QString result = decode(encoded);
-        QCOMPARE(result.length(), unicode.length());
+        QCOMPARE(result.size(), unicode.size());
         QCOMPARE(result, unicode);
     }
 
@@ -2126,7 +2142,7 @@ void tst_QStringConverter::utfHeaders()
         QString result;
         for (char c : encoded)
             result += decode(QByteArrayView(&c, 1));
-        QCOMPARE(result.length(), unicode.length());
+        QCOMPARE(result.size(), unicode.size());
         QCOMPARE(result, unicode);
     }
 

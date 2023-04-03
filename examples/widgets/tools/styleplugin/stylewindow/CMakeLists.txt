@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_add_executable(styleplugin
     main.cpp
     stylewindow.cpp stylewindow.h
@@ -9,9 +12,9 @@ set_target_properties(styleplugin PROPERTIES
 )
 
 target_link_libraries(styleplugin PRIVATE
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
 )
 
 if(NOT QT6_IS_SHARED_LIBS_BUILD)

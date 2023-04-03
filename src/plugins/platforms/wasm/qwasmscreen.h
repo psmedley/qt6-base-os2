@@ -33,10 +33,9 @@ public:
 
     static QWasmScreen *get(QPlatformScreen *screen);
     static QWasmScreen *get(QScreen *screen);
-    emscripten::val container() const;
-    emscripten::val canvas() const;
-    QString canvasId() const;
-    QString canvasTargetId() const;
+    emscripten::val element() const;
+    QString eventTargetId() const;
+    QString outerScreenId() const;
 
     QWasmCompositor *compositor();
     QWasmEventTranslator *eventTranslator();
@@ -53,7 +52,8 @@ public:
     QWindow *topWindow() const;
     QWindow *topLevelAt(const QPoint &p) const override;
 
-    QPoint translateAndClipGlobalPoint(const QPoint &p) const;
+    QPoint mapFromLocal(const QPoint &p) const;
+    QPoint clipPoint(const QPoint &p) const;
 
     void invalidateSize();
     void updateQScreenAndCanvasRenderSize();
@@ -64,18 +64,15 @@ public slots:
     void setGeometry(const QRect &rect);
 
 private:
-    std::string canvasSpecialHtmlTargetId() const;
-    bool hasSpecialHtmlTargets() const;
-
     emscripten::val m_container;
-    emscripten::val m_canvas;
+    emscripten::val m_shadowContainer;
     std::unique_ptr<QWasmCompositor> m_compositor;
     std::unique_ptr<QWasmEventTranslator> m_eventTranslator;
     QRect m_geometry = QRect(0, 0, 100, 100);
     int m_depth = 32;
     QImage::Format m_format = QImage::Format_RGB32;
     QWasmCursor m_cursor;
-    static const char * m_canvasResizeObserverCallbackContextPropertyName;
+    static const char *m_canvasResizeObserverCallbackContextPropertyName;
     std::unique_ptr<qstdweb::EventCallback> m_onContextMenu;
 };
 

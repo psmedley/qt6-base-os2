@@ -1,4 +1,5 @@
-# Generated from concurrent.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## Concurrent Module:
@@ -47,4 +48,3 @@ qt_internal_extend_target(Concurrent CONDITION MSVC AND (TEST_architecture_arch 
 qt_internal_add_docs(Concurrent
     doc/qtconcurrent.qdocconf
 )
-

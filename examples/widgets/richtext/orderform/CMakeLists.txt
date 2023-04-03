@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(orderform LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -10,6 +11,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/widgets/richtext/orderform")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+
+qt_standard_project_setup()
 
 qt_add_executable(orderform
     detailsdialog.cpp detailsdialog.h
@@ -22,16 +25,14 @@ set_target_properties(orderform PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-target_link_libraries(orderform PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
+target_link_libraries(orderform PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
 )
 
-if(TARGET Qt::PrintSupport)
-    target_link_libraries(orderform PUBLIC
-        Qt::PrintSupport
-    )
+if(TARGET Qt6::PrintSupport)
+    target_link_libraries(orderform PRIVATE Qt6::PrintSupport)
 endif()
 
 install(TARGETS orderform

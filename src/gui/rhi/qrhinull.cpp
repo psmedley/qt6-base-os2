@@ -59,7 +59,7 @@ QRhiSwapChain *QRhiNull::createSwapChain()
     return new QNullSwapChain(this);
 }
 
-QRhiBuffer *QRhiNull::createBuffer(QRhiBuffer::Type type, QRhiBuffer::UsageFlags usage, int size)
+QRhiBuffer *QRhiNull::createBuffer(QRhiBuffer::Type type, QRhiBuffer::UsageFlags usage, quint32 size)
 {
     return new QNullBuffer(this, type, usage, size);
 }
@@ -135,8 +135,7 @@ int QRhiNull::resourceLimit(QRhi::ResourceLimit limit) const
         return 32;
     }
 
-    Q_UNREACHABLE();
-    return 0;
+    Q_UNREACHABLE_RETURN(0);
 }
 
 const QRhiNativeHandles *QRhiNull::nativeHandles()
@@ -151,7 +150,7 @@ QRhiDriverInfo QRhiNull::driverInfo() const
     return info;
 }
 
-QRhiMemAllocStats QRhiNull::graphicsMemoryAllocationStatistics()
+QRhiStats QRhiNull::statistics()
 {
     return {};
 }
@@ -550,7 +549,7 @@ void QRhiNull::endComputePass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *re
         resourceUpdate(cb, resourceUpdates);
 }
 
-QNullBuffer::QNullBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
+QNullBuffer::QNullBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, quint32 size)
     : QRhiBuffer(rhi, type, usage, size)
 {
 }
@@ -662,7 +661,9 @@ bool QNullTexture::create()
     const bool is3D = m_flags.testFlag(ThreeDimensional);
     const bool isArray = m_flags.testFlag(TextureArray);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
-    QSize size = m_pixelSize.isEmpty() ? QSize(1, 1) : m_pixelSize;
+    const bool is1D = m_flags.testFlags(OneDimensional);
+    QSize size = is1D ? QSize(qMax(1, m_pixelSize.width()), 1)
+                      : (m_pixelSize.isEmpty() ? QSize(1, 1) : m_pixelSize);
     m_depth = qMax(1, m_depth);
     const int mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
     m_arraySize = qMax(0, m_arraySize);

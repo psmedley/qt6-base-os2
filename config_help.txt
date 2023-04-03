@@ -44,7 +44,9 @@ options without auto-detection.
 Configure meta:
 
   -help, -h ............ Display this help screen
-  -redo ................ Re-configure with previously used options.
+  -redo ................ Re-configure with previously used options. In addition,
+                         redo removes CMakeCache.txt file and CMakeFiles/ directory
+                         and recreates them from scratch.
                          Additional options may be passed, but will not be
                          saved for later use by -redo.
 
@@ -110,12 +112,8 @@ Build options:
                          for example, -sanitize address cannot be combined with
                          -sanitize thread.
 
-  -c++std <edition> .... Select C++ standard <edition> [c++20/c++17/c++14/c++11]
+  -c++std <edition> .... Select C++ standard <edition> [c++2b/c++20/c++17/c++14/c++11]
 
-  -sse2 ................ Use SSE2 instructions [auto]
-  -sse3/-ssse3/-sse4.1/-sse4.2/-avx/-avx2/-avx512
-                         Enable use of particular x86 instructions [auto]
-                         Enabled ones are still subject to runtime detection.
   -mips_dsp/-mips_dspr2  Use MIPS DSP/rev2 instructions [auto]
 
   -qreal <type> ........ typedef qreal to the specified type. [double]
@@ -142,8 +140,22 @@ Build options:
                          Force use of the GNU ld, GNU gold, LLVM/LLD or mold
                          linker instead of default one (GCC and clang only)
   -ccache .............. Use the ccache compiler cache [no] (Unix only)
+  -unity-build ......... Enable Unity (Jumbo) build
+  -unity-build-batch-size <int>
+                         Maximum number of source files used by the unity build
+                         to create unity source files [8]
 
   -warnings-are-errors . Treat warnings as errors [no; yes if -developer-build]
+
+  -disable-deprecated-up-to <version>
+                         Set the QT_DISABLE_DEPRECATED_UP_TO value to <version>.
+                         QT_DISABLE_DEPRECATED_UP_TO is used to remove
+                         deprecated methods from both API and ABI.
+                         <version> is a hex value, for example 0x060500 can be
+                         used to remove all code deprecated in Qt 6.5.0 or
+                         earlier releases.
+                         By default <version> is set to 0x040000 and 0x050000 on
+                         Windows, and non-Windows respectively.
 
 Build environment:
 

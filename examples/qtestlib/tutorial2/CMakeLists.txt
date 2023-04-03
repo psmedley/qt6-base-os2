@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(tutorial2 LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -10,6 +11,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/qtestlib/tutorial2")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Test Widgets)
+
+qt_standard_project_setup()
 
 qt_add_executable(tutorial2
     testqstring.cpp
@@ -20,11 +23,11 @@ set_target_properties(tutorial2 PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-target_link_libraries(tutorial2 PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Test
-    Qt::Widgets
+target_link_libraries(tutorial2 PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
+    Qt6::Widgets
 )
 
 install(TARGETS tutorial2

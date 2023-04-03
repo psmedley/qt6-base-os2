@@ -123,11 +123,13 @@ QJsonObject::QJsonObject(std::initializer_list<QPair<QString, QJsonValue> > args
     Since QJsonObject is implicitly shared, the copy is shallow
     as long as the object does not get modified.
  */
-QJsonObject::QJsonObject(const QJsonObject &other)
-{
-    o = other.o;
-}
+QJsonObject::QJsonObject(const QJsonObject &other) noexcept = default;
 
+/*!
+    \since 5.10
+
+    Move-constructs a QJsonObject from \a other.
+*/
 QJsonObject::QJsonObject(QJsonObject &&other) noexcept
     : o(other.o)
 {
@@ -137,18 +139,8 @@ QJsonObject::QJsonObject(QJsonObject &&other) noexcept
 /*!
     Assigns \a other to this object.
  */
-QJsonObject &QJsonObject::operator =(const QJsonObject &other)
-{
-    o = other.o;
-    return *this;
-}
+QJsonObject &QJsonObject::operator =(const QJsonObject &other) noexcept = default;
 
-/*!
-    \fn QJsonObject::QJsonObject(QJsonObject &&other)
-    \since 5.10
-
-    Move-constructs a QJsonObject from \a other.
-*/
 
 /*!
     \fn QJsonObject &QJsonObject::operator =(QJsonObject &&other)
@@ -1029,7 +1021,7 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
 
 /*! \fn QJsonObject::iterator QJsonObject::iterator::operator++()
 
-    The prefix ++ operator, \c{++i}, advances the iterator to the
+    The prefix \c{++} operator, \c{++i}, advances the iterator to the
     next item in the object and returns an iterator to the new current
     item.
 
@@ -1042,14 +1034,14 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
 
     \overload
 
-    The postfix ++ operator, \c{i++}, advances the iterator to the
+    The postfix \c{++} operator, \c{i++}, advances the iterator to the
     next item in the object and returns an iterator to the previously
     current item.
 */
 
 /*! \fn QJsonObject::iterator QJsonObject::iterator::operator--()
 
-    The prefix -- operator, \c{--i}, makes the preceding item
+    The prefix \c{--} operator, \c{--i}, makes the preceding item
     current and returns an iterator pointing to the new current item.
 
     Calling this function on QJsonObject::begin() leads to undefined
@@ -1062,7 +1054,7 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
 
     \overload
 
-    The postfix -- operator, \c{i--}, makes the preceding item
+    The postfix \c{--} operator, \c{i--}, makes the preceding item
     current and returns an iterator pointing to the previously
     current item.
 */
@@ -1269,7 +1261,7 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
 
 /*! \fn QJsonObject::const_iterator QJsonObject::const_iterator::operator++()
 
-    The prefix ++ operator, \c{++i}, advances the iterator to the
+    The prefix \c{++} operator, \c{++i}, advances the iterator to the
     next item in the object and returns an iterator to the new current
     item.
 
@@ -1282,14 +1274,14 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
 
     \overload
 
-    The postfix ++ operator, \c{i++}, advances the iterator to the
+    The postfix \c{++} operator, \c{i++}, advances the iterator to the
     next item in the object and returns an iterator to the previously
     current item.
 */
 
 /*! \fn QJsonObject::const_iterator &QJsonObject::const_iterator::operator--()
 
-    The prefix -- operator, \c{--i}, makes the preceding item
+    The prefix \c{--} operator, \c{--i}, makes the preceding item
     current and returns an iterator pointing to the new current item.
 
     Calling this function on QJsonObject::begin() leads to undefined
@@ -1302,7 +1294,7 @@ QJsonObject::const_iterator QJsonObject::constFindImpl(T key) const
 
     \overload
 
-    The postfix -- operator, \c{i--}, makes the preceding item
+    The postfix \c{--} operator, \c{i--}, makes the preceding item
     current and returns an iterator pointing to the previously
     current item.
 */

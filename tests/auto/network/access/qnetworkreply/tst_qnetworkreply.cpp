@@ -16,20 +16,23 @@
 #include <QBuffer>
 #include <QMap>
 
-#include <QtCore/qlist.h>
-#include <QtCore/qset.h>
 #include <QtCore/QCryptographicHash>
 #include <QtCore/QDataStream>
-#include <QtCore/QUrl>
+#include <QtCore/QDateTime>
 #include <QtCore/QEventLoop>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QFile>
+#include <QtCore/QList>
 #include <QtCore/QRandomGenerator>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QRegularExpressionMatch>
+#include <QtCore/QSet>
 #include <QtCore/QSharedPointer>
 #include <QtCore/QScopedPointer>
 #include <QtCore/QTemporaryFile>
+#include <QtCore/QTimeZone>
+#include <QtCore/QUrl>
+
 #include <QtNetwork/QTcpServer>
 #include <QtNetwork/QTcpSocket>
 #include <QtNetwork/QLocalSocket>
@@ -44,6 +47,7 @@
 #include <QtNetwork/qnetworkdiskcache.h>
 #include <QtNetwork/qnetworkrequest.h>
 #include <QtNetwork/qnetworkreply.h>
+#include <QtNetwork/QHttp1Configuration>
 #include <QtNetwork/qnetworkcookie.h>
 #include <QtNetwork/QNetworkCookieJar>
 #include <QtNetwork/QHttpPart>
@@ -65,6 +69,7 @@ Q_DECLARE_METATYPE(QSharedPointer<char>)
 #endif
 
 #include <memory>
+#include <optional>
 
 #ifdef Q_OS_UNIX
 # include <sys/types.h>
@@ -445,6 +450,7 @@ private Q_SLOTS:
     void varyingCacheExpiry_data();
     void varyingCacheExpiry();
 
+    void amountOfHttp1ConnectionsQtbug25280_data();
     void amountOfHttp1ConnectionsQtbug25280();
 
     void dontInsertPartialContentIntoTheCache();
@@ -5479,7 +5485,7 @@ void tst_QNetworkReply::lastModifiedHeaderForHttp()
 
     QDateTime header = reply->header(QNetworkRequest::LastModifiedHeader).toDateTime();
     QDateTime realDate = QDateTime::fromString("2007-05-22T12:04:57", Qt::ISODate);
-    realDate.setTimeSpec(Qt::UTC);
+    realDate.setTimeZone(QTimeZone::UTC);
 
     QCOMPARE(header, realDate);
 }
@@ -8120,10 +8126,18 @@ public:
     }
 };
 
+void tst_QNetworkReply::amountOfHttp1ConnectionsQtbug25280_data()
+{
+    QTest::addColumn<int>("amount");
+    QTest::addRow("default") << 6;
+    QTest::addRow("minimize") << 1;
+    QTest::addRow("increase") << 12;
+}
+
 // Also kind of QTBUG-8468
 void tst_QNetworkReply::amountOfHttp1ConnectionsQtbug25280()
 {
-    const int amount = 6;
+    QFETCH(const int, amount);
     QNetworkAccessManager manager; // function local instance
     Qtbug25280Server server(tst_QNetworkReply::httpEmpty200Response);
     server.doClose = false;
@@ -8131,11 +8145,16 @@ void tst_QNetworkReply::amountOfHttp1ConnectionsQtbug25280()
     QUrl url(QLatin1String("http://127.0.0.1")); // not "localhost" to prevent "Happy Eyeballs"
                                                  // from skewing the counting
     url.setPort(server.serverPort());
+    std::optional<QHttp1Configuration> http1Configuration;
+    if (amount != 6) // don't set if it's the default
+        http1Configuration.emplace().setNumberOfConnectionsPerHost(amount);
     constexpr int NumRequests = 200; // send a lot more than we have sockets
     int finished = 0;
     std::array<std::unique_ptr<QNetworkReply>, NumRequests> replies;
     for (auto &reply : replies) {
         QNetworkRequest request(url);
+        if (http1Configuration)
+            request.setHttp1Configuration(*http1Configuration);
         reply.reset(manager.get(request));
         QObject::connect(reply.get(), &QNetworkReply::finished,
                          [&finished] { ++finished; });

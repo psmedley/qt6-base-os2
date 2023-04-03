@@ -5,7 +5,6 @@
 #include "qgtk3dialoghelpers.h"
 #include "qgtk3menu.h"
 #include <QVariant>
-#include <QtCore/qregularexpression.h>
 #include <QGuiApplication>
 #include <qpa/qwindowsysteminterface.h>
 
@@ -101,6 +100,8 @@ QGtk3Theme::QGtk3Theme()
     SETTING_CONNECT("gtk-font-name");
     SETTING_CONNECT("gtk-application-prefer-dark-theme");
     SETTING_CONNECT("gtk-theme-name");
+    SETTING_CONNECT("gtk-cursor-theme-name");
+    SETTING_CONNECT("gtk-cursor-theme-size");
 #undef SETTING_CONNECT
 
     /* Set XCURSOR_SIZE and XCURSOR_THEME for Wayland sessions */
@@ -116,6 +117,8 @@ QGtk3Theme::QGtk3Theme()
                 qputenv("XCURSOR_THEME", cursorTheme.toUtf8());
         }
     }
+
+    m_storage.reset(new QGtk3Storage);
 }
 
 static inline QVariant gtkGetLongPressTime()
@@ -150,6 +153,14 @@ QVariant QGtk3Theme::themeHint(QPlatformTheme::ThemeHint hint) const
         return QVariant(gtkSetting("gtk-icon-theme-name"));
     case QPlatformTheme::SystemIconFallbackThemeName:
         return QVariant(gtkSetting("gtk-fallback-icon-theme"));
+    case QPlatformTheme::MouseCursorTheme:
+        return QVariant(gtkSetting("gtk-cursor-theme-name"));
+    case QPlatformTheme::MouseCursorSize: {
+        int s = gtkSetting<gint>("gtk-cursor-theme-size");
+        if (s > 0)
+            return QVariant(QSize(s, s));
+        return QGnomeTheme::themeHint(hint);
+    }
     default:
         return QGnomeTheme::themeHint(hint);
     }
@@ -163,45 +174,10 @@ QString QGtk3Theme::gtkFontName() const
     return QGnomeTheme::gtkFontName();
 }
 
-QPlatformTheme::Appearance QGtk3Theme::appearance() const
+Qt::ColorScheme QGtk3Theme::colorScheme() const
 {
-    /*
-        https://docs.gtk.org/gtk3/running.html
-
-        It's possible to set a theme variant after the theme name when using GTK_THEME:
-
-            GTK_THEME=Adwaita:dark
-
-        Some themes also have "-dark" as part of their name.
-
-        We test this environment variable first because the documentation says
-        it's mainly used for easy debugging, so it should be possible to use it
-        to override any other settings.
-    */
-    QString themeName = qEnvironmentVariable("GTK_THEME");
-    const QRegularExpression darkRegex(QStringLiteral("[:-]dark"), QRegularExpression::CaseInsensitiveOption);
-    if (!themeName.isEmpty())
-        return darkRegex.match(themeName).hasMatch() ? Appearance::Dark : Appearance::Light;
-
-    /*
-        https://docs.gtk.org/gtk3/property.Settings.gtk-application-prefer-dark-theme.html
-
-        This setting controls which theme is used when the theme specified by
-        gtk-theme-name provides both light and dark variants. We can save a
-        regex check by testing this property first.
-    */
-    const auto preferDark = gtkSetting<gboolean>("gtk-application-prefer-dark-theme");
-    if (preferDark)
-        return Appearance::Dark;
-
-    /*
-        https://docs.gtk.org/gtk3/property.Settings.gtk-theme-name.html
-    */
-    themeName = gtkSetting("gtk-theme-name");
-    if (!themeName.isEmpty())
-        return darkRegex.match(themeName).hasMatch() ? Appearance::Dark : Appearance::Light;
-
-    return Appearance::Unknown;
+    Q_ASSERT(m_storage);
+    return m_storage->colorScheme();
 }
 
 bool QGtk3Theme::usePlatformNativeDialog(DialogType type) const
@@ -255,6 +231,32 @@ bool QGtk3Theme::useNativeFileDialog()
      * dialog helper.
      */
     return gtk_check_version(3, 15, 5) == nullptr;
+}
+
+const QPalette *QGtk3Theme::palette(Palette type) const
+{
+    Q_ASSERT(m_storage);
+    return m_storage->palette(type);
+}
+
+QPixmap QGtk3Theme::standardPixmap(StandardPixmap sp, const QSizeF &size) const
+{
+    Q_ASSERT(m_storage);
+    return m_storage->standardPixmap(sp, size);
+}
+
+const QFont *QGtk3Theme::font(Font type) const
+{
+    Q_ASSERT(m_storage);
+    return m_storage->font(type);
+}
+
+QIcon QGtk3Theme::fileIcon(const QFileInfo &fileInfo,
+                           QPlatformTheme::IconOptions iconOptions) const
+{
+    Q_UNUSED(iconOptions);
+    Q_ASSERT(m_storage);
+    return m_storage->fileIcon(fileInfo);
 }
 
 QT_END_NAMESPACE

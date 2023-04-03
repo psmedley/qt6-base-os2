@@ -22,6 +22,8 @@
 #include <QStyle>
 #include <QProxyStyle>
 
+#include <QtWidgets/private/qapplication_p.h>
+
 class DoubleSpinBox : public QDoubleSpinBox
 {
     Q_OBJECT
@@ -855,8 +857,15 @@ void tst_QDoubleSpinBox::editingFinished()
     testFocusWidget.show();
     testFocusWidget.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&testFocusWidget));
+
+    box->show();
+    QVERIFY(QTest::qWaitForWindowExposed(box));
     box->setFocus();
-    QTRY_VERIFY(box->hasFocus());
+
+    // Box may fail to acquire focus due to a system popup
+    // it is fair in that case to skip the test
+    if (!QTest::qWaitForWindowActive(box))
+        QSKIP("Focus acquisition failed.");
 
     QSignalSpy editingFinishedSpy1(box, SIGNAL(editingFinished()));
     QSignalSpy editingFinishedSpy2(box2, SIGNAL(editingFinished()));
@@ -1145,7 +1154,7 @@ void tst_QDoubleSpinBox::taskQTBUG_5008_textFromValueAndValidate()
     spinbox.show();
     spinbox.activateWindow();
     spinbox.setFocus();
-    QApplication::setActiveWindow(&spinbox);
+    QApplicationPrivate::setActiveWindow(&spinbox);
     QVERIFY(QTest::qWaitForWindowActive(&spinbox));
     QCOMPARE(static_cast<QWidget *>(&spinbox), QApplication::activeWindow());
     QTRY_VERIFY(spinbox.hasFocus());

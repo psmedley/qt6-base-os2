@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 function(qt_set01 result)
     if (${ARGN})
         set("${result}" 1 PARENT_SCOPE)
@@ -17,6 +20,7 @@ qt_set01(OPENBSD CMAKE_SYSTEM_NAME STREQUAL "OpenBSD") # FIXME: How to identify 
 qt_set01(FREEBSD CMAKE_SYSTEM_NAME STREQUAL "FreeBSD") # FIXME: How to identify this?
 qt_set01(NETBSD CMAKE_SYSTEM_NAME STREQUAL "NetBSD") # FIXME: How to identify this?
 qt_set01(WASM CMAKE_SYSTEM_NAME STREQUAL "Emscripten" OR EMSCRIPTEN)
+qt_set01(WASM64 QT_QMAKE_TARGET_MKSPEC STREQUAL "wasm-emscripten-64")
 qt_set01(SOLARIS CMAKE_SYSTEM_NAME STREQUAL "SunOS")
 qt_set01(HURD CMAKE_SYSTEM_NAME STREQUAL "GNU")
 

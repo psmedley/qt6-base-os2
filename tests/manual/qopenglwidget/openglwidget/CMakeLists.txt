@@ -1,4 +1,5 @@
-# Generated from openglwidget.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## openglwidget Binary:
@@ -9,7 +10,7 @@ qt_internal_add_manual_test(openglwidget
     SOURCES
         main.cpp
         openglwidget.cpp openglwidget.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
@@ -18,6 +19,3 @@ qt_internal_add_manual_test(openglwidget
         Qt::Widgets
         Qt::WidgetsPrivate
 )
-
-#### Keys ignored in scope 1:.:.:openglwidget.pro:<TRUE>:
-# TEMPLATE = "app"

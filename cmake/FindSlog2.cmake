@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Find the Slog2 library
 
 # Will make the target Slog2::Slog2 available when found.

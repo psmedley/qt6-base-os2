@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # This function can be used to compile java sources into a jar package.
 
 function(qt_internal_add_jar target)

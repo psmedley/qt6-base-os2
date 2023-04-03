@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 file(GLOB_RECURSE test_data_glob
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     qss/*)
@@ -11,9 +14,10 @@ qt_internal_add_test(tst_baseline_stylesheet
         tst_baseline_stylesheet.cpp
     INCLUDE_DIRECTORIES
         ../shared
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
+        Qt::WidgetsPrivate
         Qt::Network
     TESTDATA ${test_data}
 )

@@ -1,4 +1,5 @@
-# Generated from qstatictext.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qstatictext Test:
@@ -7,7 +8,7 @@
 qt_internal_add_test(tst_qstatictext
     SOURCES
         tst_qstatictext.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
 )
 
@@ -15,7 +16,7 @@ qt_internal_add_test(tst_qstatictext
 #####################################################################
 
 qt_internal_extend_target(tst_qstatictext CONDITION QT_FEATURE_private_tests
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::GuiPrivate
 )

@@ -1,21 +1,18 @@
-# Generated from manual.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
-# special case begin
 # Don't build manual tests when targeting iOS.
 if(UIKIT)
     return()
 endif()
-# special case end
 
 add_subdirectory(filetest)
-# special case begin
 # diaglib is broken in dev due to missing
 # QtOpenGL/QGLFunctions headers
 # add_subdirectory(embeddedintoforeignwindow)
 # add_subdirectory(foreignwindows)
-# special case end
 add_subdirectory(gestures)
-# add_subdirectory(highdpi) special case broken in dev
+add_subdirectory(highdpi)
 add_subdirectory(inputmethodhints)
 add_subdirectory(keypadnavigation)
 #add_subdirectory(lance) # special case qgl.h missing
@@ -37,6 +34,9 @@ if (QT_FEATURE_openssl AND UNIX)
     add_subdirectory(qnetworkreply)
 endif()
 #special case end
+if(QT_FEATURE_permissions)
+    add_subdirectory(permissions)
+endif()
 add_subdirectory(qstorageinfo)
 add_subdirectory(qscreen)
 add_subdirectory(qscreen_xrandr)
@@ -61,6 +61,7 @@ add_subdirectory(widgetgrab)
 if(QT_FEATURE_xcb)
     add_subdirectory(xembed)
 endif()
+add_subdirectory(xmlstreamlint)
 add_subdirectory(shortcuts)
 add_subdirectory(dialogs)
 add_subdirectory(windowtransparency)

@@ -581,6 +581,17 @@ bool Moc::parseMaybeFunction(const ClassDef *cdef, FunctionDef *def)
     return true;
 }
 
+inline void handleDefaultArguments(QList<FunctionDef> *functionList, FunctionDef &function)
+{
+    // support a function with a default argument by pretending there is an
+    // overload without the argument (the original function is the overload with
+    // all arguments present)
+    while (function.arguments.size() > 0 && function.arguments.constLast().isDefault) {
+        function.wasCloned = true;
+        function.arguments.removeLast();
+        *functionList += function;
+    }
+}
 
 void Moc::parse()
 {
@@ -904,11 +915,7 @@ void Moc::parse()
                         if (funcDef.isConstructor) {
                             if ((access == FunctionDef::Public) && funcDef.isInvokable) {
                                 def.constructorList += funcDef;
-                                while (funcDef.arguments.size() > 0 && funcDef.arguments.constLast().isDefault) {
-                                    funcDef.wasCloned = true;
-                                    funcDef.arguments.removeLast();
-                                    def.constructorList += funcDef;
-                                }
+                                handleDefaultArguments(&def.constructorList, funcDef);
                             }
                         } else if (funcDef.isDestructor) {
                             // don't care about destructors
@@ -917,29 +924,17 @@ void Moc::parse()
                                 def.publicList += funcDef;
                             if (funcDef.isSlot) {
                                 def.slotList += funcDef;
-                                while (funcDef.arguments.size() > 0 && funcDef.arguments.constLast().isDefault) {
-                                    funcDef.wasCloned = true;
-                                    funcDef.arguments.removeLast();
-                                    def.slotList += funcDef;
-                                }
+                                handleDefaultArguments(&def.slotList, funcDef);
                                 if (funcDef.revision > 0)
                                     ++def.revisionedMethods;
                             } else if (funcDef.isSignal) {
                                 def.signalList += funcDef;
-                                while (funcDef.arguments.size() > 0 && funcDef.arguments.constLast().isDefault) {
-                                    funcDef.wasCloned = true;
-                                    funcDef.arguments.removeLast();
-                                    def.signalList += funcDef;
-                                }
+                                handleDefaultArguments(&def.signalList, funcDef);
                                 if (funcDef.revision > 0)
                                     ++def.revisionedMethods;
                             } else if (funcDef.isInvokable) {
                                 def.methodList += funcDef;
-                                while (funcDef.arguments.size() > 0 && funcDef.arguments.constLast().isDefault) {
-                                    funcDef.wasCloned = true;
-                                    funcDef.arguments.removeLast();
-                                    def.methodList += funcDef;
-                                }
+                                handleDefaultArguments(&def.methodList, funcDef);
                                 if (funcDef.revision > 0)
                                     ++def.revisionedMethods;
                             }
@@ -1077,7 +1072,9 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
     fprintf(out, "** WARNING! All changes made in this file will be lost!\n"
             "*****************************************************************************/\n\n");
 
-    fprintf(out, "#include <memory>\n");  // For std::addressof
+    // include header(s) of user class definitions at _first_ to allow
+    // for preprocessor definitions possibly affecting standard headers.
+    // see https://codereview.qt-project.org/c/qt/qtbase/+/445937
     if (!noInclude) {
         if (includePath.size() && !includePath.endsWith('/'))
             includePath += '/';
@@ -1102,6 +1099,18 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
     for (const QByteArray &qtContainer : qtContainers)
         fprintf(out, "#include <QtCore/%s>\n", qtContainer.constData());
 
+    fprintf(out, "\n%s#include <QtCore/qtmochelpers.h>\n%s\n",
+#if QT_VERSION <= QT_VERSION_CHECK(6, 9, 0)
+            "#if __has_include(<QtCore/qtmochelpers.h>)\n",
+            "#else\n"
+            "QT_BEGIN_MOC_NAMESPACE\n"
+            "#endif\n"
+#else
+            "", ""
+#endif
+    );
+
+    fprintf(out, "\n#include <memory>\n\n");  // For std::addressof
 
     fprintf(out, "#if !defined(Q_MOC_OUTPUT_REVISION)\n"
             "#error \"The header file '%s' doesn't include <QObject>.\"\n", fn.constData());
@@ -1118,9 +1127,9 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
             "#endif\n\n");
 #endif
 
-    fprintf(out, "QT_BEGIN_MOC_NAMESPACE\n");
     fprintf(out, "QT_WARNING_PUSH\n");
     fprintf(out, "QT_WARNING_DISABLE_DEPRECATED\n");
+    fprintf(out, "QT_WARNING_DISABLE_GCC(\"-Wuseless-cast\")\n");
 
     fputs("", out);
     for (i = 0; i < classList.size(); ++i) {
@@ -1130,7 +1139,6 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
     fputs("", out);
 
     fprintf(out, "QT_WARNING_POP\n");
-    fprintf(out, "QT_END_MOC_NAMESPACE\n");
 
     if (jsonOutput) {
         QJsonObject mocData;
@@ -1188,11 +1196,7 @@ void Moc::parseSlots(ClassDef *def, FunctionDef::Access access)
             ++def->revisionedMethods;
         }
         def->slotList += funcDef;
-        while (funcDef.arguments.size() > 0 && funcDef.arguments.constLast().isDefault) {
-            funcDef.wasCloned = true;
-            funcDef.arguments.removeLast();
-            def->slotList += funcDef;
-        }
+        handleDefaultArguments(&def->slotList, funcDef);
     }
 }
 
@@ -1236,11 +1240,7 @@ void Moc::parseSignals(ClassDef *def)
             ++def->revisionedMethods;
         }
         def->signalList += funcDef;
-        while (funcDef.arguments.size() > 0 && funcDef.arguments.constLast().isDefault) {
-            funcDef.wasCloned = true;
-            funcDef.arguments.removeLast();
-            def->signalList += funcDef;
-        }
+        handleDefaultArguments(&def->signalList, funcDef);
     }
 }
 
@@ -1320,6 +1320,10 @@ void Moc::parsePropertyAttributes(PropertyDef &propDef)
             v = lexem();
             if (l != "REVISION")
                 error(1);
+        } else if (test(DEFAULT)) {
+            v = lexem();
+            if (l != "READ" && l != "WRITE")
+                error(1);
         } else {
             next(IDENTIFIER);
             v = lexem();
@@ -1339,7 +1343,7 @@ void Moc::parsePropertyAttributes(PropertyDef &propDef)
             if (l == "READ")
                 propDef.read = v;
             else if (l == "RESET")
-                propDef.reset = v + v2;
+                propDef.reset = v;
             else if (l == "REVISION") {
                 bool ok = false;
                 const int minor = v.toInt(&ok);
@@ -1396,6 +1400,18 @@ void Moc::parsePropertyAttributes(PropertyDef &propDef)
         const QByteArray msg = "Property declaration " + propDef.name
                 + " is both BINDable and CONSTANT. CONSTANT will be ignored.";
         propDef.constant = false;
+        warning(msg.constData());
+    }
+    if (propDef.read == "default" && propDef.bind.isNull()) {
+        const QByteArray msg = "Property declaration " + propDef.name
+                + " is not BINDable but default-READable. READ will be ignored.";
+        propDef.read = "";
+        warning(msg.constData());
+    }
+    if (propDef.write == "default" && propDef.bind.isNull()) {
+        const QByteArray msg = "Property declaration " + propDef.name
+                + " is not BINDable but default-WRITEable. WRITE will be ignored.";
+        propDef.write = "";
         warning(msg.constData());
     }
 }
@@ -1665,11 +1681,7 @@ void Moc::parseSlotInPrivate(ClassDef *def, FunctionDef::Access access)
     funcDef.access = access;
     parseFunction(&funcDef, true);
     def->slotList += funcDef;
-    while (funcDef.arguments.size() > 0 && funcDef.arguments.constLast().isDefault) {
-        funcDef.wasCloned = true;
-        funcDef.arguments.removeLast();
-        def->slotList += funcDef;
-    }
+    handleDefaultArguments(&def->slotList, funcDef);
     if (funcDef.revision > 0)
         ++def->revisionedMethods;
 
@@ -2011,6 +2023,9 @@ QJsonObject FunctionDef::toJson() const
 
     if (revision > 0)
         fdef["revision"_L1] = revision;
+
+    if (wasCloned)
+        fdef["isCloned"_L1] = true;
 
     return fdef;
 }

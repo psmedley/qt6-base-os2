@@ -5,16 +5,6 @@
 
 #include "dialog.h"
 
-#define MESSAGE \
-    Dialog::tr("<p>Message boxes have a caption, a text, " \
-               "and any number of buttons, each with standard or custom texts." \
-               "<p>Click a button to close the message box. Pressing the Esc button " \
-               "will activate the detected escape button (if any).")
-#define MESSAGE_DETAILS \
-    Dialog::tr("If a message box has detailed text, the user can reveal it " \
-               "by pressing the Show Details... button.")
-
-
 class DialogOptionsWidget : public QGroupBox
 {
 public:
@@ -148,8 +138,6 @@ Dialog::Dialog(QWidget *parent)
     warningLabel->setFrameStyle(frameStyle);
     QPushButton *warningButton = new QPushButton(tr("QMessageBox::&warning()"));
 
-    errorLabel = new QLabel;
-    errorLabel->setFrameStyle(frameStyle);
     QPushButton *errorButton =
             new QPushButton(tr("QErrorMessage::showM&essage()"));
 
@@ -259,7 +247,6 @@ Dialog::Dialog(QWidget *parent)
     layout->addWidget(warningButton, 3, 0);
     layout->addWidget(warningLabel, 3, 1);
     layout->addWidget(errorButton, 4, 0);
-    layout->addWidget(errorLabel, 4, 1);
     layout->addItem(new QSpacerItem(0, 0, QSizePolicy::Ignored, QSizePolicy::MinimumExpanding), 5, 0);
     toolbox->addItem(page, tr("Message Boxes"));
 
@@ -413,10 +400,14 @@ void Dialog::setSaveFileName()
 
 void Dialog::criticalMessage()
 {
-    QMessageBox::StandardButton reply;
-    reply = QMessageBox::critical(this, tr("QMessageBox::critical()"),
-                                    MESSAGE,
-                                    QMessageBox::Abort | QMessageBox::Retry | QMessageBox::Ignore);
+    QMessageBox msgBox(QMessageBox::Critical, tr("QMessageBox::critical()"),
+                              tr("Houston, we have a problem"), { }, this);
+    msgBox.setInformativeText(tr("Activating the liquid oxygen stirring fans caused an explosion in one of the tanks. " \
+                                 "Liquid oxygen levels are getting low. This may jeopardize the moon landing mission."));
+    msgBox.addButton(QMessageBox::Abort);
+    msgBox.addButton(QMessageBox::Retry);
+    msgBox.addButton(QMessageBox::Ignore);
+    int reply = msgBox.exec();
     if (reply == QMessageBox::Abort)
         criticalLabel->setText(tr("Abort"));
     else if (reply == QMessageBox::Retry)
@@ -427,9 +418,12 @@ void Dialog::criticalMessage()
 
 void Dialog::informationMessage()
 {
-    QMessageBox::StandardButton reply;
-    reply = QMessageBox::information(this, tr("QMessageBox::information()"), MESSAGE);
-    if (reply == QMessageBox::Ok)
+    QMessageBox msgBox(QMessageBox::Information, tr("QMessageBox::information()"),
+                              tr("Elvis has left the building."), { }, this);
+    msgBox.setInformativeText(tr("This phrase was often used by public address announcers at the conclusion " \
+                                 "of Elvis Presley concerts in order to disperse audiences who lingered in " \
+                                 "hopes of an encore. It has since become a catchphrase and punchline."));
+    if (msgBox.exec() == QMessageBox::Ok)
         informationLabel->setText(tr("OK"));
     else
         informationLabel->setText(tr("Escape"));
@@ -437,10 +431,15 @@ void Dialog::informationMessage()
 
 void Dialog::questionMessage()
 {
-    QMessageBox::StandardButton reply;
-    reply = QMessageBox::question(this, tr("QMessageBox::question()"),
-                                    MESSAGE,
-                                    QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+    QMessageBox msgBox(QMessageBox::Question, tr("QMessageBox::question()"),
+                              tr("Would you like cheese with that?"), { }, this);
+    msgBox.setInformativeText(tr("A cheeseburger is a hamburger topped with cheese. Traditionally, the slice of " \
+                                 "cheese is placed on top of the meat patty. The cheese is usually added to the " \
+                                 "cooking hamburger patty shortly before serving, which allows the cheese to melt."));
+    msgBox.addButton(QMessageBox::Yes);
+    msgBox.addButton(QMessageBox::No);
+    msgBox.addButton(QMessageBox::Cancel);
+    int reply = msgBox.exec();
     if (reply == QMessageBox::Yes)
         questionLabel->setText(tr("Yes"));
     else if (reply == QMessageBox::No)
@@ -452,14 +451,15 @@ void Dialog::questionMessage()
 void Dialog::warningMessage()
 {
     QMessageBox msgBox(QMessageBox::Warning, tr("QMessageBox::warning()"),
-                       MESSAGE, { }, this);
-    msgBox.setDetailedText(MESSAGE_DETAILS);
-    msgBox.addButton(tr("Save &Again"), QMessageBox::AcceptRole);
-    msgBox.addButton(tr("&Continue"), QMessageBox::RejectRole);
+                              tr("Delete the only copy of your movie manuscript?"), { }, this);
+    msgBox.setInformativeText(tr("You've been working on this manuscript for 738 days now. Hang in there!"));
+    msgBox.setDetailedText("\"A long time ago in a galaxy far, far away....\"");
+    msgBox.addButton(tr("&Keep"), QMessageBox::AcceptRole);
+    msgBox.addButton(tr("Delete"), QMessageBox::DestructiveRole);
     if (msgBox.exec() == QMessageBox::AcceptRole)
-        warningLabel->setText(tr("Save Again"));
+        warningLabel->setText(tr("Keep"));
     else
-        warningLabel->setText(tr("Continue"));
+        warningLabel->setText(tr("Delete"));
 
 }
 
@@ -467,11 +467,13 @@ void Dialog::errorMessage()
 {
     errorMessageDialog->showMessage(
             tr("This dialog shows and remembers error messages. "
-               "If the checkbox is checked (as it is by default), "
-               "the shown message will be shown again, "
-               "but if the user unchecks the box the message "
+               "If the user chooses to not show the dialog again, the dialog "
                "will not appear again if QErrorMessage::showMessage() "
                "is called with the same message."));
-    errorLabel->setText(tr("If the box is unchecked, the message "
-                           "won't appear again."));
+    errorMessageDialog->showMessage(
+            tr("You can queue up error messages, and they will be "
+               "shown one after each other. Each message maintains "
+               "its own state for whether it will be shown again "
+               "the next time QErrorMessage::showMessage() is called "
+               "with the same message."));
 }

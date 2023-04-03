@@ -6,7 +6,7 @@
 \ingroup cmake-commands-qtcore
 
 \title qt_finalize_project
-\target qt6_finalize_project
+\keyword qt6_finalize_project
 
 \summary {Handles various common platform-specific tasks associated with a Qt project.}
 \preliminarycmakecommand
@@ -38,7 +38,7 @@ With CMake version 3.19 or later, you don't need to call this command since
 it consists of sub-commands that are ordinarily invoked at the end of
 \c CMAKE_SOURCE_DIR directory scope processing.
 
-\include cmake-android-qt-finalize-project-warning.cmake
+\include cmake-android-qt-finalize-project-warning.qdocinc
 
 \section2 Examples
 
@@ -49,4 +49,5 @@ function:
 \snippet cmake-macros/examples.cmake qt_finalize_project_manual
 
 \sa {cmake-variable-QT_NO_COLLECT_BUILD_TREE_APK_DEPS}{QT_NO_COLLECT_BUILD_TREE_APK_DEPS}
+\sa {cmake-variable-QT_NO_COLLECT_IMPORTED_TARGET_APK_DEPS}{QT_NO_COLLECT_IMPORTED_TARGET_APK_DEPS}
 */

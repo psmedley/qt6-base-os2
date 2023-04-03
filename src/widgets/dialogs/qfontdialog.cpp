@@ -69,7 +69,7 @@ QFontListView::QFontListView(QWidget *parent)
     setEditTriggers(NoEditTriggers);
 }
 
-static const Qt::WindowFlags DefaultWindowFlags =
+static const Qt::WindowFlags qfd_DefaultWindowFlags =
         Qt::Dialog | Qt::WindowSystemMenuHint | Qt::WindowCloseButtonHint;
 
 QFontDialogPrivate::QFontDialogPrivate()
@@ -119,7 +119,7 @@ QFontDialogPrivate::~QFontDialogPrivate()
     \sa getFont()
 */
 QFontDialog::QFontDialog(QWidget *parent)
-    : QDialog(*new QFontDialogPrivate, parent, DefaultWindowFlags)
+    : QDialog(*new QFontDialogPrivate, parent, qfd_DefaultWindowFlags)
 {
     Q_D(QFontDialog);
     d->init();
@@ -390,7 +390,7 @@ bool QFontDialog::eventFilter(QObject *o , QEvent *e)
 {
     Q_D(QFontDialog);
     if (e->type() == QEvent::KeyPress) {
-        QKeyEvent *k = (QKeyEvent *)e;
+        QKeyEvent *k = static_cast<QKeyEvent *>(e);
         if (o == d->sizeEdit &&
         (k->key() == Qt::Key_Up ||
              k->key() == Qt::Key_Down ||
@@ -970,7 +970,6 @@ void QFontDialog::setVisible(bool visible)
         // updates the state correctly, but skips showing the non-native version:
         setAttribute(Qt::WA_DontShowOnScreen, true);
     } else {
-        d->nativeDialogInUse = false;
         setAttribute(Qt::WA_DontShowOnScreen, false);
     }
     QDialog::setVisible(visible);
@@ -1017,9 +1016,7 @@ bool QFontDialogPrivate::canBeNativeDialog() const
         return false;
     }
 
-    QLatin1StringView staticName(QFontDialog::staticMetaObject.className());
-    QLatin1StringView dynamicName(q->metaObject()->className());
-    return (staticName == dynamicName);
+    return strcmp(QFontDialog::staticMetaObject.className(), q->metaObject()->className()) == 0;
 }
 
 QT_END_NAMESPACE

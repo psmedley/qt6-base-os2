@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Includes QtSetup and friends for private CMake API.
 qt_build_internals_set_up_private_api()
 

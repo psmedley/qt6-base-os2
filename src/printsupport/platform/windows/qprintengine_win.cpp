@@ -30,10 +30,10 @@
 #include <QtCore/QMetaType>
 #include <QtCore/qt_windows.h>
 #include <QtGui/qpagelayout.h>
+#include <QtGui/private/qpixmap_win_p.h>
 
 QT_BEGIN_NAMESPACE
 
-Q_GUI_EXPORT HBITMAP qt_pixmapToWinHBITMAP(const QPixmap &p, int hbitmapFormat = 0);
 extern QPainterPath qt_regionToPath(const QRegion &region);
 extern QMarginsF qt_convertMargins(const QMarginsF &margins, QPageLayout::Unit fromUnits, QPageLayout::Unit toUnits);
 
@@ -1586,7 +1586,7 @@ void QWin32PrintEngine::setGlobalDevMode(HGLOBAL globalDevNames, HGLOBAL globalD
 
 #if defined QT_DEBUG_DRAW || defined QT_DEBUG_METRICS
     qDebug("QWin32PrintEngine::setGlobalDevMode()");
-    debugMetrics();
+    d->debugMetrics();
 #endif // QT_DEBUG_DRAW || QT_DEBUG_METRICS
 }
 
@@ -1675,13 +1675,22 @@ void QWin32PrintEnginePrivate::updatePageLayout()
 void QWin32PrintEnginePrivate::updateMetrics()
 {
     m_paintRectPixels = m_pageLayout.paintRectPixels(resolution);
+    // Some print devices allow scaling, so that "virtual" page size != current paper size
+    const int devWidth = GetDeviceCaps(hdc, PHYSICALWIDTH);
+    const int devHeight = GetDeviceCaps(hdc, PHYSICALHEIGHT);
+    const int pageWidth = m_pageLayout.fullRectPixels(dpi_x).width();
+    const int pageHeight = m_pageLayout.fullRectPixels(dpi_y).height();
+    const qreal pageScaleX = (devWidth && pageWidth) ? qreal(devWidth) / pageWidth : 1;
+    const qreal pageScaleY = (devHeight && pageHeight) ? qreal(devHeight) / pageHeight : 1;
+    m_paintRectPixels = QTransform::fromScale(pageScaleX, pageScaleY).mapRect(m_paintRectPixels);
+
     QSizeF sizeMM = m_pageLayout.paintRect(QPageLayout::Millimeter).size();
     m_paintSizeMM = QSize(qRound(sizeMM.width()), qRound(sizeMM.height()));
     // Calculate the origin using the physical device pixels, not our paint pixels
     // Origin is defined as User Margins - Device Margins
     QMarginsF margins = m_pageLayout.margins(QPageLayout::Millimeter) / 25.4;
-    origin_x = qRound(margins.left() * dpi_x) - GetDeviceCaps(hdc, PHYSICALOFFSETX);
-    origin_y = qRound(margins.top() * dpi_y) - GetDeviceCaps(hdc, PHYSICALOFFSETY);
+    origin_x = qRound(pageScaleX * margins.left() * dpi_x) - GetDeviceCaps(hdc, PHYSICALOFFSETX);
+    origin_y = qRound(pageScaleY * margins.top() * dpi_y) - GetDeviceCaps(hdc, PHYSICALOFFSETY);
 }
 
 void QWin32PrintEnginePrivate::debugMetrics() const

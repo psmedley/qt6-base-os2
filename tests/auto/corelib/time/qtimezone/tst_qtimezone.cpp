@@ -4,6 +4,7 @@
 #include <QTest>
 #include <qtimezone.h>
 #include <private/qtimezoneprivate_p.h>
+
 #include <qlocale.h>
 
 #if defined(Q_OS_WIN)
@@ -18,15 +19,18 @@ class tst_QTimeZone : public QObject
 {
     Q_OBJECT
 
-public:
-    tst_QTimeZone();
-
 private Q_SLOTS:
     // Public class default system tests
     void createTest();
     void nullTest();
-    void systemZone();
+    void assign();
+    void compare();
+    void timespec();
+    void offset();
     void dataStreamTest();
+#if QT_CONFIG(timezone)
+    void asBackendZone();
+    void systemZone();
     void isTimeZoneIdAvailable();
     void availableTimeZoneIds();
     void utcOffsetId_data();
@@ -54,28 +58,24 @@ private Q_SLOTS:
     void localeSpecificDisplayName();
     void stdCompatibility_data();
     void stdCompatibility();
+#endif // timezone backends
 
 private:
     void printTimeZone(const QTimeZone &tz);
-#ifdef QT_BUILD_INTERNAL
+#if defined(QT_BUILD_INTERNAL) && QT_CONFIG(timezone)
     // Generic tests of privates, called by implementation-specific private tests:
     void testCetPrivate(const QTimeZonePrivate &tzp);
     void testEpochTranPrivate(const QTimeZonePrivate &tzp);
-#endif // QT_BUILD_INTERNAL
-    const bool debug;
-};
-
-tst_QTimeZone::tst_QTimeZone()
+#endif // QT_BUILD_INTERNAL && timezone backends
     // Set to true to print debug output, test Display Names and run long stress tests
-    : debug(false)
-{
-}
+    static constexpr bool debug = false;
+};
 
 void tst_QTimeZone::printTimeZone(const QTimeZone &tz)
 {
     QDateTime now = QDateTime::currentDateTime();
-    QDateTime jan = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC);
-    QDateTime jun = QDateTime(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::UTC);
+    QDateTime jan = QDateTime(QDate(2012, 1, 1), QTime(0, 0), QTimeZone::UTC);
+    QDateTime jun = QDateTime(QDate(2012, 6, 1), QTime(0, 0), QTimeZone::UTC);
     qDebug() << "";
     qDebug() << "Time Zone               = " << tz;
     qDebug() << "";
@@ -159,9 +159,9 @@ void tst_QTimeZone::createTest()
 
     QCOMPARE(tz.territory(), QLocale::NewZealand);
 
-    QDateTime jan = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC);
-    QDateTime jun = QDateTime(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::UTC);
-    QDateTime janPrev = QDateTime(QDate(2011, 1, 1), QTime(0, 0, 0), Qt::UTC);
+    QDateTime jan = QDateTime(QDate(2012, 1, 1), QTime(0, 0), QTimeZone::UTC);
+    QDateTime jun = QDateTime(QDate(2012, 6, 1), QTime(0, 0), QTimeZone::UTC);
+    QDateTime janPrev = QDateTime(QDate(2011, 1, 1), QTime(0, 0), QTimeZone::UTC);
 
     QCOMPARE(tz.offsetFromUtc(jan), 13 * 3600);
     QCOMPARE(tz.offsetFromUtc(jun), 12 * 3600);
@@ -181,7 +181,8 @@ void tst_QTimeZone::createTest()
         QTimeZone::OffsetData tran = tz.nextTransition(jan);
         // 2012-04-01 03:00 NZDT, +13 -> +12
         QCOMPARE(tran.atUtc,
-                 QDateTime(QDate(2012, 4, 1), QTime(3, 0), Qt::OffsetFromUTC, 13 * 3600));
+                 QDateTime(QDate(2012, 4, 1), QTime(3, 0),
+                           QTimeZone::fromSecondsAheadOfUtc(13 * 3600)));
         QCOMPARE(tran.offsetFromUtc, 12 * 3600);
         QCOMPARE(tran.standardTimeOffset, 12 * 3600);
         QCOMPARE(tran.daylightTimeOffset, 0);
@@ -189,7 +190,8 @@ void tst_QTimeZone::createTest()
         tran = tz.nextTransition(jun);
         // 2012-09-30 02:00 NZST, +12 -> +13
         QCOMPARE(tran.atUtc,
-                 QDateTime(QDate(2012, 9, 30), QTime(2, 0), Qt::OffsetFromUTC, 12 * 3600));
+                 QDateTime(QDate(2012, 9, 30), QTime(2, 0),
+                           QTimeZone::fromSecondsAheadOfUtc(12 * 3600)));
         QCOMPARE(tran.offsetFromUtc, 13 * 3600);
         QCOMPARE(tran.standardTimeOffset, 12 * 3600);
         QCOMPARE(tran.daylightTimeOffset, 3600);
@@ -197,7 +199,8 @@ void tst_QTimeZone::createTest()
         tran = tz.previousTransition(jan);
         // 2011-09-25 02:00 NZST, +12 -> +13
         QCOMPARE(tran.atUtc,
-                 QDateTime(QDate(2011, 9, 25), QTime(2, 0), Qt::OffsetFromUTC, 12 * 3600));
+                 QDateTime(QDate(2011, 9, 25), QTime(2, 0),
+                           QTimeZone::fromSecondsAheadOfUtc(12 * 3600)));
         QCOMPARE(tran.offsetFromUtc, 13 * 3600);
         QCOMPARE(tran.standardTimeOffset, 12 * 3600);
         QCOMPARE(tran.daylightTimeOffset, 3600);
@@ -205,17 +208,20 @@ void tst_QTimeZone::createTest()
         tran = tz.previousTransition(jun);
         // 2012-04-01 03:00 NZDT, +13 -> +12 (again)
         QCOMPARE(tran.atUtc,
-                 QDateTime(QDate(2012, 4, 1), QTime(3, 0), Qt::OffsetFromUTC, 13 * 3600));
+                 QDateTime(QDate(2012, 4, 1), QTime(3, 0),
+                           QTimeZone::fromSecondsAheadOfUtc(13 * 3600)));
         QCOMPARE(tran.offsetFromUtc, 12 * 3600);
         QCOMPARE(tran.standardTimeOffset, 12 * 3600);
         QCOMPARE(tran.daylightTimeOffset, 0);
 
         QTimeZone::OffsetDataList expected;
         // Reuse 2012's fall-back data for 2011-04-03:
-        tran.atUtc = QDateTime(QDate(2011, 4, 3), QTime(3, 0), Qt::OffsetFromUTC, 13 * 3600);
+        tran.atUtc = QDateTime(QDate(2011, 4, 3), QTime(3, 0),
+                               QTimeZone::fromSecondsAheadOfUtc(13 * 3600));
         expected << tran;
         // 2011's spring-forward:
-        tran.atUtc = QDateTime(QDate(2011, 9, 25), QTime(2, 0), Qt::OffsetFromUTC, 12 * 3600);
+        tran.atUtc = QDateTime(QDate(2011, 9, 25), QTime(2, 0),
+                               QTimeZone::fromSecondsAheadOfUtc(12 * 3600));
         tran.offsetFromUtc = 13 * 3600;
         tran.daylightTimeOffset = 3600;
         expected << tran;
@@ -257,9 +263,9 @@ void tst_QTimeZone::nullTest()
     QCOMPARE(nullTz1.territory(), QLocale::AnyTerritory);
     QCOMPARE(nullTz1.comment(), QString());
 
-    QDateTime jan = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC);
-    QDateTime jun = QDateTime(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::UTC);
-    QDateTime janPrev = QDateTime(QDate(2011, 1, 1), QTime(0, 0, 0), Qt::UTC);
+    QDateTime jan = QDateTime(QDate(2012, 1, 1), QTime(0, 0), QTimeZone::UTC);
+    QDateTime jun = QDateTime(QDate(2012, 6, 1), QTime(0, 0), QTimeZone::UTC);
+    QDateTime janPrev = QDateTime(QDate(2011, 1, 1), QTime(0, 0), QTimeZone::UTC);
 
     QCOMPARE(nullTz1.abbreviation(jan), QString());
     QCOMPARE(nullTz1.displayName(jan), QString());
@@ -300,33 +306,138 @@ void tst_QTimeZone::nullTest()
     QCOMPARE(data.daylightTimeOffset, invalidOffset);
 }
 
-void tst_QTimeZone::systemZone()
+void tst_QTimeZone::assign()
 {
-    const QTimeZone zone = QTimeZone::systemTimeZone();
-    QVERIFY(zone.isValid());
-    QCOMPARE(zone.id(), QTimeZone::systemTimeZoneId());
-    QCOMPARE(zone, QTimeZone(QTimeZone::systemTimeZoneId()));
-    // Check it behaves the same as local-time:
-    const QDate dates[] = {
-        QDate::fromJulianDay(0), // far in the distant past (LMT)
-        QDate(1625, 6, 8), // Before time-zones (date of Cassini's birth)
-        QDate(1901, 12, 13), // Last day before 32-bit time_t's range
-        QDate(1969, 12, 31), // Last day before the epoch
-        QDate(1970, 0, 0), // Start of epoch
-        QDate(2000, 2, 29), // An anomalous leap day
-        QDate(2038, 1, 20) // First day after 32-bit time_t's range
-    };
-    for (const auto &date : dates)
-        QCOMPARE(date.startOfDay(Qt::LocalTime), date.startOfDay(zone));
+    QTimeZone assignee;
+    QCOMPARE(assignee.timeSpec(), Qt::TimeZone);
+    assignee = QTimeZone();
+    QCOMPARE(assignee.timeSpec(), Qt::TimeZone);
+    assignee = QTimeZone::UTC;
+    QCOMPARE(assignee.timeSpec(), Qt::UTC);
+    assignee = QTimeZone::LocalTime;
+    QCOMPARE(assignee.timeSpec(), Qt::LocalTime);
+    assignee = QTimeZone();
+    QCOMPARE(assignee.timeSpec(), Qt::TimeZone);
+    assignee = QTimeZone::fromSecondsAheadOfUtc(1);
+    QCOMPARE(assignee.timeSpec(), Qt::OffsetFromUTC);
+    assignee = QTimeZone::fromSecondsAheadOfUtc(0);
+    QCOMPARE(assignee.timeSpec(), Qt::UTC);
+#if QT_CONFIG(timezone)
+    {
+        const QTimeZone cet("Europe/Oslo");
+        assignee = cet;
+        QCOMPARE(assignee.timeSpec(), Qt::TimeZone);
+    }
+#endif
+}
 
-#if __cpp_lib_chrono >= 201907L
-    const std::chrono::time_zone *currentTimeZone = std::chrono::current_zone();
-    QCOMPARE(QByteArrayView(currentTimeZone->name()), QByteArrayView(zone.id()));
+void tst_QTimeZone::compare()
+{
+    const QTimeZone local;
+    const QTimeZone utc(QTimeZone::UTC);
+    const auto secondEast = QTimeZone::fromSecondsAheadOfUtc(1);
+
+    QCOMPARE_NE(local, utc);
+    QCOMPARE_NE(utc, secondEast);
+    QCOMPARE_NE(secondEast, local);
+
+    QCOMPARE(local, QTimeZone());
+    QCOMPARE(utc, QTimeZone::fromSecondsAheadOfUtc(0));
+    QCOMPARE(secondEast, QTimeZone::fromDurationAheadOfUtc(std::chrono::seconds{1}));
+}
+
+void tst_QTimeZone::timespec()
+{
+    using namespace std::chrono_literals;
+    QCOMPARE(QTimeZone().timeSpec(), Qt::TimeZone);
+    QCOMPARE(QTimeZone(QTimeZone::UTC).timeSpec(), Qt::UTC);
+    QCOMPARE(QTimeZone(QTimeZone::LocalTime).timeSpec(), Qt::LocalTime);
+    QCOMPARE(QTimeZone::fromSecondsAheadOfUtc(0).timeSpec(), Qt::UTC);
+    QCOMPARE(QTimeZone::fromDurationAheadOfUtc(0s).timeSpec(), Qt::UTC);
+    QCOMPARE(QTimeZone::fromDurationAheadOfUtc(0min).timeSpec(), Qt::UTC);
+    QCOMPARE(QTimeZone::fromDurationAheadOfUtc(0h).timeSpec(), Qt::UTC);
+    QCOMPARE(QTimeZone::fromSecondsAheadOfUtc(1).timeSpec(), Qt::OffsetFromUTC);
+    QCOMPARE(QTimeZone::fromSecondsAheadOfUtc(-1).timeSpec(), Qt::OffsetFromUTC);
+    QCOMPARE(QTimeZone::fromSecondsAheadOfUtc(36000).timeSpec(), Qt::OffsetFromUTC);
+    QCOMPARE(QTimeZone::fromSecondsAheadOfUtc(-36000).timeSpec(), Qt::OffsetFromUTC);
+    QCOMPARE(QTimeZone::fromDurationAheadOfUtc(3h - 20min +17s).timeSpec(), Qt::OffsetFromUTC);
+    {
+        const QTimeZone zone;
+        QCOMPARE(zone.timeSpec(), Qt::TimeZone);
+    }
+    {
+        const QTimeZone zone = { QTimeZone::UTC };
+        QCOMPARE(zone.timeSpec(), Qt::UTC);
+    }
+    {
+        const QTimeZone zone = { QTimeZone::LocalTime };
+        QCOMPARE(zone.timeSpec(), Qt::LocalTime);
+    }
+    {
+        const auto zone = QTimeZone::fromSecondsAheadOfUtc(0);
+        QCOMPARE(zone.timeSpec(), Qt::UTC);
+    }
+    {
+        const auto zone = QTimeZone::fromDurationAheadOfUtc(0s);
+        QCOMPARE(zone.timeSpec(), Qt::UTC);
+    }
+    {
+        const auto zone = QTimeZone::fromSecondsAheadOfUtc(1);
+        QCOMPARE(zone.timeSpec(), Qt::OffsetFromUTC);
+    }
+    {
+        const auto zone = QTimeZone::fromDurationAheadOfUtc(1s);
+        QCOMPARE(zone.timeSpec(), Qt::OffsetFromUTC);
+    }
+#if QT_CONFIG(timezone)
+    QCOMPARE(QTimeZone("Europe/Oslo").timeSpec(), Qt::TimeZone);
+#endif
+}
+
+void tst_QTimeZone::offset()
+{
+    QCOMPARE(QTimeZone().fixedSecondsAheadOfUtc(), 0);
+    QCOMPARE(QTimeZone(QTimeZone::UTC).fixedSecondsAheadOfUtc(), 0);
+    QCOMPARE(QTimeZone::fromSecondsAheadOfUtc(0).fixedSecondsAheadOfUtc(), 0);
+    QCOMPARE(QTimeZone::fromDurationAheadOfUtc(std::chrono::seconds{}).fixedSecondsAheadOfUtc(), 0);
+    QCOMPARE(QTimeZone::fromDurationAheadOfUtc(std::chrono::minutes{}).fixedSecondsAheadOfUtc(), 0);
+    QCOMPARE(QTimeZone::fromDurationAheadOfUtc(std::chrono::hours{}).fixedSecondsAheadOfUtc(), 0);
+    QCOMPARE(QTimeZone::fromSecondsAheadOfUtc(1).fixedSecondsAheadOfUtc(), 1);
+    QCOMPARE(QTimeZone::fromSecondsAheadOfUtc(-1).fixedSecondsAheadOfUtc(), -1);
+    QCOMPARE(QTimeZone::fromSecondsAheadOfUtc(36000).fixedSecondsAheadOfUtc(), 36000);
+    QCOMPARE(QTimeZone::fromSecondsAheadOfUtc(-36000).fixedSecondsAheadOfUtc(), -36000);
+    {
+        const QTimeZone zone;
+        QCOMPARE(zone.fixedSecondsAheadOfUtc(), 0);
+    }
+    {
+        const QTimeZone zone = { QTimeZone::UTC };
+        QCOMPARE(zone.fixedSecondsAheadOfUtc(), 0);
+    }
+    {
+        const auto zone = QTimeZone::fromSecondsAheadOfUtc(0);
+        QCOMPARE(zone.fixedSecondsAheadOfUtc(), 0);
+    }
+    {
+        const auto zone = QTimeZone::fromDurationAheadOfUtc(std::chrono::seconds{});
+        QCOMPARE(zone.fixedSecondsAheadOfUtc(), 0);
+    }
+    {
+        const auto zone = QTimeZone::fromSecondsAheadOfUtc(1);
+        QCOMPARE(zone.fixedSecondsAheadOfUtc(), 1);
+    }
+    {
+        const auto zone = QTimeZone::fromDurationAheadOfUtc(std::chrono::seconds{1});
+        QCOMPARE(zone.fixedSecondsAheadOfUtc(), 1);
+    }
+#if QT_CONFIG(timezone)
+    QCOMPARE(QTimeZone("Europe/Oslo").fixedSecondsAheadOfUtc(), 0);
 #endif
 }
 
 void tst_QTimeZone::dataStreamTest()
 {
+#ifndef QT_NO_DATASTREAM
     // Test the OffsetFromUtc backend serialization. First with a custom timezone:
     QTimeZone tz1("QST", 123456, "Qt Standard Time", "QST", QLocale::Norway, "Qt Testing");
     QByteArray tmp;
@@ -380,6 +491,42 @@ void tst_QTimeZone::dataStreamTest()
         ds >> tz2;
     }
     QCOMPARE(tz2.id(), tz1.id());
+#endif
+}
+
+#if QT_CONFIG(timezone)
+void tst_QTimeZone::asBackendZone()
+{
+    QCOMPARE(QTimeZone(QTimeZone::LocalTime).asBackendZone(), QTimeZone::systemTimeZone());
+    QCOMPARE(QTimeZone(QTimeZone::UTC).asBackendZone(), QTimeZone::utc());
+    QCOMPARE(QTimeZone::fromSecondsAheadOfUtc(-300).asBackendZone(), QTimeZone(-300));
+    QTimeZone cet("Europe/Oslo");
+    QCOMPARE(cet.asBackendZone(), cet);
+}
+
+void tst_QTimeZone::systemZone()
+{
+    const QTimeZone zone = QTimeZone::systemTimeZone();
+    QVERIFY(zone.isValid());
+    QCOMPARE(zone.id(), QTimeZone::systemTimeZoneId());
+    QCOMPARE(zone, QTimeZone(QTimeZone::systemTimeZoneId()));
+    // Check it behaves the same as local-time:
+    const QDate dates[] = {
+        QDate::fromJulianDay(0), // far in the distant past (LMT)
+        QDate(1625, 6, 8), // Before time-zones (date of Cassini's birth)
+        QDate(1901, 12, 13), // Last day before 32-bit time_t's range
+        QDate(1969, 12, 31), // Last day before the epoch
+        QDate(1970, 0, 0), // Start of epoch
+        QDate(2000, 2, 29), // An anomalous leap day
+        QDate(2038, 1, 20) // First day after 32-bit time_t's range
+    };
+    for (const auto &date : dates)
+        QCOMPARE(date.startOfDay(QTimeZone::LocalTime), date.startOfDay(zone));
+
+#if __cpp_lib_chrono >= 201907L
+    const std::chrono::time_zone *currentTimeZone = std::chrono::current_zone();
+    QCOMPARE(QByteArrayView(currentTimeZone->name()), QByteArrayView(zone.id()));
+#endif
 }
 
 void tst_QTimeZone::isTimeZoneIdAvailable()
@@ -496,7 +643,7 @@ void tst_QTimeZone::utcOffsetId()
     QTimeZone zone(id);
     QCOMPARE(zone.isValid(), valid);
     if (valid) {
-        QDateTime epoch(QDate(1970, 1, 1), QTime(0, 0, 0), Qt::UTC);
+        QDateTime epoch(QDate(1970, 1, 1), QTime(0, 0), QTimeZone::UTC);
         QFETCH(int, offset);
         QCOMPARE(zone.offsetFromUtc(epoch), offset);
         QVERIFY(!zone.hasDaylightTime());
@@ -529,15 +676,15 @@ void tst_QTimeZone::specificTransition_data()
         QTest::newRow("Moscow/2014") // From original bug-report
             << QByteArray("Europe/Moscow")
             << QDate(2011, 4, 1) << QDate(2021, 12, 31) << 1
-            << QDateTime(QDate(2014, 10, 26), QTime(2, 0, 0),
-                         Qt::OffsetFromUTC, 4 * 3600).toUTC()
+            << QDateTime(QDate(2014, 10, 26), QTime(2, 0),
+                         QTimeZone::fromSecondsAheadOfUtc(4 * 3600)).toUTC()
             << 3 * 3600 << 3 * 3600 << 0;
     }
     QTest::newRow("Moscow/2011") // Transition on 2011-03-27
         << QByteArray("Europe/Moscow")
         << QDate(2010, 11, 1) << QDate(2014, 10, 25) << 1
-        << QDateTime(QDate(2011, 3, 27), QTime(2, 0, 0),
-                     Qt::OffsetFromUTC, 3 * 3600).toUTC()
+        << QDateTime(QDate(2011, 3, 27), QTime(2, 0),
+                     QTimeZone::fromSecondsAheadOfUtc(3 * 3600)).toUTC()
         << 4 * 3600 << 4 * 3600 << 0;
 }
 
@@ -709,12 +856,13 @@ void tst_QTimeZone::availableTimeZoneIds()
 
 void tst_QTimeZone::stressTest()
 {
+    const auto UTC = QTimeZone::UTC;
     const QList<QByteArray> idList = QTimeZone::availableTimeZoneIds();
     for (const QByteArray &id : idList) {
         QTimeZone testZone = QTimeZone(id);
         QCOMPARE(testZone.isValid(), true);
         QCOMPARE(testZone.id(), id);
-        QDateTime testDate = QDateTime(QDate(2015, 1, 1), QTime(0, 0, 0), Qt::UTC);
+        QDateTime testDate = QDateTime(QDate(2015, 1, 1), QTime(0, 0), UTC);
         testZone.territory();
         testZone.comment();
         testZone.displayName(testDate);
@@ -731,10 +879,10 @@ void tst_QTimeZone::stressTest()
         testZone.nextTransition(testDate);
         testZone.previousTransition(testDate);
         // Dates known to be outside possible tz file pre-calculated rules range
-        QDateTime lowDate1 = QDateTime(QDate(1800, 1, 1), QTime(0, 0, 0), Qt::UTC);
-        QDateTime lowDate2 = QDateTime(QDate(1800, 6, 1), QTime(0, 0, 0), Qt::UTC);
-        QDateTime highDate1 = QDateTime(QDate(2200, 1, 1), QTime(0, 0, 0), Qt::UTC);
-        QDateTime highDate2 = QDateTime(QDate(2200, 6, 1), QTime(0, 0, 0), Qt::UTC);
+        QDateTime lowDate1 = QDateTime(QDate(1800, 1, 1), QTime(0, 0), UTC);
+        QDateTime lowDate2 = QDateTime(QDate(1800, 6, 1), QTime(0, 0), UTC);
+        QDateTime highDate1 = QDateTime(QDate(2200, 1, 1), QTime(0, 0), UTC);
+        QDateTime highDate2 = QDateTime(QDate(2200, 6, 1), QTime(0, 0), UTC);
         testZone.nextTransition(lowDate1);
         testZone.nextTransition(lowDate2);
         testZone.previousTransition(lowDate2);
@@ -947,6 +1095,7 @@ void tst_QTimeZone::serialize()
 {
     int parts = 0;
 #ifndef QT_NO_DEBUG_STREAM
+    QTest::ignoreMessage(QtDebugMsg, "QTimeZone(\"\")");
     qDebug() << QTimeZone(); // to verify no crash
     parts++;
 #endif
@@ -1055,8 +1204,8 @@ void tst_QTimeZone::icuTest()
 {
 #if defined(QT_BUILD_INTERNAL) && QT_CONFIG(icu)
     // Known datetimes
-    qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
-    qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
+    qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0), QTimeZone::UTC).toMSecsSinceEpoch();
+    qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0), QTimeZone::UTC).toMSecsSinceEpoch();
 
     // Test default constructor
     QIcuTimeZonePrivate tzpd;
@@ -1100,9 +1249,10 @@ void tst_QTimeZone::icuTest()
 void tst_QTimeZone::tzTest()
 {
 #if defined QT_BUILD_INTERNAL && defined Q_OS_UNIX && !defined Q_OS_DARWIN && !defined Q_OS_ANDROID
+    const auto UTC = QTimeZone::UTC;
     // Known datetimes
-    qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
-    qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
+    qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0), UTC).toMSecsSinceEpoch();
+    qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0), UTC).toMSecsSinceEpoch();
 
     // Test default constructor
     QTzTimeZonePrivate tzpd;
@@ -1135,8 +1285,8 @@ void tst_QTimeZone::tzTest()
     // It shouldn't have any transitions. QTimeZone::hasTransitions() only says
     // whether the backend supports them, so ask for transitions in a wide
     // enough interval that one would show up, if there are any:
-    QVERIFY(permaDst.transitions(QDate(2015, 1, 1).startOfDay(Qt::UTC).toMSecsSinceEpoch(),
-                                 QDate(2020, 1, 1).startOfDay(Qt::UTC).toMSecsSinceEpoch()
+    QVERIFY(permaDst.transitions(QDate(2015, 1, 1).startOfDay(UTC).toMSecsSinceEpoch(),
+                                 QDate(2020, 1, 1).startOfDay(UTC).toMSecsSinceEpoch()
                                 ).isEmpty());
 
     QTimeZone tzBrazil("BRT+3"); // parts of Northern Brazil, as a POSIX rule
@@ -1207,14 +1357,16 @@ void tst_QTimeZone::tzTest()
     }
 
     dat = tzp.nextTransition(ancient);
-    QCOMPARE(QDateTime::fromMSecsSinceEpoch(dat.atMSecsSinceEpoch, Qt::OffsetFromUTC, 3600),
-             QDateTime(QDate(1893, 4, 1), QTime(0, 6, 32), Qt::OffsetFromUTC, 3600));
+    QCOMPARE(QDateTime::fromMSecsSinceEpoch(dat.atMSecsSinceEpoch,
+                                            QTimeZone::fromSecondsAheadOfUtc(3600)),
+             QDateTime(QDate(1893, 4, 1), QTime(0, 6, 32),
+                       QTimeZone::fromSecondsAheadOfUtc(3600)));
     QCOMPARE(dat.standardTimeOffset, 3600);
     QCOMPARE(dat.daylightTimeOffset, 0);
 
     // Date-times late enough to exercise POSIX rules:
-    qint64 stdHi = QDate(2100, 1, 1).startOfDay(Qt::UTC).toMSecsSinceEpoch();
-    qint64 dstHi = QDate(2100, 6, 1).startOfDay(Qt::UTC).toMSecsSinceEpoch();
+    qint64 stdHi = QDate(2100, 1, 1).startOfDay(UTC).toMSecsSinceEpoch();
+    qint64 dstHi = QDate(2100, 6, 1).startOfDay(UTC).toMSecsSinceEpoch();
     // Relevant last Sundays in October and March:
     QCOMPARE(Qt::DayOfWeek(QDate(2099, 10, 25).dayOfWeek()), Qt::Sunday);
     QCOMPARE(Qt::DayOfWeek(QDate(2100, 3, 28).dayOfWeek()), Qt::Sunday);
@@ -1234,32 +1386,33 @@ void tst_QTimeZone::tzTest()
 
     dat = tzp.previousTransition(stdHi);
     QCOMPARE(dat.abbreviation, QStringLiteral("CET"));
-    QCOMPARE(QDateTime::fromMSecsSinceEpoch(dat.atMSecsSinceEpoch, Qt::UTC),
-             QDateTime(QDate(2099, 10, 25), QTime(3, 0), Qt::OffsetFromUTC, 7200));
+    QCOMPARE(QDateTime::fromMSecsSinceEpoch(dat.atMSecsSinceEpoch, UTC),
+             QDateTime(QDate(2099, 10, 25), QTime(3, 0), QTimeZone::fromSecondsAheadOfUtc(7200)));
     QCOMPARE(dat.offsetFromUtc, 3600);
     QCOMPARE(dat.standardTimeOffset, 3600);
     QCOMPARE(dat.daylightTimeOffset, 0);
 
     dat = tzp.previousTransition(dstHi);
     QCOMPARE(dat.abbreviation, QStringLiteral("CEST"));
-    QCOMPARE(QDateTime::fromMSecsSinceEpoch(dat.atMSecsSinceEpoch, Qt::UTC),
-             QDateTime(QDate(2100, 3, 28), QTime(2, 0), Qt::OffsetFromUTC, 3600));
+    QCOMPARE(QDateTime::fromMSecsSinceEpoch(dat.atMSecsSinceEpoch, UTC),
+             QDateTime(QDate(2100, 3, 28), QTime(2, 0), QTimeZone::fromSecondsAheadOfUtc(3600)));
     QCOMPARE(dat.offsetFromUtc, 7200);
     QCOMPARE(dat.standardTimeOffset, 3600);
     QCOMPARE(dat.daylightTimeOffset, 3600);
 
     dat = tzp.nextTransition(stdHi);
     QCOMPARE(dat.abbreviation, QStringLiteral("CEST"));
-    QCOMPARE(QDateTime::fromMSecsSinceEpoch(dat.atMSecsSinceEpoch, Qt::UTC),
-             QDateTime(QDate(2100, 3, 28), QTime(2, 0), Qt::OffsetFromUTC, 3600));
+    QCOMPARE(QDateTime::fromMSecsSinceEpoch(dat.atMSecsSinceEpoch, UTC),
+             QDateTime(QDate(2100, 3, 28), QTime(2, 0), QTimeZone::fromSecondsAheadOfUtc(3600)));
     QCOMPARE(dat.offsetFromUtc, 7200);
     QCOMPARE(dat.standardTimeOffset, 3600);
     QCOMPARE(dat.daylightTimeOffset, 3600);
 
     dat = tzp.nextTransition(dstHi);
     QCOMPARE(dat.abbreviation, QStringLiteral("CET"));
-    QCOMPARE(QDateTime::fromMSecsSinceEpoch(dat.atMSecsSinceEpoch, Qt::OffsetFromUTC, 3600),
-             QDateTime(QDate(2100, 10, 31), QTime(3, 0), Qt::OffsetFromUTC, 7200));
+    QCOMPARE(QDateTime::fromMSecsSinceEpoch(dat.atMSecsSinceEpoch,
+                                            QTimeZone::fromSecondsAheadOfUtc(3600)),
+             QDateTime(QDate(2100, 10, 31), QTime(3, 0), QTimeZone::fromSecondsAheadOfUtc(7200)));
     QCOMPARE(dat.offsetFromUtc, 3600);
     QCOMPARE(dat.standardTimeOffset, 3600);
     QCOMPARE(dat.daylightTimeOffset, 0);
@@ -1288,7 +1441,7 @@ void tst_QTimeZone::tzTest()
         QCOMPARE(tzBarnaul.data(std).abbreviation, QString("+07"));
 
         // first full day of the new rule (tzdata2016b)
-        QDateTime dt(QDate(2016, 3, 28), QTime(0, 0, 0), Qt::UTC);
+        QDateTime dt(QDate(2016, 3, 28), QTime(0, 0), UTC);
         QCOMPARE(tzBarnaul.data(dt.toMSecsSinceEpoch()).abbreviation, QString("+07"));
     }
 #endif // QT_BUILD_INTERNAL && Q_OS_UNIX && !Q_OS_DARWIN
@@ -1298,8 +1451,8 @@ void tst_QTimeZone::macTest()
 {
 #if defined(QT_BUILD_INTERNAL) && defined(Q_OS_DARWIN)
     // Known datetimes
-    qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
-    qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
+    qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0), QTimeZone::UTC).toMSecsSinceEpoch();
+    qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0), QTimeZone::UTC).toMSecsSinceEpoch();
 
     // Test default constructor
     QMacTimeZonePrivate tzpd;
@@ -1354,8 +1507,8 @@ void tst_QTimeZone::winTest()
 {
 #if defined(QT_BUILD_INTERNAL) && defined(USING_WIN_TZ)
     // Known datetimes
-    qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
-    qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
+    qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0), QTimeZone::UTC).toMSecsSinceEpoch();
+    qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0), QTimeZone::UTC).toMSecsSinceEpoch();
 
     // Test default constructor
     QWinTimeZonePrivate tzpd;
@@ -1457,9 +1610,11 @@ void tst_QTimeZone::localeSpecificDisplayName()
 void tst_QTimeZone::testCetPrivate(const QTimeZonePrivate &tzp)
 {
     // Known datetimes
-    qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
-    qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
-    qint64 prev = QDateTime(QDate(2011, 1, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
+    const auto UTC = QTimeZone::UTC;
+    const auto eastOneHour = QTimeZone::fromSecondsAheadOfUtc(3600);
+    qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0), UTC).toMSecsSinceEpoch();
+    qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0), UTC).toMSecsSinceEpoch();
+    qint64 prev = QDateTime(QDate(2011, 1, 1), QTime(0, 0), UTC).toMSecsSinceEpoch();
 
     QCOMPARE(tzp.offsetFromUtc(std), 3600);
     QCOMPARE(tzp.offsetFromUtc(dst), 7200);
@@ -1492,32 +1647,34 @@ void tst_QTimeZone::testCetPrivate(const QTimeZonePrivate &tzp)
     if (tzp.hasTransitions()) {
         QTimeZonePrivate::Data tran = tzp.nextTransition(std);
         // 2012-03-25 02:00 CET, +1 -> +2
-        QCOMPARE(QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, Qt::UTC),
-                 QDateTime(QDate(2012, 3, 25), QTime(2, 0), Qt::OffsetFromUTC, 3600));
+        QCOMPARE(QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, UTC),
+                 QDateTime(QDate(2012, 3, 25), QTime(2, 0), eastOneHour));
         QCOMPARE(tran.offsetFromUtc, 7200);
         QCOMPARE(tran.standardTimeOffset, 3600);
         QCOMPARE(tran.daylightTimeOffset, 3600);
 
         tran = tzp.nextTransition(dst);
         // 2012-10-28 03:00 CEST, +2 -> +1
-        QCOMPARE(QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, Qt::UTC),
-                 QDateTime(QDate(2012, 10, 28), QTime(3, 0), Qt::OffsetFromUTC, 2 * 3600));
+        QCOMPARE(QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, UTC),
+                 QDateTime(QDate(2012, 10, 28), QTime(3, 0),
+                           QTimeZone::fromSecondsAheadOfUtc(2 * 3600)));
         QCOMPARE(tran.offsetFromUtc, 3600);
         QCOMPARE(tran.standardTimeOffset, 3600);
         QCOMPARE(tran.daylightTimeOffset, 0);
 
         tran = tzp.previousTransition(std);
         // 2011-10-30 03:00 CEST, +2 -> +1
-        QCOMPARE(QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, Qt::UTC),
-                 QDateTime(QDate(2011, 10, 30), QTime(3, 0), Qt::OffsetFromUTC, 2 * 3600));
+        QCOMPARE(QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, UTC),
+                 QDateTime(QDate(2011, 10, 30), QTime(3, 0),
+                           QTimeZone::fromSecondsAheadOfUtc(2 * 3600)));
         QCOMPARE(tran.offsetFromUtc, 3600);
         QCOMPARE(tran.standardTimeOffset, 3600);
         QCOMPARE(tran.daylightTimeOffset, 0);
 
         tran = tzp.previousTransition(dst);
         // 2012-03-25 02:00 CET, +1 -> +2 (again)
-        QCOMPARE(QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, Qt::UTC),
-                 QDateTime(QDate(2012, 3, 25), QTime(2, 0), Qt::OffsetFromUTC, 3600));
+        QCOMPARE(QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, UTC),
+                 QDateTime(QDate(2012, 3, 25), QTime(2, 0), eastOneHour));
         QCOMPARE(tran.offsetFromUtc, 7200);
         QCOMPARE(tran.standardTimeOffset, 3600);
         QCOMPARE(tran.daylightTimeOffset, 3600);
@@ -1525,14 +1682,15 @@ void tst_QTimeZone::testCetPrivate(const QTimeZonePrivate &tzp)
         QTimeZonePrivate::DataList expected;
         // 2011-03-27 02:00 CET, +1 -> +2
         tran.atMSecsSinceEpoch = QDateTime(QDate(2011, 3, 27), QTime(2, 0),
-                                           Qt::OffsetFromUTC, 3600).toMSecsSinceEpoch();
+                                           eastOneHour).toMSecsSinceEpoch();
         tran.offsetFromUtc = 7200;
         tran.standardTimeOffset = 3600;
         tran.daylightTimeOffset = 3600;
         expected << tran;
         // 2011-10-30 03:00 CEST, +2 -> +1
         tran.atMSecsSinceEpoch = QDateTime(QDate(2011, 10, 30), QTime(3, 0),
-                                           Qt::OffsetFromUTC, 2 * 3600).toMSecsSinceEpoch();
+                                           QTimeZone::fromSecondsAheadOfUtc(2 * 3600)
+                                           ).toMSecsSinceEpoch();
         tran.offsetFromUtc = 3600;
         tran.standardTimeOffset = 3600;
         tran.daylightTimeOffset = 0;
@@ -1540,10 +1698,8 @@ void tst_QTimeZone::testCetPrivate(const QTimeZonePrivate &tzp)
         QTimeZonePrivate::DataList result = tzp.transitions(prev, std);
         QCOMPARE(result.size(), expected.size());
         for (int i = 0; i < expected.size(); ++i) {
-            QCOMPARE(QDateTime::fromMSecsSinceEpoch(result.at(i).atMSecsSinceEpoch,
-                                                    Qt::OffsetFromUTC, 3600),
-                     QDateTime::fromMSecsSinceEpoch(expected.at(i).atMSecsSinceEpoch,
-                                                    Qt::OffsetFromUTC, 3600));
+            QCOMPARE(QDateTime::fromMSecsSinceEpoch(result.at(i).atMSecsSinceEpoch, eastOneHour),
+                     QDateTime::fromMSecsSinceEpoch(expected.at(i).atMSecsSinceEpoch, eastOneHour));
             QCOMPARE(result.at(i).offsetFromUtc, expected.at(i).offsetFromUtc);
             QCOMPARE(result.at(i).standardTimeOffset, expected.at(i).standardTimeOffset);
             QCOMPARE(result.at(i).daylightTimeOffset, expected.at(i).daylightTimeOffset);
@@ -1557,10 +1713,13 @@ void tst_QTimeZone::testEpochTranPrivate(const QTimeZonePrivate &tzp)
     if (!tzp.hasTransitions())
         return; // test only viable for transitions
 
+    const auto UTC = QTimeZone::UTC;
+    const auto hour = std::chrono::hours{1};
     QTimeZonePrivate::Data tran = tzp.nextTransition(0); // i.e. first after epoch
     // 1970-04-26 02:00 EST, -5 -> -4
-    const QDateTime after = QDateTime(QDate(1970, 4, 26), QTime(2, 0), Qt::OffsetFromUTC, -5 * 3600);
-    const QDateTime found = QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, Qt::UTC);
+    const QDateTime after = QDateTime(QDate(1970, 4, 26), QTime(2, 0),
+                                      QTimeZone::fromDurationAheadOfUtc(-5 * hour));
+    const QDateTime found = QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, UTC);
 #ifdef USING_WIN_TZ // MS gets the date wrong: 5th April instead of 26th.
     QCOMPARE(found.toOffsetFromUtc(-5 * 3600).time(), after.time());
 #else
@@ -1571,16 +1730,16 @@ void tst_QTimeZone::testEpochTranPrivate(const QTimeZonePrivate &tzp)
     QCOMPARE(tran.daylightTimeOffset, 3600);
 
     // Pre-epoch time-zones might not be supported at all:
-    tran = tzp.nextTransition(QDateTime(QDate(1601, 1, 1), QTime(0, 0),
-                                        Qt::UTC).toMSecsSinceEpoch());
+    tran = tzp.nextTransition(QDateTime(QDate(1601, 1, 1), QTime(0, 0), UTC).toMSecsSinceEpoch());
     if (tran.atMSecsSinceEpoch != QTimeZonePrivate::invalidMSecs()
         // Toronto *did* have a transition before 1970 (DST since 1918):
         && tran.atMSecsSinceEpoch < 0) {
         // ... but, if they are, we should be able to search back to them:
         tran = tzp.previousTransition(0); // i.e. last before epoch
         // 1969-10-26 02:00 EDT, -4 -> -5
-        QCOMPARE(QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, Qt::UTC),
-                 QDateTime(QDate(1969, 10, 26), QTime(2, 0), Qt::OffsetFromUTC, -4 * 3600));
+        QCOMPARE(QDateTime::fromMSecsSinceEpoch(tran.atMSecsSinceEpoch, UTC),
+                 QDateTime(QDate(1969, 10, 26), QTime(2, 0),
+                           QTimeZone::fromDurationAheadOfUtc(-4 * hour)));
         QCOMPARE(tran.offsetFromUtc, -5 * 3600);
         QCOMPARE(tran.standardTimeOffset, -5 * 3600);
         QCOMPARE(tran.daylightTimeOffset, 0);
@@ -1631,6 +1790,7 @@ void tst_QTimeZone::stdCompatibility()
     QSKIP("This test requires C++20's <chrono>.");
 #endif
 }
+#endif // timezone backends
 
 QTEST_APPLESS_MAIN(tst_QTimeZone)
 #include "tst_qtimezone.moc"

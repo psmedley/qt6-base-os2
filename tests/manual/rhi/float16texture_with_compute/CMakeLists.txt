@@ -1,4 +1,5 @@
-# Generated from float16texture_with_compute.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## float16texture_with_compute Binary:
@@ -8,7 +9,7 @@ qt_internal_add_manual_test(float16texture_with_compute
     GUI
     SOURCES
         float16texture_with_compute.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -37,7 +38,3 @@ qt_internal_add_resource(float16texture_with_compute "float16texture_with_comput
     FILES
         ${float16texture_with_compute_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:float16texture_with_compute.pro:<TRUE>:
-# TEMPLATE = "app"

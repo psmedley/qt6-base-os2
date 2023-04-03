@@ -41,14 +41,14 @@ private:
         QVarLengthArray<int, 4> inputTypes;
         QVarLengthArray<int, 4> outputTypes;
         QByteArray rawReturnType;
-        int flags;
+        quint32 flags;
     };
 
     struct Property {
         QByteArray typeName;
         QByteArray signature;
         int type;
-        int flags;
+        quint32 flags;
     };
     struct Type {
         int id;
@@ -381,8 +381,8 @@ void QDBusMetaObjectGenerator::write(QDBusMetaObject *obj)
     if (className.isEmpty())
         className = "QDBusInterface"_L1;
 
-    QVarLengthArray<int> idata;
-    idata.resize(sizeof(QDBusMetaObjectPrivate) / sizeof(int));
+    QVarLengthArray<uint> idata;
+    idata.resize(sizeof(QDBusMetaObjectPrivate) / sizeof(uint));
 
     qsizetype methodParametersDataSize =
             ((aggregateParameterCount(signals_)
@@ -391,7 +391,7 @@ void QDBusMetaObjectGenerator::write(QDBusMetaObject *obj)
             - methods.size(); // ditto
 
     QDBusMetaObjectPrivate *header = reinterpret_cast<QDBusMetaObjectPrivate *>(idata.data());
-    static_assert(QMetaObjectPrivate::OutputRevision == 10, "QtDBus meta-object generator should generate the same version as moc");
+    static_assert(QMetaObjectPrivate::OutputRevision == 11, "QtDBus meta-object generator should generate the same version as moc");
     header->revision = QMetaObjectPrivate::OutputRevision;
     header->className = 0;
     header->classInfoCount = 0;
@@ -486,7 +486,7 @@ void QDBusMetaObjectGenerator::write(QDBusMetaObject *obj)
                     typeInfo = IsUnresolvedType | strings.enter(typeName);
                 else
                     typeInfo = type;
-                metaTypes[currentMethodMetaTypeOffset++] = QMetaType (type);
+                metaTypes[currentMethodMetaTypeOffset++] = QMetaType(type);
                 idata[parametersOffset++] = typeInfo;
             }
             // Parameter names
@@ -495,12 +495,12 @@ void QDBusMetaObjectGenerator::write(QDBusMetaObject *obj)
 
             idata[signatureOffset++] = typeidOffset;
             idata[typeidOffset++] = mm.inputTypes.size();
-            memcpy(idata.data() + typeidOffset, mm.inputTypes.data(), mm.inputTypes.size() * sizeof(int));
+            memcpy(idata.data() + typeidOffset, mm.inputTypes.data(), mm.inputTypes.size() * sizeof(uint));
             typeidOffset += mm.inputTypes.size();
 
             idata[signatureOffset++] = typeidOffset;
             idata[typeidOffset++] = mm.outputTypes.size();
-            memcpy(idata.data() + typeidOffset, mm.outputTypes.data(), mm.outputTypes.size() * sizeof(int));
+            memcpy(idata.data() + typeidOffset, mm.outputTypes.data(), mm.outputTypes.size() * sizeof(uint));
             typeidOffset += mm.outputTypes.size();
         }
     }
@@ -540,7 +540,7 @@ void QDBusMetaObjectGenerator::write(QDBusMetaObject *obj)
     strings.writeBlob(string_data);
 
     uint *uint_data = new uint[idata.size()];
-    memcpy(uint_data, idata.data(), idata.size() * sizeof(int));
+    memcpy(uint_data, idata.data(), idata.size() * sizeof(uint));
 
     // put the metaobject together
     obj->d.data = uint_data;

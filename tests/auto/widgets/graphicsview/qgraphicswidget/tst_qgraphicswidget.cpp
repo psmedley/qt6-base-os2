@@ -17,8 +17,8 @@
 #include <qstylefactory.h>
 #include <qscreen.h>
 #include <qsignalspy.h>
-#include <private/qguiapplication_p.h>
-#include <qpa/qplatformintegration.h>
+
+#include <QtWidgets/private/qapplication_p.h>
 
 typedef QList<QGraphicsItem *> QGraphicsItemList;
 
@@ -1388,7 +1388,7 @@ void tst_QGraphicsWidget::setTabOrder()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     QGraphicsWidget *lastItem = nullptr;
@@ -1460,7 +1460,7 @@ void tst_QGraphicsWidget::setTabOrderAndReparent()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), (QWidget*)&view);
 
@@ -1590,7 +1590,7 @@ void tst_QGraphicsWidget::verifyFocusChain()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     {
@@ -1682,7 +1682,7 @@ void tst_QGraphicsWidget::verifyFocusChain()
         w1_2->setFocusPolicy(Qt::StrongFocus);
         scene.addItem(w1_2);
         window->show();
-        QApplication::setActiveWindow(window.data());
+        QApplicationPrivate::setActiveWindow(window.data());
         QVERIFY(QTest::qWaitForWindowActive(window.data()));
 
         lineEdit->setFocus();
@@ -2694,7 +2694,7 @@ void tst_QGraphicsWidget::task250119_shortcutContext()
     QGraphicsView view;
     view.setScene(&scene);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QTRY_COMPARE(QApplication::activeWindow(), (QWidget*)&view);
 
 
@@ -3113,9 +3113,7 @@ void tst_QGraphicsWidget::initialShow()
     dummyView->setWindowFlags(Qt::X11BypassWindowManagerHint);
     EventSpy paintSpy(dummyView->viewport(), QEvent::Paint);
     dummyView->show();
-    qApp->setActiveWindow(dummyView.data());
-    if (!QTest::qWaitForWindowActive(dummyView.data()))
-        QSKIP("Graphics view failed to show (possibly due to Qt::X11BypassWindowManagerHint");
+    QVERIFY(QTest::qWaitForWindowExposed(dummyView.data()));
     const int expectedRepaintCount = paintSpy.count();
     dummyView.reset();
 
@@ -3128,8 +3126,7 @@ void tst_QGraphicsWidget::initialShow()
     QGraphicsView view(&scene);
     view.setWindowFlags(view.windowFlags()|Qt::X11BypassWindowManagerHint);
     view.show();
-    qApp->setActiveWindow(&view);
-    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     QTRY_COMPARE(widget->repaints, expectedRepaintCount);
 }

@@ -56,6 +56,8 @@
 #include "fwdclass2.h"
 #include "fwdclass3.h"
 
+#include "signal-with-default-arg.h"
+
 #include "qmlmacro.h"
 
 #ifdef Q_MOC_RUN
@@ -755,6 +757,7 @@ private slots:
     void observerMetaCall();
     void setQPRopertyBinding();
     void privateQPropertyShim();
+    void readWriteThroughBindable();
 
 signals:
     void sigWithUnsignedArg(unsigned foo);
@@ -766,6 +769,7 @@ signals:
     void constSignal2(int arg) const;
     void member4Changed();
     void member5Changed(const QString &newVal);
+    void sigWithDefaultArg(int i = 12);
 
 private:
     bool user1() { return true; };
@@ -953,12 +957,12 @@ void tst_Moc::supportConstSignals()
     QSignalSpy spy1(this, SIGNAL(constSignal1()));
     QVERIFY(spy1.isEmpty());
     emit constSignal1();
-    QCOMPARE(spy1.count(), 1);
+    QCOMPARE(spy1.size(), 1);
 
     QSignalSpy spy2(this, SIGNAL(constSignal2(int)));
     QVERIFY(spy2.isEmpty());
     emit constSignal2(42);
-    QCOMPARE(spy2.count(), 1);
+    QCOMPARE(spy2.size(), 1);
     QCOMPARE(spy2.at(0).at(0).toInt(), 42);
 }
 
@@ -2512,7 +2516,7 @@ void tst_Moc::memberProperties()
 
     if (!signal.isEmpty())
     {
-        QCOMPARE(notifySpy.count(), 1);
+        QCOMPARE(notifySpy.size(), 1);
         if (prop.notifySignal().parameterNames().size() > 0) {
             QList<QVariant> arguments = notifySpy.takeFirst();
             QCOMPARE(arguments.size(), 1);
@@ -2522,7 +2526,7 @@ void tst_Moc::memberProperties()
         notifySpy.clear();
         // a second write with the same value should not cause the signal to be emitted again
         QCOMPARE(prop.write(pObj, writeValue), expectedWriteResult);
-        QCOMPARE(notifySpy.count(), 0);
+        QCOMPARE(notifySpy.size(), 0);
     }
 }
 
@@ -4204,7 +4208,7 @@ void tst_Moc::qpropertyMembers()
 
     instance.publicProperty.setValue(100);
     QCOMPARE(prop.read(&instance).toInt(), 100);
-    QCOMPARE(publicPropertySpy.count(), 1);
+    QCOMPARE(publicPropertySpy.size(), 1);
 
     QCOMPARE(prop.metaType(), QMetaType(QMetaType::Int));
 
@@ -4343,6 +4347,81 @@ void tst_Moc::privateQPropertyShim()
     // moc generates correct code for plain QProperty in PIMPL
     testObject.setTestProperty2(42);
     QCOMPARE(testObject.priv.testProperty2.value(), 42);
+}
+
+
+class BindableOnly : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int score BINDABLE scoreBindable READ default WRITE default)
+public:
+    BindableOnly(QObject *parent = nullptr)
+        : QObject(parent)
+        , m_score(4)
+    {}
+    QBindable<int> scoreBindable() { return QBindable<int>(&m_score); }
+private:
+    QProperty<int> m_score;
+};
+
+class BindableAndNotifyable : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int score BINDABLE scoreBindable NOTIFY scoreChanged READ default WRITE default)
+public:
+    BindableAndNotifyable(QObject *parent = nullptr)
+        : QObject(parent)
+        , m_score(4)
+    {}
+    QBindable<int> scoreBindable() { return QBindable<int>(&m_score); }
+signals:
+    void scoreChanged();
+private:
+    QProperty<int> m_score;
+};
+
+void tst_Moc::readWriteThroughBindable()
+{
+    {
+        BindableOnly o;
+        QCOMPARE(o.scoreBindable().value(), 4);
+        QCOMPARE(o.property("score").toInt(), 4);
+        o.scoreBindable().setValue(5);
+        QCOMPARE(o.scoreBindable().value(), 5);
+        QCOMPARE(o.property("score").toInt(), 5);
+        const QMetaObject *mo = o.metaObject();
+        const int i = mo->indexOfProperty("score");
+        QVERIFY(i > 0);
+        QMetaProperty p = mo->property(i);
+        QCOMPARE(p.name(), "score");
+        QVERIFY(p.isValid());
+        QVERIFY(p.isWritable());
+        QCOMPARE(p.read(&o), 5);
+        QVERIFY(o.setProperty("score", 6));
+        QCOMPARE(o.property("score").toInt(), 6);
+        QVERIFY(p.write(&o, 7));
+        QCOMPARE(p.read(&o), 7);
+    }
+    {
+        BindableAndNotifyable o;
+        QCOMPARE(o.scoreBindable().value(), 4);
+        QCOMPARE(o.property("score").toInt(), 4);
+        o.scoreBindable().setValue(5);
+        QCOMPARE(o.scoreBindable().value(), 5);
+        QCOMPARE(o.property("score").toInt(), 5);
+        const QMetaObject *mo = o.metaObject();
+        const int i = mo->indexOfProperty("score");
+        QVERIFY(i > 0);
+        QMetaProperty p = mo->property(i);
+        QCOMPARE(p.name(), "score");
+        QVERIFY(p.isValid());
+        QVERIFY(p.isWritable());
+        QCOMPARE(p.read(&o), 5);
+        QVERIFY(o.setProperty("score", 6));
+        QCOMPARE(o.property("score").toInt(), 6);
+        QVERIFY(p.write(&o, 7));
+        QCOMPARE(p.read(&o), 7);
+    }
 }
 
 QTEST_MAIN(tst_Moc)

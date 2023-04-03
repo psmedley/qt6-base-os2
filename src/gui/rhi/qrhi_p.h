@@ -30,6 +30,7 @@
 QT_BEGIN_NAMESPACE
 
 class QWindow;
+class QRhi;
 class QRhiImplementation;
 class QRhiBuffer;
 class QRhiRenderBuffer;
@@ -131,7 +132,7 @@ public:
     };
 
     QRhiVertexInputBinding() = default;
-    QRhiVertexInputBinding(quint32 stride, Classification cls = PerVertex, int stepRate = 1);
+    QRhiVertexInputBinding(quint32 stride, Classification cls = PerVertex, quint32 stepRate = 1);
 
     quint32 stride() const { return m_stride; }
     void setStride(quint32 s) { m_stride = s; }
@@ -139,13 +140,13 @@ public:
     Classification classification() const { return m_classification; }
     void setClassification(Classification c) { m_classification = c; }
 
-    int instanceStepRate() const { return m_instanceStepRate; }
-    void setInstanceStepRate(int rate) { m_instanceStepRate = rate; }
+    quint32 instanceStepRate() const { return m_instanceStepRate; }
+    void setInstanceStepRate(quint32 rate) { m_instanceStepRate = rate; }
 
 private:
     quint32 m_stride = 0;
     Classification m_classification = PerVertex;
-    int m_instanceStepRate = 1;
+    quint32 m_instanceStepRate = 1;
 };
 
 Q_DECLARE_TYPEINFO(QRhiVertexInputBinding, Q_RELOCATABLE_TYPE);
@@ -328,8 +329,8 @@ public:
     bool isLayoutCompatible(const QRhiShaderResourceBinding &other) const;
 
     static QRhiShaderResourceBinding uniformBuffer(int binding, StageFlags stage, QRhiBuffer *buf);
-    static QRhiShaderResourceBinding uniformBuffer(int binding, StageFlags stage, QRhiBuffer *buf, int offset, int size);
-    static QRhiShaderResourceBinding uniformBufferWithDynamicOffset(int binding, StageFlags stage, QRhiBuffer *buf, int size);
+    static QRhiShaderResourceBinding uniformBuffer(int binding, StageFlags stage, QRhiBuffer *buf, quint32 offset, quint32 size);
+    static QRhiShaderResourceBinding uniformBufferWithDynamicOffset(int binding, StageFlags stage, QRhiBuffer *buf, quint32 size);
 
     static QRhiShaderResourceBinding sampledTexture(int binding, StageFlags stage, QRhiTexture *tex, QRhiSampler *sampler);
 
@@ -348,11 +349,11 @@ public:
     static QRhiShaderResourceBinding imageLoadStore(int binding, StageFlags stage, QRhiTexture *tex, int level);
 
     static QRhiShaderResourceBinding bufferLoad(int binding, StageFlags stage, QRhiBuffer *buf);
-    static QRhiShaderResourceBinding bufferLoad(int binding, StageFlags stage, QRhiBuffer *buf, int offset, int size);
+    static QRhiShaderResourceBinding bufferLoad(int binding, StageFlags stage, QRhiBuffer *buf, quint32 offset, quint32 size);
     static QRhiShaderResourceBinding bufferStore(int binding, StageFlags stage, QRhiBuffer *buf);
-    static QRhiShaderResourceBinding bufferStore(int binding, StageFlags stage, QRhiBuffer *buf, int offset, int size);
+    static QRhiShaderResourceBinding bufferStore(int binding, StageFlags stage, QRhiBuffer *buf, quint32 offset, quint32 size);
     static QRhiShaderResourceBinding bufferLoadStore(int binding, StageFlags stage, QRhiBuffer *buf);
-    static QRhiShaderResourceBinding bufferLoadStore(int binding, StageFlags stage, QRhiBuffer *buf, int offset, int size);
+    static QRhiShaderResourceBinding bufferLoadStore(int binding, StageFlags stage, QRhiBuffer *buf, quint32 offset, quint32 size);
 
     struct Data
     {
@@ -361,8 +362,8 @@ public:
         QRhiShaderResourceBinding::Type type;
         struct UniformBufferData {
             QRhiBuffer *buf;
-            int offset;
-            int maybeSize;
+            quint32 offset;
+            quint32 maybeSize;
             bool hasDynamicOffset;
         };
         static const int MAX_TEX_SAMPLER_ARRAY_SIZE = 16;
@@ -376,8 +377,8 @@ public:
         };
         struct StorageBufferData {
             QRhiBuffer *buf;
-            int offset;
-            int maybeSize;
+            quint32 offset;
+            quint32 maybeSize;
         };
         union {
             UniformBufferData ubuf;
@@ -512,7 +513,7 @@ class Q_GUI_EXPORT QRhiTextureSubresourceUploadDescription
 public:
     QRhiTextureSubresourceUploadDescription() = default;
     explicit QRhiTextureSubresourceUploadDescription(const QImage &image);
-    QRhiTextureSubresourceUploadDescription(const void *data, int size);
+    QRhiTextureSubresourceUploadDescription(const void *data, quint32 size);
     explicit QRhiTextureSubresourceUploadDescription(const QByteArray &data);
 
     QImage image() const { return m_image; }
@@ -684,6 +685,8 @@ public:
 
     quint64 globalResourceId() const;
 
+    QRhi *rhi() const;
+
 protected:
     QRhiResource(QRhiImplementation *rhi);
     Q_DISABLE_COPY(QRhiResource)
@@ -723,8 +726,8 @@ public:
     UsageFlags usage() const { return m_usage; }
     void setUsage(UsageFlags u) { m_usage = u; }
 
-    int size() const { return m_size; }
-    void setSize(int sz) { m_size = sz; }
+    quint32 size() const { return m_size; }
+    void setSize(quint32 sz) { m_size = sz; }
 
     virtual bool create() = 0;
 
@@ -734,10 +737,10 @@ public:
     virtual void endFullDynamicBufferUpdateForCurrentFrame();
 
 protected:
-    QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, int size_);
+    QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, quint32 size_);
     Type m_type;
     UsageFlags m_usage;
-    int m_size;
+    quint32 m_size;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiBuffer::UsageFlags)
@@ -757,7 +760,8 @@ public:
         ExternalOES = 1 << 9,
         ThreeDimensional = 1 << 10,
         TextureRectangleGL = 1 << 11,
-        TextureArray = 1 << 12
+        TextureArray = 1 << 12,
+        OneDimensional = 1 << 13
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -1357,6 +1361,11 @@ Q_DECLARE_TYPEINFO(QRhiSwapChainHdrInfo, Q_RELOCATABLE_TYPE);
 Q_GUI_EXPORT QDebug operator<<(QDebug, const QRhiSwapChainHdrInfo &);
 #endif
 
+struct QRhiSwapChainProxyData
+{
+    void *reserved[2] = {};
+};
+
 class Q_GUI_EXPORT QRhiSwapChain : public QRhiResource
 {
 public:
@@ -1376,10 +1385,18 @@ public:
         HDR10
     };
 
+    enum StereoTargetBuffer {
+        LeftBuffer,
+        RightBuffer
+    };
+
     QRhiResource::Type resourceType() const override;
 
     QWindow *window() const { return m_window; }
     void setWindow(QWindow *window) { m_window = window; }
+
+    QRhiSwapChainProxyData proxyData() const { return m_proxyData; }
+    void setProxyData(const QRhiSwapChainProxyData &d) { m_proxyData = d; }
 
     Flags flags() const { return m_flags; }
     void setFlags(Flags f) { m_flags = f; }
@@ -1400,6 +1417,7 @@ public:
 
     virtual QRhiCommandBuffer *currentFrameCommandBuffer() = 0;
     virtual QRhiRenderTarget *currentFrameRenderTarget() = 0;
+    virtual QRhiRenderTarget *currentFrameRenderTarget(StereoTargetBuffer targetBuffer);
     virtual QSize surfacePixelSize() = 0;
     virtual bool isFormatSupported(Format f) = 0;
     virtual QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() = 0;
@@ -1415,6 +1433,7 @@ protected:
     int m_sampleCount = 1;
     QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
     QSize m_currentPixelSize;
+    QRhiSwapChainProxyData m_proxyData;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::Flags)
@@ -1542,10 +1561,10 @@ public:
     void merge(QRhiResourceUpdateBatch *other);
     bool hasOptimalCapacity() const;
 
-    void updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
-    void uploadStaticBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
+    void updateDynamicBuffer(QRhiBuffer *buf, quint32 offset, quint32 size, const void *data);
+    void uploadStaticBuffer(QRhiBuffer *buf, quint32 offset, quint32 size, const void *data);
     void uploadStaticBuffer(QRhiBuffer *buf, const void *data);
-    void readBackBuffer(QRhiBuffer *buf, int offset, int size, QRhiBufferReadbackResult *result);
+    void readBackBuffer(QRhiBuffer *buf, quint32 offset, quint32 size, QRhiBufferReadbackResult *result);
     void uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc);
     void uploadTexture(QRhiTexture *tex, const QImage &image);
     void copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc = QRhiTextureCopyDescription());
@@ -1583,18 +1602,19 @@ Q_DECLARE_TYPEINFO(QRhiDriverInfo, Q_RELOCATABLE_TYPE);
 Q_GUI_EXPORT QDebug operator<<(QDebug, const QRhiDriverInfo &);
 #endif
 
-struct Q_GUI_EXPORT QRhiMemAllocStats
+struct Q_GUI_EXPORT QRhiStats
 {
+    qint64 totalPipelineCreationTime = 0;
     quint32 blockCount = 0;
     quint32 allocCount = 0;
     quint64 usedBytes = 0;
     quint64 unusedBytes = 0;
 };
 
-Q_DECLARE_TYPEINFO(QRhiMemAllocStats, Q_RELOCATABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiStats, Q_RELOCATABLE_TYPE);
 
 #ifndef QT_NO_DEBUG_STREAM
-Q_GUI_EXPORT QDebug operator<<(QDebug, const QRhiMemAllocStats &);
+Q_GUI_EXPORT QDebug operator<<(QDebug, const QRhiStats &);
 #endif
 
 struct Q_GUI_EXPORT QRhiInitParams
@@ -1662,7 +1682,9 @@ public:
         Tessellation,
         GeometryShader,
         TextureArrayRange,
-        NonFillPolygonMode
+        NonFillPolygonMode,
+        OneDimensionalTextures,
+        OneDimensionalTextureMipmaps
     };
 
     enum BeginFrameFlag {
@@ -1701,6 +1723,7 @@ public:
 
     Implementation backend() const;
     const char *backendName() const;
+    static const char *backendName(Implementation impl);
     QRhiDriverInfo driverInfo() const;
     QThread *thread() const;
 
@@ -1717,7 +1740,7 @@ public:
 
     QRhiBuffer *newBuffer(QRhiBuffer::Type type,
                           QRhiBuffer::UsageFlags usage,
-                          int size);
+                          quint32 size);
 
     QRhiRenderBuffer *newRenderBuffer(QRhiRenderBuffer::Type type,
                                       const QSize &pixelSize,
@@ -1794,7 +1817,9 @@ public:
     QByteArray pipelineCacheData();
     void setPipelineCacheData(const QByteArray &data);
 
-    QRhiMemAllocStats graphicsMemoryAllocationStatistics() const;
+    QRhiStats statistics() const;
+
+    static QRhiSwapChainProxyData updateSwapChainProxyData(Implementation impl, QWindow *window);
 
 protected:
     QRhi();

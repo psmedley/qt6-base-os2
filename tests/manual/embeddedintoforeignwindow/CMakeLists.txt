@@ -1,4 +1,5 @@
-# Generated from embeddedintoforeignwindow.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## embeddedintoforeignwindow Binary:
@@ -16,14 +17,11 @@ qt_internal_add_manual_test(embeddedintoforeignwindow
         QT_DIAG_LIB
     INCLUDE_DIRECTORIES
         ../diaglib
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
 )
-
-#### Keys ignored in scope 1:.:.:embeddedintoforeignwindow.pro:<TRUE>:
-# TEMPLATE = "app"
 
 ## Scopes:
 #####################################################################
@@ -31,7 +29,7 @@ qt_internal_add_manual_test(embeddedintoforeignwindow
 qt_internal_extend_target(embeddedintoforeignwindow CONDITION WIN32
     SOURCES
         ../diaglib/nativewindowdump_win.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         user32
 )
 
@@ -45,14 +43,14 @@ qt_internal_extend_target(embeddedintoforeignwindow CONDITION QT_FEATURE_widgets
         ../diaglib/debugproxystyle.cpp ../diaglib/debugproxystyle.h
         ../diaglib/logwidget.cpp ../diaglib/logwidget.h
         ../diaglib/qwidgetdump.cpp ../diaglib/qwidgetdump.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::WidgetsPrivate
 )
 
 qt_internal_extend_target(embeddedintoforeignwindow CONDITION QT_FEATURE_opengl
     SOURCES
         ../diaglib/glinfo.cpp ../diaglib/glinfo.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::OpenGL
         Qt::OpenGLWidgets
 )

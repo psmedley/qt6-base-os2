@@ -36,6 +36,8 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
+Q_TRACE_POINT(qtcore, QFactoryLoader_update, const QString &fileName);
+
 bool QPluginParsedMetaData::parse(QByteArrayView raw)
 {
     QPluginMetaData::Header header;
@@ -319,7 +321,7 @@ void QFactoryLoader::setExtraSearchPath(const QString &path)
         return;             // nothing to do
 
     QMutexLocker locker(&qt_factoryloader_global->mutex);
-    QString oldPath = qExchange(d->extraSearchPath, path);
+    QString oldPath = std::exchange(d->extraSearchPath, path);
     if (oldPath.isEmpty()) {
         // easy case, just update this directory
         d->updateSinglePath(d->extraSearchPath);

@@ -41,6 +41,7 @@
 
 #include <QtGui/qgenericpluginfactory.h>
 #include <QtGui/qstylehints.h>
+#include <QtGui/private/qstylehints_p.h>
 #include <QtGui/qinputmethod.h>
 #include <QtGui/qpixmapcache.h>
 #include <qpa/qplatforminputcontext.h>
@@ -50,7 +51,9 @@
 #include <qpa/qwindowsysteminterface_p.h>
 #include "private/qwindow_p.h"
 #include "private/qcursor_p.h"
-#include "private/qopenglcontext_p.h"
+#if QT_CONFIG(opengl)
+#  include "private/qopenglcontext_p.h"
+#endif
 #include "private/qinputdevicemanager_p.h"
 #include "private/qinputmethod_p.h"
 #include "private/qpointingdevice_p.h"
@@ -569,6 +572,9 @@ static QWindowGeometrySpecification windowGeometrySpecification = Q_WINDOW_GEOME
                experimental pending the introduction of new style that
                properly adapts to dark mode.
 
+               As of Qt 6.5, the default value is 2; to disable dark mode
+               support, set the value to 0 or 1.
+
         \li \c {dialogs=[xp|none]}, \c xp uses XP-style native dialogs and
             \c none disables them.
 
@@ -682,6 +688,7 @@ QGuiApplication::~QGuiApplication()
     QGuiApplicationPrivate::lastCursorPosition.reset();
     QGuiApplicationPrivate::currentMousePressWindow = QGuiApplicationPrivate::currentMouseWindow = nullptr;
     QGuiApplicationPrivate::applicationState = Qt::ApplicationInactive;
+    QGuiApplicationPrivate::highDpiScaleFactorRoundingPolicy = Qt::HighDpiScaleFactorRoundingPolicy::PassThrough;
     QGuiApplicationPrivate::currentDragWindow = nullptr;
     QGuiApplicationPrivate::tabletDevicePoints.clear();
 }
@@ -733,6 +740,29 @@ void QGuiApplication::setApplicationDisplayName(const QString &name)
 QString QGuiApplication::applicationDisplayName()
 {
     return QGuiApplicationPrivate::displayName ? *QGuiApplicationPrivate::displayName : applicationName();
+}
+
+/*!
+    Sets the application's badge to \a number.
+
+    Useful for providing feedback to the user about the number
+    of unread messages or similar.
+
+    The badge will be overlaid on the application's icon in the Dock
+    on \macos, the home screen icon on iOS, or the task bar on Windows.
+
+    If the number is outside the range supported by the platform, the
+    number will be clamped to the supported range. If the number does
+    not fit within the badge, the number may be visually elided.
+
+    Setting the number to 0 will clear the badge.
+
+    \since 6.5
+    \sa applicationName
+*/
+void QGuiApplication::setBadgeNumber(qint64 number)
+{
+    QGuiApplicationPrivate::platformIntegration()->setApplicationBadge(number);
 }
 
 /*!
@@ -851,6 +881,17 @@ void QGuiApplicationPrivate::hideModalWindow(QWindow *window)
     }
 }
 
+Qt::WindowModality QGuiApplicationPrivate::defaultModality() const
+{
+    return Qt::NonModal;
+}
+
+bool QGuiApplicationPrivate::windowNeverBlocked(QWindow *window) const
+{
+    Q_UNUSED(window);
+    return false;
+}
+
 /*
     Returns \c true if \a window is blocked by a modal window. If \a
     blockingWindow is non-zero, *blockingWindow will be set to the blocking
@@ -858,55 +899,40 @@ void QGuiApplicationPrivate::hideModalWindow(QWindow *window)
 */
 bool QGuiApplicationPrivate::isWindowBlocked(QWindow *window, QWindow **blockingWindow) const
 {
+    Q_ASSERT_X(window, Q_FUNC_INFO, "The window must not be null");
+
     QWindow *unused = nullptr;
     if (!blockingWindow)
         blockingWindow = &unused;
+    *blockingWindow = nullptr;
 
-    if (modalWindowList.isEmpty()) {
-        *blockingWindow = nullptr;
+    if (modalWindowList.isEmpty() || windowNeverBlocked(window))
         return false;
-    }
 
     for (int i = 0; i < modalWindowList.size(); ++i) {
         QWindow *modalWindow = modalWindowList.at(i);
 
         // A window is not blocked by another modal window if the two are
         // the same, or if the window is a child of the modal window.
-        if (window == modalWindow || modalWindow->isAncestorOf(window, QWindow::IncludeTransients)) {
-            *blockingWindow = nullptr;
+        if (window == modalWindow || modalWindow->isAncestorOf(window, QWindow::IncludeTransients))
             return false;
-        }
 
-        Qt::WindowModality windowModality = modalWindow->modality();
-        switch (windowModality) {
+        switch (modalWindow->modality() == Qt::NonModal ? defaultModality()
+                                                        : modalWindow->modality()) {
         case Qt::ApplicationModal:
-        {
-            if (modalWindow != window) {
-                *blockingWindow = modalWindow;
-                return true;
-            }
-            break;
-        }
-        case Qt::WindowModal:
-        {
-            QWindow *w = window;
+            *blockingWindow = modalWindow;
+            return true;
+        case Qt::WindowModal: {
+            // Find the nearest ancestor of window which is also an ancestor of modal window to
+            // determine if the modal window blocks the window.
+            auto *current = window;
             do {
-                QWindow *m = modalWindow;
-                do {
-                    if (m == w) {
-                        *blockingWindow = m;
-                        return true;
-                    }
-                    QWindow *p = m->parent();
-                    if (!p)
-                        p = m->transientParent();
-                    m = p;
-                } while (m);
-                QWindow *p = w->parent();
-                if (!p)
-                    p = w->transientParent();
-                w = p;
-            } while (w);
+                if (current->isAncestorOf(modalWindow, QWindow::IncludeTransients)) {
+                    *blockingWindow = modalWindow;
+                    return true;
+                }
+                current = current->parent(QWindow::IncludeTransients);
+            } while (current);
             break;
         }
         default:
@@ -914,7 +940,6 @@ bool QGuiApplicationPrivate::isWindowBlocked(QWindow *window, QWindow **blocking
             break;
         }
     }
-    *blockingWindow = nullptr;
     return false;
 }
 
@@ -1145,9 +1170,9 @@ QWindow *QGuiApplication::topLevelAt(const QPoint &pos)
         \li \c offscreen
         \li \c qnx
         \li \c windows
-        \li \c wayland is a platform plugin for modern Linux desktops and some
-            embedded systems.
-        \li \c xcb is the X11 plugin used on regular desktop Linux platforms.
+        \li \c wayland is a platform plugin for the Wayland display server protocol,
+            used on some Linux desktops and embedded systems.
+        \li \c xcb is a plugin for the X11 window system, used on some desktop Linux platforms.
     \endlist
 
     For more information about the platform plugins for embedded Linux devices,
@@ -1213,7 +1238,7 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
                                               "Reinstalling the application may fix this problem.\n");
 
         if (!availablePlugins.isEmpty())
-            fatalMessage += QStringLiteral("\nAvailable platform plugins are: %1.\n").arg(availablePlugins.join(", "_L1));
+            fatalMessage += "\nAvailable platform plugins are: %1.\n"_L1.arg(availablePlugins.join(", "_L1));
 
 #if defined(Q_OS_WIN)
         // Windows: Display message box unless it is a console application
@@ -1470,6 +1495,8 @@ void QGuiApplicationPrivate::createPlatformIntegration()
     Q_UNUSED(platformExplicitlySelected);
 
     init_platform(QLatin1StringView(platformName), platformPluginPath, platformThemeName, argc, argv);
+    if (const QPlatformTheme *theme = platformTheme())
+        QStyleHintsPrivate::get(QGuiApplication::styleHints())->setColorScheme(theme->colorScheme());
 
     if (!icon.isEmpty())
         forcedWindowIcon = QDir::isAbsolutePath(icon) ? QIcon(icon) : QIcon::fromTheme(icon);
@@ -1502,7 +1529,7 @@ void QGuiApplicationPrivate::eventDispatcherReady()
     platform_integration->initialize();
 }
 
-void QGuiApplicationPrivate::init()
+void Q_TRACE_INSTRUMENT(qtgui) QGuiApplicationPrivate::init()
 {
     Q_TRACE_SCOPE(QGuiApplicationPrivate_init);
 
@@ -1989,8 +2016,9 @@ bool QGuiApplicationPrivate::processNativeEvent(QWindow *window, const QByteArra
     return window->nativeEvent(eventType, message, result);
 }
 
-void QGuiApplicationPrivate::processWindowSystemEvent(QWindowSystemInterfacePrivate::WindowSystemEvent *e)
+void Q_TRACE_INSTRUMENT(qtgui) QGuiApplicationPrivate::processWindowSystemEvent(QWindowSystemInterfacePrivate::WindowSystemEvent *e)
 {
+    Q_TRACE_PARAM_REPLACE(QWindowSystemInterfacePrivate::WindowSystemEvent *, int);
     Q_TRACE_SCOPE(QGuiApplicationPrivate_processWindowSystemEvent, e->type);
 
     switch(e->type) {
@@ -2506,9 +2534,18 @@ void QGuiApplicationPrivate::processActivatedEvent(QWindowSystemInterfacePrivate
 
 void QGuiApplicationPrivate::processWindowStateChangedEvent(QWindowSystemInterfacePrivate::WindowStateChangedEvent *wse)
 {
-    if (QWindow *window  = wse->window.data()) {
+    if (QWindow *window = wse->window.data()) {
+        QWindowPrivate *windowPrivate = qt_window_private(window);
+        const auto originalEffectiveState = QWindowPrivate::effectiveState(windowPrivate->windowState);
+
+        windowPrivate->windowState = wse->newState;
+        const auto newEffectiveState = QWindowPrivate::effectiveState(windowPrivate->windowState);
+        if (newEffectiveState != originalEffectiveState)
+            emit window->windowStateChanged(newEffectiveState);
+
+        windowPrivate->updateVisibility();
+
         QWindowStateChangeEvent e(wse->oldState);
-        window->d_func()->windowState = wse->newState;
         QGuiApplication::sendSpontaneousEvent(window, &e);
     }
 }
@@ -2557,6 +2594,20 @@ void QGuiApplicationPrivate::processThemeChanged(QWindowSystemInterfacePrivate::
     const QWindowList windows = tce->window ? QWindowList{tce->window} : window_list;
     for (auto *window : windows)
         QGuiApplication::sendSpontaneousEvent(window, &themeChangeEvent);
+
+    QStyleHintsPrivate::get(QGuiApplication::styleHints())->setColorScheme(colorScheme());
+}
+
+/*!
+   \internal
+   \brief QGuiApplicationPrivate::colorScheme
+   \return the platform theme's color scheme
+   or Qt::ColorScheme::Unknown if a platform theme cannot be established
+ */
+Qt::ColorScheme QGuiApplicationPrivate::colorScheme()
+{
+    return platformTheme() ? platformTheme()->colorScheme()
+                           : Qt::ColorScheme::Unknown;
 }
 
 void QGuiApplicationPrivate::handleThemeChanged()
@@ -3071,26 +3122,16 @@ void QGuiApplicationPrivate::processScreenGeometryChange(QWindowSystemInterfaceP
     if (!e->screen)
         return;
 
-    QScreen *s = e->screen.data();
+    {
+        QScreen *s = e->screen.data();
+        QScreenPrivate::UpdateEmitter updateEmitter(s);
 
-    bool geometryChanged = e->geometry != s->d_func()->geometry;
-    s->d_func()->geometry = e->geometry;
+        // Note: The incoming geometries have already been scaled by QHighDpi
+        // in the QWSI layer, so we don't need to call updateGeometry() here.
+        s->d_func()->geometry = e->geometry;
+        s->d_func()->availableGeometry = e->availableGeometry;
 
-    bool availableGeometryChanged = e->availableGeometry != s->d_func()->availableGeometry;
-    s->d_func()->availableGeometry = e->availableGeometry;
-
-    const Qt::ScreenOrientation primaryOrientation = s->primaryOrientation();
-    if (geometryChanged)
         s->d_func()->updatePrimaryOrientation();
-
-    s->d_func()->emitGeometryChangeSignals(geometryChanged, availableGeometryChanged);
-
-    if (geometryChanged) {
-        emit s->physicalSizeChanged(s->physicalSize());
-        emit s->logicalDotsPerInchChanged(s->logicalDotsPerInch());
-
-        if (s->primaryOrientation() != primaryOrientation)
-            emit s->primaryOrientationChanged(s->primaryOrientation());
     }
 
     resetCachedDevicePixelRatio();
@@ -3107,11 +3148,12 @@ void QGuiApplicationPrivate::processScreenLogicalDotsPerInchChange(QWindowSystem
     if (!e->screen)
         return;
 
-    QScreen *s = e->screen.data();
-    s->d_func()->logicalDpi = QDpi(e->dpiX, e->dpiY);
-
-    emit s->logicalDotsPerInchChanged(s->logicalDotsPerInch());
-    s->d_func()->updateGeometriesWithSignals();
+    {
+        QScreen *s = e->screen.data();
+        QScreenPrivate::UpdateEmitter updateEmitter(s);
+        s->d_func()->logicalDpi = QDpi(e->dpiX, e->dpiY);
+        s->d_func()->updateGeometry();
+    }
 
     resetCachedDevicePixelRatio();
 }
@@ -4274,6 +4316,9 @@ void *QGuiApplication::resolveInterface(const char *name, int revision) const
 #endif
 #if QT_CONFIG(xcb)
     QT_NATIVE_INTERFACE_RETURN_IF(QX11Application, platformNativeInterface());
+#endif
+#if defined(Q_OS_UNIX)
+    QT_NATIVE_INTERFACE_RETURN_IF(QWaylandApplication, platformNativeInterface());
 #endif
 
     return QCoreApplication::resolveInterface(name, revision);

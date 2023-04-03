@@ -1,10 +1,15 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 include(QtFeatureCommon)
 include(CheckCXXCompilerFlag)
 
 function(qt_feature_module_begin)
-    qt_parse_all_arguments(arg "qt_feature_module_begin"
+    cmake_parse_arguments(PARSE_ARGV 0 arg
         "NO_MODULE;ONLY_EVALUATE_FEATURES"
-        "LIBRARY;PRIVATE_FILE;PUBLIC_FILE" "PUBLIC_DEPENDENCIES;PRIVATE_DEPENDENCIES" ${ARGN})
+        "LIBRARY;PRIVATE_FILE;PUBLIC_FILE"
+        "PUBLIC_DEPENDENCIES;PRIVATE_DEPENDENCIES")
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     if(NOT arg_ONLY_EVALUATE_FEATURES)
         if ("${arg_LIBRARY}" STREQUAL "" AND (NOT ${arg_NO_MODULE}))
@@ -43,9 +48,11 @@ function(qt_feature feature)
     qt_feature_normalize_name("${feature}" feature)
     set_property(GLOBAL PROPERTY QT_FEATURE_ORIGINAL_NAME_${feature} "${original_name}")
 
-    qt_parse_all_arguments(arg "qt_feature"
+    cmake_parse_arguments(PARSE_ARGV 1 arg
         "PRIVATE;PUBLIC"
-        "LABEL;PURPOSE;SECTION;" "AUTODETECT;CONDITION;ENABLE;DISABLE;EMIT_IF" ${ARGN})
+        "LABEL;PURPOSE;SECTION"
+        "AUTODETECT;CONDITION;ENABLE;DISABLE;EMIT_IF")
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     set(_QT_FEATURE_DEFINITION_${feature} ${ARGN} PARENT_SCOPE)
 
@@ -409,7 +416,11 @@ endfunction()
 
 function(qt_feature_config feature config_var_name)
     qt_feature_normalize_name("${feature}" feature)
-    qt_parse_all_arguments(arg "qt_feature_config" "NEGATE" "NAME" "" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 2 arg
+        "NEGATE"
+        "NAME"
+        "")
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     # Store all the config related info in a unique variable key.
     set(key_name "_QT_FEATURE_CONFIG_DEFINITION_${feature}_${config_var_name}")
@@ -469,7 +480,11 @@ endfunction()
 
 function(qt_feature_definition feature name)
     qt_feature_normalize_name("${feature}" feature)
-    qt_parse_all_arguments(arg "qt_feature_definition" "NEGATE" "VALUE;PREREQUISITE" "" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 2 arg
+        "NEGATE"
+        "VALUE;PREREQUISITE"
+        "")
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     # Store all the define related info in a unique variable key.
     set(key_name "_QT_FEATURE_DEFINE_DEFINITION_${feature}_${name}")
@@ -525,7 +540,11 @@ function(qt_evaluate_feature_definition key)
 endfunction()
 
 function(qt_extra_definition name value)
-    qt_parse_all_arguments(arg "qt_extra_definition" "PUBLIC;PRIVATE" "" "" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 2 arg
+        "PUBLIC;PRIVATE"
+        ""
+        "")
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     if (arg_PUBLIC)
         string(APPEND __QtFeature_public_extra "\n#define ${name} ${value}\n")
@@ -657,22 +676,6 @@ function(qt_feature_module_end)
         qt_internal_feature_write_file("${CMAKE_CURRENT_BINARY_DIR}/${__QtFeature_public_file}"
             "${__QtFeature_public_features}" "${__QtFeature_public_extra}"
         )
-    endif()
-
-    # Extra header injections which have to have forwarding headers created by
-    # qt_install_injections.
-    # Skip creating forwarding headers if qt_feature_module_begin was called with NO_MODULE, aka
-    # there is no include/<module_name> so there's no place to put the forwarding headers.
-    if(__QtFeature_library)
-        set(injections "")
-        qt_compute_injection_forwarding_header("${__QtFeature_library}"
-                                                 SOURCE "${__QtFeature_public_file}"
-                                                 OUT_VAR injections)
-        qt_compute_injection_forwarding_header("${__QtFeature_library}"
-                                                SOURCE "${__QtFeature_private_file}" PRIVATE
-                                                OUT_VAR injections)
-
-        set(${arg_OUT_VAR_PREFIX}extra_library_injections ${injections} PARENT_SCOPE)
     endif()
 
     if (NOT ("${target}" STREQUAL "NO_MODULE") AND NOT arg_ONLY_EVALUATE_FEATURES)
@@ -921,7 +924,6 @@ function(qt_config_compile_test name)
                 # fail instead of cmake abort later via CMAKE_REQUIRED_LIBRARIES.
                 string(FIND "${library}" "::" cmake_target_namespace_separator)
                 if(NOT cmake_target_namespace_separator EQUAL -1)
-                    message(STATUS "Performing Test ${arg_LABEL} - Failed because ${library} not found")
                     set(HAVE_${name} FALSE)
                     break()
                 endif()
@@ -930,16 +932,22 @@ function(qt_config_compile_test name)
 
         if(NOT DEFINED HAVE_${name})
             set(_save_CMAKE_C_STANDARD "${CMAKE_C_STANDARD}")
+            set(_save_CMAKE_C_STANDARD_REQUIRED "${CMAKE_C_STANDARD_REQUIRED}")
             set(_save_CMAKE_CXX_STANDARD "${CMAKE_CXX_STANDARD}")
+            set(_save_CMAKE_CXX_STANDARD_REQUIRED "${CMAKE_CXX_STANDARD_REQUIRED}")
             set(_save_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
             set(_save_CMAKE_TRY_COMPILE_PLATFORM_VARIABLES "${CMAKE_TRY_COMPILE_PLATFORM_VARIABLES}")
 
             if(arg_C_STANDARD)
                set(CMAKE_C_STANDARD "${arg_C_STANDARD}")
+               set(CMAKE_C_STANDARD_REQUIRED OFF)
             endif()
 
             if(arg_CXX_STANDARD)
-               set(CMAKE_CXX_STANDARD "${arg_CXX_STANDARD}")
+                if(${arg_CXX_STANDARD} LESS 23 OR ${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.20")
+                    set(CMAKE_CXX_STANDARD "${arg_CXX_STANDARD}")
+                    set(CMAKE_CXX_STANDARD_REQUIRED OFF)
+                endif()
             endif()
 
             set(CMAKE_REQUIRED_FLAGS ${arg_COMPILE_OPTIONS})
@@ -970,7 +978,9 @@ function(qt_config_compile_test name)
             set(CMAKE_REQUIRED_LIBRARIES "${_save_CMAKE_REQUIRED_LIBRARIES}")
 
             set(CMAKE_C_STANDARD "${_save_CMAKE_C_STANDARD}")
+            set(CMAKE_C_STANDARD_REQUIRED "${_save_CMAKE_C_STANDARD_REQUIRED}")
             set(CMAKE_CXX_STANDARD "${_save_CMAKE_CXX_STANDARD}")
+            set(CMAKE_CXX_STANDARD_REQUIRED "${_save_CMAKE_CXX_STANDARD_REQUIRED}")
             set(CMAKE_REQUIRED_FLAGS "${_save_CMAKE_REQUIRED_FLAGS}")
             set(CMAKE_TRY_COMPILE_PLATFORM_VARIABLES "${_save_CMAKE_TRY_COMPILE_PLATFORM_VARIABLES}")
         endif()
@@ -1007,7 +1017,9 @@ function(qt_get_platform_try_compile_vars out_var)
 
     # Pass language standard flags.
     list(APPEND flags "CMAKE_C_STANDARD")
+    list(APPEND flags "CMAKE_C_STANDARD_REQUIRED")
     list(APPEND flags "CMAKE_CXX_STANDARD")
+    list(APPEND flags "CMAKE_CXX_STANDARD_REQUIRED")
 
     # Pass -stdlib=libc++ on if necessary
     if (INPUT_stdlib_libcpp OR QT_FEATURE_stdlib_libcpp)

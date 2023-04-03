@@ -30,6 +30,8 @@ private slots:
 #ifdef QT_BUILD_INTERNAL
     void cleanupFuncinfo_data();
     void cleanupFuncinfo();
+    void cleanupFuncinfoBad_data();
+    void cleanupFuncinfoBad();
 #endif
 
     void qMessagePattern_data();
@@ -166,9 +168,13 @@ public:
     int operator%(int) { ADD("TestClass1::operator%"); return 0; }
     int x;
     int &operator++() { ADD("TestClass1::operator++"); return x; }
-    int operator++(int) { ADD("TestClass1::operator++"); return 0; }
     int &operator--() { ADD("TestClass1::operator--"); return x; }
-    int operator--(int) { ADD("TestClass1::operator--"); return 0; }
+
+    // slightly different to avoid duplicate test rows
+#define ADD2(x)     QTest::newRow(x ".postfix") << Q_FUNC_INFO << x;
+    int operator++(int) { ADD2("TestClass1::operator++"); return 0; }
+    int operator--(int) { ADD2("TestClass1::operator--"); return 0; }
+#undef ADD2
 
     int nested_struct()
     {
@@ -530,7 +536,7 @@ void tst_qmessagehandler::cleanupFuncinfo_data()
     QTest::newRow("msvc_28")
         << "class std::map<long,void const *,struct std::less<long>,class std::allocator<struct std::pair<long const ,void const *> > > *__thiscall TestClass2<class std::map<long,void const *,struct std::less<long>,class std::allocator<struct std::pair<long const ,void const *> > > >::func_template1<class TestClass2<class std::map<long,void const *,struct std::less<long>,class std::allocator<struct std::pair<long const ,void const *> > > >>(void)"
         << "TestClass2::func_template1";
-    QTest::newRow("gcc_21")
+    QTest::newRow("gcc_28")
         << "T* TestClass2<T>::func_template1() [with S = TestClass2<std::map<long int, const void*, std::less<long int>, std::allocator<std::pair<const long int, const void*> > > >, T = std::map<long int, const void*, std::less<long int>, std::allocator<std::pair<const long int, const void*> > >]"
         << "TestClass2::func_template1";
 
@@ -599,6 +605,26 @@ void tst_qmessagehandler::cleanupFuncinfo_data()
         << "int TestClass1::operator>(int)"
         << "TestClass1::operator>";
 
+    QTest::newRow("gcc_40")
+        << "Polymorphic<void (*)(int)>::~Polymorphic()"
+        << "Polymorphic::~Polymorphic";
+
+    QTest::newRow("gcc_41")
+        << "function<void (int*)>()::S::f()"
+        << "function()::S::f";
+
+    QTest::newRow("msvc_41")
+        << "void `void function<void __cdecl(int *)>(void)'::`2'::S::f(void)"
+        << "function(void)'::`2'::S::f";
+
+    QTest::newRow("gcc_42")
+        << "function<Polymorphic<void (int*)> >()::S::f(Polymorphic<void (int*)>*)"
+        << "function()::S::f";
+
+    QTest::newRow("msvc_42")
+        << "void `void function<Polymorphic<void __cdecl(int *)> >(void)'::`2'::S::f(Polymorphic<void __cdecl(int *)> *)"
+        << "function(void)'::`2'::S::f";
+
     QTest::newRow("objc_1")
         << "-[SomeClass someMethod:withArguments:]"
         << "-[SomeClass someMethod:withArguments:]";
@@ -614,6 +640,14 @@ void tst_qmessagehandler::cleanupFuncinfo_data()
     QTest::newRow("objc_4")
         << "__31-[SomeClass someMethodSchedulingBlock]_block_invoke"
         << "__31-[SomeClass someMethodSchedulingBlock]_block_invoke";
+
+    QTest::newRow("thunk-1")
+        << "non-virtual thunk to QFutureWatcherBasePrivate::postCallOutEvent(QFutureCallOutEvent const&)"
+        << "QFutureWatcherBasePrivate::postCallOutEvent";
+
+    QTest::newRow("thunk-2")
+        << "virtual thunk to std::basic_iostream<char, std::char_traits<char> >::~basic_iostream()"
+        << "std::basic_iostream::~basic_iostream";
 }
 #endif
 
@@ -633,6 +667,41 @@ void tst_qmessagehandler::cleanupFuncinfo()
     QEXPECT_FAIL("TestClass1::nested_struct", "Nested function processing is broken", Continue);
     QEXPECT_FAIL("TestClass1::nested_struct_const", "Nested function processing is broken", Continue);
     QTEST(QString::fromLatin1(result), "expected");
+}
+
+void tst_qmessagehandler::cleanupFuncinfoBad_data()
+{
+    QTest::addColumn<QByteArray>("funcinfo");
+
+    auto addBadFrame = [i = 0](const char *symbol) mutable {
+        QTest::addRow("%d", ++i) << QByteArray(symbol);
+    };
+    addBadFrame("typeinfo for QEventLoop");
+    addBadFrame("typeinfo name for QtPrivate::ResultStoreBase");
+    addBadFrame("typeinfo name for ._anon_476");
+    addBadFrame("typeinfo name for std::__1::__function::__base<bool (void*, void*)>");
+    addBadFrame("vtable for BezierEase");
+    addBadFrame("vtable for Polymorphic<void ()>");
+    addBadFrame("vtable for Polymorphic<void (*)(int)>");
+    addBadFrame("TLS wrapper function for (anonymous namespace)::jitStacks");
+    addBadFrame("lcCheckIndex()::category");
+    addBadFrame("guard variable for lcEPDetach()::category");
+    addBadFrame("guard variable for QImageReader::read(QImage*)::disableNxImageLoading");
+    addBadFrame("VTT for std::__1::ostrstream");
+    addBadFrame("qIsRelocatable<(anonymous namespace)::Data>");
+    addBadFrame("qt_incomplete_metaTypeArray<(anonymous namespace)::qt_meta_stringdata_CLASSQNonContiguousByteDeviceIoDeviceImplENDCLASS_t, QtPrivate::TypeAndForceComplete<void, std::integral_constant<bool, true> > >");
+    addBadFrame("f()::i");
+}
+
+void tst_qmessagehandler::cleanupFuncinfoBad()
+{
+    QFETCH(QByteArray, funcinfo);
+
+    // A corrupted stack trace may find non-sensical symbols that aren't
+    // functions. The result doesn't matter, so long as we don't crash or hang.
+
+    QByteArray result = qCleanupFuncinfo(funcinfo);
+    qDebug() << "Decode of" << funcinfo << "produced" << result;
 }
 #endif
 
@@ -716,28 +785,39 @@ void tst_qmessagehandler::qMessagePattern_data()
 
 #define BACKTRACE_HELPER_NAME "qlogging_helper"
 
-#ifdef __GLIBC__
 #ifdef QT_NAMESPACE
 #define QT_NAMESPACE_STR QT_STRINGIFY(QT_NAMESPACE::)
 #else
 #define QT_NAMESPACE_STR ""
 #endif
 
-#if QT_CONFIG(static)
-    QSKIP("These test cases don't work with static Qt builds");
-#else
-#ifndef QT_NO_DEBUG
-    QTest::newRow("backtrace") << "[%{backtrace}] %{message}" << true << (QList<QByteArray>()
-            // MyClass::qt_static_metacall is explicitly marked as hidden in the Q_OBJECT macro
-            << "[MyClass::myFunction|MyClass::mySlot1|?" BACKTRACE_HELPER_NAME "?|" QT_NAMESPACE_STR "QMetaMethod::invoke|" QT_NAMESPACE_STR "QMetaObject::invokeMethod] from_a_function 34");
-#endif
+#ifdef __GLIBC__
+#  if QT_CONFIG(static)
+    // These test cases don't work with static Qt builds
+#  elif defined(QT_ASAN_ENABLED)
+    // These tests produce far more call frames under ASan
+#  else
+#    ifndef QT_NO_DEBUG
+    QList<QByteArray> expectedBacktrace = {
+        // MyClass::qt_static_metacall is explicitly marked as hidden in the
+        // Q_OBJECT macro hence the ?helper? frame
+        "[MyClass::myFunction|MyClass::mySlot1|?" BACKTRACE_HELPER_NAME "?|",
+
+        // QMetaObject::invokeMethodImpl calls internal function
+        // (QMetaMethodPrivate::invokeImpl, at the tims of this writing), which
+        // will usually show only as ?libQt6Core.so? or equivalent, so we skip
+
+        // end of backtrace, actual message
+        "|" QT_NAMESPACE_STR "QMetaObject::invokeMethodImpl] from_a_function 34"
+    };
+    QTest::newRow("backtrace") << "[%{backtrace}] %{message}" << true << expectedBacktrace;
+#    endif
 
     QTest::newRow("backtrace depth,separator") << "[%{backtrace depth=2 separator=\"\n\"}] %{message}" << true << (QList<QByteArray>()
             << "[MyClass::myFunction\nMyClass::mySlot1] from_a_function 34"
             << "[T::T\n");
-#endif // #if !QT_CONFIG(process)
+#  endif // #if !QT_CONFIG(static)
 #endif // #ifdef __GLIBC__
-
 }
 
 

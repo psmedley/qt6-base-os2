@@ -1,4 +1,5 @@
-# Generated from qwidget.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qwidget Test:
@@ -15,7 +16,7 @@ set(qwidget_resource_files
 qt_internal_add_test(tst_qwidget
     SOURCES
         tst_qwidget.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
@@ -26,9 +27,6 @@ qt_internal_add_test(tst_qwidget
     BUILTIN_TESTDATA
 )
 
-#### Keys ignored in scope 1:.:.:qwidget.pro:<TRUE>:
-# testcase.timeout = "600"
-
 ## Scopes:
 #####################################################################
 
@@ -37,16 +35,8 @@ qt_internal_extend_target(tst_qwidget CONDITION AIX
         -fpermissive
 )
 
-qt_internal_extend_target(tst_qwidget CONDITION APPLE
-    SOURCES
-        tst_qwidget_mac_helpers.mm
-    PUBLIC_LIBRARIES
-        ${FWAppKit}
-        ${FWSecurity}
-)
-
 qt_internal_extend_target(tst_qwidget CONDITION WIN32
-    PUBLIC_LIBRARIES
+    LIBRARIES
         gdi32
         user32
 )

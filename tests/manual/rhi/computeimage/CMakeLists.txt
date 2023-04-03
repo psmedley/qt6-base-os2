@@ -1,4 +1,5 @@
-# Generated from computeimage.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## computeimage Binary:
@@ -8,7 +9,7 @@ qt_internal_add_manual_test(computeimage
     GUI
     SOURCES
         computeimage.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -36,7 +37,3 @@ qt_internal_add_resource(computeimage "computeimage"
     FILES
         ${computeimage_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:computeimage.pro:<TRUE>:
-# TEMPLATE = "app"

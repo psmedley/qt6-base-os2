@@ -1,4 +1,5 @@
-# Generated from clipboard.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## clipboard Binary:
@@ -9,7 +10,7 @@ qt_internal_add_manual_test(clipboard
     SOURCES
         main.cpp
         mainwindow.cpp mainwindow.h mainwindow.ui
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Core
         Qt::Gui
         Qt::Widgets
@@ -32,15 +33,6 @@ qt_internal_add_resource(clipboard "data"
 #####################################################################
 
 qt_internal_extend_target(clipboard CONDITION (QT_MAJOR_VERSION GREATER 4)
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Widgets
 )
-
-#### Keys ignored in scope 3:.:.:clipboard.pro:QNX:
-# target.path = "/tmp/$${TARGET}/bin"
-
-#### Keys ignored in scope 5:.:.:clipboard.pro:UNIX AND NOT ANDROID:
-# target.path = "/opt/$${TARGET}/bin"
-
-#### Keys ignored in scope 6:.:.:clipboard.pro:NOT target.path_ISEMPTY:
-# INSTALLS = "target"

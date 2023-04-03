@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 ## Set a default build type if none was specified
 
 # Set the QT_IS_BUILDING_QT variable so we can verify whether we are building
@@ -180,6 +183,16 @@ if(PROJECT_NAME STREQUAL "QtBase")
         "A path to the source tree of the previously configured QtBase project." FORCE)
 endif()
 
+# QT_INTERNAL_CONFIGURE_FROM_IDE is set to TRUE for the following known IDE applications:
+# - Qt Creator, detected by QTC_RUN environment variable
+# - CLion, detected by CLION_IDE environment variable
+# - Visual Studio Code, detected by VSCODE_CLI environment variable
+if("$ENV{QTC_RUN}" OR "$ENV{CLION_IDE}" OR "$ENV{VSCODE_CLI}")
+    set(QT_INTERNAL_CONFIGURE_FROM_IDE TRUE CACHE INTERNAL "Configuring Qt Project from IDE")
+else()
+    set(QT_INTERNAL_CONFIGURE_FROM_IDE FALSE CACHE INTERNAL "Configuring Qt Project from IDE")
+endif()
+
 if(FEATURE_developer_build)
     if(DEFINED QT_CMAKE_EXPORT_COMPILE_COMMANDS)
         set(CMAKE_EXPORT_COMPILE_COMMANDS ${QT_CMAKE_EXPORT_COMPILE_COMMANDS})
@@ -226,6 +239,28 @@ if(QT_BUILD_STANDALONE_TESTS)
 endif()
 set(BUILD_TESTING ${QT_BUILD_TESTS} CACHE INTERNAL "")
 
+if (WASM)
+    set(_qt_batch_tests ON)
+else()
+    set(_qt_batch_tests OFF)
+endif()
+
+if(DEFINED INPUT_batch_tests)
+    if (${INPUT_batch_tests})
+        set(_qt_batch_tests ON)
+    else()
+        set(_qt_batch_tests OFF)
+    endif()
+endif()
+
+option(QT_BUILD_TESTS_BATCHED "Link all tests into a single binary." ${_qt_batch_tests})
+
+if(QT_BUILD_TESTS AND QT_BUILD_TESTS_BATCHED AND CMAKE_VERSION VERSION_LESS "3.18")
+    message(FATAL_ERROR
+        "Test batching requires at least CMake 3.18, due to requiring per-source "
+        "TARGET_DIRECTORY assignments.")
+endif()
+
 # QT_BUILD_TOOLS_WHEN_CROSSCOMPILING -> QT_FORCE_BUILD_TOOLS
 # pre-6.4 compatibility flag (remove sometime in the future)
 if(CMAKE_CROSSCOMPILING AND QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
@@ -269,6 +304,9 @@ else()
     option(QT_BUILD_MINIMAL_STATIC_TESTS "Build minimal subset of tests for static Qt builds" OFF)
 endif()
 
+option(QT_BUILD_MINIMAL_ANDROID_MULTI_ABI_TESTS
+    "Build minimal subset of tests for Android multi-ABI Qt builds" OFF)
+
 ## Path used to find host tools, either when cross-compiling or just when using the tools from
 ## a different host build.
 set(QT_HOST_PATH "$ENV{QT_HOST_PATH}" CACHE PATH
@@ -307,6 +345,13 @@ if(QT_USE_CCACHE)
     endif()
 endif()
 
+option(QT_UNITY_BUILD "Enable unity (jumbo) build")
+set(QT_UNITY_BUILD_BATCH_SIZE "32" CACHE STRING "Unity build batch size")
+if(QT_UNITY_BUILD)
+    set(CMAKE_UNITY_BUILD ON)
+    set(CMAKE_UNITY_BUILD_BATCH_SIZE "${QT_UNITY_BUILD_BATCH_SIZE}")
+endif()
+
 # We need to clean up QT_FEATURE_*, but only once per configuration cycle
 get_property(qt_feature_clean GLOBAL PROPERTY _qt_feature_clean)
 if(NOT qt_feature_clean)
@@ -329,4 +374,9 @@ to ${FEATURE_${feature}}")
         message(WARNING "Re-configuring in existing build folder. \
 Some features will be re-evaluated automatically.")
     endif()
+endif()
+
+if(NOT QT_BUILD_EXAMPLES)
+    # Disable deployment setup to avoid warnings about missing patchelf with CMake < 3.21.
+    set(QT_SKIP_SETUP_DEPLOYMENT ON)
 endif()

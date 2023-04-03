@@ -317,7 +317,7 @@ public:
 
     void swap(QList &other) noexcept { d.swap(other.d); }
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
     template <typename U = T>
     QTypeTraits::compare_eq_result_container<QList, U> operator==(const QList &other) const
     {
@@ -373,7 +373,7 @@ public:
     bool operator>(const QList &other) const;
     bool operator<=(const QList &other) const;
     bool operator>=(const QList &other) const;
-#endif // Q_CLANG_QDOC
+#endif // Q_QDOC
 
     qsizetype size() const noexcept { return d->size; }
     qsizetype count() const noexcept { return size(); }
@@ -426,7 +426,7 @@ public:
     reference operator[](qsizetype i)
     {
         Q_ASSERT_X(size_t(i) < size_t(d->size), "QList::operator[]", "index out of range");
-        detach();
+        // don't detach() here, we detach in data below:
         return data()[i];
     }
     const_reference operator[](qsizetype i) const noexcept { return at(i); }
@@ -669,10 +669,14 @@ public:
     // comfort
     QList<T> &operator+=(const QList<T> &l) { append(l); return *this; }
     QList<T> &operator+=(QList<T> &&l) { append(std::move(l)); return *this; }
-    inline QList<T> operator+(const QList<T> &l) const
+    inline QList<T> operator+(const QList<T> &l) const &
     { QList n = *this; n += l; return n; }
-    inline QList<T> operator+(QList<T> &&l) const
+    QList<T> operator+(const QList<T> &l) &&
+    { return std::move(*this += l); }
+    inline QList<T> operator+(QList<T> &&l) const &
     { QList n = *this; n += std::move(l); return n; }
+    QList<T> operator+(QList<T> &&l) &&
+    { return std::move(*this += std::move(l)); }
     inline QList<T> &operator+=(parameter_type t)
     { append(t); return *this; }
     inline QList<T> &operator<< (parameter_type t)

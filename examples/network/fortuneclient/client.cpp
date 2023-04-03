@@ -14,7 +14,6 @@ Client::Client(QWidget *parent)
     , getFortuneButton(new QPushButton(tr("Get Fortune")))
     , tcpSocket(new QTcpSocket(this))
 {
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 //! [0]
     hostCombo->setEditable(true);
     // find out name of this machine
@@ -28,16 +27,16 @@ Client::Client(QWidget *parent)
     if (name != QLatin1String("localhost"))
         hostCombo->addItem(QString("localhost"));
     // find out IP addresses of this machine
-    QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
+    const QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
     // add non-localhost addresses
-    for (int i = 0; i < ipAddressesList.size(); ++i) {
-        if (!ipAddressesList.at(i).isLoopback())
-            hostCombo->addItem(ipAddressesList.at(i).toString());
+    for (const QHostAddress &entry : ipAddressesList) {
+        if (!entry.isLoopback())
+            hostCombo->addItem(entry.toString());
     }
     // add localhost addresses
-    for (int i = 0; i < ipAddressesList.size(); ++i) {
-        if (ipAddressesList.at(i).isLoopback())
-            hostCombo->addItem(ipAddressesList.at(i).toString());
+    for (const QHostAddress &entry : ipAddressesList) {
+        if (entry.isLoopback())
+            hostCombo->addItem(entry.toString());
     }
 
     portLineEdit->setValidator(new QIntValidator(1, 65535, this));
@@ -61,7 +60,7 @@ Client::Client(QWidget *parent)
 
 //! [1]
     in.setDevice(tcpSocket);
-    in.setVersion(QDataStream::Qt_4_0);
+    in.setVersion(QDataStream::Qt_6_5);
 //! [1]
 
     connect(hostCombo, &QComboBox::editTextChanged,

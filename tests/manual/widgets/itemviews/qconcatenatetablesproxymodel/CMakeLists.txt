@@ -1,4 +1,5 @@
-# Generated from qconcatenatetablesproxymodel.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qconcatenatetablesproxymodel Binary:
@@ -10,10 +11,7 @@ qt_internal_add_manual_test(qconcatenatetablesproxymodel
         main.cpp
     INCLUDE_DIRECTORIES
         .
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )
-
-#### Keys ignored in scope 1:.:.:qconcatenatetablesproxymodel.pro:<TRUE>:
-# TEMPLATE = "app"

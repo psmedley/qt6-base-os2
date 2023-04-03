@@ -37,7 +37,7 @@ public:
 
     bool isValid() const;
 
-    void serialize(QDataStream *stream) const;
+    void serialize(QDataStream *stream, int version) const;
     QByteArray toJson() const;
 
     static QShaderDescription deserialize(QDataStream *stream, int version);
@@ -170,6 +170,15 @@ public:
     };
     Q_DECLARE_FLAGS(ImageFlags, ImageFlag)
 
+    enum QualifierFlag {
+        QualifierReadOnly = 1 << 0,
+        QualifierWriteOnly = 1 << 1,
+        QualifierCoherent = 1 << 2,
+        QualifierVolatile = 1 << 3,
+        QualifierRestrict = 1 << 4,
+    };
+    Q_DECLARE_FLAGS(QualifierFlags, QualifierFlag)
+
     // Optional data (like decorations) usually default to an otherwise invalid value (-1 or 0). This is intentional.
 
     struct InOutVariable {
@@ -181,6 +190,7 @@ public:
         ImageFormat imageFormat = ImageFormatUnknown;
         ImageFlags imageFlags;
         QList<int> arrayDims;
+        bool perPatch = false;
     };
 
     struct BlockVariable {
@@ -217,6 +227,8 @@ public:
         int binding = -1;
         int descriptorSet = -1;
         QList<BlockVariable> members;
+        int runtimeArrayStride = 0;
+        QualifierFlags qualifierFlags;
     };
 
     QList<InOutVariable> inputVariables() const;
@@ -229,7 +241,75 @@ public:
     QList<InOutVariable> separateSamplers() const;
     QList<InOutVariable> storageImages() const;
 
+    enum BuiltinType {
+        // must match SpvBuiltIn
+        PositionBuiltin = 0,
+        PointSizeBuiltin = 1,
+        ClipDistanceBuiltin = 3,
+        CullDistanceBuiltin = 4,
+        VertexIdBuiltin = 5,
+        InstanceIdBuiltin = 6,
+        PrimitiveIdBuiltin = 7,
+        InvocationIdBuiltin = 8,
+        LayerBuiltin = 9,
+        ViewportIndexBuiltin = 10,
+        TessLevelOuterBuiltin = 11,
+        TessLevelInnerBuiltin = 12,
+        TessCoordBuiltin = 13,
+        PatchVerticesBuiltin = 14,
+        FragCoordBuiltin = 15,
+        PointCoordBuiltin = 16,
+        FrontFacingBuiltin = 17,
+        SampleIdBuiltin = 18,
+        SamplePositionBuiltin = 19,
+        SampleMaskBuiltin = 20,
+        FragDepthBuiltin = 22,
+        NumWorkGroupsBuiltin = 24,
+        WorkgroupSizeBuiltin = 25,
+        WorkgroupIdBuiltin = 26,
+        LocalInvocationIdBuiltin = 27,
+        GlobalInvocationIdBuiltin = 28,
+        LocalInvocationIndexBuiltin = 29,
+        VertexIndexBuiltin = 42,
+        InstanceIndexBuiltin = 43
+    };
+
+    struct BuiltinVariable {
+        BuiltinType type;
+    };
+
+    QList<BuiltinVariable> inputBuiltinVariables() const;
+    QList<BuiltinVariable> outputBuiltinVariables() const;
+
     std::array<uint, 3> computeShaderLocalSize() const;
+
+    uint tessellationOutputVertexCount() const;
+
+    enum TessellationMode {
+        UnknownTessellationMode,
+        TrianglesTessellationMode,
+        QuadTessellationMode,
+        IsolineTessellationMode
+    };
+
+    TessellationMode tessellationMode() const;
+
+    enum TessellationWindingOrder {
+        UnknownTessellationWindingOrder,
+        CwTessellationWindingOrder,
+        CcwTessellationWindingOrder
+    };
+
+    TessellationWindingOrder tessellationWindingOrder() const;
+
+    enum TessellationPartitioning {
+        UnknownTessellationPartitioning,
+        EqualTessellationPartitioning,
+        FractionalEvenTessellationPartitioning,
+        FractionalOddTessellationPartitioning
+    };
+
+    TessellationPartitioning tessellationPartitioning() const;
 
 private:
     QShaderDescriptionPrivate *d;
@@ -241,6 +321,7 @@ private:
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QShaderDescription::ImageFlags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QShaderDescription::QualifierFlags)
 
 #ifndef QT_NO_DEBUG_STREAM
 Q_GUI_EXPORT QDebug operator<<(QDebug, const QShaderDescription &);
@@ -249,6 +330,7 @@ Q_GUI_EXPORT QDebug operator<<(QDebug, const QShaderDescription::BlockVariable &
 Q_GUI_EXPORT QDebug operator<<(QDebug, const QShaderDescription::UniformBlock &);
 Q_GUI_EXPORT QDebug operator<<(QDebug, const QShaderDescription::PushConstantBlock &);
 Q_GUI_EXPORT QDebug operator<<(QDebug, const QShaderDescription::StorageBlock &);
+Q_GUI_EXPORT QDebug operator<<(QDebug, const QShaderDescription::BuiltinVariable &);
 #endif
 
 Q_GUI_EXPORT bool operator==(const QShaderDescription &lhs, const QShaderDescription &rhs) noexcept;
@@ -257,6 +339,7 @@ Q_GUI_EXPORT bool operator==(const QShaderDescription::BlockVariable &lhs, const
 Q_GUI_EXPORT bool operator==(const QShaderDescription::UniformBlock &lhs, const QShaderDescription::UniformBlock &rhs) noexcept;
 Q_GUI_EXPORT bool operator==(const QShaderDescription::PushConstantBlock &lhs, const QShaderDescription::PushConstantBlock &rhs) noexcept;
 Q_GUI_EXPORT bool operator==(const QShaderDescription::StorageBlock &lhs, const QShaderDescription::StorageBlock &rhs) noexcept;
+Q_GUI_EXPORT bool operator==(const QShaderDescription::BuiltinVariable &lhs, const QShaderDescription::BuiltinVariable &rhs) noexcept;
 
 inline bool operator!=(const QShaderDescription &lhs, const QShaderDescription &rhs) noexcept
 {
@@ -284,6 +367,11 @@ inline bool operator!=(const QShaderDescription::PushConstantBlock &lhs, const Q
 }
 
 inline bool operator!=(const QShaderDescription::StorageBlock &lhs, const QShaderDescription::StorageBlock &rhs) noexcept
+{
+    return !(lhs == rhs);
+}
+
+inline bool operator!=(const QShaderDescription::BuiltinVariable &lhs, const QShaderDescription::BuiltinVariable &rhs) noexcept
 {
     return !(lhs == rhs);
 }

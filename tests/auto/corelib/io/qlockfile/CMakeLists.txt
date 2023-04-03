@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #####################################################################
 ## tst_qlockfile Test:
 #####################################################################
@@ -5,7 +8,7 @@
 qt_internal_add_test(tst_qlockfile
     SOURCES
         tst_qlockfile.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Concurrent
         Qt::CorePrivate
 )
@@ -14,7 +17,7 @@ qt_internal_add_test(tst_qlockfile
 #####################################################################
 
 qt_internal_extend_target(tst_qlockfile CONDITION WIN32
-    PUBLIC_LIBRARIES
+    LIBRARIES
         advapi32
 )
 add_subdirectory(qlockfiletesthelper)

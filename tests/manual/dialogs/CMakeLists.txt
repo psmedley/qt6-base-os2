@@ -1,4 +1,5 @@
-# Generated from dialogs.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## dialogs Binary:
@@ -14,19 +15,16 @@ qt_internal_add_manual_test(dialogs
         messageboxpanel.cpp messageboxpanel.h
         utils.cpp utils.h
         wizardpanel.cpp wizardpanel.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )
-
-#### Keys ignored in scope 1:.:.:dialogs.pro:<TRUE>:
-# TEMPLATE = "app"
 
 ## Scopes:
 #####################################################################
 
 qt_internal_extend_target(dialogs CONDITION TARGET Qt::PrintSupport
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::PrintSupport
 )
 

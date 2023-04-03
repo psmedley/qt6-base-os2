@@ -61,28 +61,24 @@ class QBenchmarkResult
 {
 public:
     QBenchmarkContext context;
-    qreal value = -1;
+    QBenchmarkMeasurerBase::Measurement measurement = { -1, QTest::FramesPerSecond };
     int iterations = -1;
-    QTest::QBenchmarkMetric metric = QTest::FramesPerSecond;
     bool setByMacro = true;
-    bool valid = false;
 
     QBenchmarkResult() = default;
 
     QBenchmarkResult(
-        const QBenchmarkContext &context, const qreal value, const int iterations,
-        QTest::QBenchmarkMetric metric, bool setByMacro)
+        const QBenchmarkContext &context, QBenchmarkMeasurerBase::Measurement m,
+            const int iterations, bool setByMacro)
         : context(context)
-        , value(value)
+        , measurement(m)
         , iterations(iterations)
-        , metric(metric)
         , setByMacro(setByMacro)
-        , valid(true)
     { }
 
     bool operator<(const QBenchmarkResult &other) const
     {
-        return (value / iterations) < (other.value / other.iterations);
+        return (measurement.value / iterations) < (other.measurement.value / other.iterations);
     }
 };
 Q_DECLARE_TYPEINFO(QBenchmarkResult, Q_RELOCATABLE_TYPE);
@@ -119,10 +115,10 @@ private:
 };
 
 /*
-    The QBenchmarkTestMethodData class stores all benchmark-related data
-    for the current test case. QBenchmarkTestMethodData:current is
-    created at the beginning of qInvokeTestMethod() and cleared at
-    the end.
+    The QBenchmarkTestMethodData class stores all benchmark-related data for the
+    current test case. QBenchmarkTestMethodData:current is set to a local
+    instance at the beginning of TestMethods::invokeTest() and cleared by its
+    destructor when that instance drops out of scope.
 */
 class Q_TESTLIB_EXPORT QBenchmarkTestMethodData
 {
@@ -136,12 +132,15 @@ public:
     void beginDataRun();
     void endDataRun();
 
-    bool isBenchmark() const { return result.valid; }
+    bool isBenchmark() const { return valid; }
     bool resultsAccepted() const { return resultAccepted; }
     int adjustIterationCount(int suggestion);
-    void setResult(qreal value, QTest::QBenchmarkMetric metric, bool setByMacro = true);
+    void setResults(const QList<QBenchmarkMeasurerBase::Measurement> &m, bool setByMacro = true);
+    void setResult(QBenchmarkMeasurerBase::Measurement m, bool setByMacro = true)
+    { setResults({ m }, setByMacro); }
 
-    QBenchmarkResult result;
+    QList<QBenchmarkResult> results;
+    bool valid = false;
     bool resultAccepted = false;
     bool runOnce = false;
     int iterationCount = -1;
@@ -154,8 +153,8 @@ namespace QTest
     void setIterationCountHint(int count);
     void setIterationCount(int count);
 
-    Q_TESTLIB_EXPORT void beginBenchmarkMeasurement();
-    Q_TESTLIB_EXPORT quint64 endBenchmarkMeasurement();
+    void beginBenchmarkMeasurement();
+    QList<QBenchmarkMeasurerBase::Measurement> endBenchmarkMeasurement();
 }
 
 QT_END_NAMESPACE

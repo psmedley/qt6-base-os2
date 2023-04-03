@@ -34,6 +34,9 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
+Q_TRACE_POINT(qtcore, QLibraryPrivate_load_entry, const QString &fileName);
+Q_TRACE_POINT(qtcore, QLibraryPrivate_load_exit, bool success);
+
 // On Unix systema and on Windows with MinGW, we can mix and match debug and
 // release plugins without problems. (unless compiled in debug-and-release mode
 // - why?)
@@ -345,12 +348,7 @@ inline void QLibraryStore::cleanup()
             if (lib->libraryUnloadCount.loadRelaxed() > 0) {
                 Q_ASSERT(lib->pHnd.loadRelaxed());
                 lib->libraryUnloadCount.storeRelaxed(1);
-#ifdef __GLIBC__
-                // glibc has a bug in unloading from global destructors
-                // see https://bugzilla.novell.com/show_bug.cgi?id=622977
-                // and http://sourceware.org/bugzilla/show_bug.cgi?id=11941
-                lib->unload(QLibraryPrivate::NoUnloadSys);
-#elif defined(Q_OS_DARWIN)
+#if defined(Q_OS_DARWIN)
                 // We cannot fully unload libraries, as we don't know if there are
                 // lingering references (in system threads e.g.) to Objective-C classes
                 // defined in the library.
@@ -400,10 +398,12 @@ inline QLibraryPrivate *QLibraryStore::findOrCreate(const QString &fileName, con
     QMutexLocker locker(&qt_library_mutex);
     QLibraryStore *data = instance();
 
+    QString mapName = version.isEmpty() ? fileName : fileName + u'\0' + version;
+
     // check if this library is already loaded
     QLibraryPrivate *lib = nullptr;
     if (Q_LIKELY(data)) {
-        lib = data->libraryMap.value(fileName);
+        lib = data->libraryMap.value(mapName);
         if (lib)
             lib->mergeLoadHints(loadHints);
     }
@@ -412,7 +412,7 @@ inline QLibraryPrivate *QLibraryStore::findOrCreate(const QString &fileName, con
 
     // track this library
     if (Q_LIKELY(data) && !fileName.isEmpty())
-        data->libraryMap.insert(fileName, lib);
+        data->libraryMap.insert(mapName, lib);
 
     lib->libraryRefCount.ref();
     return lib;
@@ -432,9 +432,11 @@ inline void QLibraryStore::releaseLibrary(QLibraryPrivate *lib)
     Q_ASSERT(lib->libraryUnloadCount.loadRelaxed() == 0);
 
     if (Q_LIKELY(data) && !lib->fileName.isEmpty()) {
-        QLibraryPrivate *that = data->libraryMap.take(lib->fileName);
-        Q_ASSERT(lib == that);
-        Q_UNUSED(that);
+        qsizetype n = erase_if(data->libraryMap, [lib](LibraryMap::iterator it) {
+            return it.value() == lib;
+        });
+        Q_ASSERT_X(n, "~QLibrary", "Did not find this library in the library map");
+        Q_UNUSED(n);
     }
     delete lib;
 }
@@ -800,9 +802,11 @@ bool QLibrary::load()
         return false;
     if (d.tag() == Loaded)
         return d->pHnd.loadRelaxed();
-    else
+    if (d->load()) {
         d.setTag(Loaded);
-    return d->load();
+        return true;
+    }
+    return false;
 }
 
 /*!

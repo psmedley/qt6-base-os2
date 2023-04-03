@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 add_library(code_snippets OBJECT
     doc_src_sql-driver.cpp
     src_sql_kernel_qsqldatabase.cpp

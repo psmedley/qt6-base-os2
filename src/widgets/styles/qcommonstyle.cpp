@@ -78,12 +78,16 @@
 #include <private/qstyleanimation_p.h>
 #endif
 
+#include <qloggingcategory.h>
+
 #include <limits.h>
 
 #include <private/qtextengine_p.h>
 #include <private/qstylehelper_p.h>
 
 QT_BEGIN_NAMESPACE
+
+Q_LOGGING_CATEGORY(lcCommonStyle, "qt.widgets.commonstyle");
 
 using namespace Qt::StringLiterals;
 
@@ -937,12 +941,21 @@ QSize QCommonStylePrivate::viewItemSize(const QStyleOptionViewItem *option, int 
                 break;
             }
             case QStyleOptionViewItem::Top:
-            case QStyleOptionViewItem::Bottom:
-                if (wrapText)
-                    bounds.setWidth(bounds.isValid() ? bounds.width() - 2 * textMargin : option->decorationSize.width());
-                else
-                    bounds.setWidth(QFIXED_MAX);
+            case QStyleOptionViewItem::Bottom: {
+                int width;
+                if (wrapText) {
+                    if (bounds.isValid())
+                        width = bounds.width() - 2 * textMargin;
+                    else if (option->features & QStyleOptionViewItem::HasDecoration)
+                        width = option->decorationSize.width();
+                    else
+                        width = 0;
+                } else {
+                    width = QFIXED_MAX;
+                }
+                bounds.setWidth(width);
                 break;
+            }
             default:
                 break;
             }
@@ -1104,7 +1117,7 @@ void QCommonStylePrivate::viewItemLayout(const QStyleOptionViewItem *opt,  QRect
         }
         break; }
     default:
-        qWarning("doLayout: decoration position is invalid");
+        qCWarning(lcCommonStyle, "doLayout: decoration position is invalid");
         decoration = *pixmapRect;
         break;
     }
@@ -1312,7 +1325,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
  case CE_PushButtonLabel:
         if (const QStyleOptionButton *button = qstyleoption_cast<const QStyleOptionButton *>(opt)) {
             QRect textRect = button->rect;
-            uint tf = Qt::AlignVCenter | Qt::TextShowMnemonic;
+            int tf = Qt::AlignVCenter | Qt::TextShowMnemonic;
             if (!proxy()->styleHint(SH_UnderlineShortcut, button, widget))
                 tf |= Qt::TextHideMnemonic;
 
@@ -1397,7 +1410,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
     case CE_RadioButtonLabel:
     case CE_CheckBoxLabel:
         if (const QStyleOptionButton *btn = qstyleoption_cast<const QStyleOptionButton *>(opt)) {
-            uint alignment = visualAlignment(btn->direction, Qt::AlignLeft | Qt::AlignVCenter);
+            int alignment = visualAlignment(btn->direction, Qt::AlignLeft | Qt::AlignVCenter);
 
             if (!proxy()->styleHint(SH_UnderlineShortcut, btn, widget))
                 alignment |= Qt::TextHideMnemonic;
@@ -1441,8 +1454,8 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
 #if QT_CONFIG(menubar)
     case CE_MenuBarItem:
         if (const QStyleOptionMenuItem *mbi = qstyleoption_cast<const QStyleOptionMenuItem *>(opt)) {
-            uint alignment = Qt::AlignCenter | Qt::TextShowMnemonic | Qt::TextDontClip
-                            | Qt::TextSingleLine;
+            int alignment = Qt::AlignCenter | Qt::TextShowMnemonic | Qt::TextDontClip
+                           | Qt::TextSingleLine;
             if (!proxy()->styleHint(SH_UnderlineShortcut, mbi, widget))
                 alignment |= Qt::TextHideMnemonic;
             int iconExtent = proxy()->pixelMetric(PM_SmallIconSize, opt);
@@ -3876,7 +3889,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
         break;
 #endif // QT_CONFIG(mdiarea)
     default:
-        qWarning("QCommonStyle::drawComplexControl: Control %d not handled", cc);
+        qCWarning(lcCommonStyle, "QCommonStyle::drawComplexControl: Control %d not handled", cc);
     }
 }
 
@@ -4012,7 +4025,7 @@ QStyle::SubControl QCommonStyle::hitTestComplexControl(ComplexControl cc, const 
         }
         break;
     default:
-        qWarning("QCommonStyle::hitTestComplexControl: Case %d not handled", cc);
+        qCWarning(lcCommonStyle, "QCommonStyle::hitTestComplexControl: Case %d not handled", cc);
     }
     return sc;
 }
@@ -4451,7 +4464,7 @@ QRect QCommonStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex 
     }
 #endif // QT_CONFIG(mdiarea)
      default:
-        qWarning("QCommonStyle::subControlRect: Case %d not handled", cc);
+        qCWarning(lcCommonStyle, "QCommonStyle::subControlRect: Case %d not handled", cc);
     }
 #if !QT_CONFIG(slider) && !QT_CONFIG(spinbox) && !QT_CONFIG(toolbutton) && !QT_CONFIG(groupbox)
     Q_UNUSED(widget);
@@ -4840,125 +4853,141 @@ int QCommonStyle::pixelMetric(PixelMetric m, const QStyleOption *opt, const QWid
 /*!
     \reimp
 */
-QSize QCommonStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
-                                     const QSize &csz, const QWidget *widget) const
+QSize QCommonStyle::sizeFromContents(ContentsType contentsType, const QStyleOption *opt,
+                                     const QSize &contentsSize, const QWidget *widget) const
 {
     Q_D(const QCommonStyle);
-    QSize sz(csz);
-    switch (ct) {
+    QSize size(contentsSize);
+    switch (contentsType) {
     case CT_PushButton:
-        if (const QStyleOptionButton *btn = qstyleoption_cast<const QStyleOptionButton *>(opt)) {
-            int w = csz.width(),
-                h = csz.height(),
-                bm = proxy()->pixelMetric(PM_ButtonMargin, btn, widget),
-            fw = proxy()->pixelMetric(PM_DefaultFrameWidth, btn, widget) * 2;
-            w += bm + fw;
-            h += bm + fw;
-            if (btn->features & QStyleOptionButton::AutoDefaultButton){
-                int dbw = proxy()->pixelMetric(PM_ButtonDefaultIndicator, btn, widget) * 2;
-                w += dbw;
-                h += dbw;
+        if (const auto *buttonOpt = qstyleoption_cast<const QStyleOptionButton *>(opt)) {
+            int width = contentsSize.width();
+            int height = contentsSize.height();
+            const int buttonMargin = proxy()->pixelMetric(PM_ButtonMargin, buttonOpt, widget);
+            const int defaultFrameWidth = proxy()->pixelMetric(PM_DefaultFrameWidth, buttonOpt, widget) * 2;
+            width += buttonMargin + defaultFrameWidth;
+            height += buttonMargin + defaultFrameWidth;
+            if (buttonOpt->features.testFlag(QStyleOptionButton::AutoDefaultButton)) {
+                const int buttonIndicator = proxy()->pixelMetric(PM_ButtonDefaultIndicator,
+                                                                 buttonOpt,
+                                                                 widget) * 2;
+                width += buttonIndicator;
+                height += buttonIndicator;
             }
-            sz = QSize(w, h);
+            size = QSize(width, height);
         }
         break;
     case CT_RadioButton:
     case CT_CheckBox:
-        if (const QStyleOptionButton *btn = qstyleoption_cast<const QStyleOptionButton *>(opt)) {
-            bool isRadio = (ct == CT_RadioButton);
+        if (const auto *buttonOpt = qstyleoption_cast<const QStyleOptionButton *>(opt)) {
+            const bool isRadio = (contentsType == CT_RadioButton);
 
-            int w = proxy()->pixelMetric(isRadio ? PM_ExclusiveIndicatorWidth
-                                        : PM_IndicatorWidth, btn, widget);
-            int h = proxy()->pixelMetric(isRadio ? PM_ExclusiveIndicatorHeight
-                                        : PM_IndicatorHeight, btn, widget);
+            const int width = proxy()->pixelMetric(isRadio ? PM_ExclusiveIndicatorWidth
+                                        : PM_IndicatorWidth, buttonOpt, widget);
+            const int height = proxy()->pixelMetric(isRadio ? PM_ExclusiveIndicatorHeight
+                                        : PM_IndicatorHeight, buttonOpt, widget);
 
             int margins = 0;
+
             // we add 4 pixels for label margins
-            if (!btn->icon.isNull() || !btn->text.isEmpty())
+            if (!buttonOpt->icon.isNull() || !buttonOpt->text.isEmpty()) {
                 margins = 4 + proxy()->pixelMetric(isRadio ? PM_RadioButtonLabelSpacing
                                                   : PM_CheckBoxLabelSpacing, opt, widget);
-            sz += QSize(w + margins, 4);
-            sz.setHeight(qMax(sz.height(), h));
+            }
+
+            size += QSize(width + margins, 4);
+            size.setHeight(qMax(size.height(), height));
         }
         break;
 #if QT_CONFIG(menu)
     case CT_MenuItem:
-        if (const QStyleOptionMenuItem *mi = qstyleoption_cast<const QStyleOptionMenuItem *>(opt)) {
-            bool checkable = mi->menuHasCheckableItems;
-            int maxpmw = mi->maxIconWidth;
-            int w = sz.width(), h = sz.height();
-            if (mi->menuItemType == QStyleOptionMenuItem::Separator) {
-                w = 10;
-                h = 2;
+        if (const auto *menuItemOpt = qstyleoption_cast<const QStyleOptionMenuItem *>(opt)) {
+            const bool checkable = menuItemOpt->menuHasCheckableItems;
+            const int maxpmw = menuItemOpt->maxIconWidth;
+            int width = size.width();
+            int height;
+            if (menuItemOpt->menuItemType == QStyleOptionMenuItem::Separator) {
+                width = 10;
+                height = 2;
             } else {
-                h =  mi->fontMetrics.height() + 8;
-                if (!mi->icon.isNull()) {
+                height =  menuItemOpt->fontMetrics.height() + 8;
+                if (!menuItemOpt->icon.isNull()) {
                     int iconExtent = proxy()->pixelMetric(PM_SmallIconSize, opt);
-                    h = qMax(h, mi->icon.actualSize(QSize(iconExtent, iconExtent)).height() + 4);
+                    height = qMax(height,
+                                  menuItemOpt->icon.actualSize(QSize(iconExtent,
+                                                                  iconExtent)).height() + 4);
                 }
             }
-            if (mi->text.contains(u'\t'))
-                w += 12;
+            if (menuItemOpt->text.contains(u'\t'))
+                width += 12;
             if (maxpmw > 0)
-                w += maxpmw + 6;
+                width += maxpmw + 6;
             if (checkable && maxpmw < 20)
-                w += 20 - maxpmw;
+                width += 20 - maxpmw;
             if (checkable || maxpmw > 0)
-                w += 2;
-            w += 12;
-            sz = QSize(w, h);
+                width += 2;
+            width += 12;
+            size = QSize(width, height);
         }
         break;
 #endif // QT_CONFIG(menu)
 #if QT_CONFIG(toolbutton)
     case CT_ToolButton:
-        sz = QSize(sz.width() + 6, sz.height() + 5);
+        size = QSize(size.width() + 6, size.height() + 5);
         break;
 #endif // QT_CONFIG(toolbutton)
 #if QT_CONFIG(combobox)
     case CT_ComboBox:
-        if (const QStyleOptionComboBox *cmb = qstyleoption_cast<const QStyleOptionComboBox *>(opt)) {
-            int fw = cmb->frame ? proxy()->pixelMetric(PM_ComboBoxFrameWidth, opt, widget) * 2 : 0;
+        if (const auto *comboBoxOpt = qstyleoption_cast<const QStyleOptionComboBox *>(opt)) {
+            const int frameWidth = comboBoxOpt->frame ? proxy()->pixelMetric(PM_ComboBoxFrameWidth,
+                                                                             opt,
+                                                                             widget) * 2 : 0;
             const int textMargins = 2*(proxy()->pixelMetric(PM_FocusFrameHMargin, opt) + 1);
+
             // QItemDelegate::sizeHint expands the textMargins two times, thus the 2*textMargins...
-            int other = qMax(23, 2*textMargins + proxy()->pixelMetric(QStyle::PM_ScrollBarExtent, opt, widget));
-            sz = QSize(sz.width() + fw + other, sz.height() + fw);
+            const int other = qMax(23, 2 * textMargins
+                                   + proxy()->pixelMetric(QStyle::PM_ScrollBarExtent,
+                                                          opt, widget));
+
+            size = QSize(size.width() + frameWidth + other, size.height() + frameWidth);
         }
         break;
 #endif // QT_CONFIG(combobox)
     case CT_HeaderSection:
-        if (const QStyleOptionHeader *hdr = qstyleoption_cast<const QStyleOptionHeader *>(opt)) {
-            bool nullIcon = hdr->icon.isNull();
-            int margin = proxy()->pixelMetric(QStyle::PM_HeaderMargin, hdr, widget);
-            int iconSize = nullIcon ? 0 : proxy()->pixelMetric(QStyle::PM_SmallIconSize, hdr, widget);
-            QSize txt = hdr->fontMetrics.size(0, hdr->text);
-            sz.setHeight(margin + qMax(iconSize, txt.height()) + margin);
-            sz.setWidth((nullIcon ? 0 : margin) + iconSize
-                        + (hdr->text.isNull() ? 0 : margin) + txt.width() + margin);
-            if (hdr->sortIndicator != QStyleOptionHeader::None) {
-                int margin = proxy()->pixelMetric(QStyle::PM_HeaderMargin, hdr, widget);
-                if (hdr->orientation == Qt::Horizontal)
-                    sz.rwidth() += sz.height() + margin;
+        if (const auto *headerOpt = qstyleoption_cast<const QStyleOptionHeader *>(opt)) {
+            const bool nullIcon = headerOpt->icon.isNull();
+            const int margin = proxy()->pixelMetric(QStyle::PM_HeaderMargin, headerOpt, widget);
+            const int iconSize = nullIcon ? 0 : proxy()->pixelMetric(QStyle::PM_SmallIconSize,
+                                                                     headerOpt,
+                                                                     widget);
+            const QSize textSize = headerOpt->fontMetrics.size(0, headerOpt->text);
+            size.setHeight(margin + qMax(iconSize, textSize.height()) + margin);
+            size.setWidth((nullIcon ? 0 : margin) + iconSize
+                        + (headerOpt->text.isNull() ? 0 : margin) + textSize.width() + margin);
+            if (headerOpt->sortIndicator != QStyleOptionHeader::None) {
+                const int margin = proxy()->pixelMetric(QStyle::PM_HeaderMargin, headerOpt, widget);
+                if (headerOpt->orientation == Qt::Horizontal)
+                    size.rwidth() += size.height() + margin;
                 else
-                    sz.rheight() += sz.width() + margin;
+                    size.rheight() += size.width() + margin;
             }
         }
         break;
     case CT_TabWidget:
-        sz += QSize(4, 4);
+        size += QSize(4, 4);
         break;
     case CT_LineEdit:
-        if (const QStyleOptionFrame *f = qstyleoption_cast<const QStyleOptionFrame *>(opt))
-            sz += QSize(2*f->lineWidth, 2*f->lineWidth);
+        if (const auto *frameOpt = qstyleoption_cast<const QStyleOptionFrame *>(opt))
+            size += QSize(2 * frameOpt->lineWidth, 2 * frameOpt->lineWidth);
         break;
 #if QT_CONFIG(groupbox)
     case CT_GroupBox:
-        if (const QStyleOptionGroupBox *styleOpt = qstyleoption_cast<const QStyleOptionGroupBox *>(opt))
-            sz += QSize(styleOpt->features.testFlag(QStyleOptionFrame::Flat) ? 0 : 16, 0);
+        if (const auto *groupBoxOpt = qstyleoption_cast<const QStyleOptionGroupBox *>(opt))
+            size += QSize(groupBoxOpt->features.testFlag(QStyleOptionFrame::Flat) ? 0 : 16, 0);
         break;
 #endif // QT_CONFIG(groupbox)
     case CT_MdiControls:
-        if (const QStyleOptionComplex *styleOpt = qstyleoption_cast<const QStyleOptionComplex *>(opt)) {
+        if (const auto *styleOpt = qstyleoption_cast<const QStyleOptionComplex *>(opt)) {
             const int buttonSize = proxy()->pixelMetric(PM_TitleBarButtonSize, styleOpt, widget);
             int width = 1;
             if (styleOpt->subControls & SC_MdiMinButton)
@@ -4967,34 +4996,36 @@ QSize QCommonStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
                 width += buttonSize + 1;
             if (styleOpt->subControls & SC_MdiCloseButton)
                 width += buttonSize + 1;
-            sz = QSize(width, buttonSize);
+            size = QSize(width, buttonSize);
         } else {
             const int buttonSize = proxy()->pixelMetric(PM_TitleBarButtonSize, opt, widget);
-            sz = QSize(1 + 3 * (buttonSize + 1), buttonSize);
+            size = QSize(1 + 3 * (buttonSize + 1), buttonSize);
         }
         break;
 #if QT_CONFIG(itemviews)
     case CT_ItemViewItem:
-        if (const QStyleOptionViewItem *vopt = qstyleoption_cast<const QStyleOptionViewItem *>(opt)) {
+        if (const auto *viewItemOpt = qstyleoption_cast<const QStyleOptionViewItem *>(opt)) {
             QRect decorationRect, displayRect, checkRect;
-            d->viewItemLayout(vopt, &checkRect, &decorationRect, &displayRect, true);
-            sz = (decorationRect|displayRect|checkRect).size();
-            if (decorationRect.isValid() && sz.height() == decorationRect.height())
-                sz.rheight() += 2; // Prevent icons from overlapping.
-                      }
+            d->viewItemLayout(viewItemOpt, &checkRect, &decorationRect, &displayRect, true);
+            size = (decorationRect|displayRect|checkRect).size();
+            if (decorationRect.isValid() && size.height() == decorationRect.height())
+                size.rheight() += 2; // Prevent icons from overlapping.
+        }
         break;
 #else
         Q_UNUSED(d);
 #endif // QT_CONFIG(itemviews)
 #if QT_CONFIG(spinbox)
     case CT_SpinBox:
-        if (const QStyleOptionSpinBox *vopt = qstyleoption_cast<const QStyleOptionSpinBox *>(opt)) {
+        if (const auto *spinBoxOpt = qstyleoption_cast<const QStyleOptionSpinBox *>(opt)) {
             // Add button + frame widths
             const qreal dpi = QStyleHelper::dpi(opt);
-            const bool hasButtons = (vopt->buttonSymbols != QAbstractSpinBox::NoButtons);
+            const bool hasButtons = (spinBoxOpt->buttonSymbols != QAbstractSpinBox::NoButtons);
             const int buttonWidth = hasButtons ? qRound(QStyleHelper::dpiScaled(16, dpi)) : 0;
-            const int fw = vopt->frame ? proxy()->pixelMetric(PM_SpinBoxFrameWidth, vopt, widget) : 0;
-            sz += QSize(buttonWidth + 2*fw, 2*fw);
+            const int frameWidth = spinBoxOpt->frame ? proxy()->pixelMetric(PM_SpinBoxFrameWidth,
+                                                                         spinBoxOpt, widget) : 0;
+
+            size += QSize(buttonWidth + 2 * frameWidth, 2 * frameWidth);
         }
         break;
 #endif
@@ -5010,7 +5041,7 @@ QSize QCommonStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
     default:
         break;
     }
-    return sz;
+    return size;
 }
 
 
@@ -5368,8 +5399,51 @@ int QCommonStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget
     case SH_SpinBox_SelectOnStep:
         ret = true;
         break;
-    default:
-        ret = 0;
+    case SH_EtchDisabledText:
+    case SH_DitherDisabledText:
+    case SH_ScrollBar_MiddleClickAbsolutePosition:
+    case SH_ScrollBar_ScrollWhenPointerLeavesControl:
+    case SH_Slider_SnapToValue:
+    case SH_Slider_SloppyKeyEvents:
+    case SH_ProgressDialog_CenterCancelButton:
+    case SH_PrintDialog_RightAlignButtons:
+    case SH_MainWindow_SpaceBelowMenuBar:
+    case SH_FontDialog_SelectAssociatedText:
+    case SH_Menu_AllowActiveAndDisabled:
+    case SH_Menu_SpaceActivatesItem:
+    case SH_ScrollView_FrameOnlyAroundContents:
+    case SH_ComboBox_ListMouseTracking:
+    case SH_Menu_MouseTracking:
+    case SH_MenuBar_MouseTracking:
+    case SH_ItemView_ChangeHighlightOnFocus:
+    case SH_Widget_ShareActivation:
+    case SH_Workspace_FillSpaceOnMaximize:
+    case SH_ComboBox_Popup:
+    case SH_TitleBar_NoBorder:
+    case SH_Slider_StopMouseOverSlider:
+    case SH_RichText_FullWidthSelection:
+    case SH_Menu_Scrollable:
+    case SH_TabBar_PreferNoArrows:
+    case SH_ScrollBar_LeftClickAbsolutePosition:
+    case SH_SpinBox_AnimateButton:
+    case SH_DrawMenuBarSeparator:
+    case SH_WindowFrame_Mask:
+    case SH_ToolTip_Mask:
+    case SH_Menu_Mask:
+    case SH_Menu_FlashTriggeredItem:
+    case SH_Menu_FadeOutOnHide:
+    case SH_ItemView_PaintAlternatingRowColorsForEmptyArea:
+    case SH_ComboBox_UseNativePopup:
+    case SH_Table_AlwaysDrawLeftTopGridLines:
+        ret = false;
+        break;
+    case SH_MenuBar_AltKeyNavigation:
+        if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme())
+            ret = theme->themeHint(QPlatformTheme::MenuBarFocusOnAltPressRelease).toBool();
+        break;
+    case SH_CustomBase:
+        // Added to get compiler errors when a style hint is missing
+        ret = false;
         break;
     }
 
@@ -6339,7 +6413,6 @@ QIcon QCommonStyle::standardIcon(StandardPixmap standardIcon, const QStyleOption
         addIconFiles(iconResourcePrefix() + QStringLiteral("toolbar-ext-v-"),
                      toolBarExtVSizes, sizeof(toolBarExtVSizes)/sizeof(toolBarExtVSizes[0]), icon);
         break;
-#endif // QT_NO_IMAGEFORMAT_PNG
     case SP_TabCloseButton:
         icon.addFile(iconResourcePrefix() + u"standardbutton-closetab-16.png", QSize(16, 16),
                      QIcon::Normal, QIcon::Off);
@@ -6354,6 +6427,7 @@ QIcon QCommonStyle::standardIcon(StandardPixmap standardIcon, const QStyleOption
         icon.addFile(iconResourcePrefix() + u"standardbutton-closetab-hover-32.png", QSize(32, 32),
                      QIcon::Active, QIcon::Off);
         break;
+#endif // QT_NO_IMAGEFORMAT_PNG
     default:
         icon.addPixmap(proxy()->standardPixmap(standardIcon, option, widget));
         break;

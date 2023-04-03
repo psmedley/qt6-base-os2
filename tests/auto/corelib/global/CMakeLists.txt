@@ -1,4 +1,6 @@
-# Generated from global.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 if(NOT INTEGRITY)
     add_subdirectory(qcompare)
 endif()
@@ -18,7 +20,4 @@ add_subdirectory(qtendian)
 add_subdirectory(qglobalstatic)
 add_subdirectory(qhooks)
 add_subdirectory(qoperatingsystemversion)
-if(WIN32)
-    add_subdirectory(qwinregistry)
-endif()
 add_subdirectory(qxp)

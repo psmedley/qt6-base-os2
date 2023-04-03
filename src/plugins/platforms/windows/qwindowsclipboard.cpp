@@ -4,7 +4,6 @@
 #include "qwindowsclipboard.h"
 #include "qwindowscontext.h"
 #include "qwindowsole.h"
-#include "qwindowsmime.h"
 
 #include <QtGui/qguiapplication.h>
 #include <QtGui/qclipboard.h>
@@ -17,6 +16,7 @@
 #include <QtCore/qthread.h>
 #include <QtCore/qvariant.h>
 #include <QtCore/qurl.h>
+#include <QtCore/private/qsystemerror_p.h>
 
 #include <QtGui/private/qwindowsguieventdispatcher_p.h>
 
@@ -301,7 +301,7 @@ void QWindowsClipboard::setMimeData(QMimeData *mimeData, QClipboard::Mode mode)
             mimeData->formats().join(u", ") : QString(QStringLiteral("NULL"));
         qErrnoWarning("OleSetClipboard: Failed to set mime data (%s) on clipboard: %s",
                       qPrintable(mimeDataFormats),
-                      QWindowsContext::comErrorString(src).constData());
+                      qPrintable(QSystemError::windowsComString(src)));
         releaseIData();
         return;
     }

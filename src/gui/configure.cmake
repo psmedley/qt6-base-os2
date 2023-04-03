@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 
 
 #### Inputs
@@ -66,6 +69,9 @@ if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
 endif()
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
     qt_find_package(XCB 1.11 PROVIDED_TARGETS XCB::XCB MODULE_NAME gui QMAKE_LIB xcb)
+endif()
+if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
+    qt_find_package(XCB 0.1.1 COMPONENTS CURSOR PROVIDED_TARGETS XCB::CURSOR MODULE_NAME gui QMAKE_LIB xcb_cursor)
 endif()
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
     qt_find_package(XCB 0.3.9 COMPONENTS ICCCM PROVIDED_TARGETS XCB::ICCCM MODULE_NAME gui QMAKE_LIB xcb_icccm)
@@ -479,6 +485,7 @@ glFramebufferTexture(GL_TEXTURE_2D, GL_DEPTH_STENCIL_ATTACHMENT, 1, 0);
 qt_config_compile_test(xcb_syslibs
     LABEL "XCB (extensions)"
     LIBRARIES
+        XCB::CURSOR
         XCB::ICCCM
         XCB::IMAGE
         XCB::KEYSYMS
@@ -497,6 +504,7 @@ qt_config_compile_test(xcb_syslibs
 #include <xcb/xcb.h>
 #include <xcb/xcb_image.h>
 #include <xcb/xcb_keysyms.h>
+#include <xcb/xcb_cursor.h>
 #include <xcb/randr.h>
 #include <xcb/render.h>
 #include <xcb/shape.h>
@@ -924,7 +932,7 @@ qt_feature("xcb-glx" PRIVATE
 )
 qt_feature("xcb-egl-plugin" PRIVATE
     LABEL "EGL-X11 Plugin"
-    CONDITION QT_FEATURE_egl_x11 AND QT_FEATURE_opengl
+    CONDITION QT_FEATURE_egl AND QT_FEATURE_opengl
     EMIT_IF QT_FEATURE_xcb
 )
 qt_feature("xcb-native-painting" PRIVATE
@@ -1327,11 +1335,6 @@ qt_configure_add_report_entry(
     TYPE WARNING
     MESSAGE "No QPA platform plugin enabled! This will produce a Qt that cannot run GUI applications.  See \"Platform backends\" in the output of --help."
     CONDITION QT_FEATURE_gui AND LINUX AND NOT ANDROID AND NOT QT_FEATURE_xcb AND NOT QT_FEATURE_eglfs AND NOT QT_FEATURE_directfb AND NOT QT_FEATURE_linuxfb
-)
-qt_configure_add_report_entry(
-    TYPE WARNING
-    MESSAGE "On OS X, AAT is supported only with -qt-harfbuzz."
-    CONDITION APPLE AND QT_FEATURE_system_harfbuzz
 )
 qt_configure_add_report_entry(
     TYPE ERROR

@@ -1,5 +1,5 @@
 # Copyright (C) 2022 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+# SPDX-License-Identifier: BSD-3-Clause
 
 # This function wraps COMMAND with cmake script, that makes possible standalone run with external
 # arguments.
@@ -101,4 +101,8 @@ if(NOT result EQUAL 0)
     message(FATAL_ERROR \"\${full_command} execution failed with exit code \${result}.\")
 endif()"
     )
+endfunction()
+
+function(_qt_internal_test_batch_target_name out)
+    set(${out} "test_batch" PARENT_SCOPE)
 endfunction()

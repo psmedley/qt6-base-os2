@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 project(my_app)
 cmake_minimum_required(VERSION 3.16)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Qml)

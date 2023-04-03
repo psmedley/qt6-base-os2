@@ -129,7 +129,6 @@ private:
 
     QPixmap(const QSize &s, int type);
     void doInit(int, int, int);
-    Q_DUMMY_COMPARISON_OPERATOR(QPixmap)
     friend class QPlatformPixmap;
     friend class QBitmap;
     friend class QPaintDevice;
@@ -164,7 +163,7 @@ inline void QPixmap::scroll(int dx, int dy, int ax, int ay, int awidth, int ahei
 inline bool QPixmap::loadFromData(const QByteArray &buf, const char *format,
                                   Qt::ImageConversionFlags flags)
 {
-    return loadFromData(reinterpret_cast<const uchar *>(buf.constData()), buf.size(), format, flags);
+    return loadFromData(reinterpret_cast<const uchar *>(buf.constData()), uint(buf.size()), format, flags);
 }
 
 

@@ -1,4 +1,5 @@
-# Generated from windowflags.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_manual_windowflags Binary:
@@ -11,7 +12,7 @@ qt_internal_add_manual_test(tst_manual_windowflags
         controls.cpp controls.h
         main.cpp
         previewwindow.cpp previewwindow.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )

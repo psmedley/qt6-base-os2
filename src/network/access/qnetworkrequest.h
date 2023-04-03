@@ -14,6 +14,7 @@ QT_BEGIN_NAMESPACE
 
 class QSslConfiguration;
 class QHttp2Configuration;
+class QHttp1Configuration;
 
 class QNetworkRequestPrivate;
 class Q_NETWORK_EXPORT QNetworkRequest
@@ -63,6 +64,7 @@ public:
         AutoDeleteReplyOnFinishAttribute,
         ConnectionCacheExpiryTimeoutSecondsAttribute,
         Http2CleartextAllowedAttribute,
+        UseCredentialsAttribute,
 
         User = 1000,
         UserMax = 32767
@@ -142,18 +144,21 @@ public:
 
     QString peerVerifyName() const;
     void setPeerVerifyName(const QString &peerName);
-#if QT_CONFIG(http) || defined(Q_CLANG_QDOC)
+#if QT_CONFIG(http) || defined(Q_QDOC)
+    QHttp1Configuration http1Configuration() const;
+    void setHttp1Configuration(const QHttp1Configuration &configuration);
+
     QHttp2Configuration http2Configuration() const;
     void setHttp2Configuration(const QHttp2Configuration &configuration);
 
     qint64 decompressedSafetyCheckThreshold() const;
     void setDecompressedSafetyCheckThreshold(qint64 threshold);
-#endif // QT_CONFIG(http) || defined(Q_CLANG_QDOC)
+#endif // QT_CONFIG(http) || defined(Q_QDOC)
 
-#if QT_CONFIG(http) || defined(Q_CLANG_QDOC) || defined (Q_OS_WASM)
+#if QT_CONFIG(http) || defined(Q_QDOC) || defined (Q_OS_WASM)
     int transferTimeout() const;
     void setTransferTimeout(int timeout = DefaultTransferTimeoutConstant);
-#endif // QT_CONFIG(http) || defined(Q_CLANG_QDOC) || defined (Q_OS_WASM)
+#endif // QT_CONFIG(http) || defined(Q_QDOC) || defined (Q_OS_WASM)
 private:
     QSharedDataPointer<QNetworkRequestPrivate> d;
     friend class QNetworkRequestPrivate;

@@ -31,7 +31,7 @@ public:
 #endif
     QVariant themeHint(ThemeHint) const override;
 
-    Appearance appearance() const override;
+    Qt::ColorScheme colorScheme() const override;
 
     const QPalette *palette(Palette type = SystemPalette) const override
         { return m_palettes[type]; }
@@ -60,6 +60,8 @@ public:
     void refresh();
 
     static const char *name;
+
+    static void populateLightSystemBasePalette(QPalette &result);
 
 private:
     void clearPalettes();

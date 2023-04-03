@@ -13,6 +13,7 @@
 #include <QtGui/QGuiApplication>
 #include <QtCore/QDebug>
 
+#include <QtCore/private/qcore_mac_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -354,8 +355,11 @@ void QCocoaMenuBar::insertWindowMenu()
 QList<QCocoaMenuItem*> QCocoaMenuBar::merged() const
 {
     QList<QCocoaMenuItem*> r;
-    for (auto menu : std::as_const(m_menus))
+    for (auto menu : std::as_const(m_menus)) {
+        if (!menu)
+            continue;
         r.append(menu->merged());
+    }
 
     return r;
 }
@@ -399,7 +403,7 @@ bool QCocoaMenuBar::shouldDisable(QCocoaWindow *active) const
 QPlatformMenu *QCocoaMenuBar::menuForTag(quintptr tag) const
 {
     for (auto menu : std::as_const(m_menus))
-        if (menu->tag() ==  tag)
+        if (menu && menu->tag() == tag)
             return menu;
 
     return nullptr;
@@ -407,10 +411,13 @@ QPlatformMenu *QCocoaMenuBar::menuForTag(quintptr tag) const
 
 NSMenuItem *QCocoaMenuBar::itemForRole(QPlatformMenuItem::MenuRole role)
 {
-    for (auto menu : std::as_const(m_menus))
-        for (auto *item : menu->items())
-            if (item->effectiveRole() == role)
-                return item->nsItem();
+    for (auto menu : std::as_const(m_menus)) {
+        if (menu) {
+            for (auto *item : menu->items())
+                if (item->effectiveRole() == role)
+                    return item->nsItem();
+        }
+    }
 
     return nil;
 }

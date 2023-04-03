@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 list(APPEND test_data "./data")
 
 qt_internal_add_test(tst_baseline_text
@@ -8,9 +11,10 @@ qt_internal_add_test(tst_baseline_text
         tst_baseline_text.cpp
     INCLUDE_DIRECTORIES
         ../shared
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
+        Qt::WidgetsPrivate
         Qt::Network
     TESTDATA ${test_data}
 )

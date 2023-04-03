@@ -17,7 +17,7 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_DECLARE_LOGGING_CATEGORY(lcQpaWindows)
+Q_DECLARE_LOGGING_CATEGORY(lcQpaWindow)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaEvents)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaGl)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaMime)
@@ -37,7 +37,7 @@ class QWindowsMenuBar;
 class QWindowsScreenManager;
 class QWindowsTabletSupport;
 class QWindowsWindow;
-class QWindowsMimeConverter;
+class QWindowsMimeRegistry;
 struct QWindowCreationContext;
 struct QWindowsContextPrivate;
 class QPoint;
@@ -88,8 +88,6 @@ public:
 
     static QWindowsContext *instance();
 
-    static QString windowsErrorMessage(unsigned long errorCode);
-
     void addWindow(HWND, QWindowsWindow *w);
     void removeWindow(HWND);
 
@@ -135,11 +133,10 @@ public:
 
     static bool isSessionLocked();
 
-    QWindowsMimeConverter &mimeConverter() const;
+    QWindowsMimeRegistry &mimeConverter() const;
     QWindowsScreenManager &screenManager();
     QWindowsTabletSupport *tabletSupport() const;
 
-    static QByteArray comErrorString(HRESULT hr);
     bool asyncExpose() const;
     void setAsyncExpose(bool value);
 

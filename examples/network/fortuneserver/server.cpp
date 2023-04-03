@@ -11,7 +11,6 @@ Server::Server(QWidget *parent)
     : QDialog(parent)
     , statusLabel(new QLabel)
 {
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     statusLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
 
     initServer();
@@ -72,12 +71,11 @@ void Server::initServer()
     }
 //! [0]
     QString ipAddress;
-    QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
+    const QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
     // use the first non-localhost IPv4 address
-    for (int i = 0; i < ipAddressesList.size(); ++i) {
-        if (ipAddressesList.at(i) != QHostAddress::LocalHost &&
-            ipAddressesList.at(i).toIPv4Address()) {
-            ipAddress = ipAddressesList.at(i).toString();
+    for (const QHostAddress &entry : ipAddressesList) {
+        if (entry != QHostAddress::LocalHost && entry.toIPv4Address()) {
+            ipAddress = entry.toString();
             break;
         }
     }
@@ -96,7 +94,7 @@ void Server::sendFortune()
 //! [5]
     QByteArray block;
     QDataStream out(&block, QIODevice::WriteOnly);
-    out.setVersion(QDataStream::Qt_5_10);
+    out.setVersion(QDataStream::Qt_6_5);
 
     out << fortunes[QRandomGenerator::global()->bounded(fortunes.size())];
 //! [4] //! [7]

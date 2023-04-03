@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Given "/usr/lib/x86_64-linux-gnu/libcups.so"
 # Returns "cups" or an empty string if the file is not an absolute library path.
 # Aka it strips the "lib" prefix, the .so extension and the base path.

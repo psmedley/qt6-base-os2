@@ -416,6 +416,9 @@ public:
     void setIcon(Icon icon);
     Icon icon() const;
 
+    void setIconPixmap(const QPixmap &pixmap);
+    QPixmap iconPixmap() const;
+
     void setText(const QString &text);
     QString text() const;
 
@@ -448,6 +451,10 @@ public:
     const QList<CustomButton> &customButtons();
     const CustomButton *customButton(int id);
 
+    void setCheckBox(const QString &label, Qt::CheckState state);
+    QString checkBoxLabel() const;
+    Qt::CheckState checkBoxState() const;
+
 private:
     QMessageDialogOptionsPrivate *d;
 };
@@ -461,6 +468,7 @@ public:
 
 Q_SIGNALS:
     void clicked(QPlatformDialogHelper::StandardButton button, QPlatformDialogHelper::ButtonRole role);
+    void checkBoxStateChanged(Qt::CheckState state);
 
 private:
     QSharedPointer<QMessageDialogOptions> m_options;

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_internal_add_module(TestAutogeneratingCppExportsCustomName
     GENERATE_CPP_EXPORTS
     CPP_EXPORT_HEADER_BASE_NAME

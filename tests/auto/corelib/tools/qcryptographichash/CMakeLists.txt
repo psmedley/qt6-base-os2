@@ -1,4 +1,5 @@
-# Generated from qcryptographichash.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qcryptographichash Test:
@@ -15,3 +16,7 @@ qt_internal_add_test(tst_qcryptographichash
         tst_qcryptographichash.cpp
     TESTDATA ${test_data}
 )
+
+if(QT_FEATURE_sanitize_address)
+    set_property(TEST tst_qcryptographichash APPEND PROPERTY ENVIRONMENT "QTEST_FUNCTION_TIMEOUT=900000")
+endif()

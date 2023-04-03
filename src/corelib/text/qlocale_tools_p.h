@@ -29,13 +29,15 @@ enum StrayCharacterMode {
 template <typename T> struct QSimpleParsedNumber
 {
     T result;
-    const char *endptr;
-    bool ok() { return endptr; }
+    // When used < 0, -used is how much was used, but it was an error.
+    qsizetype used;
+    bool ok() const { return used > 0; }
 };
 
 // API note: this function can't process a number with more than 2.1 billion digits
-[[nodiscard]] double qt_asciiToDouble(const char *num, qsizetype numLen, bool &ok, int &processed,
-                                      StrayCharacterMode strayCharMode = TrailingJunkProhibited);
+[[nodiscard]] QSimpleParsedNumber<double>
+qt_asciiToDouble(const char *num, qsizetype numLen,
+                 StrayCharacterMode strayCharMode = TrailingJunkProhibited);
 void qt_doubleToAscii(double d, QLocaleData::DoubleForm form, int precision,
                       char *buf, qsizetype bufSize,
                       bool &sign, int &length, int &decpt);

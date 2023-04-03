@@ -109,7 +109,6 @@ static bool isSpecialKey(const QString &text)
 
     bool accepted = true;
     if (m_sendKeyEvent && m_composingText.isEmpty()) {
-        KeyEvent keyEvent(nsevent);
         // Trust text input system on whether to send the event with text or not,
         // or otherwise apply heuristics to filter out private use symbols.
         if (didInterpretKeyEvent ? m_sendKeyEventWithoutText : isSpecialKey(keyEvent.text))
@@ -291,10 +290,9 @@ bool KeyEvent::sendWindowSystemEvent(QWindow *window) const
     case QEvent::KeyPress:
     case QEvent::KeyRelease: {
         static const int count = 1;
-        static const bool tryShortcutOverride = false;
         QWindowSystemInterface::handleExtendedKeyEvent(window, timestamp,
             type, key, modifiers, nativeScanCode, nativeVirtualKey, nativeModifiers,
-            text, isRepeat, count, tryShortcutOverride);
+            text, isRepeat, count);
         // FIXME: Make handleExtendedKeyEvent synchronous
         return QWindowSystemInterface::flushWindowSystemEvents();
     }

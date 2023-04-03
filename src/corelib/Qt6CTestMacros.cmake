@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #
 #  W A R N I N G
 #  -------------
@@ -8,14 +11,9 @@
 #
 # We mean it.
 
-message("CMAKE_VERSION: ${CMAKE_VERSION}")
-message("CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
-message("CMAKE_MODULES_UNDER_TEST: ${CMAKE_MODULES_UNDER_TEST}")
-foreach(_mod ${CMAKE_MODULES_UNDER_TEST})
-    message("CMAKE_${_mod}_MODULE_MAJOR_VERSION: ${CMAKE_${_mod}_MODULE_MAJOR_VERSION}")
-    message("CMAKE_${_mod}_MODULE_MINOR_VERSION: ${CMAKE_${_mod}_MODULE_MINOR_VERSION}")
-    message("CMAKE_${_mod}_MODULE_PATCH_VERSION: ${CMAKE_${_mod}_MODULE_PATCH_VERSION}")
-endforeach()
+message(STATUS "CMAKE_VERSION: ${CMAKE_VERSION}")
+message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+message(STATUS "CMAKE_MODULES_UNDER_TEST: ${CMAKE_MODULES_UNDER_TEST}")
 
 # Generate a shell script wrapper that calls ninja with -v parameter.
 # Upstream issue to allow specifying custom build tool options when using ctest's --build-and-test
@@ -160,6 +158,13 @@ function(_qt_internal_get_cmake_test_configure_options out_var)
 endfunction()
 
 function(_qt_internal_set_up_test_run_environment testname)
+    set(no_value_options NO_PLUGIN_PATH)
+    set(single_value_options "")
+    set(multi_value_options "")
+    cmake_parse_arguments(PARSE_ARGV 1 arg
+        "${no_value_options}" "${single_value_options}" "${multi_value_options}"
+    )
+
     # This is copy-pasted from qt_add_test and adapted to the standalone project case.
     if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
         set(QT_PATH_SEPARATOR "\\;")
@@ -198,20 +203,20 @@ function(_qt_internal_set_up_test_run_environment testname)
     set_property(TEST "${testname}" APPEND PROPERTY ENVIRONMENT "${test_env_path}")
     set_property(TEST "${testname}" APPEND PROPERTY ENVIRONMENT "QT_TEST_RUNNING_IN_CTEST=1")
 
-    # Add the install prefix to list of plugin paths when doing a prefix build
-    if(NOT QT_INSTALL_DIR)
-        foreach(install_prefix ${install_prefixes})
-            list(APPEND plugin_paths "${install_prefix}/${INSTALL_PLUGINSDIR}")
-        endforeach()
+    if(NOT arg_NO_PLUGIN_PATH)
+        # Add the install prefix to list of plugin paths when doing a prefix build
+        if(NOT QT_INSTALL_DIR)
+            foreach(install_prefix ${install_prefixes})
+                list(APPEND plugin_paths "${install_prefix}/${INSTALL_PLUGINSDIR}")
+            endforeach()
+        endif()
+
+        # TODO: Collect all paths from known repositories when performing a super build.
+        list(APPEND plugin_paths "${PROJECT_BINARY_DIR}/${INSTALL_PLUGINSDIR}")
+        list(JOIN plugin_paths "${QT_PATH_SEPARATOR}" plugin_paths_joined)
+        set_property(TEST "${testname}"
+            APPEND PROPERTY ENVIRONMENT "QT_PLUGIN_PATH=${plugin_paths_joined}")
     endif()
-
-    #TODO: Collect all paths from known repositories when performing a super
-    # build.
-    list(APPEND plugin_paths "${PROJECT_BINARY_DIR}/${INSTALL_PLUGINSDIR}")
-    list(JOIN plugin_paths "${QT_PATH_SEPARATOR}" plugin_paths_joined)
-    set_property(TEST "${testname}"
-                 APPEND PROPERTY ENVIRONMENT "QT_PLUGIN_PATH=${plugin_paths_joined}")
-
 endfunction()
 
 # Checks if the test project can be built successfully. Arguments:
@@ -260,6 +265,7 @@ macro(_qt_internal_test_expect_pass _dir)
       NO_CLEAN_STEP
       NO_BUILD_PROJECT_ARG
       NO_IOS_DEFAULT_ARGS
+      NO_RUN_ENVIRONMENT_PLUGIN_PATH
     )
     set(_test_single_args
       BINARY
@@ -434,11 +440,17 @@ macro(_qt_internal_test_expect_pass _dir)
     add_test(${testname} ${CMAKE_CTEST_COMMAND} ${ctest_command_args})
     if(_ARGS_SIMULATE_IN_SOURCE)
       set_tests_properties(${testname} PROPERTIES
-          FIXTURES_REQUIRED "${testname}SIMULATE_IN_SOURCE_FIXTURE")
+          FIXTURES_REQUIRED "${testname}SIMULATE_IN_SOURCE_FIXTURE"
+      )
     endif()
+    set_tests_properties(${testname} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
 
     if(_ARGS_BINARY)
-        _qt_internal_set_up_test_run_environment("${testname}")
+        set(run_env_args "")
+        if(_ARGS_NO_RUN_ENVIRONMENT_PLUGIN_PATH)
+            list(APPEND run_env_args NO_PLUGIN_PATH)
+        endif()
+        _qt_internal_set_up_test_run_environment("${testname}" ${run_env_args})
     endif()
 
     unset(__expect_pass_source_dir)

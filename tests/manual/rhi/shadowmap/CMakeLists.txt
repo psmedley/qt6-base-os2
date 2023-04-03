@@ -1,4 +1,5 @@
-# Generated from shadowmap.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## shadowmap Binary:
@@ -8,7 +9,7 @@ qt_internal_add_manual_test(shadowmap
     GUI
     SOURCES
         shadowmap.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -27,7 +28,3 @@ qt_internal_add_resource(shadowmap "shadowmap"
     FILES
         ${shadowmap_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:shadowmap.pro:<TRUE>:
-# TEMPLATE = "app"

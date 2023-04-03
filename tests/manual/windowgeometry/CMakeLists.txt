@@ -1,4 +1,5 @@
-# Generated from windowgeometry.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## windowgeometry Binary:
@@ -12,10 +13,7 @@ qt_internal_add_manual_test(windowgeometry
         main.cpp
     INCLUDE_DIRECTORIES
         ../windowflags
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )
-
-#### Keys ignored in scope 1:.:.:windowgeometry.pro:<TRUE>:
-# TEMPLATE = "app"

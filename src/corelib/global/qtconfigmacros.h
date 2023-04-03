@@ -4,6 +4,19 @@
 #ifndef QTCONFIGMACROS_H
 #define QTCONFIGMACROS_H
 
+#if 0
+#  pragma qt_sync_stop_processing
+#endif
+#ifdef QT_BOOTSTRAPPED
+// qconfig-bootstrapped.h is not supposed to be a part of the synced header files. So we find it by
+// the include path specified for Bootstrap library in the source tree instead of the build tree as
+// it's done for regular header files.
+#include "qconfig-bootstrapped.h"
+#else
+#include <QtCore/qconfig.h>
+#include <QtCore/qtcore-config.h>
+#endif
+
 /*
    The Qt modules' export macros.
    The options are:
@@ -32,6 +45,19 @@
 #endif
 
 /*
+   No, this is not an evil backdoor. QT_BUILD_INTERNAL just exports more symbols
+   for Qt's internal unit tests. If you want slower loading times and more
+   symbols that can vanish from version to version, feel free to define QT_BUILD_INTERNAL.
+*/
+#if defined(QT_BUILD_INTERNAL) && defined(QT_BUILDING_QT) && defined(QT_SHARED)
+#    define Q_AUTOTEST_EXPORT Q_DECL_EXPORT
+#elif defined(QT_BUILD_INTERNAL) && defined(QT_SHARED)
+#    define Q_AUTOTEST_EXPORT Q_DECL_IMPORT
+#else
+#    define Q_AUTOTEST_EXPORT
+#endif
+
+/*
     The QT_CONFIG macro implements a safe compile time check for features of Qt.
     Features can be in three states:
         0 or undefined: This will lead to a compile error when testing for it
@@ -40,6 +66,22 @@
 */
 #define QT_CONFIG(feature) (1/QT_FEATURE_##feature == 1)
 #define QT_REQUIRE_CONFIG(feature) Q_STATIC_ASSERT_X(QT_FEATURE_##feature == 1, "Required feature " #feature " for file " __FILE__ " not available.")
+
+/* moc compats (signals/slots) */
+#ifndef QT_MOC_COMPAT
+#  define QT_MOC_COMPAT
+#else
+#  undef QT_MOC_COMPAT
+#  define QT_MOC_COMPAT
+#endif
+
+/*
+   Debugging and error handling
+*/
+
+#if !defined(QT_NO_DEBUG) && !defined(QT_DEBUG)
+#  define QT_DEBUG
+#endif
 
 // valid for both C and C++
 #define QT_MANGLE_NAMESPACE0(x) x
@@ -62,12 +104,6 @@
 # define QT_END_NAMESPACE
 # define QT_BEGIN_INCLUDE_NAMESPACE
 # define QT_END_INCLUDE_NAMESPACE
-#ifndef QT_BEGIN_MOC_NAMESPACE
-# define QT_BEGIN_MOC_NAMESPACE
-#endif
-#ifndef QT_END_MOC_NAMESPACE
-# define QT_END_MOC_NAMESPACE
-#endif
 # define QT_FORWARD_DECLARE_CLASS(name) class name;
 # define QT_FORWARD_DECLARE_STRUCT(name) struct name;
 
@@ -79,12 +115,6 @@
 # define QT_END_NAMESPACE }
 # define QT_BEGIN_INCLUDE_NAMESPACE }
 # define QT_END_INCLUDE_NAMESPACE namespace QT_NAMESPACE {
-#ifndef QT_BEGIN_MOC_NAMESPACE
-# define QT_BEGIN_MOC_NAMESPACE QT_USE_NAMESPACE
-#endif
-#ifndef QT_END_MOC_NAMESPACE
-# define QT_END_MOC_NAMESPACE
-#endif
 # define QT_FORWARD_DECLARE_CLASS(name) \
     QT_BEGIN_NAMESPACE class name; QT_END_NAMESPACE \
     using QT_PREPEND_NAMESPACE(name);
@@ -119,8 +149,12 @@ namespace QT_NAMESPACE {}
 
 #endif /* __cplusplus */
 
-/* silence syncqt warning */
-QT_BEGIN_NAMESPACE
-QT_END_NAMESPACE
+/* ### Qt 6.9 (or later): remove *_MOC_* macros (moc does not need them since 6.5) */
+#ifndef QT_BEGIN_MOC_NAMESPACE
+# define QT_BEGIN_MOC_NAMESPACE QT_USE_NAMESPACE
+#endif
+#ifndef QT_END_MOC_NAMESPACE
+# define QT_END_MOC_NAMESPACE
+#endif
 
 #endif /* QTCONFIGMACROS_H */

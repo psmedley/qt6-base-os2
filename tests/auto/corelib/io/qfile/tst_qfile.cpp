@@ -23,6 +23,10 @@
 #include <private/qfsfileengine_p.h>
 #include <private/qfilesystemengine_p.h>
 
+#ifdef Q_OS_WIN
+#include <QtCore/private/qfunctions_win_p.h>
+#endif
+
 #include <QtTest/private/qemulationdetector_p.h>
 
 #ifdef Q_OS_WIN
@@ -990,7 +994,6 @@ void tst_QFile::readAllStdin()
     process.start(m_stdinProcess, QStringList(QStringLiteral("all")));
     QVERIFY2(process.waitForStarted(), qPrintable(process.errorString()));
     for (int i = 0; i < 5; ++i) {
-        QTest::qWait(1000);
         process.write(lotsOfData);
         while (process.bytesToWrite() > 0)
             QVERIFY(process.waitForBytesWritten());
@@ -1025,7 +1028,6 @@ void tst_QFile::readLineStdin()
                       QIODevice::Text | QIODevice::ReadWrite);
         QVERIFY2(process.waitForStarted(), qPrintable(process.errorString()));
         for (int i = 0; i < 5; ++i) {
-            QTest::qWait(1000);
             process.write(lotsOfData);
             while (process.bytesToWrite() > 0)
                 QVERIFY(process.waitForBytesWritten());
@@ -1582,16 +1584,11 @@ void tst_QFile::copyFallback()
 #if defined(Q_OS_WIN)
 static QString getWorkingDirectoryForLink(const QString &linkFileName)
 {
-    bool neededCoInit = false;
     QString ret;
 
+    QComHelper comHelper;
     IShellLink *psl;
     HRESULT hres = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (void **)&psl);
-    if (hres == CO_E_NOTINITIALIZED) { // COM was not initialized
-        neededCoInit = true;
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-        hres = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (void **)&psl);
-    }
 
     if (SUCCEEDED(hres)) {    // Get pointer to the IPersistFile interface.
         IPersistFile *ppf;
@@ -1608,10 +1605,6 @@ static QString getWorkingDirectoryForLink(const QString &linkFileName)
             ppf->Release();
         }
         psl->Release();
-    }
-
-    if (neededCoInit) {
-        CoUninitialize();
     }
 
     return ret;
@@ -3308,13 +3301,15 @@ void tst_QFile::mapResource_data()
 
     QString validFile = ":/tst_qfileinfo/resources/file1.ext1";
     QString invalidFile = ":/tst_qfileinfo/resources/filefoo.ext1";
+    const char modes[] = "invalid";
 
     for (int i = 0; i < 2; ++i) {
         QString file = (i == 0) ? validFile : invalidFile;
-        QTest::newRow("0, 0") << 0 << 0 << QFile::UnspecifiedError << file;
-        QTest::newRow("0, BIG") << 0 << 4096 << QFile::UnspecifiedError << file;
-        QTest::newRow("-1, 0") << -1 << 0 << QFile::UnspecifiedError << file;
-        QTest::newRow("0, -1") << 0 << -1 << QFile::UnspecifiedError << file;
+        const char *mode = i == 0 ? modes + 2 : modes;
+        QTest::addRow("0, 0 (%s)", mode) << 0 << 0 << QFile::UnspecifiedError << file;
+        QTest::addRow("0, BIG (%s)", mode) << 0 << 4096 << QFile::UnspecifiedError << file;
+        QTest::addRow("-1, 0 (%s)", mode) << -1 << 0 << QFile::UnspecifiedError << file;
+        QTest::addRow("0, -1 (%s)", mode) << 0 << -1 << QFile::UnspecifiedError << file;
     }
 
     QTest::newRow("0, 1") << 0 << 1 << QFile::NoError << validFile;

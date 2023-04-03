@@ -1,4 +1,5 @@
-# Generated from qtemporaryfile.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qtemporaryfile Test:
@@ -10,7 +11,7 @@ list(APPEND test_data "tst_qtemporaryfile.cpp")
 qt_internal_add_test(tst_qtemporaryfile
     SOURCES
         tst_qtemporaryfile.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::TestPrivate
     TESTDATA ${test_data}
 )

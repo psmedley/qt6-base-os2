@@ -1,5 +1,5 @@
-# special case skip regeneration
-# Generated from moc.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_moc Test:
@@ -38,6 +38,7 @@ set(JSON_HEADERS
         related-metaobjects-in-gadget.h
         related-metaobjects-in-namespaces.h
         related-metaobjects-name-conflict.h
+        signal-with-default-arg.h
         single-quote-digit-separator-n3781.h
         single_function_keyword.h
         slots-with-void-template.h
@@ -78,7 +79,7 @@ qt_internal_add_test(tst_moc
     EXCEPTIONS
 )
 
-qt_internal_extend_target(tst_moc PUBLIC_LIBRARIES Qt::CorePrivate)
+qt_internal_extend_target(tst_moc LIBRARIES Qt::CorePrivate)
 
 qt_internal_extend_target(tst_moc CONDITION CMAKE_CROSSCOMPILING
     DEFINES
@@ -102,22 +103,22 @@ qt_internal_extend_target(tst_moc CONDITION CLANG OR GCC
 )
 
 qt_internal_extend_target(tst_moc CONDITION TARGET Qt::DBus
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::DBus
 )
 
 qt_internal_extend_target(tst_moc CONDITION TARGET Qt::Concurrent
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Concurrent
 )
 
 qt_internal_extend_target(tst_moc CONDITION TARGET Qt::Network
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Network
 )
 
 qt_internal_extend_target(tst_moc CONDITION TARGET Qt::Sql
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Sql
 )
 

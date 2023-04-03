@@ -480,16 +480,6 @@ QString result(int type, int n)
 }
 //! [qttrid_n_noop]
 
-//! [37]
-qWarning("%s: %s", qUtf8Printable(key), qUtf8Printable(value));
-//! [37]
-
-
-//! [qUtf16Printable]
-qWarning("%ls: %ls", qUtf16Printable(key), qUtf16Printable(value));
-//! [qUtf16Printable]
-
-
 //! [38]
 struct Point2D
 {
@@ -621,11 +611,6 @@ template<> class QTypeInfo<A> : public QTypeInfoMerger<A, B, C, D> {};
     ... qOverload<int, const QString &>(&Foo::overloadedFunction)
 //! [52]
 
-//! [53]
-    ... QOverload<>::of(&Foo::overloadedFunction)
-    ... QOverload<int, const QString &>::of(&Foo::overloadedFunction)
-//! [53]
-
 //! [54]
     struct Foo {
         void overloadedFunction(int, const QString &);
@@ -682,6 +667,19 @@ bool readConfiguration(const QFile &file)
    }
 //! [qunreachable-switch]
 
+//! [qunreachable-return]
+   switch (shape) {
+       case Rectangle:
+           return rectangle();
+       case Triangle:
+           return triangle();
+       case Circle:
+           return circle();
+       case NumShapes:
+           Q_UNREACHABLE_RETURN(nullptr);
+   }
+//! [qunreachable-return]
+
 //! [qt-version-check]
 #include <QtGlobal>
 
@@ -708,7 +706,7 @@ bool readConfiguration(const QFile &file)
     QString s = ...;
     for (QChar ch : s) // detaches 's' (performs a deep-copy if 's' was shared)
         process(ch);
-    for (QChar ch : std::as_const(s)) // ok, no detach attempt
+    for (QChar ch : qAsConst(s)) // ok, no detach attempt
         process(ch);
 //! [as-const-0]
 
@@ -724,12 +722,12 @@ bool readConfiguration(const QFile &file)
 //! [as-const-2]
 
 //! [as-const-3]
-    for (QChar ch : std::as_const(funcReturningQString()))
+    for (QChar ch : qAsConst(funcReturningQString()))
         process(ch); // ERROR: ch is copied from deleted memory
 //! [as-const-3]
 
 //! [as-const-4]
-    for (QChar ch : std::as_const(funcReturningQString()))
+    for (QChar ch : qAsConst(funcReturningQString()))
         process(ch); // ERROR: ch is copied from deleted memory
 //! [as-const-4]
 

@@ -19,8 +19,22 @@ class QDebug;
    QTypeInfo     - type trait functionality
 */
 
+namespace QtPrivate {
+
 template <typename T>
 inline constexpr bool qIsRelocatable =  std::is_trivially_copyable_v<T> && std::is_trivially_destructible_v<T>;
+
+// Denotes types that are trivially default constructible, and for which
+// value-initialization can be achieved by filling their storage with 0 bits.
+// There is no type trait we can use for this, so we hardcode a list of
+// possibilities that we know are OK on the architectures that we support.
+// The most notable exception are pointers to data members, which for instance
+// on the Itanium ABI are initialized to -1.
+template <typename T>
+inline constexpr bool qIsValueInitializationBitwiseZero =
+        std::is_scalar_v<T> && !std::is_member_object_pointer_v<T>;
+
+}
 
 /*
   The catch-all template.
@@ -34,7 +48,8 @@ public:
         isPointer = std::is_pointer_v<T>,
         isIntegral = std::is_integral_v<T>,
         isComplex = !std::is_trivial_v<T>,
-        isRelocatable = qIsRelocatable<T>,
+        isRelocatable = QtPrivate::qIsRelocatable<T>,
+        isValueInitializationBitwiseZero = QtPrivate::qIsValueInitializationBitwiseZero<T>,
     };
 };
 
@@ -47,6 +62,7 @@ public:
         isIntegral = false,
         isComplex = false,
         isRelocatable = false,
+        isValueInitializationBitwiseZero = false,
     };
 };
 
@@ -79,6 +95,7 @@ public:
     static constexpr bool isRelocatable = ((QTypeInfo<Ts>::isRelocatable) && ...);
     static constexpr bool isPointer = false;
     static constexpr bool isIntegral = false;
+    static constexpr bool isValueInitializationBitwiseZero = false;
 };
 
 // QTypeInfo for std::pair:
@@ -97,6 +114,7 @@ public: \
         isIntegral = false, \
         isComplex = true, \
         isRelocatable = true, \
+        isValueInitializationBitwiseZero = false, \
     }; \
 }
 
@@ -134,9 +152,10 @@ class QTypeInfo<TYPE > \
 public: \
     enum { \
         isComplex = (((FLAGS) & Q_PRIMITIVE_TYPE) == 0) && !std::is_trivial_v<TYPE>, \
-        isRelocatable = !isComplex || ((FLAGS) & Q_RELOCATABLE_TYPE) || qIsRelocatable<TYPE>, \
+        isRelocatable = !isComplex || ((FLAGS) & Q_RELOCATABLE_TYPE) || QtPrivate::qIsRelocatable<TYPE>, \
         isPointer = std::is_pointer_v< TYPE >, \
         isIntegral = std::is_integral< TYPE >::value, \
+        isValueInitializationBitwiseZero = QtPrivate::qIsValueInitializationBitwiseZero<TYPE>, \
     }; \
 }
 
@@ -148,23 +167,6 @@ Q_DECLARE_TYPEINFO_BODY(TYPE, FLAGS)
 template<typename T> class QFlags;
 template<typename T>
 Q_DECLARE_TYPEINFO_BODY(QFlags<T>, Q_PRIMITIVE_TYPE);
-
-/*
-   Specialize a shared type with:
-
-     Q_DECLARE_SHARED(type)
-
-   where 'type' is the name of the type to specialize.  NOTE: shared
-   types must define a member-swap, and be defined in the same
-   namespace as Qt for this to work.
-*/
-
-#define Q_DECLARE_SHARED_IMPL(TYPE, FLAGS) \
-Q_DECLARE_TYPEINFO(TYPE, FLAGS); \
-inline void swap(TYPE &value1, TYPE &value2) \
-    noexcept(noexcept(value1.swap(value2))) \
-{ value1.swap(value2); }
-#define Q_DECLARE_SHARED(TYPE) Q_DECLARE_SHARED_IMPL(TYPE, Q_RELOCATABLE_TYPE)
 
 namespace QTypeTraits
 {

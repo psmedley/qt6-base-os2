@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Create a CMake toolchain file for convenient configuration of both internal Qt builds
 # as well as CMake application projects.
 # Expects various global variables to be set.

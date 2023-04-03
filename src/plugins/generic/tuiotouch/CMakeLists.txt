@@ -1,4 +1,5 @@
-# Generated from tuiotouch.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QTuioTouchPlugin Plugin:
@@ -24,7 +25,3 @@ qt_internal_add_plugin(QTuioTouchPlugin
         Qt::GuiPrivate
         Qt::Network
 )
-
-#### Keys ignored in scope 1:.:.:tuiotouch.pro:<TRUE>:
-# OTHER_FILES = "tuiotouch.json"
-# PLUGIN_EXTENDS = "-"

@@ -1,4 +1,5 @@
-# Generated from qgraphicsview.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_bench_qgraphicsview Binary:
@@ -9,7 +10,7 @@ qt_internal_add_benchmark(tst_bench_qgraphicsview
         chiptester/chip.cpp chiptester/chip.h
         chiptester/chiptester.cpp chiptester/chiptester.h
         tst_qgraphicsview.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Test
         Qt::Widgets
@@ -42,14 +43,10 @@ qt_internal_add_resource(tst_bench_qgraphicsview "images"
         ${images_resource_files}
 )
 
-
-#### Keys ignored in scope 1:.:.:qgraphicsview.pro:<TRUE>:
-# TEMPLATE = "app"
-
 ## Scopes:
 #####################################################################
 
 qt_internal_extend_target(tst_bench_qgraphicsview CONDITION TARGET Qt::OpenGL
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::OpenGL
 )

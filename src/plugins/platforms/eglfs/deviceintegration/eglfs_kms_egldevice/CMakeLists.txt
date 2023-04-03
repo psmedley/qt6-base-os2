@@ -1,4 +1,5 @@
-# Generated from eglfs_kms_egldevice.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QEglFSKmsEglDeviceIntegrationPlugin Plugin:
@@ -24,6 +25,3 @@ qt_internal_add_plugin(QEglFSKmsEglDeviceIntegrationPlugin
         Qt::GuiPrivate
         Qt::KmsSupportPrivate
 )
-
-#### Keys ignored in scope 1:.:.:eglfs_kms_egldevice.pro:<TRUE>:
-# OTHER_FILES = "$$PWD/eglfs_kms_egldevice.json"

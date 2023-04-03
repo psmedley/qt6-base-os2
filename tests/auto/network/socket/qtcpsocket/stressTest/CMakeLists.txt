@@ -1,4 +1,5 @@
-# Generated from stressTest.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## stressTest Binary:
@@ -9,11 +10,7 @@ qt_internal_add_executable(stressTest
     SOURCES
         Test.cpp Test.h
         main.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Network
         Qt::Test
 )
-
-#### Keys ignored in scope 1:.:.:stressTest.pro:<TRUE>:
-# MOC_DIR = ".moc/"
-# TMP_DIR = ".tmp/"

@@ -1,4 +1,5 @@
-# Generated from cubemap_scissor.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## cubemap_scissor Binary:
@@ -8,7 +9,7 @@ qt_internal_add_manual_test(cubemap_scissor
     GUI
     SOURCES
         cubemap_scissor.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -35,7 +36,3 @@ qt_internal_add_resource(cubemap_scissor "cubemap_scissor"
     FILES
         ${cubemap_scissor_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:cubemap_scissor.pro:<TRUE>:
-# TEMPLATE = "app"

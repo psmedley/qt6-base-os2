@@ -1,4 +1,5 @@
-# Generated from qnx.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QQnxIntegrationPlugin Plugin:
@@ -7,7 +8,7 @@
 qt_internal_add_plugin(QQnxIntegrationPlugin
     OUTPUT_NAME qqnx
     PLUGIN_TYPE platforms
-    DEFAULT_IF ${QT_QPA_DEFAULT_PLATFORM} MATCHES qnx # special case
+    DEFAULT_IF ${QT_QPA_DEFAULT_PLATFORM} MATCHES qnx
     SOURCES
         main.cpp main.h
         qqnxabstractcover.h
@@ -37,9 +38,6 @@ qt_internal_add_plugin(QQnxIntegrationPlugin
         Qt::GuiPrivate
         screen
 )
-
-#### Keys ignored in scope 1:.:.:qnx.pro:<TRUE>:
-# OTHER_FILES = "qnx.json"
 
 ## Scopes:
 #####################################################################
@@ -87,6 +85,3 @@ qt_internal_extend_target(QQnxIntegrationPlugin CONDITION lgmon
     LIBRARIES
         lgmon
 )
-
-#### Keys ignored in scope 8:.:.:qnx.pro:NOT TARGET___equals____ss_QT_DEFAULT_QPA_PLUGIN:
-# PLUGIN_EXTENDS = "-"

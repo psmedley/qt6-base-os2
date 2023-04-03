@@ -15,18 +15,13 @@
 QT_BEGIN_NAMESPACE
 
 
-#ifndef QT_NO_SHAREDMEMORY
+#if QT_CONFIG(sharedmemory)
 
 class QSharedMemoryPrivate;
 
-class Q_CORE_EXPORT QSharedMemory
-#ifndef QT_NO_QOBJECT
-    : public QObject
-#endif
+class Q_CORE_EXPORT QSharedMemory : public QObject
 {
-#ifndef QT_NO_QOBJECT
     Q_OBJECT
-#endif
     Q_DECLARE_PRIVATE(QSharedMemory)
 
 public:
@@ -49,17 +44,8 @@ public:
         UnknownError
     };
 
-#ifndef QT_NO_QOBJECT
     QSharedMemory(QObject *parent = nullptr);
     QSharedMemory(const QString &key, QObject *parent = nullptr);
-#else
-    QSharedMemory();
-    QSharedMemory(const QString &key);
-    static QString tr(const char * str)
-    {
-        return QString::fromLatin1(str);
-    }
-#endif
     ~QSharedMemory();
 
     void setKey(const QString &key);
@@ -78,7 +64,7 @@ public:
     const void* constData() const;
     const void *data() const;
 
-#ifndef QT_NO_SYSTEMSEMAPHORE
+#if QT_CONFIG(systemsemaphore)
     bool lock();
     bool unlock();
 #endif
@@ -88,12 +74,9 @@ public:
 
 private:
     Q_DISABLE_COPY(QSharedMemory)
-#ifdef QT_NO_QOBJECT
-    QScopedPointer<QSharedMemoryPrivate> d_ptr;
-#endif
 };
 
-#endif // QT_NO_SHAREDMEMORY
+#endif // QT_CONFIG(sharedmemory)
 
 QT_END_NAMESPACE
 

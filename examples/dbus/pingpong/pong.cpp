@@ -2,19 +2,22 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 #include "ping-common.h"
-#include "pong.h"
 
+#include <QObject>
 #include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusError>
-#include <QTimer>
 
-#include <stdio.h>
-#include <stdlib.h>
+class Pong : public QObject
+{
+    Q_OBJECT
+public slots:
+    QString ping(const QString &arg);
+};
 
 QString Pong::ping(const QString &arg)
 {
-    QMetaObject::invokeMethod(QCoreApplication::instance(), "quit");
+    QMetaObject::invokeMethod(QCoreApplication::instance(), &QCoreApplication::quit);
     return QString("ping(\"%1\") got called").arg(arg);
 }
 
@@ -22,22 +25,25 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
 
-    if (!QDBusConnection::sessionBus().isConnected()) {
-        fprintf(stderr, "Cannot connect to the D-Bus session bus.\n"
-                "To start it, run:\n"
-                "\teval `dbus-launch --auto-syntax`\n");
+    auto connection = QDBusConnection::sessionBus();
+
+    if (!connection.isConnected()) {
+        qWarning("Cannot connect to the D-Bus session bus.\n"
+                 "To start it, run:\n"
+                 "\teval `dbus-launch --auto-syntax`\n");
         return 1;
     }
 
-    if (!QDBusConnection::sessionBus().registerService(SERVICE_NAME)) {
-        fprintf(stderr, "%s\n",
-                qPrintable(QDBusConnection::sessionBus().lastError().message()));
+    if (!connection.registerService(SERVICE_NAME)) {
+        qWarning("%s\n", qPrintable(connection.lastError().message()));
         exit(1);
     }
 
     Pong pong;
-    QDBusConnection::sessionBus().registerObject("/", &pong, QDBusConnection::ExportAllSlots);
+    connection.registerObject("/", &pong, QDBusConnection::ExportAllSlots);
 
     app.exec();
     return 0;
 }
+
+#include "pong.moc"

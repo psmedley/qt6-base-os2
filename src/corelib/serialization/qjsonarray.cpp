@@ -139,11 +139,13 @@ QJsonArray::QJsonArray(std::initializer_list<QJsonValue> args)
     Since QJsonArray is implicitly shared, the copy is shallow
     as long as the object doesn't get modified.
  */
-QJsonArray::QJsonArray(const QJsonArray &other)
-{
-    a = other.a;
-}
+QJsonArray::QJsonArray(const QJsonArray &other) noexcept = default;
 
+/*!
+    \since 5.10
+
+    Move-constructs a QJsonArray from \a other.
+*/
 QJsonArray::QJsonArray(QJsonArray &&other) noexcept
     : a(other.a)
 {
@@ -153,18 +155,7 @@ QJsonArray::QJsonArray(QJsonArray &&other) noexcept
 /*!
     Assigns \a other to this array.
  */
-QJsonArray &QJsonArray::operator =(const QJsonArray &other)
-{
-    a = other.a;
-    return *this;
-}
-
-/*!
-    \fn QJsonArray::QJsonArray(QJsonArray &&other)
-    \since 5.10
-
-    Move-constructs a QJsonArray from \a other.
-*/
+QJsonArray &QJsonArray::operator =(const QJsonArray &other) noexcept = default;
 
 /*!
     \fn QJsonArray &QJsonArray::operator =(QJsonArray &&other)
@@ -759,7 +750,7 @@ bool QJsonArray::operator!=(const QJsonArray &other) const
 
 /*! \fn QJsonArray::iterator &QJsonArray::iterator::operator++()
 
-    The prefix ++ operator, \c{++it}, advances the iterator to the
+    The prefix \c{++} operator, \c{++it}, advances the iterator to the
     next item in the array and returns an iterator to the new current
     item.
 
@@ -772,14 +763,14 @@ bool QJsonArray::operator!=(const QJsonArray &other) const
 
     \overload
 
-    The postfix ++ operator, \c{it++}, advances the iterator to the
+    The postfix \c{++} operator, \c{it++}, advances the iterator to the
     next item in the array and returns an iterator to the previously
     current item.
 */
 
 /*! \fn QJsonArray::iterator &QJsonArray::iterator::operator--()
 
-    The prefix -- operator, \c{--it}, makes the preceding item
+    The prefix \c{--} operator, \c{--it}, makes the preceding item
     current and returns an iterator to the new current item.
 
     Calling this function on QJsonArray::begin() leads to undefined results.
@@ -791,7 +782,7 @@ bool QJsonArray::operator!=(const QJsonArray &other) const
 
     \overload
 
-    The postfix -- operator, \c{it--}, makes the preceding item
+    The postfix \c{--} operator, \c{it--}, makes the preceding item
     current and returns an iterator to the previously current item.
 */
 
@@ -975,7 +966,7 @@ bool QJsonArray::operator!=(const QJsonArray &other) const
 
 /*! \fn QJsonArray::const_iterator &QJsonArray::const_iterator::operator++()
 
-    The prefix ++ operator, \c{++it}, advances the iterator to the
+    The prefix \c{++} operator, \c{++it}, advances the iterator to the
     next item in the array and returns an iterator to the new current
     item.
 
@@ -988,14 +979,14 @@ bool QJsonArray::operator!=(const QJsonArray &other) const
 
     \overload
 
-    The postfix ++ operator, \c{it++}, advances the iterator to the
+    The postfix \c{++} operator, \c{it++}, advances the iterator to the
     next item in the array and returns an iterator to the previously
     current item.
 */
 
 /*! \fn QJsonArray::const_iterator &QJsonArray::const_iterator::operator--()
 
-    The prefix -- operator, \c{--it}, makes the preceding item
+    The prefix \c{--} operator, \c{--it}, makes the preceding item
     current and returns an iterator to the new current item.
 
     Calling this function on QJsonArray::begin() leads to undefined results.
@@ -1007,7 +998,7 @@ bool QJsonArray::operator!=(const QJsonArray &other) const
 
     \overload
 
-    The postfix -- operator, \c{it--}, makes the preceding item
+    The postfix \c{--} operator, \c{it--}, makes the preceding item
     current and returns an iterator to the previously current item.
 */
 

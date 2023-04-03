@@ -11,7 +11,7 @@
 
 #if QT_CONFIG(cxx17_filesystem)
 #include <filesystem>
-#elif defined(Q_CLANG_QDOC)
+#elif defined(Q_QDOC)
 namespace std {
     namespace filesystem {
         class path {
@@ -54,6 +54,13 @@ using ForceFilesystemPath = typename std::enable_if_t<std::is_same_v<std::filesy
 class QTemporaryFile;
 class QFilePrivate;
 
+// ### Qt 7: remove this, and make constructors always explicit.
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)) || defined(QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH)
+#  define QFILE_MAYBE_EXPLICIT explicit
+#else
+#  define QFILE_MAYBE_EXPLICIT Q_IMPLICIT
+#endif
+
 class Q_CORE_EXPORT QFile : public QFileDevice
 {
 #ifndef QT_NO_QOBJECT
@@ -63,12 +70,12 @@ class Q_CORE_EXPORT QFile : public QFileDevice
 
 public:
     QFile();
-    QFile(const QString &name);
-#ifdef Q_CLANG_QDOC
-    QFile(const std::filesystem::path &name);
+    QFILE_MAYBE_EXPLICIT QFile(const QString &name);
+#ifdef Q_QDOC
+    QFILE_MAYBE_EXPLICIT QFile(const std::filesystem::path &name);
 #elif QT_CONFIG(cxx17_filesystem)
     template<typename T, QtPrivate::ForceFilesystemPath<T> = 0>
-    QFile(const T &name) : QFile(QtPrivate::fromFilesystemPath(name))
+    QFILE_MAYBE_EXPLICIT QFile(const T &name) : QFile(QtPrivate::fromFilesystemPath(name))
     {
     }
 #endif // QT_CONFIG(cxx17_filesystem)
@@ -77,7 +84,7 @@ public:
     explicit QFile(QObject *parent);
     QFile(const QString &name, QObject *parent);
 
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     QFile(const std::filesystem::path &path, QObject *parent);
 #elif QT_CONFIG(cxx17_filesystem)
     template<typename T, QtPrivate::ForceFilesystemPath<T> = 0>
@@ -89,12 +96,12 @@ public:
     ~QFile();
 
     QString fileName() const override;
-#if QT_CONFIG(cxx17_filesystem) || defined(Q_CLANG_QDOC)
+#if QT_CONFIG(cxx17_filesystem) || defined(Q_QDOC)
     std::filesystem::path filesystemFileName() const
     { return QtPrivate::toFilesystemPath(fileName()); }
 #endif
     void setFileName(const QString &name);
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     void setFileName(const std::filesystem::path &name);
 #elif QT_CONFIG(cxx17_filesystem)
     template<typename T, QtPrivate::ForceFilesystemPath<T> = 0>
@@ -136,7 +143,7 @@ public:
 
     bool exists() const;
     static bool exists(const QString &fileName);
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     static bool exists(const std::filesystem::path &fileName);
 #elif QT_CONFIG(cxx17_filesystem)
     template<typename T, QtPrivate::ForceFilesystemPath<T> = 0>
@@ -148,7 +155,7 @@ public:
 
     QString symLinkTarget() const;
     static QString symLinkTarget(const QString &fileName);
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     std::filesystem::path filesystemSymLinkTarget() const;
     static std::filesystem::path filesystemSymLinkTarget(const std::filesystem::path &fileName);
 #elif QT_CONFIG(cxx17_filesystem)
@@ -165,7 +172,7 @@ public:
 
     bool remove();
     static bool remove(const QString &fileName);
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     static bool remove(const std::filesystem::path &fileName);
 #elif QT_CONFIG(cxx17_filesystem)
     template<typename T, QtPrivate::ForceFilesystemPath<T> = 0>
@@ -177,7 +184,7 @@ public:
 
     bool moveToTrash();
     static bool moveToTrash(const QString &fileName, QString *pathInTrash = nullptr);
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     static bool moveToTrash(const std::filesystem::path &fileName, QString *pathInTrash = nullptr);
 #elif QT_CONFIG(cxx17_filesystem)
     template<typename T, QtPrivate::ForceFilesystemPath<T> = 0>
@@ -189,7 +196,7 @@ public:
 
     bool rename(const QString &newName);
     static bool rename(const QString &oldName, const QString &newName);
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     bool rename(const std::filesystem::path &newName);
     static bool rename(const std::filesystem::path &oldName,
                        const std::filesystem::path &newName);
@@ -209,7 +216,7 @@ public:
 
     bool link(const QString &newName);
     static bool link(const QString &fileName, const QString &newName);
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     bool link(const std::filesystem::path &newName);
     static bool link(const std::filesystem::path &fileName,
                      const std::filesystem::path &newName);
@@ -229,7 +236,7 @@ public:
 
     bool copy(const QString &newName);
     static bool copy(const QString &fileName, const QString &newName);
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     bool copy(const std::filesystem::path &newName);
     static bool copy(const std::filesystem::path &fileName,
                      const std::filesystem::path &newName);
@@ -261,7 +268,7 @@ public:
     static Permissions permissions(const QString &filename);
     bool setPermissions(Permissions permissionSpec) override;
     static bool setPermissions(const QString &filename, Permissions permissionSpec);
-#ifdef Q_CLANG_QDOC
+#ifdef Q_QDOC
     static Permissions permissions(const std::filesystem::path &filename);
     static bool setPermissions(const std::filesystem::path &filename, Permissions permissionSpec);
 #elif QT_CONFIG(cxx17_filesystem)

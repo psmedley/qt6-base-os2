@@ -18,6 +18,7 @@
 
 #include <QtTest/private/qtesthelpers_p.h>
 #include <QtWidgets/private/qlistview_p.h>
+#include <QtWidgets/private/qapplication_p.h>
 
 using namespace QTestPrivate;
 
@@ -155,6 +156,7 @@ private slots:
     void spacingWithWordWrap();
     void scrollOnRemove_data();
     void scrollOnRemove();
+    void wordWrapNullIcon();
 };
 
 // Testing get/set functions
@@ -1699,7 +1701,7 @@ void tst_QListView::keyboardSearch()
     QListView view;
     view.setModel(&model);
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     QTest::keyClick(&view, Qt::Key_K);
@@ -1801,7 +1803,7 @@ void tst_QListView::shiftSelectionWithItemAlignment()
     view.resize(300, view.sizeHintForRow(0) * items.size() / 2 + view.horizontalScrollBar()->height());
 
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(static_cast<QWidget *>(&view), QApplication::activeWindow());
 
@@ -1860,7 +1862,7 @@ void tst_QListView::task262152_setModelColumnNavigate()
     view.setModelColumn(1);
 
     view.show();
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(&view, QApplication::activeWindow());
     QTest::keyClick(&view, Qt::Key_Down);
@@ -2805,7 +2807,7 @@ void tst_QListView::moveLastRow()
     view.setViewMode(QListView::IconMode);
     view.show();
 
-    QApplication::setActiveWindow(&view);
+    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     QModelIndex sourceParent = model.index(0, 0);
@@ -3056,6 +3058,11 @@ void tst_QListView::spacingWithWordWrap()
         }
     };
 
+    QStyle *oldStyle = QApplication::style();
+    oldStyle->setParent(nullptr);
+    const auto resetStyle = qScopeGuard([oldStyle]{
+        QApplication::setStyle(oldStyle);
+    });
     QApplication::setStyle(new MyStyle(scrollBarOverlap));
 
     const int listViewResizeCount = 200;
@@ -3171,6 +3178,22 @@ void tst_QListView::scrollOnRemove()
     // if nothing is selected now, then the view should not have scrolled
     if (!view.selectionModel()->selectedIndexes().size())
         QTRY_COMPARE(view.verticalScrollBar()->value(), item25Position);
+}
+
+void tst_QListView::wordWrapNullIcon()
+{
+    QListView listView;
+    listView.setViewMode(QListView::IconMode);
+    listView.setWrapping(true);
+    listView.setWordWrap(true);
+    listView.setFixedSize(QSize(100, 500));
+
+    QStandardItemModel model;
+    QStandardItem *item = new QStandardItem(QIcon(), "This is a long text for word wrapping Item_");
+    model.appendRow(item);
+    listView.setModel(&model);
+
+    listView.indexAt(QPoint(0, 0));
 }
 
 

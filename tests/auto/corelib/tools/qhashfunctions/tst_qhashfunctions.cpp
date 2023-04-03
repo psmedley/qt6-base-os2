@@ -53,7 +53,11 @@ private Q_SLOTS:
     void stdPair_string_pairIntInt()    { stdPair_template(QString("Hello"), std::make_pair(42, -47)); } // QTBUG-92910
     void stdPair_int_pairIntPairIntInt() { stdPair_template(1, std::make_pair(2, std::make_pair(3, 4))); }
 
+    void enum_int_consistent_hash_qtbug108032();
+
+#if QT_DEPRECATED_SINCE(6, 6)
     void setGlobalQHashSeed();
+#endif
 };
 
 void tst_QHashFunctions::consistent()
@@ -370,8 +374,21 @@ void tst_QHashFunctions::stdPair_template(const T1 &t1, const T2 &t2)
     QCOMPARE(qHash(vpair, seed), qHash(vpair, seed));
 }
 
+void tst_QHashFunctions::enum_int_consistent_hash_qtbug108032()
+{
+    enum E { E1, E2, E3 };
+
+    static_assert(QHashPrivate::HasQHashSingleArgOverload<E>);
+
+    QCOMPARE(qHash(E1, seed), qHash(int(E1), seed));
+    QCOMPARE(qHash(E2, seed), qHash(int(E2), seed));
+    QCOMPARE(qHash(E3, seed), qHash(int(E3), seed));
+}
+
+#if QT_DEPRECATED_SINCE(6, 6)
 void tst_QHashFunctions::setGlobalQHashSeed()
 {
+QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
     // Setter works as advertised
     qSetGlobalQHashSeed(0);
     QCOMPARE(qGlobalQHashSeed(), 0);
@@ -384,7 +401,9 @@ void tst_QHashFunctions::setGlobalQHashSeed()
     // Reset works as advertised
     qSetGlobalQHashSeed(-1);
     QVERIFY(qGlobalQHashSeed() > 0);
+QT_WARNING_POP
 }
+#endif // QT_DEPRECATED_SINCE(6, 6)
 
 QTEST_APPLESS_MAIN(tst_QHashFunctions)
 #include "tst_qhashfunctions.moc"

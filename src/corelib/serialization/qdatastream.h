@@ -67,8 +67,9 @@ public:
         Qt_6_2 = Qt_6_0,
         Qt_6_3 = Qt_6_0,
         Qt_6_4 = Qt_6_0,
-        Qt_DefaultCompiledVersion = Qt_6_4
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+        Qt_6_5 = Qt_6_0,
+        Qt_DefaultCompiledVersion = Qt_6_5
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
 #error Add the datastream version for this Qt version and update Qt_DefaultCompiledVersion
 #endif
     };
@@ -403,7 +404,7 @@ typename std::enable_if_t<std::is_enum<T>::value, QDataStream &>
 operator>>(QDataStream &s, T &t)
 { return s >> reinterpret_cast<typename std::underlying_type<T>::type &>(t); }
 
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
 
 template<typename T>
 inline QDataStreamIfHasIStreamOperatorsContainer<QList<T>, T> operator>>(QDataStream &s, QList<T> &v)
@@ -536,7 +537,7 @@ QDataStream &operator>>(QDataStream& s, std::pair<T1, T2> &p);
 template <class T1, class T2>
 QDataStream &operator<<(QDataStream& s, const std::pair<T1, T2> &p);
 
-#endif // Q_CLANG_QDOC
+#endif // Q_QDOC
 
 inline QDataStream &operator>>(QDataStream &s, QKeyCombination &combination)
 {

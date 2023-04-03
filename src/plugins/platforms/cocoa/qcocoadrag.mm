@@ -7,7 +7,9 @@
 #include "qmacclipboard.h"
 #include "qcocoahelpers.h"
 #include <QtGui/private/qcoregraphics_p.h>
+#include <QtGui/qutimimeconverter.h>
 #include <QtCore/qsysinfo.h>
+#include <QtCore/private/qcore_mac_p.h>
 
 #include <vector>
 
@@ -96,7 +98,7 @@ Qt::DropAction QCocoaDrag::drag(QDrag *o)
     m_drag = o;
     m_executed_drop_action = Qt::IgnoreAction;
 
-    QMacPasteboard dragBoard(CFStringRef(NSPasteboardNameDrag), QMacInternalPasteboardMime::MIME_DND);
+    QMacPasteboard dragBoard(CFStringRef(NSPasteboardNameDrag), QUtiMimeConverter::HandlerScopeFlag::DnD);
     m_drag->mimeData()->setData("application/x-qt-mime-type-name"_L1, QByteArray("dummy"));
     dragBoard.setMimeData(m_drag->mimeData(), QMacPasteboard::LazyRequest);
 
@@ -303,11 +305,11 @@ QStringList QCocoaDropData::formats_sys() const
         qDebug("DnD: Cannot get PasteBoard!");
         return formats;
     }
-    formats = QMacPasteboard(board, QMacInternalPasteboardMime::MIME_DND).formats();
+    formats = QMacPasteboard(board, QUtiMimeConverter::HandlerScopeFlag::DnD).formats();
     return formats;
 }
 
-QVariant QCocoaDropData::retrieveData_sys(const QString &mimeType, QMetaType type) const
+QVariant QCocoaDropData::retrieveData_sys(const QString &mimeType, QMetaType) const
 {
     QVariant data;
     PasteboardRef board;
@@ -315,7 +317,7 @@ QVariant QCocoaDropData::retrieveData_sys(const QString &mimeType, QMetaType typ
         qDebug("DnD: Cannot get PasteBoard!");
         return data;
     }
-    data = QMacPasteboard(board, QMacInternalPasteboardMime::MIME_DND).retrieveData(mimeType, type);
+    data = QMacPasteboard(board, QUtiMimeConverter::HandlerScopeFlag::DnD).retrieveData(mimeType);
     CFRelease(board);
     return data;
 }
@@ -328,7 +330,7 @@ bool QCocoaDropData::hasFormat_sys(const QString &mimeType) const
         qDebug("DnD: Cannot get PasteBoard!");
         return has;
     }
-    has = QMacPasteboard(board, QMacInternalPasteboardMime::MIME_DND).hasFormat(mimeType);
+    has = QMacPasteboard(board, QUtiMimeConverter::HandlerScopeFlag::DnD).hasFormat(mimeType);
     CFRelease(board);
     return has;
 }

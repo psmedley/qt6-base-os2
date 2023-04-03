@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #
 # Collection of auto detection routines to improve the user experience when
 # building Qt from source.
@@ -18,7 +21,7 @@ endfunction()
 
 include("${CMAKE_CURRENT_LIST_DIR}/QtPublicWasmToolchainHelpers.cmake")
 function(qt_auto_detect_wasm)
-    if("${QT_QMAKE_TARGET_MKSPEC}" STREQUAL "wasm-emscripten")
+    if("${QT_QMAKE_TARGET_MKSPEC}" STREQUAL "wasm-emscripten" OR "${QT_QMAKE_TARGET_MKSPEC}" STREQUAL "wasm-emscripten-64")
         if (NOT DEFINED ENV{EMSDK})
             message(FATAL_ERROR
                 "Can't find an Emscripten SDK! Make sure the EMSDK environment variable is "
@@ -31,6 +34,10 @@ function(qt_auto_detect_wasm)
 
             __qt_internal_query_emsdk_version("${EMROOT_PATH}" TRUE CMAKE_EMSDK_REGEX_VERSION)
             set(EMCC_VERSION "${CMAKE_EMSDK_REGEX_VERSION}" CACHE STRING INTERNAL FORCE)
+
+            if(NOT DEFINED BUILD_SHARED_LIBS)
+                qt_internal_ensure_static_qt_config()
+            endif()
 
             # Find toolchain file
             if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
@@ -45,8 +52,6 @@ function(qt_auto_detect_wasm)
             else()
                 __qt_internal_show_error_no_emscripten_toolchain_file_found_when_building_qt()
             endif()
-
-            qt_internal_ensure_static_qt_config()
 
             __qt_internal_get_emcc_recommended_version(recommended_version)
             set(QT_EMCC_RECOMMENDED_VERSION "${recommended_version}" CACHE STRING INTERNAL FORCE)
@@ -290,7 +295,7 @@ endfunction()
 
 function(qt_internal_get_xcode_version out_var)
     if(APPLE)
-        execute_process(COMMAND /usr/bin/xcrun  xcodebuild -version
+        execute_process(COMMAND /usr/bin/xcrun xcodebuild -version
                         OUTPUT_VARIABLE xcode_version
                         ERROR_VARIABLE xcrun_error)
         string(REPLACE "\n" " " xcode_version "${xcode_version}")
@@ -309,9 +314,9 @@ function(qt_auto_detect_darwin)
         if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
             if(NOT CMAKE_SYSTEM_NAME)
                 # macOS
-                set(version "10.14")
+                set(version "11.0")
             elseif(CMAKE_SYSTEM_NAME STREQUAL iOS)
-                set(version "13.0")
+                set(version "14.0")
             endif()
             if(version)
                 set(CMAKE_OSX_DEPLOYMENT_TARGET "${version}" CACHE STRING "${description}")

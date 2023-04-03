@@ -1,4 +1,5 @@
-# Generated from qscreen.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qscreen Binary:
@@ -9,10 +10,7 @@ qt_internal_add_manual_test(qscreen
         main.cpp
         propertyfield.cpp propertyfield.h
         propertywatcher.cpp propertywatcher.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )
-
-#### Keys ignored in scope 1:.:.:qscreen.pro:<TRUE>:
-# TEMPLATE = "app"

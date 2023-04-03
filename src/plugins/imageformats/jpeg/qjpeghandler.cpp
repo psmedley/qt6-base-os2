@@ -49,6 +49,7 @@ extern "C" {
 
 static void my_error_exit (j_common_ptr cinfo)
 {
+    (*cinfo->err->output_message)(cinfo);
     my_error_mgr* myerr = (my_error_mgr*) cinfo->err;
     longjmp(myerr->setjmp_buffer, 1);
 }
@@ -532,6 +533,7 @@ static bool do_write_jpeg_image(struct jpeg_compress_struct &cinfo,
             cinfo.in_color_space = gray ? JCS_GRAYSCALE : JCS_RGB;
             break;
         case QImage::Format_Grayscale8:
+        case QImage::Format_Grayscale16:
             gray = true;
             cinfo.input_components = 1;
             cinfo.in_color_space = JCS_GRAYSCALE;
@@ -629,6 +631,12 @@ static bool do_write_jpeg_image(struct jpeg_compress_struct &cinfo,
                 break;
             case QImage::Format_Grayscale8:
                 memcpy(row, image.constScanLine(cinfo.next_scanline), w);
+                break;
+            case QImage::Format_Grayscale16:
+                {
+                    QImage rowImg = image.copy(0, cinfo.next_scanline, w, 1).convertToFormat(QImage::Format_Grayscale8);
+                    memcpy(row, rowImg.constScanLine(0), w);
+                }
                 break;
             case QImage::Format_RGB888:
                 memcpy(row, image.constScanLine(cinfo.next_scanline), w * 3);

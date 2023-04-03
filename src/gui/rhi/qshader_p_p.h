@@ -17,19 +17,30 @@
 
 #include "qshader_p.h"
 #include <QtCore/QAtomicInt>
-#include <QtCore/QHash>
+#include <QtCore/QMap>
 #include <QtCore/QDebug>
 
 QT_BEGIN_NAMESPACE
 
 struct Q_GUI_EXPORT QShaderPrivate
 {
-    static const int QSB_VERSION = 6;
+    static const int QSB_VERSION = 8;
+    static const int QSB_VERSION_WITHOUT_EXTENDED_STORAGE_BUFFER_INFO = 7;
+    static const int QSB_VERSION_WITHOUT_NATIVE_SHADER_INFO = 6;
     static const int QSB_VERSION_WITHOUT_SEPARATE_IMAGES_AND_SAMPLERS = 5;
     static const int QSB_VERSION_WITHOUT_VAR_ARRAYDIMS = 4;
     static const int QSB_VERSION_WITH_CBOR = 3;
     static const int QSB_VERSION_WITH_BINARY_JSON = 2;
     static const int QSB_VERSION_WITHOUT_BINDINGS = 1;
+
+    enum MslNativeShaderInfoExtraBufferBindings {
+        MslTessVertIndicesBufferBinding = 0,
+        MslTessVertTescOutputBufferBinding,
+        MslTessTescTessLevelBufferBinding,
+        MslTessTescPatchOutputBufferBinding,
+        MslTessTescParamsBufferBinding,
+        MslTessTescInputBufferBinding
+    };
 
     QShaderPrivate()
         : ref(1)
@@ -43,20 +54,33 @@ struct Q_GUI_EXPORT QShaderPrivate
           desc(other.desc),
           shaders(other.shaders),
           bindings(other.bindings),
-          combinedImageMap(other.combinedImageMap)
+          combinedImageMap(other.combinedImageMap),
+          nativeShaderInfoMap(other.nativeShaderInfoMap)
     {
     }
 
     static QShaderPrivate *get(QShader *s) { return s->d; }
     static const QShaderPrivate *get(const QShader *s) { return s->d; }
+    static int qtQsbVersion(QShader::SerializedFormatVersion qtVersion) {
+        switch (qtVersion) {
+        case QShader::SerializedFormatVersion::Qt_6_4:
+            return (QShaderPrivate::QSB_VERSION_WITHOUT_SEPARATE_IMAGES_AND_SAMPLERS + 1);
+        case QShader::SerializedFormatVersion::Qt_6_5:
+            return (QShaderPrivate::QSB_VERSION_WITHOUT_EXTENDED_STORAGE_BUFFER_INFO + 1);
+        default:
+            return QShaderPrivate::QSB_VERSION;
+        }
+    }
 
     QAtomicInt ref;
     int qsbVersion = QSB_VERSION;
     QShader::Stage stage = QShader::VertexStage;
     QShaderDescription desc;
-    QHash<QShaderKey, QShaderCode> shaders;
-    QHash<QShaderKey, QShader::NativeResourceBindingMap> bindings;
-    QHash<QShaderKey, QShader::SeparateToCombinedImageSamplerMappingList> combinedImageMap;
+    // QMap not QHash because we need to be able to iterate based on sorted keys
+    QMap<QShaderKey, QShaderCode> shaders;
+    QMap<QShaderKey, QShader::NativeResourceBindingMap> bindings;
+    QMap<QShaderKey, QShader::SeparateToCombinedImageSamplerMappingList> combinedImageMap;
+    QMap<QShaderKey, QShader::NativeShaderInfo> nativeShaderInfoMap;
 };
 
 QT_END_NAMESPACE

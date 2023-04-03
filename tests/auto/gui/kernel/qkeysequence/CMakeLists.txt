@@ -1,4 +1,5 @@
-# Generated from qkeysequence.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qkeysequence Test:
@@ -13,7 +14,7 @@ set(qkeysequence_resource_files
 qt_internal_add_test(tst_qkeysequence
     SOURCES
         tst_qkeysequence.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate

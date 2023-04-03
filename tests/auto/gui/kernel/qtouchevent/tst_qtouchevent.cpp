@@ -369,9 +369,11 @@ void tst_QTouchEvent::state()
     QVERIFY(!touchEvent3.isBeginEvent());
     QVERIFY(!touchEvent3.isUpdateEvent());
     QVERIFY(touchEvent3.isEndEvent());
+#if QT_DEPRECATED_SINCE(6, 0)
     QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED // test Qt 5 compatibility wrappers
     QCOMPARE(touchEvent3.touchPoints(), touchEvent3.points());
     QT_WARNING_POP
+#endif
 }
 
 void tst_QTouchEvent::touchDisabledByDefault()
@@ -1190,6 +1192,7 @@ void tst_QTouchEvent::multiPointRawEventTranslationOnTouchPad()
     QVERIFY(!rightWidget.seenTouchEnd);
     QCOMPARE(leftWidget.touchBeginPoints.size(), 2);
     QCOMPARE(rightWidget.touchBeginPoints.size(), 0);
+    QCOMPARE(leftWidget.lastNormalizedPositions.size(), 2);
     {
         QEventPoint leftTouchPoint = leftWidget.touchBeginPoints.at(0);
         qCDebug(lcTests) << "lastNormalizedPositions after press" << leftWidget.lastNormalizedPositions;
@@ -1205,7 +1208,7 @@ void tst_QTouchEvent::multiPointRawEventTranslationOnTouchPad()
         QCOMPARE(leftTouchPoint.globalPosition(), leftScreenPos);
         QCOMPARE(leftTouchPoint.globalPressPosition(), leftScreenPos);
         QCOMPARE(leftTouchPoint.globalLastPosition(), leftScreenPos);
-        QVERIFY(qAbs(leftWidget.lastNormalizedPositions.at(0).x() - 0.2) < 0.05); // 0.198, might depend on window frame size
+        QCOMPARE_LT(qAbs(leftWidget.lastNormalizedPositions.at(0).x() - 0.2), 0.05); // 0.198, might depend on window frame size
         QCOMPARE(leftTouchPoint.position(), leftPos);
         QCOMPARE(leftTouchPoint.scenePosition(), leftScreenPos);
         QCOMPARE(leftTouchPoint.globalPosition(), leftScreenPos);
@@ -1225,7 +1228,7 @@ void tst_QTouchEvent::multiPointRawEventTranslationOnTouchPad()
         QCOMPARE(rightTouchPoint.globalPosition(), rightScreenPos);
         QCOMPARE(rightTouchPoint.globalPressPosition(), rightScreenPos);
         QCOMPARE(rightTouchPoint.globalLastPosition(), rightScreenPos);
-        QVERIFY(qAbs(leftWidget.lastNormalizedPositions.at(1).x() - 0.8) < 0.05); // 0.798, might depend on window frame size
+        QCOMPARE_LT(qAbs(leftWidget.lastNormalizedPositions.at(1).x() - 0.8), 0.05); // 0.798, might depend on window frame size
         QCOMPARE(rightTouchPoint.scenePosition(), rightScreenPos);
         QCOMPARE(rightTouchPoint.globalPosition(), rightScreenPos);
         QCOMPARE(rightTouchPoint.ellipseDiameters(), QSizeF(0, 0));
@@ -1252,6 +1255,7 @@ void tst_QTouchEvent::multiPointRawEventTranslationOnTouchPad()
     QVERIFY(!rightWidget.seenTouchEnd);
     QCOMPARE(leftWidget.touchUpdatePoints.size(), 2);
     QCOMPARE(rightWidget.touchUpdatePoints.size(), 0);
+    QCOMPARE(leftWidget.lastNormalizedPositions.size(), 2);
     {
         QEventPoint leftTouchPoint = leftWidget.touchUpdatePoints.at(0);
         qCDebug(lcTests) << "lastNormalizedPositions after update" << leftWidget.lastNormalizedPositions;
@@ -1267,7 +1271,7 @@ void tst_QTouchEvent::multiPointRawEventTranslationOnTouchPad()
         QCOMPARE(leftTouchPoint.globalPosition(), centerScreenPos);
         QCOMPARE(leftTouchPoint.globalPressPosition(), leftScreenPos);
         QCOMPARE(leftTouchPoint.globalLastPosition(), leftScreenPos);
-        QVERIFY(qAbs(leftWidget.lastNormalizedPositions.at(0).x() - 0.5) < 0.05); // 0.498, might depend on window frame size
+        QCOMPARE_LT(qAbs(leftWidget.lastNormalizedPositions.at(0).x() - 0.5), 0.05); // 0.498, might depend on window frame size
         QCOMPARE(leftTouchPoint.position(), leftWidget.mapFromParent(centerPos.toPoint()));
         QCOMPARE(leftTouchPoint.scenePosition(), centerScreenPos);
         QCOMPARE(leftTouchPoint.globalPosition(), centerScreenPos);
@@ -1287,7 +1291,7 @@ void tst_QTouchEvent::multiPointRawEventTranslationOnTouchPad()
         QCOMPARE(rightTouchPoint.globalPosition(), centerScreenPos);
         QCOMPARE(rightTouchPoint.globalPressPosition(), rightScreenPos);
         QCOMPARE(rightTouchPoint.globalLastPosition(), rightScreenPos);
-        QVERIFY(qAbs(leftWidget.lastNormalizedPositions.at(1).x() - 0.5) < 0.05); // 0.498, might depend on window frame size
+        QCOMPARE_LT(qAbs(leftWidget.lastNormalizedPositions.at(1).x() - 0.5), 0.05); // 0.498, might depend on window frame size
         QCOMPARE(rightTouchPoint.position(), leftWidget.mapFromParent(centerPos.toPoint()));
         QCOMPARE(rightTouchPoint.scenePosition(), centerScreenPos);
         QCOMPARE(rightTouchPoint.globalPosition(), centerScreenPos);
@@ -1314,6 +1318,7 @@ void tst_QTouchEvent::multiPointRawEventTranslationOnTouchPad()
     QVERIFY(!rightWidget.seenTouchEnd);
     QCOMPARE(leftWidget.touchEndPoints.size(), 2);
     QCOMPARE(rightWidget.touchEndPoints.size(), 0);
+    QCOMPARE(leftWidget.lastNormalizedPositions.size(), 2);
     {
         QEventPoint leftTouchPoint = leftWidget.touchEndPoints.at(0);
         qCDebug(lcTests) << "lastNormalizedPositions after release" << leftWidget.lastNormalizedPositions;
@@ -1330,7 +1335,7 @@ void tst_QTouchEvent::multiPointRawEventTranslationOnTouchPad()
         QCOMPARE(leftTouchPoint.globalPosition(), centerScreenPos);
         QCOMPARE(leftTouchPoint.globalPressPosition(), leftScreenPos);
         QCOMPARE(leftTouchPoint.globalLastPosition(), leftScreenPos);
-        QVERIFY(qAbs(leftWidget.lastNormalizedPositions.at(0).x() - 0.5) < 0.05); // 0.498, might depend on window frame size
+        QCOMPARE_LT(qAbs(leftWidget.lastNormalizedPositions.at(0).x() - 0.5), 0.05); // 0.498, might depend on window frame size
         QCOMPARE(leftTouchPoint.position(), leftWidget.mapFromParent(centerPos.toPoint()));
         QCOMPARE(leftTouchPoint.scenePosition(), centerScreenPos);
         QCOMPARE(leftTouchPoint.globalPosition(), centerScreenPos);
@@ -1350,7 +1355,7 @@ void tst_QTouchEvent::multiPointRawEventTranslationOnTouchPad()
         QCOMPARE(rightTouchPoint.globalPosition(), centerScreenPos);
         QCOMPARE(rightTouchPoint.globalPressPosition(), rightScreenPos);
         QCOMPARE(rightTouchPoint.globalLastPosition(), rightScreenPos);
-        QVERIFY(qAbs(leftWidget.lastNormalizedPositions.at(1).x() - 0.5) < 0.05); // 0.498, might depend on window frame size
+        QCOMPARE_LT(qAbs(leftWidget.lastNormalizedPositions.at(1).x() - 0.5), 0.05); // 0.498, might depend on window frame size
         QCOMPARE(rightTouchPoint.position(), leftWidget.mapFromParent(centerPos.toPoint()));
         QCOMPARE(rightTouchPoint.scenePosition(), centerScreenPos);
         QCOMPARE(rightTouchPoint.globalPosition(), centerScreenPos);

@@ -19,6 +19,8 @@ class Q_WIDGETS_EXPORT QKeySequenceEdit : public QWidget
     Q_PROPERTY(QKeySequence keySequence READ keySequence WRITE setKeySequence
                NOTIFY keySequenceChanged USER true)
     Q_PROPERTY(bool clearButtonEnabled READ isClearButtonEnabled WRITE setClearButtonEnabled)
+    Q_PROPERTY(qsizetype maximumSequenceLength READ maximumSequenceLength WRITE setMaximumSequenceLength)
+    Q_PROPERTY(QList<QKeyCombination> finishingKeyCombinations READ finishingKeyCombinations WRITE setFinishingKeyCombinations)
 
 public:
     explicit QKeySequenceEdit(QWidget *parent = nullptr);
@@ -26,13 +28,18 @@ public:
     ~QKeySequenceEdit();
 
     QKeySequence keySequence() const;
+    qsizetype maximumSequenceLength() const;
 
     void setClearButtonEnabled(bool enable);
     bool isClearButtonEnabled() const;
 
+    void setFinishingKeyCombinations(const QList<QKeyCombination> &finishingKeyCombinations);
+    QList<QKeyCombination> finishingKeyCombinations() const;
+
 public Q_SLOTS:
     void setKeySequence(const QKeySequence &keySequence);
     void clear();
+    void setMaximumSequenceLength(qsizetype count);
 
 Q_SIGNALS:
     void editingFinished();

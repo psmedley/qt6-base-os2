@@ -1,4 +1,5 @@
-# Generated from rhi.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 add_subdirectory(hellominimalcrossgfxtriangle)
 add_subdirectory(compressedtexture_bc1)
@@ -26,6 +27,9 @@ add_subdirectory(texturearray)
 add_subdirectory(polygonmode)
 add_subdirectory(tessellation)
 add_subdirectory(geometryshader)
+add_subdirectory(stenciloutline)
+add_subdirectory(stereo)
+add_subdirectory(tex1d)
 if(QT_FEATURE_widgets)
     add_subdirectory(rhiwidget)
 endif()

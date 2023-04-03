@@ -1,4 +1,5 @@
-# Generated from qlocale.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qlocale Binary:
@@ -16,7 +17,7 @@ qt_internal_add_manual_test(qlocale
         miscellaneous.cpp miscellaneous.h
         numberformats.cpp numberformats.h
         window.cpp window.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )

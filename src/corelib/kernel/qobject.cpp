@@ -43,6 +43,17 @@
 
 QT_BEGIN_NAMESPACE
 
+Q_TRACE_POINT(qtcore, QObject_ctor, QObject *object);
+Q_TRACE_POINT(qtcore, QObject_dtor, QObject *object);
+Q_TRACE_POINT(qtcore, QMetaObject_activate_entry, QObject *sender, int signalIndex);
+Q_TRACE_POINT(qtcore, QMetaObject_activate_exit);
+Q_TRACE_POINT(qtcore, QMetaObject_activate_slot_entry, QObject *receiver, int slotIndex);
+Q_TRACE_POINT(qtcore, QMetaObject_activate_slot_exit);
+Q_TRACE_POINT(qtcore, QMetaObject_activate_slot_functor_entry, void *slotObject);
+Q_TRACE_POINT(qtcore, QMetaObject_activate_slot_functor_exit);
+Q_TRACE_POINT(qtcore, QMetaObject_activate_declarative_signal_entry, QObject *sender, int signalIndex);
+Q_TRACE_POINT(qtcore, QMetaObject_activate_declarative_signal_exit);
+
 static int DIRECT_CONNECTION_ONLY = 0;
 
 Q_LOGGING_CATEGORY(lcConnectSlotsByName, "qt.core.qmetaobject.connectslotsbyname")
@@ -74,6 +85,8 @@ static int *queuedConnectionTypes(const QMetaMethod &method)
             typeIds[i] = QMetaType::VoidStar;
         else
             typeIds[i] = metaType.id();
+        if (!typeIds[i] && method.parameterTypeName(i).endsWith('*'))
+            typeIds[i] = QMetaType::VoidStar;
         if (!typeIds[i]) {
             const QByteArray typeName = method.parameterTypeName(i);
             qCWarning(lcConnect,
@@ -1279,7 +1292,7 @@ void QObject::setObjectName(QAnyStringView name)
 
     d->extraData->objectName.removeBindingUnlessInWrapper();
 
-    if (d->extraData->objectName.value() != name) {
+    if (d->extraData->objectName != name) {
         d->extraData->objectName.setValueBypassingBindings(name.toString());
         d->extraData->objectName.notify(); // also emits a signal
     }
@@ -2370,7 +2383,7 @@ void QObject::deleteLater()
     translated string is available.
 
     Example:
-    \snippet ../widgets/mainwindows/sdi/mainwindow.cpp implicit tr context
+    \snippet ../widgets/itemviews/spreadsheet/spreadsheet.cpp implicit tr context
     \dots
 
     If the same \a sourceText is used in different roles within the
@@ -2385,8 +2398,8 @@ void QObject::deleteLater()
 
     See \l{Writing Source Code for Translation} for a detailed description of
     Qt's translation mechanisms in general, and the
-    \l{Writing Source Code for Translation#Disambiguation}{Disambiguation}
-    section for information on disambiguation.
+    \l{Writing Source Code for Translation#Disambiguate Identical Text}
+    {Disambiguate Identical Text} section for information on disambiguation.
 
     \warning This method is reentrant only if all translators are
     installed \e before calling this method. Installing or removing
@@ -5356,6 +5369,31 @@ inline bool QObjectPrivate::removeConnection(QObjectPrivate::Connection *c)
     }
 
     return true;
+}
+
+/*!
+ \internal
+
+ Used by QPropertyAdaptorSlotObject to get an existing instance for a property, if available
+ */
+QtPrivate::QPropertyAdaptorSlotObject *
+QObjectPrivate::getPropertyAdaptorSlotObject(const QMetaProperty &property)
+{
+    if (auto conns = connections.loadRelaxed()) {
+        Q_Q(QObject);
+        const QMetaObject *metaObject = q->metaObject();
+        int signal_index = methodIndexToSignalIndex(&metaObject, property.notifySignalIndex());
+        auto connectionList = conns->connectionsForSignal(signal_index);
+        for (auto c = connectionList.first.loadRelaxed(); c;
+             c = c->nextConnectionList.loadRelaxed()) {
+            if (c->isSlotObject) {
+                if (auto p = QtPrivate::QPropertyAdaptorSlotObject::cast(c->slotObj,
+                                                                         property.propertyIndex()))
+                    return p;
+            }
+        }
+    }
+    return nullptr;
 }
 
 /*! \class QMetaObject::Connection

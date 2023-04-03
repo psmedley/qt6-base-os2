@@ -1,4 +1,5 @@
-# Generated from qfile_vs_qnetworkaccessmanager.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_bench_qfile_vs_qnetworkaccessmanager Binary:
@@ -7,10 +8,7 @@
 qt_internal_add_benchmark(tst_bench_qfile_vs_qnetworkaccessmanager
     SOURCES
         main.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Network
         Qt::Test
 )
-
-#### Keys ignored in scope 1:.:.:qfile_vs_qnetworkaccessmanager.pro:<TRUE>:
-# TEMPLATE = "app"

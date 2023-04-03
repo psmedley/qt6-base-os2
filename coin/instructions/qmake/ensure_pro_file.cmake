@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # CMake script to ensure that a qmake project file exists.
 #
 # Usage: cmake -DPRO_FILE=.../project.pro -P .../ensure_pro_file.cmake

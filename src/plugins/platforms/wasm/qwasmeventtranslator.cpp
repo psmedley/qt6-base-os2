@@ -140,8 +140,10 @@ static constexpr const auto WebToQtKeyCodeMappingsWithShift = qMakeArray(
         Emkb2Qt< Qt::Key_Eacute,        '\xc3','\x89' >,
         Emkb2Qt< Qt::Key_Ecircumflex,   '\xc3','\x8a' >,
         Emkb2Qt< Qt::Key_Ediaeresis,    '\xc3','\x8b' >,
+        Emkb2Qt< Qt::Key_Iacute,        '\xc3','\x8d' >,
         Emkb2Qt< Qt::Key_Icircumflex,   '\xc3','\x8e' >,
         Emkb2Qt< Qt::Key_Idiaeresis,    '\xc3','\x8f' >,
+        Emkb2Qt< Qt::Key_Igrave,        '\xc3','\x8c' >,
         Emkb2Qt< Qt::Key_Ocircumflex,   '\xc3','\x94' >,
         Emkb2Qt< Qt::Key_Odiaeresis,    '\xc3','\x96' >,
         Emkb2Qt< Qt::Key_Ograve,        '\xc3','\x92' >,
@@ -154,7 +156,8 @@ static constexpr const auto WebToQtKeyCodeMappingsWithShift = qMakeArray(
         Emkb2Qt< Qt::Key_Uacute,        '\xc3','\x9a' >,
         Emkb2Qt< Qt::Key_Ntilde,        '\xc3','\x91' >,
         Emkb2Qt< Qt::Key_Ccedilla,      '\xc3','\x87' >,
-        Emkb2Qt< Qt::Key_ydiaeresis,    '\xc3','\x8f' >
+        Emkb2Qt< Qt::Key_ydiaeresis,    '\xc3','\x8f' >,
+        Emkb2Qt< Qt::Key_Yacute,        '\xc3','\x9d' >
     >::Data{}
 );
 
@@ -174,12 +177,15 @@ bool isDeadKeyEvent(const EmscriptenKeyboardEvent *emKeyEvent)
 
 Qt::Key translateEmscriptKey(const EmscriptenKeyboardEvent *emscriptKey)
 {
-    if (isDeadKeyEvent(emscriptKey)) {
+    const bool deadKeyEvent = isDeadKeyEvent(emscriptKey);
+    if (deadKeyEvent) {
         if (auto mapping = findMappingByBisection(emscriptKey->code))
             return *mapping;
     }
     if (auto mapping = findMappingByBisection(emscriptKey->key))
         return *mapping;
+    if (deadKeyEvent)
+        return Qt::Key_unknown;
 
     // cast to unicode key
     QString str = QString::fromUtf8(emscriptKey->key).toUpper();
@@ -280,27 +286,6 @@ QWasmEventTranslator::QWasmEventTranslator() = default;
 
 QWasmEventTranslator::~QWasmEventTranslator() = default;
 
-QCursor QWasmEventTranslator::cursorForMode(QWasmCompositor::ResizeMode m)
-{
-    switch (m) {
-    case QWasmCompositor::ResizeTopLeft:
-    case QWasmCompositor::ResizeBottomRight:
-        return Qt::SizeFDiagCursor;
-    case QWasmCompositor::ResizeBottomLeft:
-    case QWasmCompositor::ResizeTopRight:
-        return Qt::SizeBDiagCursor;
-    case QWasmCompositor::ResizeTop:
-    case QWasmCompositor::ResizeBottom:
-        return Qt::SizeVerCursor;
-    case QWasmCompositor::ResizeLeft:
-    case QWasmCompositor::ResizeRight:
-        return Qt::SizeHorCursor;
-    case QWasmCompositor::ResizeNone:
-        return Qt::ArrowCursor;
-    }
-    return Qt::ArrowCursor;
-}
-
 QWasmEventTranslator::TranslatedEvent
 QWasmEventTranslator::translateKeyEvent(int emEventType, const EmscriptenKeyboardEvent *keyEvent)
 {
@@ -324,11 +309,9 @@ QWasmEventTranslator::translateKeyEvent(int emEventType, const EmscriptenKeyboar
         if (keyEvent->shiftKey && ret.key == Qt::Key_QuoteLeft)
             ret.key = Qt::Key_AsciiTilde;
         m_emDeadKey = ret.key;
-    }
-
-    if (m_emDeadKey != Qt::Key_unknown
-        && (m_keyModifiedByDeadKeyOnPress == Qt::Key_unknown
-            || ret.key == m_keyModifiedByDeadKeyOnPress)) {
+    } else if (m_emDeadKey != Qt::Key_unknown
+               && (m_keyModifiedByDeadKeyOnPress == Qt::Key_unknown
+                   || ret.key == m_keyModifiedByDeadKeyOnPress)) {
         const Qt::Key baseKey = ret.key;
         const Qt::Key translatedKey = translateBaseKeyUsingDeadKey(baseKey, m_emDeadKey);
         if (translatedKey != Qt::Key_unknown)

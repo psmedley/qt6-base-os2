@@ -1,4 +1,5 @@
-# Generated from widgets.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 add_subdirectory(qabstractbutton)
 add_subdirectory(qabstractscrollarea)
@@ -49,9 +50,9 @@ endif()
 add_subdirectory(qmenu)
 add_subdirectory(qlineedit)
 if(NOT ANDROID)
-    # QTBUG-87420 # special case
+    # QTBUG-87420
     add_subdirectory(qmdiarea)
-    # QTBUG-87421 # special case
+    # QTBUG-87421
     add_subdirectory(qmenubar)
 endif()
 if(QT_FEATURE_opengl)

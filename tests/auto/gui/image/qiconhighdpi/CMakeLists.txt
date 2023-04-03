@@ -1,4 +1,5 @@
-# Generated from qiconhighdpi.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qiconhighdpi Test:
@@ -13,7 +14,7 @@ list(APPEND test_data ${test_data_glob})
 qt_internal_add_test(tst_qiconhighdpi
     SOURCES
         tst_qiconhighdpi.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
     TESTDATA ${test_data}
 )

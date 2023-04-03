@@ -1,4 +1,5 @@
-# Generated from testProcessUniqueness.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## testProcessUniqueness Binary:
@@ -11,6 +12,4 @@ qt_internal_add_executable(testProcessUniqueness
         main.cpp
 )
 
-# special case begin
 set_target_properties(testProcessUniqueness PROPERTIES MACOSX_BUNDLE TRUE)
-# special case end

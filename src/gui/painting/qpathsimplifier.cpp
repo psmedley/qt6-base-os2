@@ -8,7 +8,9 @@
 #include <QtCore/qpoint.h>
 #include <QtCore/qalgorithms.h>
 
-#include <private/qopengl_p.h>
+#if QT_CONFIG(opengl)
+#  include <private/qopengl_p.h>
+#endif
 #include <private/qrbtree_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -1633,3 +1635,5 @@ void qSimplifyPath(const QPainterPath &path, QDataBuffer<QPoint> &vertices,
 
 
 QT_END_NAMESPACE
+
+#undef Q_FIXED_POINT_SCALE

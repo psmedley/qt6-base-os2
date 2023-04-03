@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 if (MSVC)
     if (QT_64BIT)
         # SSE2 is mandatory on 64-bit mode, so skip the option. It triggers:
@@ -13,7 +16,6 @@ if (MSVC)
     set(QT_CFLAGS_AESNI      "${QT_CFLAGS_SSE2}")
     set(QT_CFLAGS_SHANI      "${QT_CFLAGS_SSE2}")
 
-    # FIXME to be Visual Studio version specific, like in mkspecs/common/msvc-version.conf
     set(QT_CFLAGS_AVX     "-arch:AVX")
     set(QT_CFLAGS_AVX2    "-arch:AVX2")
     set(QT_CFLAGS_F16C    "-arch:AVX")
@@ -71,7 +73,7 @@ endif()
 # TODO: Missing mkspecs flags we don't handle below: win32-clang-g++, win32-clang-msvc, rtems-base
 #
 # gcc and clang base
-if(GCC OR CLANG AND NOT WASM)
+if(GCC OR CLANG)
     set(QT_CFLAGS_OPTIMIZE "-O2")
     set(QT_CFLAGS_OPTIMIZE_FULL "-O3")
     set(QT_CFLAGS_OPTIMIZE_DEBUG "-Og")
@@ -119,12 +121,8 @@ if (QCC)
     set(QT_CFLAGS_OPTIMIZE_FULL "-O3")
 endif()
 
+# Emscripten Clang
 if(WASM)
-    set(QT_CFLAGS_OPTIMIZE "-O2")
-    set(QT_CFLAGS_OPTIMIZE_FULL "-O3")
-    set(QT_CFLAGS_OPTIMIZE_SIZE "-Os")
-    set(QT_CFLAGS_OPTIMIZE_DEBUG "-g2")
-
+    set(QT_CFLAGS_OPTIMIZE_DEBUG "-O2 -g") # -Og is not supported
     set(QT_CFLAGS_SSE2 -O2 -msimd128 -msse -msse2)
-
 endif()

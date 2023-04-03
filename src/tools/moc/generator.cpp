@@ -210,6 +210,22 @@ static bool qualifiedNameEquals(const QByteArray &qualifiedName, const QByteArra
     return qualifiedNameEquals(qualifiedName.mid(index+2), name);
 }
 
+static QByteArray generateQualifiedClassNameIdentifier(const QByteArray &identifier)
+{
+    QByteArray qualifiedClassNameIdentifier = identifier;
+
+    // Remove ':'s in the name, but be sure not to create any illegal
+    // identifiers in the process. (Don't replace with '_', because
+    // that will create problems with things like NS_::_class.)
+    qualifiedClassNameIdentifier.replace("::", "SCOPE");
+
+    // Also, avoid any leading/trailing underscores (we'll concatenate
+    // the generated name with other prefixes/suffixes, and these latter
+    // may already include an underscore, leading to two underscores)
+    qualifiedClassNameIdentifier = "CLASS" + qualifiedClassNameIdentifier + "ENDCLASS";
+    return qualifiedClassNameIdentifier;
+}
+
 void Generator::generateCode()
 {
     bool isQObject = (cdef->classname == "QObject");
@@ -250,15 +266,38 @@ void Generator::generateCode()
             (cdef->hasQObject || !cdef->methodList.isEmpty()
              || !cdef->propertyList.isEmpty() || !cdef->constructorList.isEmpty());
 
-    QByteArray qualifiedClassNameIdentifier = cdef->qualified;
-    qualifiedClassNameIdentifier.replace(':', '_');
+    const QByteArray qualifiedClassNameIdentifier = generateQualifiedClassNameIdentifier(cdef->qualified);
 
     // ensure the qt_meta_stringdata_XXXX_t type is local
     fprintf(out, "namespace {\n");
 
 //
+// Build the strings using QtMocHelpers::StringData
+//
+
+    fprintf(out, "\n#ifdef QT_MOC_HAS_STRINGDATA\n"
+                 "struct qt_meta_stringdata_%s_t {};\n"
+                 "static constexpr auto qt_meta_stringdata_%s = QtMocHelpers::stringData(",
+            qualifiedClassNameIdentifier.constData(), qualifiedClassNameIdentifier.constData());
+    {
+        char comma = 0;
+        for (const QByteArray &str : strings) {
+            if (comma)
+                fputc(comma, out);
+            printStringWithIndentation(out, str);
+            comma = ',';
+        }
+    }
+    fprintf(out, "\n);\n"
+            "#else  // !QT_MOC_HAS_STRING_DATA\n");
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    fprintf(out, "#error \"qtmochelpers.h not found or too old.\"\n");
+#else
+//
 // Build stringdata struct
 //
+
     fprintf(out, "struct qt_meta_stringdata_%s_t {\n", qualifiedClassNameIdentifier.constData());
     fprintf(out, "    uint offsetsAndSizes[%d];\n", int(strings.size() * 2));
     for (int i = 0; i < strings.size(); ++i) {
@@ -302,7 +341,9 @@ void Generator::generateCode()
 // Terminate stringdata struct
     fprintf(out, "\n};\n");
     fprintf(out, "#undef QT_MOC_LITERAL\n");
+#endif // Qt 6.9
 
+    fprintf(out, "#endif // !QT_MOC_HAS_STRING_DATA\n");
     fprintf(out, "} // unnamed namespace\n\n");
 
 //
@@ -1218,7 +1259,7 @@ void Generator::generateStaticMetacall()
                 fprintf(out, "            *reinterpret_cast<int*>(_a[0]) = qRegisterMetaType< %s >(); break;\n", lastKey.constData());
         }
         fprintf(out, "        }\n");
-        fprintf(out, "    }\n");
+        fprintf(out, "    } ");
         isUsed_a = true;
         needElse = true;
     }
@@ -1279,6 +1320,9 @@ void Generator::generateStaticMetacall()
                 else if (cdef->enumDeclarations.value(p.type, false))
                     fprintf(out, "        case %d: *reinterpret_cast<int*>(_v) = QFlag(%s%s()); break;\n",
                             propindex, prefix.constData(), p.read.constData());
+                else if (p.read == "default")
+                    fprintf(out, "        case %d: *reinterpret_cast< %s*>(_v) = %s%s().value(); break;\n",
+                            propindex, p.type.constData(), prefix.constData(), p.bind.constData());
                 else if (!p.read.isEmpty())
                     fprintf(out, "        case %d: *reinterpret_cast< %s*>(_v) = %s%s(); break;\n",
                             propindex, p.type.constData(), prefix.constData(), p.read.constData());
@@ -1312,6 +1356,12 @@ void Generator::generateStaticMetacall()
                 if (cdef->enumDeclarations.value(p.type, false)) {
                     fprintf(out, "        case %d: %s%s(QFlag(*reinterpret_cast<int*>(_v))); break;\n",
                             propindex, prefix.constData(), p.write.constData());
+                } else if (p.write == "default") {
+                    fprintf(out, "        case %d: {\n", propindex);
+                    fprintf(out, "            %s%s().setValue(*reinterpret_cast< %s*>(_v));\n",
+                            prefix.constData(), p.bind.constData(), p.type.constData());
+                    fprintf(out, "            break;\n");
+                    fprintf(out, "        }\n");
                 } else if (!p.write.isEmpty()) {
                     fprintf(out, "        case %d: %s%s(*reinterpret_cast< %s*>(_v)); break;\n",
                             propindex, prefix.constData(), p.write.constData(), p.type.constData());
@@ -1348,13 +1398,13 @@ void Generator::generateStaticMetacall()
             fprintf(out, "        switch (_id) {\n");
             for (int propindex = 0; propindex < cdef->propertyList.size(); ++propindex) {
                 const PropertyDef &p = cdef->propertyList.at(propindex);
-                if (!p.reset.endsWith(')'))
+                if (p.reset.isEmpty())
                     continue;
                 QByteArray prefix = "_t->";
                 if (p.inPrivateClass.size()) {
                     prefix += p.inPrivateClass + "->";
                 }
-                fprintf(out, "        case %d: %s%s; break;\n",
+                fprintf(out, "        case %d: %s%s(); break;\n",
                         propindex, prefix.constData(), p.reset.constData());
             }
             fprintf(out, "        default: break;\n");
@@ -1519,8 +1569,7 @@ static CborError jsonValueToCbor(CborEncoder *parent, const QJsonValue &v)
         return cbor_encode_double(parent, d);
     }
     }
-    Q_UNREACHABLE();
-    return CborUnknownError;
+    Q_UNREACHABLE_RETURN(CborUnknownError);
 }
 
 void Generator::generatePluginMetaData()

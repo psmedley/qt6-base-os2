@@ -7,6 +7,7 @@
 #include "qtextformat_p.h"
 #include "qtextengine_p.h"
 #include "qabstracttextdocumentlayout.h"
+#include "qabstracttextdocumentlayout_p.h"
 #include "qtextlayout.h"
 #include "qtextboundaryfinder.h"
 #include <QtCore/private/qunicodetables_p.h>
@@ -1395,8 +1396,7 @@ void QTextEngine::shapeText(int item) const
     }
 
     if (Q_UNLIKELY(!ensureSpace(itemLength))) {
-        Q_UNREACHABLE(); // ### report OOM error somehow
-        return;
+        Q_UNREACHABLE_RETURN(); // ### report OOM error somehow
     }
 
     QFontEngine *fontEngine = this->fontEngine(si, &si.ascent, &si.descent, &si.leading);
@@ -1735,8 +1735,10 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si,
         }
 
         if (!actualFontEngine->supportsHorizontalSubPixelPositions()) {
-            for (uint i = 0; i < num_glyphs; ++i)
+            for (uint i = 0; i < num_glyphs; ++i) {
                 g.advances[i] = g.advances[i].round();
+                g.offsets[i].x = g.offsets[i].x.round();
+            }
         }
 
         glyphs_shaped += num_glyphs;
@@ -1932,7 +1934,17 @@ void QTextEngine::itemize() const
     while (uc < e) {
         switch (*uc) {
         case QChar::ObjectReplacementCharacter:
-            analysis->flags = QScriptAnalysis::Object;
+            {
+                const QTextDocumentPrivate *doc_p = QTextDocumentPrivate::get(block);
+                if (doc_p != nullptr
+                        && doc_p->layout() != nullptr
+                        && QAbstractTextDocumentLayoutPrivate::get(doc_p->layout()) != nullptr
+                        && QAbstractTextDocumentLayoutPrivate::get(doc_p->layout())->hasHandlers()) {
+                    analysis->flags = QScriptAnalysis::Object;
+                } else {
+                    analysis->flags = QScriptAnalysis::None;
+                }
+            }
             break;
         case QChar::LineSeparator:
             analysis->flags = QScriptAnalysis::LineOrParagraphSeparator;
@@ -2619,6 +2631,7 @@ QTextEngine::LayoutData::LayoutData()
     haveCharAttributes = false;
     logClustersPtr = nullptr;
     available_glyphs = 0;
+    currentMaxWidth = 0;
 }
 
 QTextEngine::LayoutData::LayoutData(const QString &str, void **stack_memory, int _allocated)
@@ -2651,6 +2664,7 @@ QTextEngine::LayoutData::LayoutData(const QString &str, void **stack_memory, int
     hasBidi = false;
     layoutState = LayoutEmpty;
     haveCharAttributes = false;
+    currentMaxWidth = 0;
 }
 
 QTextEngine::LayoutData::~LayoutData()
@@ -2736,6 +2750,7 @@ void QTextEngine::freeMemory()
         layoutData->hasBidi = false;
         layoutData->layoutState = LayoutEmpty;
         layoutData->haveCharAttributes = false;
+        layoutData->currentMaxWidth = 0;
         layoutData->items.clear();
     }
     if (specialData)

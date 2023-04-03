@@ -19,7 +19,7 @@
 # manifestmeta.filters                = highlighted sql global
 #
 # manifestmeta.highlighted.names      = "QtGui/Analog Clock Window Example" \
-#                                       "QtWidgets/Analog Clock Example"
+#                                       "QtWidgets/Analog Clock"
 # manifestmeta.highlighted.attributes = isHighlighted:true
 #
 # manifestmeta.sql.names              = "QtSql/*"
@@ -40,11 +40,9 @@ manifestmeta.android.names          =   "Qt3D/Qt 3D: Basic Shapes C++ Example" \
                                         "QtBluetooth/Bluetooth Scanner Example" \
                                         "QtBluetooth/QML Bluetooth Scanner Example" \
                                         "QtCharts/*" \
-                                        "QtConcurrent/QtConcurrent Progress Dialog Example" \
                                         "QtDataVisualization/Audiolevels Example" \
                                         "QtDataVisualization/Qt Quick 2 Scatter Example" \
                                         "QtDataVisualization/Qt Quick 2 Surface Multiseries Example" \
-                                        "QtGui/Analog Clock Window Example" \
                                         "QtGui/OpenGL Window Example" \
                                         "QtGui/Raster Window Example" \
                                         "QtLinguist/Arrow Pad Example" \
@@ -89,12 +87,16 @@ manifestmeta.android.names          =   "Qt3D/Qt 3D: Basic Shapes C++ Example" \
                                         "QtQuick/Threaded ListModel Example" \
                                         "QtQuick/TabWidget Example" \
                                         "QtQuick/UI Components*" \
-                                        "QtQuickControls/*" \
-                                        "QtQuickControls1/Qt Quick Controls 1 - Calendar Example" \
-                                        "QtQuickControls1/Qt Quick Controls 1 - Gallery" \
-                                        "QtQuickControls1/Qt Quick Controls 1 - Styles Example" \
-                                        "QtQuickControls1/Qt Quick Controls 1 - Table View Example" \
-                                        "QtQuickControls1/Qt Quick Controls 1 - Touch Gallery" \
+                                        "QtQuickControls/Qt Quick Controls - Attached Style Properties Example" \
+                                        "QtQuickControls/Qt Quick Controls - Chat Tutorial" \
+                                        "QtQuickControls/Qt Quick Controls - Contact List" \
+                                        "QtQuickControls/Qt Quick Controls - Event Calendar" \
+                                        "QtQuickControls/Qt Quick Controls - Flat Style" \
+                                        "QtQuickControls/Qt Quick Controls - Gallery" \
+                                        "QtQuickControls/Qt Quick Controls - Imagine Style Example: Automotive" \
+                                        "QtQuickControls/Qt Quick Controls - Imagine Style Example: Music Player" \
+                                        "QtQuickControls/Qt Quick Controls - Text Editor" \
+                                        "QtQuickControls/Qt Quick Controls - Wearable Demo" \
                                         "QtQuickDialogs/*" \
                                         "QtQuickExtras/*" \
                                         "QtSCXML/Qt SCXML Calculator QML Example" \
@@ -151,7 +153,6 @@ manifestmeta.android.tags              =   android
 manifestmeta.ios.names              =  "QtCore/Contiguous Cache Example" \
                                        "QtCore/Mandelbrot Example" \
                                        "QtCore/Queued Custom Type Example" \
-                                       "QtGui/Analog Clock Window Example" \
                                        "QtGui/OpenGL Window Example" \
                                        "QtGui/Raster Window Example" \
                                        "QtNetwork/Loopback Example" \
@@ -175,7 +176,6 @@ manifestmeta.ios.names              =  "QtCore/Contiguous Cache Example" \
                                        "QtWidgets/Blur Picker Effect Example" \
                                        "QtWidgets/Fade Message Effect Example" \
                                        "QtWidgets/Lighting Effect Example" \
-                                       "QtWidgets/Anchor Layout Example" \
                                        "QtWidgets/Basic Graphics Layouts Example" \
                                        "QtWidgets/40000 Chips" \
                                        "QtWidgets/Colliding Mice Example" \
@@ -184,8 +184,7 @@ manifestmeta.ios.names              =  "QtCore/Contiguous Cache Example" \
                                        "QtWidgets/Embedded Dialogs" \
                                        "QtWidgets/Graphics View Flow Layout Example" \
                                        "QtWidgets/Simple Anchor Layout Example" \
-                                       "QtWidgets/Weather Anchor Layout Example" \
-                                       "QtWidgets/Address Book Example" \
+                                       "QtWidgets/Address Book" \
                                        "QtWidgets/Basic Sort/Filter Model Example" \
                                        "QtWidgets/Chart Example" \
                                        "QtWidgets/Custom Sort/Filter Model Example" \
@@ -212,7 +211,7 @@ manifestmeta.ios.names              =  "QtCore/Contiguous Cache Example" \
                                        "QtWidgets/Completer Example" \
                                        "QtWidgets/Custom Completer Example" \
                                        "QtWidgets/Undo Framework" \
-                                       "QtWidgets/Analog Clock Example" \
+                                       "QtWidgets/Analog Clock" \
                                        "QtWidgets/Calculator Example" \
                                        "QtWidgets/Calendar Widget Example" \
                                        "QtWidgets/Character Map Example" \
@@ -225,7 +224,6 @@ manifestmeta.ios.names              =  "QtCore/Contiguous Cache Example" \
                                        "QtWidgets/Sliders Example" \
                                        "QtWidgets/Validators Example" \
                                        "QtWidgets/Window Flags Example" \
-                                       "QtWidgets/Wiggly Example" \
                                        "QtQuick/Qt Quick Examples - Animation" \
                                        "QtQuick/Qt Quick Examples - Canvas" \
                                        "QtQuick/Qt Quick Examples - Drag and Drop" \
@@ -240,7 +238,8 @@ manifestmeta.ios.names              =  "QtCore/Contiguous Cache Example" \
                                        "QtQuick/Qt Quick Examples - Text" \
                                        "QtQuick/Qt Quick Examples - Touch Interaction" \
                                        "QtQuick/Qt Quick Examples - Views" \
-                                       "QtQuick/Qt Quick Examples - Window and Screen"
+                                       "QtQuick/Qt Quick Examples - Window and Screen" \
+                                       "QtQuickControls/Qt Quick Controls - To Do List"
 
 manifestmeta.ios.tags                  = ios
 
@@ -252,9 +251,7 @@ manifestmeta.thumbnail.names    =      "QtCore/Contiguous Cache Example" \
                                        "QtCore/JSON Save Game Example" \
                                        "QtCore/Semaphores Example" \
                                        "QtCore/Wait Conditions Example" \
-                                       "QtConcurrent/Map Example" \
-                                       "QtConcurrent/QtConcurrent Word Count Example" \
-                                       "QtConcurrent/Run Function Example" \
+                                       "QtConcurrent/Word Count" \
                                        "QtGui/Raster Window Example" \
                                        "QtNetwork/Network Download*" \
                                        "QtWidgets/Dynamic Layouts Example" \

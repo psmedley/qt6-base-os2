@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Helper to check if the finalizer mode should be used.
 # If true, use finalizer mode.
 # If false, use regular mode (usage requirement propagation via associated Qt module)

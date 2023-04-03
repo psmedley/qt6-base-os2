@@ -29,6 +29,7 @@ void QKeySequenceEditPrivate::init()
     keyNum = 0;
     prevKey = -1;
     releaseTimer = 0;
+    finishingKeyCombinations = {Qt::Key_Tab, Qt::Key_Backtab};
 
     QVBoxLayout *layout = new QVBoxLayout(q);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -136,6 +137,9 @@ QKeySequenceEdit::~QKeySequenceEdit()
     \brief This property contains the currently chosen key sequence.
 
     The shortcut can be changed by the user or via setter function.
+
+    \note If the QKeySequence is longer than the maximumSequenceLength
+    property, the key sequence is truncated.
 */
 QKeySequence QKeySequenceEdit::keySequence() const
 {
@@ -169,6 +173,64 @@ bool QKeySequenceEdit::isClearButtonEnabled() const
     return d->lineEdit->isClearButtonEnabled();
 }
 
+/*!
+    \property QKeySequenceEdit::maximumSequenceLength
+    \brief The maximum sequence length.
+
+    The maximum number of key sequences a user can enter. The value needs to
+    be between 1 and 4, with 4 being the default.
+
+    \since 6.5
+*/
+qsizetype QKeySequenceEdit::maximumSequenceLength() const
+{
+    Q_D(const QKeySequenceEdit);
+    return d->maximumSequenceLength;
+}
+
+void QKeySequenceEdit::setMaximumSequenceLength(qsizetype count)
+{
+    Q_D(QKeySequenceEdit);
+
+    if (count < 1 || count > QKeySequencePrivate::MaxKeyCount) {
+        qWarning("QKeySequenceEdit: maximumSequenceLength %lld is out of range (1..%d)",
+                 qlonglong(count), QKeySequencePrivate::MaxKeyCount);
+        return;
+    }
+    d->maximumSequenceLength = int(count);
+    if (d->keyNum > count) {
+        for (qsizetype i = d->keyNum; i < count; ++i)
+            d->key[i] = QKeyCombination::fromCombined(0);
+        d->keyNum = count;
+        d->rebuildKeySequence();
+    }
+}
+
+/*!
+    \property QKeySequenceEdit::finishingKeyCombinations
+    \brief The list of key combinations that finish editing the key sequences.
+
+    Any combination in the list will finish the editing of key sequences.
+    All other key combinations can be recorded as part of a key sequence. By
+    default, Qt::Key_Tab and Qt::Key_Backtab will finish recording the key
+    sequence.
+
+    \since 6.5
+*/
+void QKeySequenceEdit::setFinishingKeyCombinations(const QList<QKeyCombination> &finishingKeyCombinations)
+{
+    Q_D(QKeySequenceEdit);
+
+    d->finishingKeyCombinations = finishingKeyCombinations;
+}
+
+QList<QKeyCombination> QKeySequenceEdit::finishingKeyCombinations() const
+{
+    Q_D(const QKeySequenceEdit);
+
+    return d->finishingKeyCombinations;
+}
+
 void QKeySequenceEdit::setKeySequence(const QKeySequence &keySequence)
 {
     Q_D(QKeySequenceEdit);
@@ -178,16 +240,24 @@ void QKeySequenceEdit::setKeySequence(const QKeySequence &keySequence)
     if (d->keySequence == keySequence)
         return;
 
-    d->keySequence = keySequence;
+    const auto desiredCount = keySequence.count();
+    if (desiredCount > d->maximumSequenceLength) {
+        qWarning("QKeySequenceEdit: setting a key sequence of length %d "
+                 "when maximumSequenceLength is %d, truncating.",
+                 desiredCount, d->maximumSequenceLength);
+    }
 
-    d->key[0] = d->key[1] = d->key[2] = d->key[3] = QKeyCombination::fromCombined(0);
-    d->keyNum = keySequence.count();
+    d->keyNum = std::min(desiredCount, d->maximumSequenceLength);
     for (int i = 0; i < d->keyNum; ++i)
         d->key[i] = keySequence[i];
+    for (int i = d->keyNum; i < QKeySequencePrivate::MaxKeyCount; ++i)
+        d->key[i] = QKeyCombination::fromCombined(0);
 
-    d->lineEdit->setText(keySequence.toString(QKeySequence::NativeText));
+    d->rebuildKeySequence();
 
-    emit keySequenceChanged(keySequence);
+    d->lineEdit->setText(d->keySequence.toString(QKeySequence::NativeText));
+
+    emit keySequenceChanged(d->keySequence);
 }
 
 /*!
@@ -212,13 +282,23 @@ void QKeySequenceEdit::clear()
 */
 bool QKeySequenceEdit::event(QEvent *e)
 {
+    Q_D(const QKeySequenceEdit);
+
     switch (e->type()) {
     case QEvent::Shortcut:
         return true;
     case QEvent::ShortcutOverride:
         e->accept();
         return true;
-    default :
+    case QEvent::KeyPress: {
+            QKeyEvent *ke = static_cast<QKeyEvent *>(e);
+            if (!d->finishingKeyCombinations.contains(ke->keyCombination())) {
+                keyPressEvent(ke);
+                return true;
+            }
+        }
+        break;
+    default:
         break;
     }
 
@@ -231,6 +311,11 @@ bool QKeySequenceEdit::event(QEvent *e)
 void QKeySequenceEdit::keyPressEvent(QKeyEvent *e)
 {
     Q_D(QKeySequenceEdit);
+
+    if (d->finishingKeyCombinations.contains(e->keyCombination())) {
+        d->finishEditing();
+        return;
+    }
 
     int nextKey = e->key();
 
@@ -255,12 +340,12 @@ void QKeySequenceEdit::keyPressEvent(QKeyEvent *e)
             return;
     }
 
-    if (d->keyNum >= QKeySequencePrivate::MaxKeyCount)
+    if (d->keyNum >= d->maximumSequenceLength)
         return;
 
     if (e->modifiers() & Qt::ShiftModifier) {
         QList<int> possibleKeys = QKeyMapper::possibleKeys(e);
-        int pkTotal = possibleKeys.count();
+        int pkTotal = possibleKeys.size();
         if (!pkTotal)
             return;
         bool found = false;
@@ -285,7 +370,7 @@ void QKeySequenceEdit::keyPressEvent(QKeyEvent *e)
 
     d->rebuildKeySequence();
     QString text = d->keySequence.toString(QKeySequence::NativeText);
-    if (d->keyNum < QKeySequencePrivate::MaxKeyCount) {
+    if (d->keyNum < d->maximumSequenceLength) {
         //: This text is an "unfinished" shortcut, expands like "Ctrl+A, ..."
         text = tr("%1, ...").arg(text);
     }
@@ -301,7 +386,7 @@ void QKeySequenceEdit::keyReleaseEvent(QKeyEvent *e)
     Q_D(QKeySequenceEdit);
 
     if (d->prevKey == e->key()) {
-        if (d->keyNum < QKeySequencePrivate::MaxKeyCount)
+        if (d->keyNum < d->maximumSequenceLength)
             d->releaseTimer = startTimer(1000);
         else
             d->finishEditing();

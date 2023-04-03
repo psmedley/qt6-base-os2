@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #####################################################################
 ## tst_baseline_painting Test:
 #####################################################################
@@ -16,7 +19,7 @@ qt_internal_add_test(tst_baseline_painting
         tst_baseline_painting.cpp
     INCLUDE_DIRECTORIES
         ../shared
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
         Qt::Network
@@ -68,6 +71,6 @@ qt_internal_add_resource(tst_baseline_painting "images"
 #####################################################################
 
 qt_internal_extend_target(tst_baseline_painting CONDITION QT_FEATURE_opengl
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::OpenGL
 )

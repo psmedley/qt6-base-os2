@@ -66,18 +66,49 @@ QT_BEGIN_NAMESPACE
 
 QT_IMPL_METATYPE_EXTERN_TAGGED(QtMetaTypePrivate::QPairVariantInterfaceImpl, QPairVariantInterfaceImpl)
 
+using QtMetaTypePrivate::isInterfaceFor;
+
 namespace {
+struct QMetaTypeDeleter
+{
+    const QtPrivate::QMetaTypeInterface *iface;
+    void operator()(void *data)
+    {
+        if (iface->alignment > __STDCPP_DEFAULT_NEW_ALIGNMENT__) {
+            operator delete(data, std::align_val_t(iface->alignment));
+        } else {
+            operator delete(data);
+        }
+    }
+};
 
 struct QMetaTypeCustomRegistry
 {
+
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0) && !defined(QT_BOOTSTRAPPED)
+    QMetaTypeCustomRegistry()
+    {
+        /* qfloat16 was neither a builtin, nor unconditionally registered
+          in QtCore in Qt <= 6.2.
+          Inserting it as an alias ensures that a QMetaType::id call
+          will get the correct built-in type-id (the interface pointers
+          might still not match, but we already deal with that case.
+        */
+        aliases.insert("qfloat16", QtPrivate::qMetaTypeInterfaceForType<qfloat16>());
+    }
+#endif
+
     QReadWriteLock lock;
     QList<const QtPrivate::QMetaTypeInterface *> registry;
     QHash<QByteArray, const QtPrivate::QMetaTypeInterface *> aliases;
     // index of first empty (unregistered) type in registry, if any.
     int firstEmpty = 0;
 
-    int registerCustomType(const QtPrivate::QMetaTypeInterface *ti)
+    int registerCustomType(const QtPrivate::QMetaTypeInterface *cti)
     {
+        // we got here because cti->typeId is 0, so this is a custom meta type
+        // (not read-only)
+        auto ti = const_cast<QtPrivate::QMetaTypeInterface *>(cti);
         {
             QWriteLocker l(&lock);
             if (int id = ti->typeId.loadRelaxed())
@@ -336,8 +367,12 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
     \value SChar \c{signed char}
     \value UChar \c{unsigned char}
     \value Float \c float
+    \value Float16 qfloat16
+    \omitvalue Float128
+    \omitvalue BFloat16
+    \omitvalue Int128
+    \omitvalue UInt128
     \value QObjectStar QObject *
-    \value QVariant QVariant
 
     \value QCursor QCursor
     \value QDate QDate
@@ -355,6 +390,7 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
     \value QStringList QStringList
     \value QVariantMap QVariantMap
     \value QVariantHash QVariantHash
+    \value QVariantPair QVariantPair
     \value QIcon QIcon
     \value QPen QPen
     \value QLineF QLineF
@@ -395,11 +431,10 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
     \value QPersistentModelIndex QPersistentModelIndex (introduced in Qt 5.5)
     \value QUuid QUuid
     \value QByteArrayList QByteArrayList
+    \value QVariant QVariant
 
     \value User  Base value for user types
     \value UnknownType This is an invalid type id. It is returned from QMetaType for types that are not registered
-    \omitvalue LastCoreType
-    \omitvalue LastGuiType
 
     Additional types can be registered using qRegisterMetaType() or by calling
     registerType().
@@ -412,7 +447,9 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
 
     The enum describes attributes of a type supported by QMetaType.
 
-    \value NeedsConstruction This type has non-trivial constructors. If the flag is not set instances can be safely initialized with memset to 0.
+    \value NeedsConstruction This type has a default constructor. If the flag is not set, instances can be safely initialized with memset to 0.
+    \value NeedsCopyConstruction (since 6.5) This type has a non-trivial copy construtcor. If the flag is not set, instances can be copied with memcpy.
+    \value NeedsMoveConstruction (since 6.5) This type has a non-trivial move constructor. If the flag is not set, instances can be moved with memcpy.
     \value NeedsDestruction This type has a non-trivial destructor. If the flag is not set calls to the destructor are not necessary before discarding objects.
     \value RelocatableType An instance of a type having this attribute can be safely moved to a different memory location using memcpy.
     \omitvalue MovableType
@@ -427,6 +464,14 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
     \omitvalue PointerToGadget
     \omitvalue IsQmlList
     \value IsConst Indicates that values of this types are immutable; for instance because they are pointers to const objects.
+
+    \note Before Qt 6.5, both the NeedsConstruction and NeedsDestruction flags
+    were incorrectly set if the either copy construtor or destructor were
+    non-trivial (that is, if the type was not trivial).
+
+    Note that the Needs flags may be set but the meta type may not have a
+    publicly-accessible constructor of the relevant type or a
+    publicly-accessible destructor.
 */
 
 /*!
@@ -497,19 +542,28 @@ bool QMetaType::isRegistered() const
     \fn int QMetaType::id() const
     \since 5.13
 
-    Returns id type hold by this QMetatype instance.
+    Returns id type held by this QMetatype instance.
 */
 
 /*!
+    \fn void QMetaType::registerType() const
+    \since 6.5
+
+    Registers this QMetaType with the type registry so it can be found by name,
+    using QMetaType::fromName().
+
+    \sa qRegisterMetaType()
+ */
+/*!
     \internal
-    The slowpath of id(). Precondition: d_ptr != nullptr
-*/
-int QMetaType::idHelper() const
+    Out-of-line path for registerType() and slow path id().
+ */
+int QMetaType::registerHelper(const QtPrivate::QMetaTypeInterface *iface)
 {
-    Q_ASSERT(d_ptr);
+    Q_ASSERT(iface);
     auto reg = customTypeRegistry();
     if (reg) {
-        return reg->registerCustomType(d_ptr);
+        return reg->registerCustomType(iface);
     }
     return 0;
 }
@@ -547,9 +601,13 @@ int QMetaType::idHelper() const
     \fn constexpr TypeFlags QMetaType::flags() const
     \since 5.0
 
-    Returns flags of the type for which this QMetaType instance was constructed.
+    Returns flags of the type for which this QMetaType instance was
+    constructed. To inspect specific type traits, prefer using one of the "is-"
+    functions rather than the flags directly.
 
-    \sa QMetaType::TypeFlags, QMetaType::flags()
+    \sa QMetaType::TypeFlags, QMetaType::flags(), isDefaultConstructible(),
+        isCopyConstructible(), isMoveConstructible(), isDestructible(),
+        isEqualityComparable(), isOrdered()
 */
 
 /*!
@@ -587,16 +645,17 @@ int QMetaType::idHelper() const
 */
 void *QMetaType::create(const void *copy) const
 {
-    if (d_ptr && (copy ? !!d_ptr->copyCtr : !!d_ptr->defaultCtr)) {
-        void *where =
-#ifdef __STDCPP_DEFAULT_NEW_ALIGNMENT__
-            d_ptr->alignment > __STDCPP_DEFAULT_NEW_ALIGNMENT__ ?
-                operator new(d_ptr->size, std::align_val_t(d_ptr->alignment)) :
-#endif
-                operator new(d_ptr->size);
-        return construct(where, copy);
-    }
-    return nullptr;
+    if (copy ? !isCopyConstructible() : !isDefaultConstructible())
+        return nullptr;
+
+    std::unique_ptr<void, QMetaTypeDeleter> where(nullptr, {d_ptr});
+    if (d_ptr->alignment > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+        where.reset(operator new(d_ptr->size, std::align_val_t(d_ptr->alignment)));
+    else
+        where.reset(operator new(d_ptr->size));
+
+    QtMetaTypePrivate::construct(d_ptr, where.get(), copy);
+    return where.release();
 }
 
 /*!
@@ -610,14 +669,9 @@ void *QMetaType::create(const void *copy) const
 */
 void QMetaType::destroy(void *data) const
 {
-    if (d_ptr) {
-        if (d_ptr->dtor)
-            d_ptr->dtor(d_ptr, data);
-        if (d_ptr->alignment > __STDCPP_DEFAULT_NEW_ALIGNMENT__) {
-            operator delete(data, std::align_val_t(d_ptr->alignment));
-        } else {
-            operator delete(data);
-        }
+    if (data && isDestructible()) {
+        QtMetaTypePrivate::destruct(d_ptr, data);
+        QMetaTypeDeleter{d_ptr}(data);
     }
 }
 
@@ -651,16 +705,11 @@ void *QMetaType::construct(void *where, const void *copy) const
 {
     if (!where)
         return nullptr;
-    if (d_ptr) {
-        if (copy && d_ptr->copyCtr) {
-            d_ptr->copyCtr(d_ptr, where, copy);
-            return where;
-        } else if (!copy && d_ptr->defaultCtr) {
-            d_ptr->defaultCtr(d_ptr, where);
-            return where;
-        }
-    }
-    return nullptr;
+    if (copy ? !isCopyConstructible() : !isDefaultConstructible())
+        return nullptr;
+
+    QtMetaTypePrivate::construct(d_ptr, where, copy);
+    return where;
 }
 
 /*!
@@ -676,12 +725,8 @@ void *QMetaType::construct(void *where, const void *copy) const
 */
 void QMetaType::destruct(void *data) const
 {
-    if (!data)
-        return;
-    if (d_ptr && d_ptr->dtor) {
-        d_ptr->dtor(d_ptr, data);
-        return;
-    }
+    if (data && isDestructible())
+        QtMetaTypePrivate::destruct(d_ptr, data);
 }
 
 static QPartialOrdering threeWayCompare(const void *ptr1, const void *ptr2)
@@ -773,6 +818,68 @@ bool QMetaType::equals(const void *lhs, const void *rhs) const
 }
 
 /*!
+    \fn bool QMetaType::isDefaultConstructible() const noexcept
+    \since 6.5
+
+    Returns true if this type can be default-constructed. If it can be, then
+    construct() and create() can be used with a \c{copy} parameter that is
+    null.
+
+    \sa flags(), isCopyConstructible(), isMoveConstructible(), isDestructible()
+ */
+
+/*!
+    \fn bool QMetaType::isCopyConstructible() const noexcept
+    \since 6.5
+
+    Returns true if this type can be copy-constructed. If it can be, then
+    construct() and create() can be used with a \c{copy} parameter that is
+    not null.
+
+    \sa flags(), isDefaultConstructible(), isMoveConstructible(), isDestructible()
+ */
+
+/*!
+    \fn bool QMetaType::isMoveConstructible() const noexcept
+    \since 6.5
+
+    Returns true if this type can be move-constructed. QMetaType currently does
+    not have an API to make use of this trait.
+
+    \sa flags(), isDefaultConstructible(), isCopyConstructible(), isDestructible()
+ */
+
+/*!
+    \fn bool QMetaType::isDestructible() const noexcept
+    \since 6.5
+
+    Returns true if this type can be destroyed. If it can be, then destroy()
+    and destruct() can be called.
+
+    \sa flags(), isDefaultConstructible(), isCopyConstructible(), isMoveConstructible()
+ */
+
+bool QMetaType::isDefaultConstructible(const QtPrivate::QMetaTypeInterface *iface) noexcept
+{
+    return !isInterfaceFor<void>(iface) && QtMetaTypePrivate::isDefaultConstructible(iface);
+}
+
+bool QMetaType::isCopyConstructible(const QtPrivate::QMetaTypeInterface *iface) noexcept
+{
+    return !isInterfaceFor<void>(iface) && QtMetaTypePrivate::isCopyConstructible(iface);
+}
+
+bool QMetaType::isMoveConstructible(const QtPrivate::QMetaTypeInterface *iface) noexcept
+{
+    return !isInterfaceFor<void>(iface) && QtMetaTypePrivate::isMoveConstructible(iface);
+}
+
+bool QMetaType::isDestructible(const QtPrivate::QMetaTypeInterface *iface) noexcept
+{
+    return !isInterfaceFor<void>(iface) && QtMetaTypePrivate::isDestructible(iface);
+}
+
+/*!
     Returns \c true if a less than or equality operator for the type described by
     this metatype was visible to the metatype declaration, otherwise \c false.
 
@@ -801,9 +908,11 @@ bool QMetaType::isOrdered() const
 void QMetaType::unregisterMetaType(QMetaType type)
 {
     if (type.d_ptr && type.d_ptr->typeId.loadRelaxed() >= QMetaType::User) {
+        // this is a custom meta type (not read-only)
+        auto d = const_cast<QtPrivate::QMetaTypeInterface *>(type.d_ptr);
         if (auto reg = customTypeRegistry())
-            reg->unregisterDynamicType(type.d_ptr->typeId.loadRelaxed());
-        type.d_ptr->typeId.storeRelease(0);
+            reg->unregisterDynamicType(d->typeId.loadRelaxed());
+        d->typeId.storeRelease(0);
     }
 }
 
@@ -1632,7 +1741,8 @@ Q_GLOBAL_STATIC(QMetaTypeMutableViewRegistry, customTypesMutableViewRegistry)
     to type To in the meta type system. Returns \c true if the registration succeeded, otherwise false.
 
     \a function must take an instance of type \c From and return an instance of \c To. It can be a function
-    pointer, a lambda or a functor object.
+    pointer, a lambda or a functor object. Since Qt 6.5, the \a function can also return an instance of
+    \c std::optional<To> to be able to indicate failed conversions.
     \snippet qmetatype/registerConverters.cpp unaryfunc
 */
 
@@ -1709,6 +1819,17 @@ void QMetaType::unregisterConverterFunction(QMetaType from, QMetaType to)
 }
 
 #ifndef QT_NO_DEBUG_STREAM
+
+/*!
+    \fn QDebug QMetaType::operator<<(QDebug d, QMetaType m)
+    \since 6.5
+    Writes the QMetaType \a m to the stream \a d, and returns the stream.
+*/
+QDebug operator<<(QDebug d, QMetaType m)
+{
+    const QDebugStateSaver saver(d);
+    return d.nospace() << "QMetaType(" << m.name() << ")";
+}
 
 /*!
     Streams the object at \a rhs to the debug stream \a dbg. Returns \c true
@@ -1840,7 +1961,6 @@ static bool convertFromEnum(QMetaType fromType, const void *from, QMetaType toTy
         if (toType.id() != QMetaType::QString && toType.id() != QMetaType::QByteArray)
             return QMetaType::convert(QMetaType::fromType<qlonglong>(), &ll, toType, to);
     }
-    Q_ASSERT(toType.id() == QMetaType::QString || toType.id() == QMetaType::QByteArray);
 #ifndef QT_NO_QOBJECT
     QMetaEnum en = metaEnumFromType(fromType);
     if (en.isValid()) {
@@ -1860,6 +1980,8 @@ static bool convertFromEnum(QMetaType fromType, const void *from, QMetaType toTy
         return true;
     }
 #endif
+    if (toType.id() == QMetaType::QString || toType.id() == QMetaType::QByteArray)
+        return QMetaType::convert(QMetaType::fromType<qlonglong>(), &ll, toType, to);
     return false;
 }
 
@@ -1871,12 +1993,12 @@ static bool convertToEnum(QMetaType fromType, const void *from, QMetaType toType
 #ifndef QT_NO_QOBJECT
     if (fromTypeId == QMetaType::QString || fromTypeId == QMetaType::QByteArray) {
         QMetaEnum en = metaEnumFromType(toType);
-        if (!en.isValid())
-            return false;
-        QByteArray keys = (fromTypeId == QMetaType::QString)
-                ? static_cast<const QString *>(from)->toUtf8()
-                : *static_cast<const QByteArray *>(from);
-        value = en.keysToValue(keys.constData(), &ok);
+        if (en.isValid()) {
+            QByteArray keys = (fromTypeId == QMetaType::QString)
+                    ? static_cast<const QString *>(from)->toUtf8()
+                    : *static_cast<const QByteArray *>(from);
+            value = en.keysToValue(keys.constData(), &ok);
+        }
     }
 #endif
     if (!ok) {
@@ -1905,8 +2027,7 @@ static bool convertToEnum(QMetaType fromType, const void *from, QMetaType toType
         *static_cast<qint64 *>(to) = value;
         return true;
     default:
-        Q_UNREACHABLE();
-        return false;
+        Q_UNREACHABLE_RETURN(false);
     }
 }
 
@@ -2889,6 +3010,7 @@ QMetaType QMetaType::fromName(QByteArrayView typeName)
 /*!
     \fn int qRegisterMetaType(const char *typeName)
     \relates QMetaType
+    \obsolete
     \threadsafe
 
     Registers the type name \a typeName for the type \c{T}. Returns
@@ -2925,8 +3047,7 @@ QMetaType QMetaType::fromName(QByteArrayView typeName)
     \threadsafe
     \since 4.2
 
-    Call this function to register the type \c T. \c T must be declared with
-    Q_DECLARE_METATYPE(). Returns the meta type Id.
+    Call this function to register the type \c T. Returns the meta type Id.
 
     Example:
 
@@ -2937,20 +3058,43 @@ QMetaType QMetaType::fromName(QByteArrayView typeName)
     pointed to type is fully defined. Use Q_DECLARE_OPAQUE_POINTER() to be able
     to register pointers to forward declared types.
 
-    After a type has been registered, you can create and destroy
-    objects of that type dynamically at run-time.
+    To use the type \c T in QMetaType, QVariant, or with the
+    QObject::property() API, registration is not necessary.
 
-    To use the type \c T in QVariant, using Q_DECLARE_METATYPE() is
-    sufficient. To use the type \c T in queued signal and slot connections,
-    \c{qRegisterMetaType<T>()} must be called before the first connection
-    is established.
+    To use the type \c T in queued signal and slot connections,
+    \c{qRegisterMetaType<T>()} must be called before the first connection is
+    established. That is typically done in the constructor of the class that
+    uses \c T, or in the \c{main()} function.
 
-    Also, to use type \c T with the QObject::property() API,
-    \c{qRegisterMetaType<T>()} must be called before it is used, typically
-    in the constructor of the class that uses \c T, or in the \c{main()}
-    function.
+    After a type has been registered, it can be found by its name using
+    QMetaType::fromName().
 
     \sa Q_DECLARE_METATYPE()
+ */
+
+/*!
+    \fn int qRegisterMetaType(QMetaType meta)
+    \relates QMetaType
+    \threadsafe
+    \since 6.5
+
+    Registers the meta type \a meta and returns its type Id.
+
+    This function requires that \c{T} is a fully defined type at the point
+    where the function is called. For pointer types, it also requires that the
+    pointed to type is fully defined. Use Q_DECLARE_OPAQUE_POINTER() to be able
+    to register pointers to forward declared types.
+
+    To use the type \c T in QMetaType, QVariant, or with the
+    QObject::property() API, registration is not necessary.
+
+    To use the type \c T in queued signal and slot connections,
+    \c{qRegisterMetaType<T>()} must be called before the first connection is
+    established. That is typically done in the constructor of the class that
+    uses \c T, or in the \c{main()} function.
+
+    After a type has been registered, it can be found by its name using
+    QMetaType::fromName().
  */
 
 /*!

@@ -1,6 +1,0 @@
-SYNCQT.HEADER_FILES = png.h pngconf.h pngdebug.h pnginfo.h pnglibconf.h pngpriv.h pngstruct.h 
-SYNCQT.GENERATED_HEADER_FILES = 
-SYNCQT.PRIVATE_HEADER_FILES = 
-SYNCQT.QPA_HEADER_FILES = 
-SYNCQT.CLEAN_HEADER_FILES = 
-SYNCQT.INJECTIONS = 

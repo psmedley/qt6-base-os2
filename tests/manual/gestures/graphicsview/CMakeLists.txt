@@ -1,4 +1,5 @@
-# Generated from graphicsview.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_manual_graphicsview Binary:
@@ -11,7 +12,7 @@ qt_internal_add_manual_test(tst_manual_graphicsview
         imageitem.cpp imageitem.h
         main.cpp
         mousepangesturerecognizer.cpp mousepangesturerecognizer.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Widgets
 )

@@ -1,4 +1,5 @@
-# Generated from hellominimalcrossgfxtriangle.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## hellominimalcrossgfxtriangle Binary:
@@ -9,7 +10,7 @@ qt_internal_add_manual_test(hellominimalcrossgfxtriangle
         hellowindow.cpp hellowindow.h
         main.cpp
         window.cpp window.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -32,7 +33,3 @@ qt_internal_add_resource(hellominimalcrossgfxtriangle "hellominimalcrossgfxtrian
     FILES
         ${hellominimalcrossgfxtriangle_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:hellominimalcrossgfxtriangle.pro:<TRUE>:
-# TEMPLATE = "app"

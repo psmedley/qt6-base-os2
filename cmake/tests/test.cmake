@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # FAKE moc-ing:
 set(QT_MOCSCANNER /usr/bin/true)
 

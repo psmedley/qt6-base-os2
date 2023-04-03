@@ -1,4 +1,5 @@
-# Generated from compressedtexture_bc1.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## compressedtexture_bc1 Binary:
@@ -8,7 +9,7 @@ qt_internal_add_manual_test(compressedtexture_bc1
     GUI
     SOURCES
         compressedtexture_bc1.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
 )
@@ -35,7 +36,3 @@ qt_internal_add_resource(compressedtexture_bc1 "compressedtexture_bc1"
     FILES
         ${compressedtexture_bc1_resource_files}
 )
-
-
-#### Keys ignored in scope 1:.:.:compressedtexture_bc1.pro:<TRUE>:
-# TEMPLATE = "app"

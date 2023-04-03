@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Note that these are only the keywords that are unique to qt_internal_add_plugin().
 # That function also supports the keywords defined by _qt_internal_get_add_plugin_keywords().
 macro(qt_internal_get_internal_add_plugin_keywords option_args single_args multi_args)
@@ -5,6 +8,7 @@ macro(qt_internal_get_internal_add_plugin_keywords option_args single_args multi
         EXCEPTIONS
         ALLOW_UNDEFINED_SYMBOLS
         SKIP_INSTALL
+        NO_UNITY_BUILD
     )
     set(${single_args}
         OUTPUT_DIRECTORY
@@ -40,12 +44,12 @@ function(qt_internal_add_plugin target)
     set(single_args ${public_single_args} ${internal_single_args})
     set(multi_args  ${public_multi_args}  ${internal_multi_args})
 
-    qt_parse_all_arguments(arg "qt_internal_add_plugin"
+    cmake_parse_arguments(PARSE_ARGV 1 arg
         "${option_args}"
         "${single_args}"
         "${multi_args}"
-        "${ARGN}"
     )
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     # Put this behind a cache option for now. It's too noisy for general use
     # until most repos are updated.
@@ -203,70 +207,78 @@ function(qt_internal_add_plugin target)
         endif()
         get_target_property(is_imported_qt_module ${qt_module_target} IMPORTED)
 
-        # Associate plugin with its Qt module when both are both built in the same repository.
-        # Check that by comparing the PROJECT_NAME of each.
-        # This covers auto-linking of the majority of plugins to executables and in-tree tests.
-        # Linking of plugins in standalone tests (when the Qt module will be an imported target)
-        # is handled instead by the complicated genex logic in QtModulePlugins.cmake.in.
-        set(is_plugin_and_module_in_same_project FALSE)
         if(NOT is_imported_qt_module)
             # This QT_PLUGINS assignment is only used by QtPostProcessHelpers to decide if a
-            # QtModulePlugins.cmake file should be generated (which only happens in static builds).
+            # QtModulePlugins.cmake file should be generated.
             set_property(TARGET "${qt_module_target}" APPEND PROPERTY QT_PLUGINS "${target}")
+        endif()
 
-            get_target_property(module_source_dir ${qt_module_target} SOURCE_DIR)
-            get_directory_property(module_project_name
-                DIRECTORY ${module_source_dir}
-                DEFINITION PROJECT_NAME
-            )
-            if(module_project_name STREQUAL PROJECT_NAME)
-                set(is_plugin_and_module_in_same_project TRUE)
+        set(plugin_target_versioned "${QT_CMAKE_EXPORT_NAMESPACE}::${target}")
+        get_target_property(type "${plugin_target_versioned}" TYPE)
+        if(type STREQUAL STATIC_LIBRARY)
+            # Associate plugin with its Qt module when both are both built in the same repository.
+            # Check that by comparing the PROJECT_NAME of each.
+            # This covers auto-linking of the majority of plugins to executables and in-tree tests.
+            # Linking of plugins in standalone tests (when the Qt module will be an imported target)
+            # is handled instead by the complicated genex logic in QtModulePlugins.cmake.in.
+            set(is_plugin_and_module_in_same_project FALSE)
+            if(NOT is_imported_qt_module)
+                get_target_property(module_source_dir ${qt_module_target} SOURCE_DIR)
+                get_directory_property(module_project_name
+                    DIRECTORY ${module_source_dir}
+                    DEFINITION PROJECT_NAME
+                )
+                if(module_project_name STREQUAL PROJECT_NAME)
+                    set(is_plugin_and_module_in_same_project TRUE)
+                endif()
+
+                # When linking static plugins with the special logic in qt_internal_add_executable,
+                # make sure to skip non-default plugins.
+                if(is_plugin_and_module_in_same_project AND _default_plugin)
+                    set_property(TARGET ${qt_module_target} APPEND PROPERTY
+                                 _qt_initial_repo_plugins
+                                 "${target}")
+                    set_property(TARGET ${qt_module_target} APPEND PROPERTY
+                                 _qt_initial_repo_plugin_class_names
+                                 "$<TARGET_PROPERTY:${target},QT_PLUGIN_CLASS_NAME>"
+                    )
+                endif()
             endif()
 
-            # When linking static plugins with the special logic in qt_internal_add_executable,
-            # make sure to skip non-default plugins.
-            if(is_plugin_and_module_in_same_project AND _default_plugin)
+            # Associate plugin with its Qt module when the plugin is built in the current repository
+            # but the module is built in a different repository (qtsvg's QSvgPlugin associated with
+            # qtbase's QtGui).
+            # The association is done in a separate property, to ensure that reconfiguring in-tree tests
+            # in qtbase doesn't accidentally cause linking to a plugin from a previously built qtsvg.
+            # Needed for in-tree tests like in qtsvg, qtimageformats.
+            # This is done for each Qt module regardless if it's an imported target or not, to handle
+            # both per-repo and top-level builds (in per-repo build of qtsvg QtGui is imported, in a
+            # top-level build Gui is not imported, but in both cases qtsvg tests need to link to
+            # QSvgPlugin).
+            #
+            # TODO: Top-level in-tree tests and qdeclarative per-repo in-tree tests that depend on
+            #       static Qml plugins won't work due to the requirement of running qmlimportscanner
+            #       at configure time, but qmlimportscanner is not built at that point. Moving the
+            #       execution of qmlimportscanner to build time is non-trivial because qmlimportscanner
+            #       not only generates a cpp file to compile but also outputs a list of static plugins
+            #       that should be linked and there is no straightforward way to tell CMake to link
+            #       against a list of libraries that was discovered at build time (apart from
+            #       response files, which apparently might not work on all platforms).
+            #       qmake doesn't have this problem because each project is configured separately so
+            #       qmlimportscanner is always built by the time it needs to be run for a test.
+            if(NOT is_plugin_and_module_in_same_project AND _default_plugin)
+                string(MAKE_C_IDENTIFIER "${PROJECT_NAME}" current_project_name)
+                set(prop_prefix "_qt_repo_${current_project_name}")
                 set_property(TARGET ${qt_module_target} APPEND PROPERTY
-                             _qt_initial_repo_plugins
-                             "${target}")
+                             ${prop_prefix}_plugins "${target}")
                 set_property(TARGET ${qt_module_target} APPEND PROPERTY
-                             _qt_initial_repo_plugin_class_names
-                             "$<TARGET_PROPERTY:${target},QT_PLUGIN_CLASS_NAME>"
+                             ${prop_prefix}_plugin_class_names
+                    "$<TARGET_PROPERTY:${target},QT_PLUGIN_CLASS_NAME>"
                 )
             endif()
         endif()
 
-        # Associate plugin with its Qt module when the plugin is built in the current repository
-        # but the module is built in a different repository (qtsvg's QSvgPlugin associated with
-        # qtbase's QtGui).
-        # The association is done in a separate property, to ensure that reconfiguring in-tree tests
-        # in qtbase doesn't accidentally cause linking to a plugin from a previously built qtsvg.
-        # Needed for in-tree tests like in qtsvg, qtimageformats.
-        # This is done for each Qt module regardless if it's an imported target or not, to handle
-        # both per-repo and top-level builds (in per-repo build of qtsvg QtGui is imported, in a
-        # top-level build Gui is not imported, but in both cases qtsvg tests need to link to
-        # QSvgPlugin).
-        #
-        # TODO: Top-level in-tree tests and qdeclarative per-repo in-tree tests that depend on
-        #       static Qml plugins won't work due to the requirement of running qmlimportscanner
-        #       at configure time, but qmlimportscanner is not built at that point. Moving the
-        #       execution of qmlimportscanner to build time is non-trivial because qmlimportscanner
-        #       not only generates a cpp file to compile but also outputs a list of static plugins
-        #       that should be linked and there is no straightforward way to tell CMake to link
-        #       against a list of libraries that was discovered at build time (apart from
-        #       response files, which apparently might not work on all platforms).
-        #       qmake doesn't have this problem because each project is configured separately so
-        #       qmlimportscanner is always built by the time it needs to be run for a test.
-        if(NOT is_plugin_and_module_in_same_project AND _default_plugin)
-            string(MAKE_C_IDENTIFIER "${PROJECT_NAME}" current_project_name)
-            set(prop_prefix "_qt_repo_${current_project_name}")
-            set_property(TARGET ${qt_module_target} APPEND PROPERTY
-                         ${prop_prefix}_plugins "${target}")
-            set_property(TARGET ${qt_module_target} APPEND PROPERTY
-                         ${prop_prefix}_plugin_class_names
-                "$<TARGET_PROPERTY:${target},QT_PLUGIN_CLASS_NAME>"
-            )
-        endif()
+        qt_internal_add_autogen_sync_header_dependencies(${target} ${qt_module_target})
     endif()
 
     # Change the configuration file install location for qml plugins into the Qml package location.
@@ -294,6 +306,12 @@ function(qt_internal_add_plugin target)
         endif()
     endif()
 
+    if(arg_NO_UNITY_BUILD)
+        set(arg_NO_UNITY_BUILD NO_UNITY_BUILD)
+    else()
+        set(arg_NO_UNITY_BUILD "")
+    endif()
+
     set_property(TARGET "${target}" PROPERTY QT_DEFAULT_PLUGIN "${_default_plugin}")
     set_property(TARGET "${target}" APPEND PROPERTY EXPORT_PROPERTIES "QT_PLUGIN_CLASS_NAME;QT_PLUGIN_TYPE;QT_MODULE;QT_DEFAULT_PLUGIN")
 
@@ -313,6 +331,8 @@ function(qt_internal_add_plugin target)
         SOURCES ${arg_SOURCES}
         INCLUDE_DIRECTORIES
             ${private_includes}
+        SYSTEM_INCLUDE_DIRECTORIES
+            ${arg_SYSTEM_INCLUDE_DIRECTORIES}
         PUBLIC_INCLUDE_DIRECTORIES
             ${public_includes}
         LIBRARIES ${arg_LIBRARIES} Qt::PlatformPluginInternal
@@ -323,10 +343,10 @@ function(qt_internal_add_plugin target)
         PUBLIC_DEFINES
             ${arg_PUBLIC_DEFINES}
         FEATURE_DEPENDENCIES ${arg_FEATURE_DEPENDENCIES}
-        DBUS_ADAPTOR_SOURCES "${arg_DBUS_ADAPTOR_SOURCES}"
-        DBUS_ADAPTOR_FLAGS "${arg_DBUS_ADAPTOR_FLAGS}"
-        DBUS_INTERFACE_SOURCES "${arg_DBUS_INTERFACE_SOURCES}"
-        DBUS_INTERFACE_FLAGS "${arg_DBUS_INTERFACE_FLAGS}"
+        DBUS_ADAPTOR_SOURCES ${arg_DBUS_ADAPTOR_SOURCES}
+        DBUS_ADAPTOR_FLAGS ${arg_DBUS_ADAPTOR_FLAGS}
+        DBUS_INTERFACE_SOURCES ${arg_DBUS_INTERFACE_SOURCES}
+        DBUS_INTERFACE_FLAGS ${arg_DBUS_INTERFACE_FLAGS}
         COMPILE_OPTIONS ${arg_COMPILE_OPTIONS}
         PUBLIC_COMPILE_OPTIONS ${arg_PUBLIC_COMPILE_OPTIONS}
         LINK_OPTIONS ${arg_LINK_OPTIONS}
@@ -334,6 +354,8 @@ function(qt_internal_add_plugin target)
         MOC_OPTIONS ${arg_MOC_OPTIONS}
         ENABLE_AUTOGEN_TOOLS ${arg_ENABLE_AUTOGEN_TOOLS}
         DISABLE_AUTOGEN_TOOLS ${arg_DISABLE_AUTOGEN_TOOLS}
+        NO_UNITY_BUILD_SOURCES ${arg_NO_UNITY_BUILD_SOURCES}
+        ${arg_NO_UNITY_BUILD}
     )
 
     qt_internal_add_repo_local_defines("${target}")
@@ -351,13 +373,9 @@ function(qt_internal_add_plugin target)
     endforeach()
 
     qt_register_target_dependencies("${target}" "${arg_PUBLIC_LIBRARIES}" "${qt_libs_private}")
-    if (NOT BUILD_SHARED_LIBS)
 
-        # There's no point in generating pri files for qml plugins. We didn't do it in Qt5 times.
-        if(NOT plugin_type_escaped STREQUAL "qml_plugin")
-            qt_generate_plugin_pri_file("${target}" pri_file)
-        endif()
-
+    get_target_property(target_type "${target}" TYPE)
+    if(target_type STREQUAL STATIC_LIBRARY)
         if(qt_module_target)
             qt_internal_link_internal_platform_for_object_library("${plugin_init_target}")
         endif()
@@ -407,9 +425,6 @@ function(qt_internal_add_plugin target)
             DESTINATION "${config_install_dir}"
             COMPONENT Devel
         )
-        if(pri_file)
-            qt_install(FILES "${pri_file}" DESTINATION "${INSTALL_MKSPECSDIR}/modules")
-        endif()
 
         # Make the export name of plugins be consistent with modules, so that
         # qt_add_resource adds its additional targets to the same export set in a static Qt build.
@@ -458,10 +473,18 @@ function(qt_finalize_plugin target)
         _qt_internal_generate_win32_rc_file("${target}")
     endif()
 
-    # Generate .prl files for plugins of static Qt builds.
-    if(NOT BUILD_SHARED_LIBS)
+    # Generate .prl and .pri files for static plugins.
+    get_target_property(target_type "${target}" TYPE)
+    if(target_type STREQUAL STATIC_LIBRARY)
         if(arg_INSTALL_PATH)
             qt_generate_prl_file(${target} "${arg_INSTALL_PATH}")
+        endif()
+
+        # There's no point in generating pri files for qml plugins.
+        # We didn't do it in Qt5 times.
+        get_target_property(plugin_type "${target}" QT_PLUGIN_TYPE)
+        if(NOT plugin_type STREQUAL "qml_plugin")
+            qt_generate_plugin_pri_file("${target}")
         endif()
     endif()
 endfunction()
@@ -494,4 +517,86 @@ function(qt_internal_get_module_for_plugin target target_type out_var)
         endif()
     endforeach()
     message(FATAL_ERROR "The plug-in '${target}' does not belong to any Qt module.")
+endfunction()
+
+function(qt_internal_add_darwin_permission_plugin permission)
+    string(TOLOWER "${permission}" permission_lower)
+    string(TOUPPER "${permission}" permission_upper)
+    set(permission_source_file "platform/darwin/qdarwinpermissionplugin_${permission_lower}.mm")
+    set(plugin_target "QDarwin${permission}PermissionPlugin")
+    set(plugin_name "qdarwin${permission_lower}permission")
+    qt_internal_add_plugin(${plugin_target}
+        STATIC # Force static, even in shared builds
+        OUTPUT_NAME ${plugin_name}
+        PLUGIN_TYPE permissions
+        DEFAULT_IF FALSE
+        SOURCES
+            ${permission_source_file}
+        DEFINES
+            QT_DARWIN_PERMISSION_PLUGIN=${permission}
+        LIBRARIES
+            Qt::Core
+            Qt::CorePrivate
+            ${FWFoundation}
+    )
+
+    # Disable PCH since CMake falls over on single .mm source targets
+    set_target_properties(${plugin_target} PROPERTIES
+        DISABLE_PRECOMPILE_HEADERS ON
+    )
+
+    # Generate plugin JSON file
+    set(content "{ \"Permissions\": [ \"Q${permission}Permission\" ] }")
+    get_target_property(plugin_build_dir "${plugin_target}" BINARY_DIR)
+    set(output_file "${plugin_build_dir}/${plugin_target}.json")
+    qt_configure_file(OUTPUT "${output_file}" CONTENT "${content}")
+
+    # Associate required usage descriptions
+    set(usage_descriptions_property "_qt_info_plist_usage_descriptions")
+    set_target_properties(${plugin_target} PROPERTIES
+        ${usage_descriptions_property} "NS${permission}UsageDescription"
+    )
+    set_property(TARGET ${plugin_target} APPEND PROPERTY
+        EXPORT_PROPERTIES ${usage_descriptions_property}
+    )
+    set(usage_descriptions_genex "$<JOIN:$<TARGET_PROPERTY:${plugin_target},${usage_descriptions_property}>, >")
+    set(extra_plugin_pri_content
+        "QT_PLUGIN.${plugin_name}.usage_descriptions = ${usage_descriptions_genex}"
+    )
+
+    # Support granular check and request implementations
+    set(separate_request_source_file
+        "${plugin_build_dir}/qdarwinpermissionplugin_${permission_lower}_request.mm")
+    set(separate_request_genex
+        "$<BOOL:$<TARGET_PROPERTY:${plugin_target},_qt_darwin_permissison_separate_request>>")
+    file(GENERATE OUTPUT "${separate_request_source_file}" CONTENT
+        "
+        #define BUILDING_PERMISSION_REQUEST 1
+        #include \"${CMAKE_CURRENT_SOURCE_DIR}/${permission_source_file}\"
+        "
+        CONDITION "${separate_request_genex}"
+    )
+    if(CMAKE_VERSION VERSION_LESS "3.18")
+        set_property(SOURCE "${separate_request_source_file}" PROPERTY GENERATED TRUE)
+    endif()
+    target_sources(${plugin_target} PRIVATE
+        "$<${separate_request_genex}:${separate_request_source_file}>"
+    )
+    set_property(TARGET ${plugin_target} APPEND PROPERTY
+        EXPORT_PROPERTIES _qt_darwin_permissison_separate_request
+    )
+    set(permission_request_symbol "_QDarwin${permission}PermissionRequest")
+    set(permission_request_flag "-Wl,-u,${permission_request_symbol}")
+    set(has_usage_description_property "_qt_has_${plugin_target}_usage_description")
+    set(has_usage_description_genex "$<BOOL:$<TARGET_PROPERTY:${has_usage_description_property}>>")
+    target_link_options(${plugin_target} INTERFACE
+        "$<$<AND:${separate_request_genex},${has_usage_description_genex}>:${permission_request_flag}>")
+     list(APPEND extra_plugin_pri_content
+        "QT_PLUGIN.${plugin_name}.request_flag = $<${separate_request_genex}:${permission_request_flag}>"
+    )
+
+    # Expose properties to qmake
+    set_property(TARGET ${plugin_target} PROPERTY
+        QT_PLUGIN_PRI_EXTRA_CONTENT ${extra_plugin_pri_content}
+    )
 endfunction()
