@@ -1,7 +1,0 @@
-<RCC>
-  <qresource prefix="/qpdf/">
-    <file alias="sRGB2014.icc">/home/psmedley/qt6-base-os2/src/gui/../3rdparty/icc/sRGB2014.icc</file>
-    <file alias="qpdfa_metadata.xml">/home/psmedley/qt6-base-os2/src/gui/painting/qpdfa_metadata.xml</file>
-  </qresource>
-</RCC>
-
