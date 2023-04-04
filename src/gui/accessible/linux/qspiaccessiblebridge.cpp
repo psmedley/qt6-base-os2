@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include "qspiaccessiblebridge_p.h"
@@ -16,12 +52,10 @@
 #include "dbusconnection_p.h"
 #include "qspi_struct_marshallers_p.h"
 
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
 #include "deviceeventcontroller_adaptor.h"
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*!
     \class QSpiAccessibleBridge
@@ -61,10 +95,10 @@ void QSpiAccessibleBridge::updateStatus()
         cache = new QSpiDBusCache(dbusConnection->connection(), this);
         dec = new DeviceEventControllerAdaptor(this);
 
-        dbusConnection->connection().registerObject(ATSPI_DBUS_PATH_DEC ""_L1, this, QDBusConnection::ExportAdaptors);
+        dbusConnection->connection().registerObject(QLatin1String(ATSPI_DBUS_PATH_DEC), this, QDBusConnection::ExportAdaptors);
 
         dbusAdaptor = new AtSpiAdaptor(dbusConnection, this);
-        dbusConnection->connection().registerVirtualObject(QSPI_OBJECT_PATH_ACCESSIBLE ""_L1, dbusAdaptor, QDBusConnection::SubPath);
+        dbusConnection->connection().registerVirtualObject(QLatin1String(QSPI_OBJECT_PATH_ACCESSIBLE), dbusAdaptor, QDBusConnection::SubPath);
         dbusAdaptor->registerApplication();
     }
 }
@@ -241,7 +275,7 @@ static RoleMapping map[] = {
 void QSpiAccessibleBridge::initializeConstantMappings()
 {
     for (uint i = 0; i < sizeof(map) / sizeof(RoleMapping); ++i)
-        m_spiRoleMapping.insert(map[i].role, RoleNames(map[i].spiRole, QLatin1StringView(map[i].name), tr(map[i].name)));
+        m_spiRoleMapping.insert(map[i].role, RoleNames(map[i].spiRole, QLatin1String(map[i].name), tr(map[i].name)));
 
     // -1 because we have button duplicated, as PushButton and Button.
     Q_ASSERT_X(m_spiRoleMapping.size() ==
@@ -266,6 +300,4 @@ RoleNames QSpiAccessibleBridge::namesForRole(QAccessible::Role role)
 }
 
 QT_END_NAMESPACE
-
-#include "moc_qspiaccessiblebridge_p.cpp"
-#endif // QT_CONFIG(accessibility)
+#endif //QT_NO_ACCESSIBILITY

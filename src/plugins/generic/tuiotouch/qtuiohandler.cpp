@@ -1,6 +1,42 @@
-// Copyright (C) 2014 Robin Burchell <robin.burchell@viroteck.net>
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2014 Robin Burchell <robin.burchell@viroteck.net>
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qtuiohandler_p.h"
 
@@ -39,7 +75,7 @@ QTuioHandler::QTuioHandler(const QString &specification)
     bool invertx = false;
     bool inverty = false;
 
-    for (int i = 0; i < args.size(); ++i) {
+    for (int i = 0; i < args.count(); ++i) {
         if (args.at(i).startsWith("udp=")) {
             QString portString = args.at(i).section('=', 1, 1);
             portNumber = portString.toInt();
@@ -136,10 +172,10 @@ void QTuioHandler::processPackets()
             messages.push_back(msg);
         }
 
-        for (const QOscMessage &message : std::as_const(messages)) {
+        for (const QOscMessage &message : qAsConst(messages)) {
             if (message.addressPattern() == "/tuio/2Dcur") {
                 QList<QVariant> arguments = message.arguments();
-                if (arguments.size() == 0) {
+                if (arguments.count() == 0) {
                     qCWarning(lcTuioHandler, "Ignoring TUIO message with no arguments");
                     continue;
                 }
@@ -159,7 +195,7 @@ void QTuioHandler::processPackets()
                 }
             } else if (message.addressPattern() == "/tuio/2Dobj") {
                 QList<QVariant> arguments = message.arguments();
-                if (arguments.size() == 0) {
+                if (arguments.count() == 0) {
                     qCWarning(lcTuioHandler, "Ignoring TUIO message with no arguments");
                     continue;
                 }
@@ -188,8 +224,8 @@ void QTuioHandler::processPackets()
 void QTuioHandler::process2DCurSource(const QOscMessage &message)
 {
     QList<QVariant> arguments = message.arguments();
-    if (arguments.size() != 2) {
-        qCWarning(lcTuioSource) << "Ignoring malformed TUIO source message: " << arguments.size();
+    if (arguments.count() != 2) {
+        qCWarning(lcTuioSource) << "Ignoring malformed TUIO source message: " << arguments.count();
         return;
     }
 
@@ -214,7 +250,7 @@ void QTuioHandler::process2DCurAlive(const QOscMessage &message)
     QMap<int, QTuioCursor> oldActiveCursors = m_activeCursors;
     QMap<int, QTuioCursor> newActiveCursors;
 
-    for (int i = 1; i < arguments.size(); ++i) {
+    for (int i = 1; i < arguments.count(); ++i) {
         if (QMetaType::Type(arguments.at(i).userType()) != QMetaType::Int) {
             qCWarning(lcTuioHandler) << "Ignoring malformed TUIO alive message (bad argument on position" << i << arguments << ')';
             return;
@@ -255,8 +291,8 @@ void QTuioHandler::process2DCurAlive(const QOscMessage &message)
 void QTuioHandler::process2DCurSet(const QOscMessage &message)
 {
     QList<QVariant> arguments = message.arguments();
-    if (arguments.size() < 7) {
-        qCWarning(lcTuioSet) << "Ignoring malformed TUIO set message with too few arguments: " << arguments.size();
+    if (arguments.count() < 7) {
+        qCWarning(lcTuioSet) << "Ignoring malformed TUIO set message with too few arguments: " << arguments.count();
         return;
     }
 
@@ -326,7 +362,7 @@ void QTuioHandler::process2DCurFseq(const QOscMessage &message)
     Q_UNUSED(message); // TODO: do we need to do anything with the frame id?
 
     QWindow *win = QGuiApplication::focusWindow();
-    if (!win && QGuiApplication::topLevelWindows().size() > 0 && forceDelivery)
+    if (!win && QGuiApplication::topLevelWindows().length() > 0 && forceDelivery)
           win = QGuiApplication::topLevelWindows().at(0);
 
     if (!win)
@@ -335,12 +371,12 @@ void QTuioHandler::process2DCurFseq(const QOscMessage &message)
     QList<QWindowSystemInterface::TouchPoint> tpl;
     tpl.reserve(m_activeCursors.size() + m_deadCursors.size());
 
-    for (const QTuioCursor &tc : std::as_const(m_activeCursors)) {
+    for (const QTuioCursor &tc : qAsConst(m_activeCursors)) {
         QWindowSystemInterface::TouchPoint tp = cursorToTouchPoint(tc, win);
         tpl.append(tp);
     }
 
-    for (const QTuioCursor &tc : std::as_const(m_deadCursors)) {
+    for (const QTuioCursor &tc : qAsConst(m_deadCursors)) {
         QWindowSystemInterface::TouchPoint tp = cursorToTouchPoint(tc, win);
         tp.state = QEventPoint::State::Released;
         tpl.append(tp);
@@ -353,8 +389,8 @@ void QTuioHandler::process2DCurFseq(const QOscMessage &message)
 void QTuioHandler::process2DObjSource(const QOscMessage &message)
 {
     QList<QVariant> arguments = message.arguments();
-    if (arguments.size() != 2) {
-        qCWarning(lcTuioSource ) << "Ignoring malformed TUIO source message: " << arguments.size();
+    if (arguments.count() != 2) {
+        qCWarning(lcTuioSource, ) << "Ignoring malformed TUIO source message: " << arguments.count();
         return;
     }
 
@@ -379,7 +415,7 @@ void QTuioHandler::process2DObjAlive(const QOscMessage &message)
     QMap<int, QTuioToken> oldActiveTokens = m_activeTokens;
     QMap<int, QTuioToken> newActiveTokens;
 
-    for (int i = 1; i < arguments.size(); ++i) {
+    for (int i = 1; i < arguments.count(); ++i) {
         if (QMetaType::Type(arguments.at(i).userType()) != QMetaType::Int) {
             qCWarning(lcTuioHandler) << "Ignoring malformed TUIO alive message (bad argument on position" << i << arguments << ')';
             return;
@@ -420,8 +456,8 @@ void QTuioHandler::process2DObjAlive(const QOscMessage &message)
 void QTuioHandler::process2DObjSet(const QOscMessage &message)
 {
     QList<QVariant> arguments = message.arguments();
-    if (arguments.size() < 7) {
-        qCWarning(lcTuioSet) << "Ignoring malformed TUIO set message with too few arguments: " << arguments.size();
+    if (arguments.count() < 7) {
+        qCWarning(lcTuioSet) << "Ignoring malformed TUIO set message with too few arguments: " << arguments.count();
         return;
     }
 
@@ -499,7 +535,7 @@ void QTuioHandler::process2DObjFseq(const QOscMessage &message)
     Q_UNUSED(message); // TODO: do we need to do anything with the frame id?
 
     QWindow *win = QGuiApplication::focusWindow();
-    if (!win && QGuiApplication::topLevelWindows().size() > 0 && forceDelivery)
+    if (!win && QGuiApplication::topLevelWindows().length() > 0 && forceDelivery)
           win = QGuiApplication::topLevelWindows().at(0);
 
     if (!win)
@@ -508,12 +544,12 @@ void QTuioHandler::process2DObjFseq(const QOscMessage &message)
     QList<QWindowSystemInterface::TouchPoint> tpl;
     tpl.reserve(m_activeTokens.size() + m_deadTokens.size());
 
-    for (const QTuioToken & t : std::as_const(m_activeTokens)) {
+    for (const QTuioToken & t : qAsConst(m_activeTokens)) {
         QWindowSystemInterface::TouchPoint tp = tokenToTouchPoint(t, win);
         tpl.append(tp);
     }
 
-    for (const QTuioToken & t : std::as_const(m_deadTokens)) {
+    for (const QTuioToken & t : qAsConst(m_deadTokens)) {
         QWindowSystemInterface::TouchPoint tp = tokenToTouchPoint(t, win);
         tp.state = QEventPoint::State::Released;
         tp.velocity = QVector2D();
@@ -525,6 +561,4 @@ void QTuioHandler::process2DObjFseq(const QOscMessage &message)
 }
 
 QT_END_NAMESPACE
-
-#include "moc_qtuiohandler_p.cpp"
 

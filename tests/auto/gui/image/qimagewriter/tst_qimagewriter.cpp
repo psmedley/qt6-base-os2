@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QDebug>
@@ -102,7 +127,7 @@ void tst_QImageWriter::getSetCheck()
 
     QCOMPARE((QIODevice *) var1, obj1.device());
     // The class should possibly handle a 0-pointer as a device, since
-    // there is a default constructor, so it's "handling" a 0 device by default.
+    // there is a default contructor, so it's "handling" a 0 device by default.
     // For example: QMovie::setDevice(0) works just fine
     obj1.setDevice((QIODevice *)0);
     QCOMPARE((QIODevice *) 0, obj1.device());
@@ -255,8 +280,6 @@ void tst_QImageWriter::writeImage2()
     QFETCH(QString, fileName);
     QFETCH(QByteArray, format);
     QFETCH(QImage, image);
-
-    SKIP_IF_UNSUPPORTED(format);
 
     //we reduce the scope of writer so that it closes the associated file
     // and QFile::remove can actually work

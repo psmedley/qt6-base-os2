@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qgenericunixthemes_p.h"
 
@@ -41,11 +77,6 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
-#ifndef QT_NO_DBUS
-Q_LOGGING_CATEGORY(lcQpaThemeDBus, "qt.qpa.theme.dbus")
-#endif
-
-using namespace Qt::StringLiterals;
 
 Q_DECLARE_LOGGING_CATEGORY(qLcTray)
 
@@ -101,100 +132,15 @@ static bool isDBusGlobalMenuAvailable()
     static bool dbusGlobalMenuAvailable = checkDBusGlobalMenuAvailable();
     return dbusGlobalMenuAvailable;
 }
-
-/*!
- * \internal
- * The QGenericUnixThemeDBusListener class listens to the SettingChanged DBus signal
- * and translates it into the QDbusSettingType enum.
- * Upon construction, it logs success/failure of the DBus connection.
- *
- * The signal settingChanged delivers the normalized setting type and the new value as a string.
- * It is emitted on known setting types only.
- */
-
-class QGenericUnixThemeDBusListener : public QObject
-{
-    Q_OBJECT
-
-public:
-    QGenericUnixThemeDBusListener(const QString &service, const QString &path, const QString &interface, const QString &signal);
-
-    enum class SettingType {
-        KdeGlobalTheme,
-        KdeApplicationStyle,
-        Unknown
-    };
-    Q_ENUM(SettingType)
-
-    static SettingType toSettingType(const QString &location, const QString &key);
-
-private Q_SLOTS:
-    void onSettingChanged(const QString &location, const QString &key, const QDBusVariant &value);
-
-Q_SIGNALS:
-    void settingChanged(QGenericUnixThemeDBusListener::SettingType type, const QString &value);
-
-};
-
-QGenericUnixThemeDBusListener::QGenericUnixThemeDBusListener(const QString &service,
-                               const QString &path, const QString &interface, const QString &signal)
-{
-    QDBusConnection dbus = QDBusConnection::sessionBus();
-    const bool dBusRunning = dbus.isConnected();
-    bool dBusSignalConnected = false;
-#define LOG service << path << interface << signal;
-
-    if (dBusRunning) {
-        qRegisterMetaType<QDBusVariant>();
-        dBusSignalConnected = dbus.connect(service, path, interface, signal, this,
-                              SLOT(onSettingChanged(QString,QString,QDBusVariant)));
-    }
-
-    if (dBusSignalConnected) {
-        // Connection successful
-        qCDebug(lcQpaThemeDBus) << LOG;
-    } else {
-        if (dBusRunning) {
-            // DBus running, but connection failed
-            qCWarning(lcQpaThemeDBus) << "DBus connection failed:" << LOG;
-        } else {
-            // DBus not running
-            qCWarning(lcQpaThemeDBus) << "Session DBus not running.";
-        }
-        qCWarning(lcQpaThemeDBus) << "Application will not react to KDE setting changes.\n"
-                             << "Check your DBus installation.";
-    }
-#undef LOG
-}
-
-QGenericUnixThemeDBusListener::SettingType QGenericUnixThemeDBusListener::toSettingType(
-        const QString &location, const QString &key)
-{
-    if (location == QLatin1StringView("org.kde.kdeglobals.KDE")
-          && key == QLatin1StringView("widgetStyle"))
-        return SettingType::KdeApplicationStyle;
-    if (location == QLatin1StringView("org.kde.kdeglobals.General")
-          && key == QLatin1StringView("ColorScheme"))
-        return SettingType::KdeGlobalTheme;
-    return SettingType::Unknown;
-}
-
-void QGenericUnixThemeDBusListener::onSettingChanged(const QString &location, const QString &key, const QDBusVariant &value)
-{
-    const SettingType type = toSettingType(location, key);
-    if (type != SettingType::Unknown)
-        emit settingChanged(type, value.variant().toString());
-}
-
-#endif //QT_NO_DBUS
+#endif
 
 class QGenericUnixThemePrivate : public QPlatformThemePrivate
 {
 public:
     QGenericUnixThemePrivate()
         : QPlatformThemePrivate()
-        , systemFont(QLatin1StringView(defaultSystemFontNameC), defaultSystemFontSize)
-        , fixedFont(QLatin1StringView(defaultFixedFontNameC), systemFont.pointSize())
+        , systemFont(QLatin1String(defaultSystemFontNameC), defaultSystemFontSize)
+        , fixedFont(QLatin1String(defaultFixedFontNameC), systemFont.pointSize())
     {
         fixedFont.setStyleHint(QFont::TypeWriter);
         qCDebug(lcQpaFonts) << "default fonts: system" << systemFont << "fixed" << fixedFont;
@@ -227,7 +173,7 @@ QStringList QGenericUnixTheme::xdgIconThemePaths()
 {
     QStringList paths;
     // Add home directory first in search path
-    const QFileInfo homeIconDir(QDir::homePath() + "/.icons"_L1);
+    const QFileInfo homeIconDir(QDir::homePath() + QLatin1String("/.icons"));
     if (homeIconDir.isDir())
         paths.prepend(homeIconDir.absoluteFilePath());
 
@@ -319,15 +265,17 @@ static QIcon xdgFileIcon(const QFileInfo &fileInfo)
 #if QT_CONFIG(settings)
 class QKdeThemePrivate : public QPlatformThemePrivate
 {
-
 public:
-    QKdeThemePrivate(const QStringList &kdeDirs, int kdeVersion);
+    QKdeThemePrivate(const QStringList &kdeDirs, int kdeVersion)
+        : kdeDirs(kdeDirs)
+        , kdeVersion(kdeVersion)
+    { }
 
     static QString kdeGlobals(const QString &kdeDir, int kdeVersion)
     {
         if (kdeVersion > 4)
-            return kdeDir + "/kdeglobals"_L1;
-        return kdeDir + "/share/config/kdeglobals"_L1;
+            return kdeDir + QLatin1String("/kdeglobals");
+        return kdeDir + QLatin1String("/share/config/kdeglobals");
     }
 
     void refresh();
@@ -352,58 +300,7 @@ public:
     int startDragDist = 10;
     int startDragTime = 500;
     int cursorBlinkRate = 1000;
-
-#ifndef QT_NO_DBUS
-private:
-    std::unique_ptr<QGenericUnixThemeDBusListener> dbus;
-    bool initDbus();
-    void settingChangedHandler(QGenericUnixThemeDBusListener::SettingType type, const QString &value);
-#endif // QT_NO_DBUS
 };
-
-#ifndef QT_NO_DBUS
-void QKdeThemePrivate::settingChangedHandler(QGenericUnixThemeDBusListener::SettingType type, const QString &value)
-{
-    switch (type) {
-    case QGenericUnixThemeDBusListener::SettingType::KdeGlobalTheme:
-        qCDebug(lcQpaThemeDBus) << "KDE global theme changed to:" << value;
-        break;
-    case QGenericUnixThemeDBusListener::SettingType::KdeApplicationStyle:
-        qCDebug(lcQpaThemeDBus) << "KDE application style changed to:" << value;
-        break;
-    case QGenericUnixThemeDBusListener::SettingType::Unknown:
-        Q_UNREACHABLE();
-    }
-
-    refresh();
-}
-
-bool QKdeThemePrivate::initDbus()
-{
-    constexpr QLatin1StringView service("");
-    constexpr QLatin1StringView path("/org/freedesktop/portal/desktop");
-    constexpr QLatin1StringView interface("org.freedesktop.portal.Settings");
-    constexpr QLatin1StringView signal("SettingChanged");
-
-    dbus.reset(new QGenericUnixThemeDBusListener(service, path, interface, signal));
-    Q_ASSERT(dbus);
-
-    // Wrap slot in a lambda to avoid inheriting QKdeThemePrivate from QObject
-    auto wrapper = [this](QGenericUnixThemeDBusListener::SettingType type, const QString &value) {
-        settingChangedHandler(type, value);
-    };
-
-    return QObject::connect(dbus.get(), &QGenericUnixThemeDBusListener::settingChanged, wrapper);
-}
-#endif // QT_NO_DBUS
-
-QKdeThemePrivate::QKdeThemePrivate(const QStringList &kdeDirs, int kdeVersion)
-    : kdeDirs(kdeDirs), kdeVersion(kdeVersion)
-{
-#ifndef QT_NO_DBUS
-    initDbus();
-#endif // QT_NO_DBUS
-}
 
 void QKdeThemePrivate::refresh()
 {
@@ -453,11 +350,11 @@ void QKdeThemePrivate::refresh()
     const QVariant toolbarStyleValue = readKdeSetting(QStringLiteral("Toolbar style/ToolButtonStyle"), kdeDirs, kdeVersion, kdeSettings);
     if (toolbarStyleValue.isValid()) {
         const QString toolBarStyle = toolbarStyleValue.toString();
-        if (toolBarStyle == "TextBesideIcon"_L1)
+        if (toolBarStyle == QLatin1String("TextBesideIcon"))
             toolButtonStyle =  Qt::ToolButtonTextBesideIcon;
-        else if (toolBarStyle == "TextOnly"_L1)
+        else if (toolBarStyle == QLatin1String("TextOnly"))
             toolButtonStyle = Qt::ToolButtonTextOnly;
-        else if (toolBarStyle == "TextUnderIcon"_L1)
+        else if (toolBarStyle == QLatin1String("TextUnderIcon"))
             toolButtonStyle = Qt::ToolButtonTextUnderIcon;
     }
 
@@ -487,12 +384,12 @@ void QKdeThemePrivate::refresh()
     if (QFont *systemFont = kdeFont(readKdeSetting(QStringLiteral("font"), kdeDirs, kdeVersion, kdeSettings)))
         resources.fonts[QPlatformTheme::SystemFont] = systemFont;
     else
-        resources.fonts[QPlatformTheme::SystemFont] = new QFont(QLatin1StringView(defaultSystemFontNameC), defaultSystemFontSize);
+        resources.fonts[QPlatformTheme::SystemFont] = new QFont(QLatin1String(defaultSystemFontNameC), defaultSystemFontSize);
 
     if (QFont *fixedFont = kdeFont(readKdeSetting(QStringLiteral("fixed"), kdeDirs, kdeVersion, kdeSettings))) {
         resources.fonts[QPlatformTheme::FixedFont] = fixedFont;
     } else {
-        fixedFont = new QFont(QLatin1StringView(defaultFixedFontNameC), defaultSystemFontSize);
+        fixedFont = new QFont(QLatin1String(defaultFixedFontNameC), defaultSystemFontSize);
         fixedFont->setStyleHint(QFont::TypeWriter);
         resources.fonts[QPlatformTheme::FixedFont] = fixedFont;
     }
@@ -504,8 +401,6 @@ void QKdeThemePrivate::refresh()
 
     if (QFont *toolBarFont = kdeFont(readKdeSetting(QStringLiteral("toolBarFont"), kdeDirs, kdeVersion, kdeSettings)))
         resources.fonts[QPlatformTheme::ToolButtonFont] = toolBarFont;
-
-    QWindowSystemInterface::handleThemeChange();
 
     qCDebug(lcQpaFonts) << "default fonts: system" << resources.fonts[QPlatformTheme::SystemFont]
                         << "fixed" << resources.fonts[QPlatformTheme::FixedFont];
@@ -628,7 +523,7 @@ QFont *QKdeThemePrivate::kdeFont(const QVariant &fontValue)
             const QStringList list = fontValue.toStringList();
             if (!list.isEmpty()) {
                 fontFamily = list.first();
-                fontDescription = list.join(u',');
+                fontDescription = list.join(QLatin1Char(','));
             }
         } else {
             fontDescription = fontFamily = fontValue.toString();
@@ -748,24 +643,24 @@ QPlatformTheme *QKdeTheme::createKdeTheme()
 
     const QString kdeDirsVar = QFile::decodeName(qgetenv("KDEDIRS"));
     if (!kdeDirsVar.isEmpty())
-        kdeDirs += kdeDirsVar.split(u':', Qt::SkipEmptyParts);
+        kdeDirs += kdeDirsVar.split(QLatin1Char(':'), Qt::SkipEmptyParts);
 
-    const QString kdeVersionHomePath = QDir::homePath() + "/.kde"_L1 + QLatin1StringView(kdeVersionBA);
+    const QString kdeVersionHomePath = QDir::homePath() + QLatin1String("/.kde") + QLatin1String(kdeVersionBA);
     if (QFileInfo(kdeVersionHomePath).isDir())
         kdeDirs += kdeVersionHomePath;
 
-    const QString kdeHomePath = QDir::homePath() + "/.kde"_L1;
+    const QString kdeHomePath = QDir::homePath() + QLatin1String("/.kde");
     if (QFileInfo(kdeHomePath).isDir())
         kdeDirs += kdeHomePath;
 
-    const QString kdeRcPath = "/etc/kde"_L1 + QLatin1StringView(kdeVersionBA) + "rc"_L1;
+    const QString kdeRcPath = QLatin1String("/etc/kde") + QLatin1String(kdeVersionBA) + QLatin1String("rc");
     if (QFileInfo(kdeRcPath).isReadable()) {
         QSettings kdeSettings(kdeRcPath, QSettings::IniFormat);
         kdeSettings.beginGroup(QStringLiteral("Directories-default"));
         kdeDirs += kdeSettings.value(QStringLiteral("prefixes")).toStringList();
     }
 
-    const QString kdeVersionPrefix = "/etc/kde"_L1 + QLatin1StringView(kdeVersionBA);
+    const QString kdeVersionPrefix = QLatin1String("/etc/kde") + QLatin1String(kdeVersionBA);
     if (QFileInfo(kdeVersionPrefix).isDir())
         kdeDirs += kdeVersionPrefix;
 
@@ -822,7 +717,7 @@ public:
         QString fontName = gtkFontName.left(split);
 
         systemFont = new QFont(fontName, size);
-        fixedFont = new QFont(QLatin1StringView(defaultFixedFontNameC), systemFont->pointSize());
+        fixedFont = new QFont(QLatin1String(defaultFixedFontNameC), systemFont->pointSize());
         fixedFont->setStyleHint(QFont::TypeWriter);
         qCDebug(lcQpaFonts) << "default fonts: system" << systemFont << "fixed" << fixedFont;
     }
@@ -862,11 +757,6 @@ QVariant QGnomeTheme::themeHint(QPlatformTheme::ThemeHint hint) const
         return QVariant(QChar(0x2022));
     case QPlatformTheme::UiEffects:
         return QVariant(int(HoverEffect));
-    case QPlatformTheme::ButtonPressKeys:
-        return QVariant::fromValue(
-                QList<Qt::Key>({ Qt::Key_Space, Qt::Key_Return, Qt::Key_Enter, Qt::Key_Select }));
-    case QPlatformTheme::PreselectFirstFileInDirectory:
-        return true;
     default:
         break;
     }
@@ -900,7 +790,7 @@ const QFont *QGnomeTheme::font(Font type) const
 
 QString QGnomeTheme::gtkFontName() const
 {
-    return QStringLiteral("%1 %2").arg(QLatin1StringView(defaultSystemFontNameC)).arg(defaultSystemFontSize);
+    return QStringLiteral("%1 %2").arg(QLatin1String(defaultSystemFontNameC)).arg(defaultSystemFontSize);
 }
 
 #ifndef QT_NO_DBUS
@@ -946,14 +836,14 @@ QString QGnomeTheme::standardButtonText(int button) const
 
 QPlatformTheme *QGenericUnixTheme::createUnixTheme(const QString &name)
 {
-    if (name == QLatin1StringView(QGenericUnixTheme::name))
+    if (name == QLatin1String(QGenericUnixTheme::name))
         return new QGenericUnixTheme;
 #if QT_CONFIG(settings)
-    if (name == QLatin1StringView(QKdeTheme::name))
+    if (name == QLatin1String(QKdeTheme::name))
         if (QPlatformTheme *kdeTheme = QKdeTheme::createKdeTheme())
             return kdeTheme;
 #endif
-    if (name == QLatin1StringView(QGnomeTheme::name))
+    if (name == QLatin1String(QGnomeTheme::name))
         return new QGnomeTheme;
     return nullptr;
 }
@@ -974,27 +864,23 @@ QStringList QGenericUnixTheme::themeNames()
         for (const QByteArray &desktopName : desktopNames) {
             if (desktopEnvironment == "KDE") {
 #if QT_CONFIG(settings)
-                result.push_back(QLatin1StringView(QKdeTheme::name));
+                result.push_back(QLatin1String(QKdeTheme::name));
 #endif
             } else if (gtkBasedEnvironments.contains(desktopName)) {
                 // prefer the GTK3 theme implementation with native dialogs etc.
                 result.push_back(QStringLiteral("gtk3"));
                 // fallback to the generic Gnome theme if loading the GTK3 theme fails
-                result.push_back(QLatin1StringView(QGnomeTheme::name));
+                result.push_back(QLatin1String(QGnomeTheme::name));
             } else {
                 // unknown, but lowercase the name (our standard practice) and
                 // remove any "x-" prefix
                 QString s = QString::fromLatin1(desktopName.toLower());
-                result.push_back(s.startsWith("x-"_L1) ? s.mid(2) : s);
+                result.push_back(s.startsWith(QLatin1String("x-")) ? s.mid(2) : s);
             }
         }
     } // desktopSettingsAware
-    result.append(QLatin1StringView(QGenericUnixTheme::name));
+    result.append(QLatin1String(QGenericUnixTheme::name));
     return result;
 }
 
 QT_END_NAMESPACE
-
-#ifndef QT_NO_DBUS
-#include "qgenericunixthemes.moc"
-#endif // QT_NO_DBUS

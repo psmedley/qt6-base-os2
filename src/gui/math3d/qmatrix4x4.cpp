@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qmatrix4x4.h"
 #include <QtCore/qmath.h>
@@ -597,7 +633,7 @@ QMatrix4x4& QMatrix4x4::operator/=(float divisor)
     \fn QVector3D operator*(const QVector3D& vector, const QMatrix4x4& matrix)
     \relates QMatrix4x4
 
-    \deprecated [6.1] Convert the QVector3D to a QVector4D with 1.0 as the w coordinate, then multiply.
+    \deprecated [6.1] Convert the QVector3D to a QVector4D first, then multiply.
 
     Returns the result of transforming \a vector according to \a matrix,
     with the matrix applied post-vector. The vector is transformed as a point.
@@ -607,7 +643,7 @@ QMatrix4x4& QMatrix4x4::operator/=(float divisor)
     \fn QVector3D operator*(const QMatrix4x4& matrix, const QVector3D& vector)
     \relates QMatrix4x4
 
-    \deprecated [6.1] Use QMatrix4x4::map() instead.
+    \deprecated [6.1] Use QMatrix4x4::map() or QMatrix4x4::mapVector() instead.
 
     Returns the result of transforming \a vector according to \a matrix,
     with the matrix applied pre-vector. The vector is transformed as a
@@ -1701,12 +1737,8 @@ QTransform QMatrix4x4::toTransform(float distanceToPlane) const
 /*!
     \fn QVector3D QMatrix4x4::map(const QVector3D& point) const
 
-    Maps \a point by multiplying this matrix by \a point extended to a 4D
-    vector by assuming 1.0 for the w coordinate. The matrix is applied
-    pre-point.
-
-    \note This function is not the same as mapVector(). For points, always use
-    map(). mapVector() is suitable for vectors (directions) only.
+    Maps \a point by multiplying this matrix by \a point.
+    The matrix is applied pre-point.
 
     \sa mapRect(), mapVector()
 */

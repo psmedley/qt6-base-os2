@@ -141,12 +141,12 @@ static SLJIT_INLINE int open_dev_zero(void)
 
 #ifdef _WIN32
 
-static SLJIT_INLINE sljit_uw get_page_alignment(void) {
+static SLJIT_INLINE sljit_sw get_page_alignment(void) {
 	SYSTEM_INFO si;
-	static sljit_uw sljit_page_align = 0;
+	static sljit_sw sljit_page_align;
 	if (!sljit_page_align) {
 		GetSystemInfo(&si);
-		sljit_page_align = (sljit_uw)si.dwPageSize - 1;
+		sljit_page_align = si.dwPageSize - 1;
 	}
 	return sljit_page_align;
 }
@@ -168,21 +168,18 @@ SLJIT_INLINE static sljit_sw get_page_alignment(void) {
 
 #include <unistd.h>
 
-static SLJIT_INLINE sljit_uw get_page_alignment(void) {
-	static sljit_uw sljit_page_align = 0;
-
-	sljit_sw align;
-
-	if (!sljit_page_align) {
+static SLJIT_INLINE sljit_sw get_page_alignment(void) {
+	static sljit_sw sljit_page_align = -1;
+	if (sljit_page_align < 0) {
 #ifdef _SC_PAGESIZE
-		align = sysconf(_SC_PAGESIZE);
+		sljit_page_align = sysconf(_SC_PAGESIZE);
 #else
-		align = getpagesize();
+		sljit_page_align = getpagesize();
 #endif
 		/* Should never happen. */
-		if (align < 0)
-			align = 4096;
-		sljit_page_align = (sljit_uw)align - 1;
+		if (sljit_page_align < 0)
+			sljit_page_align = 4096;
+		sljit_page_align--;
 	}
 	return sljit_page_align;
 }
@@ -269,7 +266,7 @@ SLJIT_API_FUNC_ATTRIBUTE void SLJIT_FUNC sljit_free_stack(struct sljit_stack *st
 SLJIT_API_FUNC_ATTRIBUTE void SLJIT_FUNC sljit_free_stack(struct sljit_stack *stack, void *allocator_data)
 {
 	SLJIT_UNUSED_ARG(allocator_data);
-	munmap((void*)stack->min_start, (size_t)(stack->end - stack->min_start));
+	munmap((void*)stack->min_start, stack->end - stack->min_start);
 	SLJIT_FREE(stack, allocator_data);
 }
 
@@ -279,7 +276,7 @@ SLJIT_API_FUNC_ATTRIBUTE struct sljit_stack* SLJIT_FUNC sljit_allocate_stack(slj
 {
 	struct sljit_stack *stack;
 	void *ptr;
-	sljit_uw page_align;
+	sljit_sw page_align;
 
 	SLJIT_UNUSED_ARG(allocator_data);
 
@@ -352,7 +349,7 @@ SLJIT_API_FUNC_ATTRIBUTE sljit_u8 *SLJIT_FUNC sljit_stack_resize(struct sljit_st
 #if defined _WIN32 || defined(POSIX_MADV_DONTNEED)
 	sljit_uw aligned_old_start;
 	sljit_uw aligned_new_start;
-	sljit_uw page_align;
+	sljit_sw page_align;
 #endif
 
 	if ((new_start < stack->min_start) || (new_start >= stack->end))

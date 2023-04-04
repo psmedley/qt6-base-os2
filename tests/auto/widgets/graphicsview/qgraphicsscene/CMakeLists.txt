@@ -4,10 +4,32 @@
 ## tst_qgraphicsscene Test:
 #####################################################################
 
-# Resources:
+qt_internal_add_test(tst_qgraphicsscene
+    LOWDPI # special case
+    SOURCES
+        tst_qgraphicsscene.cpp
+    DEFINES
+        QT_NO_CAST_TO_ASCII
+    PUBLIC_LIBRARIES
+        Qt::CorePrivate
+        Qt::Gui
+        Qt::GuiPrivate
+        Qt::Widgets
+        Qt::WidgetsPrivate
+)
 
-set(testdata_resource_files
+# Resources:
+set(images_resource_files
     "Ash_European.jpg"
+)
+
+qt_internal_add_resource(tst_qgraphicsscene "images"
+    PREFIX
+        "/"
+    FILES
+        ${images_resource_files}
+)
+set(testdata_resource_files
     "testData/render/all-all-45-deg-left.png"
     "testData/render/all-all-45-deg-right.png"
     "testData/render/all-all-scale-2x.png"
@@ -38,21 +60,13 @@ set(testdata_resource_files
     "testData/render/topright-topleft-untransformed.png"
 )
 
-qt_internal_add_test(tst_qgraphicsscene
-    LOWDPI # special case
-    SOURCES
-        tst_qgraphicsscene.cpp
-    DEFINES
-        QT_NO_CAST_TO_ASCII
-    PUBLIC_LIBRARIES
-        Qt::CorePrivate
-        Qt::Gui
-        Qt::GuiPrivate
-        Qt::Widgets
-        Qt::WidgetsPrivate
-    TESTDATA ${testdata_resource_files}
-    BUILTIN_TESTDATA
+qt_internal_add_resource(tst_qgraphicsscene "testdata"
+    PREFIX
+        "/"
+    FILES
+        ${testdata_resource_files}
 )
+
 
 ## Scopes:
 #####################################################################

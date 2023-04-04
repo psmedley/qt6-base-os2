@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtGlobal>
 #include <QMap>
@@ -334,7 +359,7 @@ bool compare(const QDBusVariant &s1, const QDBusVariant &s2)
 template<typename T>
 bool compare(const QList<T> &l1, const QList<T> &l2)
 {
-    if (l1.size() != l2.size())
+    if (l1.count() != l2.count())
         return false;
 
     typename QList<T>::ConstIterator it1 = l1.constBegin();
@@ -349,7 +374,7 @@ bool compare(const QList<T> &l1, const QList<T> &l2)
 template<typename Key, typename T>
 bool compare(const QMap<Key, T> &m1, const QMap<Key, T> &m2)
 {
-    if (m1.size() != m2.size())
+    if (m1.count() != m2.size())
         return false;
     typename QMap<Key, T>::ConstIterator i1 = m1.constBegin();
     typename QMap<Key, T>::ConstIterator end = m1.constEnd();

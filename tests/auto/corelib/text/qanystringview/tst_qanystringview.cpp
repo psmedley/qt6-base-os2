@@ -1,5 +1,30 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QAnyStringView>
 #include <QChar>
@@ -16,7 +41,6 @@
 #include <vector>
 #include <algorithm>
 #include <memory>
-#include <q20iterator.h>
 
 // for negative testing (can't convert from)
 #include <deque>
@@ -41,16 +65,6 @@
 #else
 #  define ONLY_WIN(expr) QSKIP("This is a Windows-only test")
 #endif
-
-#ifdef __cpp_impl_three_way_comparison
-#  define ONLY_3WAY(expr) expr
-#else
-#  define ONLY_3WAY(expr) \
-    QSKIP("This test requires C++20 spaceship operator (<=>) " \
-          "support enabled in the standard library.")
-#endif
-
-using namespace Qt::StringLiterals;
 
 template <typename T>
 constexpr inline bool CanConvert = std::is_convertible_v<T, QAnyStringView>;
@@ -231,7 +245,6 @@ class tst_QAnyStringView : public QObject
 private Q_SLOTS:
     void constExpr() const;
     void basics() const;
-    void asciiLiteralIsLatin1() const;
 
     void fromQString() const { fromQStringOrByteArray<QString>(); }
     void fromQByteArray() const { fromQStringOrByteArray<QByteArray>(); }
@@ -297,10 +310,9 @@ private Q_SLOTS:
     void fromChar16TContainers() const { fromContainers<char16_t>(); }
     void fromWCharTContainers() const { ONLY_WIN(fromContainers<wchar_t>()); }
 
-    void fromQStringBuilder_QString_QString() const { fromQStringBuilder(u"1"_s % u"2"_s, u"12"); }
+    void fromQStringBuilder_QString_QString() const { fromQStringBuilder(u"1"_qs % u"2"_qs, u"12"); }
 
     void comparison();
-    void compare3way();
 
 private:
     template <typename StringBuilder>
@@ -418,27 +430,6 @@ void tst_QAnyStringView::basics() const
     QVERIFY(!(sv2 != sv1));
 }
 
-void tst_QAnyStringView::asciiLiteralIsLatin1() const
-{
-    if constexpr (QAnyStringView::detects_US_ASCII_at_compile_time) {
-        constexpr bool asciiCstringIsLatin1 = QAnyStringView("Hello, World").isLatin1();
-        QVERIFY(asciiCstringIsLatin1);
-        constexpr bool asciiUtf8stringIsLatin1 = QAnyStringView(u8"Hello, World").isLatin1();
-        QVERIFY(asciiUtf8stringIsLatin1);
-        constexpr bool utf8StringIsNotLatin1 = !QAnyStringView(u8"Tørrfisk").isLatin1();
-        QVERIFY(utf8StringIsNotLatin1);
-        constexpr bool asciiCstringArrayIsLatin1 =
-                QAnyStringView::fromArray("Hello, World").isLatin1();
-        QVERIFY(asciiCstringArrayIsLatin1);
-        constexpr bool asciiUtfstringArrayIsLatin1 =
-                QAnyStringView::fromArray(u8"Hello, World").isLatin1();
-        QVERIFY(asciiUtfstringArrayIsLatin1);
-        constexpr bool utf8StringArrayIsNotLatin1 =
-                !QAnyStringView::fromArray(u8"Tørrfisk").isLatin1();
-        QVERIFY(utf8StringArrayIsNotLatin1);
-    }
-}
-
 template <typename StringBuilder>
 void tst_QAnyStringView::fromQStringBuilder(StringBuilder &&sb, QStringView expected) const
 {
@@ -539,6 +530,19 @@ void tst_QAnyStringView::fromContainers() const
     fromContainer<Char, std::vector<Char>>();
 }
 
+namespace q20 {
+#ifdef __cpp_lib_ssize
+    using std::ssize;
+#else
+    template<class C> constexpr auto ssize(const C& c)
+      -> std::common_type_t<std::ptrdiff_t, std::make_signed_t<decltype(c.size())>>
+    { return static_cast<std::common_type_t<ptrdiff_t, std::make_signed_t<decltype(c.size())>>>(c.size()); }
+
+    template<class T, ptrdiff_t N> constexpr ptrdiff_t ssize(const T (&array)[N]) noexcept
+    { return N; }
+#endif
+}
+
 namespace help {
     template <typename T>
     auto ssize(T &t) { return q20::ssize(t); }
@@ -636,28 +640,6 @@ void tst_QAnyStringView::comparison()
     QCOMPARE(QAnyStringView::compare(aa, upperAa, Qt::CaseInsensitive), 0);
     QVERIFY(QAnyStringView::compare(aa, bb) < 0);
     QVERIFY(QAnyStringView::compare(bb, aa) > 0);
-}
-
-void tst_QAnyStringView::compare3way()
-{
-#define COMPARE_3WAY(lhs, rhs, res) \
-    do { \
-        const auto qt_3way_cmp_res = (lhs) <=> (rhs); \
-        static_assert(std::is_same_v<decltype(qt_3way_cmp_res), decltype(res)>); \
-        QCOMPARE(std::is_eq(qt_3way_cmp_res), std::is_eq(res)); \
-        QCOMPARE(std::is_lt(qt_3way_cmp_res), std::is_lt(res)); \
-        QCOMPARE(std::is_gt(qt_3way_cmp_res), std::is_gt(res)); \
-    } while (false)
-
-    ONLY_3WAY(
-    const QAnyStringView aa = u"aa";
-    const QAnyStringView upperAa = u"AA";
-    const QAnyStringView bb = u"bb";
-    COMPARE_3WAY(aa, aa, std::strong_ordering::equal);
-    COMPARE_3WAY(aa, bb, std::strong_ordering::less);
-    COMPARE_3WAY(bb, aa, std::strong_ordering::greater)
-    );
-#undef COMPARE_3WAY
 }
 
 QTEST_APPLESS_MAIN(tst_QAnyStringView)

@@ -2,9 +2,6 @@
 
 This directory holds scripts to help the porting process from `qmake` to `cmake` for Qt6.
 
-If you're looking to port your own Qt-based project from `qmake` to `cmake`, please use
-[qmake2cmake](https://wiki.qt.io/Qmake2cmake).
-
 # Requirements
 
 * [Python 3.7](https://www.python.org/downloads/),
@@ -42,16 +39,22 @@ python3.7 -m pip install -r requirements.txt
 You can verify if the styling of a script is compliant with PEP8, with a couple of exceptions:
 
 Install [flake8](http://flake8.pycqa.org/en/latest/) (`pip install flake8`) and run it
-on all python source files:
+on the script you want to test:
 
 ```
-make flake8
+flake8 <file>.py --ignore=E501,E266,W503
 ```
+
+* `E501`: Line too long (82>79 characters),
+* `E266`: Too many leading '#' for block comment,
+* `W503`: Line break occurred before a binary operator)
 
 You can also modify the file with an automatic formatter,
 like [black](https://black.readthedocs.io/en/stable/) (`pip install black`),
 and execute it:
 
 ```
-make format
+black -l 100 <file>.py
 ```
+
+Using Qt's maximum line length, 100.

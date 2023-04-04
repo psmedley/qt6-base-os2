@@ -21,15 +21,12 @@ qt_internal_add_test(tst_qnetworkreply
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../" # special case
     SOURCES
         ../tst_qnetworkreply.cpp
-        ../data/gzip.rcc.cpp
-        ../data/zstandard.rcc.cpp
     PUBLIC_LIBRARIES
         Qt::CorePrivate
         Qt::NetworkPrivate
     TESTDATA ${test_data}
     QT_TEST_SERVER_LIST "vsftpd" "apache2" "ftp-proxy" "danted" "squid" # special case
 )
-add_dependencies(tst_qnetworkreply echo)
 
 # Resources:
 set(qnetworkreply_resource_files

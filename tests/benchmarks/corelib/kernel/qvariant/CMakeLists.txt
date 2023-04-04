@@ -1,10 +1,12 @@
+# Generated from qvariant.pro.
+
 #####################################################################
 ## tst_bench_qvariant Binary:
 #####################################################################
 
 qt_internal_add_benchmark(tst_bench_qvariant
     SOURCES
-        tst_bench_qvariant.cpp
+        tst_qvariant.cpp
     PUBLIC_LIBRARIES
         Qt::Gui
         Qt::Test

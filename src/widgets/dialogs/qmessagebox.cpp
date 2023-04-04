@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtWidgets/qmessagebox.h>
 
@@ -35,8 +71,6 @@
 #endif
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 #if defined(Q_OS_WIN)
 HMENU qt_getWindowsSystemMenu(const QWidget *w)
@@ -236,16 +270,16 @@ void QMessageBoxPrivate::init(const QString &title, const QString &text)
     Q_Q(QMessageBox);
 
     label = new QLabel;
-    label->setObjectName("qt_msgbox_label"_L1);
+    label->setObjectName(QLatin1String("qt_msgbox_label"));
     label->setTextInteractionFlags(Qt::TextInteractionFlags(q->style()->styleHint(QStyle::SH_MessageBox_TextInteractionFlags, nullptr, q)));
     label->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
     label->setOpenExternalLinks(true);
     iconLabel = new QLabel(q);
-    iconLabel->setObjectName("qt_msgboxex_icon_label"_L1);
+    iconLabel->setObjectName(QLatin1String("qt_msgboxex_icon_label"));
     iconLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
     buttonBox = new QDialogButtonBox;
-    buttonBox->setObjectName("qt_msgbox_buttonbox"_L1);
+    buttonBox->setObjectName(QLatin1String("qt_msgbox_buttonbox"));
     buttonBox->setCenterButtons(q->style()->styleHint(QStyle::SH_MessageBox_CenterButtons, nullptr, q));
     QObject::connect(buttonBox, SIGNAL(clicked(QAbstractButton*)),
                      q, SLOT(_q_buttonClicked(QAbstractButton*)));
@@ -484,7 +518,7 @@ void QMessageBoxPrivate::setClickedButton(QAbstractButton *button)
     emit q->buttonClicked(clickedButton);
 
     auto resultCode = execReturnCode(button);
-    close(resultCode);
+    hide(resultCode);
     finalize(resultCode, dialogCodeForButton(button));
 }
 
@@ -715,7 +749,8 @@ void QMessageBoxPrivate::_q_clicked(QPlatformDialogHelper::StandardButton button
     When an escape button can't be determined using these rules,
     pressing \uicontrol Esc has no effect.
 
-    \sa QDialogButtonBox, {Standard Dialogs Example}, {Qt Widgets - Application Example}
+    \sa QDialogButtonBox, {fowler}{GUI Design Handbook: Message Box}, {Standard Dialogs Example},
+        {Qt Widgets - Application Example}
 */
 
 /*!
@@ -1031,14 +1066,14 @@ void QMessageBoxPrivate::detectEscapeButton()
 
     // If there is only one button, make it the escape button
     const QList<QAbstractButton *> buttons = buttonBox->buttons();
-    if (buttons.size() == 1) {
+    if (buttons.count() == 1) {
         detectedEscapeButton = buttons.first();
         return;
     }
 
     // If there are two buttons and one of them is the "Show Details..."
     // button, then make the other one the escape button
-    if (buttons.size() == 2 && detailsButton) {
+    if (buttons.count() == 2 && detailsButton) {
         auto idx = buttons.indexOf(detailsButton);
         if (idx != -1) {
             detectedEscapeButton = buttons.at(1 - idx);
@@ -1385,10 +1420,8 @@ void QMessageBox::closeEvent(QCloseEvent *e)
         return;
     }
     QDialog::closeEvent(e);
-    if (!d->clickedButton) {
-        d->clickedButton = d->detectedEscapeButton;
-        setResult(d->execReturnCode(d->detectedEscapeButton));
-    }
+    d->clickedButton = d->detectedEscapeButton;
+    setResult(d->execReturnCode(d->detectedEscapeButton));
 }
 
 /*!
@@ -1461,21 +1494,21 @@ void QMessageBox::keyPressEvent(QKeyEvent *e)
 
 #if defined(Q_OS_WIN)
         if (e == QKeySequence::Copy) {
-            const auto separator = "---------------------------\n"_L1;
+            const QLatin1String separator("---------------------------\n");
             QString textToCopy;
-            textToCopy += separator + windowTitle() + u'\n' + separator // title
-                          + d->label->text() + u'\n' + separator;       // text
+            textToCopy += separator + windowTitle() + QLatin1Char('\n') + separator // title
+                          + d->label->text() + QLatin1Char('\n') + separator;       // text
 
             if (d->informativeLabel)
-                textToCopy += d->informativeLabel->text() + u'\n' + separator;
+                textToCopy += d->informativeLabel->text() + QLatin1Char('\n') + separator;
 
             const QList<QAbstractButton *> buttons = d->buttonBox->buttons();
             for (const auto *button : buttons)
-                textToCopy += button->text() + "   "_L1;
-            textToCopy += u'\n' + separator;
+                textToCopy += button->text() + QLatin1String("   ");
+            textToCopy += QLatin1Char('\n') + separator;
 #if QT_CONFIG(textedit)
             if (d->detailsText)
-                textToCopy += d->detailsText->text() + u'\n' + separator;
+                textToCopy += d->detailsText->text() + QLatin1Char('\n') + separator;
 #endif
             QGuiApplication::clipboard()->setText(textToCopy);
             return;
@@ -1564,7 +1597,7 @@ void QMessageBox::showEvent(QShowEvent *e)
     d->detectEscapeButton();
     d->updateSize();
 
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
     QAccessibleEvent event(this, QAccessible::Alert);
     QAccessible::updateAccessibility(&event);
 #endif
@@ -1778,7 +1811,7 @@ void QMessageBox::about(QWidget *parent, const QString &title, const QString &te
     }
 #endif
 
-    QMessageBox *msgBox = new QMessageBox(Information, title, text, NoButton, parent
+    QMessageBox *msgBox = new QMessageBox(title, text, Information, 0, 0, 0, parent
 #ifdef Q_OS_MAC
                                           , Qt::WindowTitleHint | Qt::WindowSystemMenuHint
 #endif
@@ -1836,7 +1869,7 @@ void QMessageBox::aboutQt(QWidget *parent, const QString &title)
     translatedTextAboutQtCaption = QMessageBox::tr(
         "<h3>About Qt</h3>"
         "<p>This program uses Qt version %1.</p>"
-        ).arg(QT_VERSION_STR ""_L1);
+        ).arg(QLatin1String(QT_VERSION_STR));
     //: Leave this text untranslated or include a verbatim copy of it below
     //: and note that it is the authoritative version in case of doubt.
     const QString translatedTextAboutQtText = QMessageBox::tr(
@@ -1870,7 +1903,7 @@ void QMessageBox::aboutQt(QWidget *parent, const QString &title)
     msgBox->setText(translatedTextAboutQtCaption);
     msgBox->setInformativeText(translatedTextAboutQtText);
 
-    QPixmap pm(":/qt-project.org/qmessagebox/images/qtlogo-64.png"_L1);
+    QPixmap pm(QLatin1String(":/qt-project.org/qmessagebox/images/qtlogo-64.png"));
     if (!pm.isNull())
         msgBox->setIconPixmap(pm);
 
@@ -1899,7 +1932,33 @@ static QMessageBox::StandardButton newButton(int button)
     if (button == QMessageBox::NoButton || (button & NewButtonMask))
         return QMessageBox::StandardButton(button & QMessageBox::ButtonMask);
 
+#if QT_VERSION < 0x050000
+    // this is needed for binary compatibility with Qt 4.0 and 4.1
+    switch (button & Old_ButtonMask) {
+    case Old_Ok:
+        return QMessageBox::Ok;
+    case Old_Cancel:
+        return QMessageBox::Cancel;
+    case Old_Yes:
+        return QMessageBox::Yes;
+    case Old_No:
+        return QMessageBox::No;
+    case Old_Abort:
+        return QMessageBox::Abort;
+    case Old_Retry:
+        return QMessageBox::Retry;
+    case Old_Ignore:
+        return QMessageBox::Ignore;
+    case Old_YesAll:
+        return QMessageBox::YesToAll;
+    case Old_NoAll:
+        return QMessageBox::NoToAll;
+    default:
+        return QMessageBox::NoButton;
+    }
+#else
     return QMessageBox::NoButton;
+#endif
 }
 
 static bool detectedCompat(int button0, int button1, int button2)
@@ -2531,7 +2590,7 @@ void QMessageBox::setInformativeText(const QString &text)
     } else {
         if (!d->informativeLabel) {
             QLabel *label = new QLabel;
-            label->setObjectName("qt_msgbox_informativelabel"_L1);
+            label->setObjectName(QLatin1String("qt_msgbox_informativelabel"));
             label->setTextInteractionFlags(Qt::TextInteractionFlags(style()->styleHint(QStyle::SH_MessageBox_TextInteractionFlags, nullptr, this)));
             label->setAlignment(Qt::AlignTop | Qt::AlignLeft);
             label->setOpenExternalLinks(true);

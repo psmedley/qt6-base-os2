@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <private/qabstractspinbox_p.h>
 #include <qspinbox.h>
@@ -14,8 +50,6 @@
 #include <float.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 //#define QSPINBOX_QSBDEBUG
 #ifdef QSPINBOX_QSBDEBUG
@@ -484,7 +518,7 @@ QString QSpinBox::textFromValue(int value) const
     QString str;
 
     if (d->displayIntegerBase != 10) {
-        const auto prefix = value < 0 ? "-"_L1 : ""_L1;
+        const QLatin1String prefix = value < 0 ? QLatin1String("-") : QLatin1String();
         str = prefix + QString::number(qAbs(value), d->displayIntegerBase);
     } else {
         str = locale().toString(value);
@@ -943,8 +977,9 @@ void QDoubleSpinBox::setDecimals(int decimals)
     This virtual function is used by the spin box whenever it needs to
     display the given \a value. The default implementation returns a string
     containing \a value printed using QWidget::locale().toString(\a value,
-    \c u'f', decimals()) and will remove the thousand separator unless
-    setGroupSeparatorShown() is set. Reimplementations may return anything.
+    QLatin1Char('f'), decimals()) and will remove the thousand
+    separator unless setGroupSeparatorShown() is set. Reimplementations may
+    return anything.
 
     Note: QDoubleSpinBox does not call this function for
     specialValueText() and that neither prefix() nor suffix() should
@@ -1092,11 +1127,11 @@ QVariant QSpinBoxPrivate::validateAndInterpret(QString &input, int &pos,
     int num = min;
 
     if (max != min && (copy.isEmpty()
-                       || (min < 0 && copy == "-"_L1)
-                       || (max >= 0 && copy == "+"_L1))) {
+                       || (min < 0 && copy == QLatin1String("-"))
+                       || (max >= 0 && copy == QLatin1String("+")))) {
         state = QValidator::Intermediate;
         QSBDEBUG() << __FILE__ << __LINE__<< "num is set to" << num;
-    } else if (copy.startsWith(u'-') && min >= 0) {
+    } else if (copy.startsWith(QLatin1Char('-')) && min >= 0) {
         state = QValidator::Invalid; // special-case -0 will be interpreted as 0 and thus not be invalid with a range from 0-100
     } else {
         bool ok = false;
@@ -1256,15 +1291,15 @@ QVariant QDoubleSpinBoxPrivate::validateAndInterpret(QString &input, int &pos,
         goto end;
     case 1:
         if (copy.at(0) == locale.decimalPoint()
-            || (plus && copy.at(0) == u'+')
-            || (minus && copy.at(0) == u'-')) {
+            || (plus && copy.at(0) == QLatin1Char('+'))
+            || (minus && copy.at(0) == QLatin1Char('-'))) {
             state = QValidator::Intermediate;
             goto end;
         }
         break;
     case 2:
         if (copy.at(1) == locale.decimalPoint()
-            && ((plus && copy.at(0) == u'+') || (minus && copy.at(0) == u'-'))) {
+            && ((plus && copy.at(0) == QLatin1Char('+')) || (minus && copy.at(0) == QLatin1Char('-')))) {
             state = QValidator::Intermediate;
             goto end;
         }

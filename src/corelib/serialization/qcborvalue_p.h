@@ -1,5 +1,41 @@
-// Copyright (C) 2020 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QCBORVALUE_P_H
 #define QCBORVALUE_P_H
@@ -79,8 +115,7 @@ struct ByteData
     QString toUtf8String() const    { return QString::fromUtf8(byte(), len); }
 
     QByteArray asByteArrayView() const { return QByteArray::fromRawData(byte(), len); }
-    QLatin1StringView asLatin1() const  { return {byte(), len}; }
-    QUtf8StringView asUtf8StringView() const { return QUtf8StringView(byte(), len); }
+    QLatin1String asLatin1() const  { return QLatin1String(byte(), len); }
     QStringView asStringView() const{ return QStringView(utf16(), len / 2); }
     QString asQStringRaw() const    { return QString::fromRawData(utf16(), len / 2); }
 };
@@ -214,7 +249,7 @@ public:
     {
         appendByteData(str, len, QCborValue::String);
     }
-    void append(QLatin1StringView s)
+    void append(QLatin1String s)
     {
         if (!QtPrivate::isAscii(s))
             return append(QString(s));
@@ -225,10 +260,12 @@ public:
     }
     void appendAsciiString(QStringView s);
 
+#if QT_STRINGVIEW_LEVEL < 2
     void append(const QString &s)
     {
         append(qToStringViewIgnoringNull(s));
     }
+#endif
 
     void append(QStringView s)
     {
@@ -329,7 +366,7 @@ public:
         return e;
     }
 
-    static int compareUtf8(const QtCbor::ByteData *b, QLatin1StringView s)
+    static int compareUtf8(const QtCbor::ByteData *b, const QLatin1String &s)
     {
         return QUtf8::compareUtf8(QByteArrayView(b->byte(), b->len), s);
     }
@@ -380,62 +417,6 @@ public:
         replaceAt(idx, {});
         elements.remove(idx);
     }
-
-    // doesn't apply to JSON
-    template <typename KeyType> QCborValueConstRef findCborMapKey(KeyType key)
-    {
-        qsizetype i = 0;
-        for ( ; i < elements.size(); i += 2) {
-            const auto &e = elements.at(i);
-            bool equals;
-            if constexpr (std::is_same_v<std::decay_t<KeyType>, QCborValue>) {
-                equals = (compareElement(i, key) == 0);
-            } else if constexpr (std::is_integral_v<KeyType>) {
-                equals = (e.type == QCborValue::Integer && e.value == key);
-            } else {
-                // assume it's a string
-                equals = stringEqualsElement(i, key);
-            }
-            if (equals)
-                break;
-        }
-        return { this, i + 1 };
-    }
-    template <typename KeyType> static QCborValue findCborMapKey(const QCborValue &self, KeyType key)
-    {
-        if (self.isMap() && self.container) {
-            qsizetype idx = self.container->findCborMapKey(key).i;
-            if (idx < self.container->elements.size())
-                return self.container->valueAt(idx);
-        }
-        return QCborValue();
-    }
-    template <typename KeyType> static QCborValueRef
-    findOrAddMapKey(QCborContainerPrivate *container, KeyType key)
-    {
-        qsizetype size = 0;
-        qsizetype index = size + 1;
-        if (container) {
-            size = container->elements.size();
-            index = container->findCborMapKey<KeyType>(key).i; // returns size + 1 if not found
-        }
-        Q_ASSERT(index & 1);
-        Q_ASSERT((size & 1) == 0);
-
-        container = detach(container, qMax(index + 1, size));
-        Q_ASSERT(container);
-        Q_ASSERT((container->elements.size() & 1) == 0);
-
-        if (index >= size) {
-            container->append(key);
-            container->append(QCborValue());
-        }
-        Q_ASSERT(index < container->elements.size());
-        return { container, index };
-    }
-    template <typename KeyType> static QCborValueRef findOrAddMapKey(QCborMap &map, KeyType key);
-    template <typename KeyType> static QCborValueRef findOrAddMapKey(QCborValue &self, KeyType key);
-    template <typename KeyType> static QCborValueRef findOrAddMapKey(QCborValueRef self, KeyType key);
 
 #if QT_CONFIG(cborstreamreader)
     void decodeValueFromCbor(QCborStreamReader &reader, int remainingStackDepth);

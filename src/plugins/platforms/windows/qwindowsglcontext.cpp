@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qwindowsglcontext.h"
 #include "qwindowscontext.h"
@@ -544,14 +580,11 @@ static int choosePixelFormat(HDC hdc,
         iAttributes[i++] = WGL_NUMBER_OVERLAYS_ARB;
         iAttributes[i++] = 1;
     }
-    // must be the one before the last one
     const int samples = format.samples();
     const bool sampleBuffersRequested = samples > 1
             && testFlag(staticContext.extensions, QOpenGLStaticContext::SampleBuffers);
-    int sampleBuffersKeyPosition = 0;
     int samplesValuePosition = 0;
     if (sampleBuffersRequested) {
-        sampleBuffersKeyPosition = i;
         iAttributes[i++] = WGL_SAMPLE_BUFFERS_ARB;
         iAttributes[i++] = TRUE;
         iAttributes[i++] = WGL_SAMPLES_ARB;
@@ -563,9 +596,9 @@ static int choosePixelFormat(HDC hdc,
     }
     // must be the last
     bool srgbRequested = format.colorSpace() == QColorSpace::SRgb;
-    int srgbCapableKeyPosition = 0;
+    int srgbValuePosition = 0;
     if (srgbRequested) {
-        srgbCapableKeyPosition = i;
+        srgbValuePosition = i;
         iAttributes[i++] = WGL_FRAMEBUFFER_SRGB_CAPABLE_EXT;
         iAttributes[i++] = TRUE;
     }
@@ -579,9 +612,8 @@ static int choosePixelFormat(HDC hdc,
                 && numFormats >= 1;
         if (valid || (!sampleBuffersRequested && !srgbRequested))
             break;
-        // NB reductions must be done in reverse order (disable the last first, then move on to the one before that, etc.)
         if (srgbRequested) {
-            iAttributes[srgbCapableKeyPosition] = 0;
+            iAttributes[srgbValuePosition] = 0;
             srgbRequested = false;
         } else if (sampleBuffersRequested) {
             if (iAttributes[samplesValuePosition] > 1) {
@@ -589,8 +621,11 @@ static int choosePixelFormat(HDC hdc,
             } else if (iAttributes[samplesValuePosition] == 1) {
                 // Fallback in case it is unable to initialize with any
                 // samples to avoid falling back to the GDI path
-                iAttributes[sampleBuffersKeyPosition] = 0;
+                // NB: The sample attributes needs to be at the end for this
+                // to work correctly
+                iAttributes[samplesValuePosition - 1] = FALSE;
                 iAttributes[samplesValuePosition] = 0;
+                iAttributes[samplesValuePosition + 1] = 0;
             } else {
                 break;
             }
@@ -1267,7 +1302,7 @@ bool QWindowsGLContext::makeCurrent(QPlatformSurface *surface)
     if (const QOpenGLContextData *contextData = findByHWND(m_windowContexts, hwnd)) {
         // Repeated calls to wglMakeCurrent when vsync is enabled in the driver will
         // often result in 100% cpuload. This check is cheap and avoids the problem.
-        // This is reproducible on NVidia cards and Intel onboard chips.
+        // This is reproducable on NVidia cards and Intel onboard chips.
         if (QOpenGLStaticContext::opengl32.wglGetCurrentContext() == contextData->renderingContext
                 && QOpenGLStaticContext::opengl32.wglGetCurrentDC() == contextData->hdc) {
             return true;

@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtOpenGL module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qopenglshaderprogram.h"
 #include "qopenglextrafunctions.h"
@@ -21,11 +57,8 @@
 #endif
 
 #include <algorithm>
-#include <memory>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*!
     \class QOpenGLShaderProgram
@@ -364,7 +397,7 @@ bool QOpenGLShaderPrivate::compile(QOpenGLShader *q)
         if (logBuffer)
             log = QString::fromLatin1(logBuffer);
         else
-            log = u"failed"_s;
+            log = QLatin1String("failed");
 
         if (name.isEmpty())
             qWarning("QOpenGLShader::compile(%s): %s", type, qPrintable(log));
@@ -545,7 +578,7 @@ static QVersionDirectivePosition findVersionDirectivePosition(const char *source
         case CommentEnding:
             if (*c == '/')
                 state = Normal;
-            else if (*c != u'*')
+            else if (*c != QLatin1Char('*'))
                 state = MultiLineComment;
             break;
         }
@@ -629,7 +662,7 @@ bool QOpenGLShader::compileSourceCode(const char *source)
             // Append #line directive in order to compensate for text insertion
             lineDirective = QStringLiteral("#line %1\n").arg(versionDirectivePosition.line).toUtf8();
             sourceChunks.append(lineDirective.constData());
-            sourceChunkLengths.append(GLint(lineDirective.size()));
+            sourceChunkLengths.append(GLint(lineDirective.length()));
         }
 
         // Append rest of shader code
@@ -1230,7 +1263,7 @@ void QOpenGLShaderProgram::removeAllShaders()
 {
     Q_D(QOpenGLShaderProgram);
     d->removingShaders = true;
-    for (QOpenGLShader *shader : std::as_const(d->shaders)) {
+    for (QOpenGLShader *shader : qAsConst(d->shaders)) {
         if (d->programGuard && d->programGuard->id()
             && shader && shader->d_func()->shaderGuard)
         {
@@ -3727,13 +3760,13 @@ bool QOpenGLShaderProgramPrivate::isCacheDisabled() const
 bool QOpenGLShaderProgramPrivate::compileCacheable()
 {
     Q_Q(QOpenGLShaderProgram);
-    for (const QOpenGLProgramBinaryCache::ShaderDesc &shader : std::as_const(binaryProgram.shaders)) {
-        auto s = std::make_unique<QOpenGLShader>(qt_shaderStageToType(shader.stage), q);
+    for (const QOpenGLProgramBinaryCache::ShaderDesc &shader : qAsConst(binaryProgram.shaders)) {
+        QScopedPointer<QOpenGLShader> s(new QOpenGLShader(qt_shaderStageToType(shader.stage), q));
         if (!s->compileSourceCode(shader.source)) {
             log = s->log();
             return false;
         }
-        anonShaders.append(s.release());
+        anonShaders.append(s.take());
         if (!q->addShader(anonShaders.last()))
             return false;
     }
@@ -3749,7 +3782,7 @@ bool QOpenGLShaderProgramPrivate::linkBinary()
     const QByteArray cacheKey = binaryProgram.cacheKey();
     if (lcOpenGLProgramDiskCache().isEnabled(QtDebugMsg))
         qCDebug(lcOpenGLProgramDiskCache, "program with %d shaders, cache key %s",
-                int(binaryProgram.shaders.size()), cacheKey.constData());
+                int(binaryProgram.shaders.count()), cacheKey.constData());
 
     bool needsCompile = true;
     if (binCache.load(cacheKey, q->programId())) {
@@ -3776,5 +3809,3 @@ bool QOpenGLShaderProgramPrivate::linkBinary()
 }
 
 QT_END_NAMESPACE
-
-#include "moc_qopenglshaderprogram.cpp"

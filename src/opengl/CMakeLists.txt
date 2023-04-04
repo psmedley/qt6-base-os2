@@ -28,8 +28,9 @@ qt_internal_add_module(OpenGL
         qopenglversionfunctions.cpp qopenglversionfunctions.h qopenglversionfunctions_p.h
         qopenglversionfunctionsfactory.cpp qopenglversionfunctionsfactory.h
         qopenglversionprofile.cpp qopenglversionprofile.h
-        qopenglvertexarrayobject.cpp qopenglvertexarrayobject.h qopenglvertexarrayobject_p.h
+        qopenglvertexarrayobject.cpp qopenglvertexarrayobject.h
         qopenglwindow.cpp qopenglwindow.h
+        qplatformbackingstoreopenglsupport.cpp qplatformbackingstoreopenglsupport.h
         qtopenglglobal.h
     DEFINES
         QT_NO_FOREACH
@@ -43,7 +44,6 @@ qt_internal_add_module(OpenGL
     PRIVATE_MODULE_INTERFACE
         Qt::CorePrivate
         Qt::GuiPrivate
-    GENERATE_CPP_EXPORTS
 )
 
 ## Scopes:

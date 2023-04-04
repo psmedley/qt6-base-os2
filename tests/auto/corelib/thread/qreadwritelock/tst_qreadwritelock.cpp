@@ -1,5 +1,30 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QSemaphore>
@@ -10,7 +35,6 @@
 #include <qthread.h>
 #include <qwaitcondition.h>
 #include <private/qemulationdetector_p.h>
-#include <private/qvolatile_p.h>
 
 #ifdef Q_OS_UNIX
 #include <unistd.h>
@@ -564,8 +588,12 @@ public:
             if(count)
                 qFatal("Non-zero count at start of write! (%d)",count );
 //            printf(".");
-            for (int i = 0; i < maxval; ++i)
-                QtPrivate::volatilePreIncrement(count);
+            int i;
+            for(i=0; i<maxval; ++i) {
+                volatile int lc=count;
+                ++lc;
+                count=lc;
+            }
             count=0;
             testRwlock.unlock();
             msleep(ulong(waitTime));
@@ -672,26 +700,27 @@ void tst_QReadWriteLock::multipleReadersLoop()
     if (QTestPrivate::isRunningArmOnX86())
         QSKIP("Flaky on QEMU, QTBUG-96103");
 
-    constexpr int time = 500;
-    constexpr int hold = 250;
-    constexpr int wait = 0;
+    int time=500;
+    int hold=250;
+    int wait=0;
 #if defined (Q_OS_HPUX)
-    constexpr int NumThreads = 50;
+    const int numthreads=50;
 #elif defined(Q_OS_VXWORKS)
-    constexpr int NumThreads = 40;
+    const int numthreads=40;
 #else
-    constexpr int NumThreads = 75;
+    const int numthreads=75;
 #endif
     QReadWriteLock testLock;
-    ReadLockLoopThread *threads[NumThreads];
-    for (auto &thread : threads)
-        thread = new ReadLockLoopThread(testLock, time, hold, wait);
-    for (auto thread : threads)
-        thread->start();
-    for (auto thread : threads)
-        thread->wait();
-    for (auto thread : threads)
-        delete thread;
+    ReadLockLoopThread *threads[numthreads];
+    int i;
+    for (i=0; i<numthreads; ++i)
+        threads[i] = new ReadLockLoopThread(testLock, time, hold, wait);
+    for (i=0; i<numthreads; ++i)
+        threads[i]->start();
+    for (i=0; i<numthreads; ++i)
+        threads[i]->wait();
+    for (i=0; i<numthreads; ++i)
+        delete threads[i];
 }
 
 /*
@@ -699,20 +728,21 @@ void tst_QReadWriteLock::multipleReadersLoop()
 */
 void tst_QReadWriteLock::multipleWritersLoop()
 {
-    constexpr int time = 500;
-    constexpr int wait = 0;
-    constexpr int hold = 0;
-    constexpr int numthreads = 50;
-    QReadWriteLock testLock;
-    WriteLockLoopThread *threads[numthreads];
-    for (auto &thread : threads)
-        thread = new WriteLockLoopThread(testLock, time, hold, wait);
-    for (auto thread : threads)
-        thread->start();
-    for (auto thread : threads)
-        thread->wait();
-    for (auto thread : threads)
-        delete thread;
+        int time=500;
+        int wait=0;
+        int hold=0;
+        const int numthreads=50;
+        QReadWriteLock testLock;
+        WriteLockLoopThread *threads[numthreads];
+        int i;
+        for (i=0; i<numthreads; ++i)
+            threads[i] = new WriteLockLoopThread(testLock, time, hold, wait);
+        for (i=0; i<numthreads; ++i)
+            threads[i]->start();
+        for (i=0; i<numthreads; ++i)
+            threads[i]->wait();
+        for (i=0; i<numthreads; ++i)
+            delete threads[i];
 }
 
 /*
@@ -720,36 +750,40 @@ void tst_QReadWriteLock::multipleWritersLoop()
 */
 void tst_QReadWriteLock::multipleReadersWritersLoop()
 {
-    constexpr int time = 10000; // INT_MAX
-    constexpr int readerThreads = 20;
-    constexpr int readerWait = 0;
-    constexpr int readerHold = 1;
+        //int time=INT_MAX;
+        int time=10000;
+        int readerThreads=20;
+        int readerWait=0;
+        int readerHold=1;
 
-    constexpr int writerThreads = 2;
-    constexpr int writerWait = 500;
-    constexpr int writerHold = 50;
+        int writerThreads=2;
+        int writerWait=500;
+        int writerHold=50;
 
-    QReadWriteLock testLock;
-    ReadLockLoopThread  *readers[readerThreads];
-    WriteLockLoopThread *writers[writerThreads];
+        QReadWriteLock testLock;
+        ReadLockLoopThread  *readers[1024];
+        WriteLockLoopThread *writers[1024];
+        int i;
 
-    for (auto &thread : readers)
-        thread = new ReadLockLoopThread(testLock, time, readerHold, readerWait, false);
-    for (auto &thread : writers)
-        thread = new WriteLockLoopThread(testLock, time, writerHold, writerWait, false);
-    for (auto thread : readers)
-        thread->start(QThread::NormalPriority);
-    for (auto thread : writers)
-        thread->start(QThread::IdlePriority);
+        for (i=0; i<readerThreads; ++i)
+            readers[i] = new ReadLockLoopThread(testLock, time, readerHold, readerWait, false);
+        for (i=0; i<writerThreads; ++i)
+            writers[i] = new WriteLockLoopThread(testLock, time, writerHold, writerWait, false);
 
-    for (auto thread : readers)
-        thread->wait();
-    for (auto thread : writers)
-        thread->wait();
-    for (auto thread : readers)
-        delete thread;
-    for (auto thread : writers)
-        delete thread;
+        for (i=0; i<readerThreads; ++i)
+            readers[i]->start(QThread::NormalPriority);
+        for (i=0; i<writerThreads; ++i)
+            writers[i]->start(QThread::IdlePriority);
+
+        for (i=0; i<readerThreads; ++i)
+            readers[i]->wait();
+        for (i=0; i<writerThreads; ++i)
+            writers[i]->wait();
+
+        for (i=0; i<readerThreads; ++i)
+            delete readers[i];
+        for (i=0; i<writerThreads; ++i)
+            delete writers[i];
 }
 
 /*
@@ -758,35 +792,39 @@ void tst_QReadWriteLock::multipleReadersWritersLoop()
 */
 void tst_QReadWriteLock::countingTest()
 {
-    constexpr int time = 10000; // INT_MAX
-    constexpr int readerThreads = 20;
-    constexpr int readerWait = 1;
+        //int time=INT_MAX;
+        int time=10000;
+        int readerThreads=20;
+        int readerWait=1;
 
-    constexpr int writerThreads = 3;
-    constexpr int writerWait = 150;
-    constexpr int maxval = 10000;
+        int writerThreads=3;
+        int writerWait=150;
+        int maxval=10000;
 
-    QReadWriteLock testLock;
-    ReadLockCountThread  *readers[readerThreads];
-    WriteLockCountThread *writers[writerThreads];
+        QReadWriteLock testLock;
+        ReadLockCountThread  *readers[1024];
+        WriteLockCountThread *writers[1024];
+        int i;
 
-    for (auto &thread : readers)
-        thread = new ReadLockCountThread(testLock, time,  readerWait);
-    for (auto &thread : writers)
-        thread = new WriteLockCountThread(testLock, time,  writerWait, maxval);
-    for (auto thread : readers)
-        thread->start(QThread::NormalPriority);
-    for (auto thread : writers)
-        thread->start(QThread::LowestPriority);
+        for (i=0; i<readerThreads; ++i)
+            readers[i] = new ReadLockCountThread(testLock, time,  readerWait);
+        for (i=0; i<writerThreads; ++i)
+            writers[i] = new WriteLockCountThread(testLock, time,  writerWait, maxval);
 
-    for (auto thread : readers)
-        thread->wait();
-    for (auto thread : writers)
-        thread->wait();
-    for (auto thread : readers)
-        delete thread;
-    for (auto thread : writers)
-        delete thread;
+        for (i=0; i<readerThreads; ++i)
+            readers[i]->start(QThread::NormalPriority);
+        for (i=0; i<writerThreads; ++i)
+            writers[i]->start(QThread::LowestPriority);
+
+        for (i=0; i<readerThreads; ++i)
+            readers[i]->wait();
+        for (i=0; i<writerThreads; ++i)
+            writers[i]->wait();
+
+        for (i=0; i<readerThreads; ++i)
+            delete readers[i];
+        for (i=0; i<writerThreads; ++i)
+            delete writers[i];
 }
 
 void tst_QReadWriteLock::limitedReaders()

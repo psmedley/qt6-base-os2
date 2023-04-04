@@ -1,3 +1,5 @@
+# Generated from test.pro.
+
 #####################################################################
 ## tst_qprocess Test:
 #####################################################################
@@ -9,36 +11,16 @@ qt_internal_add_test(tst_qprocess
     PUBLIC_LIBRARIES
         Qt::CorePrivate
         Qt::Network
-        Qt::TestPrivate
 )
 
-## Build assorted sub-programs called from the test:
-add_dependencies(tst_qprocess
-    testProcessCrash
-    testProcessEcho
-    testProcessEcho2
-    testProcessEcho3
-    testProcessEnvironment
-    testProcessHang
-    testProcessNormal
-    testProcessOutput
-    testProcessDeadWhileReading
-    testProcessEOF
-    testExitCodes
-    testForwarding
-    testDetached
-    fileWriterProcess
-    testSetWorkingDirectory
-    testSoftExit
-    nospace onespace twospaces
-    testSpaceInName
-)
-if(TARGET Qt::Widgets)
-    add_dependencies(tst_qprocess testGuiProcess)
-endif()
-if(WIN32)
-    add_dependencies(tst_qprocess testProcessEchoGui testSetNamedPipeHandleState)
-endif()
+#### Keys ignored in scope 1:.:.:test.pro:<TRUE>:
+# TEST_HELPER_INSTALLS = "../testProcessSpacesArgs/nospace" "../testProcessSpacesArgs/one space" "../testProcessSpacesArgs/two space s" "../test Space In Name/testSpaceInName"
+
+## Scopes:
+#####################################################################
 
 #### Keys ignored in scope 2:.:.:test.pro:WIN32:
 # TESTDATA = "../testBatFiles/*"
+
+#### Keys ignored in scope 5:.:..:../qprocess.pri:NOT TARGET Qt::Widgets:
+# SUBPROGRAMS = "-testGuiProcess"

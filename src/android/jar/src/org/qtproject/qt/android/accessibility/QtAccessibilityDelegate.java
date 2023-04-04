@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the Android port of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 package org.qtproject.qt.android.accessibility;
@@ -7,7 +43,6 @@ package org.qtproject.qt.android.accessibility;
 import android.accessibilityservice.AccessibilityService;
 import android.app.Activity;
 import android.graphics.Rect;
-import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -16,12 +51,10 @@ import android.view.ViewParent;
 import android.text.TextUtils;
 
 import android.view.accessibility.*;
-import android.view.accessibility.AccessibilityNodeInfo.CollectionInfo;
 import android.view.MotionEvent;
 import android.view.View.OnHoverListener;
 
 import android.content.Context;
-import android.system.Os;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -89,8 +122,6 @@ public class QtAccessibilityDelegate extends View.AccessibilityDelegate
         @Override
         public void onAccessibilityStateChanged(boolean enabled)
         {
-            if (Os.getenv("QT_ANDROID_DISABLE_ACCESSIBILITY") != null)
-                return;
             if (enabled) {
                     try {
                         View view = m_view;
@@ -162,15 +193,9 @@ public class QtAccessibilityDelegate extends View.AccessibilityDelegate
         return true;
     }
 
-    public void notifyScrolledEvent(int viewId)
+    public void notifyLocationChange()
     {
-        sendEventForVirtualViewId(viewId, AccessibilityEvent.TYPE_VIEW_SCROLLED);
-    }
-
-    public void notifyLocationChange(int viewId)
-    {
-        if (m_focusedVirtualViewId == viewId)
-            invalidateVirtualViewId(m_focusedVirtualViewId);
+        invalidateVirtualViewId(m_focusedVirtualViewId);
     }
 
     public void notifyObjectHide(int viewId, int parentId)
@@ -237,14 +262,10 @@ public class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
     public boolean sendEventForVirtualViewId(int virtualViewId, int eventType)
     {
-        final AccessibilityEvent event = getEventForVirtualViewId(virtualViewId, eventType);
-        return sendAccessibilityEvent(event);
-    }
-
-    public boolean sendAccessibilityEvent(AccessibilityEvent event)
-    {
-        if (event == null)
+        if ((virtualViewId == INVALID_ID) || !m_manager.isEnabled()) {
+            Log.w(TAG, "sendEventForVirtualViewId for invalid view");
             return false;
+        }
 
         final ViewGroup group = (ViewGroup) m_view.getParent();
         if (group == null) {
@@ -252,18 +273,15 @@ public class QtAccessibilityDelegate extends View.AccessibilityDelegate
             return false;
         }
 
+        final AccessibilityEvent event;
+        event = getEventForVirtualViewId(virtualViewId, eventType);
         return group.requestSendAccessibilityEvent(m_view, event);
     }
 
     public void invalidateVirtualViewId(int virtualViewId)
     {
-        final AccessibilityEvent event = getEventForVirtualViewId(virtualViewId, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-
-        if (event == null)
-            return;
-
-        event.setContentChangeTypes(AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE);
-        sendAccessibilityEvent(event);
+        if (virtualViewId != INVALID_ID)
+            sendEventForVirtualViewId(virtualViewId, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
     }
 
     private void setHoveredVirtualViewId(int virtualViewId)
@@ -280,14 +298,6 @@ public class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
     private AccessibilityEvent getEventForVirtualViewId(int virtualViewId, int eventType)
     {
-        if ((virtualViewId == INVALID_ID) || !m_manager.isEnabled()) {
-            Log.w(TAG, "getEventForVirtualViewId for invalid view");
-            return null;
-        }
-
-        if (m_activityDelegate.getSurfaceCount() == 0)
-            return null;
-
         final AccessibilityEvent event = AccessibilityEvent.obtain(eventType);
 
         event.setEnabled(true);
@@ -350,11 +360,9 @@ public class QtAccessibilityDelegate extends View.AccessibilityDelegate
 // Spit out the entire hierarchy for debugging purposes
 //        dumpNodes(-1);
 
-        if (m_activityDelegate.getSurfaceCount() != 0) {
-            int[] ids = QtNativeAccessibility.childIdListForAccessibleObject(-1);
-            for (int i = 0; i < ids.length; ++i)
-                result.addChild(m_view, ids[i]);
-        }
+        int[] ids = QtNativeAccessibility.childIdListForAccessibleObject(-1);
+        for (int i = 0; i < ids.length; ++i)
+            result.addChild(m_view, ids[i]);
 
         // The offset values have changed, so we need to re-focus the
         // currently focused item, otherwise it will have an incorrect
@@ -382,9 +390,8 @@ public class QtAccessibilityDelegate extends View.AccessibilityDelegate
         node.setClassName(m_view.getClass().getName() + DEFAULT_CLASS_NAME);
         node.setPackageName(m_view.getContext().getPackageName());
 
-        if (m_activityDelegate.getSurfaceCount() == 0 || !QtNativeAccessibility.populateNode(virtualViewId, node)) {
+        if (!QtNativeAccessibility.populateNode(virtualViewId, node))
             return node;
-        }
 
         // set only if valid, otherwise we return a node that is invalid and will crash when accessed
         node.setSource(m_view, virtualViewId);
@@ -418,13 +425,6 @@ public class QtAccessibilityDelegate extends View.AccessibilityDelegate
         int[] ids = QtNativeAccessibility.childIdListForAccessibleObject(virtualViewId);
         for (int i = 0; i < ids.length; ++i)
             node.addChild(m_view, ids[i]);
-        if (node.isScrollable()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                node.setCollectionInfo(new CollectionInfo(ids.length, 1, false));
-            } else {
-                node.setCollectionInfo(CollectionInfo.obtain(ids.length, 1, false));
-            }
-        }
 
         return node;
     }
@@ -434,7 +434,7 @@ public class QtAccessibilityDelegate extends View.AccessibilityDelegate
         @Override
         public AccessibilityNodeInfo createAccessibilityNodeInfo(int virtualViewId)
         {
-            if (virtualViewId == View.NO_ID || m_activityDelegate.getSurfaceCount() == 0) {
+            if (virtualViewId == View.NO_ID) {
                 return getNodeForView();
             }
             return getNodeForVirtualViewId(virtualViewId);

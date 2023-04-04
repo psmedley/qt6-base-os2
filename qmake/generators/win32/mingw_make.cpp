@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the qmake application of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "mingw_make.h"
 #include "option.h"
@@ -191,7 +216,7 @@ void MingwMakefileGenerator::writeIncPart(QTextStream &t)
             return;
         }
     }
-    for (const ProString &incit: std::as_const(incs)) {
+    for (const ProString &incit: qAsConst(incs)) {
         QString inc = incit.toQString();
         inc.replace(QRegularExpression("\\\\$"), "");
         inc.replace('\\', '/');
@@ -217,18 +242,21 @@ void MingwMakefileGenerator::writeLibsPart(QTextStream &t)
 
 void MingwMakefileGenerator::writeObjectsPart(QTextStream &t)
 {
-    linkerResponseFile = maybeCreateLinkerResponseFile();
-    if (!linkerResponseFile.isValid()) {
+    const ProString &objmax = project->first("QMAKE_LINK_OBJECT_MAX");
+    if (objmax.isEmpty() || project->values("OBJECTS").count() < objmax.toInt()) {
         objectsLinkLine = "$(OBJECTS)";
     } else if (project->isActiveConfig("staticlib") && project->first("TEMPLATE") == "lib") {
         // QMAKE_LIB is used for win32, including mingw, whereas QMAKE_AR is used on Unix.
         QString ar_cmd = var("QMAKE_LIB");
         if (ar_cmd.isEmpty())
             ar_cmd = "ar -rc";
-        objectsLinkLine = ar_cmd + ' ' + var("DEST_TARGET") + " @"
-            + escapeFilePath(linkerResponseFile.filePath);
+        const QString ar_response_file =
+                createResponseFile(var("QMAKE_LINK_OBJECT_SCRIPT"), project->values("OBJECTS"));
+        objectsLinkLine = ar_cmd + ' ' + var("DEST_TARGET") + " @" + escapeFilePath(ar_response_file);
     } else {
-        objectsLinkLine = "@" + escapeFilePath(linkerResponseFile.filePath);
+        const QString ld_response_file =
+                createResponseFile(var("QMAKE_LINK_OBJECT_SCRIPT"), project->values("OBJECTS"));
+        objectsLinkLine = "@" + escapeFilePath(ld_response_file);
     }
     Win32MakefileGenerator::writeObjectsPart(t);
 }
@@ -250,16 +278,13 @@ void MingwMakefileGenerator::writeBuildRulesPart(QTextStream &t)
     if(project->isActiveConfig("staticlib") && project->first("TEMPLATE") == "lib") {
         t << "\n\t-$(DEL_FILE) $(DESTDIR_TARGET) 2>" << var("QMAKE_SHELL_NULL_DEVICE");
         const ProString &objmax = project->first("QMAKE_LINK_OBJECT_MAX");
-        if (objmax.isEmpty() || project->values("OBJECTS").size() < objmax.toInt()) {
+        if (objmax.isEmpty() || project->values("OBJECTS").count() < objmax.toInt()) {
             t << "\n\t$(LIB) $(DESTDIR_TARGET) " << objectsLinkLine << " " ;
         } else {
             t << "\n\t" << objectsLinkLine << " " ;
         }
     } else {
-        t << "\n\t$(LINKER) $(LFLAGS) " << var("QMAKE_LINK_O_FLAG") << "$(DESTDIR_TARGET) "
-          << objectsLinkLine;
-        if (!linkerResponseFile.isValid() || linkerResponseFile.onlyObjects)
-            t << " $(LIBS)";
+        t << "\n\t$(LINKER) $(LFLAGS) " << var("QMAKE_LINK_O_FLAG") << "$(DESTDIR_TARGET) " << objectsLinkLine << "  $(LIBS)";
     }
     if(!project->isEmpty("QMAKE_POST_LINK"))
         t << "\n\t" <<var("QMAKE_POST_LINK");
@@ -273,7 +298,7 @@ void MingwMakefileGenerator::writeRcFilePart(QTextStream &t)
     ProStringList rcIncPaths = project->values("RC_INCLUDEPATH");
     rcIncPaths.prepend(fileInfo(rc_file).path());
     QString incPathStr;
-    for (int i = 0; i < rcIncPaths.size(); ++i) {
+    for (int i = 0; i < rcIncPaths.count(); ++i) {
         const ProString &path = rcIncPaths.at(i);
         if (path.isEmpty())
             continue;

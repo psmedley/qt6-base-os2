@@ -30,19 +30,19 @@ public:
     void setupUi(QDialog *Dialog)
     {
         if (Dialog->objectName().isEmpty())
-            Dialog->setObjectName("Dialog");
+            Dialog->setObjectName(QString::fromUtf8("Dialog"));
         Dialog->resize(400, 300);
         gridLayout = new QGridLayout(Dialog);
-        gridLayout->setObjectName("gridLayout");
+        gridLayout->setObjectName(QString::fromUtf8("gridLayout"));
         treeWidget = new QTreeWidget(Dialog);
         treeWidget->headerItem()->setText(0, QString());
         treeWidget->headerItem()->setText(2, QString());
-        treeWidget->setObjectName("treeWidget");
+        treeWidget->setObjectName(QString::fromUtf8("treeWidget"));
 
         gridLayout->addWidget(treeWidget, 0, 0, 1, 1);
 
         buttonBox = new QDialogButtonBox(Dialog);
-        buttonBox->setObjectName("buttonBox");
+        buttonBox->setObjectName(QString::fromUtf8("buttonBox"));
         buttonBox->setOrientation(Qt::Horizontal);
         buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
 

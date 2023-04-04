@@ -6,7 +6,7 @@ instructions:
         fileContents: |
             #!/bin/bash
             RESULT=1 # 0 upon success
-            TIMEOUT=240
+            TIMEOUT=60
             COUNT=0
             QEMUPID=0
             QEMUIPADDR="{{.Env.QNX_QEMU_IPADDR}}"
@@ -56,12 +56,22 @@ instructions:
             done
             exit $RESULT
         filename: "{{.Env.QNX_QEMU}}/start_qnx_qemu.sh"
-        fileMode: 493
+        fileMode: 755
       - type: ChangeDirectory
         directory: "{{.Env.QNX_QEMU}}"
       - type: ExecuteCommand
+        command: "chmod 755 {{.Env.QNX_QEMU}}/start_qnx_qemu.sh"
+        maxTimeInSeconds: 10
+        maxTimeBetweenOutput: 10
+        userMessageOnFailure: >
+          Failed to change file permission.
+        disable_if:
+          condition: property
+          property: host.os
+          equals_value: Windows
+      - type: ExecuteCommand
         command: "{{.Env.QNX_QEMU}}/start_qnx_qemu.sh"
-        maxTimeInSeconds: 300
+        maxTimeInSeconds: 100
         maxTimeBetweenOutput: 100
         userMessageOnFailure: >
           Failed to start QNX qemu, check logs.

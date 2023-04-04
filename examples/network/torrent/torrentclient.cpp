@@ -1,5 +1,52 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the examples of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:BSD$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
+**
+** "Redistribution and use in source and binary forms, with or without
+** modification, are permitted provided that the following conditions are
+** met:
+**   * Redistributions of source code must retain the above copyright
+**     notice, this list of conditions and the following disclaimer.
+**   * Redistributions in binary form must reproduce the above copyright
+**     notice, this list of conditions and the following disclaimer in
+**     the documentation and/or other materials provided with the
+**     distribution.
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
+**     from this software without specific prior written permission.
+**
+**
+** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "connectionmanager.h"
 #include "filemanager.h"
@@ -415,10 +462,11 @@ void TorrentClient::stop()
         d->transferRateTimer = 0;
     }
 
-    // Abort all existing connections
-    for (PeerWireClient *client : std::as_const(d->connections)) {
-        RateController::instance()->removeSocket(client);
-        ConnectionManager::instance()->removeConnection(client);
+    // Abort all existing connections (note: use a copy of the list because
+    // PeerWireClient::abort may (and is likely to) cause TorrentClient::removeClient
+    // to be called which modifies the list (and does all the removal job).
+    QList<PeerWireClient *> connections = d->connections;
+    for (PeerWireClient *client : qAsConst(connections)) {
         client->abort();
     }
     d->connections.clear();
@@ -439,7 +487,7 @@ void TorrentClient::setPaused(bool paused)
         // connections to 0. Keep the list of peers, so we can quickly
         // resume later.
         d->setState(Paused);
-        for (PeerWireClient *client : std::as_const(d->connections))
+        for (PeerWireClient *client : qAsConst(d->connections))
             client->abort();
         d->connections.clear();
         TorrentServer::instance()->removeClient(this);
@@ -574,7 +622,7 @@ void TorrentClient::pieceVerified(int pieceIndex, bool ok)
     }
 
     // Update the peer list so we know who's still interesting.
-    for (TorrentPeer *peer : std::as_const(d->peers)) {
+    for (TorrentPeer *peer : qAsConst(d->peers)) {
         if (!peer->interesting)
             continue;
         bool interesting = false;
@@ -594,7 +642,7 @@ void TorrentClient::pieceVerified(int pieceIndex, bool ok)
     d->incompletePieces.clearBit(pieceIndex);
 
     // Notify connected peers.
-    for (PeerWireClient *client : std::as_const(d->connections)) {
+    for (PeerWireClient *client : qAsConst(d->connections)) {
         if (client->state() == QAbstractSocket::ConnectedState
             && !client->availablePieces().testBit(pieceIndex)) {
             client->sendPieceNotification(pieceIndex);
@@ -672,9 +720,9 @@ QList<TorrentPeer *> TorrentClient::weighedFreePeers() const
     qint64 now = QDateTime::currentSecsSinceEpoch();
     QList<TorrentPeer *> freePeers;
     QMap<QString, int> connectionsPerPeer;
-    for (TorrentPeer *peer : std::as_const(d->peers)) {
+    for (TorrentPeer *peer : qAsConst(d->peers)) {
         bool busy = false;
-        for (PeerWireClient *client : std::as_const(d->connections)) {
+        for (PeerWireClient *client : qAsConst(d->connections)) {
             if (client->state() == PeerWireClient::ConnectedState
                 && client->peerAddress() == peer->address
                 && client->peerPort() == peer->port) {
@@ -694,7 +742,7 @@ QList<TorrentPeer *> TorrentClient::weighedFreePeers() const
 
     // Assign points based on connection speed and pieces available.
     QList<QPair<int, TorrentPeer *> > points;
-    for (TorrentPeer *peer : std::as_const(freePeers)) {
+    for (TorrentPeer *peer : qAsConst(freePeers)) {
         int tmp = 0;
         if (peer->interesting) {
             tmp += peer->numCompletedPieces;
@@ -717,7 +765,7 @@ QList<TorrentPeer *> TorrentClient::weighedFreePeers() const
     QMultiMap<int, TorrentPeer *> pointMap;
     int lowestScore = 0;
     int lastIndex = 0;
-    for (const PointPair &point : std::as_const(points)) {
+    for (const PointPair &point : qAsConst(points)) {
         if (point.first > lowestScore) {
             lowestScore = point.first;
             ++lastIndex;
@@ -768,7 +816,7 @@ void TorrentClient::setupOutgoingConnection()
     PeerWireClient *client = qobject_cast<PeerWireClient *>(sender());
 
     // Update connection statistics.
-    for (TorrentPeer *peer : std::as_const(d->peers)) {
+    for (TorrentPeer *peer : qAsConst(d->peers)) {
         if (peer->port == client->peerPort() && peer->address == client->peerAddress()) {
             peer->connectTime = peer->lastVisited - peer->connectStart;
             break;
@@ -1040,7 +1088,7 @@ void TorrentClient::scheduleUploads()
     // no use in unchoking them.
     QList<PeerWireClient *> allClients = d->connections;
     QList<QPair<qint64, PeerWireClient *>> transferSpeeds;
-    for (PeerWireClient *client : std::as_const(allClients)) {
+    for (PeerWireClient *client : qAsConst(allClients)) {
         if (client->state() == QAbstractSocket::ConnectedState
             && client->availablePieces().count(true) != d->pieceCount) {
             if (d->state == Seeding) {
@@ -1098,7 +1146,7 @@ void TorrentClient::scheduleDownloads()
 
     // Check what each client is doing, and assign payloads to those
     // who are either idle or done.
-    for (PeerWireClient *client : std::as_const(d->connections))
+    for (PeerWireClient *client : qAsConst(d->connections))
         schedulePieceForClient(client);
 }
 
@@ -1177,7 +1225,7 @@ void TorrentClient::schedulePieceForClient(PeerWireClient *client)
         incompletePiecesAvailableToClient &= client->availablePieces();
 
         // Remove all pieces that this client has already requested.
-        for (int i : std::as_const(currentPieces))
+        for (int i : qAsConst(currentPieces))
             incompletePiecesAvailableToClient.clearBit(i);
 
         // Only continue if more pieces can be scheduled. If no pieces
@@ -1213,7 +1261,7 @@ void TorrentClient::schedulePieceForClient(PeerWireClient *client)
                 memset(occurrences, 0, d->pieceCount * sizeof(int));
 
                 // Count how many of each piece are available.
-                for (PeerWireClient *peer : std::as_const(d->connections)) {
+                for (PeerWireClient *peer : qAsConst(d->connections)) {
                     QBitArray peerPieces = peer->availablePieces();
                     int peerPiecesSize = peerPieces.size();
                     for (int i = 0; i < peerPiecesSize; ++i) {
@@ -1311,7 +1359,7 @@ void TorrentClient::requestMore(PeerWireClient *client)
 
     // Starting with the first piece that we're waiting for, request
     // blocks until the quota is filled up.
-    for (TorrentPiece *piece : std::as_const(piecesInProgress)) {
+    for (TorrentPiece *piece : qAsConst(piecesInProgress)) {
         numBlocksInProgress += requestBlocks(client, piece, maxInProgress - numBlocksInProgress);
         if (numBlocksInProgress == maxInProgress)
             break;
@@ -1414,7 +1462,7 @@ void TorrentClient::addToPeerList(const QList<TorrentPeer> &peerList)
         }
 
         bool known = false;
-        for (const TorrentPeer *knownPeer : std::as_const(d->peers)) {
+        for (const TorrentPeer *knownPeer : qAsConst(d->peers)) {
             if (knownPeer->port == peer.port
                 && knownPeer->address == peer.address) {
                 known = true;
@@ -1445,7 +1493,7 @@ void TorrentClient::addToPeerList(const QList<TorrentPeer> &peerList)
         const auto firstNInactivePeers = [&tooMany, this] (TorrentPeer *peer) {
             if (!tooMany)
                 return false;
-            for (const PeerWireClient *client : std::as_const(d->connections)) {
+            for (const PeerWireClient *client : qAsConst(d->connections)) {
                 if (client->peer() == peer && (client->downloadSpeed() + client->uploadSpeed()) > 1024)
                     return false;
             }

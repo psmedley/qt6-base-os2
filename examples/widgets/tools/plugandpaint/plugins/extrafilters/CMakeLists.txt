@@ -1,15 +1,12 @@
 qt_add_plugin(pnp_extrafilters
     CLASS_NAME ExtraFiltersPlugin
 )
-
 target_sources(pnp_extrafilters PRIVATE
     extrafiltersplugin.cpp extrafiltersplugin.h
 )
-
 set_target_properties(pnp_extrafilters PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/app"
 )
-
 target_include_directories(pnp_extrafilters PUBLIC
     ../../app
 )

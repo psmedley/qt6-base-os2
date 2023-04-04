@@ -1,5 +1,30 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <qrect.h>
@@ -7,7 +32,6 @@
 #include <limits.h>
 #include <qdebug.h>
 
-#include <array>
 
 class tst_QRect : public QObject
 {
@@ -99,9 +123,6 @@ private slots:
     void newMoveBottomRight();
     void margins();
     void marginsf();
-
-    void toRectF_data();
-    void toRectF();
 
     void translate_data();
     void translate();
@@ -3514,39 +3535,6 @@ void tst_QRect::marginsf()
     QCOMPARE(a, QRectF(QPoint(13.0, 14.0), QSizeF(43.5, 141.5)));
     QCOMPARE(a, rectangle.marginsRemoved(margins));
 }
-
-void tst_QRect::toRectF_data()
-{
-    QTest::addColumn<QRect>("input");
-    QTest::addColumn<QRectF>("result");
-
-    auto row = [](int x1, int y1, int w, int h) {
-        // QRectF -> QRect conversion tries to maintain size(), not bottomRight(),
-        // so compare in (topLeft(), size()) space
-        QTest::addRow("((%d, %d) (%dx%d))", x1, y1, w, h)
-                << QRect({x1, y1}, QSize{w, h}) << QRectF(QPointF(x1, y1), QSizeF(w, h));
-    };
-    constexpr std::array samples = {-1, 0, 1};
-    for (int x1 : samples) {
-        for (int y1 : samples) {
-            for (int w : samples) {
-                for (int h : samples) {
-                    row(x1, y1, w, h);
-                }
-            }
-        }
-    }
-}
-
-void tst_QRect::toRectF()
-{
-    QFETCH(const QRect, input);
-    QFETCH(const QRectF, result);
-
-    QCOMPARE(result.toRect(), input); // consistency check
-    QCOMPARE(input.toRectF(), result);
-}
-
 
 void tst_QRect::translate_data()
 {

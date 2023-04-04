@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QCSSPARSER_P_H
 #define QCSSPARSER_P_H
@@ -763,9 +799,9 @@ public:
     inline bool testMedium() { return test(IDENT); }
     inline bool parseNextMedium(QStringList *media) { if (!testMedium()) return recordError(); return parseMedium(media); }
     inline bool testPseudoPage() { return test(COLON); }
-    inline bool testImport() { return testTokenAndEndsWith(ATKEYWORD_SYM, QLatin1StringView("import")); }
-    inline bool testMedia() { return testTokenAndEndsWith(ATKEYWORD_SYM, QLatin1StringView("media")); }
-    inline bool testPage() { return testTokenAndEndsWith(ATKEYWORD_SYM, QLatin1StringView("page")); }
+    inline bool testImport() { return testTokenAndEndsWith(ATKEYWORD_SYM, QLatin1String("import")); }
+    inline bool testMedia() { return testTokenAndEndsWith(ATKEYWORD_SYM, QLatin1String("media")); }
+    inline bool testPage() { return testTokenAndEndsWith(ATKEYWORD_SYM, QLatin1String("page")); }
     inline bool testCombinator() { return test(PLUS) || test(GREATER) || test(TILDE) || test(S); }
     inline bool testProperty() { return test(IDENT); }
     bool testTerm();
@@ -785,7 +821,7 @@ public:
 
     inline void skipSpace() { while (test(S)) {}; }
 
-    inline bool hasNext() const { return index < symbols.size(); }
+    inline bool hasNext() const { return index < symbols.count(); }
     inline TokenType next() { return symbols.at(index++).token; }
     bool next(TokenType t);
     bool test(TokenType t);
@@ -796,10 +832,10 @@ public:
     QString lexemUntil(TokenType t);
     bool until(TokenType target, TokenType target2 = NONE);
     inline TokenType lookup() const {
-        return (index - 1) < symbols.size() ? symbols.at(index - 1).token : NONE;
+        return (index - 1) < symbols.count() ? symbols.at(index - 1).token : NONE;
     }
 
-    bool testTokenAndEndsWith(TokenType t, QLatin1StringView str);
+    bool testTokenAndEndsWith(TokenType t, QLatin1String str);
 
     inline bool recordError() { errorIndex = index; return false; }
 
@@ -849,9 +885,9 @@ private:
 
 QT_END_NAMESPACE
 
-QT_DECL_METATYPE_EXTERN_TAGGED(QCss::BackgroundData, QCss__BackgroundData, Q_GUI_EXPORT)
-QT_DECL_METATYPE_EXTERN_TAGGED(QCss::LengthData, QCss__LengthData, Q_GUI_EXPORT)
-QT_DECL_METATYPE_EXTERN_TAGGED(QCss::BorderData, QCss__BorderData, Q_GUI_EXPORT)
+Q_DECLARE_METATYPE( QCss::BackgroundData )
+Q_DECLARE_METATYPE( QCss::LengthData )
+Q_DECLARE_METATYPE( QCss::BorderData )
 
 #undef QT_CSS_DECLARE_TYPEINFO
 

@@ -1,6 +1,42 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// Copyright (C) 2018 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2018 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qdrawhelper_p.h"
 
@@ -25,16 +61,6 @@
 #include <qloggingcategory.h>
 #include <qmath.h>
 
-#if QT_CONFIG(thread) && !defined(Q_OS_WASM)
-#define QT_USE_THREAD_PARALLEL_FILLS
-#endif
-
-#if defined(QT_USE_THREAD_PARALLEL_FILLS)
-#include <qsemaphore.h>
-#include <qthreadpool.h>
-#include <private/qthreadpool_p.h>
-#endif
-
 QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcQtGuiDrawHelper, "qt.gui.drawhelper")
@@ -45,8 +71,10 @@ Q_LOGGING_CATEGORY(lcQtGuiDrawHelper, "qt.gui.drawhelper")
   constants and structures
 */
 
-constexpr int fixed_scale = 1 << 16;
-constexpr int half_point = 1 << 15;
+enum {
+    fixed_scale = 1 << 16,
+    half_point = 1 << 15
+};
 
 template <QPixelLayout::BPP bpp> static
 inline uint QT_FASTCALL fetch1Pixel(const uchar *, int)
@@ -458,54 +486,10 @@ static QRgbaFloat32 *QT_FASTCALL destFetchFP(QRgbaFloat32 *buffer, QRasterBuffer
     return const_cast<QRgbaFloat32 *>(qFetchToRGBA32F[rasterBuffer->format](buffer, rasterBuffer->scanLine(y), x, length, nullptr, nullptr));
 }
 
-static QRgbaFloat32 *QT_FASTCALL destFetchRGBFP(QRgbaFloat32 *, QRasterBuffer *rasterBuffer, int x, int y, int)
-{
-    return reinterpret_cast<QRgbaFloat32 *>(rasterBuffer->scanLine(y)) + x;
-}
-
 static QRgbaFloat32 *QT_FASTCALL destFetchFPUndefined(QRgbaFloat32 *buffer, QRasterBuffer *, int, int, int)
 {
     return buffer;
 }
-static DestFetchProcFP destFetchProcFP[QImage::NImageFormats] =
-{
-    nullptr,            // Format_Invalid
-    nullptr,            // Format_Mono,
-    nullptr,            // Format_MonoLSB
-    nullptr,            // Format_Indexed8
-    destFetchFP,        // Format_RGB32
-    destFetchFP,        // Format_ARGB32,
-    destFetchFP,        // Format_ARGB32_Premultiplied
-    destFetchFP,        // Format_RGB16
-    destFetchFP,        // Format_ARGB8565_Premultiplied
-    destFetchFP,        // Format_RGB666
-    destFetchFP,        // Format_ARGB6666_Premultiplied
-    destFetchFP,        // Format_RGB555
-    destFetchFP,        // Format_ARGB8555_Premultiplied
-    destFetchFP,        // Format_RGB888
-    destFetchFP,        // Format_RGB444
-    destFetchFP,        // Format_ARGB4444_Premultiplied
-    destFetchFP,        // Format_RGBX8888
-    destFetchFP,        // Format_RGBA8888
-    destFetchFP,        // Format_RGBA8888_Premultiplied
-    destFetchFP,        // Format_BGR30
-    destFetchFP,        // Format_A2BGR30_Premultiplied
-    destFetchFP,        // Format_RGB30
-    destFetchFP,        // Format_A2RGB30_Premultiplied
-    destFetchFP,        // Format_Alpha8
-    destFetchFP,        // Format_Grayscale8
-    destFetchFP,        // Format_RGBX64
-    destFetchFP,        // Format_RGBA64
-    destFetchFP,        // Format_RGBA64_Premultiplied
-    destFetchFP,        // Format_Grayscale16
-    destFetchFP,        // Format_BGR888
-    destFetchFP,        // Format_RGBX16FPx4
-    destFetchFP,        // Format_RGBA16FPx4
-    destFetchFP,        // Format_RGBA16FPx4_Premultiplied
-    destFetchRGBFP,     // Format_RGBX32FPx4
-    destFetchFP,        // Format_RGBA32FPx4
-    destFetchRGBFP,     // Format_RGBA32FPx4_Premultiplied
-};
 #endif
 
 /*
@@ -3587,20 +3571,20 @@ static const CompositionFunctionFP *functionForModeFP = qt_functionForModeFP_C;
 static TextureBlendType getBlendType(const QSpanData *data)
 {
     TextureBlendType ft;
-    if (data->texture.type == QTextureData::Pattern)
-        ft = BlendTiled;
-    else if (data->txop <= QTransform::TxTranslate)
-        if (data->texture.type == QTextureData::Tiled)
+    if (data->txop <= QTransform::TxTranslate)
+        if (data->texture.type == QTextureData::Tiled || data->texture.type == QTextureData::Pattern)
             ft = BlendTiled;
         else
             ft = BlendUntransformed;
     else if (data->bilinear)
-        if (data->texture.type == QTextureData::Tiled)
+        if (data->texture.type == QTextureData::Tiled || data->texture.type == QTextureData::Pattern)
             ft = BlendTransformedBilinearTiled;
         else
             ft = BlendTransformedBilinear;
     else
-        if (data->texture.type == QTextureData::Tiled)
+        if (data->texture.type == QTextureData::Pattern)
+            ft = BlendTiled;
+        else if (data->texture.type == QTextureData::Tiled)
             ft = BlendTransformedTiled;
         else
             ft = BlendTransformed;
@@ -3614,7 +3598,7 @@ static inline Operator getOperator(const QSpanData *data, const QSpan *spans, in
 
     switch(data->type) {
     case QSpanData::Solid:
-        solidSource = data->solidColor.alphaF() >= 1.0f;
+        solidSource = data->solidColor.isOpaque();
         op.srcFetch = nullptr;
         op.srcFetch64 = nullptr;
         op.srcFetchFP = nullptr;
@@ -3683,10 +3667,11 @@ static inline Operator getOperator(const QSpanData *data, const QSpan *spans, in
     op.destFetch64 = nullptr;
 #endif
 #if QT_CONFIG(raster_fp)
-    op.destFetchFP = destFetchProcFP[data->rasterBuffer->format];
-#else
-    op.destFetchFP = nullptr;
+    if (data->rasterBuffer->format > QImage::Format_Indexed8)
+        op.destFetchFP = destFetchFP;
+    else
 #endif
+        op.destFetchFP = nullptr;
     if (op.mode == QPainter::CompositionMode_Source &&
             (data->type != QSpanData::Texture || data->texture.const_alpha == 256)) {
         const QSpan *lastSpan = spans + spanCount;
@@ -3708,8 +3693,7 @@ static inline Operator getOperator(const QSpanData *data, const QSpan *spans, in
                 op.destFetch64 = destFetch64Undefined;
 #endif
 #if QT_CONFIG(raster_fp)
-            if (op.destFetchFP != destFetchRGBFP)
-                op.destFetchFP = destFetchFPUndefined;
+            op.destFetchFP = destFetchFPUndefined;
 #endif
         }
     }
@@ -3781,60 +3765,36 @@ static void spanfill_from_first(QRasterBuffer *rasterBuffer, QPixelLayout::BPP b
 
 // -------------------- blend methods ---------------------
 
-#if defined(QT_USE_THREAD_PARALLEL_FILLS)
-#define QT_THREAD_PARALLEL_FILLS(function) \
-    const int segments = (count + 32) / 64; \
-    QThreadPool *threadPool = QThreadPoolPrivate::qtGuiInstance(); \
-    if (segments > 1 && threadPool && !threadPool->contains(QThread::currentThread())) { \
-        QSemaphore semaphore; \
-        int c = 0; \
-        for (int i = 0; i < segments; ++i) { \
-            int cn = (count - c) / (segments - i); \
-            threadPool->start([&, c, cn]() { \
-                function(c, c + cn); \
-                semaphore.release(1); \
-            }, 1); \
-            c += cn; \
-        } \
-        semaphore.acquire(segments); \
-    } else \
-        function(0, count)
-#else
-#define QT_THREAD_PARALLEL_FILLS(function) function(0, count)
-#endif
-
 static void blend_color_generic(int count, const QSpan *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
-    const Operator op = getOperator(data, nullptr, 0);
-    const uint color = data->solidColor.rgba();
+    uint buffer[BufferSize];
+    Operator op = getOperator(data, nullptr, 0);
+    const uint color = data->solidColor.toArgb32();
     const bool solidFill = op.mode == QPainter::CompositionMode_Source;
     const QPixelLayout::BPP bpp = qPixelLayouts[data->rasterBuffer->format].bpp;
 
-    auto function = [=] (int cStart, int cEnd) {
-        alignas(16) uint buffer[BufferSize];
-        for (int c = cStart; c < cEnd; ++c) {
-            int x = spans[c].x;
-            int length = spans[c].len;
-            if (solidFill && bpp >= QPixelLayout::BPP8 && spans[c].coverage == 255 && length && op.destStore) {
-                // If dest doesn't matter we don't need to bother with blending or converting all the identical pixels
-                op.destStore(data->rasterBuffer, x, spans[c].y, &color, 1);
-                spanfill_from_first(data->rasterBuffer, bpp, x, spans[c].y, length);
-                length = 0;
-            }
-
-            while (length) {
-                int l = qMin(BufferSize, length);
-                uint *dest = op.destFetch(buffer, data->rasterBuffer, x, spans[c].y, l);
-                op.funcSolid(dest, l, color, spans[c].coverage);
-                if (op.destStore)
-                    op.destStore(data->rasterBuffer, x, spans[c].y, dest, l);
-                length -= l;
-                x += l;
-            }
+    while (count--) {
+        int x = spans->x;
+        int length = spans->len;
+        if (solidFill && bpp >= QPixelLayout::BPP8 && spans->coverage == 255 && length) {
+            // If dest doesn't matter we don't need to bother with blending or converting all the identical pixels
+            op.destStore(data->rasterBuffer, x, spans->y, &color, 1);
+            spanfill_from_first(data->rasterBuffer, bpp, x, spans->y, length);
+            length = 0;
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+
+        while (length) {
+            int l = qMin(BufferSize, length);
+            uint *dest = op.destFetch(buffer, data->rasterBuffer, x, spans->y, l);
+            op.funcSolid(dest, l, color, spans->coverage);
+            if (op.destStore)
+                op.destStore(data->rasterBuffer, x, spans->y, dest, l);
+            length -= l;
+            x += l;
+        }
+        ++spans;
+    }
 }
 
 static void blend_color_argb(int count, const QSpan *spans, void *userData)
@@ -3842,7 +3802,7 @@ static void blend_color_argb(int count, const QSpan *spans, void *userData)
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
     const Operator op = getOperator(data, nullptr, 0);
-    const uint color = data->solidColor.rgba();
+    const uint color = data->solidColor.toArgb32();
 
     if (op.mode == QPainter::CompositionMode_Source) {
         // inline for performance
@@ -3864,55 +3824,50 @@ static void blend_color_argb(int count, const QSpan *spans, void *userData)
         }
         return;
     }
-    const auto funcSolid = op.funcSolid;
-    auto function = [=] (int cStart, int cEnd) {
-        for (int c = cStart; c < cEnd; ++c) {
-            uint *target = ((uint *)data->rasterBuffer->scanLine(spans[c].y)) + spans[c].x;
-            funcSolid(target, spans[c].len, color, spans[c].coverage);
-        }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+
+    while (count--) {
+        uint *target = ((uint *)data->rasterBuffer->scanLine(spans->y)) + spans->x;
+        op.funcSolid(target, spans->len, color, spans->coverage);
+        ++spans;
+    }
 }
 
 static void blend_color_generic_rgb64(int count, const QSpan *spans, void *userData)
 {
 #if QT_CONFIG(raster_64bit)
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
-    const Operator op = getOperator(data, nullptr, 0);
+    Operator op = getOperator(data, nullptr, 0);
     if (!op.funcSolid64) {
         qCDebug(lcQtGuiDrawHelper, "blend_color_generic_rgb64: unsupported 64bit blend attempted, falling back to 32-bit");
         return blend_color_generic(count, spans, userData);
     }
 
-    const QRgba64 color = data->solidColor.rgba64();
+    alignas(8) QRgba64 buffer[BufferSize];
+    const QRgba64 color = data->solidColor;
     const bool solidFill = op.mode == QPainter::CompositionMode_Source;
     const QPixelLayout::BPP bpp = qPixelLayouts[data->rasterBuffer->format].bpp;
 
-    auto function = [=, &op] (int cStart, int cEnd)
-    {
-        alignas(16) QRgba64 buffer[BufferSize];
-        for (int c = cStart; c < cEnd; ++c) {
-            int x = spans[c].x;
-            int length = spans[c].len;
-            if (solidFill && bpp >= QPixelLayout::BPP8 && spans[c].coverage == 255 && length && op.destStore64) {
-                // If dest doesn't matter we don't need to bother with blending or converting all the identical pixels
-                op.destStore64(data->rasterBuffer, x, spans[c].y, &color, 1);
-                spanfill_from_first(data->rasterBuffer, bpp, x, spans[c].y, length);
-                length = 0;
-            }
-
-            while (length) {
-                int l = qMin(BufferSize, length);
-                QRgba64 *dest = op.destFetch64(buffer, data->rasterBuffer, x, spans[c].y, l);
-                op.funcSolid64(dest, l, color, spans[c].coverage);
-                if (op.destStore64)
-                    op.destStore64(data->rasterBuffer, x, spans[c].y, dest, l);
-                length -= l;
-                x += l;
-            }
+    while (count--) {
+        int x = spans->x;
+        int length = spans->len;
+        if (solidFill && bpp >= QPixelLayout::BPP8 && spans->coverage == 255 && length && op.destStore64) {
+            // If dest doesn't matter we don't need to bother with blending or converting all the identical pixels
+            op.destStore64(data->rasterBuffer, x, spans->y, &color, 1);
+            spanfill_from_first(data->rasterBuffer, bpp, x, spans->y, length);
+            length = 0;
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+
+        while (length) {
+            int l = qMin(BufferSize, length);
+            QRgba64 *dest = op.destFetch64(buffer, data->rasterBuffer, x, spans->y, l);
+            op.funcSolid64(dest, l, color, spans->coverage);
+            if (op.destStore64)
+                op.destStore64(data->rasterBuffer, x, spans->y, dest, l);
+            length -= l;
+            x += l;
+        }
+        ++spans;
+    }
 #else
     blend_color_generic(count, spans, userData);
 #endif
@@ -3922,109 +3877,102 @@ static void blend_color_generic_fp(int count, const QSpan *spans, void *userData
 {
 #if QT_CONFIG(raster_fp)
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
-    const Operator op = getOperator(data, nullptr, 0);
+    Operator op = getOperator(data, nullptr, 0);
     if (!op.funcSolidFP || !op.destFetchFP) {
         qCDebug(lcQtGuiDrawHelper, "blend_color_generic_fp: unsupported 4xF16 blend attempted, falling back to 32-bit");
         return blend_color_generic(count, spans, userData);
     }
 
-    float r, g, b, a;
-    data->solidColor.getRgbF(&r, &g, &b, &a);
-    const QRgbaFloat32 color{r, g, b, a};
+    QRgbaFloat32 buffer[BufferSize];
+    const QRgbaFloat32 color = qConvertRgb64ToRgbaF32(data->solidColor);
     const bool solidFill = op.mode == QPainter::CompositionMode_Source;
     QPixelLayout::BPP bpp = qPixelLayouts[data->rasterBuffer->format].bpp;
 
-    auto function = [=, &op] (int cStart, int cEnd)
-    {
-        alignas(16) QRgbaFloat32 buffer[BufferSize];
-        for (int c = cStart; c < cEnd; ++c) {
-            int x = spans[c].x;
-            int length = spans[c].len;
-            if (solidFill && bpp >= QPixelLayout::BPP8 && spans[c].coverage == 255 && length && op.destStoreFP) {
-                // If dest doesn't matter we don't need to bother with blending or converting all the identical pixels
-                op.destStoreFP(data->rasterBuffer, x, spans[c].y, &color, 1);
-                spanfill_from_first(data->rasterBuffer, bpp, x, spans[c].y, length);
-                length = 0;
-            }
-
-            while (length) {
-                int l = qMin(BufferSize, length);
-                QRgbaFloat32 *dest = op.destFetchFP(buffer, data->rasterBuffer, x, spans[c].y, l);
-                op.funcSolidFP(dest, l, color, spans[c].coverage);
-                if (op.destStoreFP)
-                    op.destStoreFP(data->rasterBuffer, x, spans[c].y, dest, l);
-                length -= l;
-                x += l;
-            }
+    while (count--) {
+        int x = spans->x;
+        int length = spans->len;
+        if (solidFill && bpp >= QPixelLayout::BPP8 && spans->coverage == 255 && length && op.destStoreFP) {
+            // If dest doesn't matter we don't need to bother with blending or converting all the identical pixels
+            op.destStoreFP(data->rasterBuffer, x, spans->y, &color, 1);
+            spanfill_from_first(data->rasterBuffer, bpp, x, spans->y, length);
+            length = 0;
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+
+        while (length) {
+            int l = qMin(BufferSize, length);
+            QRgbaFloat32 *dest = op.destFetchFP(buffer, data->rasterBuffer, x, spans->y, l);
+            op.funcSolidFP(dest, l, color, spans->coverage);
+            if (op.destStoreFP)
+                op.destStoreFP(data->rasterBuffer, x, spans->y, dest, l);
+            length -= l;
+            x += l;
+        }
+        ++spans;
+    }
 #else
     blend_color_generic(count, spans, userData);
 #endif
 }
 
 template <typename T>
-void handleSpans(int count, const QSpan *spans, const QSpanData *data, const Operator &op)
+void handleSpans(int count, const QSpan *spans, const QSpanData *data, T &handler)
 {
-    const int const_alpha = (data->type == QSpanData::Texture) ? data->texture.const_alpha : 256;
-    const bool solidSource = op.mode == QPainter::CompositionMode_Source && const_alpha == 256;
+    uint const_alpha = 256;
+    if (data->type == QSpanData::Texture)
+        const_alpha = data->texture.const_alpha;
 
-    auto function = [=, &op] (int cStart, int cEnd)
-    {
-        T handler(data, op);
-        int coverage = 0;
-        for (int c = cStart; c < cEnd;) {
-            if (!spans[c].len) {
-                ++c;
-                continue;
-            }
-            int x = spans[c].x;
-            const int y = spans[c].y;
-            int right = x + spans[c].len;
-            const bool fetchDest = !solidSource || spans[c].coverage < 255;
-
-            // compute length of adjacent spans
-            for (int i = c + 1; i < cEnd && spans[i].y == y && spans[i].x == right && fetchDest == (!solidSource || spans[i].coverage < 255); ++i)
-                right += spans[i].len;
-            int length = right - x;
-
-            while (length) {
-                int l = qMin(BufferSize, length);
-                length -= l;
-
-                int process_length = l;
-                int process_x = x;
-
-                const auto *src = handler.fetch(process_x, y, process_length, fetchDest);
-                int offset = 0;
-                while (l > 0) {
-                    if (x == spans[c].x) // new span?
-                        coverage = (spans[c].coverage * const_alpha) >> 8;
-
-                    int right = spans[c].x + spans[c].len;
-                    int len = qMin(l, right - x);
-
-                    handler.process(x, y, len, coverage, src, offset);
-
-                    l -= len;
-                    x += len;
-                    offset += len;
-
-                    if (x == right) // done with current span?
-                        ++c;
-                }
-                handler.store(process_x, y, process_length);
-            }
+    int coverage = 0;
+    while (count) {
+        if (!spans->len) {
+            ++spans;
+            --count;
+            continue;
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+        int x = spans->x;
+        const int y = spans->y;
+        int right = x + spans->len;
+
+        // compute length of adjacent spans
+        for (int i = 1; i < count && spans[i].y == y && spans[i].x == right; ++i)
+            right += spans[i].len;
+        int length = right - x;
+
+        while (length) {
+            int l = qMin(BufferSize, length);
+            length -= l;
+
+            int process_length = l;
+            int process_x = x;
+
+            const auto *src = handler.fetch(process_x, y, process_length);
+            int offset = 0;
+            while (l > 0) {
+                if (x == spans->x) // new span?
+                    coverage = (spans->coverage * const_alpha) >> 8;
+
+                int right = spans->x + spans->len;
+                int len = qMin(l, right - x);
+
+                handler.process(x, y, len, coverage, src, offset);
+
+                l -= len;
+                x += len;
+                offset += len;
+
+                if (x == right) { // done with current span?
+                    ++spans;
+                    --count;
+                }
+            }
+            handler.store(process_x, y, process_length);
+        }
+    }
 }
 
 struct QBlendBase
 {
-    const QSpanData *data;
-    const Operator &op;
+    QSpanData *data;
+    Operator op;
 };
 
 class BlendSrcGeneric : public QBlendBase
@@ -4033,17 +3981,14 @@ public:
     uint *dest = nullptr;
     alignas(16) uint buffer[BufferSize];
     alignas(16) uint src_buffer[BufferSize];
-    BlendSrcGeneric(const QSpanData *d, const Operator &o)
+    BlendSrcGeneric(QSpanData *d, const Operator &o)
         : QBlendBase{d, o}
     {
     }
 
-    const uint *fetch(int x, int y, int len, bool fetchDest)
+    const uint *fetch(int x, int y, int len)
     {
-        if (fetchDest || op.destFetch == destFetchARGB32P)
-            dest = op.destFetch(buffer, data->rasterBuffer, x, y, len);
-        else
-            dest = buffer;
+        dest = op.destFetch(buffer, data->rasterBuffer, x, y, len);
         return op.srcFetch(src_buffer, &op, data, y, x, len);
     }
 
@@ -4066,7 +4011,7 @@ public:
     QRgba64 *dest = nullptr;
     alignas(16) QRgba64 buffer[BufferSize];
     alignas(16) QRgba64 src_buffer[BufferSize];
-    BlendSrcGenericRGB64(const QSpanData *d, const Operator &o)
+    BlendSrcGenericRGB64(QSpanData *d, const Operator &o)
         : QBlendBase{d, o}
     {
     }
@@ -4076,12 +4021,9 @@ public:
         return op.func64 && op.destFetch64;
     }
 
-    const QRgba64 *fetch(int x, int y, int len, bool fetchDest)
+    const QRgba64 *fetch(int x, int y, int len)
     {
-        if (fetchDest || op.destFetch64 == destFetchRGB64)
-            dest = op.destFetch64(buffer, data->rasterBuffer, x, y, len);
-        else
-            dest = buffer;
+        dest = op.destFetch64(buffer, data->rasterBuffer, x, y, len);
         return op.srcFetch64(src_buffer, &op, data, y, x, len);
     }
 
@@ -4105,7 +4047,7 @@ public:
     QRgbaFloat32 *dest = nullptr;
     alignas(16) QRgbaFloat32 buffer[BufferSize];
     alignas(16) QRgbaFloat32 src_buffer[BufferSize];
-    BlendSrcGenericRGBFP(const QSpanData *d, const Operator &o)
+    BlendSrcGenericRGBFP(QSpanData *d, const Operator &o)
         : QBlendBase{d, o}
     {
     }
@@ -4115,12 +4057,9 @@ public:
         return op.funcFP && op.destFetchFP && op.srcFetchFP;
     }
 
-    const QRgbaFloat32 *fetch(int x, int y, int len, bool fetchDest)
+    const QRgbaFloat32 *fetch(int x, int y, int len)
     {
-        if (fetchDest || op.destFetchFP == destFetchRGBFP)
-            dest = op.destFetchFP(buffer, data->rasterBuffer, x, y, len);
-        else
-            dest = buffer;
+        dest = op.destFetchFP(buffer, data->rasterBuffer, x, y, len);
         return op.srcFetchFP(src_buffer, &op, data, y, x, len);
     }
 
@@ -4140,20 +4079,22 @@ public:
 static void blend_src_generic(int count, const QSpan *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
-    const Operator op = getOperator(data, nullptr, 0);
-    handleSpans<BlendSrcGeneric>(count, spans, data, op);
+    BlendSrcGeneric blend(data, getOperator(data, spans, count));
+    handleSpans(count, spans, data, blend);
 }
 
 #if QT_CONFIG(raster_64bit)
 static void blend_src_generic_rgb64(int count, const QSpan *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
-    const Operator op = getOperator(data, nullptr, 0);
-    if (op.func64 && op.destFetch64) {
-        handleSpans<BlendSrcGenericRGB64>(count, spans, data, op);
-    } else {
+    Operator op = getOperator(data, spans, count);
+    BlendSrcGenericRGB64 blend64(data, op);
+    if (blend64.isSupported())
+        handleSpans(count, spans, data, blend64);
+    else {
         qCDebug(lcQtGuiDrawHelper, "blend_src_generic_rgb64: unsupported 64-bit blend attempted, falling back to 32-bit");
-        handleSpans<BlendSrcGeneric>(count, spans, data, op);
+        BlendSrcGeneric blend32(data, op);
+        handleSpans(count, spans, data, blend32);
     }
 }
 #endif
@@ -4162,12 +4103,14 @@ static void blend_src_generic_rgb64(int count, const QSpan *spans, void *userDat
 static void blend_src_generic_fp(int count, const QSpan *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
-    const Operator op = getOperator(data, spans, count);
-    if (op.funcFP && op.destFetchFP && op.srcFetchFP) {
-        handleSpans<BlendSrcGenericRGBFP>(count, spans, data, op);
-    } else {
+    Operator op = getOperator(data, spans, count);
+    BlendSrcGenericRGBFP blendFP(data, op);
+    if (blendFP.isSupported())
+        handleSpans(count, spans, data, blendFP);
+    else {
         qCDebug(lcQtGuiDrawHelper, "blend_src_generic_fp: unsupported 4xFP blend attempted, falling back to 32-bit");
-        handleSpans<BlendSrcGeneric>(count, spans, data, op);
+        BlendSrcGeneric blend32(data, op);
+        handleSpans(count, spans, data, blend32);
     }
 }
 #endif
@@ -4176,53 +4119,46 @@ static void blend_untransformed_generic(int count, const QSpan *spans, void *use
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
-    const Operator op = getOperator(data, spans, count);
+    uint buffer[BufferSize];
+    uint src_buffer[BufferSize];
+    Operator op = getOperator(data, spans, count);
 
     const int image_width = data->texture.width;
     const int image_height = data->texture.height;
-    const int const_alpha = data->texture.const_alpha;
-    const int xoff = -qRound(-data->dx);
-    const int yoff = -qRound(-data->dy);
-    const bool solidSource = op.mode == QPainter::CompositionMode_Source && const_alpha == 256 && op.destFetch != destFetchARGB32P;
+    int xoff = -qRound(-data->dx);
+    int yoff = -qRound(-data->dy);
 
-    auto function = [=, &op] (int cStart, int cEnd)
-    {
-        alignas(16) uint buffer[BufferSize];
-        alignas(16) uint src_buffer[BufferSize];
-        for (int c = cStart; c < cEnd; ++c) {
-            if (!spans[c].len)
-                continue;
-            int x = spans[c].x;
-            int length = spans[c].len;
-            int sx = xoff + x;
-            int sy = yoff + spans[c].y;
-            const bool fetchDest = !solidSource || spans[c].coverage < 255;
-            if (sy >= 0 && sy < image_height && sx < image_width) {
-                if (sx < 0) {
-                    x -= sx;
-                    length += sx;
-                    sx = 0;
-                }
-                if (sx + length > image_width)
-                    length = image_width - sx;
-                if (length > 0) {
-                    const int coverage = (spans[c].coverage * const_alpha) >> 8;
-                    while (length) {
-                        int l = qMin(BufferSize, length);
-                        const uint *src = op.srcFetch(src_buffer, &op, data, sy, sx, l);
-                        uint *dest = fetchDest ? op.destFetch(buffer, data->rasterBuffer, x, spans[c].y, l) : buffer;
-                        op.func(dest, src, l, coverage);
-                        if (op.destStore)
-                            op.destStore(data->rasterBuffer, x, spans[c].y, dest, l);
-                        x += l;
-                        sx += l;
-                        length -= l;
-                    }
+    for (; count--; spans++) {
+        if (!spans->len)
+            continue;
+        int x = spans->x;
+        int length = spans->len;
+        int sx = xoff + x;
+        int sy = yoff + spans->y;
+        if (sy >= 0 && sy < image_height && sx < image_width) {
+            if (sx < 0) {
+                x -= sx;
+                length += sx;
+                sx = 0;
+            }
+            if (sx + length > image_width)
+                length = image_width - sx;
+            if (length > 0) {
+                const int coverage = (spans->coverage * data->texture.const_alpha) >> 8;
+                while (length) {
+                    int l = qMin(BufferSize, length);
+                    const uint *src = op.srcFetch(src_buffer, &op, data, sy, sx, l);
+                    uint *dest = op.destFetch(buffer, data->rasterBuffer, x, spans->y, l);
+                    op.func(dest, src, l, coverage);
+                    if (op.destStore)
+                        op.destStore(data->rasterBuffer, x, spans->y, dest, l);
+                    x += l;
+                    sx += l;
+                    length -= l;
                 }
             }
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+    }
 }
 
 #if QT_CONFIG(raster_64bit)
@@ -4230,57 +4166,50 @@ static void blend_untransformed_generic_rgb64(int count, const QSpan *spans, voi
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
-    const Operator op = getOperator(data, spans, count);
+    Operator op = getOperator(data, spans, count);
     if (!op.func64) {
         qCDebug(lcQtGuiDrawHelper, "blend_untransformed_generic_rgb64: unsupported 64-bit blend attempted, falling back to 32-bit");
         return blend_untransformed_generic(count, spans, userData);
     }
+    alignas(8) QRgba64 buffer[BufferSize];
+    alignas(8) QRgba64 src_buffer[BufferSize];
 
     const int image_width = data->texture.width;
     const int image_height = data->texture.height;
-    const int const_alpha = data->texture.const_alpha;
-    const int xoff = -qRound(-data->dx);
-    const int yoff = -qRound(-data->dy);
-    const bool solidSource = op.mode == QPainter::CompositionMode_Source && const_alpha == 256 && op.destFetch64 != destFetchRGB64;
+    int xoff = -qRound(-data->dx);
+    int yoff = -qRound(-data->dy);
 
-    auto function = [=, &op] (int cStart, int cEnd)
-    {
-        alignas(16) QRgba64 buffer[BufferSize];
-        alignas(16) QRgba64 src_buffer[BufferSize];
-        for (int c = cStart; c < cEnd; ++c) {
-            if (!spans[c].len)
-                continue;
-            int x = spans[c].x;
-            int length = spans[c].len;
-            int sx = xoff + x;
-            int sy = yoff + spans[c].y;
-            const bool fetchDest = !solidSource || spans[c].coverage < 255;
-            if (sy >= 0 && sy < image_height && sx < image_width) {
-                if (sx < 0) {
-                    x -= sx;
-                    length += sx;
-                    sx = 0;
-                }
-                if (sx + length > image_width)
-                    length = image_width - sx;
-                if (length > 0) {
-                    const int coverage = (spans[c].coverage * const_alpha) >> 8;
-                    while (length) {
-                        int l = qMin(BufferSize, length);
-                        const QRgba64 *src = op.srcFetch64(src_buffer, &op, data, sy, sx, l);
-                        QRgba64 *dest = fetchDest ? op.destFetch64(buffer, data->rasterBuffer, x, spans[c].y, l) : buffer;
-                        op.func64(dest, src, l, coverage);
-                        if (op.destStore64)
-                            op.destStore64(data->rasterBuffer, x, spans[c].y, dest, l);
-                        x += l;
-                        sx += l;
-                        length -= l;
-                    }
+    for (; count--; spans++) {
+        if (!spans->len)
+            continue;
+        int x = spans->x;
+        int length = spans->len;
+        int sx = xoff + x;
+        int sy = yoff + spans->y;
+        if (sy >= 0 && sy < image_height && sx < image_width) {
+            if (sx < 0) {
+                x -= sx;
+                length += sx;
+                sx = 0;
+            }
+            if (sx + length > image_width)
+                length = image_width - sx;
+            if (length > 0) {
+                const int coverage = (spans->coverage * data->texture.const_alpha) >> 8;
+                while (length) {
+                    int l = qMin(BufferSize, length);
+                    const QRgba64 *src = op.srcFetch64(src_buffer, &op, data, sy, sx, l);
+                    QRgba64 *dest = op.destFetch64(buffer, data->rasterBuffer, x, spans->y, l);
+                    op.func64(dest, src, l, coverage);
+                    if (op.destStore64)
+                        op.destStore64(data->rasterBuffer, x, spans->y, dest, l);
+                    x += l;
+                    sx += l;
+                    length -= l;
                 }
             }
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+    }
 }
 #endif
 
@@ -4289,56 +4218,50 @@ static void blend_untransformed_generic_fp(int count, const QSpan *spans, void *
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
-    const Operator op = getOperator(data, spans, count);
+    Operator op = getOperator(data, spans, count);
     if (!op.funcFP) {
         qCDebug(lcQtGuiDrawHelper, "blend_untransformed_generic_rgbaf16: unsupported 4xFP16 blend attempted, falling back to 32-bit");
         return blend_untransformed_generic(count, spans, userData);
     }
+    QRgbaFloat32 buffer[BufferSize];
+    QRgbaFloat32 src_buffer[BufferSize];
 
     const int image_width = data->texture.width;
     const int image_height = data->texture.height;
-    const int xoff = -qRound(-data->dx);
-    const int yoff = -qRound(-data->dy);
-    const bool solidSource = op.mode == QPainter::CompositionMode_Source && data->texture.const_alpha == 256 && op.destFetchFP != destFetchRGBFP;
+    int xoff = -qRound(-data->dx);
+    int yoff = -qRound(-data->dy);
 
-    auto function = [=, &op] (int cStart, int cEnd)
-    {
-        alignas(16) QRgbaFloat32 buffer[BufferSize];
-        alignas(16) QRgbaFloat32 src_buffer[BufferSize];
-        for (int c = cStart; c < cEnd; ++c) {
-            if (!spans[c].len)
-                continue;
-            int x = spans[c].x;
-            int length = spans[c].len;
-            int sx = xoff + x;
-            int sy = yoff + spans[c].y;
-            const bool fetchDest = !solidSource || spans[c].coverage < 255;
-            if (sy >= 0 && sy < image_height && sx < image_width) {
-                if (sx < 0) {
-                    x -= sx;
-                    length += sx;
-                    sx = 0;
-                }
-                if (sx + length > image_width)
-                    length = image_width - sx;
-                if (length > 0) {
-                    const int coverage = (spans[c].coverage * data->texture.const_alpha) >> 8;
-                    while (length) {
-                        int l = qMin(BufferSize, length);
-                        const QRgbaFloat32 *src = op.srcFetchFP(src_buffer, &op, data, sy, sx, l);
-                        QRgbaFloat32 *dest = fetchDest ? op.destFetchFP(buffer, data->rasterBuffer, x, spans[c].y, l) : buffer;
-                        op.funcFP(dest, src, l, coverage);
-                        if (op.destStoreFP)
-                            op.destStoreFP(data->rasterBuffer, x, spans[c].y, dest, l);
-                        x += l;
-                        sx += l;
-                        length -= l;
-                    }
+    for (; count--; spans++) {
+        if (!spans->len)
+            continue;
+        int x = spans->x;
+        int length = spans->len;
+        int sx = xoff + x;
+        int sy = yoff + spans->y;
+        if (sy >= 0 && sy < image_height && sx < image_width) {
+            if (sx < 0) {
+                x -= sx;
+                length += sx;
+                sx = 0;
+            }
+            if (sx + length > image_width)
+                length = image_width - sx;
+            if (length > 0) {
+                const int coverage = (spans->coverage * data->texture.const_alpha) >> 8;
+                while (length) {
+                    int l = qMin(BufferSize, length);
+                    const QRgbaFloat32 *src = op.srcFetchFP(src_buffer, &op, data, sy, sx, l);
+                    QRgbaFloat32 *dest = op.destFetchFP(buffer, data->rasterBuffer, x, spans->y, l);
+                    op.funcFP(dest, src, l, coverage);
+                    if (op.destStoreFP)
+                        op.destStoreFP(data->rasterBuffer, x, spans->y, dest, l);
+                    x += l;
+                    sx += l;
+                    length -= l;
                 }
             }
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+    }
 }
 #endif
 
@@ -4351,41 +4274,36 @@ static void blend_untransformed_argb(int count, const QSpan *spans, void *userDa
         return;
     }
 
-    const Operator op = getOperator(data, spans, count);
+    Operator op = getOperator(data, spans, count);
 
     const int image_width = data->texture.width;
     const int image_height = data->texture.height;
-    const int const_alpha = data->texture.const_alpha;
-    const int xoff = -qRound(-data->dx);
-    const int yoff = -qRound(-data->dy);
+    int xoff = -qRound(-data->dx);
+    int yoff = -qRound(-data->dy);
 
-    auto function = [=, &op] (int cStart, int cEnd)
-    {
-        for (int c = cStart; c < cEnd; ++c) {
-            if (!spans[c].len)
-                continue;
-            int x = spans[c].x;
-            int length = spans[c].len;
-            int sx = xoff + x;
-            int sy = yoff + spans[c].y;
-            if (sy >= 0 && sy < image_height && sx < image_width) {
-                if (sx < 0) {
-                    x -= sx;
-                    length += sx;
-                    sx = 0;
-                }
-                if (sx + length > image_width)
-                    length = image_width - sx;
-                if (length > 0) {
-                    const int coverage = (spans[c].coverage * const_alpha) >> 8;
-                    const uint *src = (const uint *)data->texture.scanLine(sy) + sx;
-                    uint *dest = ((uint *)data->rasterBuffer->scanLine(spans[c].y)) + x;
-                    op.func(dest, src, length, coverage);
-                }
+    for (; count--; spans++) {
+        if (!spans->len)
+            continue;
+        int x = spans->x;
+        int length = spans->len;
+        int sx = xoff + x;
+        int sy = yoff + spans->y;
+        if (sy >= 0 && sy < image_height && sx < image_width) {
+            if (sx < 0) {
+                x -= sx;
+                length += sx;
+                sx = 0;
+            }
+            if (sx + length > image_width)
+                length = image_width - sx;
+            if (length > 0) {
+                const int coverage = (spans->coverage * data->texture.const_alpha) >> 8;
+                const uint *src = (const uint *)data->texture.scanLine(sy) + sx;
+                uint *dest = ((uint *)data->rasterBuffer->scanLine(spans->y)) + x;
+                op.func(dest, src, length, coverage);
             }
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+    }
 }
 
 static inline quint16 interpolate_pixel_rgb16_255(quint16 x, quint8 a,
@@ -4457,54 +4375,57 @@ static void blend_untransformed_rgb565(int count, const QSpan *spans, void *user
     int xoff = -qRound(-data->dx);
     int yoff = -qRound(-data->dy);
 
-    auto function = [=](int cStart, int cEnd)
-    {
-        for (int c = cStart; c < cEnd; ++c) {
-            if (!spans[c].len)
-                continue;
-            const quint8 coverage = (data->texture.const_alpha * spans[c].coverage) >> 8;
-            if (coverage == 0)
-                continue;
+    const QSpan *end = spans + count;
+    while (spans < end) {
+        if (!spans->len) {
+            ++spans;
+            continue;
+        }
+        const quint8 coverage = (data->texture.const_alpha * spans->coverage) >> 8;
+        if (coverage == 0) {
+            ++spans;
+            continue;
+        }
 
-            int x = spans[c].x;
-            int length = spans[c].len;
-            int sx = xoff + x;
-            int sy = yoff + spans[c].y;
-            if (sy >= 0 && sy < image_height && sx < image_width) {
-                if (sx < 0) {
-                    x -= sx;
-                    length += sx;
-                    sx = 0;
-                }
-                if (sx + length > image_width)
-                    length = image_width - sx;
-                if (length > 0) {
-                    quint16 *dest = (quint16 *)data->rasterBuffer->scanLine(spans[c].y) + x;
-                    const quint16 *src = (const quint16 *)data->texture.scanLine(sy) + sx;
-                    if (coverage == 255) {
-                        memcpy(dest, src, length * sizeof(quint16));
-                    } else {
-                        const quint8 alpha = (coverage + 1) >> 3;
-                        const quint8 ialpha = 0x20 - alpha;
-                        if (alpha > 0)
-                            blend_sourceOver_rgb16_rgb16(dest, src, length, alpha, ialpha);
-                    }
+        int x = spans->x;
+        int length = spans->len;
+        int sx = xoff + x;
+        int sy = yoff + spans->y;
+        if (sy >= 0 && sy < image_height && sx < image_width) {
+            if (sx < 0) {
+                x -= sx;
+                length += sx;
+                sx = 0;
+            }
+            if (sx + length > image_width)
+                length = image_width - sx;
+            if (length > 0) {
+                quint16 *dest = (quint16 *)data->rasterBuffer->scanLine(spans->y) + x;
+                const quint16 *src = (const quint16 *)data->texture.scanLine(sy) + sx;
+                if (coverage == 255) {
+                    memcpy(dest, src, length * sizeof(quint16));
+                } else {
+                    const quint8 alpha = (coverage + 1) >> 3;
+                    const quint8 ialpha = 0x20 - alpha;
+                    if (alpha > 0)
+                        blend_sourceOver_rgb16_rgb16(dest, src, length, alpha, ialpha);
                 }
             }
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+        ++spans;
+    }
 }
 
 static void blend_tiled_generic(int count, const QSpan *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
-    const Operator op = getOperator(data, spans, count);
+    uint buffer[BufferSize];
+    uint src_buffer[BufferSize];
+    Operator op = getOperator(data, spans, count);
 
     const int image_width = data->texture.width;
     const int image_height = data->texture.height;
-    const int const_alpha = data->texture.const_alpha;
     int xoff = -qRound(-data->dx) % image_width;
     int yoff = -qRound(-data->dy) % image_height;
 
@@ -4513,39 +4434,34 @@ static void blend_tiled_generic(int count, const QSpan *spans, void *userData)
     if (yoff < 0)
         yoff += image_height;
 
-    auto function = [=, &op](int cStart, int cEnd)
-    {
-        alignas(16) uint buffer[BufferSize];
-        alignas(16) uint src_buffer[BufferSize];
-        for (int c = cStart; c < cEnd; ++c) {
-            int x = spans[c].x;
-            int length = spans[c].len;
-            int sx = (xoff + spans[c].x) % image_width;
-            int sy = (spans[c].y + yoff) % image_height;
-            if (sx < 0)
-                sx += image_width;
-            if (sy < 0)
-                sy += image_height;
+    while (count--) {
+        int x = spans->x;
+        int length = spans->len;
+        int sx = (xoff + spans->x) % image_width;
+        int sy = (spans->y + yoff) % image_height;
+        if (sx < 0)
+            sx += image_width;
+        if (sy < 0)
+            sy += image_height;
 
-            const int coverage = (spans[c].coverage * const_alpha) >> 8;
-            while (length) {
-                int l = qMin(image_width - sx, length);
-                if (BufferSize < l)
-                    l = BufferSize;
-                const uint *src = op.srcFetch(src_buffer, &op, data, sy, sx, l);
-                uint *dest = op.destFetch(buffer, data->rasterBuffer, x, spans[c].y, l);
-                op.func(dest, src, l, coverage);
-                if (op.destStore)
-                    op.destStore(data->rasterBuffer, x, spans[c].y, dest, l);
-                x += l;
-                sx += l;
-                length -= l;
-                if (sx >= image_width)
-                    sx = 0;
-            }
+        const int coverage = (spans->coverage * data->texture.const_alpha) >> 8;
+        while (length) {
+            int l = qMin(image_width - sx, length);
+            if (BufferSize < l)
+                l = BufferSize;
+            const uint *src = op.srcFetch(src_buffer, &op, data, sy, sx, l);
+            uint *dest = op.destFetch(buffer, data->rasterBuffer, x, spans->y, l);
+            op.func(dest, src, l, coverage);
+            if (op.destStore)
+                op.destStore(data->rasterBuffer, x, spans->y, dest, l);
+            x += l;
+            sx += l;
+            length -= l;
+            if (sx >= image_width)
+                sx = 0;
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+        ++spans;
+    }
 }
 
 #if QT_CONFIG(raster_64bit)
@@ -4553,11 +4469,13 @@ static void blend_tiled_generic_rgb64(int count, const QSpan *spans, void *userD
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
-    const Operator op = getOperator(data, spans, count);
+    Operator op = getOperator(data, spans, count);
     if (!op.func64) {
         qCDebug(lcQtGuiDrawHelper, "blend_tiled_generic_rgb64: unsupported 64-bit blend attempted, falling back to 32-bit");
         return blend_tiled_generic(count, spans, userData);
     }
+    alignas(8) QRgba64 buffer[BufferSize];
+    alignas(8) QRgba64 src_buffer[BufferSize];
 
     const int image_width = data->texture.width;
     const int image_height = data->texture.height;
@@ -4572,7 +4490,6 @@ static void blend_tiled_generic_rgb64(int count, const QSpan *spans, void *userD
     bool isBpp32 = qPixelLayouts[data->rasterBuffer->format].bpp == QPixelLayout::BPP32;
     bool isBpp64 = qPixelLayouts[data->rasterBuffer->format].bpp == QPixelLayout::BPP64;
     if (op.destFetch64 == destFetch64Undefined && image_width <= BufferSize && (isBpp32 || isBpp64)) {
-        alignas(16) QRgba64 src_buffer[BufferSize];
         // If destination isn't blended into the result, we can do the tiling directly on destination pixels.
         while (count--) {
             int x = spans->x;
@@ -4620,39 +4537,34 @@ static void blend_tiled_generic_rgb64(int count, const QSpan *spans, void *userD
         return;
     }
 
-    auto function = [=, &op](int cStart, int cEnd)
-    {
-        alignas(16) QRgba64 buffer[BufferSize];
-        alignas(16) QRgba64 src_buffer[BufferSize];
-        for (int c = cStart; c < cEnd; ++c) {
-            int x = spans[c].x;
-            int length = spans[c].len;
-            int sx = (xoff + spans[c].x) % image_width;
-            int sy = (spans[c].y + yoff) % image_height;
-            if (sx < 0)
-                sx += image_width;
-            if (sy < 0)
-                sy += image_height;
+    while (count--) {
+        int x = spans->x;
+        int length = spans->len;
+        int sx = (xoff + spans->x) % image_width;
+        int sy = (spans->y + yoff) % image_height;
+        if (sx < 0)
+            sx += image_width;
+        if (sy < 0)
+            sy += image_height;
 
-            const int coverage = (spans[c].coverage * data->texture.const_alpha) >> 8;
-            while (length) {
-                int l = qMin(image_width - sx, length);
-                if (BufferSize < l)
-                    l = BufferSize;
-                const QRgba64 *src = op.srcFetch64(src_buffer, &op, data, sy, sx, l);
-                QRgba64 *dest = op.destFetch64(buffer, data->rasterBuffer, x, spans[c].y, l);
-                op.func64(dest, src, l, coverage);
-                if (op.destStore64)
-                    op.destStore64(data->rasterBuffer, x, spans[c].y, dest, l);
-                x += l;
-                sx += l;
-                length -= l;
-                if (sx >= image_width)
-                    sx = 0;
-            }
+        const int coverage = (spans->coverage * data->texture.const_alpha) >> 8;
+        while (length) {
+            int l = qMin(image_width - sx, length);
+            if (BufferSize < l)
+                l = BufferSize;
+            const QRgba64 *src = op.srcFetch64(src_buffer, &op, data, sy, sx, l);
+            QRgba64 *dest = op.destFetch64(buffer, data->rasterBuffer, x, spans->y, l);
+            op.func64(dest, src, l, coverage);
+            if (op.destStore64)
+                op.destStore64(data->rasterBuffer, x, spans->y, dest, l);
+            x += l;
+            sx += l;
+            length -= l;
+            if (sx >= image_width)
+                sx = 0;
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+        ++spans;
+    }
 }
 #endif
 
@@ -4661,11 +4573,13 @@ static void blend_tiled_generic_fp(int count, const QSpan *spans, void *userData
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
-    const Operator op = getOperator(data, spans, count);
+    Operator op = getOperator(data, spans, count);
     if (!op.funcFP) {
         qCDebug(lcQtGuiDrawHelper, "blend_tiled_generic_fp: unsupported 4xFP blend attempted, falling back to 32-bit");
         return blend_tiled_generic(count, spans, userData);
     }
+    QRgbaFloat32 buffer[BufferSize];
+    QRgbaFloat32 src_buffer[BufferSize];
 
     const int image_width = data->texture.width;
     const int image_height = data->texture.height;
@@ -4679,39 +4593,34 @@ static void blend_tiled_generic_fp(int count, const QSpan *spans, void *userData
 
     // Consider tiling optimizing like the other versions.
 
-    auto function = [=, &op](int cStart, int cEnd)
-    {
-        alignas(16) QRgbaFloat32 buffer[BufferSize];
-        alignas(16) QRgbaFloat32 src_buffer[BufferSize];
-        for (int c = cStart; c < cEnd; ++c) {
-            int x = spans[c].x;
-            int length = spans[c].len;
-            int sx = (xoff + spans[c].x) % image_width;
-            int sy = (spans[c].y + yoff) % image_height;
-            if (sx < 0)
-                sx += image_width;
-            if (sy < 0)
-                sy += image_height;
+    while (count--) {
+        int x = spans->x;
+        int length = spans->len;
+        int sx = (xoff + spans->x) % image_width;
+        int sy = (spans->y + yoff) % image_height;
+        if (sx < 0)
+            sx += image_width;
+        if (sy < 0)
+            sy += image_height;
 
-            const int coverage = (spans[c].coverage * data->texture.const_alpha) >> 8;
-            while (length) {
-                int l = qMin(image_width - sx, length);
-                if (BufferSize < l)
-                    l = BufferSize;
-                const QRgbaFloat32 *src = op.srcFetchFP(src_buffer, &op, data, sy, sx, l);
-                QRgbaFloat32 *dest = op.destFetchFP(buffer, data->rasterBuffer, x, spans[c].y, l);
-                op.funcFP(dest, src, l, coverage);
-                if (op.destStoreFP)
-                    op.destStoreFP(data->rasterBuffer, x, spans[c].y, dest, l);
-                x += l;
-                sx += l;
-                length -= l;
-                if (sx >= image_width)
-                    sx = 0;
-            }
+        const int coverage = (spans->coverage * data->texture.const_alpha) >> 8;
+        while (length) {
+            int l = qMin(image_width - sx, length);
+            if (BufferSize < l)
+                l = BufferSize;
+            const QRgbaFloat32 *src = op.srcFetchFP(src_buffer, &op, data, sy, sx, l);
+            QRgbaFloat32 *dest = op.destFetchFP(buffer, data->rasterBuffer, x, spans->y, l);
+            op.funcFP(dest, src, l, coverage);
+            if (op.destStoreFP)
+                op.destStoreFP(data->rasterBuffer, x, spans->y, dest, l);
+            x += l;
+            sx += l;
+            length -= l;
+            if (sx >= image_width)
+                sx = 0;
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+        ++spans;
+    }
 }
 #endif
 
@@ -4724,10 +4633,10 @@ static void blend_tiled_argb(int count, const QSpan *spans, void *userData)
         return;
     }
 
-    const Operator op = getOperator(data, spans, count);
+    Operator op = getOperator(data, spans, count);
 
-    const int image_width = data->texture.width;
-    const int image_height = data->texture.height;
+    int image_width = data->texture.width;
+    int image_height = data->texture.height;
     int xoff = -qRound(-data->dx) % image_width;
     int yoff = -qRound(-data->dy) % image_height;
 
@@ -4735,37 +4644,33 @@ static void blend_tiled_argb(int count, const QSpan *spans, void *userData)
         xoff += image_width;
     if (yoff < 0)
         yoff += image_height;
-    const auto func = op.func;
-    const int const_alpha = data->texture.const_alpha;
 
-    auto function = [=] (int cStart, int cEnd) {
-        for (int c = cStart; c < cEnd; ++c) {
-            int x = spans[c].x;
-            int length = spans[c].len;
-            int sx = (xoff + spans[c].x) % image_width;
-            int sy = (spans[c].y + yoff) % image_height;
-            if (sx < 0)
-                sx += image_width;
-            if (sy < 0)
-                sy += image_height;
+    while (count--) {
+        int x = spans->x;
+        int length = spans->len;
+        int sx = (xoff + spans->x) % image_width;
+        int sy = (spans->y + yoff) % image_height;
+        if (sx < 0)
+            sx += image_width;
+        if (sy < 0)
+            sy += image_height;
 
-            const int coverage = (spans[c].coverage * const_alpha) >> 8;
-            while (length) {
-                int l = qMin(image_width - sx, length);
-                if (BufferSize < l)
-                    l = BufferSize;
-                const uint *src = (const uint *)data->texture.scanLine(sy) + sx;
-                uint *dest = ((uint *)data->rasterBuffer->scanLine(spans[c].y)) + x;
-                func(dest, src, l, coverage);
-                x += l;
-                sx += l;
-                length -= l;
-                if (sx >= image_width)
-                    sx = 0;
-            }
+        const int coverage = (spans->coverage * data->texture.const_alpha) >> 8;
+        while (length) {
+            int l = qMin(image_width - sx, length);
+            if (BufferSize < l)
+                l = BufferSize;
+            const uint *src = (const uint *)data->texture.scanLine(sy) + sx;
+            uint *dest = ((uint *)data->rasterBuffer->scanLine(spans->y)) + x;
+            op.func(dest, src, l, coverage);
+            x += l;
+            sx += l;
+            length -= l;
+            if (sx >= image_width)
+                sx = 0;
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+        ++spans;
+    }
 }
 
 static void blend_tiled_rgb565(int count, const QSpan *spans, void *userData)
@@ -4791,80 +4696,79 @@ static void blend_tiled_rgb565(int count, const QSpan *spans, void *userData)
     if (yoff < 0)
         yoff += image_height;
 
-    const int const_alpha = data->texture.const_alpha;
-    auto function = [=] (int cStart, int cEnd) {
-        for (int c = cStart; c < cEnd; ++c) {
-            const quint8 coverage = (const_alpha * spans[c].coverage) >> 8;
-            if (coverage == 0)
-                continue;
+    while (count--) {
+        const quint8 coverage = (data->texture.const_alpha * spans->coverage) >> 8;
+        if (coverage == 0) {
+            ++spans;
+            continue;
+        }
 
-            int x = spans[c].x;
-            int length = spans[c].len;
-            int sx = (xoff + spans[c].x) % image_width;
-            int sy = (spans[c].y + yoff) % image_height;
-            if (sx < 0)
-                sx += image_width;
-            if (sy < 0)
-                sy += image_height;
+        int x = spans->x;
+        int length = spans->len;
+        int sx = (xoff + spans->x) % image_width;
+        int sy = (spans->y + yoff) % image_height;
+        if (sx < 0)
+            sx += image_width;
+        if (sy < 0)
+            sy += image_height;
 
-            if (coverage == 255) {
-                // Copy the first texture block
-                length = qMin(image_width,length);
-                int tx = x;
+        if (coverage == 255) {
+            // Copy the first texture block
+            length = qMin(image_width,length);
+            int tx = x;
+            while (length) {
+                int l = qMin(image_width - sx, length);
+                if (BufferSize < l)
+                    l = BufferSize;
+                quint16 *dest = ((quint16 *)data->rasterBuffer->scanLine(spans->y)) + tx;
+                const quint16 *src = (const quint16 *)data->texture.scanLine(sy) + sx;
+                memcpy(dest, src, l * sizeof(quint16));
+                length -= l;
+                tx += l;
+                sx += l;
+                if (sx >= image_width)
+                    sx = 0;
+            }
+
+            // Now use the rasterBuffer as the source of the texture,
+            // We can now progressively copy larger blocks
+            // - Less cpu time in code figuring out what to copy
+            // We are dealing with one block of data
+            // - More likely to fit in the cache
+            // - can use memcpy
+            int copy_image_width = qMin(image_width, int(spans->len));
+            length = spans->len - copy_image_width;
+            quint16 *src = ((quint16 *)data->rasterBuffer->scanLine(spans->y)) + x;
+            quint16 *dest = src + copy_image_width;
+            while (copy_image_width < length) {
+                memcpy(dest, src, copy_image_width * sizeof(quint16));
+                dest += copy_image_width;
+                length -= copy_image_width;
+                copy_image_width *= 2;
+            }
+            if (length > 0)
+                memcpy(dest, src, length * sizeof(quint16));
+        } else {
+            const quint8 alpha = (coverage + 1) >> 3;
+            const quint8 ialpha = 0x20 - alpha;
+            if (alpha > 0) {
                 while (length) {
                     int l = qMin(image_width - sx, length);
                     if (BufferSize < l)
                         l = BufferSize;
-                    quint16 *dest = ((quint16 *)data->rasterBuffer->scanLine(spans[c].y)) + tx;
+                    quint16 *dest = ((quint16 *)data->rasterBuffer->scanLine(spans->y)) + x;
                     const quint16 *src = (const quint16 *)data->texture.scanLine(sy) + sx;
-                    memcpy(dest, src, l * sizeof(quint16));
-                    length -= l;
-                    tx += l;
+                    blend_sourceOver_rgb16_rgb16(dest, src, l, alpha, ialpha);
+                    x += l;
                     sx += l;
+                    length -= l;
                     if (sx >= image_width)
                         sx = 0;
                 }
-
-                // Now use the rasterBuffer as the source of the texture,
-                // We can now progressively copy larger blocks
-                // - Less cpu time in code figuring out what to copy
-                // We are dealing with one block of data
-                // - More likely to fit in the cache
-                // - can use memcpy
-                int copy_image_width = qMin(image_width, int(spans[c].len));
-                length = spans[c].len - copy_image_width;
-                quint16 *src = ((quint16 *)data->rasterBuffer->scanLine(spans[c].y)) + x;
-                quint16 *dest = src + copy_image_width;
-                while (copy_image_width < length) {
-                    memcpy(dest, src, copy_image_width * sizeof(quint16));
-                    dest += copy_image_width;
-                    length -= copy_image_width;
-                    copy_image_width *= 2;
-                }
-                if (length > 0)
-                    memcpy(dest, src, length * sizeof(quint16));
-            } else {
-                const quint8 alpha = (coverage + 1) >> 3;
-                const quint8 ialpha = 0x20 - alpha;
-                if (alpha > 0) {
-                    while (length) {
-                        int l = qMin(image_width - sx, length);
-                        if (BufferSize < l)
-                            l = BufferSize;
-                        quint16 *dest = ((quint16 *)data->rasterBuffer->scanLine(spans[c].y)) + x;
-                        const quint16 *src = (const quint16 *)data->texture.scanLine(sy) + sx;
-                        blend_sourceOver_rgb16_rgb16(dest, src, l, alpha, ialpha);
-                        x += l;
-                        sx += l;
-                        length -= l;
-                        if (sx >= image_width)
-                            sx = 0;
-                    }
-                }
             }
         }
-    };
-    QT_THREAD_PARALLEL_FILLS(function);
+        ++spans;
+    }
 }
 
 /* Image formats here are target formats */
@@ -5032,7 +4936,7 @@ static void blend_vertical_gradient(int count, const QSpan *spans, void *userDat
 #if QT_CONFIG(raster_64bit)
         data->solidColor = qt_gradient_pixel64_fixed(&data->gradient, yinc * y + off);
 #else
-        data->solidColor = qt_gradient_pixel_fixed(&data->gradient, yinc * y + off);
+        data->solidColor = QRgba64::fromArgb32(qt_gradient_pixel_fixed(&data->gradient, yinc * y + off));
 #endif
         blend_color(1, spans, userData);
         ++spans;
@@ -5621,7 +5525,7 @@ static inline void alphargbblend_argb32(quint32 *dst, uint coverage, const QRgba
 static inline void rgbBlendPixel(QRgba64 &dst, int coverage, QRgba64 slinear, const QColorTrcLut *colorProfile)
 {
     // Do a gammacorrected RGB alphablend...
-    const QRgba64 dlinear = colorProfile ? colorProfile->toLinear(dst) : dst;
+    const QRgba64 dlinear = colorProfile ? colorProfile->toLinear64(dst) : dst;
 
     QRgba64 blend = rgbBlend(dlinear, slinear, coverage);
 
@@ -6245,7 +6149,7 @@ void qt_memfill64(quint64 *dest, quint64 color, qsizetype count)
 }
 #endif
 
-#if defined(QT_COMPILER_SUPPORTS_SSSE3) && defined(Q_CC_GNU) && !defined(Q_CC_CLANG)
+#if defined(QT_COMPILER_SUPPORTS_SSSE3) && defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && !defined(Q_CC_CLANG)
 __attribute__((optimize("no-tree-vectorize")))
 #endif
 void qt_memfill24(quint24 *dest, quint24 color, qsizetype count)

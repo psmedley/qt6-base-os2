@@ -1,51 +1,8 @@
 type: Group
 instructions:
-  - type: ScheduleUploadTestResults
-  - type: PrependToEnvironmentVariable
-    variableName: PATH
-    variableValue: "{{.Env.PYTHON3_PATH}}:"
-    disable_if:
-      condition: property
-      property: host.os
-      equals_value: Windows
-  - type: EnvironmentVariable
-    variableName: TESTRUNNER
-    variableValue: "{{.InstallDir}}/libexec/qt-testrunner.py --"
-    disable_if:
-      condition: property
-      property: host.os
-      equals_value: Windows
-  - type: AppendToEnvironmentVariable
-    variableName: TESTRUNNER
-    variableValue: " {{.SourceDir}}/coin_qnx_qemu_runner.sh"
-    enable_if:
-      condition: property
-      property: target.osVersion
-      in_values: [QNX_710]
-  - type: EnvironmentVariable
-    variableName: TESTRUNNER
-    variableValue: "{{.InstallDir}}\\bin\\qt-testrunner.py --"
-    enable_if:
-      condition: property
-      property: host.os
-      equals_value: Windows
-  - type: EnvironmentVariable
-    variableName: COIN_CTEST_RESULTSDIR
-    variableValue: "{{.AgentWorkingDir}}\\testresults"
-    enable_if:
-      condition: property
-      property: host.os
-      equals_value: Windows
-  - type: EnvironmentVariable
-    variableName: COIN_CTEST_RESULTSDIR
-    variableValue: "{{.AgentWorkingDir}}/testresults"
-    disable_if:
-      condition: property
-      property: host.os
-      equals_value: Windows
   - type: EnvironmentVariable
     variableName: CTEST_ARGS
-    variableValue: "-V"
+    variableValue: "-V --rerun-failed --force-new-ctest-process --repeat until-pass:5"
   - type: AppendToEnvironmentVariable
     variableName: CTEST_ARGS
     variableValue: " --stop-on-failure"
@@ -64,10 +21,6 @@ instructions:
 
   - type: Group
     instructions:
-      # Qttestrunner does not work with bic tests.
-      - type: EnvironmentVariable
-        variableName: TESTRUNNER
-        variableValue: ""
       - type: EnvironmentVariable
         variableName: QT_MODULE_TO_TEST
         variableValue: "{{.SourceDir}}"

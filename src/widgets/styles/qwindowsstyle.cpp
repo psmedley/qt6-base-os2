@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qwindowsstyle_p.h"
 #include "qwindowsstyle_p_p.h"
@@ -373,10 +409,7 @@ static QScreen *screenOf(const QWidget *w)
 // and account for secondary screens with differing logical DPI.
 qreal QWindowsStylePrivate::nativeMetricScaleFactor(const QWidget *widget)
 {
-    const QPlatformScreen *screen = screenOf(widget)->handle();
-    const qreal scale = screen ? (screen->logicalDpi().first / screen->logicalBaseDpi().first)
-                               : QWindowsStylePrivate::appDevicePixelRatio();
-    qreal result = qreal(1) / scale;
+    qreal result = qreal(1) / QWindowsStylePrivate::devicePixelRatio(widget);
     if (QGuiApplicationPrivate::screen_list.size() > 1) {
         const QScreen *primaryScreen = QGuiApplication::primaryScreen();
         const QScreen *screen = screenOf(widget);
@@ -571,12 +604,12 @@ int QWindowsStyle::styleHint(StyleHint hint, const QStyleOption *opt, const QWid
                 ret = 1;
             }
         }
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
         if (!ret && opt && opt->type == QStyleOption::SO_MenuItem
             && QStyleHelper::isInstanceOf(opt->styleObject, QAccessible::MenuItem)
             && opt->styleObject->property("_q_showUnderlined").toBool())
             ret = 1;
-#endif // QT_CONFIG(accessibility)
+#endif // QT_NO_ACCESSIBILITY
         break;
     }
 #endif // Q_OS_WIN
@@ -1124,7 +1157,9 @@ void QWindowsStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPai
                     pixmap = menuitem->icon.pixmap(proxy()->pixelMetric(PM_SmallIconSize, opt, widget), mode, QIcon::On);
                 else
                     pixmap = menuitem->icon.pixmap(proxy()->pixelMetric(PM_SmallIconSize, opt, widget), mode);
-                QRect pmr(QPoint(0, 0), pixmap.deviceIndependentSize().toSize());
+                const int pixw = pixmap.width() / pixmap.devicePixelRatio();
+                const int pixh = pixmap.height() / pixmap.devicePixelRatio();
+                QRect pmr(0, 0, pixw, pixh);
                 pmr.moveCenter(vCheckRect.center());
                 p->setPen(menuitem->palette.text().color());
                 p->drawPixmap(pmr.topLeft(), pixmap);
@@ -1157,7 +1192,7 @@ void QWindowsStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPai
             QStringView s(menuitem->text);
             if (!s.isEmpty()) {                     // draw text
                 p->save();
-                qsizetype t = s.indexOf(u'\t');
+                int t = s.indexOf(QLatin1Char('\t'));
                 int text_flags = Qt::AlignVCenter | Qt::TextShowMnemonic | Qt::TextDontClip | Qt::TextSingleLine;
                 if (!proxy()->styleHint(SH_UnderlineShortcut, menuitem, widget))
                     text_flags |= Qt::TextHideMnemonic;
@@ -2315,7 +2350,7 @@ QSize QWindowsStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
             }
             int maxpmw = mi->maxIconWidth;
             int tabSpacing = 20;
-            if (mi->text.contains(u'\t'))
+            if (mi->text.contains(QLatin1Char('\t')))
                 w += tabSpacing;
             else if (mi->menuItemType == QStyleOptionMenuItem::SubMenu)
                 w += 2 * QWindowsStylePrivate::windowsArrowHMargin;

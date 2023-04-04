@@ -6,6 +6,7 @@
 
 qt_get_tool_target_name(target_name rcc)
 qt_internal_add_tool(${target_name}
+    BOOTSTRAP
     TARGET_DESCRIPTION "Qt Resource Compiler"
     INSTALL_DIR "${INSTALL_LIBEXECDIR}"
     TOOLS_TARGET Core # special case
@@ -19,7 +20,6 @@ qt_internal_add_tool(${target_name}
     INCLUDE_DIRECTORIES
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
-qt_internal_return_unless_building_tools()
 
 #### Keys ignored in scope 1:.:.:rcc.pro:<TRUE>:
 # QMAKE_TARGET_DESCRIPTION = "Qt Resource Compiler"
@@ -28,7 +28,14 @@ qt_internal_return_unless_building_tools()
 ## Scopes:
 #####################################################################
 
-qt_internal_extend_target(${target_name} CONDITION QT_FEATURE_zstd
+qt_internal_extend_target(${target_name} CONDITION QT_FEATURE_zstd AND NOT CMAKE_CROSSCOMPILING
+    DEFINES
+        QT_FEATURE_zstd=1
     LIBRARIES
-        WrapZSTD::WrapZSTD
+        ZSTD::ZSTD
+)
+
+qt_internal_extend_target(${target_name} CONDITION CMAKE_CROSSCOMPILING OR NOT QT_FEATURE_zstd
+    DEFINES
+        QT_FEATURE_zstd=-1
 )

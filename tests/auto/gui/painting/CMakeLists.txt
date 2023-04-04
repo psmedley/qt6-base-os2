@@ -17,7 +17,6 @@ add_subdirectory(qpolygon)
 # QTBUG-87669 # special case
 if(NOT ANDROID)
     add_subdirectory(qcolorspace)
-    add_subdirectory(qcolortransform)
 endif()
 if(QT_FEATURE_private_tests)
     add_subdirectory(qpathclipper)

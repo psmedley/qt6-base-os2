@@ -1,26 +1,44 @@
 #!/usr/bin/env python3
-# Copyright (C) 2021 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+#############################################################################
+##
+## Copyright (C) 2021 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is part of the test suite of the Qt Toolkit.
+##
+## $QT_BEGIN_LICENSE:GPL-EXCEPT$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 3 as published by the Free Software
+## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
 """Script to generate C++ code from CLDR data in QLocaleXML form
 
 See ``cldr2qlocalexml.py`` for how to generate the QLocaleXML data itself.
 Pass the output file from that as first parameter to this script; pass
-the ISO 639-3 data file as second parameter; pass the root of the qtbase
-check-out as third parameter.
-
-The ISO 639-3 data file can be downloaded from the SIL website:
-
-    https://iso639-3.sil.org/sites/iso639-3/files/downloads/iso-639-3.tab
+the root of the qtbase check-out as second parameter.
 """
 
 import datetime
 import argparse
 from pathlib import Path
-from typing import Optional
 
 from qlocalexml import QLocaleXmlReader
 from localetools import unicode2hex, wrap_list, Error, Transcriber, SourceFileEditor
-from iso639_3 import LanguageCodeData
 
 class LocaleKeySorter:
     """Sort-ordering representation of a locale key.
@@ -105,7 +123,7 @@ class StringData:
         if len(self.data) > 0xffff:
             raise ValueError(f'Data is too big ({len(self.data)}) for quint16 index to its end!',
                              self.name)
-        fd.write(f"\nstatic constexpr char16_t {self.name}[] = {{\n")
+        fd.write(f"\nstatic const char16_t {self.name}[] = {{\n")
         fd.write(wrap_list(self.data))
         fd.write("\n};\n")
 
@@ -150,7 +168,7 @@ class LocaleDataWriter (LocaleSourceEditor):
         likely = sorted(likely, key=keyLikely)
 
         i = 0
-        self.writer.write('static constexpr QLocaleId likely_subtags[] = {\n')
+        self.writer.write('static const QLocaleId likely_subtags[] = {\n')
         for had, have, got, give in likely:
             i += 1
             self.writer.write('    {{ {:3d}, {:3d}, {:3d} }}'.format(*have))
@@ -160,7 +178,7 @@ class LocaleDataWriter (LocaleSourceEditor):
         self.writer.write('};\n\n')
 
     def localeIndex(self, indices):
-        self.writer.write('static constexpr quint16 locale_index[] = {\n')
+        self.writer.write('static const quint16 locale_index[] = {\n')
         for index, name in indices:
             self.writer.write(f'{index:6d}, // {name}\n')
         self.writer.write('     0 // trailing 0\n')
@@ -181,7 +199,7 @@ class LocaleDataWriter (LocaleSourceEditor):
         endonyms_data = StringData('endonyms_data')
 
         # Locale data
-        self.writer.write('static constexpr QLocaleData locale_data[] = {\n')
+        self.writer.write('static const QLocaleData locale_data[] = {\n')
         # Table headings: keep each label centred in its field, matching line_format:
         self.writer.write('   // '
                           # Width 6 + comma
@@ -331,7 +349,7 @@ class LocaleDataWriter (LocaleSourceEditor):
 
     @staticmethod
     def __writeNameData(out, book, form):
-        out(f'static constexpr char {form}_name_list[] =\n')
+        out(f'static const char {form}_name_list[] =\n')
         out('"Default\\0"\n')
         for key, value in book.items():
             if key == 0:
@@ -339,7 +357,7 @@ class LocaleDataWriter (LocaleSourceEditor):
             out(f'"{value[0]}\\0"\n')
         out(';\n\n')
 
-        out(f'static constexpr quint16 {form}_name_index[] = {{\n')
+        out(f'static const quint16 {form}_name_index[] = {{\n')
         out(f'     0, // Any{form.capitalize()}\n')
         index = 8
         for key, value in book.items():
@@ -352,7 +370,7 @@ class LocaleDataWriter (LocaleSourceEditor):
 
     @staticmethod
     def __writeCodeList(out, book, form, width):
-        out(f'static constexpr unsigned char {form}_code_list[] =\n')
+        out(f'static const unsigned char {form}_code_list[] =\n')
         for key, value in book.items():
             code = value[1]
             code += r'\0' * max(width - len(code), 0)
@@ -371,42 +389,8 @@ class LocaleDataWriter (LocaleSourceEditor):
     # TODO: unify these next three into the previous three; kept
     # separate for now to verify we're not changing data.
 
-    def languageCodes(self, languages, code_data: LanguageCodeData):
-        out = self.writer.write
-
-        out(f'constexpr std::array<LanguageCodeEntry, {len(languages)}> languageCodeList {{\n')
-
-        def q(val: Optional[str], size: int) -> str:
-            """Quote the value and adjust the result for tabular view."""
-            chars = []
-            if val is not None:
-                for c in val:
-                    chars.append(f"'{c}'")
-                s = ', '.join(chars)
-                s = f'{{{s}}}'
-            else:
-                s = ''
-            if size == 0:
-                return f'{{{s}}}'
-            else:
-                return f'{{{s}}},'.ljust(size * 5 + 4)
-
-        for key, value in languages.items():
-            code = value[1]
-            if key < 2:
-                result = code_data.query('und')
-            else:
-                result = code_data.query(code)
-                assert code == result.id()
-            assert result is not None
-
-            codeString = q(result.part1Code, 2)
-            codeString += q(result.part2BCode, 3)
-            codeString += q(result.part2TCode, 3)
-            codeString += q(result.part3Code, 0)
-            out(f'    LanguageCodeEntry {{{codeString}}}, // {value[0]}\n')
-
-        out('};\n\n')
+    def languageCodes(self, languages):
+        self.__writeCodeList(self.writer.write, languages, 'language', 3)
 
     def scriptCodes(self, scripts):
         self.__writeCodeList(self.writer.write, scripts, 'script', 4)
@@ -422,7 +406,7 @@ class CalendarDataWriter (LocaleSourceEditor):
     def write(self, calendar, locales, names):
         months_data = StringData('months_data')
 
-        self.writer.write('static constexpr QCalendarLocale locale_data[] = {\n')
+        self.writer.write('static const QCalendarLocale locale_data[] = {\n')
         self.writer.write(
             '     //'
             # IDs, width 7 (6 + comma)
@@ -535,8 +519,6 @@ def main(out, err):
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('input_file', help='input XML file name',
                         metavar='input-file.xml')
-    parser.add_argument('iso_path', help='path to the ISO 639-3 data file',
-                        metavar='iso-639-3.tab')
     parser.add_argument('qtbase_path', help='path to the root of the qtbase source tree')
     parser.add_argument('--calendars', help='select calendars to emit data for',
                         nargs='+', metavar='CALENDAR',
@@ -556,8 +538,6 @@ def main(out, err):
     locale_map = dict(reader.loadLocaleMap(calendars, err.write))
     locale_keys = sorted(locale_map.keys(), key=LocaleKeySorter(reader.defaultMap()))
 
-    code_data = LanguageCodeData(args.iso_path)
-
     try:
         with LocaleDataWriter(qtsrcdir.joinpath('src/corelib/text/qlocale_data_p.h'),
                               qtsrcdir, reader.cldrVersion) as writer:
@@ -569,7 +549,7 @@ def main(out, err):
             writer.scriptNames(reader.scripts)
             writer.territoryNames(reader.territories)
             # TODO: merge the next three into the previous three
-            writer.languageCodes(reader.languages, code_data)
+            writer.languageCodes(reader.languages)
             writer.scriptCodes(reader.scripts)
             writer.territoryCodes(reader.territories)
     except Exception as e:

@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtDBus module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qdbusutil_p.h"
 
@@ -14,8 +50,6 @@
 #ifndef QT_NO_DBUS
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 static inline bool isValidCharacterNoDash(QChar c)
 {
@@ -49,34 +83,34 @@ static bool variantToString(const QVariant &arg, QString &out)
     int argType = arg.metaType().id();
 
     if (argType == QMetaType::QStringList) {
-        out += u'{';
+        out += QLatin1Char('{');
         const QStringList list = arg.toStringList();
         for (const QString &item : list)
-            out += u'\"' + item + "\", "_L1;
+            out += QLatin1Char('\"') + item + QLatin1String("\", ");
         if (!list.isEmpty())
             out.chop(2);
-        out += u'}';
+        out += QLatin1Char('}');
     } else if (argType == QMetaType::QByteArray) {
-        out += u'{';
+        out += QLatin1Char('{');
         QByteArray list = arg.toByteArray();
-        for (int i = 0; i < list.size(); ++i) {
+        for (int i = 0; i < list.count(); ++i) {
             out += QString::number(list.at(i));
-            out += ", "_L1;
+            out += QLatin1String(", ");
         }
         if (!list.isEmpty())
             out.chop(2);
-        out += u'}';
+        out += QLatin1Char('}');
     } else if (argType == QMetaType::QVariantList) {
-        out += u'{';
+        out += QLatin1Char('{');
         const QList<QVariant> list = arg.toList();
         for (const QVariant &item : list) {
             if (!variantToString(item, out))
                 return false;
-            out += ", "_L1;
+            out += QLatin1String(", ");
         }
         if (!list.isEmpty())
             out.chop(2);
-        out += u'}';
+        out += QLatin1Char('}');
     } else if (argType == QMetaType::Char || argType == QMetaType::Short || argType == QMetaType::Int
                || argType == QMetaType::Long || argType == QMetaType::LongLong) {
         out += QString::number(arg.toLongLong());
@@ -86,40 +120,40 @@ static bool variantToString(const QVariant &arg, QString &out)
     } else if (argType == QMetaType::Double) {
         out += QString::number(arg.toDouble());
     } else if (argType == QMetaType::Bool) {
-        out += arg.toBool() ? "true"_L1 : "false"_L1;
+        out += QLatin1String(arg.toBool() ? "true" : "false");
     } else if (argType == qMetaTypeId<QDBusArgument>()) {
         argToString(qvariant_cast<QDBusArgument>(arg), out);
     } else if (argType == qMetaTypeId<QDBusObjectPath>()) {
         const QString path = qvariant_cast<QDBusObjectPath>(arg).path();
-        out += "[ObjectPath: "_L1;
+        out += QLatin1String("[ObjectPath: ");
         out += path;
-        out += u']';
+        out += QLatin1Char(']');
     } else if (argType == qMetaTypeId<QDBusSignature>()) {
-        out += "[Signature: "_L1 + qvariant_cast<QDBusSignature>(arg).signature();
-        out += u']';
+        out += QLatin1String("[Signature: ") + qvariant_cast<QDBusSignature>(arg).signature();
+        out += QLatin1Char(']');
     } else if (argType == qMetaTypeId<QDBusUnixFileDescriptor>()) {
-        out += "[Unix FD: "_L1;
-        out += qvariant_cast<QDBusUnixFileDescriptor>(arg).isValid() ? "valid"_L1 : "not valid"_L1;
-        out += u']';
+        out += QLatin1String("[Unix FD: ");
+        out += QLatin1String(qvariant_cast<QDBusUnixFileDescriptor>(arg).isValid() ? "valid" : "not valid");
+        out += QLatin1Char(']');
     } else if (argType == qMetaTypeId<QDBusVariant>()) {
         const QVariant v = qvariant_cast<QDBusVariant>(arg).variant();
-        out += "[Variant"_L1;
+        out += QLatin1String("[Variant");
         QMetaType vUserType = v.metaType();
         if (vUserType != QMetaType::fromType<QDBusVariant>()
                 && vUserType != QMetaType::fromType<QDBusSignature>()
                 && vUserType != QMetaType::fromType<QDBusObjectPath>()
                 && vUserType != QMetaType::fromType<QDBusArgument>())
-            out += u'(' + QLatin1StringView(v.typeName()) + u')';
-        out += ": "_L1;
+            out += QLatin1Char('(') + QLatin1String(v.typeName()) + QLatin1Char(')');
+        out += QLatin1String(": ");
         if (!variantToString(v, out))
             return false;
-        out += u']';
+        out += QLatin1Char(']');
     } else if (arg.canConvert<QString>()) {
-        out += u'\"' + arg.toString() + u'\"';
+        out += QLatin1Char('\"') + arg.toString() + QLatin1Char('\"');
     } else {
-        out += u'[';
-        out += QLatin1StringView(arg.typeName());
-        out += u']';
+        out += QLatin1Char('[');
+        out += QLatin1String(arg.typeName());
+        out += QLatin1Char(']');
     }
 
     return true;
@@ -133,7 +167,7 @@ bool argToString(const QDBusArgument &busArg, QString &out)
 
     if (elementType != QDBusArgument::BasicType && elementType != QDBusArgument::VariantType
             && elementType != QDBusArgument::MapEntryType)
-        out += "[Argument: "_L1 + busSig + u' ';
+        out += QLatin1String("[Argument: ") + busSig + QLatin1Char(' ');
 
     switch (elementType) {
         case QDBusArgument::BasicType:
@@ -147,33 +181,33 @@ bool argToString(const QDBusArgument &busArg, QString &out)
             break;
         case QDBusArgument::ArrayType:
             busArg.beginArray();
-            out += u'{';
+            out += QLatin1Char('{');
             doIterate = true;
             break;
         case QDBusArgument::MapType:
             busArg.beginMap();
-            out += u'{';
+            out += QLatin1Char('{');
             doIterate = true;
             break;
         case QDBusArgument::MapEntryType:
             busArg.beginMapEntry();
             if (!variantToString(busArg.asVariant(), out))
                 return false;
-            out += " = "_L1;
+            out += QLatin1String(" = ");
             if (!argToString(busArg, out))
                 return false;
             busArg.endMapEntry();
             break;
         case QDBusArgument::UnknownType:
         default:
-            out += "<ERROR - Unknown Type>"_L1;
+            out += QLatin1String("<ERROR - Unknown Type>");
             return false;
     }
     if (doIterate && !busArg.atEnd()) {
         while (!busArg.atEnd()) {
             if (!argToString(busArg, out))
                 return false;
-            out += ", "_L1;
+            out += QLatin1String(", ");
         }
         out.chop(2);
     }
@@ -188,18 +222,18 @@ bool argToString(const QDBusArgument &busArg, QString &out)
             busArg.endStructure();
             break;
         case QDBusArgument::ArrayType:
-            out += u'}';
+            out += QLatin1Char('}');
             busArg.endArray();
             break;
         case QDBusArgument::MapType:
-            out += u'}';
+            out += QLatin1Char('}');
             busArg.endMap();
             break;
     }
 
     if (elementType != QDBusArgument::BasicType && elementType != QDBusArgument::VariantType
             && elementType != QDBusArgument::MapEntryType)
-        out += u']';
+        out += QLatin1Char(']');
 
     return true;
 }
@@ -306,7 +340,7 @@ namespace QDBusUtil
             return false;       // can't be valid if it's empty
 
         const QChar *c = part.data();
-        for (int i = 0; i < part.size(); ++i)
+        for (int i = 0; i < part.length(); ++i)
             if (!isValidCharacterNoDash(c[i]))
                 return false;
 
@@ -335,11 +369,11 @@ namespace QDBusUtil
     */
     bool isValidInterfaceName(const QString& ifaceName)
     {
-        if (ifaceName.isEmpty() || ifaceName.size() > DBUS_MAXIMUM_NAME_LENGTH)
+        if (ifaceName.isEmpty() || ifaceName.length() > DBUS_MAXIMUM_NAME_LENGTH)
             return false;
 
-        const auto parts = QStringView{ifaceName}.split(u'.');
-        if (parts.size() < 2)
+        const auto parts = QStringView{ifaceName}.split(QLatin1Char('.'));
+        if (parts.count() < 2)
             return false;           // at least two parts
 
         for (auto part : parts)
@@ -358,12 +392,12 @@ namespace QDBusUtil
     */
     bool isValidUniqueConnectionName(QStringView connName)
     {
-        if (connName.isEmpty() || connName.size() > DBUS_MAXIMUM_NAME_LENGTH ||
-            !connName.startsWith(u':'))
+        if (connName.isEmpty() || connName.length() > DBUS_MAXIMUM_NAME_LENGTH ||
+            !connName.startsWith(QLatin1Char(':')))
             return false;
 
-        const auto parts = connName.mid(1).split(u'.');
-        if (parts.size() < 1)
+        const auto parts = connName.mid(1).split(QLatin1Char('.'));
+        if (parts.count() < 1)
             return false;
 
         for (QStringView part : parts) {
@@ -371,7 +405,7 @@ namespace QDBusUtil
                  return false;
 
             const QChar* c = part.data();
-            for (int j = 0; j < part.size(); ++j)
+            for (int j = 0; j < part.length(); ++j)
                 if (!isValidCharacter(c[j]))
                     return false;
         }
@@ -402,14 +436,14 @@ namespace QDBusUtil
     */
     bool isValidBusName(const QString &busName)
     {
-        if (busName.isEmpty() || busName.size() > DBUS_MAXIMUM_NAME_LENGTH)
+        if (busName.isEmpty() || busName.length() > DBUS_MAXIMUM_NAME_LENGTH)
             return false;
 
-        if (busName.startsWith(u':'))
+        if (busName.startsWith(QLatin1Char(':')))
             return isValidUniqueConnectionName(busName);
 
-        const auto parts = QStringView{busName}.split(u'.');
-        if (parts.size() < 1)
+        const auto parts = QStringView{busName}.split(QLatin1Char('.'));
+        if (parts.count() < 1)
             return false;
 
         for (QStringView part : parts) {
@@ -419,7 +453,7 @@ namespace QDBusUtil
             const QChar *c = part.data();
             if (isValidNumber(c[0]))
                 return false;
-            for (int j = 0; j < part.size(); ++j)
+            for (int j = 0; j < part.length(); ++j)
                 if (!isValidCharacter(c[j]))
                     return false;
         }
@@ -435,13 +469,13 @@ namespace QDBusUtil
     */
     bool isValidMemberName(QStringView memberName)
     {
-        if (memberName.isEmpty() || memberName.size() > DBUS_MAXIMUM_NAME_LENGTH)
+        if (memberName.isEmpty() || memberName.length() > DBUS_MAXIMUM_NAME_LENGTH)
             return false;
 
         const QChar* c = memberName.data();
         if (isValidNumber(c[0]))
             return false;
-        for (int j = 0; j < memberName.size(); ++j)
+        for (int j = 0; j < memberName.length(); ++j)
             if (!isValidCharacterNoDash(c[j]))
                 return false;
         return true;
@@ -478,15 +512,15 @@ namespace QDBusUtil
     */
     bool isValidObjectPath(const QString &path)
     {
-        if (path == "/"_L1)
+        if (path == QLatin1String("/"))
             return true;
 
-        if (!path.startsWith(u'/') || path.indexOf("//"_L1) != -1 ||
-            path.endsWith(u'/'))
+        if (!path.startsWith(QLatin1Char('/')) || path.indexOf(QLatin1String("//")) != -1 ||
+            path.endsWith(QLatin1Char('/')))
             return false;
 
         // it starts with /, so we skip the empty first part
-        const auto parts = QStringView{path}.mid(1).split(u'/');
+        const auto parts = QStringView{path}.mid(1).split(QLatin1Char('/'));
         for (QStringView part : parts)
             if (!isValidPartOfObjectPath(part))
                 return false;

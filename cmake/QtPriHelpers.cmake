@@ -532,15 +532,12 @@ QT.${config_module_name}_private.disabled_features = ${disabled_private_features
                     "-DIMPLICIT_LINK_DIRECTORIES=${implicit_link_directories}"
                     -P "${QT_CMAKE_DIR}/QtGenerateLibPri.cmake"
             VERBATIM)
-        # add_dependencies has no effect when adding interface libraries. So need to add the
-        # '_lib_pri' targets to ALL to make sure that the related rules executed.
-        unset(add_pri_target_to_all)
+        add_custom_target(${target}_lib_pri DEPENDS "${private_pri_file_path}")
         if(arg_HEADER_MODULE)
-            set(add_pri_target_to_all ALL)
+            add_dependencies(${target}_timestamp ${target}_lib_pri)
+        else()
+            add_dependencies(${target} ${target}_lib_pri)
         endif()
-        add_custom_target(${target}_lib_pri ${add_pri_target_to_all}
-            DEPENDS "${private_pri_file_path}")
-        add_dependencies(${target} ${target}_lib_pri)
     endif()
 
     qt_install(FILES "${pri_files}" DESTINATION ${INSTALL_MKSPECSDIR}/modules)
@@ -715,10 +712,6 @@ QT_PATCH_VERSION = ${PROJECT_VERSION_PATCH}
         set(compiler_version_major_var_name "QT_APPLE_CLANG_MAJOR_VERSION")
         set(compiler_version_minor_var_name "QT_APPLE_CLANG_MINOR_VERSION")
         set(compiler_version_patch_var_name "QT_APPLE_CLANG_PATCH_VERSION")
-    elseif(IntelLLVM)
-        set(compiler_version_major_var_name "QT_INTELLLVM_MAJOR_VERSION")
-        set(compiler_version_minor_var_name "QT_INTELLLVM_MINOR_VERSION")
-        set(compiler_version_patch_var_name "QT_INTELLLVM_PATCH_VERSION")
     elseif(CLANG)
         set(compiler_version_major_var_name "QT_CLANG_MAJOR_VERSION")
         set(compiler_version_minor_var_name "QT_CLANG_MINOR_VERSION")
@@ -727,6 +720,10 @@ QT_PATCH_VERSION = ${PROJECT_VERSION_PATCH}
         set(compiler_version_major_var_name "QT_GCC_MAJOR_VERSION")
         set(compiler_version_minor_var_name "QT_GCC_MINOR_VERSION")
         set(compiler_version_patch_var_name "QT_GCC_PATCH_VERSION")
+    elseif(ICC)
+        set(compiler_version_major_var_name "QT_ICC_MAJOR_VERSION")
+        set(compiler_version_minor_var_name "QT_ICC_MINOR_VERSION")
+        set(compiler_version_patch_var_name "QT_ICC_PATCH_VERSION")
     elseif(MSVC)
         set(compiler_version_major_var_name "QT_MSVC_MAJOR_VERSION")
         set(compiler_version_minor_var_name "QT_MSVC_MINOR_VERSION")
@@ -795,9 +792,7 @@ function(qt_generate_global_device_pri_file)
         string(APPEND content "DEFAULT_ANDROID_NDK_ROOT = ${ANDROID_NDK}\n")
 
         set(android_platform "android-23")
-        if(ANDROID_PLATFORM)
-            set(android_platform "${ANDROID_PLATFORM}")
-        elseif(ANDROID_NATIVE_API_LEVEL)
+        if(ANDROID_NATIVE_API_LEVEL)
             set(android_platform "android-${ANDROID_NATIVE_API_LEVEL}")
         endif()
         string(APPEND content "DEFAULT_ANDROID_PLATFORM = ${android_platform}\n")
@@ -840,7 +835,7 @@ function(qt_get_build_parts out_var)
         list(APPEND parts "tests")
     endif()
 
-    if(NOT CMAKE_CROSSCOMPILING OR QT_FORCE_BUILD_TOOLS)
+    if(NOT CMAKE_CROSSCOMPILING OR QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
         list(APPEND parts "tools")
     endif()
 

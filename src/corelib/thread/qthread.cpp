@@ -1,13 +1,48 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qthread.h"
 #include "qthreadstorage.h"
 #include "qmutex.h"
 #include "qreadwritelock.h"
 #include "qabstracteventdispatcher.h"
-#include "qbindingstorage.h"
 
 #include <qeventloop.h>
 
@@ -17,29 +52,6 @@
 #include <limits>
 
 QT_BEGIN_NAMESPACE
-
-/*
-    QPostEventList
-*/
-
-void QPostEventList::addEvent(const QPostEvent &ev)
-{
-    int priority = ev.priority;
-    if (isEmpty() ||
-            constLast().priority >= priority ||
-            insertionOffset >= size()) {
-        // optimization: we can simply append if the last event in
-        // the queue has higher or equal priority
-        append(ev);
-    } else {
-        // insert event in descending priority order, using upper
-        // bound for a given priority (to ensure proper ordering
-        // of events with the same priority)
-        QPostEventList::iterator at = std::upper_bound(begin() + insertionOffset, end(), ev);
-        insert(at, ev);
-    }
-}
-
 
 /*
   QThreadData
@@ -129,9 +141,8 @@ QAdoptedThread::QAdoptedThread(QThreadData *data)
     d_func()->running = true;
     d_func()->finished = false;
     init();
-    d_func()->m_statusOrPendingObjects.setStatusAndClearList(
-                QtPrivate::getBindingStatus({}));
 #endif
+
     // fprintf(stderr, "new QAdoptedThread = %p\n", this);
 }
 
@@ -164,7 +175,7 @@ QThreadPrivate::QThreadPrivate(QThreadData *d)
 #ifdef Q_OS_INTEGRITY
     stackSize = 128 * 1024;
 #elif defined(Q_OS_RTEMS)
-    Q_CONSTINIT static bool envStackSizeOk = false;
+    static bool envStackSizeOk = false;
     static const int envStackSize = qEnvironmentVariableIntValue("QT_DEFAULT_THREAD_STACK_SIZE", &envStackSizeOk);
     if (envStackSizeOk)
         stackSize = envStackSize;
@@ -190,10 +201,6 @@ QThreadPrivate::QThreadPrivate(QThreadData *d)
 
 QThreadPrivate::~QThreadPrivate()
 {
-    // access to m_statusOrPendingObjects cannot race with anything
-    // unless there is already a potential use-after-free bug, as the
-    // thread is in the process of being destroyed
-    delete m_statusOrPendingObjects.list();
     data->deref();
 }
 
@@ -313,20 +320,9 @@ QThreadPrivate::~QThreadPrivate()
 /*!
     \fn int QThread::idealThreadCount()
 
-    Returns the ideal number of threads that this process can run in parallel.
-    This is done by querying the number of logical processors available to this
-    process (if supported by this OS) or the total number of logical processors
-    in the system. This function returns 1 if neither value could be
-    determined.
-
-    \note On operating systems that support setting a thread's affinity to a
-    subset of all logical processors, the value returned by this function may
-    change between threads and over time.
-
-    \note On operating systems that support CPU hotplugging and hot-unplugging,
-    the value returned by this function may also change over time (and note
-    that CPUs can be turned on and off by software, without a physical,
-    hardware change).
+    Returns the ideal number of threads that can be run on the system. This is done querying
+    the number of processor cores, both real and logical, in the system. This function returns 1
+    if the number of processor cores could not be detected.
 */
 
 /*!
@@ -448,15 +444,6 @@ QThread::QThread(QThreadPrivate &dd, QObject *parent)
     isFinished() returns \c false) will result in a program
     crash. Wait for the finished() signal before deleting the
     QThread.
-
-    Since Qt 6.3, it is allowed to delete a QThread instance created by
-    a call to QThread::create() even if the corresponding thread is
-    still running. In such a case, Qt will post an interruption request
-    to that thread (via requestInterruption()); will ask the thread's
-    event loop (if any) to quit (via quit()); and will block until the
-    thread has finished.
-
-    \sa create(), isInterruptionRequested(), exec(), quit()
 */
 QThread::~QThread()
 {
@@ -536,24 +523,6 @@ uint QThread::stackSize() const
 }
 
 /*!
-    \internal
-    Transitions BindingStatusOrList to the binding status state. If we had a list of
-    pending objects, all objects get their reinitBindingStorageAfterThreadMove method
-    called, and afterwards, the list gets discarded.
- */
-void QtPrivate::BindingStatusOrList::setStatusAndClearList(QBindingStatus *status) noexcept
-{
-
-    if (auto pendingObjects = list()) {
-        for (auto obj: *pendingObjects)
-            QObjectPrivate::get(obj)->reinitBindingStorageAfterThreadMove();
-        delete pendingObjects;
-    }
-    // synchronizes-with the load-acquire in bindingStatus():
-    data.store(encodeBindingStatus(status), std::memory_order_release);
-}
-
-/*!
     Enters the event loop and waits until exit() is called, returning the value
     that was passed to exit(). The value returned is 0 if exit() is called via
     quit().
@@ -569,10 +538,7 @@ void QtPrivate::BindingStatusOrList::setStatusAndClearList(QBindingStatus *statu
 int QThread::exec()
 {
     Q_D(QThread);
-    const auto status = QtPrivate::getBindingStatus(QtPrivate::QBindingStatusAccessToken{});
-
     QMutexLocker locker(&d->mutex);
-    d->m_statusOrPendingObjects.setStatusAndClearList(status);
     d->data->quitNow = false;
     if (d->exited) {
         d->exited = false;
@@ -588,58 +554,6 @@ int QThread::exec()
     d->returnCode = -1;
     return returnCode;
 }
-
-
-/*!
-    \internal
-    If BindingStatusOrList is already in the binding status state, this will
-    return that BindingStatus pointer.
-    Otherwise, \a object is added to the list, and we return nullptr.
-    The list is allocated if it does not already exist.
- */
-QBindingStatus *QtPrivate::BindingStatusOrList::addObjectUnlessAlreadyStatus(QObject *object)
-{
-    if (auto status = bindingStatus())
-        return status;
-    List *objectList = list();
-    if (!objectList) {
-        objectList = new List();
-        objectList->reserve(8);
-        data.store(encodeList(objectList), std::memory_order_relaxed);
-    }
-    objectList->push_back(object);
-    return nullptr;
-}
-
-/*!
-    \internal
-    If BindingStatusOrList is a list, remove \a object from it
- */
-void QtPrivate::BindingStatusOrList::removeObject(QObject *object)
-{
-    List *objectList = list();
-    if (!objectList)
-        return;
-    auto it = std::remove(objectList->begin(), objectList->end(), object);
-    objectList->erase(it, objectList->end());
-}
-
-QBindingStatus *QThreadPrivate::addObjectWithPendingBindingStatusChange(QObject *obj)
-{
-    if (auto status = m_statusOrPendingObjects.bindingStatus())
-        return status;
-    QMutexLocker lock(&mutex);
-    return m_statusOrPendingObjects.addObjectUnlessAlreadyStatus(obj);
-}
-
-void QThreadPrivate::removeObjectWithPendingBindingStatusChange(QObject *obj)
-{
-    if (m_statusOrPendingObjects.bindingStatus())
-        return;
-    QMutexLocker lock(&mutex);
-    m_statusOrPendingObjects.removeObject(obj);
-}
-
 
 /*!
     \threadsafe
@@ -985,18 +899,8 @@ bool QThread::isRunning() const
     return d->running;
 }
 
-void QThread::requestInterruption()
-{
-
-}
-
-bool QThread::isInterruptionRequested() const
-{
-    return false;
-}
-
 // No threads: so we can just use static variables
-Q_CONSTINIT static QThreadData *data = nullptr;
+static QThreadData *data = nullptr;
 
 QThreadData *QThreadData::current(bool createIfNecessary)
 {
@@ -1068,11 +972,8 @@ QAbstractEventDispatcher *QThread::eventDispatcher() const
 
     Sets the event dispatcher for the thread to \a eventDispatcher. This is
     only possible as long as there is no event dispatcher installed for the
-    thread yet.
-
-    An event dispatcher is automatically created for the main thread when \l
-    QCoreApplication is instantiated and on start() for auxiliary threads.
-
+    thread yet. That is, before the thread has been started with start() or, in
+    case of the main thread, before QCoreApplication has been instantiated.
     This method takes ownership of the object.
 */
 void QThread::setEventDispatcher(QAbstractEventDispatcher *eventDispatcher)
@@ -1204,13 +1105,6 @@ public:
     explicit QThreadCreateThread(std::future<void> &&future)
         : m_future(std::move(future))
     {
-    }
-
-    ~QThreadCreateThread()
-    {
-        requestInterruption();
-        quit();
-        wait();
     }
 
 private:

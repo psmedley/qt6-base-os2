@@ -1,21 +1,51 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
+
 
 #include <QTest>
 
 #include <QtCore/QSettings>
 #include <private/qsettings_p.h>
-
-#include "tst_qmetatype_common.h"
-
 #include <QtCore/QCoreApplication>
-#include <QtCore/QDir>
+#include <QtCore/QDateTime>
 #include <QtCore/QtGlobal>
+#include <QtCore/QMetaType>
+#include <QtCore/QString>
+#include <QtCore/QDir>
 #include <QtCore/QThread>
 #include <QtCore/QSysInfo>
 #if QT_CONFIG(shortcut)
 #  include <QtGui/QKeySequence>
 #endif
+
+#include <QtCore>
+#include <QtGui>
+#include "tst_qmetatype_common.h"
 
 #include <cctype>
 #include <stdlib.h>
@@ -78,16 +108,6 @@ static inline bool canWriteNativeSystemSettings()
 
 static const char insufficientPermissionSkipMessage[] = "Insufficient permissions for this test.";
 
-static void populateWithFormats()
-{
-    QTest::addColumn<QSettings::Format>("format");
-
-    QTest::newRow("native") << QSettings::NativeFormat;
-    QTest::newRow("ini") << QSettings::IniFormat;
-    QTest::newRow("custom1") << QSettings::CustomFormat1;
-    QTest::newRow("custom2") << QSettings::CustomFormat2;
-}
-
 class tst_QSettings : public QObject
 {
     Q_OBJECT
@@ -100,7 +120,7 @@ public slots:
     void cleanup() { cleanupTestFiles(); }
 private slots:
     void getSetCheck();
-    void ctor_data() { populateWithFormats(); }
+    void ctor_data();
     void ctor();
     void beginGroup();
     void setValue();
@@ -112,16 +132,16 @@ private slots:
     void syncAlternateDataStream();
 #endif
     void setFallbacksEnabled();
-    void setFallbacksEnabled_data() { populateWithFormats(); }
-    void fromFile_data() { populateWithFormats(); }
+    void setFallbacksEnabled_data();
+    void fromFile_data();
     void fromFile();
-    void testArrays_data() { populateWithFormats(); }
+    void testArrays_data();
     void testArrays();
-    void testCaseSensitivity_data() { populateWithFormats(); }
+    void testCaseSensitivity_data();
     void testCaseSensitivity();
     void testErrorHandling_data();
     void testErrorHandling();
-    void testChildKeysAndGroups_data() { populateWithFormats(); }
+    void testChildKeysAndGroups_data();
     void testChildKeysAndGroups();
     void testUpdateRequestEvent();
     void testThreadSafety();
@@ -134,7 +154,7 @@ private slots:
 #ifdef Q_OS_MAC
     void fileName();
 #endif
-    void isWritable_data() { populateWithFormats(); }
+    void isWritable_data();
     void isWritable();
     void registerFormat();
     void setPath();
@@ -148,23 +168,23 @@ private slots:
 #endif
 
 #ifdef QT_BUILD_INTERNAL
-    void allKeys_data() { populateWithFormats(); }
+    void allKeys_data();
     void allKeys();
-    void childGroups_data() { populateWithFormats(); }
+    void childGroups_data();
     void childGroups();
-    void childKeys_data() { populateWithFormats(); }
+    void childKeys_data();
     void childKeys();
     void testIniParsing_data();
     void testIniParsing();
     void testEscapes();
     void testNormalizedKey_data();
     void testNormalizedKey();
-    void testVariantTypes_data() { populateWithFormats(); }
+    void testVariantTypes_data();
     void testVariantTypes();
     void testMetaTypes_data();
     void testMetaTypes();
 #endif
-    void rainersSyncBugOnMac_data() { populateWithFormats(); }
+    void rainersSyncBugOnMac_data();
     void rainersSyncBugOnMac();
     void recursionBug();
 
@@ -178,10 +198,6 @@ private slots:
     void floatAsQVariant();
 
     void testXdg();
-
-    void testReadKeys_data();
-    void testReadKeys();
-
 private:
     void cleanupTestFiles();
 
@@ -264,6 +280,16 @@ static bool writeCustom3File(QIODevice &device, const QSettings::SettingsMap &ma
     return true;
 }
 
+static void populateWithFormats()
+{
+    QTest::addColumn<QSettings::Format>("format");
+
+    QTest::newRow("native") << QSettings::NativeFormat;
+    QTest::newRow("ini") << QSettings::IniFormat;
+    QTest::newRow("custom1") << QSettings::CustomFormat1;
+    QTest::newRow("custom2") << QSettings::CustomFormat2;
+}
+
 tst_QSettings::tst_QSettings()
     : m_canWriteNativeSystemSettings(canWriteNativeSystemSettings())
 {
@@ -334,6 +360,11 @@ void tst_QSettings::cleanupTestFiles()
 /*
     Test the constructors and the assignment operator.
 */
+
+void tst_QSettings::ctor_data()
+{
+    populateWithFormats();
+}
 
 void tst_QSettings::ctor()
 {
@@ -550,7 +581,7 @@ void tst_QSettings::ctor()
         QCOMPARE(settings1.value("alpha/beta/geometry/width").toInt(), 3);
         QCOMPARE(settings1.value("alpha/beta/geometry/height").toInt(), 4);
         QCOMPARE(settings1.value("alpha/gamma/splitter").toInt(), 5);
-        QCOMPARE(settings1.allKeys().size(), 6);
+        QCOMPARE(settings1.allKeys().count(), 6);
 
         QCOMPARE(settings2.value("alpha/beta/geometry").toInt(), -7);
         QCOMPARE(settings2.value("alpha/beta/geometry/x").toInt(), 1);
@@ -558,7 +589,7 @@ void tst_QSettings::ctor()
         QCOMPARE(settings2.value("alpha/beta/geometry/width").toInt(), 3);
         QCOMPARE(settings2.value("alpha/beta/geometry/height").toInt(), 4);
         QCOMPARE(settings2.value("alpha/gamma/splitter").toInt(), 5);
-        QCOMPARE(settings2.allKeys().size(), 6);
+        QCOMPARE(settings2.allKeys().count(), 6);
     }
 
     {
@@ -569,7 +600,7 @@ void tst_QSettings::ctor()
         QCOMPARE(settings1.value("alpha/beta/geometry/width").toInt(), 3);
         QCOMPARE(settings1.value("alpha/beta/geometry/height").toInt(), 4);
         QCOMPARE(settings1.value("alpha/gamma/splitter").toInt(), 5);
-        QCOMPARE(settings1.allKeys().size(), 6);
+        QCOMPARE(settings1.allKeys().count(), 6);
     }
 
     {
@@ -924,7 +955,7 @@ void tst_QSettings::testIniParsing()
     if ( settings.status() == QSettings::NoError ) { // else no point proceeding
         QVariant v = settings.value(key);
         if (expect.isValid())
-            QVERIFY(v.canConvert(expect.metaType()));
+            QVERIFY(v.canConvert(expect.type()));
         // check some types so as to give prettier error messages
         if ( v.typeId() == QMetaType::QString ) {
             QCOMPARE(v.toString(), expect.toString());
@@ -1152,7 +1183,7 @@ template<int MetaTypeId>
 static void testMetaTypesHelper(QSettings::Format format)
 {
     typedef typename MetaEnumToType<MetaTypeId>::Type Type;
-    const char *key = QMetaType(MetaTypeId).name();
+    const char *key = QMetaType::typeName(MetaTypeId);
     Type *value = TestValueFactory<MetaTypeId>::create();
     QVariant inputVariant = QVariant::fromValue(*value);
 
@@ -1171,8 +1202,8 @@ static void testMetaTypesHelper(QSettings::Format format)
         QSettings settings(format, scope, organization, applicationName);
         QVariant outputVariant = settings.value(key);
         if (MetaTypeId != QMetaType::QVariant)
-            QVERIFY(outputVariant.canConvert(QMetaType(MetaTypeId)));
-        if (outputVariant.typeId() != inputVariant.typeId())
+            QVERIFY(outputVariant.canConvert(MetaTypeId));
+        if (outputVariant.type() != inputVariant.type())
             qWarning() << "type mismatch between" << inputVariant << "and" << outputVariant;
         QCOMPARE(qvariant_cast<Type >(outputVariant), *value);
     }
@@ -1211,7 +1242,7 @@ void tst_QSettings::testMetaTypes_data()
 #define ADD_METATYPE_TEST_ROW(MetaTypeName, MetaTypeId, RealType) \
     { \
         const char *formatName = QMetaEnum::fromType<QSettings::Format>().valueToKey(formats[i]); \
-        const char *typeName = QMetaType(QMetaType::MetaTypeName).name(); \
+        const char *typeName = QMetaType::typeName(QMetaType::MetaTypeName); \
         QTest::newRow(QString("%1:%2").arg(formatName).arg(typeName).toLatin1().constData()) \
             << QSettings::Format(formats[i]) << int(QMetaType::MetaTypeName); \
     }
@@ -1246,102 +1277,106 @@ FOR_EACH_CORE_METATYPE(RETURN_CREATE_FUNCTION)
 
     TypeTestFunctionGetter::get(type)(format);
 }
+
+void tst_QSettings::testVariantTypes_data()
+{
+    populateWithFormats();
+}
 #endif
 
 #ifdef QT_BUILD_INTERNAL
 void tst_QSettings::testVariantTypes()
 {
-    QFETCH(QSettings::Format, format);
-
-    {
-        QSettings settings(format, QSettings::UserScope, "software.org", "KillerAPP");
-        QVERIFY(!settings.contains("empty"));
-        QCOMPARE(settings.value("empty"), QVariant());
-
-        settings.setValue("empty", QVariant());
-        QVERIFY(settings.contains("empty"));
-        QCOMPARE(settings.value("empty"), QVariant());
-
-        settings.setValue("empty", QVariant(1));
-        QVERIFY(settings.contains("empty"));
-        QCOMPARE(settings.value("empty"), QVariant(1));
-
-        settings.setValue("empty", QVariant());
-        QVERIFY(settings.contains("empty"));
-        QCOMPARE(settings.value("empty"), QVariant());
-
-        settings.remove("empty");
-        QVERIFY(!settings.contains("empty"));
-        QCOMPARE(settings.value("empty"), QVariant());
+#define testVal(key, val, tp, rtype) \
+    { \
+        QSettings settings1(format, QSettings::UserScope, "software.org", "KillerAPP"); \
+        settings1.setValue(key, QVariant::fromValue(val)); \
+    } \
+//    QConfFile::clearCache(); \
+    { \
+        QSettings settings2(format, QSettings::UserScope, "software.org", "KillerAPP"); \
+        QVariant v = settings2.value(key); \
+        QVERIFY(qvariant_cast<tp >(v) == val); \
+        QVERIFY(v.type() == QVariant::rtype); \
     }
 
-    auto checker = [format](const char *key, auto value, QMetaType::Type expected) {
-        {
-            QSettings settings(format, QSettings::UserScope, "software.org", "KillerAPP");
-            settings.setValue(key, QVariant::fromValue(value));
-        }
-        QConfFile::clearCache();
-        {
-            QSettings settings(format, QSettings::UserScope, "software.org", "KillerAPP");
-            QVariant actual = settings.value(key);
-            QCOMPARE(actual.metaType().id(), expected);
-            QCOMPARE(qvariant_cast<decltype(value)>(actual), value);
-        }
-    };
-#define testValue(key, supplied, expected) do { \
-        checker(key, supplied, QMetaType::expected); \
-        if (QTest::currentTestFailed()) \
-            return; \
-    } while (0)
-
     typedef QMap<QString, QVariant> TestVariantMap;
+
+    QFETCH(QSettings::Format, format);
 
     TestVariantMap m2;
     m2.insert("ene", "due");
     m2.insert("rike", "fake");
     m2.insert("borba", "dorba");
-    testValue("customMap", m2, QVariantMap);
+    testVal("key2", m2, TestVariantMap, Map);
 
-    QStringList l2 { "ene", "due", "@Point(1 2)", "@fake" };
-    testValue("stringsAt", l2, QStringList);
+    QStringList l2;
 
-    l2 = { "ene", "due", "rike", "fake" };
-    testValue("strings", l2, QStringList);
+    l2 << "ene" << "due" << "@Point(1 2)" << "@fake";
+    testVal("key3", l2, QStringList, StringList);
 
+    l2.clear();
+    l2 << "ene" << "due" << "rike" << "fake";
+    testVal("key3", l2, QStringList, StringList);
+
+    QList<QVariant> l3;
     QDate date = QDate::currentDate();
     QTime time = QTime::currentTime();
-    QList<QVariant> l3 { QString("ene"), 10, QVariant::fromValue(QColor(1, 2, 3)),
-            QVariant(QRect(1, 2, 3, 4)), QVariant(QSize(4, 56)), QVariant(QPoint(4, 2)),
-            true, false, date, time };
-    testValue("mixedList", l3, QVariantList);
+    l3 << QString("ene") << 10 << QVariant::fromValue(QColor(1, 2, 3)) << QVariant(QRect(1, 2, 3, 4))
+        << QVariant(QSize(4, 56)) << QVariant(QPoint(4, 2)) << true << false << date << time;
+    testVal("key3", l3, QVariantList, List);
 
-    testValue("string", QString("hello"), QString);
-    testValue("color", QColor(1, 2, 3), QColor);
-    testValue("rect", QRect(1, 2, 3, 4), QRect);
-    testValue("size", QSize(4, 56), QSize);
-    testValue("point", QPoint(4, 2), QPoint);
-    testValue("date", date, QDate);
-    testValue("time", time, QTime);
-    testValue("byteArray", QByteArray("foo bar"), QByteArray);
+    testVal("key4", QString("hello"), QString, String);
+    testVal("key5", QColor(1, 2, 3), QColor, Color);
+    testVal("key6", QRect(1, 2, 3, 4), QRect, Rect);
+    testVal("key7", QSize(4, 56), QSize, Size);
+    testVal("key8", QPoint(4, 2), QPoint, Point);
+    testVal("key10", date, QDate, Date);
+    testVal("key11", time, QTime, Time);
+    testVal("key12", QByteArray("foo bar"), QByteArray, ByteArray);
 
-    QList<QVariant> l4 { QVariant(m2), QVariant(l2), QVariant(l3) };
-    testValue("collectList", l4, QVariantList);
+    {
+        QSettings settings(format, QSettings::UserScope, "software.org", "KillerAPP");
+        QVERIFY(!settings.contains("key99"));
+        QCOMPARE(settings.value("key99"), QVariant());
 
+        settings.setValue("key99", QVariant());
+        QVERIFY(settings.contains("key99"));
+        QCOMPARE(settings.value("key99"), QVariant());
+
+        settings.setValue("key99", QVariant(1));
+        QVERIFY(settings.contains("key99"));
+        QCOMPARE(settings.value("key99"), QVariant(1));
+
+        settings.setValue("key99", QVariant());
+        QVERIFY(settings.contains("key99"));
+        QCOMPARE(settings.value("key99"), QVariant());
+
+        settings.remove("key99");
+        QVERIFY(!settings.contains("key99"));
+        QCOMPARE(settings.value("key99"), QVariant());
+    }
+
+    QList<QVariant> l4;
+    l4 << QVariant(m2) << QVariant(l2) << QVariant(l3);
+    testVal("key13", l4, QVariantList, List);
     QDateTime dt = QDateTime::currentDateTime();
     dt.setOffsetFromUtc(3600);
-    testValue("dateTime", dt, QDateTime);
+    testVal("key14", dt, QDateTime, DateTime);
 
 #if QT_CONFIG(shortcut)
     // We store key sequences as strings instead of binary variant blob, for improved
     // readability in the resulting format.
-    QKeySequence seq(Qt::ControlModifier | Qt::Key_F1);
-    if (format >= QSettings::InvalidFormat)
-        testValue("keySequence", seq, QKeySequence);
-    else
-        testValue("keySequence", seq.toString(QKeySequence::NativeText), QString);
+    if (format >= QSettings::InvalidFormat) {
+        testVal("keysequence", QKeySequence(Qt::ControlModifier + Qt::Key_F1), QKeySequence, KeySequence);
+    } else {
+        testVal("keysequence",
+                QKeySequence(Qt::ControlModifier + Qt::Key_F1).toString(QKeySequence::NativeText),
+                QString, String);
+    }
 #endif // QT_CONFIG(shortcut)
 
-#undef testValue
+#undef testVal
 }
 #endif
 
@@ -1731,12 +1766,12 @@ void tst_QSettings::sync()
     QCOMPARE(settings2.value("moo/beta/geometry/width").toInt(), 3);
     QCOMPARE(settings2.value("moo/beta/geometry/height").toInt(), 4);
     QCOMPARE(settings2.value("moo/gamma/splitter").toInt(), 5);
-    QCOMPARE(settings2.allKeys().size(), 11);
+    QCOMPARE(settings2.allKeys().count(), 11);
 
     // Now, software.org.ini no longer exists, this is same as another app
     // clearing all settings.
     settings1.sync();
-    QCOMPARE(settings1.allKeys().size(), 0);
+    QCOMPARE(settings1.allKeys().count(), 0);
 
     // Now "some other app" will change software.org.ini
     QVERIFY(QFile::rename((userConfDir + "other.software.org.ini").toLatin1(),
@@ -1754,7 +1789,7 @@ void tst_QSettings::sync()
     QCOMPARE(settings1.value("moo/beta/geometry/width").toInt(), 3);
     QCOMPARE(settings1.value("moo/beta/geometry/height").toInt(), 4);
     QCOMPARE(settings1.value("moo/gamma/splitter").toInt(), 5);
-    QCOMPARE(settings1.allKeys().size(), 11);
+    QCOMPARE(settings1.allKeys().count(), 11);
 }
 
 void tst_QSettings::syncNonWriteableDir()
@@ -1828,6 +1863,11 @@ void tst_QSettings::syncAlternateDataStream()
     QCOMPARE(settings.value("alpha/beta"), QVariant(1));
 }
 #endif
+
+void tst_QSettings::setFallbacksEnabled_data()
+{
+    populateWithFormats();
+}
 
 void tst_QSettings::setFallbacksEnabled()
 {
@@ -1913,6 +1953,11 @@ void tst_QSettings::setFallbacksEnabled()
     QVERIFY(!settings1.contains("key 5"));
 }
 
+void tst_QSettings::testChildKeysAndGroups_data()
+{
+    populateWithFormats();
+}
+
 void tst_QSettings::testChildKeysAndGroups()
 {
     QFETCH(QSettings::Format, format);
@@ -1972,16 +2017,6 @@ void tst_QSettings::testChildKeysAndGroups()
         settings2.endGroup();
         l.sort();
         QCOMPARE(l, QStringList() << "bar" << "foo");
-    }
-    {
-        QSettings settings3(format, QSettings::UserScope, "software.org", "application");
-        settings3.setFallbacksEnabled(false);
-        settings3.beginGroup("alpha");
-        QCOMPARE(settings3.childGroups(), QStringList());
-        settings3.setFallbacksEnabled(true);
-        QStringList children = settings3.childGroups();
-        children.sort();
-        QCOMPARE(children, QStringList({"beta", "gamma"}));
     }
 }
 
@@ -2111,17 +2146,20 @@ void tst_QSettings::testNormalizedKey()
 
     inKey.detach();
 
-    {
-        auto result = QSettingsPrivate::normalizedKey(inKey);
-        QCOMPARE(result, outKey);
-    }
-    {
-        auto result = QSettingsPrivate::normalizedKey(QUtf8StringView{inKey.toUtf8()});
-        QCOMPARE(result, outKey);
-    }
-    {
-        auto result = QSettingsPrivate::normalizedKey(QLatin1String{inKey.toLatin1()});
-        QCOMPARE(result, outKey);
+    QString result = QSettingsPrivate::normalizedKey(inKey);
+    QCOMPARE(result, outKey);
+
+    /*
+        If the key is already normalized, we verify that outKey is
+        just a shallow copy of the input string. This is an important
+        optimization that shouldn't be removed accidentally.
+    */
+    if (inKey == outKey) {
+        QVERIFY(!result.isDetached());
+    } else {
+        if (!result.isEmpty()) {
+            QVERIFY(result.isDetached());
+        }
     }
 }
 #endif
@@ -2147,8 +2185,6 @@ void tst_QSettings::testEmptyData()
     vList2 << emptyString << nullString;
     vList3 << QString("foo");
 
-    const auto rm = QScopeGuard([=] { QFile::remove(filename); });
-
     {
         QSettings settings(filename, QSettings::IniFormat);
         settings.setValue("nullString", nullString);
@@ -2202,6 +2238,7 @@ void tst_QSettings::testEmptyData()
         QCOMPARE(settings.value("vList3").toList(), vList3);
         QCOMPARE(settings.status(), QSettings::NoError);
     }
+    QFile::remove(filename);
 }
 
 void tst_QSettings::testEmptyKey()
@@ -2307,6 +2344,11 @@ void tst_QSettings::trailingWhitespace()
     }
 }
 
+void tst_QSettings::fromFile_data()
+{
+    populateWithFormats();
+}
+
 void tst_QSettings::fromFile()
 {
     QFETCH(QSettings::Format, format);
@@ -2376,6 +2418,11 @@ static bool containsSubList(QStringList mom, QStringList son)
     return true;
 }
 
+void tst_QSettings::testArrays_data()
+{
+    populateWithFormats();
+}
+
 /*
     Tests beginReadArray(), beginWriteArray(), endArray(), and
     setArrayIndex().
@@ -2441,17 +2488,17 @@ void tst_QSettings::testArrays()
         QCOMPARE(settings1.value("ene").toInt(), 2);
         QCOMPARE(settings1.value("due").toInt(), 3);
         QCOMPARE(settings1.value("rike").toInt(), 4);
-        QCOMPARE(settings1.allKeys().size(), 3);
+        QCOMPARE(settings1.allKeys().count(), 3);
         settings1.setArrayIndex(1);
         QCOMPARE(settings1.value("ene").toInt(), 5);
         QCOMPARE(settings1.value("due").toInt(), 6);
         QCOMPARE(settings1.value("rike").toInt(), 7);
-        QCOMPARE(settings1.allKeys().size(), 3);
+        QCOMPARE(settings1.allKeys().count(), 3);
         settings1.setArrayIndex(2);
         QCOMPARE(settings1.value("ene").toInt(), 8);
         QCOMPARE(settings1.value("due").toInt(), 9);
         QCOMPARE(settings1.value("rike").toInt(), 10);
-        QCOMPARE(settings1.allKeys().size(), 3);
+        QCOMPARE(settings1.allKeys().count(), 3);
 
         settings1.endArray();
         settings1.endGroup();
@@ -2501,17 +2548,17 @@ void tst_QSettings::testArrays()
         QCOMPARE(settings1.value("ene").toInt(), 2);
         QCOMPARE(settings1.value("due").toInt(), 3);
         QCOMPARE(settings1.value("rike").toInt(), 4);
-        QCOMPARE(settings1.allKeys().size(), 3);
+        QCOMPARE(settings1.allKeys().count(), 3);
         settings1.setArrayIndex(1);
         QCOMPARE(settings1.value("ene").toInt(), 5);
         QCOMPARE(settings1.value("due").toInt(), 6);
         QCOMPARE(settings1.value("rike").toInt(), 7);
-        QCOMPARE(settings1.allKeys().size(), 3);
+        QCOMPARE(settings1.allKeys().count(), 3);
         settings1.setArrayIndex(2);
         QCOMPARE(settings1.value("ene").toInt(), 8);
         QCOMPARE(settings1.value("due").toInt(), 9);
         QCOMPARE(settings1.value("rike").toInt(), 10);
-        QCOMPARE(settings1.allKeys().size(), 3);
+        QCOMPARE(settings1.allKeys().count(), 3);
 
         settings1.endArray();
         settings1.endGroup();
@@ -2656,7 +2703,7 @@ static QByteArray iniEscapedKey(const QString &str)
 static QString iniUnescapedKey(const QByteArray &ba)
 {
     QString result;
-    QSettingsPrivate::iniUnescapedKey(ba, result);
+    QSettingsPrivate::iniUnescapedKey(ba, 0, ba.size(), result);
     return result;
 }
 
@@ -2671,7 +2718,7 @@ static QStringList iniUnescapedStringList(const QByteArray &ba)
 {
     QStringList result;
     QString str;
-    bool isStringList = QSettingsPrivate::iniUnescapedStringList(ba, str, result);
+    bool isStringList = QSettingsPrivate::iniUnescapedStringList(ba, 0, ba.size(), str, result);
     if (!isStringList)
         result = QStringList(str);
     return result;
@@ -2683,7 +2730,7 @@ QString escapeWeirdChars(const QString &s)
     QString result;
     bool escapeNextDigit = false;
 
-    for (int i = 0; i < s.size(); ++i) {
+    for (int i = 0; i < s.length(); ++i) {
         QChar c = s.at(i);
         if (c.unicode() < ' ' || c.unicode() > '~'
             || (escapeNextDigit && c.unicode() >= '0' && c.unicode() <= 'f')) {
@@ -2822,6 +2869,11 @@ void tst_QSettings::testEscapes()
     testBadEscape("@@Rect(1 2 3)", "@Rect(1 2 3)");
 }
 #endif
+
+void tst_QSettings::testCaseSensitivity_data()
+{
+    populateWithFormats();
+}
 
 void tst_QSettings::testCaseSensitivity()
 {
@@ -2972,6 +3024,11 @@ void tst_QSettings::fileName()
 }
 #endif
 
+void tst_QSettings::isWritable_data()
+{
+    populateWithFormats();
+}
+
 void tst_QSettings::isWritable()
 {
     QFETCH(QSettings::Format, format);
@@ -3022,6 +3079,13 @@ void tst_QSettings::isWritable()
         }
     }
 }
+
+#ifdef QT_BUILD_INTERNAL
+void tst_QSettings::childGroups_data()
+{
+    populateWithFormats();
+}
+#endif
 
 #ifdef QT_BUILD_INTERNAL
 void tst_QSettings::childGroups()
@@ -3093,6 +3157,13 @@ void tst_QSettings::childGroups()
 #endif
 
 #ifdef QT_BUILD_INTERNAL
+void tst_QSettings::childKeys_data()
+{
+    populateWithFormats();
+}
+#endif
+
+#ifdef QT_BUILD_INTERNAL
 void tst_QSettings::childKeys()
 {
     QFETCH(QSettings::Format, format);
@@ -3156,6 +3227,13 @@ void tst_QSettings::childKeys()
         childKeys.sort();
         QCOMPARE(childKeys, QStringList() << "alpha" << "beta" << "gamma");
     }
+}
+#endif
+
+#ifdef QT_BUILD_INTERNAL
+void tst_QSettings::allKeys_data()
+{
+    populateWithFormats();
 }
 #endif
 
@@ -3419,6 +3497,11 @@ void tst_QSettings::dontReorderIniKeysNeedlessly()
 }
 #endif
 
+void tst_QSettings::rainersSyncBugOnMac_data()
+{
+    ctor_data();
+}
+
 void tst_QSettings::rainersSyncBugOnMac()
 {
     QFETCH(QSettings::Format, format);
@@ -3450,7 +3533,7 @@ void tst_QSettings::rainersSyncBugOnMac()
 void tst_QSettings::recursionBug()
 {
     QPixmap pix(10,10);
-    pix.fill(Qt::blue);
+    pix.fill("blue");
 
     {
         QSettings settings(settingsPath("starrunner.ini"), QSettings::IniFormat);
@@ -3567,40 +3650,6 @@ void tst_QSettings::testXdg()
 #else
     QSKIP("This test is performed in QT_BUILD_INTERNAL on Q_XDG_PLATFORM with use of standard paths only.");
 #endif
-}
-
-void tst_QSettings::testReadKeys_data()
-{
-    QTest::addColumn<QString>("filepath");
-
-    QTest::newRow("escaped") << ":/qt5settings.ini";
-    QTest::newRow("utf-8") << ":/utf8settings.ini";
-}
-
-void tst_QSettings::testReadKeys()
-{
-    QFETCH(QString, filepath);
-
-    QSettings settings(filepath, QSettings::IniFormat);
-    QCOMPARE(settings.status(), QSettings::NoError);
-
-    QVariantMap expectedValues;
-    expectedValues.insert("Test/BAR", "BAR");
-    expectedValues.insert("Test/OST", "OST");
-    expectedValues.insert("Test/B\xC3\x84R", "B\xC3\x84R"); // BÄR
-    expectedValues.insert("Test/\xC3\x96SE", "\xC3\x96SE"); // ÖSE
-    expectedValues.insert(
-            "Test/\xD0\xAD\xD1\x82\xD0\xBE/\xD1\x82\xD0\xB5\xD1\x81\xD1\x82", // Это/тест
-            "\xD0\xAD\xD1\x82\xD0\xBE \xD1\x82\xD0\xB5\xD1\x81\xD1\x82"); // Это тест
-    expectedValues.insert(".,'%U\xD0\xB0\xD0\xB1\xD0\xB2\xD0\xB3\"\t", ".,'%!@#$");
-    expectedValues.insert("\xE2\x99\x9F", "\xE2\x99\x98\xE2\x99\x9A"); // ♟︎ ♘♚
-    expectedValues.insert("\xF0\x9F\x8C\x8D", "\xF0\x9F\x8C\x90"); // 🌍 🌐
-
-    QVariantMap readValues;
-    for (const auto &key : settings.allKeys())
-        readValues.insert(key, settings.value(key));
-
-    QCOMPARE(readValues, expectedValues);
 }
 
 QTEST_MAIN(tst_QSettings)

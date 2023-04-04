@@ -1,5 +1,41 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qwindowsmime.h"
 #include "qwindowscontext.h"
@@ -18,8 +54,6 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /* The MSVC compilers allows multi-byte characters, that has the behavior of
  * that each character gets shifted into position. 0x73524742 below is for MSVC
@@ -62,6 +96,7 @@ struct BMP_BITMAPV5HEADER {
     DWORD  bV5ProfileSize;
     DWORD  bV5Reserved;
 };
+static const int BMP_BITFIELDS = 3;
 
 static const char dibFormatC[] = "dib";
 
@@ -138,18 +173,6 @@ static bool qt_write_dibv5(QDataStream &s, QImage image)
     bi.bV5Intent        = BMP_LCS_GM_IMAGES;    //LCS_GM_IMAGES
 
     d->write(reinterpret_cast<const char*>(&bi), bi.bV5Size);
-    if (s.status() != QDataStream::Ok)
-        return false;
-
-    d->write(reinterpret_cast<const char *>(&bi.bV5RedMask), sizeof(bi.bV5RedMask));
-    if (s.status() != QDataStream::Ok)
-        return false;
-
-    d->write(reinterpret_cast<const char *>(&bi.bV5GreenMask), sizeof(bi.bV5GreenMask));
-    if (s.status() != QDataStream::Ok)
-        return false;
-
-    d->write(reinterpret_cast<const char *>(&bi.bV5BlueMask), sizeof(bi.bV5BlueMask));
     if (s.status() != QDataStream::Ok)
         return false;
 
@@ -561,7 +584,7 @@ QVariant QWindowsMimeText::convertToMime(const QString &mime, LPDATAOBJECT pData
         QByteArray data = getData(CF_UNICODETEXT, pDataObj);
         if (!data.isEmpty()) {
             str = QString::fromWCharArray(reinterpret_cast<const wchar_t *>(data.constData()));
-            str.replace("\r\n"_L1, "\n"_L1);
+            str.replace(QLatin1String("\r\n"), QLatin1String("\n"));
         } else {
             data = getData(CF_TEXT, pDataObj);
             if (!data.isEmpty()) {
@@ -647,7 +670,7 @@ bool QWindowsMimeURI::convertFromMime(const FORMATETC &formatetc, const QMimeDat
             auto *f = reinterpret_cast<wchar_t *>(files);
             for (int i=0; i<fileNames.size(); i++) {
                 const auto l = size_t(fileNames.at(i).length());
-                memcpy(f, fileNames.at(i).data(), l * sizeof(ushort));
+                memcpy(f, fileNames.at(i).utf16(), l * sizeof(ushort));
                 f += l;
                 *f++ = 0;
             }
@@ -659,8 +682,8 @@ bool QWindowsMimeURI::convertFromMime(const FORMATETC &formatetc, const QMimeDat
             const auto urls = mimeData->urls();
             QByteArray result;
             if (!urls.isEmpty()) {
-                const QString url = urls.at(0).toString();
-                result = QByteArray(reinterpret_cast<const char *>(url.data()),
+                QString url = urls.at(0).toString();
+                result = QByteArray(reinterpret_cast<const char *>(url.utf16()),
                                     url.length() * int(sizeof(ushort)));
             }
             result.append('\0');
@@ -906,7 +929,6 @@ public:
     QVariant convertToMime(const QString &mime, IDataObject *pDataObj, QMetaType preferredType) const override;
     QString mimeForFormat(const FORMATETC &formatetc) const override;
 private:
-    bool hasOriginalDIBV5(IDataObject *pDataObj) const;
     UINT CF_PNG;
 };
 
@@ -988,41 +1010,15 @@ bool QWindowsMimeImage::convertFromMime(const FORMATETC &formatetc, const QMimeD
     return false;
 }
 
-bool QWindowsMimeImage::hasOriginalDIBV5(IDataObject *pDataObj) const
-{
-    bool isSynthesized = true;
-    IEnumFORMATETC *pEnum = nullptr;
-    HRESULT res = pDataObj->EnumFormatEtc(1, &pEnum);
-    if (res == S_OK && pEnum) {
-        FORMATETC fc;
-        while ((res = pEnum->Next(1, &fc, nullptr)) == S_OK) {
-            if (fc.ptd)
-                CoTaskMemFree(fc.ptd);
-            if (fc.cfFormat == CF_DIB)
-                break;
-            if (fc.cfFormat == CF_DIBV5) {
-                isSynthesized = false;
-                break;
-            }
-        }
-        pEnum->Release();
-    }
-    return !isSynthesized;
-}
-
 QVariant QWindowsMimeImage::convertToMime(const QString &mimeType, IDataObject *pDataObj, QMetaType preferredType) const
 {
     Q_UNUSED(preferredType);
     QVariant result;
     if (mimeType != u"application/x-qt-image")
         return result;
-    // Try to convert from DIBV5 as it is the most widespread format that supports transparency,
-    // but avoid synthesizing it, as that typically loses transparency, e.g. from Office
-    const bool canGetDibV5 = canGetData(CF_DIBV5, pDataObj);
-    const bool hasOrigDibV5 = canGetDibV5 ? hasOriginalDIBV5(pDataObj) : false;
-    qCDebug(lcQpaMime) << "canGetDibV5:" << canGetDibV5 << "hasOrigDibV5:" << hasOrigDibV5;
-    if (hasOrigDibV5) {
-        qCDebug(lcQpaMime) << "Decoding DIBV5";
+    //Try to convert from DIBV5 as it is the most
+    //widespread format that support transparency
+    if (canGetData(CF_DIBV5, pDataObj)) {
         QImage img;
         QByteArray data = getData(CF_DIBV5, pDataObj);
         QBuffer buffer(&data);
@@ -1031,7 +1027,6 @@ QVariant QWindowsMimeImage::convertToMime(const QString &mimeType, IDataObject *
     }
     //PNG, MS Office place this (undocumented)
     if (canGetData(CF_PNG, pDataObj)) {
-        qCDebug(lcQpaMime) << "Decoding PNG";
         QImage img;
         QByteArray data = getData(CF_PNG, pDataObj);
         if (img.loadFromData(data, "PNG")) {
@@ -1040,7 +1035,6 @@ QVariant QWindowsMimeImage::convertToMime(const QString &mimeType, IDataObject *
     }
     //Fallback to DIB
     if (canGetData(CF_DIB, pDataObj)) {
-        qCDebug(lcQpaMime) << "Decoding DIB";
         QImage img;
         QByteArray data = getData(CF_DIBV5, pDataObj);
         QBuffer buffer(&data);
@@ -1269,7 +1263,7 @@ static const char x_qt_windows_mime[] = "application/x-qt-windows-mime;value=\""
 
 static bool isCustomMimeType(const QString &mimeType)
 {
-    return mimeType.startsWith(QLatin1StringView(x_qt_windows_mime), Qt::CaseInsensitive);
+    return mimeType.startsWith(QLatin1String(x_qt_windows_mime), Qt::CaseInsensitive);
 }
 
 static QString customMimeType(const QString &mimeType, int *lindex = nullptr)
@@ -1351,7 +1345,7 @@ QString QLastResortMimes::mimeForFormat(const FORMATETC &formatetc) const
                     }
                 }
                 if (!ianaType)
-                    format = QLatin1StringView(x_qt_windows_mime) + clipFormat + u'"';
+                    format = QLatin1String(x_qt_windows_mime) + clipFormat + u'"';
                 else
                     format = clipFormat;
             }

@@ -1,5 +1,30 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the tools applications of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <qbytearray.h>
 #include <qcommandlineparser.h>
@@ -24,8 +49,6 @@
 #define PROGRAMCOPYRIGHT "Copyright (C) 2022 The Qt Company Ltd."
 
 #define ANNOTATION_NO_WAIT      "org.freedesktop.DBus.Method.NoReply"
-
-using namespace Qt::StringLiterals;
 
 static QString globalClassName;
 static QString parentClassName;
@@ -53,10 +76,11 @@ static const char forwardDeclarations[] =
 static QDBusIntrospection::Interfaces readInput()
 {
     QFile input(inputFile);
-    if (inputFile.isEmpty() || inputFile == "-"_L1)
+    if (inputFile.isEmpty() || inputFile == QLatin1String("-")) {
         input.open(stdin, QIODevice::ReadOnly);
-    else
+    } else {
         input.open(QIODevice::ReadOnly);
+    }
 
     QByteArray data = input.readAll();
 
@@ -87,14 +111,15 @@ static void cleanInterfaces(QDBusIntrospection::Interfaces &interfaces)
 // produce a header name from the file name
 static QString header(const QString &name)
 {
-    QStringList parts = name.split(u':');
+    QStringList parts = name.split(QLatin1Char(':'));
     QString retval = parts.first();
 
-    if (retval.isEmpty() || retval == "-"_L1)
+    if (retval.isEmpty() || retval == QLatin1String("-"))
         return retval;
 
-    if (!retval.endsWith(".h"_L1) && !retval.endsWith(".cpp"_L1) && !retval.endsWith(".cc"_L1))
-        retval.append(".h"_L1);
+    if (!retval.endsWith(QLatin1String(".h")) && !retval.endsWith(QLatin1String(".cpp")) &&
+        !retval.endsWith(QLatin1String(".cc")))
+        retval.append(QLatin1String(".h"));
 
     return retval;
 }
@@ -102,14 +127,15 @@ static QString header(const QString &name)
 // produce a cpp name from the file name
 static QString cpp(const QString &name)
 {
-    QStringList parts = name.split(u':');
+    QStringList parts = name.split(QLatin1Char(':'));
     QString retval = parts.last();
 
-    if (retval.isEmpty() || retval == "-"_L1)
+    if (retval.isEmpty() || retval == QLatin1String("-"))
         return retval;
 
-    if (!retval.endsWith(".h"_L1) && !retval.endsWith(".cpp"_L1) && !retval.endsWith(".cc"_L1))
-        retval.append(".cpp"_L1);
+    if (!retval.endsWith(QLatin1String(".h")) && !retval.endsWith(QLatin1String(".cpp")) &&
+        !retval.endsWith(QLatin1String(".cc")))
+        retval.append(QLatin1String(".cpp"));
 
     return retval;
 }
@@ -121,8 +147,8 @@ static QString moc(const QString &name)
     if (retval.isEmpty())
         return retval;
 
-    retval.truncate(retval.size() - 1); // drop the h in .h
-    retval += "moc"_L1;
+    retval.truncate(retval.length() - 1); // drop the h in .h
+    retval += QLatin1String("moc");
     return retval;
 }
 
@@ -154,7 +180,7 @@ static QString classNameForInterface(const QString &interface, ClassType classTy
     if (!globalClassName.isEmpty())
         return globalClassName;
 
-    const auto parts = QStringView{interface}.split(u'.');
+    const auto parts = QStringView{interface}.split(QLatin1Char('.'));
 
     QString retval;
     if (classType == Proxy) {
@@ -167,9 +193,9 @@ static QString classNameForInterface(const QString &interface, ClassType classTy
     }
 
     if (classType == Proxy)
-        retval += "Interface"_L1;
+        retval += QLatin1String("Interface");
     else
-        retval += "Adaptor"_L1;
+        retval += QLatin1String("Adaptor");
 
     return retval;
 }
@@ -177,36 +203,32 @@ static QString classNameForInterface(const QString &interface, ClassType classTy
 // ### Qt6 Remove the two isSignal ifs
 // They are only here because before signal arguments where previously searched as "In" so to maintain compatibility
 // we first search for "Out" and if not found we search for "In"
-static QByteArray qtTypeName(const QString &where, const QString &signature,
-                             const QDBusIntrospection::Annotations &annotations, int paramId = -1,
-                             const char *direction = "Out", bool isSignal = false)
+static QByteArray qtTypeName(const QString &signature, const QDBusIntrospection::Annotations &annotations, int paramId = -1, const char *direction = "Out", bool isSignal = false)
 {
     int type = QDBusMetaType::signatureToMetaType(signature.toLatin1()).id();
     if (type == QMetaType::UnknownType) {
         QString annotationName = QString::fromLatin1("org.qtproject.QtDBus.QtTypeName");
         if (paramId >= 0)
-            annotationName += QString::fromLatin1(".%1%2").arg(QLatin1StringView(direction)).arg(paramId);
+            annotationName += QString::fromLatin1(".%1%2").arg(QLatin1String(direction)).arg(paramId);
         QString qttype = annotations.value(annotationName);
         if (!qttype.isEmpty())
             return std::move(qttype).toLatin1();
 
         QString oldAnnotationName = QString::fromLatin1("com.trolltech.QtDBus.QtTypeName");
         if (paramId >= 0)
-            oldAnnotationName += QString::fromLatin1(".%1%2").arg(QLatin1StringView(direction)).arg(paramId);
+            oldAnnotationName += QString::fromLatin1(".%1%2").arg(QLatin1String(direction)).arg(paramId);
         qttype = annotations.value(oldAnnotationName);
 
         if (qttype.isEmpty()) {
             if (!isSignal || qstrcmp(direction, "Out") == 0) {
                 fprintf(stderr, "%s: Got unknown type `%s' processing '%s'\n",
                         PROGRAMNAME, qPrintable(signature), qPrintable(inputFile));
-                fprintf(stderr,
-                        "You should add <annotation name=\"%s\" value=\"<type>\"/> to the XML "
-                        "description for '%s'\n",
-                        qPrintable(annotationName), qPrintable(where));
+                fprintf(stderr, "You should add <annotation name=\"%s\" value=\"<type>\"/> to the XML description\n",
+                        qPrintable(annotationName));
             }
 
             if (isSignal)
-                return qtTypeName(where, signature, annotations, paramId, "In", isSignal);
+                return qtTypeName(signature, annotations, paramId, "In", isSignal);
 
             exit(1);
         }
@@ -223,23 +245,23 @@ static QByteArray qtTypeName(const QString &where, const QString &signature,
 
 static QString nonConstRefArg(const QByteArray &arg)
 {
-    return QLatin1StringView(arg + " &");
+    return QLatin1String(arg + " &");
 }
 
 static QString templateArg(const QByteArray &arg)
 {
     if (!arg.endsWith('>'))
-        return QLatin1StringView(arg);
+        return QLatin1String(arg);
 
-    return QLatin1StringView(arg + ' ');
+    return QLatin1String(arg + ' ');
 }
 
 static QString constRefArg(const QByteArray &arg)
 {
     if (!arg.startsWith('Q'))
-        return QLatin1StringView(arg + ' ');
+        return QLatin1String(arg + ' ');
     else
-        return QString("const %1 &"_L1).arg(QLatin1StringView(arg));
+        return QString( QLatin1String("const %1 &") ).arg( QLatin1String(arg) );
 }
 
 static QStringList makeArgNames(const QDBusIntrospection::Arguments &inputArgs,
@@ -247,29 +269,29 @@ static QStringList makeArgNames(const QDBusIntrospection::Arguments &inputArgs,
                                 QDBusIntrospection::Arguments())
 {
     QStringList retval;
-    const int numInputArgs = inputArgs.size();
-    const int numOutputArgs = outputArgs.size();
+    const int numInputArgs = inputArgs.count();
+    const int numOutputArgs = outputArgs.count();
     retval.reserve(numInputArgs + numOutputArgs);
     for (int i = 0; i < numInputArgs; ++i) {
         const QDBusIntrospection::Argument &arg = inputArgs.at(i);
         QString name = arg.name;
         if (name.isEmpty())
-            name = QString( "in%1"_L1 ).arg(i);
+            name = QString( QLatin1String("in%1") ).arg(i);
         else
-            name.replace(u'-', u'_');
+            name.replace(QLatin1Char('-'), QLatin1Char('_'));
         while (retval.contains(name))
-            name += "_"_L1;
+            name += QLatin1String("_");
         retval << name;
     }
     for (int i = 0; i < numOutputArgs; ++i) {
         const QDBusIntrospection::Argument &arg = outputArgs.at(i);
         QString name = arg.name;
         if (name.isEmpty())
-            name = QString( "out%1"_L1 ).arg(i);
+            name = QString( QLatin1String("out%1") ).arg(i);
         else
-            name.replace(u'-', u'_');
+            name.replace(QLatin1Char('-'), QLatin1Char('_'));
         while (retval.contains(name))
-            name += "_"_L1;
+            name += QLatin1String("_");
         retval << name;
     }
     return retval;
@@ -283,9 +305,9 @@ static void writeArgList(QTextStream &ts, const QStringList &argNames,
     // input args:
     bool first = true;
     int argPos = 0;
-    for (int i = 0; i < inputArgs.size(); ++i) {
+    for (int i = 0; i < inputArgs.count(); ++i) {
         const QDBusIntrospection::Argument &arg = inputArgs.at(i);
-        QString type = constRefArg(qtTypeName(arg.name, arg.type, annotations, i, "In"));
+        QString type = constRefArg(qtTypeName(arg.type, annotations, i, "In"));
 
         if (!first)
             ts << ", ";
@@ -297,12 +319,12 @@ static void writeArgList(QTextStream &ts, const QStringList &argNames,
 
     // output args
     // yes, starting from 1
-    for (int i = 1; i < outputArgs.size(); ++i) {
+    for (int i = 1; i < outputArgs.count(); ++i) {
         const QDBusIntrospection::Argument &arg = outputArgs.at(i);
 
         if (!first)
             ts << ", ";
-        ts << nonConstRefArg(qtTypeName(arg.name, arg.type, annotations, i, "Out"))
+        ts << nonConstRefArg(qtTypeName(arg.type, annotations, i, "Out"))
            << argNames.at(argPos++);
         first = false;
     }
@@ -314,10 +336,9 @@ static void writeSignalArgList(QTextStream &ts, const QStringList &argNames,
 {
     bool first = true;
     int argPos = 0;
-    for (int i = 0; i < outputArgs.size(); ++i) {
+    for (int i = 0; i < outputArgs.count(); ++i) {
         const QDBusIntrospection::Argument &arg = outputArgs.at(i);
-        QString type = constRefArg(
-                qtTypeName(arg.name, arg.type, annotations, i, "Out", true /* isSignal */));
+        QString type = constRefArg(qtTypeName(arg.type, annotations, i, "Out", true /* isSignal */));
 
         if (!first)
             ts << ", ";
@@ -328,11 +349,11 @@ static void writeSignalArgList(QTextStream &ts, const QStringList &argNames,
 
 static QString propertyGetter(const QDBusIntrospection::Property &property)
 {
-    QString getter = property.annotations.value("org.qtproject.QtDBus.PropertyGetter"_L1);
+    QString getter = property.annotations.value(QLatin1String("org.qtproject.QtDBus.PropertyGetter"));
     if (!getter.isEmpty())
         return getter;
 
-    getter = property.annotations.value("com.trolltech.QtDBus.propertyGetter"_L1);
+    getter = property.annotations.value(QLatin1String("com.trolltech.QtDBus.propertyGetter"));
     if (!getter.isEmpty()) {
         fprintf(stderr, "%s: Warning: deprecated annotation 'com.trolltech.QtDBus.propertyGetter' found"
                 " while processing '%s';"
@@ -348,11 +369,11 @@ static QString propertyGetter(const QDBusIntrospection::Property &property)
 
 static QString propertySetter(const QDBusIntrospection::Property &property)
 {
-    QString setter = property.annotations.value("org.qtproject.QtDBus.PropertySetter"_L1);
+    QString setter = property.annotations.value(QLatin1String("org.qtproject.QtDBus.PropertySetter"));
     if (!setter.isEmpty())
         return setter;
 
-    setter = property.annotations.value("com.trolltech.QtDBus.propertySetter"_L1);
+    setter = property.annotations.value(QLatin1String("com.trolltech.QtDBus.propertySetter"));
     if (!setter.isEmpty()) {
         fprintf(stderr, "%s: Warning: deprecated annotation 'com.trolltech.QtDBus.propertySetter' found"
                 " while processing '%s';"
@@ -361,7 +382,7 @@ static QString propertySetter(const QDBusIntrospection::Property &property)
         return setter;
     }
 
-    setter = "set"_L1 + property.name;
+    setter = QLatin1String("set") + property.name;
     setter[3] = setter[3].toUpper();
     return setter;
 }
@@ -379,16 +400,16 @@ static QString stringify(const QString &data)
 {
     QString retval;
     int i;
-    for (i = 0; i < data.size(); ++i) {
-        retval += u'\"';
-        for ( ; i < data.size() && data[i] != u'\n' && data[i] != u'\r'; ++i)
-            if (data[i] == u'\"')
-                retval += "\\\""_L1;
+    for (i = 0; i < data.length(); ++i) {
+        retval += QLatin1Char('\"');
+        for ( ; i < data.length() && data[i] != QLatin1Char('\n') && data[i] != QLatin1Char('\r'); ++i)
+            if (data[i] == QLatin1Char('\"'))
+                retval += QLatin1String("\\\"");
             else
                 retval += data[i];
-        if (i+1 < data.size() && data[i] == u'\r' && data[i+1] == u'\n')
+        if (i+1 < data.length() && data[i] == QLatin1Char('\r') && data[i+1] == QLatin1Char('\n'))
             i++;
-        retval += "\\n\"\n"_L1;
+        retval += QLatin1String("\\n\"\n");
     }
     return retval;
 }
@@ -399,7 +420,7 @@ static bool openFile(const QString &fileName, QFile &file)
         return false;
 
     bool isOk = false;
-    if (fileName == "-"_L1) {
+    if (fileName == QLatin1String("-")) {
         isOk = file.open(stdout, QIODevice::WriteOnly | QIODevice::Text);
     } else {
         file.setFileName(fileName);
@@ -430,30 +451,26 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
 
     // include guards:
     QString includeGuard;
-    if (!headerName.isEmpty() && headerName != "-"_L1) {
-        includeGuard = headerName.toUpper().replace(u'.', u'_');
-        qsizetype pos = includeGuard.lastIndexOf(u'/');
+    if (!headerName.isEmpty() && headerName != QLatin1String("-")) {
+        includeGuard = headerName.toUpper().replace(QLatin1Char('.'), QLatin1Char('_'));
+        int pos = includeGuard.lastIndexOf(QLatin1Char('/'));
         if (pos != -1)
             includeGuard = includeGuard.mid(pos + 1);
     } else {
-        includeGuard = "QDBUSXML2CPP_PROXY"_L1;
+        includeGuard = QLatin1String("QDBUSXML2CPP_PROXY");
     }
-    includeGuard = "%1"_L1.arg(includeGuard);
+    includeGuard = QString(QLatin1String("%1"))
+                   .arg(includeGuard);
     hs << "#ifndef " << includeGuard << Qt::endl
        << "#define " << includeGuard << Qt::endl
        << Qt::endl;
 
     // include our stuff:
     hs << "#include <QtCore/QObject>" << Qt::endl
-       << includeList;
-#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
-    hs << "#include <QtDBus/QtDBus>" << Qt::endl;
-#else
-    hs << "#include <QtDBus/QDBusAbstractInterface>" << Qt::endl;
-    hs << "#include <QtDBus/QDBusPendingReply>" << Qt::endl;
-#endif
+       << includeList
+       << "#include <QtDBus/QtDBus>" << Qt::endl;
 
-    for (const QString &include : std::as_const(includes)) {
+    for (const QString &include : qAsConst(includes)) {
         hs << "#include \"" << include << "\"" << Qt::endl;
         if (headerName.isEmpty())
             cs << "#include \"" << include << "\"" << Qt::endl;
@@ -462,7 +479,7 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
     hs << Qt::endl;
 
     if (cppName != headerName) {
-        if (!headerName.isEmpty() && headerName != "-"_L1)
+        if (!headerName.isEmpty() && headerName != QLatin1String("-"))
             cs << "#include \"" << headerName << "\"" << Qt::endl << Qt::endl;
     }
 
@@ -507,7 +524,7 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
 
         // properties:
         for (const QDBusIntrospection::Property &property : interface->properties) {
-            QByteArray type = qtTypeName(property.name, property.type, property.annotations);
+            QByteArray type = qtTypeName(property.type, property.annotations);
             QString getter = propertyGetter(property);
             QString setter = propertySetter(property);
 
@@ -515,7 +532,7 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
 
             // getter:
             if (property.access != QDBusIntrospection::Property::Write)
-                // it's readable
+                // it's readble
                 hs << " READ " << getter;
 
             // setter
@@ -545,9 +562,9 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
         // methods:
         hs << "public Q_SLOTS: // METHODS" << Qt::endl;
         for (const QDBusIntrospection::Method &method : interface->methods) {
-            bool isDeprecated = method.annotations.value("org.freedesktop.DBus.Deprecated"_L1) == "true"_L1;
+            bool isDeprecated = method.annotations.value(QLatin1String("org.freedesktop.DBus.Deprecated")) == QLatin1String("true");
             bool isNoReply =
-                method.annotations.value(ANNOTATION_NO_WAIT ""_L1) == "true"_L1;
+                method.annotations.value(QLatin1String(ANNOTATION_NO_WAIT)) == QLatin1String("true");
             if (isNoReply && !method.outputArgs.isEmpty()) {
                 fprintf(stderr, "%s: warning while processing '%s': method %s in interface %s is marked 'no-reply' but has output arguments.\n",
                         PROGRAMNAME, qPrintable(inputFile), qPrintable(method.name),
@@ -562,10 +579,9 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
                 hs << "Q_NOREPLY void ";
             } else {
                 hs << "QDBusPendingReply<";
-                for (int i = 0; i < method.outputArgs.size(); ++i)
+                for (int i = 0; i < method.outputArgs.count(); ++i)
                     hs << (i > 0 ? ", " : "")
-                       << templateArg(qtTypeName(method.outputArgs.at(i).name, method.outputArgs.at(i).type,
-                                                 method.annotations, i, "Out"));
+                       << templateArg(qtTypeName(method.outputArgs.at(i).type, method.annotations, i, "Out"));
                 hs << "> ";
             }
 
@@ -580,7 +596,7 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
 
             if (!method.inputArgs.isEmpty()) {
                 hs << "        argumentList";
-                for (int argPos = 0; argPos < method.inputArgs.size(); ++argPos)
+                for (int argPos = 0; argPos < method.inputArgs.count(); ++argPos)
                     hs << " << QVariant::fromValue(" << argNames.at(argPos) << ')';
                 hs << ";" << Qt::endl;
             }
@@ -595,12 +611,12 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
             // close the function:
             hs << "    }" << Qt::endl;
 
-            if (method.outputArgs.size() > 1) {
+            if (method.outputArgs.count() > 1) {
                 // generate the old-form QDBusReply methods with multiple incoming parameters
-                hs << "    inline " << (isDeprecated ? "Q_DECL_DEPRECATED " : "") << "QDBusReply<"
-                   << templateArg(qtTypeName(method.outputArgs.first().name, method.outputArgs.first().type,
-                                             method.annotations, 0, "Out"))
-                   << "> ";
+                hs << "    inline "
+                   << (isDeprecated ? "Q_DECL_DEPRECATED " : "")
+                   << "QDBusReply<"
+                   << templateArg(qtTypeName(method.outputArgs.first().type, method.annotations, 0, "Out")) << "> ";
                 hs << method.name << "(";
 
                 QStringList argNames = makeArgNames(method.inputArgs, method.outputArgs);
@@ -613,7 +629,7 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
                 int argPos = 0;
                 if (!method.inputArgs.isEmpty()) {
                     hs << "        argumentList";
-                    for (argPos = 0; argPos < method.inputArgs.size(); ++argPos)
+                    for (argPos = 0; argPos < method.inputArgs.count(); ++argPos)
                         hs << " << QVariant::fromValue(" << argNames.at(argPos) << ')';
                     hs << ";" << Qt::endl;
                 }
@@ -623,13 +639,12 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
 
                 argPos++;
                 hs << "        if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().count() == "
-                   << method.outputArgs.size() << ") {" << Qt::endl;
+                   << method.outputArgs.count() << ") {" << Qt::endl;
 
                 // yes, starting from 1
-                for (int i = 1; i < method.outputArgs.size(); ++i)
+                for (int i = 1; i < method.outputArgs.count(); ++i)
                     hs << "            " << argNames.at(argPos++) << " = qdbus_cast<"
-                       << templateArg(qtTypeName(method.outputArgs.at(i).name, method.outputArgs.at(i).type,
-                                                 method.annotations, i, "Out"))
+                       << templateArg(qtTypeName(method.outputArgs.at(i).type, method.annotations, i, "Out"))
                        << ">(reply.arguments().at(" << i << "));" << Qt::endl;
                 hs << "        }" << Qt::endl
                    << "        return reply;" << Qt::endl
@@ -642,7 +657,8 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
         hs << "Q_SIGNALS: // SIGNALS" << Qt::endl;
         for (const QDBusIntrospection::Signal &signal : interface->signals_) {
             hs << "    ";
-            if (signal.annotations.value("org.freedesktop.DBus.Deprecated"_L1) == "true"_L1)
+            if (signal.annotations.value(QLatin1String("org.freedesktop.DBus.Deprecated")) ==
+                QLatin1String("true"))
                 hs << "Q_DECL_DEPRECATED ";
 
             hs << "void " << signal.name << "(";
@@ -666,28 +682,28 @@ static void writeProxy(const QString &filename, const QDBusIntrospection::Interf
             QStringList current;
             QString name;
             if (it != interfaces.constEnd()) {
-                current = it->constData()->name.split(u'.');
+                current = it->constData()->name.split(QLatin1Char('.'));
                 name = current.takeLast();
             }
 
             int i = 0;
-            while (i < current.size() && i < last.size() && current.at(i) == last.at(i))
+            while (i < current.count() && i < last.count() && current.at(i) == last.at(i))
                 ++i;
 
             // i parts matched
             // close last.arguments().count() - i namespaces:
-            for (int j = i; j < last.size(); ++j)
-                hs << QString((last.size() - j - 1 + i) * 2, u' ') << "}" << Qt::endl;
+            for (int j = i; j < last.count(); ++j)
+                hs << QString((last.count() - j - 1 + i) * 2, QLatin1Char(' ')) << "}" << Qt::endl;
 
             // open current.arguments().count() - i namespaces
-            for (int j = i; j < current.size(); ++j)
-                hs << QString(j * 2, u' ') << "namespace " << current.at(j) << " {" << Qt::endl;
+            for (int j = i; j < current.count(); ++j)
+                hs << QString(j * 2, QLatin1Char(' ')) << "namespace " << current.at(j) << " {" << Qt::endl;
 
             // add this class:
             if (!name.isEmpty()) {
-                hs << QString(current.size() * 2, u' ')
-                   << "using " << name << " = ::" << classNameForInterface(it->constData()->name, Proxy)
-                   << ";" << Qt::endl;
+                hs << QString(current.count() * 2, QLatin1Char(' '))
+                   << "typedef ::" << classNameForInterface(it->constData()->name, Proxy)
+                   << " " << name << ";" << Qt::endl;
             }
 
             if (it == interfaces.constEnd())
@@ -741,15 +757,16 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
 
     // include guards:
     QString includeGuard;
-    if (!headerName.isEmpty() && headerName != "-"_L1) {
-        includeGuard = headerName.toUpper().replace(u'.', u'_');
-        qsizetype pos = includeGuard.lastIndexOf(u'/');
+    if (!headerName.isEmpty() && headerName != QLatin1String("-")) {
+        includeGuard = headerName.toUpper().replace(QLatin1Char('.'), QLatin1Char('_'));
+        int pos = includeGuard.lastIndexOf(QLatin1Char('/'));
         if (pos != -1)
             includeGuard = includeGuard.mid(pos + 1);
     } else {
-        includeGuard = "QDBUSXML2CPP_ADAPTOR"_L1;
+        includeGuard = QLatin1String("QDBUSXML2CPP_ADAPTOR");
     }
-    includeGuard = "%1"_L1.arg(includeGuard);
+    includeGuard = QString(QLatin1String("%1"))
+                   .arg(includeGuard);
     hs << "#ifndef " << includeGuard << Qt::endl
        << "#define " << includeGuard << Qt::endl
        << Qt::endl;
@@ -759,21 +776,16 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
     if (cppName == headerName)
         hs << "#include <QtCore/QMetaObject>" << Qt::endl
            << "#include <QtCore/QVariant>" << Qt::endl;
-#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
     hs << "#include <QtDBus/QtDBus>" << Qt::endl;
-#else
-    hs << "#include <QtDBus/QDBusAbstractAdaptor>" << Qt::endl;
-    hs << "#include <QtDBus/QDBusObjectPath>" << Qt::endl;
-#endif
 
-    for (const QString &include : std::as_const(includes)) {
+    for (const QString &include : qAsConst(includes)) {
         hs << "#include \"" << include << "\"" << Qt::endl;
         if (headerName.isEmpty())
             cs << "#include \"" << include << "\"" << Qt::endl;
     }
 
     if (cppName != headerName) {
-        if (!headerName.isEmpty() && headerName != "-"_L1)
+        if (!headerName.isEmpty() && headerName != QLatin1String("-"))
             cs << "#include \"" << headerName << "\"" << Qt::endl;
 
         cs << "#include <QtCore/QMetaObject>" << Qt::endl
@@ -788,7 +800,7 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
 
     QString parent = parentClassName;
     if (parentClassName.isEmpty())
-        parent = "QObject"_L1;
+        parent = QLatin1String("QObject");
 
     for (const QDBusIntrospection::Interface *interface : interfaces) {
         QString className = classNameForInterface(interface->name, Adaptor);
@@ -836,7 +848,7 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
 
         hs << "public: // PROPERTIES" << Qt::endl;
         for (const QDBusIntrospection::Property &property : interface->properties) {
-            QByteArray type = qtTypeName(property.name, property.type, property.annotations);
+            QByteArray type = qtTypeName(property.type, property.annotations);
             QString constRefType = constRefArg(type);
             QString getter = propertyGetter(property);
             QString setter = propertySetter(property);
@@ -867,7 +879,7 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
                    << "{" << Qt::endl
                    << "    // set the value of property " << property.name << Qt::endl
                    << "    parent()->setProperty(\"" << property.name << "\", QVariant::fromValue(value";
-                if (constRefType.contains("QDBusVariant"_L1))
+                if (constRefType.contains(QLatin1String("QDBusVariant")))
                     cs << ".variant()";
                 cs << "));" << Qt::endl
                    << "}" << Qt::endl
@@ -880,7 +892,7 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
         hs << "public Q_SLOTS: // METHODS" << Qt::endl;
         for (const QDBusIntrospection::Method &method : interface->methods) {
             bool isNoReply =
-                method.annotations.value(ANNOTATION_NO_WAIT ""_L1) == "true"_L1;
+                method.annotations.value(QLatin1String(ANNOTATION_NO_WAIT)) == QLatin1String("true");
             if (isNoReply && !method.outputArgs.isEmpty()) {
                 fprintf(stderr, "%s: warning while processing '%s': method %s in interface %s is marked 'no-reply' but has output arguments.\n",
                         PROGRAMNAME, qPrintable(inputFile), qPrintable(method.name), qPrintable(interface->name));
@@ -888,7 +900,8 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
             }
 
             hs << "    ";
-            if (method.annotations.value("org.freedesktop.DBus.Deprecated"_L1) == "true"_L1)
+            if (method.annotations.value(QLatin1String("org.freedesktop.DBus.Deprecated")) ==
+                QLatin1String("true"))
                 hs << "Q_DECL_DEPRECATED ";
 
             QByteArray returnType;
@@ -899,8 +912,7 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
                 hs << "void ";
                 cs << "void ";
             } else {
-                returnType = qtTypeName(method.outputArgs.first().name, method.outputArgs.first().type,
-                                        method.annotations, 0, "Out");
+                returnType = qtTypeName(method.outputArgs.first().type, method.annotations, 0, "Out");
                 hs << returnType << " ";
                 cs << returnType << " ";
             }
@@ -920,14 +932,14 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
 
             // make the call
             bool usingInvokeMethod = false;
-            if (parentClassName.isEmpty() && method.inputArgs.size() <= 10
-                && method.outputArgs.size() <= 1)
+            if (parentClassName.isEmpty() && method.inputArgs.count() <= 10
+                && method.outputArgs.count() <= 1)
                 usingInvokeMethod = true;
 
             if (usingInvokeMethod) {
                 // we are using QMetaObject::invokeMethod
                 if (!returnType.isEmpty())
-                    cs << "    " << returnType << " " << argNames.at(method.inputArgs.size())
+                    cs << "    " << returnType << " " << argNames.at(method.inputArgs.count())
                        << ";" << Qt::endl;
 
                 static const char invoke[] = "    QMetaObject::invokeMethod(parent(), \"";
@@ -935,20 +947,24 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
 
                 if (!method.outputArgs.isEmpty())
                     cs << ", Q_RETURN_ARG("
-                       << qtTypeName(method.outputArgs.at(0).name, method.outputArgs.at(0).type, method.annotations,
+                       << qtTypeName(method.outputArgs.at(0).type, method.annotations,
                                      0, "Out")
-                       << ", " << argNames.at(method.inputArgs.size()) << ")";
+                       << ", "
+                       << argNames.at(method.inputArgs.count())
+                       << ")";
 
-                for (int i = 0; i < method.inputArgs.size(); ++i)
+                for (int i = 0; i < method.inputArgs.count(); ++i)
                     cs << ", Q_ARG("
-                       << qtTypeName(method.inputArgs.at(i).name, method.inputArgs.at(i).type, method.annotations,
+                       << qtTypeName(method.inputArgs.at(i).type, method.annotations,
                                      i, "In")
-                       << ", " << argNames.at(i) << ")";
+                       << ", "
+                       << argNames.at(i)
+                       << ")";
 
                 cs << ");" << Qt::endl;
 
                 if (!returnType.isEmpty())
-                    cs << "    return " << argNames.at(method.inputArgs.size()) << ";" << Qt::endl;
+                    cs << "    return " << argNames.at(method.inputArgs.count()) << ";" << Qt::endl;
             } else {
                 if (parentClassName.isEmpty())
                     cs << "    //";
@@ -966,12 +982,12 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
 
                 int argPos = 0;
                 bool first = true;
-                for (int i = 0; i < method.inputArgs.size(); ++i) {
+                for (int i = 0; i < method.inputArgs.count(); ++i) {
                     cs << (first ? "" : ", ") << argNames.at(argPos++);
                     first = false;
                 }
                 ++argPos;           // skip retval, if any
-                for (int i = 1; i < method.outputArgs.size(); ++i) {
+                for (int i = 1; i < method.outputArgs.count(); ++i) {
                     cs << (first ? "" : ", ") << argNames.at(argPos++);
                     first = false;
                 }
@@ -985,7 +1001,8 @@ static void writeAdaptor(const QString &filename, const QDBusIntrospection::Inte
         hs << "Q_SIGNALS: // SIGNALS" << Qt::endl;
         for (const QDBusIntrospection::Signal &signal : interface->signals_) {
             hs << "    ";
-            if (signal.annotations.value("org.freedesktop.DBus.Deprecated"_L1) == "true"_L1)
+            if (signal.annotations.value(QLatin1String("org.freedesktop.DBus.Deprecated")) ==
+                QLatin1String("true"))
                 hs << "Q_DECL_DEPRECATED ";
 
             hs << "void " << signal.name << "(";
@@ -1034,14 +1051,14 @@ int main(int argc, char **argv)
     QCoreApplication::setApplicationVersion(QStringLiteral(PROGRAMVERSION));
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(
+    parser.setApplicationDescription(QLatin1String(
             "Produces the C++ code to implement the interfaces defined in the input file.\n\n"
             "If the file name given to the options -a and -p does not end in .cpp or .h, the\n"
             "program will automatically append the suffixes and produce both files.\n"
             "You can also use a colon (:) to separate the header name from the source file\n"
             "name, as in '-a filename_p.h:filename.cpp'.\n\n"
             "If you pass a dash (-) as the argument to either -p or -a, the output is written\n"
-            "to the standard output."_L1);
+            "to the standard output."));
 
     parser.addHelpOption();
     parser.addVersionOption();
@@ -1111,8 +1128,8 @@ int main(int argc, char **argv)
 
     QStringList args = app.arguments();
     args.removeFirst();
-    commandLine = PROGRAMNAME " "_L1;
-    commandLine += args.join(u' ');
+    commandLine = QLatin1String(PROGRAMNAME " ");
+    commandLine += args.join(QLatin1Char(' '));
 
     if (!proxyFile.isEmpty() || adaptorFile.isEmpty())
         writeProxy(proxyFile, interfaces);

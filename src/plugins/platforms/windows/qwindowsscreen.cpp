@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qwindowsscreen.h"
 #include "qwindowscontext.h"
@@ -20,11 +56,7 @@
 
 #include <QtCore/qdebug.h>
 
-#include <shellscalingapi.h>
-
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 static inline QDpi deviceDPI(HDC hdc)
 {
@@ -33,10 +65,12 @@ static inline QDpi deviceDPI(HDC hdc)
 
 static inline QDpi monitorDPI(HMONITOR hMonitor)
 {
-    UINT dpiX;
-    UINT dpiY;
-    if (SUCCEEDED(GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)))
-        return QDpi(dpiX, dpiY);
+    if (QWindowsContext::shcoredll.isValid()) {
+        UINT dpiX;
+        UINT dpiY;
+        if (SUCCEEDED(QWindowsContext::shcoredll.getDpiForMonitor(hMonitor, 0, &dpiX, &dpiY)))
+            return QDpi(dpiX, dpiY);
+    }
     return {0, 0};
 }
 
@@ -117,7 +151,6 @@ static bool monitorData(HMONITOR hMonitor, QWindowsScreenData *data)
     data->hMonitor = hMonitor;
     data->geometry = QRect(QPoint(info.rcMonitor.left, info.rcMonitor.top), QPoint(info.rcMonitor.right - 1, info.rcMonitor.bottom - 1));
     data->availableGeometry = QRect(QPoint(info.rcWork.left, info.rcWork.top), QPoint(info.rcWork.right - 1, info.rcWork.bottom - 1));
-    data->deviceName = QString::fromWCharArray(info.szDevice);
     DISPLAYCONFIG_PATH_INFO pathInfo = {};
     const bool hasPathInfo = getPathInfo(info, &pathInfo);
     if (hasPathInfo) {
@@ -130,8 +163,8 @@ static bool monitorData(HMONITOR hMonitor, QWindowsScreenData *data)
             data->name = QString::fromWCharArray(deviceName.monitorFriendlyDeviceName);
     }
     if (data->name.isEmpty())
-        data->name = data->deviceName;
-    if (data->deviceName == u"WinDisc") {
+        data->name = QString::fromWCharArray(info.szDevice);
+    if (wcscmp(info.szDevice, L"WinDisc") == 0) {
         data->flags |= QWindowsScreenData::LockScreen;
     } else {
         if (const HDC hdc = CreateDC(info.szDevice, nullptr, nullptr, nullptr)) {
@@ -146,7 +179,7 @@ static bool monitorData(HMONITOR hMonitor, QWindowsScreenData *data)
             DeleteDC(hdc);
         } else {
             qWarning("%s: Unable to obtain handle for monitor '%s', defaulting to %g DPI.",
-                     __FUNCTION__, qPrintable(data->deviceName),
+                     __FUNCTION__, qPrintable(QString::fromWCharArray(info.szDevice)),
                      data->dpi.first);
         } // CreateDC() failed
     } // not lock screen
@@ -182,8 +215,11 @@ static bool monitorData(HMONITOR hMonitor, QWindowsScreenData *data)
     // EnumDisplayMonitors (as opposed to EnumDisplayDevices) enumerates only
     // virtual desktop screens.
     data->flags |= QWindowsScreenData::VirtualDesktop;
-    if (info.dwFlags & MONITORINFOF_PRIMARY)
+    if (info.dwFlags & MONITORINFOF_PRIMARY) {
         data->flags |= QWindowsScreenData::PrimaryScreen;
+        if ((data->flags & QWindowsScreenData::LockScreen) == 0)
+            QWindowsFontDatabase::setDefaultVerticalDPI(data->dpi.second);
+    }
     return true;
 }
 
@@ -193,16 +229,6 @@ BOOL QT_WIN_CALLBACK monitorEnumCallback(HMONITOR hMonitor, HDC, LPRECT, LPARAM 
     QWindowsScreenData data;
     if (monitorData(hMonitor, &data)) {
         auto *result = reinterpret_cast<WindowsScreenDataList *>(p);
-        auto it = std::find_if(result->rbegin(), result->rend(),
-            [&data](QWindowsScreenData i){ return i.name == data.name; });
-        if (it != result->rend()) {
-            int previousIndex = 1;
-            if (it->deviceIndex.has_value())
-                previousIndex = it->deviceIndex.value();
-            else
-                (*it).deviceIndex = 1;
-            data.deviceIndex = previousIndex + 1;
-        }
         // QWindowSystemInterface::handleScreenAdded() documentation specifies that first
         // added screen will be the primary screen, so order accordingly.
         // Note that the side effect of this policy is that there is no way to change primary
@@ -236,8 +262,7 @@ static QDebug operator<<(QDebug dbg, const QWindowsScreenData &d)
         << " physical: " << d.physicalSizeMM.width() << 'x' << d.physicalSizeMM.height()
         << " DPI: " << d.dpi.first << 'x' << d.dpi.second << " Depth: " << d.depth
         << " Format: " << d.format
-        << " hMonitor: " << d.hMonitor
-        << " device name: " << d.deviceName;
+        << " hMonitor: " << d.hMonitor;
     if (d.flags & QWindowsScreenData::PrimaryScreen)
         dbg << " primary";
     if (d.flags & QWindowsScreenData::VirtualDesktop)
@@ -261,13 +286,6 @@ QWindowsScreen::QWindowsScreen(const QWindowsScreenData &data) :
     , m_cursor(new QWindowsCursor(this))
 #endif
 {
-}
-
-QString QWindowsScreen::name() const
-{
-    return m_data.deviceIndex.has_value()
-               ? (u"%1 (%2)"_s).arg(m_data.name, QString::number(m_data.deviceIndex.value()))
-               : m_data.name;
 }
 
 Q_GUI_EXPORT QPixmap qt_pixmapFromWinHBITMAP(HBITMAP bitmap, int hbitmapFormat = 0);
@@ -330,7 +348,7 @@ QWindow *QWindowsScreen::topLevelAt(const QPoint &point) const
     if (QWindow *child = QWindowsScreen::windowAt(point, CWP_SKIPINVISIBLE))
         result = QWindowsWindow::topLevelOf(child);
     if (QWindowsContext::verbose > 1)
-        qCDebug(lcQpaScreen) <<__FUNCTION__ << point << result;
+        qCDebug(lcQpaWindows) <<__FUNCTION__ << point << result;
     return result;
 }
 
@@ -341,7 +359,7 @@ QWindow *QWindowsScreen::windowAt(const QPoint &screenPoint, unsigned flags)
             findPlatformWindowAt(GetDesktopWindow(), screenPoint, flags))
         result = bw->window();
     if (QWindowsContext::verbose > 1)
-        qCDebug(lcQpaScreen) <<__FUNCTION__ << screenPoint << " returns " << result;
+        qCDebug(lcQpaWindows) <<__FUNCTION__ << screenPoint << " returns " << result;
     return result;
 }
 
@@ -377,7 +395,7 @@ void QWindowsScreen::handleChanges(const QWindowsScreenData &newData)
     m_data.physicalSizeMM = newData.physicalSizeMM;
 
     if (m_data.hMonitor != newData.hMonitor) {
-        qCDebug(lcQpaScreen) << "Monitor" << m_data.name
+        qCDebug(lcQpaWindows) << "Monitor" << m_data.name
             << "has had its hMonitor handle changed from"
             << m_data.hMonitor << "to" << newData.hMonitor;
         m_data.hMonitor = newData.hMonitor;
@@ -422,50 +440,62 @@ QRect QWindowsScreen::virtualGeometry(const QPlatformScreen *screen) // cf QScre
     return result;
 }
 
+enum OrientationPreference : DWORD // matching Win32 API ORIENTATION_PREFERENCE
+{
+    orientationPreferenceNone = 0,
+    orientationPreferenceLandscape = 0x1,
+    orientationPreferencePortrait = 0x2,
+    orientationPreferenceLandscapeFlipped = 0x4,
+    orientationPreferencePortraitFlipped = 0x8
+};
+
 bool QWindowsScreen::setOrientationPreference(Qt::ScreenOrientation o)
 {
     bool result = false;
-    ORIENTATION_PREFERENCE orientationPreference = ORIENTATION_PREFERENCE_NONE;
-    switch (o) {
-    case Qt::PrimaryOrientation:
-        break;
-    case Qt::PortraitOrientation:
-        orientationPreference = ORIENTATION_PREFERENCE_PORTRAIT;
-        break;
-    case Qt::LandscapeOrientation:
-        orientationPreference = ORIENTATION_PREFERENCE_LANDSCAPE;
-        break;
-    case Qt::InvertedPortraitOrientation:
-        orientationPreference = ORIENTATION_PREFERENCE_PORTRAIT_FLIPPED;
-        break;
-    case Qt::InvertedLandscapeOrientation:
-        orientationPreference = ORIENTATION_PREFERENCE_LANDSCAPE_FLIPPED;
-        break;
+    if (QWindowsContext::user32dll.setDisplayAutoRotationPreferences) {
+        DWORD orientationPreference = 0;
+        switch (o) {
+        case Qt::PrimaryOrientation:
+            orientationPreference = orientationPreferenceNone;
+            break;
+        case Qt::PortraitOrientation:
+            orientationPreference = orientationPreferencePortrait;
+            break;
+        case Qt::LandscapeOrientation:
+            orientationPreference = orientationPreferenceLandscape;
+            break;
+        case Qt::InvertedPortraitOrientation:
+            orientationPreference = orientationPreferencePortraitFlipped;
+            break;
+        case Qt::InvertedLandscapeOrientation:
+            orientationPreference = orientationPreferenceLandscapeFlipped;
+            break;
+        }
+        result = QWindowsContext::user32dll.setDisplayAutoRotationPreferences(orientationPreference);
     }
-    result = SetDisplayAutoRotationPreferences(orientationPreference);
     return result;
 }
 
 Qt::ScreenOrientation QWindowsScreen::orientationPreference()
 {
     Qt::ScreenOrientation result = Qt::PrimaryOrientation;
-    ORIENTATION_PREFERENCE orientationPreference = ORIENTATION_PREFERENCE_NONE;
-    if (GetDisplayAutoRotationPreferences(&orientationPreference)) {
-        switch (orientationPreference) {
-        case ORIENTATION_PREFERENCE_NONE:
-            break;
-        case ORIENTATION_PREFERENCE_LANDSCAPE:
-            result = Qt::LandscapeOrientation;
-            break;
-        case ORIENTATION_PREFERENCE_PORTRAIT:
-            result = Qt::PortraitOrientation;
-            break;
-        case ORIENTATION_PREFERENCE_LANDSCAPE_FLIPPED:
-            result = Qt::InvertedLandscapeOrientation;
-            break;
-        case ORIENTATION_PREFERENCE_PORTRAIT_FLIPPED:
-            result = Qt::InvertedPortraitOrientation;
-            break;
+    if (QWindowsContext::user32dll.getDisplayAutoRotationPreferences) {
+        DWORD orientationPreference = 0;
+        if (QWindowsContext::user32dll.getDisplayAutoRotationPreferences(&orientationPreference)) {
+            switch (orientationPreference) {
+            case orientationPreferenceLandscape:
+                result = Qt::LandscapeOrientation;
+                break;
+            case orientationPreferencePortrait:
+                result = Qt::PortraitOrientation;
+                break;
+            case orientationPreferenceLandscapeFlipped:
+                result = Qt::InvertedLandscapeOrientation;
+                break;
+            case orientationPreferencePortraitFlipped:
+                result = Qt::InvertedPortraitOrientation;
+                break;
+            }
         }
     }
     return result;
@@ -478,9 +508,9 @@ QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTy
 {
     QPlatformScreen::SubpixelAntialiasingType type = QPlatformScreen::subpixelAntialiasingTypeHint();
     if (type == QPlatformScreen::Subpixel_None) {
-        QSettings settings(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Avalon.Graphics\DISPLAY1)"_L1,
+        QSettings settings(QLatin1String(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Avalon.Graphics\DISPLAY1)"),
                            QSettings::NativeFormat);
-        int registryValue = settings.value("PixelStructure"_L1, -1).toInt();
+        int registryValue = settings.value(QLatin1String("PixelStructure"), -1).toInt();
         switch (registryValue) {
         case 0:
             type = QPlatformScreen::Subpixel_None;
@@ -510,45 +540,8 @@ QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTy
     \internal
 */
 
-extern "C" LRESULT QT_WIN_CALLBACK qDisplayChangeObserverWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    if (message == WM_DISPLAYCHANGE) {
-        qCDebug(lcQpaScreen) << "Handling WM_DISPLAYCHANGE";
-        if (QWindowsTheme *t = QWindowsTheme::instance())
-            t->displayChanged();
-        QWindowsWindow::displayChanged();
-        QWindowsContext::instance()->screenManager().handleScreenChanges();
-    }
-
-    return DefWindowProc(hwnd, message, wParam, lParam);
-}
-
 QWindowsScreenManager::QWindowsScreenManager() = default;
 
-void QWindowsScreenManager::initialize()
-{
-    qCDebug(lcQpaScreen) << "Initializing screen manager";
-
-    auto className = QWindowsContext::instance()->registerWindowClass(
-        QWindowsContext::classNamePrefix() + QLatin1String("ScreenChangeObserverWindow"),
-        qDisplayChangeObserverWndProc);
-
-    // HWND_MESSAGE windows do not get WM_DISPLAYCHANGE, so we need to create
-    // a real top level window that we never show.
-    m_displayChangeObserver = CreateWindowEx(0, reinterpret_cast<LPCWSTR>(className.utf16()),
-        nullptr, WS_TILED, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-        nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
-    Q_ASSERT(m_displayChangeObserver);
-
-    qCDebug(lcQpaScreen) << "Created display change observer" << m_displayChangeObserver;
-
-    handleScreenChanges();
-}
-
-QWindowsScreenManager::~QWindowsScreenManager()
-{
-    DestroyWindow(m_displayChangeObserver);
-}
 
 bool QWindowsScreenManager::isSingleScreen()
 {
@@ -556,19 +549,19 @@ bool QWindowsScreenManager::isSingleScreen()
 }
 
 static inline int indexOfMonitor(const QWindowsScreenManager::WindowsScreenList &screens,
-                                 const QString &deviceName)
+                                 const QString &monitorName)
 {
     for (int i= 0; i < screens.size(); ++i)
-        if (screens.at(i)->data().deviceName == deviceName)
+        if (screens.at(i)->data().name == monitorName)
             return i;
     return -1;
 }
 
 static inline int indexOfMonitor(const WindowsScreenDataList &screenData,
-                                 const QString &deviceName)
+                                 const QString &monitorName)
 {
     for (int i = 0; i < screenData.size(); ++i)
-        if (screenData.at(i).deviceName == deviceName)
+        if (screenData.at(i).name == monitorName)
             return i;
     return -1;
 }
@@ -592,7 +585,7 @@ static void moveToVirtualScreen(QWindow *w, const QScreen *newScreen)
 
 void QWindowsScreenManager::removeScreen(int index)
 {
-    qCDebug(lcQpaScreen) << "Removing Monitor:" << m_screens.at(index)->data();
+    qCDebug(lcQpaWindows) << "Removing Monitor:" << m_screens.at(index)->data();
     QScreen *screen = m_screens.at(index)->screen();
     QScreen *primaryScreen = QGuiApplication::primaryScreen();
     // QTBUG-38650: When a screen is disconnected, Windows will automatically
@@ -634,7 +627,7 @@ bool QWindowsScreenManager::handleScreenChanges()
     const bool lockScreen = newDataList.size() == 1 && (newDataList.front().flags & QWindowsScreenData::LockScreen);
     bool primaryScreenChanged = false;
     for (const QWindowsScreenData &newData : newDataList) {
-        const int existingIndex = indexOfMonitor(m_screens, newData.deviceName);
+        const int existingIndex = indexOfMonitor(m_screens, newData.name);
         if (existingIndex != -1) {
             m_screens.at(existingIndex)->handleChanges(newData);
             if (existingIndex == 0)
@@ -644,14 +637,14 @@ bool QWindowsScreenManager::handleScreenChanges()
             m_screens.push_back(newScreen);
             QWindowSystemInterface::handleScreenAdded(newScreen,
                                                              newData.flags & QWindowsScreenData::PrimaryScreen);
-            qCDebug(lcQpaScreen) << "New Monitor: " << newData;
+            qCDebug(lcQpaWindows) << "New Monitor: " << newData;
         }    // exists
     }        // for new screens.
     // Remove deleted ones but keep main monitors if we get only the
     // temporary lock screen to avoid window recreation (QTBUG-33062).
     if (!lockScreen) {
         for (int i = m_screens.size() - 1; i >= 0; --i) {
-            if (indexOfMonitor(newDataList, m_screens.at(i)->data().deviceName) == -1)
+            if (indexOfMonitor(newDataList, m_screens.at(i)->data().name) == -1)
                 removeScreen(i);
         }     // for existing screens
     }     // not lock screen

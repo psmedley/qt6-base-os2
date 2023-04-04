@@ -1,6 +1,42 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtDBus module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qdbusconnection.h"
 #include "qdbusconnection_p.h"
@@ -429,7 +465,7 @@ QDBusConnection &QDBusConnection::operator=(const QDBusConnection &other)
 }
 
 /*!
-    Opens a connection of type \a type to one of the known buses and
+    Opens a connection of type \a type to one of the known busses and
     associate with it the connection name \a name. Returns a
     QDBusConnection object associated with that connection.
 */
@@ -853,16 +889,16 @@ bool QDBusConnection::registerObject(const QString &path, const QString &interfa
     if (!d || !d->connection || !object || !options || !QDBusUtil::isValidObjectPath(path))
         return false;
 
-    auto pathComponents = QStringView{path}.split(u'/');
+    auto pathComponents = QStringView{path}.split(QLatin1Char('/'));
     if (pathComponents.constLast().isEmpty())
         pathComponents.removeLast();
     QDBusWriteLocker locker(RegisterObjectAction, d);
 
     // lower-bound search for where this object should enter in the tree
-    QDBusConnectionPrivate::ObjectTreeNode *node = &d->rootNode;
+    QDBusConnectionPrivate::ObjectTreeNode::DataList::Iterator node = &d->rootNode;
     int i = 1;
     while (node) {
-        if (pathComponents.size() == i) {
+        if (pathComponents.count() == i) {
             // this node exists
             // consider it free if there's no object here and the user is not trying to
             // replace the object sub-tree
@@ -898,7 +934,7 @@ bool QDBusConnection::registerObject(const QString &path, const QString &interfa
             std::lower_bound(node->children.begin(), node->children.end(), pathComponents.at(i));
         if (it != node->children.end() && it->name == pathComponents.at(i)) {
             // match: this node exists
-            node = &(*it);
+            node = it;
 
             // are we allowed to go deeper?
             if (node->flags & ExportChildObjects) {
@@ -909,8 +945,7 @@ bool QDBusConnection::registerObject(const QString &path, const QString &interfa
             }
         } else {
             // add entry
-            it = node->children.insert(it, pathComponents.at(i).toString());
-            node = &(*it);
+            node = node->children.insert(it, pathComponents.at(i).toString());
         }
 
         // iterate
@@ -962,7 +997,7 @@ QObject *QDBusConnection::objectRegisteredAt(const QString &path) const
     if (!d || !d->connection || !QDBusUtil::isValidObjectPath(path))
         return nullptr;
 
-    auto pathComponents = QStringView{path}.split(u'/');
+    auto pathComponents = QStringView{path}.split(QLatin1Char('/'));
     if (pathComponents.constLast().isEmpty())
         pathComponents.removeLast();
 
@@ -972,7 +1007,7 @@ QObject *QDBusConnection::objectRegisteredAt(const QString &path) const
 
     int i = 1;
     while (node) {
-        if (pathComponents.size() == i)
+        if (pathComponents.count() == i)
             return node->obj;
         if ((node->flags & QDBusConnectionPrivate::VirtualObject) && (node->flags & QDBusConnection::SubPath))
             return node->obj;
@@ -982,7 +1017,7 @@ QObject *QDBusConnection::objectRegisteredAt(const QString &path) const
         if (it == node->children.constEnd() || it->name != pathComponents.at(i))
             break;              // node not found
 
-        node = &(*it);
+        node = it;
         ++i;
     }
     return nullptr;
@@ -1218,10 +1253,6 @@ QByteArray QDBusConnection::localMachineId()
 */
 
 QT_END_NAMESPACE
-
-#include "moc_qdbusconnection_p.cpp"
-#include "moc_qdbusconnection.cpp"
-#include "moc_qdbusconnectionmanager_p.cpp"
 
 #ifdef Q_OS_WIN
 #  include <qt_windows.h>

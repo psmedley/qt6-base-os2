@@ -1,5 +1,9 @@
 # Generated from qguiapplication.pro.
 
+if(NOT QT_FEATURE_private_tests)
+    return()
+endif()
+
 #####################################################################
 ## tst_qguiapplication Test:
 #####################################################################
@@ -11,12 +15,6 @@ else()
     set(target_version "1.2.3")
 endif()
 # special case end
-
-# Resources:
-set(tst_qguiapplication_resource_files
-    "icons/appicon.png"
-    "icons/usericon.png"
-)
 
 qt_internal_add_test(tst_qguiapplication
     VERSION ${target_version} # special case
@@ -31,8 +29,19 @@ qt_internal_add_test(tst_qguiapplication
     PUBLIC_LIBRARIES
         Qt::CorePrivate
         Qt::GuiPrivate
-    TESTDATA ${tst_qguiapplication_resource_files}
-    BUILTIN_TESTDATA
+)
+
+# Resources:
+set(tst_qguiapplication_resource_files
+    "icons/appicon.png"
+    "icons/usericon.png"
+)
+
+qt_internal_add_resource(tst_qguiapplication "tst_qguiapplication"
+    PREFIX
+        "/"
+    FILES
+        ${tst_qguiapplication_resource_files}
 )
 
 if (ANDROID)
@@ -44,3 +53,12 @@ if (APPLE)
     set_property(TARGET tst_qguiapplication PROPERTY PROPERTY MACOSX_BUNDLE TRUE)
 endif()
 # special case end
+
+## Scopes:
+#####################################################################
+
+#### Keys ignored in scope 3:.:../../../corelib/kernel/qcoreapplication:../../../corelib/kernel/qcoreapplication/qcoreapplication.pro:WIN32:
+# VERSION = "1.2.3.4"
+
+#### Keys ignored in scope 4:.:../../../corelib/kernel/qcoreapplication:../../../corelib/kernel/qcoreapplication/qcoreapplication.pro:else:
+# VERSION = "1.2.3"

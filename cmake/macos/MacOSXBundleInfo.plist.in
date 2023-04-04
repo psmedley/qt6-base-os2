@@ -29,9 +29,7 @@
 	<string>${MACOSX_BUNDLE_ICON_FILE}</string>
 
 	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
-	<key>CFBundleAllowMixedLocalizations</key>
-	<true/>
+	<string>English</string>
 
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>

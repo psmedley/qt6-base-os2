@@ -1,18 +1,23 @@
+# Generated from qurl.pro.
+
 #####################################################################
 ## tst_qurl Binary:
 #####################################################################
 
-qt_internal_add_benchmark(tst_bench_qurl
+qt_internal_add_benchmark(tst_qurl
     SOURCES
-        tst_bench_qurl.cpp
+        main.cpp
     PUBLIC_LIBRARIES
         Qt::Test
 )
 
+#### Keys ignored in scope 1:.:.:qurl.pro:<TRUE>:
+# TEMPLATE = "app"
+
 ## Scopes:
 #####################################################################
 
-qt_internal_extend_target(tst_bench_qurl CONDITION WIN32
+qt_internal_extend_target(tst_qurl CONDITION WIN32
     DEFINES
         _CRT_SECURE_NO_WARNINGS
 )

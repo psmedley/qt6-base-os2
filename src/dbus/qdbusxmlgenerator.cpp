@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtDBus module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qstringlist.h>
@@ -16,8 +52,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 extern Q_DBUS_EXPORT QString qDBusGenerateMetaObjectXml(QString interface, const QMetaObject *mo,
                                                        const QMetaObject *base, int flags);
 
@@ -25,28 +59,28 @@ static inline QString typeNameToXml(const char *typeName)
 {
     // ### copied from qtextdocument.cpp
     // ### move this into Qt Core at some point
-    const QLatin1StringView plain(typeName);
+    const QLatin1String plain(typeName);
     QString rich;
     rich.reserve(int(plain.size() * 1.1));
     for (int i = 0; i < plain.size(); ++i) {
-        if (plain.at(i) == u'<')
-            rich += "&lt;"_L1;
-        else if (plain.at(i) == u'>')
-            rich += "&gt;"_L1;
-        else if (plain.at(i) == u'&')
-            rich += "&amp;"_L1;
+        if (plain.at(i) == QLatin1Char('<'))
+            rich += QLatin1String("&lt;");
+        else if (plain.at(i) == QLatin1Char('>'))
+            rich += QLatin1String("&gt;");
+        else if (plain.at(i) == QLatin1Char('&'))
+            rich += QLatin1String("&amp;");
         else
             rich += plain.at(i);
     }
     return rich;
 }
 
-static inline QLatin1StringView accessAsString(bool read, bool write)
+static inline QLatin1String accessAsString(bool read, bool write)
 {
     if (read)
-        return write ? "readwrite"_L1 : "read"_L1 ;
+        return write ? QLatin1String("readwrite") : QLatin1String("read") ;
     else
-        return write ? "write"_L1 : ""_L1 ;
+        return write ? QLatin1String("write") : QLatin1String("") ;
 }
 
 // implement the D-Bus org.freedesktop.DBus.Introspectable interface
@@ -74,17 +108,17 @@ static QString generateInterfaceXml(const QMetaObject *mo, int flags, int method
             if (!signature)
                 continue;
 
-            retval += "    <property name=\"%1\" type=\"%2\" access=\"%3\""_L1
-                      .arg(QLatin1StringView(mp.name()),
-                           QLatin1StringView(signature),
+            retval += QLatin1String("    <property name=\"%1\" type=\"%2\" access=\"%3\"")
+                      .arg(QLatin1String(mp.name()),
+                           QLatin1String(signature),
                            accessAsString(mp.isReadable(), mp.isWritable()));
 
             if (!QDBusMetaType::signatureToMetaType(signature).isValid()) {
                 const char *typeName = type.name();
-                retval += ">\n      <annotation name=\"org.qtproject.QtDBus.QtTypeName\" value=\"%3\"/>\n    </property>\n"_L1
+                retval += QLatin1String(">\n      <annotation name=\"org.qtproject.QtDBus.QtTypeName\" value=\"%3\"/>\n    </property>\n")
                           .arg(typeNameToXml(typeName));
             } else {
-                retval += "/>\n"_L1;
+                retval += QLatin1String("/>\n");
             }
         }
     }
@@ -93,17 +127,14 @@ static QString generateInterfaceXml(const QMetaObject *mo, int flags, int method
     for (int i = methodOffset; i < mo->methodCount(); ++i) {
         QMetaMethod mm = mo->method(i);
 
-        bool isSignal = false;
-        bool isSlot = false;
+        bool isSignal;
         if (mm.methodType() == QMetaMethod::Signal)
             // adding a signal
             isSignal = true;
-        else if (mm.access() == QMetaMethod::Public && mm.methodType() == QMetaMethod::Slot)
-            isSlot = true;
-        else if (mm.access() == QMetaMethod::Public && mm.methodType() == QMetaMethod::Method)
-            ; // invokable, neither signal nor slot
+        else if (mm.access() == QMetaMethod::Public && (mm.methodType() == QMetaMethod::Slot || mm.methodType() == QMetaMethod::Method))
+            isSignal = false;
         else
-            continue;           // neither signal nor public method/slot
+            continue;           // neither signal nor public slot
 
         if (isSignal && !(flags & (QDBusConnection::ExportScriptableSignals |
                                    QDBusConnection::ExportNonScriptableSignals)))
@@ -126,12 +157,12 @@ static QString generateInterfaceXml(const QMetaObject *mo, int flags, int method
         if (typeId.isValid() && typeId.id() != QMetaType::Void) {
             const char *typeName = QDBusMetaType::typeToSignature(typeId);
             if (typeName) {
-                xml += "      <arg type=\"%1\" direction=\"out\"/>\n"_L1
+                xml += QLatin1String("      <arg type=\"%1\" direction=\"out\"/>\n")
                        .arg(typeNameToXml(typeName));
 
                 // do we need to describe this argument?
                 if (!QDBusMetaType::signatureToMetaType(typeName).isValid())
-                    xml += "      <annotation name=\"org.qtproject.QtDBus.QtTypeName.Out0\" value=\"%1\"/>\n"_L1
+                    xml += QLatin1String("      <annotation name=\"org.qtproject.QtDBus.QtTypeName.Out0\" value=\"%1\"/>\n")
                         .arg(typeNameToXml(QMetaType(typeId).name()));
             } else {
                 qWarning() << "Unsupported return type" << typeId.id() << typeId.name() << "in method" << mm.name();
@@ -151,7 +182,7 @@ static QString generateInterfaceXml(const QMetaObject *mo, int flags, int method
             qWarning() << "Skipped method" << mm.name() << ":" << qPrintable(errorMsg);
             continue;           // invalid form
         }
-        if (isSignal && inputCount + 1 != types.size())
+        if (isSignal && inputCount + 1 != types.count())
             continue;           // signal with output arguments?
         if (isSignal && types.at(inputCount) == QDBusMetaTypeId::message())
             continue;           // signal with QDBusMessage argument?
@@ -159,7 +190,7 @@ static QString generateInterfaceXml(const QMetaObject *mo, int flags, int method
             continue;           // cloned signal?
 
         int j;
-        for (j = 1; j < types.size(); ++j) {
+        for (j = 1; j < types.count(); ++j) {
             // input parameter for a slot or output for a signal
             if (types.at(j) == QDBusMetaTypeId::message()) {
                 isScriptable = true;
@@ -168,7 +199,7 @@ static QString generateInterfaceXml(const QMetaObject *mo, int flags, int method
 
             QString name;
             if (!names.at(j - 1).isEmpty())
-                name = "name=\"%1\" "_L1.arg(QLatin1StringView(names.at(j - 1)));
+                name = QLatin1String("name=\"%1\" ").arg(QLatin1String(names.at(j - 1)));
 
             bool isOutput = isSignal || j > inputCount;
 
@@ -180,7 +211,7 @@ static QString generateInterfaceXml(const QMetaObject *mo, int flags, int method
             if (!QDBusMetaType::signatureToMetaType(signature).isValid()) {
                 const char *typeName = QMetaType(types.at(j)).name();
                 xml += QString::fromLatin1("      <annotation name=\"org.qtproject.QtDBus.QtTypeName.%1%2\" value=\"%3\"/>\n")
-                       .arg(isOutput ? "Out"_L1 : "In"_L1)
+                       .arg(isOutput ? QLatin1String("Out") : QLatin1String("In"))
                        .arg(isOutput && !isSignal ? j - inputCount : j - 1)
                        .arg(typeNameToXml(typeName));
             }
@@ -189,21 +220,21 @@ static QString generateInterfaceXml(const QMetaObject *mo, int flags, int method
         int wantedMask;
         if (isScriptable)
             wantedMask = isSignal ? QDBusConnection::ExportScriptableSignals
-                                  : isSlot ? QDBusConnection::ExportScriptableSlots
-                                           : QDBusConnection::ExportScriptableInvokables;
+                                  : QDBusConnection::ExportScriptableSlots;
         else
             wantedMask = isSignal ? QDBusConnection::ExportNonScriptableSignals
-                                  : isSlot ? QDBusConnection::ExportNonScriptableSlots
-                                           : QDBusConnection::ExportNonScriptableInvokables;
+                                  : QDBusConnection::ExportNonScriptableSlots;
         if ((flags & wantedMask) != wantedMask)
             continue;
 
         if (qDBusCheckAsyncTag(mm.tag()))
             // add the no-reply annotation
-            xml += "      <annotation name=\"" ANNOTATION_NO_WAIT "\" value=\"true\"/>\n"_L1;
+            xml += QLatin1String("      <annotation name=\"" ANNOTATION_NO_WAIT "\""
+                                 " value=\"true\"/>\n");
 
         retval += xml;
-        retval += "    </%1>\n"_L1.arg(isSignal ? "signal"_L1 : "method"_L1);
+        retval += QLatin1String("    </%1>\n")
+                  .arg(isSignal ? QLatin1String("signal") : QLatin1String("method"));
     }
 
     return retval;
@@ -225,7 +256,7 @@ QString qDBusGenerateMetaObjectXml(QString interface, const QMetaObject *mo,
 
     if (xml.isEmpty())
         return QString();       // don't add an empty interface
-    return "  <interface name=\"%1\">\n%2  </interface>\n"_L1
+    return QLatin1String("  <interface name=\"%1\">\n%2  </interface>\n")
         .arg(interface, xml);
 }
 #if 0
@@ -236,30 +267,30 @@ QString qDBusGenerateMetaObjectXml(QString interface, const QMetaObject *mo, con
         // generate the interface name from the meta object
         int idx = mo->indexOfClassInfo(QCLASSINFO_DBUS_INTERFACE);
         if (idx >= mo->classInfoOffset()) {
-            interface = QLatin1StringView(mo->classInfo(idx).value());
+            interface = QLatin1String(mo->classInfo(idx).value());
         } else {
-            interface = QLatin1StringView(mo->className());
-            interface.replace("::"_L1, "."_L1);
+            interface = QLatin1String(mo->className());
+            interface.replace(QLatin1String("::"), QLatin1String("."));
 
-            if (interface.startsWith("QDBus"_L1)) {
-                interface.prepend("org.qtproject.QtDBus."_L1);
-            } else if (interface.startsWith(u'Q') &&
+            if (interface.startsWith(QLatin1String("QDBus"))) {
+                interface.prepend(QLatin1String("org.qtproject.QtDBus."));
+            } else if (interface.startsWith(QLatin1Char('Q')) &&
                        interface.length() >= 2 && interface.at(1).isUpper()) {
                 // assume it's Qt
-                interface.prepend("org.qtproject.Qt."_L1);
+                interface.prepend(QLatin1String("org.qtproject.Qt."));
             } else if (!QCoreApplication::instance()||
                        QCoreApplication::instance()->applicationName().isEmpty()) {
-                interface.prepend("local."_L1);
+                interface.prepend(QLatin1String("local."));
             } else {
-                interface.prepend(u'.').prepend(QCoreApplication::instance()->applicationName());
+                interface.prepend(QLatin1Char('.')).prepend(QCoreApplication::instance()->applicationName());
                 QStringList domainName =
-                    QCoreApplication::instance()->organizationDomain().split(u'.',
+                    QCoreApplication::instance()->organizationDomain().split(QLatin1Char('.'),
                                                                              Qt::SkipEmptyParts);
                 if (domainName.isEmpty())
-                    interface.prepend("local."_L1);
+                    interface.prepend(QLatin1String("local."));
                 else
                     for (int i = 0; i < domainName.count(); ++i)
-                        interface.prepend(u'.').prepend(domainName.at(i));
+                        interface.prepend(QLatin1Char('.')).prepend(domainName.at(i));
             }
         }
     }

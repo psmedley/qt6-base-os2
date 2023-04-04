@@ -8,6 +8,5 @@ qt_internal_add_test(tst_qreadwritelock
     SOURCES
         tst_qreadwritelock.cpp
     PUBLIC_LIBRARIES
-        Qt::CorePrivate
         Qt::TestPrivate
 )

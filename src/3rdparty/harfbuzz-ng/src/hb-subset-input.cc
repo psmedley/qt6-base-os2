@@ -26,21 +26,36 @@
 
 #include "hb-subset.hh"
 #include "hb-set.hh"
-#include "hb-utf.hh"
 
-
-hb_subset_input_t::hb_subset_input_t ()
+/**
+ * hb_subset_input_create_or_fail:
+ *
+ * Creates a new subset input object.
+ *
+ * Return value: (transfer full): New subset input, or %NULL if failed. Destroy
+ * with hb_subset_input_destroy().
+ *
+ * Since: 1.8.0
+ **/
+hb_subset_input_t *
+hb_subset_input_create_or_fail (void)
 {
-  for (auto& set : sets_iter ())
-    set = hb::shared_ptr<hb_set_t> (hb_set_create ());
+  hb_subset_input_t *input = hb_object_create<hb_subset_input_t>();
 
-  if (in_error ())
-    return;
+  if (unlikely (!input))
+    return nullptr;
 
-  flags = HB_SUBSET_FLAGS_DEFAULT;
+  input->unicodes = hb_set_create ();
+  input->glyphs = hb_set_create ();
+  input->name_ids = hb_set_create ();
+  hb_set_add_range (input->name_ids, 0, 6);
+  input->name_languages = hb_set_create ();
+  hb_set_add (input->name_languages, 0x0409);
+  input->layout_features = hb_set_create ();
+  input->drop_tables = hb_set_create ();
+  input->no_subset_tables = hb_set_create ();
 
-  hb_set_add_range (sets.name_ids, 0, 6);
-  hb_set_add (sets.name_languages, 0x0409);
+  input->flags = HB_SUBSET_FLAGS_DEFAULT;
 
   hb_tag_t default_drop_tables[] = {
     // Layout disabled by default
@@ -66,10 +81,11 @@ hb_subset_input_t::hb_subset_input_t ()
     HB_TAG ('S', 'i', 'l', 'f'),
     HB_TAG ('S', 'i', 'l', 'l'),
   };
-  sets.drop_tables->add_array (default_drop_tables, ARRAY_LENGTH (default_drop_tables));
+  input->drop_tables->add_array (default_drop_tables, ARRAY_LENGTH (default_drop_tables));
 
   hb_tag_t default_no_subset_tables[] = {
     HB_TAG ('a', 'v', 'a', 'r'),
+    HB_TAG ('f', 'v', 'a', 'r'),
     HB_TAG ('g', 'a', 's', 'p'),
     HB_TAG ('c', 'v', 't', ' '),
     HB_TAG ('f', 'p', 'g', 'm'),
@@ -78,9 +94,10 @@ hb_subset_input_t::hb_subset_input_t ()
     HB_TAG ('D', 'S', 'I', 'G'),
     HB_TAG ('M', 'V', 'A', 'R'),
     HB_TAG ('c', 'v', 'a', 'r'),
+    HB_TAG ('S', 'T', 'A', 'T'),
   };
-  sets.no_subset_tables->add_array (default_no_subset_tables,
-					 ARRAY_LENGTH (default_no_subset_tables));
+  input->no_subset_tables->add_array (default_no_subset_tables,
+				      ARRAY_LENGTH (default_no_subset_tables));
 
   //copied from _layout_features_groups in fonttools
   hb_tag_t default_layout_features[] = {
@@ -121,20 +138,7 @@ hb_subset_input_t::hb_subset_input_t ()
     HB_TAG ('r', 't', 'l', 'a'),
     HB_TAG ('r', 't', 'l', 'm'),
 
-    //random
-    HB_TAG ('r', 'a', 'n', 'd'),
-
-    //justify
-    HB_TAG ('j', 'a', 'l', 't'), // HarfBuzz doesn't use; others might
-
-    //private
-    HB_TAG ('H', 'a', 'r', 'f'),
-    HB_TAG ('H', 'A', 'R', 'F'),
-    HB_TAG ('B', 'u', 'z', 'z'),
-    HB_TAG ('B', 'U', 'Z', 'Z'),
-
-    //shapers
-
+    //Complex shapers
     //arabic
     HB_TAG ('i', 'n', 'i', 't'),
     HB_TAG ('m', 'e', 'd', 'i'),
@@ -182,35 +186,7 @@ hb_subset_input_t::hb_subset_input_t ()
     HB_TAG ('b', 'l', 'w', 'm'),
   };
 
-  sets.layout_features->add_array (default_layout_features, ARRAY_LENGTH (default_layout_features));
-
-  sets.layout_scripts->invert (); // Default to all scripts.
-}
-
-/**
- * hb_subset_input_create_or_fail:
- *
- * Creates a new subset input object.
- *
- * Return value: (transfer full): New subset input, or `NULL` if failed. Destroy
- * with hb_subset_input_destroy().
- *
- * Since: 1.8.0
- **/
-hb_subset_input_t *
-hb_subset_input_create_or_fail (void)
-{
-  hb_subset_input_t *input = hb_object_create<hb_subset_input_t>();
-
-  if (unlikely (!input))
-    return nullptr;
-
-  if (input->in_error ())
-  {
-    hb_subset_input_destroy (input);
-    return nullptr;
-  }
-
+  input->layout_features->add_array (default_layout_features, ARRAY_LENGTH (default_layout_features));
   return input;
 }
 
@@ -244,6 +220,14 @@ hb_subset_input_destroy (hb_subset_input_t *input)
 {
   if (!hb_object_destroy (input)) return;
 
+  hb_set_destroy (input->unicodes);
+  hb_set_destroy (input->glyphs);
+  hb_set_destroy (input->name_ids);
+  hb_set_destroy (input->name_languages);
+  hb_set_destroy (input->drop_tables);
+  hb_set_destroy (input->layout_features);
+  hb_set_destroy (input->no_subset_tables);
+
   hb_free (input);
 }
 
@@ -262,7 +246,7 @@ hb_subset_input_destroy (hb_subset_input_t *input)
 HB_EXTERN hb_set_t *
 hb_subset_input_unicode_set (hb_subset_input_t *input)
 {
-  return input->sets.unicodes;
+  return input->unicodes;
 }
 
 /**
@@ -279,31 +263,99 @@ hb_subset_input_unicode_set (hb_subset_input_t *input)
 HB_EXTERN hb_set_t *
 hb_subset_input_glyph_set (hb_subset_input_t *input)
 {
-  return input->sets.glyphs;
+  return input->glyphs;
 }
 
 /**
- * hb_subset_input_set:
+ * hb_subset_input_nameid_set:
  * @input: a #hb_subset_input_t object.
- * @set_type: a #hb_subset_sets_t set type.
  *
- * Gets the set of the specified type.
+ * Gets the set of name table name IDs to retain, the caller should modify the
+ * set as needed.
  *
- * Return value: (transfer none): pointer to the #hb_set_t of the specified type.
+ * Return value: (transfer none): pointer to the #hb_set_t of name IDs.
  *
- * Since: 2.9.1
+ * Since: 2.9.0
  **/
 HB_EXTERN hb_set_t *
-hb_subset_input_set (hb_subset_input_t *input, hb_subset_sets_t set_type)
+hb_subset_input_nameid_set (hb_subset_input_t *input)
 {
-  return input->sets_iter () [set_type];
+  return input->name_ids;
 }
+
+/**
+ * hb_subset_input_namelangid_set:
+ * @input: a #hb_subset_input_t object.
+ *
+ * Gets the set of name table language IDs to retain, the caller should modify
+ * the set as needed.
+ *
+ * Return value: (transfer none): pointer to the #hb_set_t of language IDs.
+ *
+ * Since: 2.9.0
+ **/
+HB_EXTERN hb_set_t *
+hb_subset_input_namelangid_set (hb_subset_input_t *input)
+{
+  return input->name_languages;
+}
+
+
+/**
+ * hb_subset_input_layout_features_set:
+ * @input: a #hb_subset_input_t object.
+ *
+ * Gets the set of layout feature tags to retain, the caller should modify the
+ * set as needed.
+ *
+ * Return value: (transfer none): pointer to the #hb_set_t of feature tags.
+ *
+ * Since: 2.9.0
+ **/
+HB_EXTERN hb_set_t *
+hb_subset_input_layout_features_set (hb_subset_input_t *input)
+{
+  return input->layout_features;
+}
+
+/**
+ * hb_subset_input_drop_tables_set:
+ * @input: a #hb_subset_input_t object.
+ *
+ * Gets the set of table tags to drop, the caller should modify the set as
+ * needed.
+ *
+ * Return value: (transfer none): pointer to the #hb_set_t of table tags.
+ *
+ * Since: 2.9.0
+ **/
+HB_EXTERN hb_set_t *
+hb_subset_input_drop_tables_set (hb_subset_input_t *input)
+{
+  return input->drop_tables;
+}
+
+/**
+ * hb_subset_input_no_subset_tables_set:
+ * @input: a #hb_subset_input_t object.
+ *
+ * Gets the set of table tags which specifies tables that should not be
+ * subsetted, the caller should modify the set as needed.
+ *
+ * Return value: (transfer none): pointer to the #hb_set_t of table tags.
+ *
+ * Since: 2.9.0
+ **/
+HB_EXTERN hb_set_t *
+hb_subset_input_no_subset_tables_set (hb_subset_input_t *input)
+{
+  return input->no_subset_tables;
+}
+
 
 /**
  * hb_subset_input_get_flags:
  * @input: a #hb_subset_input_t object.
- *
- * Gets all of the subsetting flags in the input object.
  *
  * Return value: the subsetting flags bit field.
  *
@@ -320,8 +372,8 @@ hb_subset_input_get_flags (hb_subset_input_t *input)
  * @input: a #hb_subset_input_t object.
  * @value: bit field of flags
  *
- * Sets all of the flags in the input object to the values specified by the bit
- * field.
+ * Set all of the flags in the input object to the values
+ * specified by the bit field.
  *
  * Since: 2.9.0
  **/
@@ -342,7 +394,7 @@ hb_subset_input_set_flags (hb_subset_input_t *input,
  *
  * Attaches a user-data key/data pair to the given subset input object.
  *
- * Return value: `true` if success, `false` otherwise
+ * Return value: %true if success, %false otherwise
  *
  * Since: 2.9.0
  **/
@@ -375,218 +427,132 @@ hb_subset_input_get_user_data (const hb_subset_input_t *input,
   return hb_object_get_user_data (input, key);
 }
 
-/**
- * hb_subset_input_keep_everything:
- * @input: a #hb_subset_input_t object
- *
- * Configure input object to keep everything in the font face.
- * That is, all Unicodes, glyphs, names, layout items,
- * glyph names, etc.
- *
- * The input can be tailored afterwards by the caller.
- *
- * Since: 7.0.0
- */
-void
-hb_subset_input_keep_everything (hb_subset_input_t *input)
+
+static void set_flag_value (hb_subset_input_t *input, hb_subset_flags_t flag, hb_bool_t value)
 {
-  const hb_subset_sets_t indices[] = {HB_SUBSET_SETS_UNICODE,
-				      HB_SUBSET_SETS_GLYPH_INDEX,
-				      HB_SUBSET_SETS_NAME_ID,
-				      HB_SUBSET_SETS_NAME_LANG_ID,
-				      HB_SUBSET_SETS_LAYOUT_FEATURE_TAG,
-				      HB_SUBSET_SETS_LAYOUT_SCRIPT_TAG};
-
-  for (auto idx : hb_iter (indices))
-  {
-    hb_set_t *set = hb_subset_input_set (input, idx);
-    hb_set_clear (set);
-    hb_set_invert (set);
-  }
-
-  // Don't drop any tables
-  hb_set_clear (hb_subset_input_set (input, HB_SUBSET_SETS_DROP_TABLE_TAG));
-
   hb_subset_input_set_flags (input,
-			     HB_SUBSET_FLAGS_NOTDEF_OUTLINE |
-			     HB_SUBSET_FLAGS_GLYPH_NAMES |
-			     HB_SUBSET_FLAGS_NO_PRUNE_UNICODE_RANGES |
-                             HB_SUBSET_FLAGS_PASSTHROUGH_UNRECOGNIZED);
+                             value
+                             ? hb_subset_input_get_flags (input) | flag
+                             : hb_subset_input_get_flags (input) & ~flag);
 }
 
-#ifndef HB_NO_VAR
-/**
- * hb_subset_input_pin_axis_to_default: (skip)
- * @input: a #hb_subset_input_t object.
- * @face: a #hb_face_t object.
- * @axis_tag: Tag of the axis to be pinned
- *
- * Pin an axis to its default location in the given subset input object.
- *
- * All axes in a font must be pinned. Additionally, `CFF2` table, if present,
- * will be de-subroutinized.
- *
- * Return value: `true` if success, `false` otherwise
- *
- * Since: 6.0.0
- **/
-HB_EXTERN hb_bool_t
-hb_subset_input_pin_axis_to_default (hb_subset_input_t  *input,
-                                     hb_face_t          *face,
-                                     hb_tag_t            axis_tag)
+void
+hb_subset_input_set_retain_all_features (hb_subset_input_t *subset_input,
+                                         hb_bool_t value)
 {
-  hb_ot_var_axis_info_t axis_info;
-  if (!hb_ot_var_find_axis_info (face, axis_tag, &axis_info))
-    return false;
-
-  return input->axes_location.set (axis_tag, axis_info.default_value);
+  return set_flag_value (subset_input,
+                         HB_SUBSET_FLAGS_RETAIN_ALL_FEATURES,
+                         value);
 }
 
-/**
- * hb_subset_input_pin_axis_location: (skip)
- * @input: a #hb_subset_input_t object.
- * @face: a #hb_face_t object.
- * @axis_tag: Tag of the axis to be pinned
- * @axis_value: Location on the axis to be pinned at
- *
- * Pin an axis to a fixed location in the given subset input object.
- *
- * All axes in a font must be pinned. Additionally, `CFF2` table, if present,
- * will be de-subroutinized.
- *
- * Return value: `true` if success, `false` otherwise
- *
- * Since: 6.0.0
- **/
-HB_EXTERN hb_bool_t
-hb_subset_input_pin_axis_location (hb_subset_input_t  *input,
-                                   hb_face_t          *face,
-                                   hb_tag_t            axis_tag,
-                                   float               axis_value)
+hb_bool_t
+hb_subset_input_get_retain_all_features (hb_subset_input_t *subset_input)
 {
-  hb_ot_var_axis_info_t axis_info;
-  if (!hb_ot_var_find_axis_info (face, axis_tag, &axis_info))
-    return false;
-
-  float val = hb_clamp(axis_value, axis_info.min_value, axis_info.max_value);
-  return input->axes_location.set (axis_tag, val);
+  return (bool) (hb_subset_input_get_flags (subset_input) & HB_SUBSET_FLAGS_RETAIN_ALL_FEATURES);
 }
-#endif
 
-/**
- * hb_subset_preprocess:
- * @source: a #hb_face_t object.
- *
- * Preprocesses the face and attaches data that will be needed by the
- * subsetter. Future subsetting operations can then use the precomputed data
- * to speed up the subsetting operation.
- *
- * See [subset-preprocessing](https://github.com/harfbuzz/harfbuzz/blob/main/docs/subset-preprocessing.md)
- * for more information.
- *
- * Note: the preprocessed face may contain sub-blobs that reference the memory
- * backing the source #hb_face_t. Therefore in the case that this memory is not
- * owned by the source face you will need to ensure that memory lives
- * as long as the returned #hb_face_t.
- *
- * Returns: a new #hb_face_t.
- *
- * Since: 6.0.0
- **/
-
-HB_EXTERN hb_face_t *
-hb_subset_preprocess (hb_face_t *source)
+void
+hb_subset_input_set_drop_hints (hb_subset_input_t *subset_input,
+				hb_bool_t drop_hints)
 {
-  hb_subset_input_t* input = hb_subset_input_create_or_fail ();
-  if (!input)
-    return hb_face_reference (source);
-
-  hb_subset_input_keep_everything (input);
-
-  input->attach_accelerator_data = true;
-
-  // Always use long loca in the preprocessed version. This allows
-  // us to store the glyph bytes unpadded which allows the future subset
-  // operation to run faster by skipping the trim padding step.
-  input->force_long_loca = true;
-
-  hb_face_t* new_source = hb_subset_or_fail (source, input);
-  hb_subset_input_destroy (input);
-
-  if (!new_source) {
-    DEBUG_MSG (SUBSET, nullptr, "Preprocessing failed due to subset failure.");
-    return hb_face_reference (source);
-  }
-
-  return new_source;
+  return set_flag_value (subset_input,
+                         HB_SUBSET_FLAGS_NO_HINTING,
+                         drop_hints);
 }
 
-#ifdef HB_EXPERIMENTAL_API
-/**
- * hb_subset_input_override_name_table:
- * @input: a #hb_subset_input_t object.
- * @name_id: name_id of a nameRecord
- * @platform_id: platform ID of a nameRecord
- * @encoding_id: encoding ID of a nameRecord
- * @language_id: language ID of a nameRecord
- * @name_str: pointer to name string new value or null to indicate should remove
- * @str_len: the size of @name_str, or -1 if it is `NULL`-terminated
- *
- * Override the name string of the NameRecord identified by name_id,
- * platform_id, encoding_id and language_id. If a record with that name_id
- * doesn't exist, create it and insert to the name table.
- *
- * Note: for mac platform, we only support name_str with all ascii characters,
- * name_str with non-ascii characters will be ignored.
- *
- * XSince: EXPERIMENTAL
- **/
-HB_EXTERN hb_bool_t
-hb_subset_input_override_name_table (hb_subset_input_t  *input,
-                                     hb_ot_name_id_t     name_id,
-                                     unsigned            platform_id,
-                                     unsigned            encoding_id,
-                                     unsigned            language_id,
-                                     const char         *name_str,
-                                     int                 str_len /* -1 means nul-terminated */)
+hb_bool_t
+hb_subset_input_get_drop_hints (hb_subset_input_t *subset_input)
 {
-  if (!name_str)
-  {
-    str_len = 0;
-  }
-  else if (str_len == -1)
-  {
-      str_len = strlen (name_str);
-  }
-
-  hb_bytes_t name_bytes (nullptr, 0);
-  if (str_len)
-  {
-    if (platform_id == 1)
-    {
-      const uint8_t *src = reinterpret_cast<const uint8_t*> (name_str);
-      const uint8_t *src_end = src + str_len;
-
-      hb_codepoint_t unicode;
-      const hb_codepoint_t replacement = HB_BUFFER_REPLACEMENT_CODEPOINT_DEFAULT;
-      while (src < src_end)
-      {
-        src = hb_utf8_t::next (src, src_end, &unicode, replacement);
-        if (unicode >= 0x0080u)
-        {
-          printf ("Non-ascii character detected, ignored...This API supports acsii characters only for mac platform\n");
-          return false;
-        }
-      }
-    }
-    char *override_name = (char *) hb_malloc (str_len);
-    if (unlikely (!override_name)) return false;
-
-    hb_memcpy (override_name, name_str, str_len);
-    name_bytes = hb_bytes_t (override_name, str_len);
-  }
-  input->name_table_overrides.set (hb_ot_name_record_ids_t (platform_id, encoding_id, language_id, name_id), name_bytes);
-  return true;
+  return (bool) (hb_subset_input_get_flags (subset_input) & HB_SUBSET_FLAGS_NO_HINTING);
 }
 
-#endif
+void
+hb_subset_input_set_desubroutinize (hb_subset_input_t *subset_input,
+				    hb_bool_t desubroutinize)
+{
+  return set_flag_value (subset_input,
+                         HB_SUBSET_FLAGS_DESUBROUTINIZE,
+                         desubroutinize);
+}
+
+hb_bool_t
+hb_subset_input_get_desubroutinize (hb_subset_input_t *subset_input)
+{
+  return (bool) (hb_subset_input_get_flags (subset_input) & HB_SUBSET_FLAGS_DESUBROUTINIZE);
+}
+
+void
+hb_subset_input_set_retain_gids (hb_subset_input_t *subset_input,
+				 hb_bool_t retain_gids)
+{
+  return set_flag_value (subset_input,
+                         HB_SUBSET_FLAGS_RETAIN_GIDS,
+                         retain_gids);
+}
+
+hb_bool_t
+hb_subset_input_get_retain_gids (hb_subset_input_t *subset_input)
+{
+  return (bool) (hb_subset_input_get_flags (subset_input) & HB_SUBSET_FLAGS_RETAIN_GIDS);
+}
+
+void
+hb_subset_input_set_name_legacy (hb_subset_input_t *subset_input,
+				 hb_bool_t name_legacy)
+{
+  return set_flag_value (subset_input,
+                         HB_SUBSET_FLAGS_NAME_LEGACY,
+                         name_legacy);
+}
+
+hb_bool_t
+hb_subset_input_get_name_legacy (hb_subset_input_t *subset_input)
+{
+  return (bool) (hb_subset_input_get_flags (subset_input) & HB_SUBSET_FLAGS_NAME_LEGACY);
+}
+
+void
+hb_subset_input_set_overlaps_flag (hb_subset_input_t *subset_input,
+                                   hb_bool_t overlaps_flag)
+{
+  return set_flag_value (subset_input,
+                         HB_SUBSET_FLAGS_SET_OVERLAPS_FLAG,
+                         overlaps_flag);
+}
+
+hb_bool_t
+hb_subset_input_get_overlaps_flag (hb_subset_input_t *subset_input)
+{
+  return (bool) (hb_subset_input_get_flags (subset_input) & HB_SUBSET_FLAGS_SET_OVERLAPS_FLAG);
+}
+
+void
+hb_subset_input_set_notdef_outline (hb_subset_input_t *subset_input,
+                                    hb_bool_t notdef_outline)
+{
+  return set_flag_value (subset_input,
+                         HB_SUBSET_FLAGS_NOTDEF_OUTLINE,
+                         notdef_outline);
+}
+
+hb_bool_t
+hb_subset_input_get_notdef_outline (hb_subset_input_t *subset_input)
+{
+  return (bool) (hb_subset_input_get_flags (subset_input) & HB_SUBSET_FLAGS_NOTDEF_OUTLINE);
+}
+
+void
+hb_subset_input_set_no_prune_unicode_ranges (hb_subset_input_t *subset_input,
+                                             hb_bool_t no_prune_unicode_ranges)
+{
+  return set_flag_value (subset_input,
+                         HB_SUBSET_FLAGS_NO_PRUNE_UNICODE_RANGES,
+                         no_prune_unicode_ranges);
+}
+
+
+hb_bool_t
+hb_subset_input_get_no_prune_unicode_ranges (hb_subset_input_t *subset_input)
+{
+  return (bool) (hb_subset_input_get_flags (subset_input) & HB_SUBSET_FLAGS_NO_PRUNE_UNICODE_RANGES);
+}

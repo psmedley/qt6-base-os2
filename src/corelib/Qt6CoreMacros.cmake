@@ -36,6 +36,8 @@
 #
 ######################################
 
+include(CMakeParseArguments)
+
 set(__qt_core_macros_module_base_dir "${CMAKE_CURRENT_LIST_DIR}")
 
 # macro used to create the names of output files preserving relative dirs
@@ -128,8 +130,8 @@ function(_qt_internal_create_moc_command infile outfile moc_flags moc_options
         set(targetincludes "$<TARGET_PROPERTY:${moc_target},INCLUDE_DIRECTORIES>")
         set(targetdefines "$<TARGET_PROPERTY:${moc_target},COMPILE_DEFINITIONS>")
 
-        set(targetincludes "$<$<BOOL:${targetincludes}>:-I$<JOIN:$<REMOVE_DUPLICATES:${targetincludes}>,\n-I>\n>")
-        set(targetdefines "$<$<BOOL:${targetdefines}>:-D$<JOIN:$<REMOVE_DUPLICATES:${targetdefines}>,\n-D>\n>")
+        set(targetincludes "$<$<BOOL:${targetincludes}>:-I$<JOIN:${targetincludes},\n-I>\n>")
+        set(targetdefines "$<$<BOOL:${targetdefines}>:-D$<JOIN:${targetdefines},\n-D>\n>")
 
         file (GENERATE
             OUTPUT ${_moc_parameters_file}
@@ -289,10 +291,6 @@ function(qt6_add_binary_resources target )
     set(rcc_options ${_RCC_OPTIONS})
     set(rcc_destination ${_RCC_DESTINATION})
 
-    if(NOT QT_FEATURE_zstd)
-        list(APPEND rcc_options "--no-zstd")
-    endif()
-
     if(NOT rcc_destination)
         set(rcc_destination ${CMAKE_CURRENT_BINARY_DIR}/${target}.rcc)
     endif()
@@ -357,10 +355,6 @@ function(qt6_add_resources outfiles )
             message(WARNING "Use qt6_add_binary_resources for binary option")
         endif()
 
-        if(NOT QT_FEATURE_zstd)
-            list(APPEND rcc_options "--no-zstd")
-        endif()
-
         foreach(it ${rcc_files})
             get_filename_component(outfilename ${it} NAME_WE)
             get_filename_component(infile ${it} ABSOLUTE)
@@ -375,11 +369,8 @@ function(qt6_add_resources outfiles )
                                MAIN_DEPENDENCY ${infile}
                                DEPENDS ${_rc_depends} "${_out_depends}" ${QT_CMAKE_EXPORT_NAMESPACE}::rcc
                                VERBATIM)
-            set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOMOC ON
-                                                              SKIP_AUTOUIC ON
-                                                              SKIP_UNITY_BUILD_INCLUSION ON
-                                                              SKIP_PRECOMPILE_HEADERS ON
-                                                              )
+            set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOMOC ON)
+            set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOUIC ON)
             list(APPEND ${outfiles} ${outfile})
         endforeach()
         set(${outfiles} ${${outfiles}} PARENT_SCOPE)
@@ -408,18 +399,6 @@ endif()
 # qt6_add_big_resources(outfiles inputfile ... )
 
 function(qt6_add_big_resources outfiles )
-    if(CMAKE_GENERATOR STREQUAL "Xcode" AND IOS)
-        message(WARNING
-            "Due to CMake limitations, qt6_add_big_resources can't be used when building for iOS. "
-            "See https://bugreports.qt.io/browse/QTBUG-103497 for details. "
-            "Falling back to using qt6_add_resources. "
-            "Consider using qt6_add_resources directly to silence this warning."
-        )
-        qt6_add_resources(${ARGV})
-        set(${outfiles} ${${outfiles}} PARENT_SCOPE)
-        return()
-    endif()
-
     if (CMAKE_VERSION VERSION_LESS 3.9)
         message(FATAL_ERROR, "qt6_add_big_resources requires CMake 3.9 or newer")
     endif()
@@ -435,10 +414,6 @@ function(qt6_add_big_resources outfiles )
 
     if("${rcc_options}" MATCHES "-binary")
         message(WARNING "Use qt6_add_binary_resources for binary option")
-    endif()
-
-    if(NOT QT_FEATURE_zstd)
-        list(APPEND rcc_options "--no-zstd")
     endif()
 
     foreach(it ${rcc_files})
@@ -642,14 +617,15 @@ function(_qt_internal_finalize_executable target)
         endif()
     endif()
 
+    if(ANDROID)
+        qt6_android_generate_deployment_settings("${target}")
+        qt6_android_add_apk_target("${target}")
+    endif()
     if(EMSCRIPTEN)
-        _qt_internal_wasm_add_target_helpers("${target}")
-        _qt_internal_add_wasm_extra_exported_methods("${target}")
+        qt_wasm_add_target_helpers("${target}")
     endif()
     if(IOS)
         _qt_internal_finalize_ios_app("${target}")
-    elseif(APPLE)
-        _qt_internal_finalize_macos_app("${target}")
     endif()
 
     # For finalizer mode of plugin importing to work safely, we need to know the list of Qt
@@ -704,6 +680,252 @@ function(qt6_finalize_target target)
     if(target_type STREQUAL "EXECUTABLE" OR is_android_executable)
         _qt_internal_finalize_executable(${ARGV})
     endif()
+endfunction()
+
+function(_qt_internal_handle_ios_launch_screen target)
+    # Check if user provided a launch screen path via a variable.
+    set(launch_screen "")
+
+    # This variable is currently in Technical Preview.
+    if(QT_IOS_LAUNCH_SCREEN)
+        set(launch_screen "${QT_IOS_LAUNCH_SCREEN}")
+    endif()
+
+    # Check if user provided a launch screen path via a target property.
+    if(NOT launch_screen)
+
+        # This property is currently in Technical Preview.
+        get_target_property(launch_screen_from_prop "${target}" QT_IOS_LAUNCH_SCREEN)
+        if(launch_screen_from_prop)
+            set(launch_screen "${launch_screen_from_prop}")
+        endif()
+    endif()
+
+    # If user hasn't provided a launch screen path, use a copy of the one qmake uses.
+    # It needs to be a copy because configure_file can't handle all the escaped double quotes.
+    if(NOT launch_screen AND NOT QT_NO_SET_IOS_LAUNCH_SCREEN)
+        set(launch_screen "LaunchScreen.storyboard")
+        set(launch_screen
+            "${__qt_internal_cmake_ios_support_files_path}/${launch_screen}")
+    endif()
+
+    # Save the name of the launch screen in an internal cache var, so it is added as a
+    # UILaunchStoryboardName entry in the generated Info.plist.
+    # This is the only sensible but dirty way to set up a variable, so that CMake's internal
+    # configure_file call for Info.plist picks it up.
+    # Unfortunately CMake does not provide a way of setting a regular non-cache variable in a
+    # directory scope from within a nested function call.
+    # This means that the behavior below will only work if there's one single executable in the
+    # project.
+    # FIXME: Figure out if there's a better way of doing this.
+    #        Perhaps we should give up on using CMake's Info.plist mechanism and just call
+    #        configure_file ourselves.
+    if(launch_screen)
+        if(NOT IS_ABSOLUTE "${launch_screen}")
+            message(FATAL_ERROR
+                "Provided launch screen value should be an absolute path: '${launch_screen}'")
+        endif()
+
+        if(NOT EXISTS "${launch_screen}")
+            message(FATAL_ERROR
+                "Provided launch screen file does not exist: '${launch_screen}'")
+        endif()
+
+        get_filename_component(launch_screen_name "${launch_screen}" NAME)
+        set(QT_INTERNAL_IOS_LAUNCH_SCREEN_PLIST_ENTRY "${launch_screen_name}" CACHE INTERNAL "")
+    endif()
+
+    if(launch_screen AND NOT QT_NO_ADD_IOS_LAUNCH_SCREEN_TO_BUNDLE)
+        # Configure the file and place it in the build dir.
+        set(launch_screen_in_path "${launch_screen}")
+
+        string(MAKE_C_IDENTIFIER "${target}" target_identifier)
+        set(launch_screen_out_dir
+            "${CMAKE_CURRENT_BINARY_DIR}/qt_story_boards/${target_identifier}")
+
+        set(launch_screen_out_path
+            "${launch_screen_out_dir}/${launch_screen_name}")
+
+        file(MAKE_DIRECTORY "${launch_screen_out_dir}")
+
+        set(QT_IOS_LAUNCH_SCREEN_TEXT "${target}")
+        configure_file(
+            "${launch_screen_in_path}"
+            "${launch_screen_out_path}"
+            @ONLY
+        )
+
+        # Add it as a source file, otherwise CMake doesn't consider it a resource.
+        target_sources("${target}" PRIVATE "${launch_screen_out_path}")
+
+        # Ensure Xcode copies the file to the app bundle.
+        set_property(TARGET "${target}" APPEND PROPERTY RESOURCE "${launch_screen_out_path}")
+    endif()
+endfunction()
+
+function(_qt_internal_find_ios_development_team_id out_var)
+    get_property(team_id GLOBAL PROPERTY _qt_internal_ios_development_team_id)
+    get_property(team_id_computed GLOBAL PROPERTY _qt_internal_ios_development_team_id_computed)
+    if(team_id_computed)
+        # Just in case if the value is non-empty but still booly FALSE.
+        if(NOT team_id)
+            set(team_id "")
+        endif()
+        set("${out_var}" "${team_id}" PARENT_SCOPE)
+        return()
+    endif()
+
+    set_property(GLOBAL PROPERTY _qt_internal_ios_development_team_id_computed "TRUE")
+
+    set(home_dir "$ENV{HOME}")
+    set(xcode_preferences_path "${home_dir}/Library/Preferences/com.apple.dt.Xcode.plist")
+
+    # Extract the first account name (email) from the user's Xcode preferences
+    message(DEBUG "Trying to extract an Xcode development team id from '${xcode_preferences_path}'")
+    execute_process(COMMAND "/usr/libexec/PlistBuddy"
+                            -x -c "print IDEProvisioningTeams" "${xcode_preferences_path}"
+                    OUTPUT_VARIABLE teams_xml
+                    ERROR_VARIABLE plist_error)
+    if(teams_xml AND NOT plist_error)
+        string(REPLACE "\n" ";" teams_xml_lines "${teams_xml}")
+        foreach(xml_line ${teams_xml_lines})
+            if(xml_line MATCHES "<key>(.+)</key>")
+                set(first_account "${CMAKE_MATCH_1}")
+                string(STRIP "${first_account}" first_account)
+                break()
+            endif()
+        endforeach()
+    endif()
+
+    if(NOT first_account)
+        message(DEBUG "Failed to extract an Xcode development team id.")
+        return()
+    endif()
+
+    # Extract the first team ID
+    execute_process(COMMAND "/usr/libexec/PlistBuddy"
+                            -c "print IDEProvisioningTeams:${first_account}:0:teamID"
+                            "${xcode_preferences_path}"
+                    OUTPUT_VARIABLE team_id
+                    ERROR_VARIABLE team_id_error)
+    if(team_id AND NOT team_id_error)
+        message(DEBUG "Successfully extracted the first encountered Xcode development team id.")
+        string(STRIP "${team_id}" team_id)
+        set_property(GLOBAL PROPERTY _qt_internal_ios_development_team_id "${team_id}")
+        set("${out_var}" "${team_id}" PARENT_SCOPE)
+    else()
+        set("${out_var}" "" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(_qt_internal_get_ios_bundle_identifier_prefix out_var)
+    get_property(prefix GLOBAL PROPERTY _qt_internal_ios_bundle_identifier_prefix)
+    get_property(prefix_computed GLOBAL PROPERTY
+                 _qt_internal_ios_bundle_identifier_prefix_computed)
+    if(prefix_computed)
+        # Just in case if the value is non-empty but still booly FALSE.
+        if(NOT prefix)
+            set(prefix "")
+        endif()
+        set("${out_var}" "${prefix}" PARENT_SCOPE)
+        return()
+    endif()
+
+    set_property(GLOBAL PROPERTY _qt_internal_ios_bundle_identifier_prefix_computed "TRUE")
+
+    set(home_dir "$ENV{HOME}")
+    set(xcode_preferences_path "${home_dir}/Library/Preferences/com.apple.dt.Xcode.plist")
+
+    message(DEBUG "Trying to extract the default bundle identifier prefix from Xcode preferences.")
+    execute_process(COMMAND "/usr/libexec/PlistBuddy"
+                            -c "print IDETemplateOptions:bundleIdentifierPrefix"
+                            "${xcode_preferences_path}"
+                    OUTPUT_VARIABLE prefix
+                    ERROR_VARIABLE prefix_error)
+    if(prefix AND NOT prefix_error)
+        message(DEBUG "Successfully extracted the default bundle indentifier prefix.")
+        string(STRIP "${prefix}" prefix)
+    else()
+        message(DEBUG "Failed to extract the default bundle indentifier prefix.")
+    endif()
+
+    if(prefix AND NOT prefix_error)
+        set_property(GLOBAL PROPERTY _qt_internal_ios_bundle_identifier_prefix "${prefix}")
+        set("${out_var}" "${prefix}" PARENT_SCOPE)
+    else()
+        set("${out_var}" "" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(_qt_internal_get_default_ios_bundle_identifier out_var)
+    _qt_internal_get_ios_bundle_identifier_prefix(prefix)
+    if(NOT prefix)
+        set(prefix "com.yourcompany")
+    endif()
+    set("${out_var}" "${prefix}.\${PRODUCT_NAME:rfc1034identifier}" PARENT_SCOPE)
+endfunction()
+
+function(_qt_internal_set_placeholder_apple_bundle_version target)
+    # If user hasn't provided neither a bundle version nor a bundle short version string for the
+    # app, set a placeholder value for both which will add them to the generated Info.plist file.
+    # This is required so that the app launches in the simulator (but apparently not for running
+    # on-device).
+    get_target_property(bundle_version "${target}" MACOSX_BUNDLE_BUNDLE_VERSION)
+    get_target_property(bundle_short_version "${target}" MACOSX_BUNDLE_SHORT_VERSION_STRING)
+
+    if(NOT MACOSX_BUNDLE_BUNDLE_VERSION AND
+       NOT MACOSX_BUNDLE_SHORT_VERSION_STRING AND
+       NOT bundle_version AND
+       NOT bundle_short_version AND
+       NOT QT_NO_SET_XCODE_BUNDLE_VERSION
+     )
+         set(bundle_version "0.0.1")
+         set(bundle_short_version "0.0.1")
+         set_target_properties("${target}"
+                               PROPERTIES
+                               MACOSX_BUNDLE_BUNDLE_VERSION "${bundle_version}"
+                               MACOSX_BUNDLE_SHORT_VERSION_STRING "${bundle_short_version}"
+                               )
+    endif()
+endfunction()
+
+function(_qt_internal_finalize_ios_app target)
+    # If user hasn't provided a development team id, try to find the first one specified
+    # in the Xcode preferences.
+    if(NOT CMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM AND NOT QT_NO_SET_XCODE_DEVELOPMENT_TEAM_ID)
+        get_target_property(existing_team_id "${target}" XCODE_ATTRIBUTE_DEVELOPMENT_TEAM)
+        if(NOT existing_team_id)
+            _qt_internal_find_ios_development_team_id(team_id)
+            set_target_properties("${target}"
+                                  PROPERTIES XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${team_id}")
+        endif()
+    endif()
+
+    # If user hasn't provided a bundle identifier for the app, get a default identifier
+    # using the default bundle prefix from Xcode preferences and add it to the generated
+    # Info.plist file.
+    if(NOT MACOSX_BUNDLE_GUI_IDENTIFIER AND NOT QT_NO_SET_XCODE_BUNDLE_IDENTIFIER)
+        get_target_property(existing_id "${target}" MACOSX_BUNDLE_GUI_IDENTIFIER)
+        if(NOT existing_id)
+            _qt_internal_get_default_ios_bundle_identifier(bundle_id)
+            set_target_properties("${target}"
+                                  PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER "${bundle_id}")
+        endif()
+    endif()
+
+    # Reuse the same bundle identifier for the Xcode property.
+    if(NOT CMAKE_XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
+            AND NOT QT_NO_SET_XCODE_BUNDLE_IDENTIFIER)
+        get_target_property(existing_id "${target}" XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER)
+        if(NOT existing_id)
+            set_target_properties("${target}"
+                                  PROPERTIES XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
+                                  "${bundle_id}")
+        endif()
+    endif()
+
+    _qt_internal_handle_ios_launch_screen("${target}")
+    _qt_internal_set_placeholder_apple_bundle_version("${target}")
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
@@ -995,7 +1217,6 @@ function(qt6_extract_metatypes target)
                     ${multi_config_args}
                 COMMENT "Running AUTOMOC file extraction for target ${target}"
                 COMMAND_EXPAND_LISTS
-                VERBATIM
             )
 
         endif()
@@ -1057,7 +1278,6 @@ function(qt6_extract_metatypes target)
             ${metatypes_file_gen}
             ${metatypes_file}
         COMMENT "Running moc --collect-json for target ${target}"
-        VERBATIM
     )
 
     # We can't rely on policy CMP0118 since user project controls it
@@ -1366,7 +1586,6 @@ END
             add_custom_command(OUTPUT "${output}"
                 DEPENDS "${input}"
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different "${input}" "${output}"
-                VERBATIM
             )
             # We can't rely on policy CMP0118 since user project controls it
             set_source_files_properties(${output} ${scope_args} PROPERTIES
@@ -1593,19 +1812,6 @@ function(_qt_internal_expose_source_file_to_ide target file)
     else()
         set_property(TARGET ${ide_target} APPEND PROPERTY SOURCES "${file}")
     endif()
-
-    set(scope_args)
-    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
-        set(scope_args TARGET_DIRECTORY "${target}")
-    endif()
-    get_source_file_property(
-        target_dependency "${file}" ${scope_args} _qt_resource_target_dependency)
-    if(target_dependency)
-        if(NOT TARGET "${target_dependency}")
-            message(FATAL_ERROR "Target dependency on source file ${file} is not a cmake target.")
-        endif()
-        add_dependencies(${ide_target} ${target_dependency})
-    endif()
 endfunction()
 
 #
@@ -1632,18 +1838,7 @@ function(_qt_internal_process_resource target resourceName)
     string(REPLACE "/" "_" resourceName ${resourceName})
     string(REPLACE "." "_" resourceName ${resourceName})
 
-    set(resource_files "")
-    # Strip the ending slashes from the file_path. If paths contain slashes in the end
-    # set/get source properties works incorrect and may have the same QT_RESOURCE_ALIAS
-    # for two different paths. See https://gitlab.kitware.com/cmake/cmake/-/issues/23212
-    # for details.
-    foreach(file_path IN LISTS rcc_FILES)
-        if(file_path MATCHES "(.+)/$")
-            set(file_path "${CMAKE_MATCH_1}")
-        endif()
-        list(APPEND resource_files ${file_path})
-    endforeach()
-
+    set(resource_files ${rcc_FILES})
     if(NOT "${rcc_BASE}" STREQUAL "")
         get_filename_component(abs_base "${rcc_BASE}" ABSOLUTE)
         foreach(file_path IN LISTS resource_files)
@@ -1703,26 +1898,14 @@ function(_qt_internal_process_resource target resourceName)
         string(APPEND qrcContents "${file}</file>\n")
         list(APPEND files "${file}")
 
-        set(scope_args)
-        if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
-            set(scope_args TARGET_DIRECTORY ${target})
-        endif()
-        get_source_file_property(
-            target_dependency ${file} ${scope_args} _qt_resource_target_dependency)
-
-        # The target dependency code path does not take care of rebuilds when ${file}
-        # is touched. Limit its usage to the Xcode generator to avoid the Xcode common
-        # dependency issue.
-        # TODO: Figure out how to avoid the issue on Xcode, while also enabling proper
-        # dependency tracking when ${file} is touched.
-        if(target_dependency AND CMAKE_GENERATOR STREQUAL "Xcode")
-            if(NOT TARGET ${target_dependency})
-                message(FATAL_ERROR
-                        "Target dependency on resource file ${file} is not a cmake target.")
+        get_source_file_property(target_dependency ${file} QT_RESOURCE_TARGET_DEPENDENCY)
+        if (NOT target_dependency)
+            list(APPEND resource_dependencies ${file})
+        else()
+            if (NOT TARGET ${target_dependency})
+                message(FATAL_ERROR "Target dependency on resource file ${file} is not a cmake target.")
             endif()
             list(APPEND resource_dependencies ${target_dependency})
-        else()
-            list(APPEND resource_dependencies ${file})
         endif()
         _qt_internal_expose_source_file_to_ide(${target} "${file}")
     endforeach()
@@ -1794,8 +1977,6 @@ function(_qt_internal_process_resource target resourceName)
         set_source_files_properties(${generatedOutfile} ${scope_args} PROPERTIES
             SKIP_AUTOGEN TRUE
             GENERATED TRUE
-            SKIP_UNITY_BUILD_INCLUSION TRUE
-            SKIP_PRECOMPILE_HEADERS TRUE
         )
         get_target_property(target_source_dir ${target} SOURCE_DIR)
         if(NOT target_source_dir STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -1841,10 +2022,6 @@ function(qt6_add_plugin target)
     list(APPEND single_args CLASSNAME)
 
     cmake_parse_arguments(PARSE_ARGV 1 arg "${opt_args}" "${single_args}" "${multi_args}")
-
-    if (arg_UNPARSED_ARGUMENTS)
-        message(AUTHOR_WARNING "Unexpected arguments: ${arg_UNPARSED_ARGUMENTS}. If these are source files, consider using target_sources() instead.")
-    endif()
 
     # Handle the inconsistent CLASSNAME/CLASS_NAME keyword naming between commands
     if(arg_CLASSNAME)
@@ -2098,7 +2275,6 @@ macro(_qt_internal_override_example_install_dir_to_dot)
     # to CMAKE_INSTALL_PREFIX.
     if(QT_INTERNAL_SET_EXAMPLE_INSTALL_DIR_TO_DOT)
         set(INSTALL_EXAMPLEDIR ".")
-        set(_qt_internal_example_dir_set_to_dot TRUE)
     endif()
 endmacro()
 
@@ -2126,6 +2302,30 @@ function(_qt_internal_apply_strict_cpp target)
                 OBJCXX_EXTENSIONS OFF)
         endif()
     endif()
+endfunction()
+
+# Wraps a tool command with a script that contains the necessary environment for the tool to run
+# correctly.
+# _qt_internal_wrap_tool_command(var <SET|APPEND> <command> [args...])
+# Arguments:
+#    APPEND Selects the 'append' mode for the out_variable argument.
+#    SET Selects the 'set' mode for the out_variable argument.
+function(_qt_internal_wrap_tool_command out_variable action)
+    set(append FALSE)
+    if(action STREQUAL "APPEND")
+        set(append TRUE)
+    elseif(NOT action STREQUAL "SET")
+        message(FATAL_ERROR "Invalid action specified ${action}. Supported actions: SET, APPEND")
+    endif()
+
+    set(cmd COMMAND ${QT_TOOL_COMMAND_WRAPPER_PATH} ${ARGN})
+
+    if(append)
+        list(APPEND ${out_variable} ${cmd})
+    else()
+        set(${out_variable} ${cmd})
+    endif()
+    set(${out_variable} "${${out_variable}}" PARENT_SCOPE)
 endfunction()
 
 # Copies properties of the dependency to the target.
@@ -2181,329 +2381,8 @@ function(qt6_disable_unicode_defines target)
     set_target_properties(${target} PROPERTIES QT_NO_UNICODE_DEFINES TRUE)
 endfunction()
 
-# Finalizer function for the top-level user projects.
-#
-# This function is currently in Technical Preview.
-# Its signature and behavior might change.
-function(qt6_finalize_project)
-    if(NOT CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-        message("qt6_finalize_project is called not in the top-level CMakeLists.txt.")
-    endif()
-    if(ANDROID)
-        _qt_internal_collect_apk_dependencies()
-    endif()
-endfunction()
-
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_finalize_project)
-        if(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_finalize_project()
-        else()
-            message(FATAL_ERROR "qt_finalize_project() is only available in Qt 6.")
-        endif()
-    endfunction()
-
     function(qt_disable_unicode_defines)
         qt6_disable_unicode_defines(${ARGV})
     endfunction()
-endif()
-
-function(_qt_internal_get_deploy_impl_dir var)
-    set(${var} "${CMAKE_BINARY_DIR}/.qt" PARENT_SCOPE)
-endfunction()
-
-function(_qt_internal_add_deploy_support deploy_support_file)
-    get_filename_component(deploy_support_file "${deploy_support_file}" REALPATH)
-
-    set(target ${QT_CMAKE_EXPORT_NAMESPACE}::Core)
-    get_target_property(aliased_target ${target} ALIASED_TARGET)
-    if(aliased_target)
-        set(target ${aliased_target})
-    endif()
-
-    get_property(scripts TARGET ${target} PROPERTY _qt_deploy_support_files)
-    if(NOT "${deploy_support_file}" IN_LIST scripts)
-        set_property(TARGET ${target} APPEND PROPERTY
-            _qt_deploy_support_files "${deploy_support_file}"
-        )
-    endif()
-endfunction()
-
-# Sets up the commands for use at install/deploy time
-function(_qt_internal_setup_deploy_support)
-    get_property(cmake_role GLOBAL PROPERTY CMAKE_ROLE)
-    if(NOT cmake_role STREQUAL "PROJECT")
-        return()
-    endif()
-
-    # Always set QT_DEPLOY_SUPPORT in the caller's scope, even if we've generated
-    # the deploy support file in a previous call. The project may be calling
-    # find_package() from sibling directories with separate variable scopes.
-    _qt_internal_get_deploy_impl_dir(deploy_impl_dir)
-
-    get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
-    if(is_multi_config)
-        set(QT_DEPLOY_SUPPORT "${deploy_impl_dir}/QtDeploySupport-$<CONFIG>.cmake")
-    else()
-        set(QT_DEPLOY_SUPPORT "${deploy_impl_dir}/QtDeploySupport.cmake")
-    endif()
-    set(QT_DEPLOY_SUPPORT "${QT_DEPLOY_SUPPORT}" PARENT_SCOPE)
-
-    get_property(have_generated_file GLOBAL PROPERTY _qt_have_generated_deploy_support)
-    if(have_generated_file)
-        return()
-    endif()
-    set_property(GLOBAL PROPERTY _qt_have_generated_deploy_support TRUE)
-
-    include(GNUInstallDirs)
-    set(target ${QT_CMAKE_EXPORT_NAMESPACE}::Core)
-    get_target_property(aliased_target ${target} ALIASED_TARGET)
-    if(aliased_target)
-        set(target ${aliased_target})
-    endif()
-
-    # Make sure to look under the Qt bin dir with find_program, rather than randomly picking up
-    # a deployqt tool in the system.
-    # QT6_INSTALL_PREFIX is not set during Qt build, so add the hints conditionally.
-    set(find_program_hints)
-    if(QT6_INSTALL_PREFIX)
-        set(find_program_hints HINTS ${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS})
-    endif()
-
-    # In the generator expression logic below, we need safe_target_file because
-    # CMake evaluates expressions in both the TRUE and FALSE branches of $<IF:...>.
-    # We still need a target to give to $<TARGET_FILE:...> when we have no deploy
-    # tool, so we cannot use something like $<TARGET_FILE:macdeployqt> directly.
-    if(APPLE AND NOT IOS)
-        find_program(MACDEPLOYQT_EXECUTABLE macdeployqt
-            ${find_program_hints})
-        set(fallback "$<$<BOOL:${MACDEPLOYQT_EXECUTABLE}>:${MACDEPLOYQT_EXECUTABLE}>")
-        set(target_if_exists "$<TARGET_NAME_IF_EXISTS:${QT_CMAKE_EXPORT_NAMESPACE}::macdeployqt>")
-        set(have_deploy_tool "$<BOOL:${target_if_exists}>")
-        set(safe_target_file
-            "$<TARGET_FILE:$<IF:${have_deploy_tool},${target_if_exists},${target}>>")
-        set(__QT_DEPLOY_TOOL "$<IF:${have_deploy_tool},${safe_target_file},${fallback}>")
-    elseif(WIN32)
-        find_program(WINDEPLOYQT_EXECUTABLE windeployqt
-            ${find_program_hints})
-        set(fallback "$<$<BOOL:${WINDEPLOYQT_EXECUTABLE}>:${WINDEPLOYQT_EXECUTABLE}>")
-        set(target_if_exists "$<TARGET_NAME_IF_EXISTS:${QT_CMAKE_EXPORT_NAMESPACE}::windeployqt>")
-        set(have_deploy_tool "$<BOOL:${target_if_exists}>")
-        set(safe_target_file
-            "$<TARGET_FILE:$<IF:${have_deploy_tool},${target_if_exists},${target}>>")
-        set(__QT_DEPLOY_TOOL "$<IF:${have_deploy_tool},${safe_target_file},${fallback}>")
-    else()
-        # Android is handled as a build target, not via this install-based approach.
-        # Therefore, we don't consider androiddeployqt here.
-        set(__QT_DEPLOY_TOOL "")
-    endif()
-
-    _qt_internal_add_deploy_support("${CMAKE_CURRENT_LIST_DIR}/Qt6CoreDeploySupport.cmake")
-
-    file(GENERATE OUTPUT "${QT_DEPLOY_SUPPORT}" CONTENT
-"cmake_minimum_required(VERSION 3.16...3.21)
-
-# These are part of the public API. Projects should use them to provide a
-# consistent set of prefix-relative destinations.
-if(NOT QT_DEPLOY_BIN_DIR)
-    set(QT_DEPLOY_BIN_DIR \"${CMAKE_INSTALL_BINDIR}\")
-endif()
-if(NOT QT_DEPLOY_LIB_DIR)
-    set(QT_DEPLOY_LIB_DIR \"${CMAKE_INSTALL_LIBDIR}\")
-endif()
-if(NOT QT_DEPLOY_PLUGINS_DIR)
-    set(QT_DEPLOY_PLUGINS_DIR \"plugins\")
-endif()
-if(NOT QT_DEPLOY_QML_DIR)
-    set(QT_DEPLOY_QML_DIR \"qml\")
-endif()
-if(NOT QT_DEPLOY_PREFIX)
-    set(QT_DEPLOY_PREFIX \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}\")
-endif()
-if(QT_DEPLOY_PREFIX STREQUAL \"\")
-    set(QT_DEPLOY_PREFIX .)
-endif()
-
-# These are internal implementation details. They may be removed at any time.
-set(__QT_DEPLOY_SYSTEM_NAME \"${CMAKE_SYSTEM_NAME}\")
-set(__QT_DEPLOY_IS_SHARED_LIBS_BUILD \"${QT6_IS_SHARED_LIBS_BUILD}\")
-set(__QT_DEPLOY_TOOL \"${__QT_DEPLOY_TOOL}\")
-set(__QT_DEPLOY_IMPL_DIR \"${deploy_impl_dir}\")
-set(__QT_DEPLOY_VERBOSE \"${QT_ENABLE_VERBOSE_DEPLOYMENT}\")
-set(__QT_CMAKE_EXPORT_NAMESPACE \"${QT_CMAKE_EXPORT_NAMESPACE}\")
-set(__QT_DEPLOY_GENERATOR_IS_MULTI_CONFIG \"${is_multi_config}\")
-set(__QT_DEPLOY_ACTIVE_CONFIG \"$<CONFIG>\")
-set(__QT_NO_CREATE_VERSIONLESS_FUNCTIONS \"${QT_NO_CREATE_VERSIONLESS_FUNCTIONS}\")
-set(__QT_DEFAULT_MAJOR_VERSION \"${QT_DEFAULT_MAJOR_VERSION}\")
-
-# Define the CMake commands to be made available during deployment.
-set(__qt_deploy_support_files
-    \"$<JOIN:$<TARGET_PROPERTY:${target},_qt_deploy_support_files>,\"
-    \">\"
-)
-foreach(__qt_deploy_support_file IN LISTS __qt_deploy_support_files)
-    include(\"\${__qt_deploy_support_file}\")
-endforeach()
-
-unset(__qt_deploy_support_file)
-unset(__qt_deploy_support_files)
-")
-endfunction()
-
-# Note this needs to be a macro because it sets variables intended for the
-# calling scope.
-macro(qt6_standard_project_setup)
-    # A parent project might want to prevent child projects pulled in with
-    # add_subdirectory() from changing the parent's preferred arrangement.
-    # They can set this variable to true to effectively disable this function.
-    if(NOT QT_NO_STANDARD_PROJECT_SETUP)
-
-        # All changes below this point should not result in a change to an
-        # existing value, except for CMAKE_INSTALL_RPATH which may append new
-        # values (but no duplicates).
-
-        # Use standard install locations, provided by GNUInstallDirs. All
-        # platforms should have this included so that we know the
-        # CMAKE_INSTALL_xxxDIR variables will be set.
-        include(GNUInstallDirs)
-        if(WIN32)
-            # Windows has no RPATH support, so we need all non-plugin DLLs in
-            # the same directory as application executables if we want to be
-            # able to run them without having to augment the PATH environment
-            # variable. Don't discard an existing value in case the project has
-            # already set this to somewhere else. Our setting is somewhat
-            # opinionated, so make it easy for projects to choose something else.
-            if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
-                set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-            endif()
-        elseif(NOT APPLE)
-            # Apart from Windows and Apple, most other platforms support RPATH
-            # and $ORIGIN. Make executables and non-static libraries use an
-            # install RPATH that allows them to find library dependencies if the
-            # project installs things to the directories defined by the
-            # CMAKE_INSTALL_xxxDIR variables (which is what CMake's defaults
-            # are based on).
-            file(RELATIVE_PATH __qt_relDir
-                ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}
-                ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}
-            )
-            list(APPEND CMAKE_INSTALL_RPATH $ORIGIN $ORIGIN/${__qt_relDir})
-            list(REMOVE_DUPLICATES CMAKE_INSTALL_RPATH)
-            unset(__qt_reldir)
-        endif()
-
-        # Turn these on by default, unless they are already set. Projects can
-        # always turn off any they really don't want after we return.
-        foreach(auto_set IN ITEMS MOC UIC)
-            if(NOT DEFINED CMAKE_AUTO${auto_set})
-                set(CMAKE_AUTO${auto_set} TRUE)
-            endif()
-        endforeach()
-    endif()
-endmacro()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_standard_project_setup)
-        qt6_standard_project_setup(${ARGV})
-    endmacro()
-endif()
-
-# This function is currently in Technical Preview.
-# Its signature and behavior might change.
-function(qt6_generate_deploy_app_script)
-    # We use a TARGET keyword option instead of taking the target as the first
-    # positional argument. This is to keep open the possibility of deploying
-    # an app for which we don't have a target (e.g. an application from a
-    # third party project that the caller may want to include in their own
-    # package). We would add an EXECUTABLE keyword for that, which would be
-    # mutually exclusive with the TARGET keyword.
-    set(no_value_options
-        NO_UNSUPPORTED_PLATFORM_ERROR
-    )
-    set(single_value_options
-        TARGET
-        FILENAME_VARIABLE
-    )
-    set(multi_value_options "")
-    cmake_parse_arguments(PARSE_ARGV 0 arg
-        "${no_value_options}" "${single_value_options}" "${multi_value_options}"
-    )
-    if(arg_UNPARSED_ARGUMENTS)
-        message(FATAL_ERROR "Unexpected arguments: ${arg_UNPARSED_ARGUMENTS}")
-    endif()
-    if(NOT arg_TARGET)
-        message(FATAL_ERROR "TARGET must be specified")
-    endif()
-    if(NOT arg_FILENAME_VARIABLE)
-        message(FATAL_ERROR "FILENAME_VARIABLE must be specified")
-    endif()
-
-    # Create a file name that will be unique for this target and the combination
-    # of arguments passed to this command. This allows the project to call us
-    # multiple times with different arguments for the same target (e.g. to
-    # create deployment scripts for different scenarios).
-    string(MAKE_C_IDENTIFIER "${arg_TARGET}" target_id)
-    string(SHA1 args_hash "${ARGV}")
-    string(SUBSTRING "${args_hash}" 0 10 short_hash)
-    _qt_internal_get_deploy_impl_dir(deploy_impl_dir)
-    set(file_name "${deploy_impl_dir}/deploy_${target_id}_${short_hash}")
-    get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
-    if(is_multi_config)
-        string(APPEND file_name "-$<CONFIG>")
-    endif()
-    set(${arg_FILENAME_VARIABLE} "${file_name}" PARENT_SCOPE)
-
-    if(QT6_IS_SHARED_LIBS_BUILD)
-        set(qt_build_type_string "shared Qt libs")
-    else()
-        set(qt_build_type_string "static Qt libs")
-    endif()
-
-    if(APPLE AND NOT IOS AND QT6_IS_SHARED_LIBS_BUILD)
-        # TODO: Handle non-bundle applications if possible.
-        get_target_property(is_bundle ${arg_TARGET} MACOSX_BUNDLE)
-        if(NOT is_bundle)
-            message(FATAL_ERROR
-                "Executable targets have to be app bundles to use this command "
-                "on Apple platforms."
-            )
-        endif()
-        file(GENERATE OUTPUT "${file_name}" CONTENT "
-include(${QT_DEPLOY_SUPPORT})
-qt6_deploy_runtime_dependencies(
-    EXECUTABLE $<TARGET_FILE_NAME:${arg_TARGET}>.app
-)
-")
-
-    elseif(WIN32 AND QT6_IS_SHARED_LIBS_BUILD)
-        file(GENERATE OUTPUT "${file_name}" CONTENT "
-include(${QT_DEPLOY_SUPPORT})
-qt6_deploy_runtime_dependencies(
-    EXECUTABLE \${QT_DEPLOY_BIN_DIR}/$<TARGET_FILE_NAME:${arg_TARGET}>
-    GENERATE_QT_CONF
-)")
-
-    elseif(NOT arg_NO_UNSUPPORTED_PLATFORM_ERROR AND NOT QT_INTERNAL_NO_UNSUPPORTED_PLATFORM_ERROR)
-        # Currently we don't deploy runtime dependencies if cross-compiling or using a static Qt.
-        # We also don't do it if targeting Linux, but we could provide an option to do
-        # so if we had a deploy tool or purely CMake-based deploy implementation.
-        # Error out by default unless the project opted out of the error.
-        # This provides us a migration path in the future without breaking compatibility promises.
-        message(FATAL_ERROR
-            "Support for installing runtime dependencies is not implemented for "
-            "this target platform (${CMAKE_SYSTEM_NAME}, ${qt_build_type_string})."
-        )
-    else()
-        file(GENERATE OUTPUT "${file_name}" CONTENT "
-include(${QT_DEPLOY_SUPPORT})
-_qt_internal_show_skip_runtime_deploy_message(\"${qt_build_type_string}\")
-")
-    endif()
-
-endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_generate_deploy_app_script)
-        qt6_generate_deploy_app_script(${ARGV})
-    endmacro()
 endif()

@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -15,9 +40,6 @@
 #include <QGridLayout>
 #include <QStyleFactory>
 #include <QTabWidget>
-
-#include <private/qguiapplication_p.h>
-#include <qpa/qplatformtheme.h>
 
 class tst_QPushButton : public QObject
 {
@@ -51,7 +73,6 @@ private slots:
     void emitReleasedAfterChange();
     void hitButton();
     void iconOnlyStyleSheet();
-    void mousePressAndMove();
 
 protected slots:
     void resetCounters();
@@ -198,13 +219,6 @@ void tst_QPushButton::autoRepeat()
     // check that pressing ENTER has no effect
     resetCounters();
     testWidget->setDown( false );
-    // Skip after reset if ButtonPressKeys has Key_Enter
-    const auto buttonPressKeys = QGuiApplicationPrivate::platformTheme()
-                                         ->themeHint(QPlatformTheme::ButtonPressKeys)
-                                         .value<QList<Qt::Key>>();
-    if (buttonPressKeys.contains(Qt::Key_Enter)) {
-        return;
-    }
     testWidget->setAutoRepeat( false );
     QTest::keyPress( testWidget, Qt::Key_Enter );
 
@@ -239,14 +253,6 @@ void tst_QPushButton::pressed()
     QTest::keyRelease( testWidget, ' ' );
     QCOMPARE( press_count, (uint)1 );
     QCOMPARE( release_count, (uint)1 );
-
-    // Skip if ButtonPressKeys has Key_Enter
-    const auto buttonPressKeys = QGuiApplicationPrivate::platformTheme()
-                                         ->themeHint(QPlatformTheme::ButtonPressKeys)
-                                         .value<QList<Qt::Key>>();
-    if (buttonPressKeys.contains(Qt::Key_Enter)) {
-        return;
-    }
 
     QTest::keyPress( testWidget,Qt::Key_Enter );
     QCOMPARE( press_count, (uint)1 );
@@ -611,7 +617,7 @@ void tst_QPushButton::taskQTBUG_20191_shortcutWithKeypadModifer()
     QTest::qWait(300);
     QTest::keyClick(&dialog, Qt::Key_5, Qt::KeypadModifier);
     QTest::qWait(300);
-    QCOMPARE(spy1.size(), 2);
+    QCOMPARE(spy1.count(), 2);
 
     // add shortcut 'keypad 5' to button2
     spy1.clear();
@@ -621,8 +627,8 @@ void tst_QPushButton::taskQTBUG_20191_shortcutWithKeypadModifer()
     QTest::qWait(300);
     QTest::keyClick(&dialog, Qt::Key_5, Qt::KeypadModifier);
     QTest::qWait(300);
-    QCOMPARE(spy1.size(), 1);
-    QCOMPARE(spy2.size(), 1);
+    QCOMPARE(spy1.count(), 1);
+    QCOMPARE(spy2.count(), 1);
 
     // remove shortcut from button1
     spy1.clear();
@@ -632,8 +638,8 @@ void tst_QPushButton::taskQTBUG_20191_shortcutWithKeypadModifer()
     QTest::qWait(300);
     QTest::keyClick(&dialog, Qt::Key_5, Qt::KeypadModifier);
     QTest::qWait(300);
-    QCOMPARE(spy1.size(), 0);
-    QCOMPARE(spy2.size(), 1);
+    QCOMPARE(spy1.count(), 0);
+    QCOMPARE(spy2.count(), 1);
 }
 
 #endif // QT_CONFIG(shortcut)
@@ -657,16 +663,16 @@ void tst_QPushButton::emitReleasedAfterChange()
     QVERIFY(button1->isDown());
     QTest::keyClick(&dialog, Qt::Key_Tab);
     QVERIFY(!button1->isDown());
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     spy.clear();
 
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
     button1->setFocus();
     QTest::mousePress(button1, Qt::LeftButton);
     QVERIFY(button1->isDown());
     button1->setEnabled(false);
     QVERIFY(!button1->isDown());
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 }
 
 /*
@@ -730,36 +736,6 @@ void tst_QPushButton::iconOnlyStyleSheet()
     "}");
     pb.show();
     QVERIFY(QTest::qWaitForWindowExposed(&pb));
-}
-
-/*
-    Test that mouse has been pressed,the signal is sent when moving the mouse.
-    QTBUG-97937
-*/
-void tst_QPushButton::mousePressAndMove()
-{
-    QPushButton button;
-    button.setGeometry(0, 0, 20, 20);
-    QSignalSpy pressSpy(&button, &QAbstractButton::pressed);
-    QSignalSpy releaseSpy(&button, &QAbstractButton::released);
-
-    QTest::mousePress(&button, Qt::LeftButton);
-    QCOMPARE(pressSpy.size(), 1);
-    QCOMPARE(releaseSpy.size(), 0);
-
-    // mouse pressed and moving out
-    QTest::mouseMove(&button, QPoint(100, 100));
-
-    // should emit released signal when the mouse is dragged out of boundary
-    QCOMPARE(pressSpy.size(), 1);
-    QCOMPARE(releaseSpy.size(), 1);
-
-    // mouse pressed and moving into
-    QTest::mouseMove(&button, QPoint(10, 10));
-
-    // should emit pressed signal when the mouse is dragged into of boundary
-    QCOMPARE(pressSpy.size(), 2);
-    QCOMPARE(releaseSpy.size(), 1);
 }
 
 QTEST_MAIN(tst_QPushButton)

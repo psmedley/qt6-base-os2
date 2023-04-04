@@ -1,12 +1,46 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qhttpnetworkrequest_p.h"
 #include "private/qnoncontiguousbytedevice_p.h"
 
 QT_BEGIN_NAMESPACE
-
-QT_IMPL_METATYPE_EXTERN(QHttpNetworkRequest)
 
 QHttpNetworkRequestPrivate::QHttpNetworkRequestPrivate(QHttpNetworkRequest::Operation op,
         QHttpNetworkRequest::Priority pri, const QUrl &newUrl)
@@ -23,11 +57,11 @@ QHttpNetworkRequestPrivate::QHttpNetworkRequestPrivate(const QHttpNetworkRequest
       customVerb(other.customVerb),
       priority(other.priority),
       uploadByteDevice(other.uploadByteDevice),
+      minimumArchiveBombSize(other.minimumArchiveBombSize),
       autoDecompress(other.autoDecompress),
       pipeliningAllowed(other.pipeliningAllowed),
       http2Allowed(other.http2Allowed),
       http2Direct(other.http2Direct),
-      h2cAllowed(other.h2cAllowed),
       withCredentials(other.withCredentials),
       ssl(other.ssl),
       preConnect(other.preConnect),
@@ -52,7 +86,6 @@ bool QHttpNetworkRequestPrivate::operator==(const QHttpNetworkRequestPrivate &ot
         && (pipeliningAllowed == other.pipeliningAllowed)
         && (http2Allowed == other.http2Allowed)
         && (http2Direct == other.http2Direct)
-        && (h2cAllowed == other.h2cAllowed)
         // we do not clear the customVerb in setOperation
         && (operation != QHttpNetworkRequest::Custom || (customVerb == other.customVerb))
         && (withCredentials == other.withCredentials)
@@ -61,7 +94,7 @@ bool QHttpNetworkRequestPrivate::operator==(const QHttpNetworkRequestPrivate &ot
         && (redirectPolicy == other.redirectPolicy)
         && (peerVerifyName == other.peerVerifyName)
         && (needResendWithCredentials == other.needResendWithCredentials)
-        ;
+        && (minimumArchiveBombSize == other.minimumArchiveBombSize);
 }
 
 QByteArray QHttpNetworkRequest::methodName() const
@@ -114,7 +147,7 @@ QByteArray QHttpNetworkRequestPrivate::header(const QHttpNetworkRequest &request
 {
     QList<QPair<QByteArray, QByteArray> > fields = request.header();
     QByteArray ba;
-    ba.reserve(40 + fields.size()*25); // very rough lower bound estimation
+    ba.reserve(40 + fields.length()*25); // very rough lower bound estimation
 
     ba += request.methodName();
     ba += ' ';
@@ -239,7 +272,7 @@ void QHttpNetworkRequest::setContentLength(qint64 length)
 
 QList<QPair<QByteArray, QByteArray> > QHttpNetworkRequest::header() const
 {
-    return d->parser.headers();
+    return d->fields;
 }
 
 QByteArray QHttpNetworkRequest::headerField(const QByteArray &name, const QByteArray &defaultValue) const
@@ -335,12 +368,12 @@ void QHttpNetworkRequest::setHTTP2Direct(bool b)
 
 bool QHttpNetworkRequest::isH2cAllowed() const
 {
-    return d->h2cAllowed;
+    return qEnvironmentVariableIsSet("QT_NETWORK_H2C_ALLOWED");
 }
 
 void QHttpNetworkRequest::setH2cAllowed(bool b)
 {
-    d->h2cAllowed = b;
+    Q_UNUSED(b);
 }
 
 bool QHttpNetworkRequest::withCredentials() const
@@ -381,6 +414,16 @@ QString QHttpNetworkRequest::peerVerifyName() const
 void QHttpNetworkRequest::setPeerVerifyName(const QString &peerName)
 {
     d->peerVerifyName = peerName;
+}
+
+qint64 QHttpNetworkRequest::minimumArchiveBombSize() const
+{
+    return d->minimumArchiveBombSize;
+}
+
+void QHttpNetworkRequest::setMinimumArchiveBombSize(qint64 threshold)
+{
+    d->minimumArchiveBombSize = threshold;
 }
 
 QT_END_NAMESPACE

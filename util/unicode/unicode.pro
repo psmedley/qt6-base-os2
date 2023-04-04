@@ -1,4 +1,4 @@
 SOURCES += main.cpp
-QT = core core-private
+QT = core
 CONFIG += console
 DEFINES += QT_FORCE_ASSERTS

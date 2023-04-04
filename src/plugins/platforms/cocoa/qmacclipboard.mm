@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <AppKit/AppKit.h>
 
@@ -18,8 +54,6 @@
 #include <type_traits>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*****************************************************************************
    QMacPasteboard code
@@ -146,7 +180,7 @@ OSStatus QMacPasteboard::promiseKeeper(PasteboardRef paste, PasteboardItemID id,
         }
     }
 
-    if (!promise.itemId && flavorAsQString == "com.trolltech.qt.MimeTypeName"_L1) {
+    if (!promise.itemId && flavorAsQString == QLatin1String("com.trolltech.qt.MimeTypeName")) {
         // we have promised this data, but won't be able to convert, so return null data.
         // This helps in making the application/x-qt-mime-type-name hidden from normal use.
         QByteArray ba;
@@ -294,7 +328,7 @@ QMacPasteboard::setMimeData(QMimeData *mime_src, DataRequestType dataRequestType
         // QMimeData sub classes reimplementing the formats() might not expose the
         // temporary "application/x-qt-mime-type-name" mimetype. So check the existence
         // of this mime type while doing drag and drop.
-        QString dummyMimeType("application/x-qt-mime-type-name"_L1);
+        QString dummyMimeType(QLatin1String("application/x-qt-mime-type-name"));
         if (!formats.contains(dummyMimeType)) {
             QByteArray dummyType = mime_src->data(dummyMimeType);
             if (!dummyType.isEmpty()) {
@@ -308,7 +342,7 @@ QMacPasteboard::setMimeData(QMimeData *mime_src, DataRequestType dataRequestType
                 // Hack: The Rtf handler converts incoming Rtf to Html. We do
                 // not want to convert outgoing Html to Rtf but instead keep
                 // posting it as Html. Skip the Rtf handler here.
-                if (c->convertorName() == "Rtf"_L1)
+                if (c->convertorName() == QLatin1String("Rtf"))
                     continue;
                 QString flavor(c->flavorFor(mimeType));
                 if (!flavor.isEmpty()) {
@@ -429,9 +463,9 @@ QMacPasteboard::retrieveData(const QString &format, QMetaType) const
             // Converting via PasteboardCopyItemFlavorData below will for some UITs result
             // in newlines mapping to '\r' instead of '\n'. To work around this we shortcut
             // the conversion via NSPasteboard's NSStringPboardType if possible.
-            if (c_flavor == "com.apple.traditional-mac-plain-text"_L1
-             || c_flavor == "public.utf8-plain-text"_L1
-             || c_flavor == "public.utf16-plain-text"_L1) {
+            if (c_flavor == QLatin1String("com.apple.traditional-mac-plain-text")
+             || c_flavor == QLatin1String("public.utf8-plain-text")
+             || c_flavor == QLatin1String("public.utf16-plain-text")) {
                 QString str = qt_mac_get_pasteboardString(paste);
                 if (!str.isEmpty())
                     return str;

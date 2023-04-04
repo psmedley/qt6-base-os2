@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the qmake application of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "winmakefile.h"
 #include "option.h"
@@ -174,9 +199,9 @@ bool Win32MakefileGenerator::processPrlFileBase(QString &origFile, QStringView o
 {
     if (MakefileGenerator::processPrlFileBase(origFile, origName, fixedBase, slashOff))
         return true;
-    for (int off = fixedBase.size(); off > slashOff; off--) {
+    for (int off = fixedBase.length(); off > slashOff; off--) {
         if (!fixedBase.at(off - 1).isDigit()) {
-            if (off != fixedBase.size()) {
+            if (off != fixedBase.length()) {
                 return MakefileGenerator::processPrlFileBase(
                             origFile, origName, fixedBase.left(off), slashOff);
             }
@@ -479,8 +504,8 @@ void Win32MakefileGenerator::writeCleanParts(QTextStream &t)
                 const int commandlineLimit = 2047; // NT limit, expanded
                 for (ProStringList::ConstIterator it = list.begin(); it != list.end(); ++it) {
                     file = ' ' + escapeFilePath(Option::fixPathToTargetOS((*it).toQString()));
-                    if(del_statement.size() + files.size() +
-                       qMax(fixEnvVariables(file).size(), file.size()) > commandlineLimit) {
+                    if(del_statement.length() + files.length() +
+                       qMax(fixEnvVariables(file).length(), file.length()) > commandlineLimit) {
                         t << "\n\t" << del_statement << files;
                         files.clear();
                     }
@@ -508,8 +533,8 @@ void Win32MakefileGenerator::writeCleanParts(QTextStream &t)
                 const int commandlineLimit = 2047; // NT limit, expanded
                 for (ProStringList::ConstIterator it = list.begin(); it != list.end(); ++it) {
                     file = " " + escapeFilePath(Option::fixPathToTargetOS((*it).toQString()));
-                    if(del_statement.size() + files.size() +
-                       qMax(fixEnvVariables(file).size(), file.size()) > commandlineLimit) {
+                    if(del_statement.length() + files.length() +
+                       qMax(fixEnvVariables(file).length(), file.length()) > commandlineLimit) {
                         t << "\n\t" << del_statement << files;
                         files.clear();
                     }
@@ -686,7 +711,7 @@ void Win32MakefileGenerator::writeRcFilePart(QTextStream &t)
 
         const ProStringList rcIncPaths = project->values("RC_INCLUDEPATH");
         QString incPathStr;
-        for (int i = 0; i < rcIncPaths.size(); ++i) {
+        for (int i = 0; i < rcIncPaths.count(); ++i) {
             const ProString &path = rcIncPaths.at(i);
             if (path.isEmpty())
                 continue;
@@ -749,7 +774,7 @@ QString Win32MakefileGenerator::defaultInstall(const QString &t)
             QString dst_prl = Option::fixPathToTargetOS(project->first("QMAKE_INTERNAL_PRL_FILE").toQString());
             int slsh = dst_prl.lastIndexOf(Option::dir_sep);
             if(slsh != -1)
-                dst_prl = dst_prl.right(dst_prl.size() - slsh - 1);
+                dst_prl = dst_prl.right(dst_prl.length() - slsh - 1);
             dst_prl = filePrefixRoot(root, targetdir + dst_prl);
             if (!ret.isEmpty())
                 ret += "\n\t";

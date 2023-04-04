@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 //#define QIMAGEREADER_DEBUG
 
@@ -11,6 +47,7 @@
     \inmodule QtGui
     \reentrant
     \ingroup painting
+    \ingroup io
 
     The most common way to read images is through QImage and QPixmap's
     constructors, or by calling QImage::load() and
@@ -135,7 +172,6 @@
 QT_BEGIN_NAMESPACE
 
 using namespace QImageReaderWriterHelpers;
-using namespace Qt::StringLiterals;
 
 static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
                                                 const QByteArray &format,
@@ -150,7 +186,7 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
     QByteArray suffix;
 
 #ifndef QT_NO_IMAGEFORMATPLUGIN
-    Q_CONSTINIT static QBasicMutex mutex;
+    static QBasicMutex mutex;
     const auto locker = qt_scoped_lock(mutex);
 
     typedef QMultiMap<int, QString> PluginKeyMap;
@@ -235,7 +271,7 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
                 }
             }
         } else {
-            const int testIndex = keyMap.key(QLatin1StringView(testFormat), -1);
+            const int testIndex = keyMap.key(QLatin1String(testFormat), -1);
             if (testIndex != -1) {
                 QImageIOPlugin *plugin = qobject_cast<QImageIOPlugin *>(l->instance(testIndex));
                 if (plugin && plugin->capabilities(device, testFormat) & QImageIOPlugin::CanRead) {
@@ -483,9 +519,9 @@ QImageReaderPrivate::QImageReaderPrivate(QImageReader *qq)
 */
 QImageReaderPrivate::~QImageReaderPrivate()
 {
-    delete handler;
     if (deleteDevice)
         delete device;
+    delete handler;
 }
 
 /*!
@@ -493,9 +529,6 @@ QImageReaderPrivate::~QImageReaderPrivate()
 */
 bool QImageReaderPrivate::initHandler()
 {
-    if (handler)
-        return true;
-
     // check some preconditions
     if (!device || (!deleteDevice && !device->isOpen() && !device->open(QIODevice::ReadOnly))) {
         imageReaderError = QImageReader::DeviceError;
@@ -528,8 +561,8 @@ bool QImageReaderPrivate::initHandler()
         QString fileName = file->fileName();
 
         do {
-            file->setFileName(fileName + u'.'
-                    + QLatin1StringView(extensions.at(currentExtension++).constData()));
+            file->setFileName(fileName + QLatin1Char('.')
+                    + QLatin1String(extensions.at(currentExtension++).constData()));
             file->open(QIODevice::ReadOnly);
         } while (!file->isOpen() && currentExtension < extensions.size());
 
@@ -542,7 +575,7 @@ bool QImageReaderPrivate::initHandler()
     }
 
     // assign a handler
-    if ((handler = createReadHandlerHelper(device, format, autoDetectImageFormat, ignoresFormatAndExtension)) == nullptr) {
+    if (!handler && (handler = createReadHandlerHelper(device, format, autoDetectImageFormat, ignoresFormatAndExtension)) == nullptr) {
         imageReaderError = QImageReader::UnsupportedFormatError;
         errorString = QImageReader::tr("Unsupported image format");
         return false;
@@ -555,7 +588,7 @@ bool QImageReaderPrivate::initHandler()
 */
 void QImageReaderPrivate::getText()
 {
-    if (text.isEmpty() && initHandler() && handler->supportsOption(QImageIOHandler::Description))
+    if (text.isEmpty() && (handler || initHandler()) && handler->supportsOption(QImageIOHandler::Description))
         text = qt_getImageTextFromDescription(handler->option(QImageIOHandler::Description).toString());
 }
 
@@ -745,12 +778,12 @@ bool QImageReader::decideFormatFromContent() const
 */
 void QImageReader::setDevice(QIODevice *device)
 {
-    delete d->handler;
-    d->handler = nullptr;
     if (d->device && d->deleteDevice)
         delete d->device;
     d->device = device;
     d->deleteDevice = false;
+    delete d->handler;
+    d->handler = nullptr;
     d->text.clear();
 }
 
@@ -1190,7 +1223,7 @@ bool QImageReader::read(QImage *image)
         return false;
     }
 
-    if (!d->initHandler())
+    if (!d->handler && !d->initHandler())
         return false;
 
     // set the handler specific options.
@@ -1210,9 +1243,11 @@ bool QImageReader::read(QImage *image)
         d->handler->setOption(QImageIOHandler::Quality, d->quality);
 
     // read the image
-    QString filename = fileName();
     if (Q_TRACE_ENABLED(QImageReader_read_before_reading)) {
-        Q_TRACE(QImageReader_read_before_reading, this, filename.isEmpty() ? u"unknown"_s : filename);
+        QString fileName = QStringLiteral("unknown");
+        if (QFile *file = qobject_cast<QFile *>(d->device))
+            fileName = file->fileName();
+        Q_TRACE(QImageReader_read_before_reading, this, fileName);
     }
 
     const bool result = d->handler->read(image);
@@ -1279,8 +1314,8 @@ bool QImageReader::read(QImage *image)
     // successful read; check for "@Nx" file name suffix and set device pixel ratio.
     static bool disableNxImageLoading = !qEnvironmentVariableIsEmpty("QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING");
     if (!disableNxImageLoading) {
-        const QByteArray suffix = QFileInfo(filename).baseName().right(3).toLatin1();
-        if (suffix.size() == 3 && suffix[0] == '@' && suffix[1] >= '2' && suffix[1] <= '9' && suffix[2] == 'x')
+        const QByteArray suffix = QFileInfo(fileName()).baseName().right(3).toLatin1();
+        if (suffix.length() == 3 && suffix[0] == '@' && suffix[1] >= '2' && suffix[1] <= '9' && suffix[2] == 'x')
             image->setDevicePixelRatio(suffix[1] - '0');
     }
     if (autoTransform())

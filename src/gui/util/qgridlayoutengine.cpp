@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qglobal.h"
 
@@ -11,12 +47,10 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 template<typename T>
 static void insertOrRemoveItems(QList<T> &items, int index, int delta)
 {
-    int count = items.size();
+    int count = items.count();
     if (index < count) {
         if (delta > 0) {
             items.insert(index, delta, T());
@@ -773,7 +807,7 @@ int QGridLayoutEngine::columnCount(Qt::Orientation orientation) const
 
 int QGridLayoutEngine::itemCount() const
 {
-    return q_items.size();
+    return q_items.count();
 }
 
 QGridLayoutItem *QGridLayoutEngine::itemAt(int index) const
@@ -818,7 +852,7 @@ void QGridLayoutEngine::setRowSpacing(int row, qreal spacing, Qt::Orientation or
     Q_ASSERT(row >= 0);
 
     QGridLayoutRowInfo &rowInfo = q_infos[orientation];
-    if (row >= rowInfo.spacings.size())
+    if (row >= rowInfo.spacings.count())
         rowInfo.spacings.resize(row + 1);
     if (spacing >= 0)
         rowInfo.spacings[row].setUserValue(spacing);
@@ -843,7 +877,7 @@ void QGridLayoutEngine::setRowStretchFactor(int row, int stretch, Qt::Orientatio
     maybeExpandGrid(row, -1, orientation);
 
     QGridLayoutRowInfo &rowInfo = q_infos[orientation];
-    if (row >= rowInfo.stretches.size())
+    if (row >= rowInfo.stretches.count())
         rowInfo.stretches.resize(row + 1);
     rowInfo.stretches[row].setUserValue(stretch);
 }
@@ -865,7 +899,7 @@ void QGridLayoutEngine::setRowSizeHint(Qt::SizeHint which, int row, qreal size,
     maybeExpandGrid(row, -1, orientation);
 
     QGridLayoutRowInfo &rowInfo = q_infos[orientation];
-    if (row >= rowInfo.boxes.size())
+    if (row >= rowInfo.boxes.count())
         rowInfo.boxes.resize(row + 1);
     rowInfo.boxes[row].q_sizes(which) = size;
 }
@@ -883,7 +917,7 @@ void QGridLayoutEngine::setRowAlignment(int row, Qt::Alignment alignment,
     maybeExpandGrid(row, -1, orientation);
 
     QGridLayoutRowInfo &rowInfo = q_infos[orientation];
-    if (row >= rowInfo.alignments.size())
+    if (row >= rowInfo.alignments.count())
         rowInfo.alignments.resize(row + 1);
     rowInfo.alignments[row] = alignment;
 }
@@ -992,7 +1026,7 @@ void QGridLayoutEngine::setGeometries(const QRectF &contentsGeometry, const QAbs
 
     ensureGeometries(contentsGeometry.size(), styleInfo);
 
-    for (int i = q_items.size() - 1; i >= 0; --i) {
+    for (int i = q_items.count() - 1; i >= 0; --i) {
         QGridLayoutItem *item = q_items.at(i);
 
         qreal x = q_xx.at(item->firstColumn());
@@ -1121,7 +1155,7 @@ void QGridLayoutEngine::transpose()
 {
     invalidate();
 
-    for (int i = q_items.size() - 1; i >= 0; --i)
+    for (int i = q_items.count() - 1; i >= 0; --i)
         q_items.at(i)->transpose();
 
     q_defaultSpacings.transpose();
@@ -1153,12 +1187,12 @@ void QGridLayoutEngine::dump(int indent) const
     qDebug("%*s Grid (%d x %d)", indent, "", internalGridRowCount(),
            internalGridColumnCount());
     for (int row = 0; row < internalGridRowCount(); ++row) {
-        QString message = "[ "_L1;
+        QString message = QLatin1String("[ ");
         for (int column = 0; column < internalGridColumnCount(); ++column) {
             message += QString::number(q_items.indexOf(itemAt(row, column))).rightJustified(3);
-            message += u' ';
+            message += QLatin1Char(' ');
         }
-        message += u']';
+        message += QLatin1Char(']');
         qDebug("%*s  %s", indent, "", qPrintable(message));
     }
 
@@ -1180,10 +1214,10 @@ void QGridLayoutEngine::dump(int indent) const
     for (int pass = 0; pass < 2; ++pass) {
         QString message;
         for (i = 0; i < cellPos->count(); ++i) {
-            message += (message.isEmpty() ? "["_L1 : ", "_L1);
+            message += QLatin1String((message.isEmpty() ? "[" : ", "));
             message += QString::number(cellPos->at(i));
         }
-        message += u']';
+        message += QLatin1Char(']');
         qDebug("%*s %s %s", indent, "", (pass == 0 ? "rows:" : "columns:"), qPrintable(message));
         cellPos = &q_xx;
     }
@@ -1210,7 +1244,7 @@ void QGridLayoutEngine::maybeExpandGrid(int row, int column, Qt::Orientation ori
     int newGridColumnCount = internalGridColumnCount();
 
     int newGridSize = newGridRowCount * newGridColumnCount;
-    if (newGridSize != q_grid.size()) {
+    if (newGridSize != q_grid.count()) {
         q_grid.resize(newGridSize);
 
         if (newGridColumnCount != oldGridColumnCount) {
@@ -1232,7 +1266,7 @@ void QGridLayoutEngine::regenerateGrid()
 {
     q_grid.fill(nullptr);
 
-    for (int i = q_items.size() - 1; i >= 0; --i) {
+    for (int i = q_items.count() - 1; i >= 0; --i) {
         QGridLayoutItem *item = q_items.at(i);
 
         for (int j = item->firstRow(); j <= item->lastRow(); ++j) {
@@ -1265,7 +1299,7 @@ void QGridLayoutEngine::insertOrRemoveRows(int row, int delta, Qt::Orientation o
 
     q_infos[orientation].insertOrRemoveRows(row, delta);
 
-    for (int i = q_items.size() - 1; i >= 0; --i)
+    for (int i = q_items.count() - 1; i >= 0; --i)
         q_items.at(i)->insertOrRemoveRows(row, delta, orientation);
 
     q_grid.resize(internalGridRowCount() * internalGridColumnCount());
@@ -1406,7 +1440,7 @@ void QGridLayoutEngine::fillRowData(QGridLayoutRowData *rowData,
                 }
             }
         }
-        if (row < rowInfo.boxes.size()) {
+        if (row < rowInfo.boxes.count()) {
             QGridLayoutBox rowBoxInfo = rowInfo.boxes.at(row);
             rowBoxInfo.normalize();
             rowBox.q_minimumSize = qMax(rowBox.q_minimumSize, rowBoxInfo.q_minimumSize);
@@ -1510,7 +1544,7 @@ void QGridLayoutEngine::ensureEffectiveFirstAndLastRows() const
         q_cachedEffectiveFirstRows = {columnCount, rowCount};
         q_cachedEffectiveLastRows = {-1, -1};
 
-        for (int i = q_items.size() - 1; i >= 0; --i) {
+        for (int i = q_items.count() - 1; i >= 0; --i) {
             const QGridLayoutItem *item = q_items.at(i);
 
             for (Qt::Orientation o : {Qt::Horizontal, Qt::Vertical}) {
@@ -1556,7 +1590,7 @@ void QGridLayoutEngine::ensureColumnAndRowData(QGridLayoutRowData *rowData, QGri
 bool QGridLayoutEngine::ensureDynamicConstraint() const
 {
     if (q_cachedConstraintOrientation == UnknownConstraint) {
-        for (int i = q_items.size() - 1; i >= 0; --i) {
+        for (int i = q_items.count() - 1; i >= 0; --i) {
             QGridLayoutItem *item = q_items.at(i);
             if (item->hasDynamicConstraint()) {
                 Qt::Orientation itemConstraintOrientation = item->dynamicConstraintOrientation();

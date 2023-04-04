@@ -1,5 +1,41 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qjnihelpers_p.h"
 
@@ -8,7 +44,6 @@
 #include "qlist.h"
 #include "qmutex.h"
 #include "qsemaphore.h"
-#include "qreadwritelock.h"
 #include <QtCore/private/qcoreapplication_p.h>
 
 #include <android/log.h>
@@ -34,12 +69,10 @@ static jobject g_jActivity = nullptr;
 static jobject g_jService = nullptr;
 static jobject g_jClassLoader = nullptr;
 
-Q_GLOBAL_STATIC(QtAndroidPrivate::OnBindListener *, g_onBindListener, nullptr);
+Q_GLOBAL_STATIC_WITH_ARGS(QtAndroidPrivate::OnBindListener*, g_onBindListener, (nullptr));
 Q_GLOBAL_STATIC(QMutex, g_onBindListenerMutex);
 Q_GLOBAL_STATIC(QSemaphore, g_waitForServiceSetupSemaphore);
 Q_GLOBAL_STATIC(QAtomicInt, g_serviceSetupLockers);
-
-Q_GLOBAL_STATIC(QReadWriteLock, g_updateMutex);
 
 namespace {
     struct GenericMotionEventListeners {
@@ -53,7 +86,7 @@ static jboolean dispatchGenericMotionEvent(JNIEnv *, jclass, jobject event)
 {
     jboolean ret = JNI_FALSE;
     QMutexLocker locker(&g_genericMotionEventListeners()->mutex);
-    for (auto *listener : std::as_const(g_genericMotionEventListeners()->listeners))
+    for (auto *listener : qAsConst(g_genericMotionEventListeners()->listeners))
         ret |= listener->handleGenericMotionEvent(event);
     return ret;
 }
@@ -70,44 +103,9 @@ static jboolean dispatchKeyEvent(JNIEnv *, jclass, jobject event)
 {
     jboolean ret = JNI_FALSE;
     QMutexLocker locker(&g_keyEventListeners()->mutex);
-    for (auto *listener : std::as_const(g_keyEventListeners()->listeners))
+    for (auto *listener : qAsConst(g_keyEventListeners()->listeners))
         ret |= listener->handleKeyEvent(event);
     return ret;
-}
-
-static jboolean updateNativeActivity(JNIEnv *env, jclass = nullptr)
-{
-
-    jclass jQtNative = env->FindClass("org/qtproject/qt/android/QtNative");
-    if (QJniEnvironment::checkAndClearExceptions(env))
-        return JNI_FALSE;
-
-    jmethodID activityMethodID =
-            env->GetStaticMethodID(jQtNative, "activity", "()Landroid/app/Activity;");
-    if (QJniEnvironment::checkAndClearExceptions(env))
-        return JNI_FALSE;
-
-    jobject activity = env->CallStaticObjectMethod(jQtNative, activityMethodID);
-    if (QJniEnvironment::checkAndClearExceptions(env))
-        return JNI_FALSE;
-
-    QWriteLocker locker(g_updateMutex());
-
-    if (g_jActivity) {
-        env->DeleteGlobalRef(g_jActivity);
-        g_jActivity = nullptr;
-    }
-
-    if (activity) {
-        g_jActivity = env->NewGlobalRef(activity);
-        env->DeleteLocalRef(activity);
-    }
-
-    env->DeleteLocalRef(jQtNative);
-    if (QJniEnvironment::checkAndClearExceptions(env))
-        return JNI_FALSE;
-
-    return JNI_TRUE;
 }
 
 namespace {
@@ -273,7 +271,6 @@ jint QtAndroidPrivate::initJNI(JavaVM *vm, JNIEnv *env)
     static const JNINativeMethod methods[] = {
         {"dispatchGenericMotionEvent", "(Landroid/view/MotionEvent;)Z", reinterpret_cast<void *>(dispatchGenericMotionEvent)},
         {"dispatchKeyEvent", "(Landroid/view/KeyEvent;)Z", reinterpret_cast<void *>(dispatchKeyEvent)},
-        {"updateNativeActivity", "()Z", reinterpret_cast<void *>(updateNativeActivity) },
     };
 
     const bool regOk = (env->RegisterNatives(jQtNative, methods, sizeof(methods) / sizeof(methods[0])) == JNI_OK);
@@ -290,26 +287,24 @@ jint QtAndroidPrivate::initJNI(JavaVM *vm, JNIEnv *env)
     return JNI_OK;
 }
 
-QtJniTypes::Activity QtAndroidPrivate::activity()
+jobject QtAndroidPrivate::activity()
 {
-    QReadLocker locker(g_updateMutex());
     return g_jActivity;
 }
 
-QtJniTypes::Service QtAndroidPrivate::service()
+jobject QtAndroidPrivate::service()
 {
     return g_jService;
 }
 
-QtJniTypes::Context QtAndroidPrivate::context()
+jobject QtAndroidPrivate::context()
 {
-    QReadLocker locker(g_updateMutex());
     if (g_jActivity)
         return g_jActivity;
     if (g_jService)
         return g_jService;
 
-    return nullptr;
+    return 0;
 }
 
 JavaVM *QtAndroidPrivate::javaVM()
@@ -379,18 +374,6 @@ jobject QtAndroidPrivate::callOnBindListener(jobject intent)
     if (*g_onBindListener)
         return (*g_onBindListener)->onBind(intent);
     return nullptr;
-}
-
-Q_GLOBAL_STATIC(QAtomicInt, g_androidDeadlockProtector);
-
-bool QtAndroidPrivate::acquireAndroidDeadlockProtector()
-{
-    return g_androidDeadlockProtector->testAndSetAcquire(0, 1);
-}
-
-void QtAndroidPrivate::releaseAndroidDeadlockProtector()
-{
-    g_androidDeadlockProtector->storeRelease(0);
 }
 
 QT_END_NAMESPACE

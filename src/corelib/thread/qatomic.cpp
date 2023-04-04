@@ -1,6 +1,42 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qatomic.h"
 
@@ -31,7 +67,7 @@
 
     The template parameter \c T must be a C++ integer type:
     \list
-       \li 8-bit: bool, char, signed char, unsigned char, qint8, quint8, char8_t (C++20)
+       \li 8-bit: char, signed char, unsigned char, qint8, quint8
        \li 16-bit: short, unsigned short, qint16, quint16, char16_t (C++11)
        \li 32-bit: int, unsigned int, qint32, quint32, char32_t (C++11)
        \li 64-bit: long long, unsigned long long, qint64, quint64
@@ -39,11 +75,11 @@
        \li pointer size: qintptr, quintptr, qptrdiff
     \endlist
 
-    Of the list above, only the 8-bit, 16-bit, 32-bit- and pointer-sized
-    instantiations are guaranteed to work on all platforms. Support for other
-    sizes depends on the compiler and processor architecture the code is being
-    compiled for. To test whether the 64-bit types are supported on 32-bit
-    platforms, check the macro \c Q_ATOMIC_INT64_IS_SUPPORTED.
+    Of the list above, only the 32-bit- and pointer-sized instantiations are guaranteed to
+    work on all platforms. Support for other sizes depends on the compiler and
+    processor architecture the code is being compiled for. To test whether the
+    other types are supported, check the macro \c Q_ATOMIC_INT\e{nn}_IS_SUPPORTED,
+    where \c{\e{nn}} is the number of bits desired.
 
     \section1 The Atomic API
 
@@ -397,21 +433,14 @@
 
     Atomic test-and-set.
 
-    \note If you use this function in a loop, consider using the overload with the
-    additional \c{T &currentValue} argument instead, which avoids the extra load() on
-    failure.
-
     If the current value of this QAtomicInteger is the \a expectedValue,
     the test-and-set functions assign the \a newValue to this
     QAtomicInteger and return true. If the values are \e not the same,
     this function does nothing and returns \c false.
 
-//![memory-order-relaxed]
     This function uses \e relaxed \l {QAtomicInteger#Memory
     ordering}{memory ordering} semantics, leaving the compiler and
     processor to freely reorder memory accesses.
-//![memory-order-relaxed]
-
 */
 
 /*!
@@ -419,21 +448,15 @@
 
     Atomic test-and-set.
 
-    \note If you use this function in a loop, consider using the overload with the
-    additional \c{T &currentValue} argument instead, which avoids the extra load() on
-    failure.
-
     If the current value of this QAtomicInteger is the \a expectedValue,
     the test-and-set functions assign the \a newValue to this
     QAtomicInteger and return true. If the values are \e not the same,
     this function does nothing and returns \c false.
 
-//![memory-order-acquire]
     This function uses \e acquire \l {QAtomicInteger#Memory
     ordering}{memory ordering} semantics, which ensures that memory
     access following the atomic operation (in program order) may not
     be re-ordered before the atomic operation.
-//![memory-order-acquire]
 */
 
 /*!
@@ -441,21 +464,15 @@
 
     Atomic test-and-set.
 
-    \note If you use this function in a loop, consider using the overload with the
-    additional \c{T &currentValue} argument instead, which avoids the extra load() on
-    failure.
-
     If the current value of this QAtomicInteger is the \a expectedValue,
     the test-and-set functions assign the \a newValue to this
     QAtomicInteger and return true. If the values are \e not the same,
     this function does nothing and returns \c false.
 
-//![memory-order-release]
     This function uses \e release \l {QAtomicInteger#Memory
     ordering}{memory ordering} semantics, which ensures that memory
     access before the atomic operation (in program order) may not be
     re-ordered after the atomic operation.
-//![memory-order-release]
 */
 
 /*!
@@ -463,78 +480,15 @@
 
     Atomic test-and-set.
 
-    \note If you use this function in a loop, consider using the overload with the
-    additional \c{T &currentValue} argument instead, which avoids the extra load() on
-    failure.
-
     If the current value of this QAtomicInteger is the \a expectedValue,
     the test-and-set functions assign the \a newValue to this
     QAtomicInteger and return true. If the values are \e not the same,
     this function does nothing and returns \c false.
 
-//![memory-order-ordered]
     This function uses \e ordered \l {QAtomicInteger#Memory
     ordering}{memory ordering} semantics, which ensures that memory
     access before and after the atomic operation (in program order)
     may not be re-ordered.
-//![memory-order-ordered]
-
-*/
-
-/*!
-    \fn template <typename T> bool QAtomicInteger<T>::testAndSetRelaxed(T expectedValue, T newValue, T &currentValue)
-    \since 5.3
-
-    Atomic test-and-set.
-
-    If the current value of this QAtomicInteger is the \a expectedValue, the
-    test-and-set functions assign the \a newValue to this QAtomicInteger and
-    return \c true. If the values are \e not the same, the functions load the
-    current value of this QAtomicInteger into \a currentValue and return \c false.
-
-    \include qatomic.cpp memory-order-relaxed
-*/
-
-/*!
-    \fn template <typename T> bool QAtomicInteger<T>::testAndSetAcquire(T expectedValue, T newValue, T &currentValue)
-    \since 5.3
-
-    Atomic test-and-set.
-
-    If the current value of this QAtomicInteger is the \a expectedValue, the
-    test-and-set functions assign the \a newValue to this QAtomicInteger and
-    return \c true. If the values are \e not the same, the functions load the
-    current value of this QAtomicInteger into \a currentValue and return \c false.
-
-    \include qatomic.cpp memory-order-acquire
-*/
-
-/*!
-    \fn template <typename T> bool QAtomicInteger<T>::testAndSetRelease(T expectedValue, T newValue, T &currentValue)
-    \since 5.3
-
-    Atomic test-and-set.
-
-    If the current value of this QAtomicInteger is the \a expectedValue, the
-    test-and-set functions assign the \a newValue to this QAtomicInteger and
-    return \c true. If the values are \e not the same, the functions loads the
-    current value of this QAtomicInteger into \a currentValue and return \c false.
-
-    \include qatomic.cpp memory-order-release
-*/
-
-/*!
-    \fn template <typename T> bool QAtomicInteger<T>::testAndSetOrdered(T expectedValue, T newValue, T &currentValue)
-    \since 5.3
-
-    Atomic test-and-set.
-
-    If the current value of this QAtomicInteger is the \a expectedValue, the
-    test-and-set functions assign the \a newValue to this QAtomicInteger and
-    return \c true. If the values are \e not the same, it loads the current
-    value of this QAtomicInteger into \a currentValue and return \c false.
-
-    \include qatomic.cpp memory-order-ordered
 */
 
 /*!
@@ -1032,16 +986,9 @@
 
     This macro is defined if atomic integers of size \e{nn} (in bits) are
     supported in this compiler / architecture combination.
+    Q_ATOMIC_INT32_IS_SUPPORTED is always defined.
 
     \e{nn} is the size of the integer, in bits (8, 16, 32 or 64).
-
-    The following macros always defined:
-
-    \list
-    \li Q_ATOMIC_INT8_IS_SUPPORTED
-    \li Q_ATOMIC_INT16_IS_SUPPORTED
-    \li Q_ATOMIC_INT32_IS_SUPPORTED
-    \endlist
 */
 
 /*!
@@ -1742,12 +1689,6 @@
 */
 
 // static checks
-#ifndef Q_ATOMIC_INT8_IS_SUPPORTED
-#  error "Q_ATOMIC_INT8_IS_SUPPORTED must be defined"
-#endif
-#ifndef Q_ATOMIC_INT16_IS_SUPPORTED
-#  error "Q_ATOMIC_INT16_IS_SUPPORTED must be defined"
-#endif
 #ifndef Q_ATOMIC_INT32_IS_SUPPORTED
 #  error "Q_ATOMIC_INT32_IS_SUPPORTED must be defined"
 #endif
@@ -1766,19 +1707,22 @@ static_assert(sizeof(QAtomicInteger<quintptr>));
 static_assert(sizeof(QAtomicInteger<qptrdiff>));
 static_assert(sizeof(QAtomicInteger<char32_t>));
 
+#ifdef Q_ATOMIC_INT16_IS_SUPPORTED
 static_assert(sizeof(QAtomicInteger<short>));
 static_assert(sizeof(QAtomicInteger<unsigned short>));
+#  if WCHAR_MAX < 0x10000
 static_assert(sizeof(QAtomicInteger<wchar_t>));
+#  endif
 static_assert(sizeof(QAtomicInteger<char16_t>));
-
-static_assert(sizeof(QAtomicInteger<char>));
-static_assert(sizeof(QAtomicInteger<unsigned char>));
-static_assert(sizeof(QAtomicInteger<signed char>));
-static_assert(sizeof(QAtomicInteger<bool>));
+#endif
 
 #ifdef Q_ATOMIC_INT64_IS_SUPPORTED
 static_assert(sizeof(QAtomicInteger<qint64>));
 static_assert(sizeof(QAtomicInteger<quint64>));
+#endif
+
+#if WCHAR_MAX == INT_MAX
+static_assert(sizeof(QAtomicInteger<wchar_t>));
 #endif
 
 QT_END_NAMESPACE

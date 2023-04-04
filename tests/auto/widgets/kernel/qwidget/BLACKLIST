@@ -3,6 +3,11 @@
 ubuntu-16.04
 [restoreVersion1Geometry]
 ubuntu-16.04
+[focusProxyAndInputMethods]
+rhel-7.6
+centos
+opensuse-leap
+ubuntu
 [raise]
 opensuse-leap
 # QTBUG-68175
@@ -17,6 +22,9 @@ osx
 macos arm
 [render_systemClip]
 osx
+[maskedUpdate]
+opensuse
+opensuse-leap
 [moveInResizeEvent]
 ubuntu-16.04
 [multipleToplevelFocusCheck]
@@ -25,7 +33,12 @@ centos
 opensuse-leap
 ubuntu
 sles-15
+
 # QTBUG-87668
+[reparent]
+android
+[windowState]
+android
 [showMinimizedKeepsFocus]
 android
 [normalGeometry]
@@ -34,23 +47,19 @@ android
 android
 [optimizedResizeMove]
 android
+[resizeEvent]
+android
 [update]
 android
 [scroll]
 android
+[setWindowGeometry]
+android
+[windowMoveResize]
+android
 [moveChild]
 android
+[showAndMoveChild]
+android
 [multipleToplevelFocusCheck]
-android
-[renderInvisible]
-android
-[updateWhileMinimized]
-android
-[doubleRepaint]
-android
-[setMaskInResizeEvent]
-android
-[activateWindow]
-android
-[optimizedResize_topLevel]
 android

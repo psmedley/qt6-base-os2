@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtTest module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QTEST_GUI_H
 #define QTEST_GUI_H
@@ -122,17 +158,17 @@ inline bool qCompare(QImage const &t1, QImage const &t2,
         qsnprintf(msg, 1024, "Compared QImages differ.\n"
                   "   Actual   (%s).isNull(): %d\n"
                   "   Expected (%s).isNull(): %d", actual, t1Null, expected, t2Null);
-        return compare_helper(false, msg, actual, expected, file, line);
+        return compare_helper(false, msg, nullptr, nullptr, actual, expected, file, line);
     }
     if (t1Null && t2Null)
-        return compare_helper(true, nullptr, actual, expected, file, line);
+        return compare_helper(true, nullptr, nullptr, nullptr, actual, expected, file, line);
     if (!qFuzzyCompare(t1.devicePixelRatio(), t2.devicePixelRatio())) {
         qsnprintf(msg, 1024, "Compared QImages differ in device pixel ratio.\n"
                   "   Actual   (%s): %g\n"
                   "   Expected (%s): %g",
                   actual, t1.devicePixelRatio(),
                   expected, t2.devicePixelRatio());
-        return compare_helper(false, msg, actual, expected, file, line);
+        return compare_helper(false, msg, nullptr, nullptr, actual, expected, file, line);
     }
     if (t1.width() != t2.width() || t1.height() != t2.height()) {
         qsnprintf(msg, 1024, "Compared QImages differ in size.\n"
@@ -140,17 +176,17 @@ inline bool qCompare(QImage const &t1, QImage const &t2,
                   "   Expected (%s): %dx%d",
                   actual, t1.width(), t1.height(),
                   expected, t2.width(), t2.height());
-        return compare_helper(false, msg, actual, expected, file, line);
+        return compare_helper(false, msg, nullptr, nullptr, actual, expected, file, line);
     }
     if (t1.format() != t2.format()) {
         qsnprintf(msg, 1024, "Compared QImages differ in format.\n"
                   "   Actual   (%s): %d\n"
                   "   Expected (%s): %d",
                   actual, t1.format(), expected, t2.format());
-        return compare_helper(false, msg, actual, expected, file, line);
+        return compare_helper(false, msg, nullptr, nullptr, actual, expected, file, line);
     }
     return compare_helper(t1 == t2, "Compared values are not the same",
-                          actual, expected, file, line);
+                          toString(t1), toString(t2), actual, expected, file, line);
 }
 
 inline bool qCompare(QPixmap const &t1, QPixmap const &t2, const char *actual, const char *expected,
@@ -164,17 +200,17 @@ inline bool qCompare(QPixmap const &t1, QPixmap const &t2, const char *actual, c
         qsnprintf(msg, 1024, "Compared QPixmaps differ.\n"
                   "   Actual   (%s).isNull(): %d\n"
                   "   Expected (%s).isNull(): %d", actual, t1Null, expected, t2Null);
-        return compare_helper(false, msg, actual, expected, file, line);
+        return compare_helper(false, msg, nullptr, nullptr, actual, expected, file, line);
     }
     if (t1Null && t2Null)
-        return compare_helper(true, nullptr, actual, expected, file, line);
+        return compare_helper(true, nullptr, nullptr, nullptr, actual, expected, file, line);
     if (!qFuzzyCompare(t1.devicePixelRatio(), t2.devicePixelRatio())) {
         qsnprintf(msg, 1024, "Compared QPixmaps differ in device pixel ratio.\n"
                   "   Actual   (%s): %g\n"
                   "   Expected (%s): %g",
                   actual, t1.devicePixelRatio(),
                   expected, t2.devicePixelRatio());
-        return compare_helper(false, msg, actual, expected, file, line);
+        return compare_helper(false, msg, nullptr, nullptr, actual, expected, file, line);
     }
     if (t1.width() != t2.width() || t1.height() != t2.height()) {
         qsnprintf(msg, 1024, "Compared QPixmaps differ in size.\n"
@@ -182,7 +218,7 @@ inline bool qCompare(QPixmap const &t1, QPixmap const &t2, const char *actual, c
                   "   Expected (%s): %dx%d",
                   actual, t1.width(), t1.height(),
                   expected, t2.width(), t2.height());
-        return compare_helper(false, msg, actual, expected, file, line);
+        return compare_helper(false, msg, nullptr, nullptr, actual, expected, file, line);
     }
     return qCompare(t1.toImage(), t2.toImage(), actual, expected, file, line);
 }

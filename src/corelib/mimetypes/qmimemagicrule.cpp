@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #define QT_NO_CAST_FROM_ASCII
@@ -8,13 +44,10 @@
 
 #include "qmimetypeparser_p.h"
 #include <QtCore/QList>
-#include <QtCore/QMap>
 #include <QtCore/QDebug>
 #include <qendian.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 // in the same order as Type!
 static const char magicRuleTypes_string[] =
@@ -198,14 +231,11 @@ QMimeMagicRule::QMimeMagicRule(const QString &type,
       m_mask(mask),
       m_matchFunction(nullptr)
 {
-    if (Q_UNLIKELY(m_type == Invalid)) {
-        if (errorString)
-            *errorString = "Type "_L1 + type + " is not supported"_L1;
-        return;
-    }
+    if (Q_UNLIKELY(m_type == Invalid))
+        *errorString = QLatin1String("Type ") + type + QLatin1String(" is not supported");
 
     // Parse for offset as "1" or "1:10"
-    const int colonIndex = offsets.indexOf(u':');
+    const int colonIndex = offsets.indexOf(QLatin1Char(':'));
     const QStringView startPosStr = QStringView{offsets}.mid(0, colonIndex); // \ These decay to returning 'offsets'
     const QStringView endPosStr   = QStringView{offsets}.mid(colonIndex + 1);// / unchanged when colonIndex == -1
     if (Q_UNLIKELY(!QMimeTypeParserBase::parseNumber(startPosStr, &m_startPos, errorString)) ||
@@ -227,7 +257,7 @@ QMimeMagicRule::QMimeMagicRule(const QString &type,
         if (Q_UNLIKELY(!ok)) {
             m_type = Invalid;
             if (errorString)
-                *errorString = "Invalid magic rule value \""_L1 + QLatin1StringView(m_value) + u'"';
+                *errorString = QLatin1String("Invalid magic rule value \"") + QLatin1String(m_value) + QLatin1Char('"');
             return;
         }
         m_numberMask = !m_mask.isEmpty() ? m_mask.toUInt(&ok, 0) : 0; // autodetect base
@@ -241,7 +271,7 @@ QMimeMagicRule::QMimeMagicRule(const QString &type,
             if (Q_UNLIKELY(m_mask.size() < 4 || !m_mask.startsWith("0x"))) {
                 m_type = Invalid;
                 if (errorString)
-                    *errorString = "Invalid magic rule mask \""_L1 + QLatin1StringView(m_mask) + u'"';
+                    *errorString = QLatin1String("Invalid magic rule mask \"") + QLatin1String(m_mask) + QLatin1Char('"');
                 return;
             }
             const QByteArray &tempMask = QByteArray::fromHex(QByteArray::fromRawData(
@@ -249,7 +279,7 @@ QMimeMagicRule::QMimeMagicRule(const QString &type,
             if (Q_UNLIKELY(tempMask.size() != m_pattern.size())) {
                 m_type = Invalid;
                 if (errorString)
-                    *errorString = "Invalid magic rule mask size \""_L1 + QLatin1StringView(m_mask) + u'"';
+                    *errorString = QLatin1String("Invalid magic rule mask size \"") + QLatin1String(m_mask) + QLatin1Char('"');
                 return;
             }
             m_mask = tempMask;

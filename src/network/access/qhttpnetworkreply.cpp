@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qhttpnetworkreply_p.h"
 #include "qhttpnetworkconnection_p.h"
@@ -10,11 +46,7 @@
 #    include <QtNetwork/qsslconfiguration.h>
 #endif
 
-#include <private/qdecompresshelper_p.h>
-
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 QHttpNetworkReply::QHttpNetworkReply(const QUrl &url, QObject *parent)
     : QObject(*new QHttpNetworkReplyPrivate(url), parent)
@@ -69,7 +101,7 @@ void QHttpNetworkReply::setContentLength(qint64 length)
 
 QList<QPair<QByteArray, QByteArray> > QHttpNetworkReply::header() const
 {
-    return d_func()->parser.headers();
+    return d_func()->fields;
 }
 
 QByteArray QHttpNetworkReply::headerField(const QByteArray &name, const QByteArray &defaultValue) const
@@ -81,12 +113,6 @@ void QHttpNetworkReply::setHeaderField(const QByteArray &name, const QByteArray 
 {
     Q_D(QHttpNetworkReply);
     d->setHeaderField(name, data);
-}
-
-void QHttpNetworkReply::appendHeaderField(const QByteArray &name, const QByteArray &data)
-{
-    Q_D(QHttpNetworkReply);
-    d->appendHeaderField(name, data);
 }
 
 void QHttpNetworkReply::parseHeader(const QByteArray &header)
@@ -109,13 +135,13 @@ void QHttpNetworkReply::setRequest(const QHttpNetworkRequest &request)
 
 int QHttpNetworkReply::statusCode() const
 {
-    return d_func()->parser.getStatusCode();
+    return d_func()->statusCode;
 }
 
 void QHttpNetworkReply::setStatusCode(int code)
 {
     Q_D(QHttpNetworkReply);
-    d->parser.setStatusCode(code);
+    d->statusCode = code;
 }
 
 QString QHttpNetworkReply::errorString() const
@@ -130,12 +156,7 @@ QNetworkReply::NetworkError QHttpNetworkReply::errorCode() const
 
 QString QHttpNetworkReply::reasonPhrase() const
 {
-    return d_func()->parser.getReasonPhrase();
-}
-
-void QHttpNetworkReply::setReasonPhrase(const QString &reason)
-{
-    d_func()->parser.setReasonPhrase(reason);
+    return d_func()->reasonPhrase;
 }
 
 void QHttpNetworkReply::setErrorString(const QString &error)
@@ -146,22 +167,12 @@ void QHttpNetworkReply::setErrorString(const QString &error)
 
 int QHttpNetworkReply::majorVersion() const
 {
-    return d_func()->parser.getMajorVersion();
+    return d_func()->majorVersion;
 }
 
 int QHttpNetworkReply::minorVersion() const
 {
-    return d_func()->parser.getMinorVersion();
-}
-
-void QHttpNetworkReply::setMajorVersion(int version)
-{
-    d_func()->parser.setMajorVersion(version);
-}
-
-void QHttpNetworkReply::setMinorVersion(int version)
-{
-    d_func()->parser.setMinorVersion(version);
+    return d_func()->minorVersion;
 }
 
 qint64 QHttpNetworkReply::bytesAvailable() const
@@ -235,8 +246,7 @@ void QHttpNetworkReply::setReadBufferSize(qint64 size)
 bool QHttpNetworkReply::supportsUserProvidedDownloadBuffer()
 {
     Q_D(QHttpNetworkReply);
-    return !d->isChunked() && !d->autoDecompress &&
-            d->bodyLength > 0 && d->parser.getStatusCode() == 200;
+    return (!d->isChunked() && !d->autoDecompress && d->bodyLength > 0 && d->statusCode == 200);
 }
 
 void QHttpNetworkReply::setUserProvidedDownloadBuffer(char* b)
@@ -302,8 +312,9 @@ QHttpNetworkConnection* QHttpNetworkReply::connection()
 QHttpNetworkReplyPrivate::QHttpNetworkReplyPrivate(const QUrl &newUrl)
     : QHttpNetworkHeaderPrivate(newUrl)
     , state(NothingDoneState)
-    , ssl(false),
-      bodyLength(0), contentRead(0), totalProgress(0),
+    , ssl(false)
+    , statusCode(100),
+      majorVersion(0), minorVersion(0), bodyLength(0), contentRead(0), totalProgress(0),
       chunkedTransferEncoding(false),
       connectionCloseEnabled(true),
       forceConnectionCloseEnabled(false),
@@ -318,7 +329,8 @@ QHttpNetworkReplyPrivate::QHttpNetworkReplyPrivate(const QUrl &newUrl)
 
 {
     QString scheme = newUrl.scheme();
-    if (scheme == "preconnect-http"_L1 || scheme == "preconnect-https"_L1)
+    if (scheme == QLatin1String("preconnect-http")
+            || scheme == QLatin1String("preconnect-https"))
         // make sure we do not close the socket after preconnecting
         connectionCloseEnabled = false;
 }
@@ -328,6 +340,7 @@ QHttpNetworkReplyPrivate::~QHttpNetworkReplyPrivate() = default;
 void QHttpNetworkReplyPrivate::clearHttpLayerInformation()
 {
     state = NothingDoneState;
+    statusCode = 100;
     bodyLength = 0;
     contentRead = 0;
     totalProgress = 0;
@@ -335,7 +348,8 @@ void QHttpNetworkReplyPrivate::clearHttpLayerInformation()
     currentChunkRead = 0;
     lastChunkRead = false;
     connectionCloseEnabled = true;
-    parser.clear();
+    decompressHelper.clear();
+    fields.clear();
 }
 
 // TODO: Isn't everything HTTP layer related? We don't need to set connection and connectionChannel to 0 at all
@@ -369,12 +383,15 @@ void QHttpNetworkReplyPrivate::removeAutoDecompressHeader()
     // The header "Content-Encoding  = gzip" is retained.
     // Content-Length is removed since the actual one sent by the server is for compressed data
     QByteArray name("content-length");
-    QByteArray contentLength = parser.firstHeaderField(name);
-    bool parseOk = false;
-    qint64 value = contentLength.toLongLong(&parseOk);
-    if (parseOk) {
-        removedContentLength = value;
-        parser.removeHeaderField(name);
+    QList<QPair<QByteArray, QByteArray> >::Iterator it = fields.begin(),
+                                                   end = fields.end();
+    while (it != end) {
+        if (name.compare(it->first, Qt::CaseInsensitive) == 0) {
+            removedContentLength = strtoull(it->second.constData(), nullptr, 0);
+            fields.erase(it);
+            break;
+        }
+        ++it;
     }
 }
 
@@ -420,7 +437,7 @@ qint64 QHttpNetworkReplyPrivate::readStatus(QAbstractSocket *socket)
         if (c == '\n') {
             // remove the CR at the end
             if (fragment.endsWith('\r')) {
-                fragment.truncate(fragment.size()-1);
+                fragment.truncate(fragment.length()-1);
             }
             bool ok = parseStatus(fragment);
             state = ReadingHeaderState;
@@ -434,7 +451,7 @@ qint64 QHttpNetworkReplyPrivate::readStatus(QAbstractSocket *socket)
         }
 
         // is this a valid reply?
-        if (fragment.size() == 5 && !fragment.startsWith("HTTP/")) {
+        if (fragment.length() == 5 && !fragment.startsWith("HTTP/")) {
             fragment.clear();
             return -1;
         }
@@ -445,7 +462,38 @@ qint64 QHttpNetworkReplyPrivate::readStatus(QAbstractSocket *socket)
 
 bool QHttpNetworkReplyPrivate::parseStatus(const QByteArray &status)
 {
-    return parser.parseStatus(status);
+    // from RFC 2616:
+    //        Status-Line = HTTP-Version SP Status-Code SP Reason-Phrase CRLF
+    //        HTTP-Version   = "HTTP" "/" 1*DIGIT "." 1*DIGIT
+    // that makes: 'HTTP/n.n xxx Message'
+    // byte count:  0123456789012
+
+    static const int minLength = 11;
+    static const int dotPos = 6;
+    static const int spacePos = 8;
+    static const char httpMagic[] = "HTTP/";
+
+    if (status.length() < minLength
+        || !status.startsWith(httpMagic)
+        || status.at(dotPos) != '.'
+        || status.at(spacePos) != ' ') {
+        // I don't know how to parse this status line
+        return false;
+    }
+
+    // optimize for the valid case: defer checking until the end
+    majorVersion = status.at(dotPos - 1) - '0';
+    minorVersion = status.at(dotPos + 1) - '0';
+
+    int i = spacePos;
+    int j = status.indexOf(' ', i + 1); // j == -1 || at(j) == ' ' so j+1 == 0 && j+1 <= length()
+    const QByteArray code = status.mid(i + 1, j - i - 1);
+
+    bool ok;
+    statusCode = code.toInt(&ok);
+    reasonPhrase = QString::fromLatin1(status.constData() + j + 1);
+
+    return ok && uint(majorVersion) <= 9 && uint(minorVersion) <= 9;
 }
 
 qint64 QHttpNetworkReplyPrivate::readHeader(QAbstractSocket *socket)
@@ -482,8 +530,8 @@ qint64 QHttpNetworkReplyPrivate::readHeader(QAbstractSocket *socket)
                     allHeaders = true;
 
                 // there is another case: We have no headers. Then the fragment equals just the line ending
-                if ((fragment.size() == 2 && fragment.endsWith("\r\n"))
-                    || (fragment.size() == 1 && fragment.endsWith("\n")))
+                if ((fragment.length() == 2 && fragment.endsWith("\r\n"))
+                    || (fragment.length() == 1 && fragment.endsWith("\n")))
                     allHeaders = true;
             }
         }
@@ -504,20 +552,47 @@ qint64 QHttpNetworkReplyPrivate::readHeader(QAbstractSocket *socket)
         // check for explicit indication of close or the implicit connection close of HTTP/1.0
         connectionCloseEnabled = (connectionHeaderField.toLower().contains("close") ||
             headerField("proxy-connection").toLower().contains("close")) ||
-            (parser.getMajorVersion() == 1 && parser.getMinorVersion() == 0 &&
+            (majorVersion == 1 && minorVersion == 0 &&
             (connectionHeaderField.isEmpty() && !headerField("proxy-connection").toLower().contains("keep-alive")));
+        if (autoDecompress && isCompressed()) {
+            if (!decompressHelper.setEncoding(headerField("content-encoding")))
+                return -1; // Either the encoding was unsupported or the decoder could not be set up
+            decompressHelper.setDecompressedSafetyCheckThreshold(request.minimumArchiveBombSize());
+        }
     }
     return bytes;
 }
 
 void QHttpNetworkReplyPrivate::parseHeader(const QByteArray &header)
 {
-    parser.parseHeaders(header);
-}
+    // see rfc2616, sec 4 for information about HTTP/1.1 headers.
+    // allows relaxed parsing here, accepts both CRLF & LF line endings
+    int i = 0;
+    while (i < header.count()) {
+        int j = header.indexOf(':', i); // field-name
+        if (j == -1)
+            break;
+        const QByteArray field = header.mid(i, j - i).trimmed();
+        j++;
+        // any number of LWS is allowed before and after the value
+        QByteArray value;
+        do {
+            i = header.indexOf('\n', j);
+            if (i == -1)
+                break;
+            if (!value.isEmpty())
+                value += ' ';
+            // check if we have CRLF or only LF
+            bool hasCR = (i && header[i-1] == '\r');
+            int length = i -(hasCR ? 1: 0) - j;
+            value += header.mid(j, length).trimmed();
+            j = ++i;
+        } while (i < header.count() && (header.at(i) == ' ' || header.at(i) == '\t'));
+        if (i == -1)
+            break; // something is wrong
 
-void QHttpNetworkReplyPrivate::appendHeaderField(const QByteArray &name, const QByteArray &data)
-{
-    parser.appendHeaderField(name, data);
+        fields.append(qMakePair(field, value));
+    }
 }
 
 bool QHttpNetworkReplyPrivate::isChunked()
@@ -585,18 +660,42 @@ qint64 QHttpNetworkReplyPrivate::readBody(QAbstractSocket *socket, QByteDataBuff
 {
     qint64 bytes = 0;
 
+    // for compressed data we'll allocate a temporary one that we then decompress
+    QByteDataBuffer *tempOutDataBuffer = (autoDecompress ? new QByteDataBuffer : out);
+
+
     if (isChunked()) {
         // chunked transfer encoding (rfc 2616, sec 3.6)
-        bytes += readReplyBodyChunked(socket, out);
+        bytes += readReplyBodyChunked(socket, tempOutDataBuffer);
     } else if (bodyLength > 0) {
         // we have a Content-Length
-        bytes += readReplyBodyRaw(socket, out, bodyLength - contentRead);
+        bytes += readReplyBodyRaw(socket, tempOutDataBuffer, bodyLength - contentRead);
         if (contentRead + bytes == bodyLength)
             state = AllDoneState;
     } else {
         // no content length. just read what's possible
-        bytes += readReplyBodyRaw(socket, out, socket->bytesAvailable());
+        bytes += readReplyBodyRaw(socket, tempOutDataBuffer, socket->bytesAvailable());
     }
+
+    // This is true if there is compressed encoding and we're supposed to use it.
+    if (autoDecompress) {
+        QScopedPointer holder(tempOutDataBuffer);
+        if (!decompressHelper.isValid())
+            return -1;
+
+        decompressHelper.feed(std::move(*tempOutDataBuffer));
+        while (decompressHelper.hasData()) {
+            QByteArray output(4 * 1024, Qt::Uninitialized);
+            qint64 read = decompressHelper.read(output.data(), output.size());
+            if (read < 0) {
+                return -1;
+            } else if (read > 0) {
+                output.resize(read);
+                out->append(std::move(output));
+            }
+        }
+    }
+
     contentRead += bytes;
     return bytes;
 }
@@ -740,7 +839,7 @@ bool QHttpNetworkReplyPrivate::isRedirecting() const
 {
     // We're in the process of redirecting - if the HTTP status code says so and
     // followRedirect is switched on
-    return (QHttpNetworkReply::isHttpRedirect(parser.getStatusCode())
+    return (QHttpNetworkReply::isHttpRedirect(statusCode)
             && request.isFollowRedirects());
 }
 
@@ -748,12 +847,11 @@ bool QHttpNetworkReplyPrivate::shouldEmitSignals()
 {
     // for 401 & 407 don't emit the data signals. Content along with these
     // responses are sent only if the authentication fails.
-    return parser.getStatusCode() != 401 && parser.getStatusCode() != 407;
+    return (statusCode != 401 && statusCode != 407);
 }
 
 bool QHttpNetworkReplyPrivate::expectContent()
 {
-    int statusCode = parser.getStatusCode();
     // check whether we can expect content after the headers (rfc 2616, sec4.4)
     if ((statusCode >= 100 && statusCode < 200)
         || statusCode == 204 || statusCode == 304)
@@ -820,5 +918,3 @@ void QHttpNetworkReply::ignoreSslErrors(const QList<QSslError> &errors)
 
 
 QT_END_NAMESPACE
-
-#include "moc_qhttpnetworkreply_p.cpp"

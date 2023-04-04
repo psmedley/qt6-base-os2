@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 /*
@@ -720,29 +745,29 @@ void tst_QTextLayout::cursorToXForBidiBoundaries_data()
     QTest::addColumn<Qt::LayoutDirection>("textDirection");
     QTest::addColumn<QString>("text");
     QTest::addColumn<int>("cursorPosition");
-    QTest::addColumn<int>("runsToInclude");
+    QTest::addColumn<int>("expectedX");
 
     QTest::addRow("LTR, abcشزذabc, 0") << Qt::LeftToRight << "abcشزذabc"
         << 0 << 0;
     QTest::addRow("RTL, abcشزذabc, 9") << Qt::RightToLeft << "abcشزذabc"
-        << 9 << 1;
+        << 9 << TESTFONT_SIZE * 3;
     QTest::addRow("LTR, abcشزذabc, 3") << Qt::LeftToRight << "abcشزذabc"
         << 0 << 0;
     QTest::addRow("RTL, abcشزذabc, 6") << Qt::RightToLeft << "abcشزذabc"
-        << 9 << 1;
+        << 9 << TESTFONT_SIZE * 3;
 
     QTest::addRow("LTR, شزذabcشزذ, 0") << Qt::LeftToRight << "شزذabcشزذ"
-        << 0 << 1;
+        << 0 << TESTFONT_SIZE * 2;
     QTest::addRow("RTL, شزذabcشزذ, 9") << Qt::RightToLeft << "شزذabcشزذ"
         << 9 << 0;
     QTest::addRow("LTR, شزذabcشزذ, 3") << Qt::LeftToRight << "شزذabcشزذ"
-        << 3 << 1;
+        << 3 << TESTFONT_SIZE * 2;
     QTest::addRow("RTL, شزذabcشزذ, 3") << Qt::RightToLeft << "شزذabcشزذ"
-        << 3 << 2;
+        << 3 << TESTFONT_SIZE * 5;
     QTest::addRow("LTR, شزذabcشزذ, 6") << Qt::LeftToRight << "شزذabcشزذ"
-        << 6 << 2;
+        << 6 << TESTFONT_SIZE * 5;
     QTest::addRow("RTL, شزذabcشزذ, 6") << Qt::RightToLeft << "شزذabcشزذ"
-        << 6 << 1;
+        << 6 << TESTFONT_SIZE * 2;
 }
 
 void tst_QTextLayout::cursorToXForBidiBoundaries()
@@ -750,7 +775,7 @@ void tst_QTextLayout::cursorToXForBidiBoundaries()
     QFETCH(Qt::LayoutDirection, textDirection);
     QFETCH(QString, text);
     QFETCH(int, cursorPosition);
-    QFETCH(int, runsToInclude);
+    QFETCH(int, expectedX);
 
     QTextOption option;
     option.setTextDirection(textDirection);
@@ -759,27 +784,12 @@ void tst_QTextLayout::cursorToXForBidiBoundaries()
     layout.setTextOption(option);
     layout.beginLayout();
 
-    {
-        QTextLine line = layout.createLine();
-        line.setLineWidth(0x10000);
-    }
-    layout.endLayout();
-
-    QTextLine line = layout.lineAt(0);
-    QList<QGlyphRun> glyphRuns = line.glyphRuns();
-    QVERIFY(runsToInclude <= glyphRuns.size());
-
-    std::sort(glyphRuns.begin(), glyphRuns.end(),
-              [](const QGlyphRun &first, const QGlyphRun &second) {
-                    return first.positions().first().x() < second.positions().first().x();
-                 });
-
-    qreal expectedX = 0.0;
-    for (int i = 0; i < runsToInclude; ++i) {
-        expectedX += glyphRuns.at(i).boundingRect().width();
-    }
+    QTextLine line = layout.createLine();
+    line.setLineWidth(0x10000);
 
     QCOMPARE(line.cursorToX(cursorPosition), expectedX);
+
+    layout.endLayout();
 }
 
 void tst_QTextLayout::horizontalAlignment_data()
@@ -1074,7 +1084,7 @@ void tst_QTextLayout::defaultWordSeparators_data()
 
     QString separators(".,:;-<>[](){}=/+%&^*");
     separators += QLatin1String("!?");
-    for (int i = 0; i < separators.size(); ++i) {
+    for (int i = 0; i < separators.count(); ++i) {
         QTest::newRow(QString::number(i).toLatin1().data())
             << QString::fromLatin1("abcd") + separators.at(i) + QString::fromLatin1("efgh")
             <<  0 << 4;

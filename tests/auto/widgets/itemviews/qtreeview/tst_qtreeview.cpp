@@ -1,5 +1,30 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "../../../../shared/fakedirmodel.h"
 
@@ -1279,7 +1304,7 @@ void tst_QTreeView::setModel()
             QCOMPARE(view.header()->model(), model);
             QCOMPARE(view.selectionModel() != oldSelectionModel, (i == 0));
         }
-        QTRY_COMPARE(modelDestroyedSpy.size(), 0);
+        QTRY_COMPARE(modelDestroyedSpy.count(), 0);
 
         view.setModel(nullptr);
         QCOMPARE(view.model(), nullptr);
@@ -1334,7 +1359,7 @@ void tst_QTreeView::setHeader()
         Qt::Orientation orient = x ? Qt::Vertical : Qt::Horizontal;
         QHeaderView *head = new QHeaderView(orient);
         view.setHeader(head);
-        QCOMPARE(destroyedSpy.size(), 1);
+        QCOMPARE(destroyedSpy.count(), 1);
         QCOMPARE(head->parent(), &view);
         QCOMPARE(view.header(), head);
         view.setHeader(head);
@@ -1517,10 +1542,10 @@ void tst_QTreeView::limitedExpand()
         QVERIFY(spy.isValid());
 
         view.expand(model.index(0, 0));
-        QCOMPARE(spy.size(), 0);
+        QCOMPARE(spy.count(), 0);
 
         view.expand(model.index(1, 0));
-        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy.count(), 1);
     }
     {
         QStringListModel model(QStringList() << "one" << "two");
@@ -1531,9 +1556,9 @@ void tst_QTreeView::limitedExpand()
         QVERIFY(spy.isValid());
 
         view.expand(model.index(0, 0));
-        QCOMPARE(spy.size(), 0);
+        QCOMPARE(spy.count(), 0);
         view.expandAll();
-        QCOMPARE(spy.size(), 0);
+        QCOMPARE(spy.count(), 0);
     }
 }
 
@@ -1572,58 +1597,58 @@ void tst_QTreeView::expandAndCollapse()
             view.expand(QModelIndex());
             QCOMPARE(view.isExpanded(QModelIndex()), false);
             view.collapse(QModelIndex());
-            QCOMPARE(expandedSpy.size(), 0);
-            QCOMPARE(collapsedSpy.size(), 0);
+            QCOMPARE(expandedSpy.count(), 0);
+            QCOMPARE(collapsedSpy.count(), 0);
 
             // expand a first level item
             QVERIFY(!view.isExpanded(a));
             view.expand(a);
             QVERIFY(view.isExpanded(a));
-            QCOMPARE(expandedSpy.size(), 1);
-            QCOMPARE(collapsedSpy.size(), 0);
+            QCOMPARE(expandedSpy.count(), 1);
+            QCOMPARE(collapsedSpy.count(), 0);
             args = expandedSpy.takeFirst();
             QCOMPARE(qvariant_cast<QModelIndex>(args.at(0)), a);
 
             view.expand(a);
             QVERIFY(view.isExpanded(a));
-            QCOMPARE(expandedSpy.size(), 0);
-            QCOMPARE(collapsedSpy.size(), 0);
+            QCOMPARE(expandedSpy.count(), 0);
+            QCOMPARE(collapsedSpy.count(), 0);
 
             // expand a second level item
             QVERIFY(!view.isExpanded(b));
             view.expand(b);
             QVERIFY(view.isExpanded(a));
             QVERIFY(view.isExpanded(b));
-            QCOMPARE(expandedSpy.size(), 1);
-            QCOMPARE(collapsedSpy.size(), 0);
+            QCOMPARE(expandedSpy.count(), 1);
+            QCOMPARE(collapsedSpy.count(), 0);
             args = expandedSpy.takeFirst();
             QCOMPARE(qvariant_cast<QModelIndex>(args.at(0)), b);
 
             view.expand(b);
             QVERIFY(view.isExpanded(b));
-            QCOMPARE(expandedSpy.size(), 0);
-            QCOMPARE(collapsedSpy.size(), 0);
+            QCOMPARE(expandedSpy.count(), 0);
+            QCOMPARE(collapsedSpy.count(), 0);
 
             // collapse the first level item
             view.collapse(a);
             QVERIFY(!view.isExpanded(a));
             QVERIFY(view.isExpanded(b));
-            QCOMPARE(expandedSpy.size(), 0);
-            QCOMPARE(collapsedSpy.size(), 1);
+            QCOMPARE(expandedSpy.count(), 0);
+            QCOMPARE(collapsedSpy.count(), 1);
             args = collapsedSpy.takeFirst();
             QCOMPARE(qvariant_cast<QModelIndex>(args.at(0)), a);
 
             view.collapse(a);
             QVERIFY(!view.isExpanded(a));
-            QCOMPARE(expandedSpy.size(), 0);
-            QCOMPARE(collapsedSpy.size(), 0);
+            QCOMPARE(expandedSpy.count(), 0);
+            QCOMPARE(collapsedSpy.count(), 0);
 
             // expand the first level item again
             view.expand(a);
             QVERIFY(view.isExpanded(a));
             QVERIFY(view.isExpanded(b));
-            QCOMPARE(expandedSpy.size(), 1);
-            QCOMPARE(collapsedSpy.size(), 0);
+            QCOMPARE(expandedSpy.count(), 1);
+            QCOMPARE(collapsedSpy.count(), 0);
             args = expandedSpy.takeFirst();
             QCOMPARE(qvariant_cast<QModelIndex>(args.at(0)), a);
 
@@ -1631,8 +1656,8 @@ void tst_QTreeView::expandAndCollapse()
             view.collapse(b);
             QVERIFY(view.isExpanded(a));
             QVERIFY(!view.isExpanded(b));
-            QCOMPARE(expandedSpy.size(), 0);
-            QCOMPARE(collapsedSpy.size(), 1);
+            QCOMPARE(expandedSpy.count(), 0);
+            QCOMPARE(collapsedSpy.count(), 1);
             args = collapsedSpy.takeFirst();
             QCOMPARE(qvariant_cast<QModelIndex>(args.at(0)), b);
 
@@ -1640,8 +1665,8 @@ void tst_QTreeView::expandAndCollapse()
             view.collapse(a);
             QVERIFY(!view.isExpanded(a));
             QVERIFY(!view.isExpanded(b));
-            QCOMPARE(expandedSpy.size(), 0);
-            QCOMPARE(collapsedSpy.size(), 1);
+            QCOMPARE(expandedSpy.count(), 0);
+            QCOMPARE(collapsedSpy.count(), 1);
             args = collapsedSpy.takeFirst();
             QCOMPARE(qvariant_cast<QModelIndex>(args.at(0)), a);
 
@@ -1653,8 +1678,8 @@ void tst_QTreeView::expandAndCollapse()
             QVERIFY(view.isExpanded(a));
             QVERIFY(view.isExpanded(b));
             QVERIFY(!view.isExpanded(c));
-            QCOMPARE(expandedSpy.size(), 2);
-            QCOMPARE(collapsedSpy.size(), 0);
+            QCOMPARE(expandedSpy.count(), 2);
+            QCOMPARE(collapsedSpy.count(), 0);
             args = expandedSpy.takeFirst();
             QCOMPARE(qvariant_cast<QModelIndex>(args.at(0)), a);
             args = expandedSpy.takeFirst();
@@ -1665,8 +1690,8 @@ void tst_QTreeView::expandAndCollapse()
             QVERIFY(!view.isExpanded(a));
             QVERIFY(!view.isExpanded(b));
             QVERIFY(!view.isExpanded(c));
-            QCOMPARE(expandedSpy.size(), 0);
-            QCOMPARE(collapsedSpy.size(), 2);
+            QCOMPARE(expandedSpy.count(), 0);
+            QCOMPARE(collapsedSpy.count(), 2);
             args = collapsedSpy.takeFirst();
             QCOMPARE(qvariant_cast<QModelIndex>(args.at(0)), a);
             args = collapsedSpy.takeFirst();
@@ -1728,22 +1753,22 @@ void tst_QTreeView::expandAndCollapseAll()
 
     view.expandAll();
     checkExpandState(model, view, QModelIndex(), true, &count);
-    QCOMPARE(collapsedSpy.size(), 0);
-    QCOMPARE(expandedSpy.size(),  39); // == 3 (first) + 9 (second) + 27 (third level)
+    QCOMPARE(collapsedSpy.count(), 0);
+    QCOMPARE(expandedSpy.count(),  39); // == 3 (first) + 9 (second) + 27 (third level)
     QCOMPARE(count, 39);
 
     collapsedSpy.clear();
     expandedSpy.clear();
     view.collapseAll();
     checkExpandState(model, view, QModelIndex(), false, &count);
-    QCOMPARE(collapsedSpy.size(), 39);
-    QCOMPARE(expandedSpy.size(), 0);
+    QCOMPARE(collapsedSpy.count(), 39);
+    QCOMPARE(expandedSpy.count(), 0);
     QCOMPARE(count, 39);
 
     collapsedSpy.clear();
     expandedSpy.clear();
     view.expandRecursively(model.index(0, 0));
-    QCOMPARE(expandedSpy.size(), 13); // 1 + 3 + 9
+    QCOMPARE(expandedSpy.count(), 13); // 1 + 3 + 9
 
     checkExpandState(model, view, model.index(0, 0), true, &count);
     QCOMPARE(count, 13);
@@ -1755,9 +1780,9 @@ void tst_QTreeView::expandAndCollapseAll()
     expandedSpy.clear();
     view.collapseAll();
     view.expandRecursively(model.index(0, 0), 1);
-    QCOMPARE(expandedSpy.size(), 4); // 1 + 3
+    QCOMPARE(expandedSpy.count(), 4); // 1 + 3
     view.expandRecursively(model.index(0, 0), 2);
-    QCOMPARE(expandedSpy.size(), 13); // (1 + 3) + 9
+    QCOMPARE(expandedSpy.count(), 13); // (1 + 3) + 9
 
     checkExpandState(model, view, model.index(0, 0), true, &count);
     QCOMPARE(count, 13);
@@ -1853,7 +1878,7 @@ void tst_QTreeView::keyboardNavigation()
             }
             break;
         default:
-            QFAIL(qPrintable(QStringLiteral("Unexpected key: %1").arg(key)));
+            QVERIFY(false);
         }
 
         QCOMPARE(view.currentIndex().row(), row);
@@ -2043,7 +2068,7 @@ void tst_QTreeView::setSelection()
     QVERIFY(selectionModel);
 
     const QModelIndexList selectedIndexes = selectionModel->selectedIndexes();
-    QCOMPARE(selectedIndexes.size(), expectedItems.size());
+    QCOMPARE(selectedIndexes.count(), expectedItems.count());
     for (const QModelIndex &idx : selectedIndexes)
         QVERIFY(expectedItems.contains(QPoint(idx.column(), idx.row())));
 }
@@ -2147,7 +2172,7 @@ void tst_QTreeView::clicked()
             continue;
         QSignalSpy spy(&view, &QTreeView::clicked);
         QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, p);
-        QTRY_COMPARE(spy.size(), 1);
+        QTRY_COMPARE(spy.count(), 1);
     }
 }
 
@@ -2228,7 +2253,7 @@ void tst_QTreeView::rowsAboutToBeRemoved()
     model.removeRows(1,1);
     QCOMPARE((view.state()), 0);
     // Should not be 5 (or any other number for that sake :)
-    QCOMPARE(spy1.size(), 1);
+    QCOMPARE(spy1.count(), 1);
 
 }
 
@@ -2540,28 +2565,28 @@ void tst_QTreeView::selectionWithHiddenItems()
 
     //child should not be selected as it is hidden (its parent is not expanded)
     view.selectAll();
-    QCOMPARE(view.selectionModel()->selection().size(), 1); //one range
-    QCOMPARE(view.selectionModel()->selectedRows().size(), 4);
+    QCOMPARE(view.selectionModel()->selection().count(), 1); //one range
+    QCOMPARE(view.selectionModel()->selectedRows().count(), 4);
     view.expandAll();
     QVERIFY(view.isExpanded(item1.index()));
-    QCOMPARE(view.selectionModel()->selection().size(), 1);
-    QCOMPARE(view.selectionModel()->selectedRows().size(), 4);
+    QCOMPARE(view.selectionModel()->selection().count(), 1);
+    QCOMPARE(view.selectionModel()->selectedRows().count(), 4);
     QVERIFY( !view.selectionModel()->isSelected(model.indexFromItem(&child)));
     view.clearSelection();
     QVERIFY(view.isExpanded(item1.index()));
 
     //child should be selected as it is visible (its parent is expanded)
     view.selectAll();
-    QCOMPARE(view.selectionModel()->selection().size(), 2);
-    QCOMPARE(view.selectionModel()->selectedRows().size(), 5); //everything is selected
+    QCOMPARE(view.selectionModel()->selection().count(), 2);
+    QCOMPARE(view.selectionModel()->selectedRows().count(), 5); //everything is selected
     view.clearSelection();
 
     //we hide the node with a child (there should then be 3 items selected in 2 ranges)
     view.setRowHidden(1, QModelIndex(), true);
     QVERIFY(view.isExpanded(item1.index()));
     view.selectAll();
-    QCOMPARE(view.selectionModel()->selection().size(), 2);
-    QCOMPARE(view.selectionModel()->selectedRows().size(), 3);
+    QCOMPARE(view.selectionModel()->selection().count(), 2);
+    QCOMPARE(view.selectionModel()->selectedRows().count(), 3);
     QVERIFY(!view.selectionModel()->isSelected(model.indexFromItem(&item1)));
     QVERIFY(!view.selectionModel()->isSelected(model.indexFromItem(&child)));
 
@@ -2574,8 +2599,8 @@ void tst_QTreeView::selectionWithHiddenItems()
     QVERIFY(view.isExpanded(item1.index()));
     view.selectAll();
     QVERIFY(view.isExpanded(item1.index()));
-    QCOMPARE(view.selectionModel()->selection().size(), 3);
-    QCOMPARE(view.selectionModel()->selectedRows().size(), 4);
+    QCOMPARE(view.selectionModel()->selection().count(), 3);
+    QCOMPARE(view.selectionModel()->selectedRows().count(), 4);
     QVERIFY( !view.selectionModel()->isSelected(model.indexFromItem(&item2)));
     view.setRowHidden(2, QModelIndex(), false);
     QVERIFY(view.isExpanded(item1.index()));
@@ -2590,21 +2615,21 @@ void tst_QTreeView::selectAll()
     view2.setSelectionMode(QAbstractItemView::ExtendedSelection);
     view2.selectAll();  // Should work with an empty model
     //everything should be selected since we are in ExtendedSelection mode
-    QCOMPARE(view2.selectedIndexes().size(), model.rowCount() * model.columnCount());
+    QCOMPARE(view2.selectedIndexes().count(), model.rowCount() * model.columnCount());
 
     for (int i = 0; i < model.rowCount(); ++i)
         model.setData(model.index(i,0), QLatin1String("row ") + QString::number(i));
     QTreeView view;
     view.setModel(&model);
-    int selectedCount = view.selectedIndexes().size();
+    int selectedCount = view.selectedIndexes().count();
     view.selectAll();
-    QCOMPARE(view.selectedIndexes().size(), selectedCount);
+    QCOMPARE(view.selectedIndexes().count(), selectedCount);
 
     QTreeView view3;
     view3.setModel(&model);
     view3.setSelectionMode(QAbstractItemView::NoSelection);
     view3.selectAll();
-    QCOMPARE(view3.selectedIndexes().size(), 0);
+    QCOMPARE(view3.selectedIndexes().count(), 0);
 }
 
 void tst_QTreeView::extendedSelection_data()
@@ -2630,7 +2655,7 @@ void tst_QTreeView::extendedSelection()
     topLevel.show();
     QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
     QTest::mousePress(view.viewport(), Qt::LeftButton, {}, mousePressPos);
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), selectedCount);
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), selectedCount);
 }
 
 void tst_QTreeView::rowSizeHint()
@@ -2870,7 +2895,7 @@ public:
         }
         void kill()
         {
-            for (int i = children.size() -1; i >= 0; --i) {
+            for (int i = children.count() -1; i >= 0; --i) {
                 children.at(i)->kill();
                 if (parent == nullptr) {
                     deadChildren.append(children.at(i));
@@ -2912,7 +2937,7 @@ public:
         emit layoutAboutToBeChanged();
         QModelIndexList oldList = persistentIndexList();
         QList<QStack<int>> oldListPath;
-        for (int i = 0; i < oldList.size(); ++i) {
+        for (int i = 0; i < oldList.count(); ++i) {
             QModelIndex idx = oldList.at(i);
             QStack<int> path;
             while (idx.isValid()) {
@@ -2924,7 +2949,7 @@ public:
         root->kill();
 
         QModelIndexList newList;
-        for (auto path : std::as_const(oldListPath)) {
+        for (auto path : qAsConst(oldListPath)) {
             QModelIndex idx;
             while (!path.isEmpty())
                 idx = index(path.pop(), 0, idx);
@@ -2943,7 +2968,7 @@ public:
             if (parentNode->isDead)
                 qFatal("%s: parentNode is dead!", Q_FUNC_INFO);
         }
-        return parentNode->children.size();
+        return parentNode->children.count();
     }
     int columnCount(const QModelIndex &parent = QModelIndex()) const override
     {
@@ -3534,7 +3559,7 @@ void tst_QTreeView::task174627_moveLeftToRoot()
 
     QSignalSpy spy(&view, &task174627_TreeView::signalCurrentChanged);
     QTest::keyClick(&view, Qt::Key_Left);
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
 }
 
 void tst_QTreeView::task171902_expandWith1stColHidden()
@@ -4040,7 +4065,7 @@ void tst_QTreeView::task248022_changeSelection()
             &view, &TreeView::handleSelectionChanged);
     QTest::mouseClick(view.viewport(), Qt::LeftButton, {},
                       view.visualRect(model.index(1)).center());
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), list.size());
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), list.count());
 }
 
 void tst_QTreeView::task245654_changeModelAndExpandAll()
@@ -4089,7 +4114,7 @@ void tst_QTreeView::doubleClickedWithSpans()
     QTest::mousePress(view.viewport(), Qt::LeftButton, {}, p);
     QTest::mouseDClick(view.viewport(), Qt::LeftButton, {}, p);
     QTest::mouseRelease(view.viewport(), Qt::LeftButton, {}, p);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 
     //let's click on the 2nd column
     p.setX(p.x() + view.header()->sectionSize(0));
@@ -4100,7 +4125,7 @@ void tst_QTreeView::doubleClickedWithSpans()
     QTest::mousePress(view.viewport(), Qt::LeftButton, {}, p);
     QTest::mouseDClick(view.viewport(), Qt::LeftButton, {}, p);
     QTest::mouseRelease(view.viewport(), Qt::LeftButton, {}, p);
-    QTRY_COMPARE(spy.size(), 2);
+    QTRY_COMPARE(spy.count(), 2);
 }
 
 void tst_QTreeView::taskQTBUG_6450_selectAllWith1stColumnHidden()
@@ -5117,7 +5142,7 @@ void tst_QTreeView::fetchUntilScreenFull()
 
             TreeItem* parentItem = parent.isValid() ? static_cast<TreeItem*>(parent.internalPointer())
                 : m_root;
-            return parentItem->children.size();
+            return parentItem->children.count();
         }
 
         int columnCount(const QModelIndex&) const override { return 2; }

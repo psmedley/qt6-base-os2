@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QLALR module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "cppgenerator.h"
 
@@ -12,8 +37,6 @@
 #include <QtCore/qmap.h>
 
 #include <iterator>
-
-using namespace Qt::StringLiterals;
 
 namespace {
 
@@ -41,15 +64,40 @@ void generateList(const QList<int> &list, QTextStream &out)
 
 QString CppGenerator::copyrightHeader() const
 {
-  return
-    "// Copyright (C) 2016 The Qt Company Ltd.\n"
-    "// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0\n"
-    "\n"_L1;
+  return QLatin1String(
+    "/****************************************************************************\n"
+    "**\n"
+    "** Copyright (C) 2016 The Qt Company Ltd.\n"
+    "** Contact: https://www.qt.io/licensing/\n"
+    "**\n"
+    "** This file is part of the Qt Toolkit.\n"
+    "**\n"
+    "** $QT_BEGIN_LICENSE:GPL-EXCEPT$\n"
+    "** Commercial License Usage\n"
+    "** Licensees holding valid commercial Qt licenses may use this file in\n"
+    "** accordance with the commercial license agreement provided with the\n"
+    "** Software or, alternatively, in accordance with the terms contained in\n"
+    "** a written agreement between you and The Qt Company. For licensing terms\n"
+    "** and conditions see https://www.qt.io/terms-conditions. For further\n"
+    "** information use the contact form at https://www.qt.io/contact-us.\n"
+    "**\n"
+    "** GNU General Public License Usage\n"
+    "** Alternatively, this file may be used under the terms of the GNU\n"
+    "** General Public License version 3 as published by the Free Software\n"
+    "** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT\n"
+    "** included in the packaging of this file. Please review the following\n"
+    "** information to ensure the GNU General Public License requirements will\n"
+    "** be met: https://www.gnu.org/licenses/gpl-3.0.html.\n"
+    "**\n"
+    "** $QT_END_LICENSE$\n"
+    "**\n"
+    "****************************************************************************/\n"
+    "\n");
 }
 
 QString CppGenerator::privateCopyrightHeader() const
 {
-  return
+  return QLatin1String(
     "//\n"
     "//  W A R N I N G\n"
     "//  -------------\n"
@@ -59,12 +107,12 @@ QString CppGenerator::privateCopyrightHeader() const
     "// version without notice, or even be removed.\n"
     "//\n"
     "// We mean it.\n"
-    "//\n"_L1;
+    "//\n");
 }
 
 QString CppGenerator::startIncludeGuard(const QString &fileName)
 {
-    const QString normalized(QString(fileName).replace(u'.', u'_').toUpper());
+    const QString normalized(QString(fileName).replace(QLatin1Char('.'), QLatin1Char('_')).toUpper());
 
     return QString::fromLatin1("#ifndef %1\n"
                                "#define %2\n").arg(normalized, normalized);
@@ -72,7 +120,7 @@ QString CppGenerator::startIncludeGuard(const QString &fileName)
 
 QString CppGenerator::endIncludeGuard(const QString &fileName)
 {
-    const QString normalized(QString(fileName).replace(u'.', u'_').toUpper());
+    const QString normalized(QString(fileName).replace(QLatin1Char('.'), QLatin1Char('_')).toUpper());
 
     return QString::fromLatin1("#endif // %1\n").arg(normalized);
 }
@@ -214,7 +262,7 @@ void CppGenerator::operator () ()
     }
 
   auto rule = grammar.rules.begin();
-  for (int i = 0; i < used_rules.size(); ++i, ++rule)
+  for (int i = 0; i < used_rules.count (); ++i, ++rule)
     {
       if (! used_rules.testBit (i))
         {
@@ -326,8 +374,8 @@ void CppGenerator::operator () ()
     }
 
   // default behaviour
-  QString declFileName = grammar.table_name.toLower () + "_p.h"_L1;
-  QString bitsFileName = grammar.table_name.toLower () + ".cpp"_L1;
+  QString declFileName = grammar.table_name.toLower () + QLatin1String("_p.h");
+  QString bitsFileName = grammar.table_name.toLower () + QLatin1String(".cpp");
 
   { // decls...
     QFile f (declFileName);
@@ -400,9 +448,9 @@ void CppGenerator::operator () ()
 
 QString CppGenerator::debugInfoProt() const
 {
-    QString prot = "QLALR_NO_"_L1;
+    QString prot = QLatin1String("QLALR_NO_");
     prot += grammar.table_name.toUpper();
-    prot += "_DEBUG_INFO"_L1;
+    prot += QLatin1String("_DEBUG_INFO");
     return prot;
 }
 
@@ -413,16 +461,16 @@ void CppGenerator::generateDecl (QTextStream &out)
       << "public:" << Qt::endl
       << "    enum VariousConstants {" << Qt::endl;
 
-  for (const Name &t : std::as_const(grammar.terminals))
+  for (const Name &t : qAsConst(grammar.terminals))
     {
       QString name = *t;
       int value = std::distance (grammar.names.begin (), t);
 
-      if (name == "$end"_L1)
-        name = "EOF_SYMBOL"_L1;
+      if (name == QLatin1String ("$end"))
+        name = QLatin1String ("EOF_SYMBOL");
 
-      else if (name == "$accept"_L1)
-        name = "ACCEPT_SYMBOL"_L1;
+      else if (name == QLatin1String ("$accept"))
+        name = QLatin1String ("ACCEPT_SYMBOL");
 
       else
         name.prepend (grammar.token_prefix);

@@ -1,13 +1,36 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QtCore>
 #include <QTest>
 
 #include <QtTest/private/qemulationdetector_p.h>
-
-#include <optional>
 
 enum { OneMinute = 60 * 1000,
        TwoMinutes = OneMinute * 2 };
@@ -21,20 +44,12 @@ struct Functor
 class tst_QObjectRace: public QObject
 {
     Q_OBJECT
-public:
-    tst_QObjectRace()
-        : ThreadCount(QThread::idealThreadCount())
-    {}
-
 private slots:
     void moveToThreadRace();
     void destroyRace();
     void blockingQueuedDestroyRace();
     void disconnectRace();
     void disconnectRace2();
-
-private:
-    const int ThreadCount;
 };
 
 class RaceObject : public QObject
@@ -118,7 +133,8 @@ void tst_QObjectRace::moveToThreadRace()
 {
     RaceObject *object = new RaceObject;
 
-    QVarLengthArray<RaceThread *, 16> threads(ThreadCount);
+    enum { ThreadCount = 6 };
+    RaceThread *threads[ThreadCount];
     for (int i = 0; i < ThreadCount; ++i) {
         threads[i] = new RaceThread;
         threads[i]->setObject(object);
@@ -248,10 +264,10 @@ void tst_QObjectRace::destroyRace()
     if (QTestPrivate::isRunningArmOnX86())
         QSKIP("Test is too slow to run on emulator");
 
-    constexpr int ObjectCountPerThread = 2777;
-    const int ObjectCount = ThreadCount * ObjectCountPerThread;
+    enum { ThreadCount = 10, ObjectCountPerThread = 2777,
+           ObjectCount = ThreadCount * ObjectCountPerThread };
 
-    QVarLengthArray<MyObject *, ObjectCountPerThread * 10> objects(ObjectCount);
+    MyObject *objects[ObjectCount];
     for (int i = 0; i < ObjectCount; ++i)
         objects[i] = new MyObject;
 
@@ -268,10 +284,10 @@ void tst_QObjectRace::destroyRace()
                 objects[((i+5)*79) % ObjectCount],  Functor() );
     }
 
-    QVarLengthArray<DestroyThread *, 16> threads(ThreadCount);
+    DestroyThread *threads[ThreadCount];
     for (int i = 0; i < ThreadCount; ++i) {
         threads[i] = new DestroyThread;
-        threads[i]->setObjects(objects.data() + i*ObjectCountPerThread, ObjectCountPerThread);
+        threads[i]->setObjects(objects + i*ObjectCountPerThread, ObjectCountPerThread);
     }
 
     for (int i = 0; i < ThreadCount; ++i)
@@ -331,13 +347,17 @@ void tst_QObjectRace::blockingQueuedDestroyRace()
 
     while (iteration++ < MinIterations || !timer.hasExpired()) {
         // Manually allocate some storage, and create a receiver in there
-        std::optional<BlockingQueuedDestroyRaceObject> receiver;
+        std::aligned_storage<
+                sizeof(BlockingQueuedDestroyRaceObject),
+                alignof(BlockingQueuedDestroyRaceObject)
+            >::type storage;
 
-        receiver.emplace(BlockingQueuedDestroyRaceObject::Behavior::Normal);
+        auto *receiver = reinterpret_cast<BlockingQueuedDestroyRaceObject *>(&storage);
+        new (receiver) BlockingQueuedDestroyRaceObject(BlockingQueuedDestroyRaceObject::Behavior::Normal);
 
         // Connect it to the sender via BlockingQueuedConnection
         QVERIFY(connect(&sender, &BlockingQueuedDestroyRaceObject::aSignal,
-                        &*receiver, &BlockingQueuedDestroyRaceObject::aSlot,
+                        receiver, &BlockingQueuedDestroyRaceObject::aSlot,
                         Qt::BlockingQueuedConnection));
 
         const auto emitUntilDestroyed = [&sender] {
@@ -359,13 +379,15 @@ void tst_QObjectRace::blockingQueuedDestroyRace()
         // - the metacall event to be posted to a destroyed object;
         // - the metacall event to be posted to the wrong object.
         // In both cases we hope to catch the race by crashing.
-        receiver.reset();
-        receiver.emplace(BlockingQueuedDestroyRaceObject::Behavior::Crash);
+        receiver->~BlockingQueuedDestroyRaceObject();
+        new (receiver) BlockingQueuedDestroyRaceObject(BlockingQueuedDestroyRaceObject::Behavior::Crash);
 
         // Flush events
         QTest::qWait(0);
 
         thread->wait();
+
+        receiver->~BlockingQueuedDestroyRaceObject();
     }
 #endif
 }
@@ -484,7 +506,7 @@ public:
 
 void tst_QObjectRace::disconnectRace()
 {
-    enum { TimeLimit = 3000 };
+    enum { ThreadCount = 20, TimeLimit = 3000 };
 
     QCOMPARE(countedStructObjectsCount.loadRelaxed(), 0u);
 
@@ -494,7 +516,7 @@ void tst_QObjectRace::disconnectRace()
         senderThread->start();
         sender->moveToThread(senderThread.data());
 
-        QVarLengthArray<DisconnectRaceThread *, 16> threads(ThreadCount);
+        DisconnectRaceThread *threads[ThreadCount];
         for (int i = 0; i < ThreadCount; ++i) {
             threads[i] = new DisconnectRaceThread(sender.data(), !(i % 10));
             threads[i]->start();
@@ -520,7 +542,7 @@ void tst_QObjectRace::disconnectRace()
         senderThread->start();
         sender->moveToThread(senderThread.data());
 
-        QVarLengthArray<DeleteReceiverRaceReceiverThread *, 16> threads(ThreadCount);
+        DeleteReceiverRaceReceiverThread *threads[ThreadCount];
         for (int i = 0; i < ThreadCount; ++i) {
             threads[i] = new DeleteReceiverRaceReceiverThread(sender.data());
             threads[i]->start();

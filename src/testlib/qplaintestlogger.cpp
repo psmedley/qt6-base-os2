@@ -1,5 +1,41 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtTest module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtTest/private/qtestresult_p.h>
 #include <QtTest/qtestassert.h>
@@ -36,15 +72,11 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 namespace QTest {
 
     static const char *incidentType2String(QAbstractTestLogger::IncidentTypes type)
     {
         switch (type) {
-        case QAbstractTestLogger::Skip:
-            return "SKIP   ";
         case QAbstractTestLogger::Pass:
             return "PASS   ";
         case QAbstractTestLogger::XFail:
@@ -62,8 +94,7 @@ namespace QTest {
         case QAbstractTestLogger::BlacklistedXFail:
             return "BXFAIL ";
         }
-        Q_UNREACHABLE();
-        return nullptr;
+        return "??????";
     }
 
     static const char *benchmarkResult2String()
@@ -74,23 +105,24 @@ namespace QTest {
     static const char *messageType2String(QAbstractTestLogger::MessageTypes type)
     {
         switch (type) {
+        case QAbstractTestLogger::Skip:
+            return "SKIP   ";
+        case QAbstractTestLogger::Warn:
+            return "WARNING";
+        case QAbstractTestLogger::QWarning:
+            return "QWARN  ";
         case QAbstractTestLogger::QDebug:
             return "QDEBUG ";
         case QAbstractTestLogger::QInfo:
             return "QINFO  ";
-        case QAbstractTestLogger::QWarning:
-            return "QWARN  ";
         case QAbstractTestLogger::QCritical:
             return "QCRITICAL";
         case QAbstractTestLogger::QFatal:
             return "QFATAL ";
         case QAbstractTestLogger::Info:
             return "INFO   ";
-        case QAbstractTestLogger::Warn:
-            return "WARNING";
         }
-        Q_UNREACHABLE();
-        return nullptr;
+        return "??????";
     }
 
     template <typename T>
@@ -114,45 +146,46 @@ namespace QTest {
     template <typename T> QString formatResult(T number, int significantDigits)
     {
         if (number < T(0))
-            return u"NAN"_s;
+            return QLatin1String("NAN");
         if (number == T(0))
-            return u"0"_s;
+            return QLatin1String("0");
 
         QString beforeDecimalPoint = QString::number(qint64(number), 'f', 0);
         QString afterDecimalPoint = QString::number(number, 'f', 20);
-        afterDecimalPoint.remove(0, beforeDecimalPoint.size() + 1);
+        afterDecimalPoint.remove(0, beforeDecimalPoint.count() + 1);
 
-        int beforeUse = qMin(beforeDecimalPoint.size(), significantDigits);
-        int beforeRemove = beforeDecimalPoint.size() - beforeUse;
+        int beforeUse = qMin(beforeDecimalPoint.count(), significantDigits);
+        int beforeRemove = beforeDecimalPoint.count() - beforeUse;
 
         // Replace insignificant digits before the decimal point with zeros.
         beforeDecimalPoint.chop(beforeRemove);
         for (int i = 0; i < beforeRemove; ++i) {
-            beforeDecimalPoint.append(u'0');
+            beforeDecimalPoint.append(QLatin1Char('0'));
         }
 
         int afterUse = significantDigits - beforeUse;
 
         // leading zeroes after the decimal point does not count towards the digit use.
-        if (beforeDecimalPoint == u'0' && !afterDecimalPoint.isEmpty()) {
+        if (beforeDecimalPoint == QLatin1String("0") && afterDecimalPoint.isEmpty() == false) {
             ++afterUse;
 
             int i = 0;
-            while (i < afterDecimalPoint.size() && afterDecimalPoint.at(i) == u'0')
+            while (i < afterDecimalPoint.count() && afterDecimalPoint.at(i) == QLatin1Char('0')) {
                 ++i;
+            }
 
             afterUse += i;
         }
 
-        int afterRemove = afterDecimalPoint.size() - afterUse;
+        int afterRemove = afterDecimalPoint.count() - afterUse;
         afterDecimalPoint.chop(afterRemove);
 
-        QChar separator = u',';
-        QChar decimalPoint = u'.';
+        QChar separator = QLatin1Char(',');
+        QChar decimalPoint = QLatin1Char('.');
 
         // insert thousands separators
-        int length = beforeDecimalPoint.size();
-        for (int i = beforeDecimalPoint.size() -1; i >= 1; --i) {
+        int length = beforeDecimalPoint.length();
+        for (int i = beforeDecimalPoint.length() -1; i >= 1; --i) {
             if ((length - i) % 3 == 0)
                 beforeDecimalPoint.insert(i, separator);
         }
@@ -172,20 +205,11 @@ namespace QTest {
     int formatResult(char * buffer, int bufferSize, T number, int significantDigits)
     {
         QString result = formatResult(number, significantDigits);
-        int size = result.size();
+        int size = result.count();
         qstrncpy(buffer, std::move(result).toLatin1().constData(), bufferSize);
         return size;
     }
 }
-
-/*! \internal
-    \class QPlainTestLogger
-    \inmodule QtTest
-
-    QPlainTestLogger implements basic logging of test results.
-
-    The format is Qt-specific and aims to be be easy to read.
-*/
 
 void QPlainTestLogger::outputMessage(const char *str)
 {
@@ -209,7 +233,7 @@ void QPlainTestLogger::printMessage(MessageSource source, const char *type, cons
 
     QTestCharBuffer messagePrefix;
 
-    QTestCharBuffer messageLocation;
+    QTestCharBuffer failureLocation;
 #ifdef Q_OS_WIN
     constexpr const char *INCIDENT_LOCATION_STR = "\n%s(%d) : failure location";
     constexpr const char *OTHER_LOCATION_STR = "\n%s(%d) : message location";
@@ -221,10 +245,10 @@ void QPlainTestLogger::printMessage(MessageSource source, const char *type, cons
     if (file) {
         switch (source) {
         case MessageSource::Incident:
-            QTest::qt_asprintf(&messageLocation, INCIDENT_LOCATION_STR, file, line);
+            QTest::qt_asprintf(&failureLocation, INCIDENT_LOCATION_STR, file, line);
             break;
         case MessageSource::Other:
-            QTest::qt_asprintf(&messageLocation, OTHER_LOCATION_STR, file, line);
+            QTest::qt_asprintf(&failureLocation, OTHER_LOCATION_STR, file, line);
             break;
         }
     }
@@ -233,7 +257,7 @@ void QPlainTestLogger::printMessage(MessageSource source, const char *type, cons
     QTestCharBuffer testIdentifier;
     QTestPrivate::generateTestIdentifier(&testIdentifier);
     QTest::qt_asprintf(&messagePrefix, "%s: %s%s%s%s\n",
-                       type, testIdentifier.data(), msgFiller, msg, messageLocation.data());
+                       type, testIdentifier.data(), msgFiller, msg, failureLocation.data());
 
     // In colored mode, printf above stripped our nonprintable control characters.
     // Put them back.
@@ -357,8 +381,8 @@ void QPlainTestLogger::leaveTestFunction()
 void QPlainTestLogger::addIncident(IncidentTypes type, const char *description,
                                    const char *file, int line)
 {
-    // suppress B?PASS and B?XFAIL in silent mode
-    if ((type == Pass || type == BlacklistedPass || type == XFail || type == BlacklistedXFail)
+    // suppress PASS and XFAIL in silent mode
+    if ((type == QAbstractTestLogger::Pass || type == QAbstractTestLogger::XFail)
         && QTestLog::verboseLevel() < 0)
         return;
 
@@ -383,7 +407,7 @@ void QPlainTestLogger::addMessage(MessageTypes type, const QString &message,
                                   const char *file, int line)
 {
     // suppress non-fatal messages in silent mode
-    if (type != QFatal && QTestLog::verboseLevel() < 0)
+    if (type != QAbstractTestLogger::QFatal && QTestLog::verboseLevel() < 0)
         return;
 
     printMessage(MessageSource::Other, QTest::messageType2String(type), qPrintable(message), file, line);

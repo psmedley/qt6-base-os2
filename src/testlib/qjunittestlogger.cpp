@@ -1,5 +1,41 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtTest module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtTest/private/qjunittestlogger_p.h>
 #include <QtTest/private/qtestelement_p.h>
@@ -21,16 +57,6 @@
 #include <string.h>
 
 QT_BEGIN_NAMESPACE
-/*! \internal
-    \class QJUnitTestLogger
-    \inmodule QtTest
-
-    QJUnitTestLogger implements logging in a JUnit-compatible XML format.
-
-    The \l{JUnit XML} format was originally developed for Java testing.
-    It is supported by \l{Test Center}.
-*/
-// QTBUG-95424 links to further useful documentation.
 
 QJUnitTestLogger::QJUnitTestLogger(const char *filename)
     : QAbstractTestLogger(filename)
@@ -179,7 +205,7 @@ void QJUnitTestLogger::leaveTestFunction()
 void QJUnitTestLogger::leaveTestCase()
 {
     currentTestCase->addAttribute(QTest::AI_Time,
-        toSecondsFormat(elapsedTestCaseSeconds() * 1000).constData());
+        toSecondsFormat(elapsedTestCaseSeconds()).constData());
 
     if (!systemOutputElement->childElements().empty())
         currentTestCase->addChild(systemOutputElement);
@@ -198,7 +224,7 @@ void QJUnitTestLogger::leaveTestCase()
 void QJUnitTestLogger::addIncident(IncidentTypes type, const char *description,
                                    const char *file, int line)
 {
-    if (type == Fail || type == XPass) {
+    if (type == QAbstractTestLogger::Fail || type == QAbstractTestLogger::XPass) {
         auto failureType = [&]() {
             switch (type) {
             case QAbstractTestLogger::Fail: return "fail";
@@ -208,14 +234,10 @@ void QJUnitTestLogger::addIncident(IncidentTypes type, const char *description,
         }();
 
         addFailure(QTest::LET_Failure, failureType, QString::fromUtf8(description));
-    } else if (type == XFail) {
+    } else if (type == QAbstractTestLogger::XFail) {
         // Since XFAIL does not add a failure to the testlog in JUnit XML we add a
         // message, so we still have some information about the expected failure.
-        addMessage(Info, QString::fromUtf8(description), file, line);
-    } else if (type == Skip) {
-        auto skippedElement = new QTestElement(QTest::LET_Skipped);
-        skippedElement->addAttribute(QTest::AI_Message, description);
-        currentTestCase->addChild(skippedElement);
+        addMessage(QAbstractTestLogger::Info, QString::fromUtf8(description), file, line);
     }
 }
 
@@ -236,8 +258,8 @@ void QJUnitTestLogger::addFailure(QTest::LogElementType elementType,
     failureElement->addAttribute(QTest::AI_Type, failureType);
 
     // Assume the first line is the message, and the remainder are details
-    QString message = failureDescription.section(u'\n', 0, 0);
-    QString details = failureDescription.section(u'\n', 1);
+    QString message = failureDescription.section(QLatin1Char('\n'), 0, 0);
+    QString details = failureDescription.section(QLatin1Char('\n'), 1);
 
     failureElement->addAttribute(QTest::AI_Message, message.toUtf8().constData());
 
@@ -261,7 +283,12 @@ void QJUnitTestLogger::addMessage(MessageTypes type, const QString &message, con
     Q_UNUSED(file);
     Q_UNUSED(line);
 
-    if (type == QFatal) {
+    if (type == QAbstractTestLogger::Skip) {
+        auto skippedElement = new QTestElement(QTest::LET_Skipped);
+        skippedElement->addAttribute(QTest::AI_Message, message.toUtf8().constData());
+        currentTestCase->addChild(skippedElement);
+        return;
+    } else if (type == QAbstractTestLogger::QFatal) {
         addFailure(QTest::LET_Error, "qfatal", message);
         return;
     }

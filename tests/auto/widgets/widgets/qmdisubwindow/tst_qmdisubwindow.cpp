@@ -1,5 +1,30 @@
-// Copyright (C) 2019 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2019 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qmdisubwindow.h"
 #include "private/qmdisubwindow_p.h"
@@ -20,7 +45,6 @@
 #include <QStyleOptionTitleBar>
 #include <QPushButton>
 #include <QScreen>
-#include <QScrollBar>
 #include <QSizeGrip>
 #include <QSignalSpy>
 #include <QList>
@@ -197,7 +221,6 @@ private slots:
     void styleChange();
     void testFullScreenState();
     void testRemoveBaseWidget();
-    void testRespectMinimumSize();
 };
 
 void tst_QMdiSubWindow::initTestCase()
@@ -471,7 +494,7 @@ void tst_QMdiSubWindow::mainWindowSupport()
 
     workspace->activateNextSubWindow();
     QCoreApplication::processEvents();
-    for (QMdiSubWindow *window : std::as_const(windows)) {
+    for (QMdiSubWindow *window : qAsConst(windows)) {
         QCOMPARE(workspace->activeSubWindow(), window);
         QVERIFY(window->isMaximized());
         QVERIFY(window->maximizedButtonsWidget());
@@ -528,9 +551,9 @@ void tst_QMdiSubWindow::emittingOfSignals()
 
     int count = 0;
     if (signal == SIGNAL(aboutToActivate())) {
-        count += spy.size();
+        count += spy.count();
     } else {
-        for (int i = 0; i < spy.size(); ++i) {
+        for (int i = 0; i < spy.count(); ++i) {
             Qt::WindowStates oldState = qvariant_cast<Qt::WindowStates>(spy.at(i).at(0));
             Qt::WindowStates newState = qvariant_cast<Qt::WindowStates>(spy.at(i).at(1));
             if (watchedState != Qt::WindowNoState) {
@@ -553,7 +576,7 @@ void tst_QMdiSubWindow::emittingOfSignals()
 
     spy.clear();
     triggerSignal(window, &workspace, signal);
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
 
     delete window;
     window = nullptr;
@@ -1030,7 +1053,7 @@ void tst_QMdiSubWindow::setSystemMenu()
     subWindow->setSystemMenu(systemMenu);
     QCOMPARE(subWindow->systemMenu(), qobject_cast<QMenu *>(systemMenu));
     QCOMPARE(subWindow->systemMenu()->parentWidget(), static_cast<QWidget *>(subWindow));
-    QCOMPARE(subWindow->systemMenu()->actions().size(), 1);
+    QCOMPARE(subWindow->systemMenu()->actions().count(), 1);
 
     // Show the new system menu
     QVERIFY(!QApplication::activePopupWidget());
@@ -1254,7 +1277,7 @@ void tst_QMdiSubWindow::changeFocusWithTab()
     mdiArea.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
     mdiArea.addSubWindow(widget);
     mdiArea.show();
-    QCOMPARE(mdiArea.subWindowList().size(), 1);
+    QCOMPARE(mdiArea.subWindowList().count(), 1);
 
     QApplication::setActiveWindow(&mdiArea);
     QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(firstLineEdit));
@@ -1336,7 +1359,7 @@ void tst_QMdiSubWindow::closeEvent()
 
     QVERIFY(window->close());
     QCOMPARE(closeSpy.count(), 3);
-    QCOMPARE(mdiArea.subWindowList().size(), 0);
+    QCOMPARE(mdiArea.subWindowList().count(), 0);
 }
 
 // There exists more tests in QMdiArea which covers window title support
@@ -2101,7 +2124,7 @@ void tst_QMdiSubWindow::styleChange()
 
     // subWindowActivated should NOT be activated by a style change,
     // even if internally QMdiSubWindow un-minimizes subwindows temporarily.
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
 }
 
 void tst_QMdiSubWindow::testFullScreenState()
@@ -2138,36 +2161,6 @@ void tst_QMdiSubWindow::testRemoveBaseWidget()
     QCOMPARE(widget2->parent(), widget1);
 
     delete widget1;
-}
-
-void tst_QMdiSubWindow::testRespectMinimumSize()  // QTBUG-100494
-{
-    QMdiArea mdiArea;
-    mdiArea.resize(400, 400);
-    mdiArea.setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    mdiArea.setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
-    auto vlay = new QVBoxLayout;
-    vlay->addWidget(new QPushButton(QLatin1String("btn1-1")));
-    vlay->addSpacerItem(new QSpacerItem(20, 40, QSizePolicy::Minimum, QSizePolicy::Expanding));
-    vlay->addWidget(new QPushButton(QLatin1String("btn1-2")));
-    auto w1 = new QWidget;
-    w1->setLayout(vlay);
-    w1->resize(300, 200);
-    w1->setMinimumSize(200, 150);
-    auto sw = new QMdiSubWindow;
-    sw->setWidget(w1);
-    sw->resize(w1->size());
-    mdiArea.addSubWindow(sw);
-    sw->showMaximized();
-
-    mdiArea.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&mdiArea));
-    QVERIFY(!mdiArea.horizontalScrollBar()->isVisible());
-    QVERIFY(!mdiArea.verticalScrollBar()->isVisible());
-    mdiArea.resize(150, 100);
-    QTRY_VERIFY(mdiArea.horizontalScrollBar()->isVisible());
-    QTRY_VERIFY(mdiArea.verticalScrollBar()->isVisible());
 }
 
 QTEST_MAIN(tst_QMdiSubWindow)

@@ -1,12 +1,48 @@
-// Copyright (C) 2017 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QWindow>
 #include <QtGui/QPainter>
+#include <QtGui/QOffscreenSurface>
 #include <qpa/qplatformbackingstore.h>
 #include <private/qwindow_p.h>
-#include <private/qrhi_p.h>
 
 #include "qopenglcompositorbackingstore_p.h"
 #include "qopenglcompositor_p.h"
@@ -43,22 +79,37 @@ QOpenGLCompositorBackingStore::QOpenGLCompositorBackingStore(QWindow *window)
     : QPlatformBackingStore(window),
       m_window(window),
       m_bsTexture(0),
-      m_bsTextureWrapper(nullptr),
       m_bsTextureContext(0),
       m_textures(new QPlatformTextureList),
-      m_lockedWidgetTextures(0),
-      m_rhi(nullptr)
+      m_lockedWidgetTextures(0)
 {
 }
 
 QOpenGLCompositorBackingStore::~QOpenGLCompositorBackingStore()
 {
-    if (m_bsTexture && m_rhi) {
-        delete m_bsTextureWrapper;
-        // Contexts are sharing resources, won't matter which one is
-        // current here, use the rhi's shortcut.
-        m_rhi->makeThreadLocalNativeContextCurrent();
-        glDeleteTextures(1, &m_bsTexture);
+    if (m_bsTexture) {
+        QOpenGLContext *ctx = QOpenGLContext::currentContext();
+        // With render-to-texture-widgets QWidget makes sure the TLW's shareContext() is
+        // made current before destroying backingstores. That is however not the case for
+        // windows with regular widgets only.
+        QScopedPointer<QOffscreenSurface> tempSurface;
+        if (!ctx) {
+            ctx = QOpenGLCompositor::instance()->context();
+            if (ctx) {
+                tempSurface.reset(new QOffscreenSurface);
+                tempSurface->setFormat(ctx->format());
+                tempSurface->create();
+                ctx->makeCurrent(tempSurface.data());
+            }
+        }
+
+        if (m_bsTextureContext && ctx && ctx->shareGroup() == m_bsTextureContext->shareGroup())
+            glDeleteTextures(1, &m_bsTexture);
+        else
+            qWarning("QOpenGLCompositorBackingStore: Texture is not valid in the current context");
+
+        if (tempSurface && ctx)
+            ctx->doneCurrent();
     }
 
     delete m_textures; // this does not actually own any GL resources
@@ -127,11 +178,6 @@ void QOpenGLCompositorBackingStore::updateTexture()
 
         m_dirty = QRegion();
     }
-
-    if (!m_bsTextureWrapper) {
-        m_bsTextureWrapper = m_rhi->newTexture(QRhiTexture::RGBA8, m_image.size());
-        m_bsTextureWrapper->createFrom({m_bsTexture, 0});
-    }
 }
 
 void QOpenGLCompositorBackingStore::flush(QWindow *window, const QRegion &region, const QPoint &offset)
@@ -141,82 +187,60 @@ void QOpenGLCompositorBackingStore::flush(QWindow *window, const QRegion &region
     Q_UNUSED(region);
     Q_UNUSED(offset);
 
-    m_rhi = rhi();
-    if (!m_rhi) {
-        setRhiConfig(QPlatformBackingStoreRhiConfig(QPlatformBackingStoreRhiConfig::OpenGL));
-        m_rhi = rhi();
-    }
-    Q_ASSERT(m_rhi);
-
     QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
     QOpenGLContext *dstCtx = compositor->context();
-    if (!dstCtx)
-        return;
+    Q_ASSERT(dstCtx);
 
     QWindow *dstWin = compositor->targetWindow();
     if (!dstWin)
         return;
 
-    if (!dstCtx->makeCurrent(dstWin))
-        return;
-
+    dstCtx->makeCurrent(dstWin);
     updateTexture();
     m_textures->clear();
-    m_textures->appendTexture(nullptr, m_bsTextureWrapper, window->geometry());
+    m_textures->appendTexture(nullptr, m_bsTexture, window->geometry());
 
     compositor->update();
 }
 
-QPlatformBackingStore::FlushResult QOpenGLCompositorBackingStore::rhiFlush(QWindow *window,
-                                                                           qreal sourceDevicePixelRatio,
-                                                                           const QRegion &region,
-                                                                           const QPoint &offset,
-                                                                           QPlatformTextureList *textures,
-                                                                           bool translucentBackground)
+void QOpenGLCompositorBackingStore::composeAndFlush(QWindow *window, const QRegion &region, const QPoint &offset,
+                                               QPlatformTextureList *textures,
+                                               bool translucentBackground)
 {
     // QOpenGLWidget/QQuickWidget content provided as textures. The raster content goes on top.
 
     Q_UNUSED(region);
     Q_UNUSED(offset);
     Q_UNUSED(translucentBackground);
-    Q_UNUSED(sourceDevicePixelRatio);
-
-    m_rhi = rhi();
-    if (!m_rhi) {
-        setRhiConfig(QPlatformBackingStoreRhiConfig(QPlatformBackingStoreRhiConfig::OpenGL));
-        m_rhi = rhi();
-    }
-    Q_ASSERT(m_rhi);
 
     QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
     QOpenGLContext *dstCtx = compositor->context();
-    if (!dstCtx)
-        return FlushFailed;
+    Q_ASSERT(dstCtx); // setTarget() must have been called before, e.g. from QEGLFSWindow
+
+    // The compositor's context and the context to which QOpenGLWidget/QQuickWidget
+    // textures belong are not the same. They share resources, though.
+    Q_ASSERT(qt_window_private(window)->shareContext()->shareGroup() == dstCtx->shareGroup());
 
     QWindow *dstWin = compositor->targetWindow();
     if (!dstWin)
-        return FlushFailed;
+        return;
 
-    if (!dstCtx->makeCurrent(dstWin))
-        return FlushFailed;
+    dstCtx->makeCurrent(dstWin);
 
     QWindowPrivate::get(window)->lastComposeTime.start();
 
     m_textures->clear();
-    for (int i = 0; i < textures->count(); ++i) {
-        m_textures->appendTexture(textures->source(i), textures->texture(i), textures->geometry(i),
+    for (int i = 0; i < textures->count(); ++i)
+        m_textures->appendTexture(textures->source(i), textures->textureId(i), textures->geometry(i),
                                   textures->clipRect(i), textures->flags(i));
-    }
 
     updateTexture();
-    m_textures->appendTexture(nullptr, m_bsTextureWrapper, window->geometry());
+    m_textures->appendTexture(nullptr, m_bsTexture, window->geometry());
 
     textures->lock(true);
     m_lockedWidgetTextures = textures;
 
     compositor->update();
-
-    return FlushSuccess;
 }
 
 void QOpenGLCompositorBackingStore::notifyComposited()
@@ -256,8 +280,6 @@ void QOpenGLCompositorBackingStore::resize(const QSize &size, const QRegion &sta
 
     dstCtx->makeCurrent(dstWin);
     if (m_bsTexture) {
-        delete m_bsTextureWrapper;
-        m_bsTextureWrapper = nullptr;
         glDeleteTextures(1, &m_bsTexture);
         m_bsTexture = 0;
         m_bsTextureContext = nullptr;

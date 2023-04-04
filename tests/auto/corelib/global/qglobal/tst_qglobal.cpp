@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -84,7 +109,7 @@ void tst_QGlobal::for_each()
     foreach(int i, list) {
         QCOMPARE(i, counter++);
     }
-    QCOMPARE(counter, list.size());
+    QCOMPARE(counter, list.count());
 
     // do it again, to make sure we don't have any for-scoping
     // problems with older compilers
@@ -92,29 +117,29 @@ void tst_QGlobal::for_each()
     foreach(int i, list) {
         QCOMPARE(i, counter++);
     }
-    QCOMPARE(counter, list.size());
+    QCOMPARE(counter, list.count());
 
     // check whether we can pass a constructor as container argument
     counter = 0;
     foreach (int i, QList<int>(list)) {
         QCOMPARE(i, counter++);
     }
-    QCOMPARE(counter, list.size());
+    QCOMPARE(counter, list.count());
 
     // check whether we can use a lambda
     counter = 0;
     foreach (int i, [&](){ return list; }()) {
         QCOMPARE(i, counter++);
     }
-    QCOMPARE(counter, list.size());
+    QCOMPARE(counter, list.count());
 
     // Should also work with an existing variable
-    int local = 0;
+    int local;
     counter = 0;
     foreach (local, list) {
         QCOMPARE(local, counter++);
     }
-    QCOMPARE(counter, list.size());
+    QCOMPARE(counter, list.count());
     QCOMPARE(local, counter - 1);
 
     // Test the macro does not mess if/else conditions
@@ -124,7 +149,7 @@ void tst_QGlobal::for_each()
             QCOMPARE(i, counter++);
     else
         QFAIL("If/Else mismatch");
-    QCOMPARE(counter, list.size());
+    QCOMPARE(counter, list.count());
 
     counter = 0;
     if (false)
@@ -135,7 +160,7 @@ void tst_QGlobal::for_each()
         foreach (int i, list)
             if (false) { }
             else QCOMPARE(i, counter++);
-    QCOMPARE(counter, list.size());
+    QCOMPARE(counter, list.count());
 
     // break and continue
     counter = 0;
@@ -510,6 +535,8 @@ void tst_QGlobal::testqOverload()
     QVERIFY(QConstOverload<QByteArray>::of(&Overloaded::mixedFoo) ==
              static_cast<void (Overloaded::*)(QByteArray) const>(&Overloaded::mixedFoo));
 
+#if defined(__cpp_variable_templates) && __cpp_variable_templates >= 201304 // C++14
+
     // void returning free overloaded functions
     QVERIFY(qOverload<>(&freeOverloaded) ==
              static_cast<void (*)()>(&freeOverloaded));
@@ -553,6 +580,7 @@ void tst_QGlobal::testqOverload()
 
     QVERIFY(qConstOverload<QByteArray>(&Overloaded::mixedFoo) ==
              static_cast<void (Overloaded::*)(QByteArray) const>(&Overloaded::mixedFoo));
+#endif
 
 #endif
 }

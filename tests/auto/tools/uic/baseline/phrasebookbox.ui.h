@@ -1,8 +1,31 @@
 /*
-
-* Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
-
+*********************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the autotests of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+*********************************************************************
 */
 
 /********************************************************************************
@@ -54,45 +77,45 @@ public:
     void setupUi(QDialog *PhraseBookBox)
     {
         if (PhraseBookBox->objectName().isEmpty())
-            PhraseBookBox->setObjectName("PhraseBookBox");
+            PhraseBookBox->setObjectName(QString::fromUtf8("PhraseBookBox"));
         PhraseBookBox->resize(596, 454);
         unnamed = new QHBoxLayout(PhraseBookBox);
         unnamed->setSpacing(6);
         unnamed->setContentsMargins(11, 11, 11, 11);
-        unnamed->setObjectName("unnamed");
+        unnamed->setObjectName(QString::fromUtf8("unnamed"));
         inputsLayout = new QVBoxLayout();
         inputsLayout->setSpacing(6);
-        inputsLayout->setObjectName("inputsLayout");
+        inputsLayout->setObjectName(QString::fromUtf8("inputsLayout"));
         gridLayout = new QGridLayout();
         gridLayout->setSpacing(6);
-        gridLayout->setObjectName("gridLayout");
+        gridLayout->setObjectName(QString::fromUtf8("gridLayout"));
         target = new QLabel(PhraseBookBox);
-        target->setObjectName("target");
+        target->setObjectName(QString::fromUtf8("target"));
 
         gridLayout->addWidget(target, 1, 0, 1, 1);
 
         targetLed = new QLineEdit(PhraseBookBox);
-        targetLed->setObjectName("targetLed");
+        targetLed->setObjectName(QString::fromUtf8("targetLed"));
 
         gridLayout->addWidget(targetLed, 1, 1, 1, 1);
 
         source = new QLabel(PhraseBookBox);
-        source->setObjectName("source");
+        source->setObjectName(QString::fromUtf8("source"));
 
         gridLayout->addWidget(source, 0, 0, 1, 1);
 
         definitionLed = new QLineEdit(PhraseBookBox);
-        definitionLed->setObjectName("definitionLed");
+        definitionLed->setObjectName(QString::fromUtf8("definitionLed"));
 
         gridLayout->addWidget(definitionLed, 2, 1, 1, 1);
 
         sourceLed = new QLineEdit(PhraseBookBox);
-        sourceLed->setObjectName("sourceLed");
+        sourceLed->setObjectName(QString::fromUtf8("sourceLed"));
 
         gridLayout->addWidget(sourceLed, 0, 1, 1, 1);
 
         definition = new QLabel(PhraseBookBox);
-        definition->setObjectName("definition");
+        definition->setObjectName(QString::fromUtf8("definition"));
 
         gridLayout->addWidget(definition, 2, 0, 1, 1);
 
@@ -100,7 +123,7 @@ public:
         inputsLayout->addLayout(gridLayout);
 
         phraseList = new QTreeView(PhraseBookBox);
-        phraseList->setObjectName("phraseList");
+        phraseList->setObjectName(QString::fromUtf8("phraseList"));
         phraseList->setRootIsDecorated(false);
         phraseList->setUniformRowHeights(true);
         phraseList->setItemsExpandable(false);
@@ -114,24 +137,24 @@ public:
 
         buttonLayout = new QVBoxLayout();
         buttonLayout->setSpacing(6);
-        buttonLayout->setObjectName("buttonLayout");
+        buttonLayout->setObjectName(QString::fromUtf8("buttonLayout"));
         newBut = new QPushButton(PhraseBookBox);
-        newBut->setObjectName("newBut");
+        newBut->setObjectName(QString::fromUtf8("newBut"));
 
         buttonLayout->addWidget(newBut);
 
         removeBut = new QPushButton(PhraseBookBox);
-        removeBut->setObjectName("removeBut");
+        removeBut->setObjectName(QString::fromUtf8("removeBut"));
 
         buttonLayout->addWidget(removeBut);
 
         saveBut = new QPushButton(PhraseBookBox);
-        saveBut->setObjectName("saveBut");
+        saveBut->setObjectName(QString::fromUtf8("saveBut"));
 
         buttonLayout->addWidget(saveBut);
 
         closeBut = new QPushButton(PhraseBookBox);
-        closeBut->setObjectName("closeBut");
+        closeBut->setObjectName(QString::fromUtf8("closeBut"));
 
         buttonLayout->addWidget(closeBut);
 

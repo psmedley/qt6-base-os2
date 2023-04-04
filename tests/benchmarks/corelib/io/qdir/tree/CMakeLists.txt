@@ -1,22 +1,28 @@
+# Generated from tree.pro.
+
 #####################################################################
-## tst_bench_qdir_tree Binary:
+## bench_qdir_tree Binary:
 #####################################################################
 
-qt_internal_add_benchmark(tst_bench_qdir_tree
+qt_internal_add_benchmark(bench_qdir_tree
     SOURCES
-        tst_bench_qdir_tree.cpp
+        bench_qdir_tree.cpp
     PUBLIC_LIBRARIES
         Qt::Test
 )
 
 # Resources:
-set(qdir_tree_resource_files
+set(bench_qdir_tree_resource_files
     "4.6.0-list.txt"
 )
 
-qt_internal_add_resource(tst_bench_qdir_tree "tst_bench_qdir_tree"
+qt_internal_add_resource(bench_qdir_tree "bench_qdir_tree"
     PREFIX
         "/"
     FILES
-        ${qdir_tree_resource_files}
+        ${bench_qdir_tree_resource_files}
 )
+
+
+#### Keys ignored in scope 1:.:.:tree.pro:<TRUE>:
+# TEMPLATE = "app"

@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
 
@@ -25,8 +61,6 @@
 #include <qtooltip.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*!
     \class QToolTip
@@ -113,7 +147,7 @@ protected:
 #ifndef QT_NO_STYLE_STYLESHEET
 public slots:
     /** \internal
-      Cleanup the _q_stylesheet_parent property.
+      Cleanup the _q_stylesheet_parent propery.
      */
     void styleSheetParentDestroyed() {
         setProperty("_q_stylesheet_parent", QVariant());
@@ -157,7 +191,7 @@ QTipLabel::QTipLabel(const QString &text, const QPoint &pos, QWidget *w, int mse
 
 void QTipLabel::restartExpireTimer(int msecDisplayTime)
 {
-    int time = 10000 + 40 * qMax(0, text().size()-100);
+    int time = 10000 + 40 * qMax(0, text().length()-100);
     if (msecDisplayTime > 0)
         time = msecDisplayTime;
     expireTimer.start(time, this);
@@ -308,6 +342,13 @@ bool QTipLabel::eventFilter(QObject *o, QEvent *e)
     case QEvent::FocusIn:
     case QEvent::FocusOut:
 #endif
+    case QEvent::Close:
+        // For QTBUG-55523 (QQC) specifically: Hide tooltip when windows are closed,
+        // unless the close event is for the this tooltip, in which case we don't
+        // recursively hide/close again.
+        if (o != windowHandle() && o != this)
+            hideTipImmediately();
+        break;
     case QEvent::MouseButtonPress:
     case QEvent::MouseButtonRelease:
     case QEvent::MouseButtonDblClick:
@@ -338,7 +379,7 @@ void QTipLabel::placeTip(const QPoint &pos, QWidget *w)
         //the stylesheet need to know the real parent
         QTipLabel::instance->setProperty("_q_stylesheet_parent", QVariant::fromValue(w));
         //we force the style to be the QStyleSheetStyle, and force to clear the cache as well.
-        QTipLabel::instance->setStyleSheet("/* */"_L1);
+        QTipLabel::instance->setStyleSheet(QLatin1String("/* */"));
 
         // Set up for cleaning up this later...
         QTipLabel::instance->styleSheetParent = w;
@@ -458,7 +499,7 @@ void QToolTip::showText(const QPoint &pos, const QString &text, QWidget *w, cons
         QWidgetPrivate::get(QTipLabel::instance)->setScreen(QTipLabel::getTipScreen(pos, w));
         QTipLabel::instance->setTipRect(w, rect);
         QTipLabel::instance->placeTip(pos, w);
-        QTipLabel::instance->setObjectName("qtooltip_label"_L1);
+        QTipLabel::instance->setObjectName(QLatin1String("qtooltip_label"));
 
 #if QT_CONFIG(effects)
         if (QApplication::isEffectEnabled(Qt::UI_FadeTooltip))

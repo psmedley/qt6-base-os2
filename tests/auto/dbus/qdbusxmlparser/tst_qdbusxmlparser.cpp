@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QCoreApplication>
 #include <QDomDocument>
@@ -106,9 +131,9 @@ void tst_QDBusXmlParser::parsing_common(const QString &xmlData)
     QFETCH(int, objectCount);
     QFETCH(int, annotationCount);
     QFETCH(QStringList, introspection);
-    QCOMPARE(obj.interfaces.size(), interfaceCount);
-    QCOMPARE(obj.childObjects.size(), objectCount);
-    QCOMPARE(QDBusIntrospection::parseInterface(xmlData).annotations.size(), annotationCount);
+    QCOMPARE(obj.interfaces.count(), interfaceCount);
+    QCOMPARE(obj.childObjects.count(), objectCount);
+    QCOMPARE(QDBusIntrospection::parseInterface(xmlData).annotations.count(), annotationCount);
 
     QDBusIntrospection::Interfaces ifaces = QDBusIntrospection::parseInterfaces(xmlData);
 
@@ -327,7 +352,7 @@ void tst_QDBusXmlParser::methods()
     QFETCH(MethodMap, methodMap);
     MethodMap parsedMap = iface.methods;
 
-    QCOMPARE(parsedMap.size(), methodMap.size());
+    QCOMPARE(parsedMap.count(), methodMap.count());
     QCOMPARE(parsedMap, methodMap);
 }
 
@@ -441,7 +466,7 @@ void tst_QDBusXmlParser::signals_()
     QFETCH(SignalMap, signalMap);
     SignalMap parsedMap = iface.signals_;
 
-    QCOMPARE(signalMap.size(), parsedMap.size());
+    QCOMPARE(signalMap.count(), parsedMap.count());
     QCOMPARE(signalMap, parsedMap);
 }
 
@@ -531,7 +556,7 @@ void tst_QDBusXmlParser::properties()
     QFETCH(PropertyMap, propertyMap);
     PropertyMap parsedMap = iface.properties;
 
-    QCOMPARE(propertyMap.size(), parsedMap.size());
+    QCOMPARE(propertyMap.count(), parsedMap.count());
     QCOMPARE(propertyMap, parsedMap);
 }
 

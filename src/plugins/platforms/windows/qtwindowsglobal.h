@@ -1,6 +1,42 @@
-// Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QTWINDOWSGLOBAL_H
 #define QTWINDOWSGLOBAL_H
@@ -8,16 +44,8 @@
 #include <QtCore/qt_windows.h>
 #include <QtCore/qnamespace.h>
 
-#ifndef WM_DWMCOMPOSITIONCHANGED
-#  define WM_DWMCOMPOSITIONCHANGED 0x31E
-#endif
-
-#ifndef WM_DWMCOLORIZATIONCOLORCHANGED
-#  define WM_DWMCOLORIZATIONCOLORCHANGED 0x0320
-#endif
-
-#ifndef WM_SYSCOLORCHANGE
-#  define WM_SYSCOLORCHANGE 0x0015
+#ifndef WM_DWMCOMPOSITIONCHANGED // MinGW.
+#    define WM_DWMCOMPOSITIONCHANGED 0x31E
 #endif
 
 #ifndef WM_TOUCH
@@ -65,7 +93,7 @@ QT_BEGIN_NAMESPACE
 namespace QtWindows
 {
 
-enum WindowsEventTypeFlags
+enum
 {
     WindowEventFlag = 0x10000,
     MouseEventFlag = 0x20000,
@@ -106,7 +134,6 @@ enum WindowsEventType // Simplify event types
     ExitSizeMoveEvent = WindowEventFlag + 23,
     PointerActivateWindowEvent = WindowEventFlag + 24,
     DpiScaledSizeEvent = WindowEventFlag + 25,
-    DpiChangedAfterParentEvent = WindowEventFlag + 27,
     MouseEvent = MouseEventFlag + 1,
     MouseWheelEvent = MouseEventFlag + 2,
     CursorEvent = MouseEventFlag + 3,
@@ -140,14 +167,13 @@ enum WindowsEventType // Simplify event types
     InputMethodRequest = InputMethodEventFlag + 6,
     ThemeChanged = ThemingEventFlag + 1,
     CompositionSettingsChanged = ThemingEventFlag + 2,
-    SettingChangedEvent = 438,
+    DisplayChangedEvent = 437,
+    SettingChangedEvent = DisplayChangedEvent + 1,
     ScrollEvent = GenericEventFlag + 1,
     ContextMenu = 123,
     GestureEvent = 124,
     UnknownEvent = 542
 };
-Q_DECLARE_MIXED_ENUM_OPERATORS(bool, WindowsEventTypeFlags, WindowsEventType);
-Q_DECLARE_MIXED_ENUM_OPERATORS(bool, WindowsEventType, WindowsEventTypeFlags);
 
 // Matches Process_DPI_Awareness (Windows 8.1 onwards), used for SetProcessDpiAwareness()
 enum ProcessDpiAwareness
@@ -259,9 +285,12 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
     // http://msdn.microsoft.com/en-us/library/ms695534(v=vs.85).aspx
     case WM_SETTINGCHANGE:
         return QtWindows::SettingChangedEvent;
+    case WM_DISPLAYCHANGE:
+        return QtWindows::DisplayChangedEvent;
     case WM_THEMECHANGED:
-    case WM_SYSCOLORCHANGE: // Handle color change as theme change (QTBUG-34170).
-    case WM_DWMCOLORIZATIONCOLORCHANGED:
+#ifdef WM_SYSCOLORCHANGE // Windows 7: Handle color change as theme change (QTBUG-34170).
+    case WM_SYSCOLORCHANGE:
+#endif
         return QtWindows::ThemeChanged;
     case WM_DWMCOMPOSITIONCHANGED:
         return QtWindows::CompositionSettingsChanged;
@@ -292,8 +321,6 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
         return HIWORD(wParamIn) ? QtWindows::AcceleratorCommandEvent : QtWindows::MenuCommandEvent;
     case WM_DPICHANGED:
         return QtWindows::DpiChangedEvent;
-    case WM_DPICHANGED_AFTERPARENT:
-        return QtWindows::DpiChangedAfterParentEvent;
     case WM_GETDPISCALEDSIZE:
         return QtWindows::DpiScaledSizeEvent;
     case WM_ENTERSIZEMOVE:

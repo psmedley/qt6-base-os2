@@ -170,10 +170,9 @@ static int Absorb(spongeState *state, const unsigned char *data, unsigned long l
             i += wholeBlocks*state->rate;
         }
         else {
-            if (databitlen-i > state->rate - state->bitsInQueue)
+            partialBlock = (unsigned int)(databitlen - i);
+            if (partialBlock+state->bitsInQueue > state->rate)
                 partialBlock = state->rate-state->bitsInQueue;
-            else
-                partialBlock = (unsigned int)(databitlen - i);
             partialByte = partialBlock % 8;
             partialBlock -= partialByte;
             memcpy(state->dataQueue+state->bitsInQueue/8, data+i/8, partialBlock/8);

@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /*!
     \class QMdiSubWindow
@@ -138,8 +174,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 using namespace QMdi;
 
 static const QStyle::SubControl SubControls[] =
@@ -252,7 +286,7 @@ QString QMdiSubWindowPrivate::originalWindowTitle()
     if (originalTitle.isNull()) {
         originalTitle = originalWindowTitleHelper();
         if (originalTitle.isNull())
-            originalTitle = ""_L1;
+            originalTitle = QLatin1String("");
     }
     return originalTitle;
 }
@@ -388,7 +422,7 @@ ControlLabel::ControlLabel(QMdiSubWindow *subWindow, QWidget *parent)
     Q_UNUSED(subWindow);
     setFocusPolicy(Qt::NoFocus);
     updateWindowIcon();
-    setFixedSize(label.deviceIndependentSize().toSize());
+    setFixedSize(label.size() / label.devicePixelRatio());
 }
 
 /*
@@ -396,7 +430,7 @@ ControlLabel::ControlLabel(QMdiSubWindow *subWindow, QWidget *parent)
 */
 QSize ControlLabel::sizeHint() const
 {
-    return label.deviceIndependentSize().toSize();
+    return label.size() / label.devicePixelRatio();
 }
 
 /*
@@ -1885,7 +1919,7 @@ void QMdiSubWindowPrivate::enterRubberBandMode()
     if (!rubberBand) {
         rubberBand = new QRubberBand(QRubberBand::Rectangle, q->parentWidget());
         // For accessibility to identify this special widget.
-        rubberBand->setObjectName("qt_rubberband"_L1);
+        rubberBand->setObjectName(QLatin1String("qt_rubberband"));
     }
     QPoint rubberBandPos = q->mapToParent(QPoint(0, 0));
     rubberBand->setGeometry(rubberBandPos.x(), rubberBandPos.y(),
@@ -2182,7 +2216,7 @@ void QMdiSubWindowPrivate::updateInternalWindowTitle()
     Q_Q(QMdiSubWindow);
     if (q->isWindowModified()) {
         windowTitle = q->windowTitle();
-        windowTitle.replace("[*]"_L1, "*"_L1);
+        windowTitle.replace(QLatin1String("[*]"), QLatin1String("*"));
     } else {
         windowTitle = qt_setWindowTitle_helperHelper(q->windowTitle(), q);
     }
@@ -2300,8 +2334,10 @@ void QMdiSubWindow::setWidget(QWidget *widget)
         d->updateWindowTitle(true);
         isWindowModified = d->baseWidget->isWindowModified();
     }
-    if (!this->isWindowModified() && isWindowModified && windowTitle().contains("[*]"_L1))
+    if (!this->isWindowModified() && isWindowModified
+            && windowTitle().contains(QLatin1String("[*]"))) {
         setWindowModified(isWindowModified);
+    }
     d->lastChildWindowTitle = d->baseWidget->windowTitle();
     d->ignoreWindowTitleChange = false;
 
@@ -2734,7 +2770,7 @@ bool QMdiSubWindow::eventFilter(QObject *object, QEvent *event)
         bool windowModified = d->baseWidget->isWindowModified();
         if (!windowModified && d->baseWidget->windowTitle() != windowTitle())
             break;
-        if (windowTitle().contains("[*]"_L1))
+        if (windowTitle().contains(QLatin1String("[*]")))
             setWindowModified(windowModified);
         break;
     }
@@ -2835,7 +2871,7 @@ bool QMdiSubWindow::event(QEvent *event)
         d->updateInternalWindowTitle();
         break;
     case QEvent::ModifiedChange:
-        if (!windowTitle().contains("[*]"_L1))
+        if (!windowTitle().contains(QLatin1String("[*]")))
             break;
 #if QT_CONFIG(menubar)
         if (maximizedButtonsWidget() && d->controlContainer->menuBar() && d->controlContainer->menuBar()

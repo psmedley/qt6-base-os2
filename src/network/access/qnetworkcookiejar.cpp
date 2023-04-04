@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qnetworkcookiejar.h"
 #include "qnetworkcookiejar_p.h"
@@ -14,14 +50,12 @@ QT_BEGIN_NAMESPACE
 static bool qIsEffectiveTLD(QStringView domain)
 {
     // provide minimal checking by not accepting cookies on real TLDs
-    return !domain.contains(u'.');
+    return !domain.contains(QLatin1Char('.'));
 }
 QT_END_NAMESPACE
 #endif
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*!
     \class QNetworkCookieJar
@@ -114,9 +148,9 @@ void QNetworkCookieJar::setAllCookies(const QList<QNetworkCookie> &cookieList)
 
 static inline bool isParentPath(const QString &path, const QString &reference)
 {
-    if ((path.isEmpty() && reference == "/"_L1) || path.startsWith(reference)) {
+    if ((path.isEmpty() && reference == QLatin1String("/")) || path.startsWith(reference)) {
         //The cookie-path and the request-path are identical.
-        if (path.size() == reference.size())
+        if (path.length() == reference.length())
             return true;
         //The cookie-path is a prefix of the request-path, and the last
         //character of the cookie-path is %x2F ("/").
@@ -125,7 +159,7 @@ static inline bool isParentPath(const QString &path, const QString &reference)
         //The cookie-path is a prefix of the request-path, and the first
         //character of the request-path that is not included in the cookie-
         //path is a %x2F ("/") character.
-        if (path.at(reference.size()) == u'/')
+        if (path.at(reference.length()) == u'/')
             return true;
     }
     return false;
@@ -133,7 +167,7 @@ static inline bool isParentPath(const QString &path, const QString &reference)
 
 static inline bool isParentDomain(const QString &domain, const QString &reference)
 {
-    if (!reference.startsWith(u'.'))
+    if (!reference.startsWith(QLatin1Char('.')))
         return domain == reference;
 
     return domain.endsWith(reference) || domain == QStringView{reference}.mid(1);
@@ -200,7 +234,7 @@ QList<QNetworkCookie> QNetworkCookieJar::cookiesForUrl(const QUrl &url) const
     Q_D(const QNetworkCookieJar);
     const QDateTime now = QDateTime::currentDateTimeUtc();
     QList<QNetworkCookie> result;
-    bool isEncrypted = url.scheme() == "https"_L1;
+    bool isEncrypted = url.scheme() == QLatin1String("https");
 
     // scan our cookies for something that matches
     QList<QNetworkCookie>::ConstIterator it = d->allCookies.constBegin(),
@@ -216,20 +250,20 @@ QList<QNetworkCookie> QNetworkCookieJar::cookiesForUrl(const QUrl &url) const
             continue;
 
         QString domain = it->domain();
-        if (domain.startsWith(u'.')) /// Qt6?: remove when compliant with RFC6265
+        if (domain.startsWith(QLatin1Char('.'))) /// Qt6?: remove when compliant with RFC6265
             domain = domain.mid(1);
 #if QT_CONFIG(topleveldomain)
         if (qIsEffectiveTLD(domain) && url.host() != domain)
             continue;
 #else
-        if (!domain.contains(u'.') && url.host() != domain)
+        if (!domain.contains(QLatin1Char('.')) && url.host() != domain)
             continue;
 #endif // topleveldomain
 
         // insert this cookie into result, sorted by path
         QList<QNetworkCookie>::Iterator insertIt = result.begin();
         while (insertIt != result.end()) {
-            if (insertIt->path().size() < it->path().size()) {
+            if (insertIt->path().length() < it->path().length()) {
                 // insert here
                 insertIt = result.insert(insertIt, *it);
                 break;
@@ -322,7 +356,7 @@ bool QNetworkCookieJar::validateCookie(const QNetworkCookie &cookie, const QUrl 
     if (!isParentDomain(domain, host) && !isParentDomain(host, domain))
         return false; // not accepted
 
-    if (domain.startsWith(u'.'))
+    if (domain.startsWith(QLatin1Char('.')))
         domain = domain.mid(1);
 
     // We shouldn't reject if:
@@ -339,5 +373,3 @@ bool QNetworkCookieJar::validateCookie(const QNetworkCookie &cookie, const QUrl 
 }
 
 QT_END_NAMESPACE
-
-#include "moc_qnetworkcookiejar.cpp"

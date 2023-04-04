@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QNETWORKMANAGERSERVICE_H
 #define QNETWORKMANAGERSERVICE_H
@@ -15,11 +51,14 @@
 // We mean it.
 //
 
-#include <QtCore/qvariant.h>
-#include <QtCore/qmap.h>
-#include <QtDBus/qdbusabstractinterface.h>
+#include <QtDBus/QDBusAbstractInterface>
+#include <QtDBus/QDBusPendingCallWatcher>
+#include <QtDBus/QDBusObjectPath>
 
-#include <optional>
+#define NM_DBUS_SERVICE "org.freedesktop.NetworkManager"
+
+#define NM_DBUS_PATH "/org/freedesktop/NetworkManager"
+#define NM_DBUS_INTERFACE "org.freedesktop.NetworkManager"
 
 // Matches 'NMDeviceState' from https://developer.gnome.org/NetworkManager/stable/nm-dbus-types.html
 enum NMDeviceState {
@@ -37,8 +76,6 @@ enum NMDeviceState {
 };
 
 QT_BEGIN_NAMESPACE
-
-class QDBusObjectPath;
 
 // This tiny class exists for the purpose of seeing if NetworkManager is available without
 // initializing everything the derived/full class needs.
@@ -82,65 +119,16 @@ public:
         NM_CONNECTIVITY_FULL = 4,
     };
     Q_ENUM(NMConnectivityState);
-    // Matches 'NMDeviceType' from
-    // https://developer-old.gnome.org/NetworkManager/stable/nm-dbus-types.html#NMDeviceType
-    enum NMDeviceType {
-        NM_DEVICE_TYPE_UNKNOWN = 0,
-        NM_DEVICE_TYPE_GENERIC = 14,
-        NM_DEVICE_TYPE_ETHERNET = 1,
-        NM_DEVICE_TYPE_WIFI = 2,
-        NM_DEVICE_TYPE_UNUSED1 = 3,
-        NM_DEVICE_TYPE_UNUSED2 = 4,
-        NM_DEVICE_TYPE_BT = 5,
-        NM_DEVICE_TYPE_OLPC_MESH = 6,
-        NM_DEVICE_TYPE_WIMAX = 7,
-        NM_DEVICE_TYPE_MODEM = 8,
-        NM_DEVICE_TYPE_INFINIBAND = 9,
-        NM_DEVICE_TYPE_BOND = 10,
-        NM_DEVICE_TYPE_VLAN = 11,
-        NM_DEVICE_TYPE_ADSL = 12,
-        NM_DEVICE_TYPE_BRIDGE = 13,
-        NM_DEVICE_TYPE_TEAM = 15,
-        NM_DEVICE_TYPE_TUN = 16,
-        NM_DEVICE_TYPE_IP_TUNNEL = 17,
-        NM_DEVICE_TYPE_MACVLAN = 18,
-        NM_DEVICE_TYPE_VXLAN = 19,
-        NM_DEVICE_TYPE_VETH = 20,
-        NM_DEVICE_TYPE_MACSEC = 21,
-        NM_DEVICE_TYPE_DUMMY = 22,
-        NM_DEVICE_TYPE_PPP = 23,
-        NM_DEVICE_TYPE_OVS_INTERFACE = 24,
-        NM_DEVICE_TYPE_OVS_PORT = 25,
-        NM_DEVICE_TYPE_OVS_BRIDGE = 26,
-        NM_DEVICE_TYPE_WPAN = 27,
-        NM_DEVICE_TYPE_6LOWPAN = 28,
-        NM_DEVICE_TYPE_WIREGUARD = 29,
-        NM_DEVICE_TYPE_WIFI_P2P = 30,
-        NM_DEVICE_TYPE_VRF = 31,
-    };
-    // Matches 'NMMetered' from
-    // https://developer-old.gnome.org/NetworkManager/stable/nm-dbus-types.html#NMMetered
-    enum NMMetered {
-        NM_METERED_UNKNOWN,
-        NM_METERED_YES,
-        NM_METERED_NO,
-        NM_METERED_GUESS_YES,
-        NM_METERED_GUESS_NO,
-    };
 
     QNetworkManagerInterface(QObject *parent = nullptr);
     ~QNetworkManagerInterface();
 
     NMState state() const;
     NMConnectivityState connectivityState() const;
-    NMDeviceType deviceType() const;
-    NMMetered meteredState() const;
 
 Q_SIGNALS:
     void stateChanged(NMState);
     void connectivityChanged(NMConnectivityState);
-    void deviceTypeChanged(NMDeviceType);
-    void meteredChanged(NMMetered);
 
 private Q_SLOTS:
     void setProperties(const QString &interfaceName, const QMap<QString, QVariant> &map,
@@ -148,11 +136,6 @@ private Q_SLOTS:
 
 private:
     Q_DISABLE_COPY_MOVE(QNetworkManagerInterface)
-
-    NMDeviceType extractDeviceType(const QDBusObjectPath &devicePath) const;
-    NMMetered extractDeviceMetered(const QDBusObjectPath &devicePath) const;
-
-    std::optional<QDBusObjectPath> primaryConnectionDevicePath() const;
 
     QVariantMap propertyMap;
 };

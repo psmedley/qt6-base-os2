@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <qglobal.h>
 
@@ -360,7 +396,7 @@ QChar QAppleKeyMapper::toCocoaKey(Qt::Key key)
 {
     // Prioritize overloaded keys
     if (key == Qt::Key_Return)
-        return QChar(NSCarriageReturnCharacter);
+        return QChar(NSNewlineCharacter);
     if (key == Qt::Key_Backspace)
         return QChar(NSBackspaceCharacter);
 
@@ -515,7 +551,7 @@ const QAppleKeyMapper::KeyMap &QAppleKeyMapper::keyMapForKey(VirtualKeyCode virt
         qCDebug(lcQpaKeyMapper).verbosity(0) << "\t" << qtModifiers
             << "+" << qUtf8Printable(QString::asprintf("0x%02x", virtualKey))
             << "=" << qUtf8Printable(QString::asprintf("%d / 0x%02x /", qtKey, qtKey))
-                   << QKeySequence(qtKey).toString();
+                   << QString(QChar(qtKey));
     }
 
     return keyMap;
@@ -601,6 +637,7 @@ QList<int> QAppleKeyMapper::possibleKeys(const QKeyEvent *event) const
 API_AVAILABLE(ios(13.4)) Qt::Key QAppleKeyMapper::fromUIKitKey(NSString *keyCode)
 {
     static QHash<NSString *, Qt::Key> uiKitKeys = {
+#if QT_IOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__IPHONE_13_4)
         { UIKeyInputF1, Qt::Key_F1 },
         { UIKeyInputF2, Qt::Key_F2 },
         { UIKeyInputF3, Qt::Key_F3 },
@@ -617,6 +654,7 @@ API_AVAILABLE(ios(13.4)) Qt::Key QAppleKeyMapper::fromUIKitKey(NSString *keyCode
         { UIKeyInputEnd, Qt::Key_End },
         { UIKeyInputPageUp, Qt::Key_PageUp },
         { UIKeyInputPageDown, Qt::Key_PageDown },
+#endif
         { UIKeyInputEscape, Qt::Key_Escape },
         { UIKeyInputUpArrow, Qt::Key_Up },
         { UIKeyInputDownArrow, Qt::Key_Down },

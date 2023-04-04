@@ -1,5 +1,30 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QListWidget>
@@ -22,7 +47,7 @@
 using namespace QTestPrivate;
 
 #if defined(Q_OS_WIN)
-#  include <qt_windows.h>
+#  include <windows.h>
 #  include <QDialog>
 #  include <QGuiApplication>
 #  include <QVBoxLayout>
@@ -88,7 +113,6 @@ private slots:
     void moveCursor2();
     void moveCursor3();
     void moveCursor4();
-    void moveCursor5();
     void indexAt();
     void clicked();
     void singleSelectionRemoveRow();
@@ -420,7 +444,7 @@ void tst_QListView::cursorMove()
             }
             break;
         default:
-            QFAIL(qPrintable(QStringLiteral("Unexpected key: %1").arg(key)));
+            QVERIFY(false);
         }
 
         QCoreApplication::processEvents();
@@ -609,26 +633,6 @@ void tst_QListView::moveCursor4()
     QTRY_COMPARE(idx, model.index(actualIndex - 2, 0));
 }
 
-void tst_QListView::moveCursor5()
-{
-    PublicListView listView;;
-    QStandardItemModel model;
-    QIcon icon(QPixmap(300,300));
-    model.appendRow(new QStandardItem(icon,"11"));
-    model.appendRow(new QStandardItem(icon,"22"));
-    model.appendRow(new QStandardItem(icon,"33"));
-    listView.setModel(&model);
-    listView.setGeometry(10,10,200,200);
-    listView.setIconSize(QSize(300,300));
-    listView.setViewMode(QListView::IconMode);
-    listView.setCurrentIndex(model.index(0, 0));
-
-    QModelIndex idx = listView.moveCursor(PublicListView::MovePageDown, Qt::NoModifier);
-    QTRY_COMPARE(idx, model.index(1, 0));
-    idx = listView.moveCursor(PublicListView::MovePageUp, Qt::NoModifier);
-    QTRY_COMPARE(idx, model.index(0, 0));
-}
-
 class QListViewShowEventListener : public QListView
 {
     Q_OBJECT
@@ -718,7 +722,7 @@ void tst_QListView::clicked()
             continue;
         QSignalSpy spy(&view, &QListView::clicked);
         QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, p);
-        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy.count(), 1);
     }
 }
 
@@ -1147,7 +1151,7 @@ void tst_QListView::selection()
     v.setSelection(selectionRect, QItemSelectionModel::ClearAndSelect);
 
     const QModelIndexList selected = v.selectionModel()->selectedIndexes();
-    QCOMPARE(selected.size(), expectedItems.size());
+    QCOMPARE(selected.count(), expectedItems.count());
     for (const auto &idx : selected)
         QVERIFY(expectedItems.contains(idx.row()));
 }
@@ -1557,7 +1561,7 @@ void tst_QListView::task203585_selectAll()
     QVERIFY(view.selectionModel()->selectedIndexes().isEmpty());
     view.setRowHidden(0, false);
     view.selectAll();
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), 1);
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), 1);
 }
 
 void tst_QListView::task228566_infiniteRelayout()
@@ -1642,7 +1646,7 @@ void tst_QListView::task196118_visualRegionForSelection()
 
     view.selectionModel()->select(top1.index(), QItemSelectionModel::Select);
 
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), 1);
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), 1);
     QVERIFY(view.getVisualRegionForSelection().isEmpty());
 }
 
@@ -1740,7 +1744,7 @@ void tst_QListView::shiftSelectionWithNonUniformItemSizes()
         QTRY_COMPARE(view.currentIndex(), model.index(1, 0));
 
         QModelIndexList selected = view.selectionModel()->selectedIndexes();
-        QCOMPARE(selected.size(), 3);
+        QCOMPARE(selected.count(), 3);
         QVERIFY(!selected.contains(model.index(0, 0)));
     }
     {   // Second test: QListView::TopToBottom flow
@@ -1767,7 +1771,7 @@ void tst_QListView::shiftSelectionWithNonUniformItemSizes()
         QTRY_COMPARE(view.currentIndex(), model.index(1, 0));
 
         QModelIndexList selected = view.selectionModel()->selectedIndexes();
-        QCOMPARE(selected.size(), 3);
+        QCOMPARE(selected.count(), 3);
         QVERIFY(!selected.contains(model.index(0, 0)));
     }
 }
@@ -1829,7 +1833,7 @@ void tst_QListView::clickOnViewportClearsSelection()
 
     view.selectAll();
     QModelIndex index = model.index(0);
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), 1);
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), 1);
     QVERIFY(view.selectionModel()->isSelected(index));
 
     //we try to click outside of the index
@@ -1837,7 +1841,7 @@ void tst_QListView::clickOnViewportClearsSelection()
 
     QTest::mousePress(view.viewport(), Qt::LeftButton, {}, point);
     //at this point, the selection shouldn't have changed
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), 1);
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), 1);
     QVERIFY(view.selectionModel()->isSelected(index));
 
     QTest::mouseRelease(view.viewport(), Qt::LeftButton, {}, point);
@@ -1946,7 +1950,7 @@ void tst_QListView::taskQTBUG_435_deselectOnViewportClick()
     view.setModel(&model);
     view.setSelectionMode(QAbstractItemView::ExtendedSelection);
     view.selectAll();
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), model.rowCount());
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), model.rowCount());
 
 
     const QRect itemRect = view.visualRect(model.index(model.rowCount() - 1));
@@ -1956,7 +1960,7 @@ void tst_QListView::taskQTBUG_435_deselectOnViewportClick()
     QVERIFY(!view.selectionModel()->hasSelection());
 
     view.selectAll();
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), model.rowCount());
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), model.rowCount());
 
     //and now the right button
     QTest::mouseClick(view.viewport(), Qt::RightButton, {}, p);
@@ -2715,9 +2719,9 @@ public:
         if (idxPar.isValid()) {
             TstMoveItem *parentItem = static_cast<TstMoveItem *>(idxPar.internalPointer());
             Q_ASSERT(parentItem);
-            cnt = parentItem->childItems.size();
+            cnt = parentItem->childItems.count();
         } else {
-            cnt = rootItem->childItems.size();
+            cnt = rootItem->childItems.count();
         }
         return cnt;
     }
@@ -2734,9 +2738,9 @@ public:
         if (parent.isValid()) {
             TstMoveItem *parentItem = static_cast<TstMoveItem *>(parent.internalPointer());
             Q_ASSERT(parentItem);
-            ret = parentItem->childItems.size() > 0;
+            ret = parentItem->childItems.count() > 0;
         } else {
-            ret = rootItem->childItems.size() > 0;
+            ret = rootItem->childItems.count() > 0;
         }
         return ret;
     }
@@ -2758,8 +2762,8 @@ public:
         TstMoveItem *itmDestParent = itemAt(destinationParent);
 
         if (itmSrcParent && sourceRow >= 0
-            && sourceRow + count <= itmSrcParent->childItems.size()
-            && itmDestParent && destinationChild <= itmDestParent->childItems.size()) {
+            && sourceRow + count <= itmSrcParent->childItems.count()
+            && itmDestParent && destinationChild <= itmDestParent->childItems.count()) {
             beginMoveRows(sourceParent, sourceRow, sourceRow + count - 1,
                           destinationParent, destinationChild);
             QList<TstMoveItem *> itemsToMove;
@@ -2767,7 +2771,7 @@ public:
                 TstMoveItem *itm = itmSrcParent->childItems.at(sourceRow+i);
                 itemsToMove.append(itm);
             }
-            for (int i = itemsToMove.size() -1; i >= 0; --i) {
+            for (int i = itemsToMove.count() -1; i >= 0; --i) {
                 TstMoveItem *itm = itemsToMove.at(i);
                 itm->parentItem->childItems.removeAll(itm);
                 itm->parentItem = itmDestParent;
@@ -3169,7 +3173,7 @@ void tst_QListView::scrollOnRemove()
     model.removeRow(25);
 
     // if nothing is selected now, then the view should not have scrolled
-    if (!view.selectionModel()->selectedIndexes().size())
+    if (!view.selectionModel()->selectedIndexes().count())
         QTRY_COMPARE(view.verticalScrollBar()->value(), item25Position);
 }
 

@@ -1,6 +1,42 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <private/qdrawhelper_x86_p.h>
 
@@ -497,42 +533,66 @@ void qt_scale_image_argb32_on_argb32_sse2(uchar *destPixels, int dbpl,
         return qt_scale_image_argb32_on_argb32(destPixels, dbpl, srcPixels, sbpl, srch, targetRect, sourceRect, clip, const_alpha);
     }
 
-    qreal sx = sourceRect.width() / (qreal)targetRect.width();
-    qreal sy = sourceRect.height() / (qreal)targetRect.height();
+    qreal sx = targetRect.width() / (qreal) sourceRect.width();
+    qreal sy = targetRect.height() / (qreal) sourceRect.height();
 
-    const int ix = 0x00010000 * sx;
-    const int iy = 0x00010000 * sy;
+    int ix = 0x00010000 / sx;
+    int iy = 0x00010000 / sy;
 
-    QRect tr = targetRect.normalized().toRect();
-    tr = tr.intersected(clip);
-    if (tr.isEmpty())
+    int cx1 = clip.x();
+    int cx2 = clip.x() + clip.width();
+    int cy1 = clip.top();
+    int cy2 = clip.y() + clip.height();
+
+    int tx1 = qRound(targetRect.left());
+    int tx2 = qRound(targetRect.right());
+    int ty1 = qRound(targetRect.top());
+    int ty2 = qRound(targetRect.bottom());
+
+    if (tx2 < tx1)
+        qSwap(tx2, tx1);
+    if (ty2 < ty1)
+        qSwap(ty2, ty1);
+
+    if (tx1 < cx1)
+        tx1 = cx1;
+    if (tx2 >= cx2)
+        tx2 = cx2;
+
+    if (tx1 >= tx2)
         return;
-    const int tx1 = tr.left();
-    const int ty1 = tr.top();
-    int h = tr.height();
-    int w = tr.width();
+
+    if (ty1 < cy1)
+        ty1 = cy1;
+    if (ty2 >= cy2)
+       ty2 = cy2;
+    if (ty1 >= ty2)
+        return;
+
+    int h = ty2 - ty1;
+    int w = tx2 - tx1;
 
     quint32 basex;
     quint32 srcy;
 
     if (sx < 0) {
-        int dstx = qFloor((tx1 + qreal(0.5) - targetRect.right()) * sx * 65536) + 1;
+        int dstx = qFloor((tx1 + qreal(0.5) - targetRect.right()) * ix) + 1;
         basex = quint32(sourceRect.right() * 65536) + dstx;
     } else {
-        int dstx = qCeil((tx1 + qreal(0.5) - targetRect.left()) * sx * 65536) - 1;
+        int dstx = qCeil((tx1 + qreal(0.5) - targetRect.left()) * ix) - 1;
         basex = quint32(sourceRect.left() * 65536) + dstx;
     }
     if (sy < 0) {
-        int dsty = qFloor((ty1 + qreal(0.5) - targetRect.bottom()) * sy * 65536) + 1;
+        int dsty = qFloor((ty1 + qreal(0.5) - targetRect.bottom()) * iy) + 1;
         srcy = quint32(sourceRect.bottom() * 65536) + dsty;
     } else {
-        int dsty = qCeil((ty1 + qreal(0.5) - targetRect.top()) * sy * 65536) - 1;
+        int dsty = qCeil((ty1 + qreal(0.5) - targetRect.top()) * iy) - 1;
         srcy = quint32(sourceRect.top() * 65536) + dsty;
     }
 
     quint32 *dst = ((quint32 *) (destPixels + ty1 * dbpl)) + tx1;
 
-    const __m128i nullVector = _mm_setzero_si128();
+    const __m128i nullVector = _mm_set1_epi32(0);
     const __m128i half = _mm_set1_epi16(0x80);
     const __m128i one = _mm_set1_epi16(0xff);
     const __m128i colorMask = _mm_set1_epi32(0x00ff00ff);
@@ -571,14 +631,13 @@ void qt_scale_image_argb32_on_argb32_sse2(uchar *destPixels, int dbpl,
 
         __m128i srcxVector = _mm_set_epi32(srcx, srcx + ix, srcx + ix + ix, srcx + ix + ix + ix);
 
-        for (; x < (w - 3); x += 4) {
-            const int idx0 = _mm_extract_epi16(srcxVector, 1);
-            const int idx1 = _mm_extract_epi16(srcxVector, 3);
-            const int idx2 = _mm_extract_epi16(srcxVector, 5);
-            const int idx3 = _mm_extract_epi16(srcxVector, 7);
+        for (; x<w - 3; x += 4) {
+            union Vect_buffer { __m128i vect; quint32 i[4]; };
+            Vect_buffer addr;
+            addr.vect = _mm_srli_epi32(srcxVector, 16);
             srcxVector = _mm_add_epi32(srcxVector, ixVector);
 
-            const __m128i srcVector = _mm_set_epi32(src[idx0], src[idx1], src[idx2], src[idx3]);
+            const __m128i srcVector = _mm_set_epi32(src[addr.i[0]], src[addr.i[1]], src[addr.i[2]], src[addr.i[3]]);
             BLEND_SOURCE_OVER_ARGB32_SSE2_helper(dst, srcVector, nullVector, half, one, colorMask, alphaMask);
         }
 

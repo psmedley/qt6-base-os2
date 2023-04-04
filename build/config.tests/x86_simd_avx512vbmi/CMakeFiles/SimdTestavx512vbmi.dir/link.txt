@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/SimdTestavx512vbmi.dir/main.cpp.o -o SimdTestavx512vbmi 

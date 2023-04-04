@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QABSTRACTANIMATION_P_H
 #define QABSTRACTANIMATION_P_H
@@ -32,7 +68,6 @@ class QAbstractAnimation;
 class QAbstractAnimationPrivate : public QObjectPrivate
 {
 public:
-    QAbstractAnimationPrivate();
     virtual ~QAbstractAnimationPrivate();
 
     static QAbstractAnimationPrivate *get(QAbstractAnimation *q)
@@ -82,10 +117,7 @@ class QDefaultAnimationDriver : public QAnimationDriver
 {
     Q_OBJECT
 public:
-    explicit QDefaultAnimationDriver(QUnifiedTimer *timer);
-    ~QDefaultAnimationDriver() override;
-
-protected:
+    QDefaultAnimationDriver(QUnifiedTimer *timer);
     void timerEvent(QTimerEvent *e) override;
 
 private Q_SLOTS:
@@ -100,27 +132,24 @@ private:
 class Q_CORE_EXPORT QAnimationDriverPrivate : public QObjectPrivate
 {
 public:
-    QAnimationDriverPrivate();
-    ~QAnimationDriverPrivate() override;
-
+    QAnimationDriverPrivate() : running(false) {}
     QElapsedTimer timer;
-    bool running = false;
+    bool running;
 };
 
 class Q_CORE_EXPORT QAbstractAnimationTimer : public QObject
 {
     Q_OBJECT
 public:
-    QAbstractAnimationTimer();
-    ~QAbstractAnimationTimer() override;
+    QAbstractAnimationTimer() : isRegistered(false), isPaused(false), pauseDuration(0) {}
 
     virtual void updateAnimationsTime(qint64 delta) = 0;
     virtual void restartAnimationTimer() = 0;
     virtual int runningAnimationCount() = 0;
 
-    bool isRegistered = false;
-    bool isPaused = false;
-    int pauseDuration = 0;
+    bool isRegistered;
+    bool isPaused;
+    int pauseDuration;
 };
 
 class Q_CORE_EXPORT QUnifiedTimer : public QObject
@@ -130,8 +159,6 @@ private:
     QUnifiedTimer();
 
 public:
-    ~QUnifiedTimer() override;
-
     static QUnifiedTimer *instance();
     static QUnifiedTimer *instance(bool create);
 
@@ -223,8 +250,6 @@ private:
     QAnimationTimer();
 
 public:
-    ~QAnimationTimer() override;
-
     static QAnimationTimer *instance();
     static QAnimationTimer *instance(bool create);
 
@@ -247,7 +272,7 @@ public:
     void updateAnimationsTime(qint64 delta) override;
 
     //useful for profiling/debugging
-    int runningAnimationCount() override { return animations.size(); }
+    int runningAnimationCount() override { return animations.count(); }
 
 private Q_SLOTS:
     void startAnimations();

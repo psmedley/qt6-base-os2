@@ -35,44 +35,44 @@ public:
     void setupUi(QDialog *ProxyDialog)
     {
         if (ProxyDialog->objectName().isEmpty())
-            ProxyDialog->setObjectName("ProxyDialog");
+            ProxyDialog->setObjectName(QString::fromUtf8("ProxyDialog"));
         ProxyDialog->resize(369, 144);
         gridLayout = new QGridLayout(ProxyDialog);
-        gridLayout->setObjectName("gridLayout");
+        gridLayout->setObjectName(QString::fromUtf8("gridLayout"));
         iconLabel = new QLabel(ProxyDialog);
-        iconLabel->setObjectName("iconLabel");
+        iconLabel->setObjectName(QString::fromUtf8("iconLabel"));
 
         gridLayout->addWidget(iconLabel, 0, 0, 1, 1);
 
         introLabel = new QLabel(ProxyDialog);
-        introLabel->setObjectName("introLabel");
+        introLabel->setObjectName(QString::fromUtf8("introLabel"));
         introLabel->setWordWrap(true);
 
         gridLayout->addWidget(introLabel, 0, 1, 1, 2);
 
         usernameLabel = new QLabel(ProxyDialog);
-        usernameLabel->setObjectName("usernameLabel");
+        usernameLabel->setObjectName(QString::fromUtf8("usernameLabel"));
 
         gridLayout->addWidget(usernameLabel, 1, 0, 1, 2);
 
         userNameLineEdit = new QLineEdit(ProxyDialog);
-        userNameLineEdit->setObjectName("userNameLineEdit");
+        userNameLineEdit->setObjectName(QString::fromUtf8("userNameLineEdit"));
 
         gridLayout->addWidget(userNameLineEdit, 1, 2, 1, 1);
 
         passwordLabel = new QLabel(ProxyDialog);
-        passwordLabel->setObjectName("passwordLabel");
+        passwordLabel->setObjectName(QString::fromUtf8("passwordLabel"));
 
         gridLayout->addWidget(passwordLabel, 2, 0, 1, 2);
 
         passwordLineEdit = new QLineEdit(ProxyDialog);
-        passwordLineEdit->setObjectName("passwordLineEdit");
+        passwordLineEdit->setObjectName(QString::fromUtf8("passwordLineEdit"));
         passwordLineEdit->setEchoMode(QLineEdit::Password);
 
         gridLayout->addWidget(passwordLineEdit, 2, 2, 1, 1);
 
         buttonBox = new QDialogButtonBox(ProxyDialog);
-        buttonBox->setObjectName("buttonBox");
+        buttonBox->setObjectName(QString::fromUtf8("buttonBox"));
         buttonBox->setOrientation(Qt::Horizontal);
         buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
 

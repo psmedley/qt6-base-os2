@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtDBus module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <string.h>
 
@@ -18,8 +54,6 @@
 #ifndef QT_NO_DBUS
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 bool qDBusCheckAsyncTag(const char *tag)
 {
@@ -44,33 +78,33 @@ QString qDBusInterfaceFromMetaObject(const QMetaObject *mo)
 
     int idx = mo->indexOfClassInfo(QCLASSINFO_DBUS_INTERFACE);
     if (idx >= mo->classInfoOffset()) {
-        interface = QLatin1StringView(mo->classInfo(idx).value());
+        interface = QLatin1String(mo->classInfo(idx).value());
     } else {
-        interface = QLatin1StringView(mo->className());
-        interface.replace("::"_L1, "."_L1);
+        interface = QLatin1String(mo->className());
+        interface.replace(QLatin1String("::"), QLatin1String("."));
 
-        if (interface.startsWith("QDBus"_L1)) {
-            interface.prepend("org.qtproject.QtDBus."_L1);
-        } else if (interface.startsWith(u'Q') &&
-                   interface.size() >= 2 && interface.at(1).isUpper()) {
+        if (interface.startsWith(QLatin1String("QDBus"))) {
+            interface.prepend(QLatin1String("org.qtproject.QtDBus."));
+        } else if (interface.startsWith(QLatin1Char('Q')) &&
+                   interface.length() >= 2 && interface.at(1).isUpper()) {
             // assume it's Qt
-            interface.prepend("org.qtproject.Qt."_L1);
+            interface.prepend(QLatin1String("org.qtproject.Qt."));
         } else if (!QCoreApplication::instance()||
                    QCoreApplication::instance()->applicationName().isEmpty()) {
-            interface.prepend("local."_L1);
+            interface.prepend(QLatin1String("local."));
          } else {
-            interface.prepend(u'.').prepend(QCoreApplication::instance()->applicationName());
+            interface.prepend(QLatin1Char('.')).prepend(QCoreApplication::instance()->applicationName());
             const QString organizationDomain = QCoreApplication::instance()->organizationDomain();
-            const auto domainName = QStringView{organizationDomain}.split(u'.', Qt::SkipEmptyParts);
+            const auto domainName = QStringView{organizationDomain}.split(QLatin1Char('.'), Qt::SkipEmptyParts);
             if (domainName.isEmpty()) {
-                 interface.prepend("local."_L1);
+                 interface.prepend(QLatin1String("local."));
             } else {
                 QString composedDomain;
                 // + 1 for additional dot, e.g. organizationDomain equals "example.com",
                 // then composedDomain will be equal "com.example."
                 composedDomain.reserve(organizationDomain.size() + 1);
                 for (auto it = domainName.rbegin(), end = domainName.rend(); it != end; ++it)
-                    composedDomain += *it + u'.';
+                    composedDomain += *it + QLatin1Char('.');
 
                 interface.prepend(composedDomain);
             }
@@ -122,17 +156,17 @@ int qDBusParametersForMethod(const QList<QByteArray> &parameterTypes, QList<QMet
     for ( ; it != end; ++it) {
         QByteArray type = *it;
         if (type.endsWith('*')) {
-            errorMsg = "Pointers are not supported: "_L1 + QLatin1StringView(type);
+            errorMsg = QLatin1String("Pointers are not supported: ") + QLatin1String(type);
             return -1;
         }
 
         if (type.endsWith('&')) {
             QByteArray basictype = type;
-            basictype.truncate(type.size() - 1);
+            basictype.truncate(type.length() - 1);
 
             QMetaType id = QMetaType::fromName(basictype);
             if (!id.isValid()) {
-                errorMsg = "Unregistered output type in parameter list: "_L1 + QLatin1StringView(type);
+                errorMsg = QLatin1String("Unregistered output type in parameter list: ") + QLatin1String(type);
                 return -1;
             } else if (QDBusMetaType::typeToSignature(id) == nullptr)
                 return -1;
@@ -143,7 +177,7 @@ int qDBusParametersForMethod(const QList<QByteArray> &parameterTypes, QList<QMet
         }
 
         if (seenMessage) {      // && !type.endsWith('&')
-            errorMsg = "Invalid method, non-output parameters after message or after output parameters: "_L1 + QLatin1StringView(type);
+            errorMsg = QLatin1String("Invalid method, non-output parameters after message or after output parameters: ") + QLatin1String(type);
             return -1;          // not allowed
         }
 
@@ -159,14 +193,14 @@ int qDBusParametersForMethod(const QList<QByteArray> &parameterTypes, QList<QMet
 #endif
 
         if (!id.isValid()) {
-            errorMsg = "Unregistered input type in parameter list: "_L1 + QLatin1StringView(type);
+            errorMsg = QLatin1String("Unregistered input type in parameter list: ") + QLatin1String(type);
             return -1;
         }
 
         if (id == QDBusMetaTypeId::message())
             seenMessage = true;
         else if (QDBusMetaType::typeToSignature(id) == nullptr) {
-            errorMsg = "Type not registered with QtDBus in parameter list: "_L1 + QLatin1StringView(type);
+            errorMsg = QLatin1String("Type not registered with QtDBus in parameter list: ") + QLatin1String(type);
             return -1;
         }
 

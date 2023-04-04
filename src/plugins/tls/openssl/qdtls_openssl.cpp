@@ -1,5 +1,41 @@
-// Copyright (C) 2018 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2018 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -571,7 +607,7 @@ bool DtlsState::init(QDtlsBasePrivate *dtlsBase, QUdpSocket *socket,
     Q_ASSERT(dtlsBase);
     Q_ASSERT(socket);
 
-    if (!tlsContext && !initTls(dtlsBase))
+    if (!tlsContext.data() && !initTls(dtlsBase))
         return false;
 
     udpSocket = socket;
@@ -598,7 +634,7 @@ void DtlsState::reset()
 
 bool DtlsState::initTls(QDtlsBasePrivate *dtlsBase)
 {
-    if (tlsContext)
+    if (tlsContext.data())
         return true;
 
     if (!QSslSocket::supportsSsl())
@@ -619,7 +655,7 @@ bool DtlsState::initTls(QDtlsBasePrivate *dtlsBase)
 static QString msgFunctionFailed(const char *function)
 {
     //: %1: Some function
-    return QDtls::tr("%1 failed").arg(QLatin1StringView(function));
+    return QDtls::tr("%1 failed").arg(QLatin1String(function));
 }
 
 bool DtlsState::initCtxAndConnection(QDtlsBasePrivate *dtlsBase)
@@ -682,7 +718,7 @@ bool DtlsState::initCtxAndConnection(QDtlsBasePrivate *dtlsBase)
 bool DtlsState::initBIO(QDtlsBasePrivate *dtlsBase)
 {
     Q_ASSERT(dtlsBase);
-    Q_ASSERT(tlsContext && tlsConnection);
+    Q_ASSERT(tlsContext.data() && tlsConnection.data());
 
     BioMethod customMethod(q_BIO_meth_new(BIO_TYPE_DGRAM, dtlsbio::qdtlsMethodName),
                            dtlsutil::delete_bio_method);
@@ -1254,12 +1290,12 @@ unsigned QDtlsPrivateOpenSSL::pskClientCallback(const char *hint, char *identity
         return 0;
 
     // Copy data back into OpenSSL
-    const int identityLength = qMin(pskAuthenticator.identity().size(),
+    const int identityLength = qMin(pskAuthenticator.identity().length(),
                                     pskAuthenticator.maximumIdentityLength());
     std::memcpy(identity, pskAuthenticator.identity().constData(), identityLength);
     identity[identityLength] = 0;
 
-    const int pskLength = qMin(pskAuthenticator.preSharedKey().size(),
+    const int pskLength = qMin(pskAuthenticator.preSharedKey().length(),
                                pskAuthenticator.maximumPreSharedKeyLength());
     std::memcpy(psk, pskAuthenticator.preSharedKey().constData(), pskLength);
 
@@ -1285,7 +1321,7 @@ unsigned QDtlsPrivateOpenSSL::pskServerCallback(const char *identity, unsigned c
         return 0;
 
     // Copy data back into OpenSSL
-    const int pskLength = qMin(pskAuthenticator.preSharedKey().size(),
+    const int pskLength = qMin(pskAuthenticator.preSharedKey().length(),
                                pskAuthenticator.maximumPreSharedKeyLength());
 
     std::memcpy(psk, pskAuthenticator.preSharedKey().constData(), pskLength);
@@ -1330,7 +1366,7 @@ bool QDtlsPrivateOpenSSL::verifyPeer()
     // Translate errors from the error list into QSslErrors
     using CertClass = QTlsPrivate::X509CertificateOpenSSL;
     errors.reserve(errors.size() + opensslErrors.size());
-    for (const auto &error : std::as_const(opensslErrors)) {
+    for (const auto &error : qAsConst(opensslErrors)) {
         const auto value = peerCertificateChain.value(error.depth);
         errors << CertClass::openSSLErrorToQSslError(error.code, value);
     }
@@ -1387,12 +1423,9 @@ void QDtlsPrivateOpenSSL::fetchNegotiatedParameters()
     // TLS 1.2, that's how it's set by OpenSSL (and that's what they are?).
 
     switch (q_SSL_version(dtls.tlsConnection.data())) {
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
     case DTLS1_VERSION:
         sessionProtocol = QSsl::DtlsV1_0;
         break;
-QT_WARNING_POP
     case DTLS1_2_VERSION:
         sessionProtocol = QSsl::DtlsV1_2;
         break;

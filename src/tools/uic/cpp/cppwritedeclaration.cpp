@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the tools applications of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "cppwritedeclaration.h"
 #include "cppwriteinitialization.h"
@@ -13,8 +38,6 @@
 #include <qdebug.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 namespace {
     void openNameSpaces(const QStringList &namespaceList, QTextStream &output)
@@ -52,10 +75,10 @@ void WriteDeclaration::acceptUI(DomUI *node)
 
     QString exportMacro = node->elementExportMacro();
     if (!exportMacro.isEmpty())
-        exportMacro.append(u' ');
+        exportMacro.append(QLatin1Char(' '));
 
-    QStringList namespaceList = qualifiedClassName.split("::"_L1);
-    if (namespaceList.size()) {
+    QStringList namespaceList = qualifiedClassName.split(QLatin1String("::"));
+    if (namespaceList.count()) {
         className = namespaceList.last();
         namespaceList.removeLast();
     }
@@ -65,15 +88,15 @@ void WriteDeclaration::acceptUI(DomUI *node)
     // is a User using Qt-in-namespace having his own classes not in a namespace.
     // In this case the generated Ui helper classes will also end up in
     // the Qt namespace (which is harmless, but not "pretty")
-    const bool needsMacro = namespaceList.size() == 0
-        || namespaceList[0] == "qdesigner_internal"_L1;
+    const bool needsMacro = namespaceList.count() == 0
+        || namespaceList[0] == QLatin1String("qdesigner_internal");
 
     if (needsMacro)
         m_output << "QT_BEGIN_NAMESPACE\n\n";
 
     openNameSpaces(namespaceList, m_output);
 
-    if (namespaceList.size())
+    if (namespaceList.count())
         m_output << "\n";
 
     m_output << "class " << exportMacro << m_option.prefix << className << "\n"
@@ -82,7 +105,7 @@ void WriteDeclaration::acceptUI(DomUI *node)
 
     const QStringList connections = m_uic->databaseInfo()->connections();
     for (const QString &connection : connections) {
-        if (connection != "(default)"_L1)
+        if (connection != QLatin1String("(default)"))
             m_output << m_option.indent << "QSqlDatabase " << connection << "Connection;\n";
     }
 
@@ -98,11 +121,11 @@ void WriteDeclaration::acceptUI(DomUI *node)
 
     closeNameSpaces(namespaceList, m_output);
 
-    if (namespaceList.size())
+    if (namespaceList.count())
         m_output << "\n";
 
     if (m_option.generateNamespace && !m_option.prefix.isEmpty()) {
-        namespaceList.append("Ui"_L1);
+        namespaceList.append(QLatin1String("Ui"));
 
         openNameSpaces(namespaceList, m_output);
 
@@ -110,7 +133,7 @@ void WriteDeclaration::acceptUI(DomUI *node)
 
         closeNameSpaces(namespaceList, m_output);
 
-        if (namespaceList.size())
+        if (namespaceList.count())
             m_output << "\n";
     }
 
@@ -120,7 +143,7 @@ void WriteDeclaration::acceptUI(DomUI *node)
 
 void WriteDeclaration::acceptWidget(DomWidget *node)
 {
-    QString className = "QWidget"_L1;
+    QString className = QLatin1String("QWidget");
     if (node->hasAttributeClass())
         className = node->attributeClass();
 
@@ -137,7 +160,7 @@ void WriteDeclaration::acceptSpacer(DomSpacer *node)
 
 void WriteDeclaration::acceptLayout(DomLayout *node)
 {
-    QString className = "QLayout"_L1;
+    QString className = QLatin1String("QLayout");
     if (node->hasAttributeClass())
         className = node->attributeClass();
 

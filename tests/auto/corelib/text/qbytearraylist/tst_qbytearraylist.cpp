@@ -1,14 +1,36 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2014 by Southwest Research Institute (R)
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
-
-#define QT_USE_QSTRINGBUILDER
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2014 by Southwest Research Institute (R)
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <qbytearraylist.h>
 
 #include <qmetatype.h>
-#include <qproperty.h>
 
 Q_DECLARE_METATYPE(QByteArrayList)
 
@@ -16,7 +38,6 @@ class tst_QByteArrayList : public QObject
 {
     Q_OBJECT
 private slots:
-    void join_overloads() const;
     void join() const;
     void join_data() const;
     void joinByteArray() const;
@@ -34,34 +55,12 @@ private slots:
     void initializerList() const;
 };
 
-void tst_QByteArrayList::join_overloads() const
-{
-    // Checks that there are no ambiguities between the different join() overloads:
-
-    const QByteArrayList list = {"a", "b", "c"};
-    const QByteArray expected = "aXbXc";
-
-    QCOMPARE(list.join('X'), expected);
-    QCOMPARE(list.join("X"), expected);
-    QCOMPARE(list.join(QByteArrayLiteral("X")), expected);
-    QCOMPARE(list.join(QByteArray("X")), expected);
-    QCOMPARE(list.join(QByteArrayView("X")), expected);
-    const char *sep = "X";
-    QCOMPARE(list.join(sep), expected);
-    QCOMPARE(list.join(QByteArray() % "X"), expected); // QStringBuilder expression
-    QProperty<QByteArray> prop("X"); // implicitly convertible to QByteArray
-    QCOMPARE(list.join(prop), expected);
-    QCOMPARE(list.join(std::as_const(prop)), expected);
-}
-
 void tst_QByteArrayList::join() const
 {
     QFETCH(QByteArrayList, input);
     QFETCH(QByteArray, expectedResult);
 
     QCOMPARE(input.join(), expectedResult);
-    QCOMPARE(input.join(QByteArrayView{}), expectedResult);
-    QCOMPARE(input.join(QByteArray{}), expectedResult);
 }
 
 void tst_QByteArrayList::join_data() const
@@ -89,7 +88,6 @@ void tst_QByteArrayList::joinByteArray() const
     QFETCH(QByteArray, expectedResult);
 
     QCOMPARE(input.join(separator), expectedResult);
-    QCOMPARE(input.join(QByteArrayView{separator}), expectedResult);
 }
 
 void tst_QByteArrayList::joinByteArray_data() const
@@ -134,7 +132,6 @@ void tst_QByteArrayList::joinChar() const
     QFETCH(QByteArray, expectedResult);
 
     QCOMPARE(input.join(separator), expectedResult);
-    QCOMPARE(input.join(QByteArrayView{&separator, 1}), expectedResult);
 }
 
 void tst_QByteArrayList::joinChar_data() const

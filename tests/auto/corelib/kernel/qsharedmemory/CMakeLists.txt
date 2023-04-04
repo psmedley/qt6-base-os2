@@ -1,4 +1,6 @@
-if(QT_FEATURE_sharedmemory)
+# Generated from qsharedmemory.pro.
+
+if(QT_FEATURE_sharedmemory) # special case
     #####################################################################
     ## tst_qsharedmemory Test:
     #####################################################################
@@ -14,11 +16,9 @@ if(QT_FEATURE_sharedmemory)
     #####################################################################
 
     qt_internal_extend_target(tst_qsharedmemory CONDITION LINUX
-        PUBLIC_LIBRARIES
-            rt
+    PUBLIC_LIBRARIES
+        rt
     )
+# if(QT_FEATURE_sharedmemory) # special case
     add_subdirectory(producerconsumer)
-    if(QT_FEATURE_process)
-        add_dependencies(tst_qsharedmemory producerconsumer_helper)
-    endif()
 endif()

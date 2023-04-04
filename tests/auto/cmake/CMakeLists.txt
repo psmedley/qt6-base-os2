@@ -111,24 +111,6 @@ include("${_Qt6CTestMacros}")
 
 if(NOT NO_WIDGETS)
     _qt_internal_test_expect_pass(test_build_simple_widget_app)
-    set(extra_widget_app_options "")
-    if(IOS)
-        list(APPEND extra_widget_app_options
-            QMAKE_OPTIONS CONFIG+=iossimulator
-        )
-    endif()
-    if(CMAKE_HOST_WIN32)
-        # Unset MAKEFLAGS environment variable when invoking build tool, it might
-        # have options incompatible with nmake.
-        list(APPEND extra_widget_app_options
-            BUILD_ENVIRONMENT MAKEFLAGS ""
-        )
-    endif()
-
-    _qt_internal_add_qmake_test(test_build_simple_widget_app
-        TESTNAME test_build_simple_widget_app_qmake
-        ${extra_widget_app_options}
-    )
 endif()
 
 # We only support a limited subset of cmake tests when targeting iOS:
@@ -177,7 +159,6 @@ endif()
 _qt_internal_test_expect_pass(test_multiple_find_package)
 _qt_internal_test_expect_pass(test_add_resources_delayed_file)
 _qt_internal_test_expect_pass(test_add_binary_resources_delayed_file BINARY test_add_binary_resources_delayed_file)
-_qt_internal_test_expect_pass(test_qt_add_resources_rebuild)
 
 if(NOT NO_GUI)
     _qt_internal_test_expect_pass(test_private_includes)
@@ -283,16 +264,11 @@ elseif(QT6_INSTALL_BINS)
 endif()
 
 # Test building and installing a few dummy Qt modules and plugins.
-set(mockplugins_test_args "")
-if(NOT QT_FEATURE_no_prefix)
-    list(APPEND mockplugins_test_args
-        BINARY "${CMAKE_COMMAND}"
-        BINARY_ARGS
-        "-DQT_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mockplugins"
-        -P "${qt_install_prefix}/${qt_install_bin_dir}/qt-cmake-private-install.cmake"
-    )
-endif()
-_qt_internal_test_expect_pass(mockplugins ${mockplugins_test_args})
+_qt_internal_test_expect_pass(mockplugins
+    BINARY "${CMAKE_COMMAND}"
+    BINARY_ARGS
+    "-DQT_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mockplugins"
+    -P "${qt_install_prefix}/${qt_install_bin_dir}/qt-cmake-private-install.cmake")
 set_tests_properties(mockplugins PROPERTIES FIXTURES_SETUP build_mockplugins)
 
 # Test importing the plugins built in the project above.
@@ -315,26 +291,4 @@ _qt_internal_test_expect_pass(tst_qaddpreroutine
 _qt_internal_test_expect_pass(test_static_resources
                               BINARY "${CMAKE_CTEST_COMMAND}"
                               BINARY_ARGS "-V")
-
-_qt_internal_test_expect_pass(test_generating_cpp_exports)
-
 _qt_internal_test_expect_pass(test_qt_extract_metatypes)
-
-set(deploy_args
-    test_widgets_app_deployment
-    BINARY "${CMAKE_CTEST_COMMAND}"
-    BINARY_ARGS "-V"
-    # Need to explicitly specify a writable install prefix.
-    BUILD_OPTIONS
-        -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/test_widgets_app_deployment_installed
-)
-
-# For now, the test should only pass on Windows and macOS shared and static builds and fail on
-# other platforms, because there is no support for runtime dependency deployment
-# on those platforms.
-# With static builds the runtime dependencies are just skipped, but the test should still pass.
-if((WIN32 OR (APPLE AND NOT IOS)))
-    _qt_internal_test_expect_pass(${deploy_args})
-else()
-    _qt_internal_test_expect_fail(${deploy_args})
-endif()

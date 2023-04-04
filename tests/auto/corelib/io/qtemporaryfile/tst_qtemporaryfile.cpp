@@ -1,6 +1,31 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// Copyright (C) 2017 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <qcoreapplication.h>
@@ -16,7 +41,7 @@
 
 #if defined(Q_OS_WIN)
 # include <shlwapi.h>
-# include <qt_windows.h>
+# include <windows.h>
 #endif
 #if defined(Q_OS_UNIX)
 # include <sys/types.h>
@@ -26,7 +51,7 @@
 # include <unistd.h>            // close(2)
 #endif
 
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
 #include <QDirIterator>
 #include <QStandardPaths>
 #endif
@@ -34,8 +59,6 @@
 #ifdef Q_OS_INTEGRITY
 #include "qplatformdefs.h"
 #endif
-
-using namespace Qt::StringLiterals;
 
 class tst_QTemporaryFile : public QObject
 {
@@ -88,15 +111,15 @@ void tst_QTemporaryFile::initTestCase()
     QVERIFY(QDir("test-XXXXXX").exists() || QDir().mkdir("test-XXXXXX"));
     QCoreApplication::setApplicationName("tst_qtemporaryfile");
 
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     QString sourceDir(":/android_testdata/");
     QDirIterator it(sourceDir, QDirIterator::Subdirectories);
     while (it.hasNext()) {
-        QFileInfo sourceFileInfo = it.nextFileInfo();
+        it.next();
+
+        QFileInfo sourceFileInfo = it.fileInfo();
         if (!sourceFileInfo.isDir()) {
-            QFileInfo destinationFileInfo(
-                QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QLatin1Char('/')
-                + sourceFileInfo.filePath().mid(sourceDir.length()));
+            QFileInfo destinationFileInfo(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QLatin1Char('/') + sourceFileInfo.filePath().mid(sourceDir.length()));
 
             if (!destinationFileInfo.exists()) {
                 QVERIFY(QDir().mkpath(destinationFileInfo.path()));
@@ -195,22 +218,22 @@ void tst_QTemporaryFile::fileTemplate_data()
         return; // skip if we have no drive letter
 
     tmp.data()[1] = u'$';
-    const auto tmpPath = tmp + uR"(\QTBUG-74291.XXXXXX.tmpFile)"_s;
+    const auto tmpPath = tmp + uR"(\QTBUG-74291.XXXXXX.tmpFile)"_qs;
 
     QTest::newRow("UNC-backslash")
-            << uR"(\\localhost\)"_s + tmpPath << "QTBUG-74291."
+            << uR"(\\localhost\)"_qs + tmpPath << "QTBUG-74291."
             << ".tmpFile"
             << "";
     QTest::newRow("UNC-prefix")
-            << uR"(\\?\UNC\localhost\)"_s + tmpPath << "QTBUG-74291."
+            << uR"(\\?\UNC\localhost\)"_qs + tmpPath << "QTBUG-74291."
             << ".tmpFile"
             << "";
     QTest::newRow("UNC-slash")
-            << u"//localhost/"_s + QDir::fromNativeSeparators(tmpPath) << "QTBUG-74291."
+            << u"//localhost/"_qs + QDir::fromNativeSeparators(tmpPath) << "QTBUG-74291."
             << ".tmpFile"
             << "";
     QTest::newRow("UNC-prefix-slash")
-            << uR"(//?/UNC/localhost/)"_s + QDir::fromNativeSeparators(tmpPath) << "QTBUG-74291."
+            << uR"(//?/UNC/localhost/)"_qs + QDir::fromNativeSeparators(tmpPath) << "QTBUG-74291."
             << ".tmpFile"
             << "";
 #endif
@@ -230,11 +253,11 @@ void tst_QTemporaryFile::fileTemplate()
     QVERIFY2(file.open(), qPrintable(file.errorString()));
 
     QString fileName = QFileInfo(file).fileName();
-    if (prefix.size())
-        QCOMPARE(fileName.left(prefix.size()), prefix);
+    if (prefix.length())
+        QCOMPARE(fileName.left(prefix.length()), prefix);
 
-    if (suffix.size())
-        QCOMPARE(fileName.right(suffix.size()), suffix);
+    if (suffix.length())
+        QCOMPARE(fileName.right(suffix.length()), suffix);
 }
 
 
@@ -363,7 +386,7 @@ void tst_QTemporaryFile::nonWritableCurrentDir()
 
     ChdirOnReturn cor(QDir::currentPath());
 
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     QDir::setCurrent("/data");
 #else
     QDir::setCurrent("/home");
@@ -789,9 +812,8 @@ void tst_QTemporaryFile::createNativeFile_data()
     QTest::addColumn<bool>("valid");
     QTest::addColumn<QByteArray>("content");
 
-#ifdef Q_OS_ANDROID
-    const QString nativeFilePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
-                                   + QStringLiteral("/resources/test.txt");
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+    const QString nativeFilePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/resources/test.txt");
 #else
     const QString nativeFilePath = QFINDTESTDATA("resources/test.txt");
 #endif

@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qstandarditemmodel.h"
 
@@ -319,11 +355,11 @@ void QStandardItemPrivate::sortChildren(int column, Qt::SortOrder order)
     }
 
     QModelIndexList changedPersistentIndexesFrom, changedPersistentIndexesTo;
-    QList<QStandardItem*> sorted_children(children.size());
+    QList<QStandardItem*> sorted_children(children.count());
     for (int i = 0; i < rowCount(); ++i) {
-        int r = (i < sortable.size()
+        int r = (i < sortable.count()
                  ? sortable.at(i).second
-                 : unsortable.at(i - sortable.size()));
+                 : unsortable.at(i - sortable.count()));
         for (int c = 0; c < columnCount(); ++c) {
             QStandardItem *itm = q->child(r, c);
             sorted_children[childIndex(i, c)] = itm;
@@ -371,7 +407,7 @@ void QStandardItemPrivate::setModel(QStandardItemModel *mod)
             }
             itm->d_func()->model = mod;
             const QList<QStandardItem*> &childList = itm->d_func()->children;
-            for (int i = 0; i < childList.size(); ++i) {
+            for (int i = 0; i < childList.count(); ++i) {
                 QStandardItem *chi = childList.at(i);
                 if (chi)
                     stack.push(chi);
@@ -432,7 +468,7 @@ bool QStandardItemPrivate::insertRows(int row, const QList<QStandardItem*> &item
     Q_Q(QStandardItem);
     if ((row < 0) || (row > rowCount()) || items.isEmpty())
         return false;
-    int count = items.size();
+    int count = items.count();
     if (model)
         model->d_func()->rowsAboutToBeInserted(q, row, row + count - 1);
     if (rowCount() == 0) {
@@ -446,7 +482,7 @@ bool QStandardItemPrivate::insertRows(int row, const QList<QStandardItem*> &item
         if (index != -1)
             children.insert(index, columnCount() * count, nullptr);
     }
-    for (int i = 0; i < items.size(); ++i) {
+    for (int i = 0; i < items.count(); ++i) {
         QStandardItem *item = items.at(i);
         item->d_func()->model = model;
         item->d_func()->parent = q;
@@ -478,7 +514,7 @@ bool QStandardItemPrivate::insertRows(int row, int count, const QList<QStandardI
     }
     if (!items.isEmpty()) {
         int index = childIndex(row, 0);
-        int limit = qMin(items.size(), columnCount() * count);
+        int limit = qMin(items.count(), columnCount() * count);
         for (int i = 0; i < limit; ++i) {
             QStandardItem *item = items.at(i);
             if (item) {
@@ -523,7 +559,7 @@ bool QStandardItemPrivate::insertColumns(int column, int count, const QList<QSta
         }
     }
     if (!items.isEmpty()) {
-        int limit = qMin(items.size(), rowCount() * count);
+        int limit = qMin(items.count(), rowCount() * count);
         for (int i = 0; i < limit; ++i) {
             QStandardItem *item = items.at(i);
             if (item) {
@@ -840,7 +876,7 @@ QStandardItem &QStandardItem::operator=(const QStandardItem &other)
 QStandardItem::~QStandardItem()
 {
     Q_D(QStandardItem);
-    for (QStandardItem *child : std::as_const(d->children)) {
+    for (QStandardItem *child : qAsConst(d->children)) {
         if (child)
             child->d_func()->setModel(nullptr);
         delete child;
@@ -1588,8 +1624,8 @@ void QStandardItem::insertRow(int row, const QList<QStandardItem*> &items)
     Q_D(QStandardItem);
     if (row < 0)
         return;
-    if (columnCount() < items.size())
-        setColumnCount(items.size());
+    if (columnCount() < items.count())
+        setColumnCount(items.count());
     d->insertRows(row, 1, items);
 }
 
@@ -1617,8 +1653,8 @@ void QStandardItem::insertColumn(int column, const QList<QStandardItem*> &items)
     Q_D(QStandardItem);
     if (column < 0)
         return;
-    if (rowCount() < items.size())
-        setRowCount(items.size());
+    if (rowCount() < items.count())
+        setRowCount(items.count());
     d->insertColumns(column, 1, items);
 }
 
@@ -2529,9 +2565,9 @@ QStandardItem *QStandardItemModel::verticalHeaderItem(int row) const
 void QStandardItemModel::setHorizontalHeaderLabels(const QStringList &labels)
 {
     Q_D(QStandardItemModel);
-    if (columnCount() < labels.size())
-        setColumnCount(labels.size());
-    for (int i = 0; i < labels.size(); ++i) {
+    if (columnCount() < labels.count())
+        setColumnCount(labels.count());
+    for (int i = 0; i < labels.count(); ++i) {
         QStandardItem *item = horizontalHeaderItem(i);
         if (!item) {
             item = d->createItem();
@@ -2552,9 +2588,9 @@ void QStandardItemModel::setHorizontalHeaderLabels(const QStringList &labels)
 void QStandardItemModel::setVerticalHeaderLabels(const QStringList &labels)
 {
     Q_D(QStandardItemModel);
-    if (rowCount() < labels.size())
-        setRowCount(labels.size());
-    for (int i = 0; i < labels.size(); ++i) {
+    if (rowCount() < labels.count())
+        setRowCount(labels.count());
+    for (int i = 0; i < labels.count(); ++i) {
         QStandardItem *item = verticalHeaderItem(i);
         if (!item) {
             item = d->createItem();
@@ -3112,9 +3148,9 @@ QMimeData *QStandardItemModel::mimeData(const QModelIndexList &indexes) const
 
     QSet<QStandardItem*> itemsSet;
     QStack<QStandardItem*> stack;
-    itemsSet.reserve(indexes.size());
-    stack.reserve(indexes.size());
-    for (int i = 0; i < indexes.size(); ++i) {
+    itemsSet.reserve(indexes.count());
+    stack.reserve(indexes.count());
+    for (int i = 0; i < indexes.count(); ++i) {
         if (QStandardItem *item = itemFromIndex(indexes.at(i))) {
             itemsSet << item;
             stack.push(item);
@@ -3133,7 +3169,7 @@ QMimeData *QStandardItemModel::mimeData(const QModelIndexList &indexes) const
                 continue;
 
             const QList<QStandardItem*> &childList = itm->d_func()->children;
-            for (int i = 0; i < childList.size(); ++i) {
+            for (int i = 0; i < childList.count(); ++i) {
                 QStandardItem *chi = childList.at(i);
                 if (chi) {
                     itemsSet.remove(chi);
@@ -3143,8 +3179,8 @@ QMimeData *QStandardItemModel::mimeData(const QModelIndexList &indexes) const
         }
     }
 
-    stack.reserve(itemsSet.size());
-    for (QStandardItem *item : std::as_const(itemsSet))
+    stack.reserve(itemsSet.count());
+    for (QStandardItem *item : qAsConst(itemsSet))
         stack.push(item);
 
     //stream everything recursively
@@ -3153,7 +3189,7 @@ QMimeData *QStandardItemModel::mimeData(const QModelIndexList &indexes) const
         if (itemsSet.contains(item)) //if the item is selection 'top-level', stream its position
             stream << item->row() << item->column();
 
-        stream << *item << item->columnCount() << int(item->d_ptr->children.size());
+        stream << *item << item->columnCount() << int(item->d_ptr->children.count());
         stack += item->d_ptr->children;
     }
 
@@ -3242,15 +3278,15 @@ bool QStandardItemModel::dropMimeData(const QMimeData *data, Qt::DropAction acti
 
     // Compute the number of continuous rows upon insertion and modify the rows to match
     QList<int> rowsToInsert(bottom + 1);
-    for (int i = 0; i < rows.size(); ++i)
+    for (int i = 0; i < rows.count(); ++i)
         rowsToInsert[rows.at(i)] = 1;
-    for (int i = 0; i < rowsToInsert.size(); ++i) {
+    for (int i = 0; i < rowsToInsert.count(); ++i) {
         if (rowsToInsert.at(i) == 1){
             rowsToInsert[i] = dragRowCount;
             ++dragRowCount;
         }
     }
-    for (int i = 0; i < rows.size(); ++i)
+    for (int i = 0; i < rows.count(); ++i)
         rows[i] = top + rowsToInsert.at(rows.at(i));
 
     QBitArray isWrittenTo(dragRowCount * dragColumnCount);

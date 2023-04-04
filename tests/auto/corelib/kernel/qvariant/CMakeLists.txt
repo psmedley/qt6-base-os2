@@ -4,12 +4,6 @@
 ## tst_qvariant Test:
 #####################################################################
 
-# Resources:
-set(qvariant_resource_files
-    "stream/qt4.9/"
-    "stream/qt5.0/"
-)
-
 qt_internal_add_test(tst_qvariant
     SOURCES
         tst_qvariant.cpp
@@ -20,9 +14,21 @@ qt_internal_add_test(tst_qvariant
     PUBLIC_LIBRARIES
         Qt::CorePrivate
         Qt::Gui
-    TESTDATA ${qvariant_resource_files}
-    BUILTIN_TESTDATA
 )
+
+# Resources:
+set(qvariant_resource_files
+    "stream/qt4.9/"
+    "stream/qt5.0/"
+)
+
+qt_internal_add_resource(tst_qvariant "qvariant"
+    PREFIX
+        "/"
+    FILES
+        ${qvariant_resource_files}
+)
+
 
 ## Scopes:
 #####################################################################

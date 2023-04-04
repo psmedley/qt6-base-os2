@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -1459,7 +1484,7 @@ void tst_QAbstractSlider::keyPressed()
     slider->setOrientation(Qt::Horizontal);
     slider->setInvertedAppearance(invertedAppearance);
     slider->setInvertedControls(invertedControls);
-    for (int i=0;i<keySequence.size();i++) {
+    for (int i=0;i<keySequence.count();i++) {
         QTest::keyClick(slider, keySequence.at(i));
     }
     QCOMPARE(slider->sliderPosition(), expectedSliderPosition);
@@ -1666,8 +1691,8 @@ void tst_QAbstractSlider::wheelEvent()
 #endif
     QCOMPARE(slider->sliderPosition(),expectedSliderPosition);
     int expectedSignalCount = (initialSliderPosition == expectedSliderPosition) ? 0 : 1;
-    QCOMPARE(spy1.size(), expectedSignalCount);
-    QCOMPARE(spy2.size(), expectedSignalCount);
+    QCOMPARE(spy1.count(), expectedSignalCount);
+    QCOMPARE(spy2.count(), expectedSignalCount);
     if (expectedSignalCount)
         QVERIFY(actionTriggeredTimeStamp < valueChangedTimeStamp);
 }
@@ -1814,9 +1839,9 @@ void tst_QAbstractSlider::sliderPressedReleased()
 
     QTest::mousePress(slider, Qt::LeftButton, {},
                       QPoint(rect.center().x() + 2, rect.center().y() + 2));
-    QCOMPARE(spy1.size(), expectedCount);
+    QCOMPARE(spy1.count(), expectedCount);
     QTest::mouseRelease(slider, Qt::LeftButton, {}, rect.center());
-    QCOMPARE(spy2.size(), expectedCount);
+    QCOMPARE(spy2.count(), expectedCount);
 
     delete slider;
 }
@@ -1885,7 +1910,7 @@ void tst_QAbstractSlider::sliderMoved()
     slider->setMaximum(maximum);
     slider->setSliderDown(sliderDown);
     slider->setSliderPosition(position);
-    QCOMPARE(spy.size(), expectedCount);
+    QCOMPARE(spy.count(), expectedCount);
 
     delete slider;
 }
@@ -1957,7 +1982,7 @@ void tst_QAbstractSlider::rangeChanged()
     slider.setRange(minimum, maximum);
     QSignalSpy spy(&slider, SIGNAL(rangeChanged(int,int)));
     slider.setRange(newMin, newMax);
-    QCOMPARE(spy.size(), expectedCount);
+    QCOMPARE(spy.count(), expectedCount);
 }
 
 void tst_QAbstractSlider::setSliderPosition_data()
@@ -1996,8 +2021,8 @@ void tst_QAbstractSlider::setSliderPosition()
     QSignalSpy spy2(slider, SIGNAL(valueChanged(int)));
     slider->setSliderPosition(targetPosition);
     QCOMPARE(slider->sliderPosition(), targetPosition);
-    QCOMPARE(spy1.size(), down ? 1 : 0);
-    QCOMPARE(spy2.size(), tracking ? 1 : 0);
+    QCOMPARE(spy1.count(), down ? 1 : 0);
+    QCOMPARE(spy2.count(), tracking ? 1 : 0);
     QCOMPARE(slider->value(), tracking ? targetPosition : initialValue);
     if (tracking && down)
         QVERIFY(sliderMovedTimeStamp < valueChangedTimeStamp);
@@ -2025,9 +2050,9 @@ void tst_QAbstractSlider::setValue()
     QSignalSpy spy2(slider, SIGNAL(valueChanged(int)));
     QSignalSpy spy3(slider, SIGNAL(actionTriggered(int)));
     slider->setValue(50);
-    QCOMPARE(spy1.size(), down ? 1 : 0);
-    QCOMPARE(spy2.size(), 1);
-    QCOMPARE(spy3.size(), 0);
+    QCOMPARE(spy1.count(), down ? 1 : 0);
+    QCOMPARE(spy2.count(), 1);
+    QCOMPARE(spy3.count(), 0);
     QCOMPARE(slider->value(), reportedValue);
     QCOMPARE(slider->sliderPosition(), reportedSliderPosition);
     if (down)
@@ -2051,37 +2076,37 @@ void tst_QAbstractSlider::setRepeatAction()
     // Start repeat action with initial delay of 500 ms, and then repeating
     // every 250 ms.
     slider->setRepeatAction(QAbstractSlider::SliderPageStepAdd, 500, 250);
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
     QCOMPARE(slider->value(), 55);
 
     QElapsedTimer t;
     t.start();
     QTest::qWait(300);
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
     QCOMPARE(slider->value(), 55);
 
     waitUntilTimeElapsed(t, 550);
-    QTRY_COMPARE(spy.size(), 1);
+    QTRY_COMPARE(spy.count(), 1);
     QCOMPARE(slider->value(), 65);
     QCOMPARE(spy.at(0).at(0).toUInt(), (uint)QAbstractSlider::SliderPageStepAdd);
 
     waitUntilTimeElapsed(t, 790);
-    QTRY_COMPARE(spy.size(), 2);
+    QTRY_COMPARE(spy.count(), 2);
     QCOMPARE(slider->value(), 75);
     QCOMPARE(spy.at(1).at(0).toUInt(), (uint)QAbstractSlider::SliderPageStepAdd);
 
     waitUntilTimeElapsed(t, 1790);
-    QTRY_COMPARE(spy.size(), 6);
+    QTRY_COMPARE(spy.count(), 6);
     QCOMPARE(slider->value(), 115);
     QCOMPARE(spy.at(4).at(0).toUInt(), (uint)QAbstractSlider::SliderPageStepAdd);
     QCOMPARE(spy.at(5).at(0).toUInt(), (uint)QAbstractSlider::SliderPageStepAdd);
 
     slider->setRepeatAction(QAbstractSlider::SliderNoAction);
-    QCOMPARE(spy.size(), 6);
+    QCOMPARE(spy.count(), 6);
     QCOMPARE(slider->value(), 115);
 
     QTest::qWait(300);
-    QCOMPARE(spy.size(), 6);
+    QCOMPARE(spy.count(), 6);
     QCOMPARE(slider->value(), 115);
 }
 

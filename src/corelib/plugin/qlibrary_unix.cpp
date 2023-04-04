@@ -1,12 +1,48 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2020 Intel Corporation
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2020 Intel Corporation
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qplatformdefs.h"
 
-#include <qcoreapplication.h>
 #include <qfile.h>
 #include "qlibrary_p.h"
+#include <qcoreapplication.h>
 #include <private/qfilesystementry_p.h>
 #include <private/qsimd_p.h>
 
@@ -23,12 +59,10 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 static QString qdlerror()
 {
     const char *err = dlerror();
-    return err ? u'(' + QString::fromLocal8Bit(err) + u')' : QString();
+    return err ? QLatin1Char('(') + QString::fromLocal8Bit(err) + QLatin1Char(')') : QString();
 }
 
 QStringList QLibraryPrivate::suffixes_sys(const QString &fullVersion)
@@ -48,16 +82,16 @@ QStringList QLibraryPrivate::suffixes_sys(const QString &fullVersion)
     // .so is preferred.
 # if defined(__ia64)
     if (!fullVersion.isEmpty()) {
-        suffixes << ".so.%1"_L1.arg(fullVersion);
+        suffixes << QLatin1String(".so.%1").arg(fullVersion);
     } else {
-        suffixes << ".so"_L1;
+        suffixes << QLatin1String(".so");
     }
 # endif
     if (!fullVersion.isEmpty()) {
-        suffixes << ".sl.%1"_L1.arg(fullVersion);
-        suffixes << ".%1"_L1.arg(fullVersion);
+        suffixes << QLatin1String(".sl.%1").arg(fullVersion);
+        suffixes << QLatin1String(".%1").arg(fullVersion);
     } else {
-        suffixes << ".sl"_L1;
+        suffixes << QLatin1String(".sl");
     }
 #elif defined(Q_OS_AIX)
     suffixes << ".a";
@@ -66,9 +100,9 @@ QStringList QLibraryPrivate::suffixes_sys(const QString &fullVersion)
     return QStringList(QStringLiteral(".dll"));
 #else
     if (!fullVersion.isEmpty()) {
-        suffixes << ".so.%1"_L1.arg(fullVersion);
+        suffixes << QLatin1String(".so.%1").arg(fullVersion);
     } else {
-        suffixes << ".so"_L1;
+        suffixes << QLatin1String(".so");
 # ifdef Q_OS_ANDROID
         suffixes << QStringLiteral(LIBS_SUFFIX);
 # endif
@@ -76,10 +110,10 @@ QStringList QLibraryPrivate::suffixes_sys(const QString &fullVersion)
 #endif
 # ifdef Q_OS_MAC
     if (!fullVersion.isEmpty()) {
-        suffixes << ".%1.bundle"_L1.arg(fullVersion);
-        suffixes << ".%1.dylib"_L1.arg(fullVersion);
+        suffixes << QLatin1String(".%1.bundle").arg(fullVersion);
+        suffixes << QLatin1String(".%1.dylib").arg(fullVersion);
     } else {
-        suffixes << ".bundle"_L1 << ".dylib"_L1;
+        suffixes << QLatin1String(".bundle") << QLatin1String(".dylib");
     }
 #endif
     return suffixes;
@@ -90,7 +124,7 @@ QStringList QLibraryPrivate::prefixes_sys()
 #if defined(Q_OS_OS2)
     return QStringList();
 #else
-    return QStringList() << "lib"_L1;
+    return QStringList() << QLatin1String("lib");
 #endif
 }
 
@@ -102,10 +136,10 @@ bool QLibraryPrivate::load_sys()
 
     QString path = fsEntry.path();
     QString name = fsEntry.fileName();
-    if (path == "."_L1 && !fileName.startsWith(path))
+    if (path == QLatin1String(".") && !fileName.startsWith(path))
         path.clear();
     else
-        path += u'/';
+        path += QLatin1Char('/');
 
     QStringList suffixes;
     QStringList prefixes;
@@ -170,7 +204,7 @@ bool QLibraryPrivate::load_sys()
             QStringList tmp;
             qSwap(tmp, list);
             list.reserve(tmp.size() * 2);
-            for (const QString &s : std::as_const(tmp)) {
+            for (const QString &s : qAsConst(tmp)) {
                 QString modifiedPath = s;
                 f(&modifiedPath);
                 list.append(modifiedPath);
@@ -179,10 +213,10 @@ bool QLibraryPrivate::load_sys()
         };
         if (pluginState == IsAPlugin) {
             // add ".avx2" to each suffix in the list
-            transform(suffixes, [](QString *s) { s->append(".avx2"_L1); });
+            transform(suffixes, [](QString *s) { s->append(QLatin1String(".avx2")); });
         } else {
             // prepend "haswell/" to each prefix in the list
-            transform(prefixes, [](QString *s) { s->prepend("haswell/"_L1); });
+            transform(prefixes, [](QString *s) { s->prepend(QLatin1String("haswell/")); });
         }
     }
 #endif
@@ -194,15 +228,15 @@ bool QLibraryPrivate::load_sys()
         for (int suffix = 0; retry && !hnd && suffix < suffixes.size(); suffix++) {
             if (!prefixes.at(prefix).isEmpty() && name.startsWith(prefixes.at(prefix)))
                 continue;
-            if (path.isEmpty() && prefixes.at(prefix).contains(u'/'))
+            if (path.isEmpty() && prefixes.at(prefix).contains(QLatin1Char('/')))
                 continue;
             if (!suffixes.at(suffix).isEmpty() && name.endsWith(suffixes.at(suffix)))
                 continue;
             if (loadHints & QLibrary::LoadArchiveMemberHint) {
                 attempt = name;
-                int lparen = attempt.indexOf(u'(');
+                int lparen = attempt.indexOf(QLatin1Char('('));
                 if (lparen == -1)
-                    lparen = attempt.size();
+                    lparen = attempt.count();
                 attempt = path + prefixes.at(prefix) + attempt.insert(lparen, suffixes.at(suffix));
             } else {
                 attempt = path + prefixes.at(prefix) + name + suffixes.at(suffix);
@@ -212,7 +246,7 @@ bool QLibraryPrivate::load_sys()
 #ifdef Q_OS_ANDROID
             if (!hnd) {
                 auto attemptFromBundle = attempt;
-                hnd = dlopen(QFile::encodeName(attemptFromBundle.replace(u'/', u'_')), dlFlags);
+                hnd = dlopen(QFile::encodeName(attemptFromBundle.replace(QLatin1Char('/'), QLatin1Char('_'))), dlFlags);
             }
             if (hnd) {
                 using JniOnLoadPtr = jint (*)(JavaVM *vm, void *reserved);
@@ -224,7 +258,7 @@ bool QLibraryPrivate::load_sys()
             }
 #endif
 
-            if (!hnd && fileName.startsWith(u'/') && QFile::exists(attempt)) {
+            if (!hnd && fileName.startsWith(QLatin1Char('/')) && QFile::exists(attempt)) {
                 // We only want to continue if dlopen failed due to that the shared library did not exist.
                 // However, we are only able to apply this check for absolute filenames (since they are
                 // not influenced by the content of LD_LIBRARY_PATH, /etc/ld.so.cache, DT_RPATH etc...)
@@ -274,7 +308,7 @@ bool QLibraryPrivate::unload_sys()
         if (!qstrcmp(error, "Shared objects still referenced")) // On QNX that's only "informative"
             return true;
         errorString = QLibrary::tr("Cannot unload library %1: %2").arg(fileName,
-                                                                       QLatin1StringView(error));
+                                                                       QLatin1String(error));
 #else
         errorString = QLibrary::tr("Cannot unload library %1: %2").arg(fileName, qdlerror());
 #endif

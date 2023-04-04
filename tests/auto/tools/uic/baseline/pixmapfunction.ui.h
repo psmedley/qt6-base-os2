@@ -29,18 +29,18 @@ public:
     void setupUi(QWidget *Form)
     {
         if (Form->objectName().isEmpty())
-            Form->setObjectName("Form");
+            Form->setObjectName(QString::fromUtf8("Form"));
         Form->resize(149, 112);
         verticalLayout = new QVBoxLayout(Form);
-        verticalLayout->setObjectName("verticalLayout");
+        verticalLayout->setObjectName(QString::fromUtf8("verticalLayout"));
         label = new QLabel(Form);
-        label->setObjectName("label");
+        label->setObjectName(QString::fromUtf8("label"));
         label->setPixmap(QPixmap(pixmapFunction("labelPixmap")));
 
         verticalLayout->addWidget(label);
 
         pushButton = new QPushButton(Form);
-        pushButton->setObjectName("pushButton");
+        pushButton->setObjectName(QString::fromUtf8("pushButton"));
         QIcon icon;
         icon.addPixmap(QPixmap(pixmapFunction("buttonIconNormalOff")), QIcon::Normal, QIcon::Off);
         icon.addPixmap(QPixmap(pixmapFunction("buttonIconNormalOn")), QIcon::Normal, QIcon::On);

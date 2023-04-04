@@ -36,30 +36,30 @@ public:
     void setupUi(QWidget *QPrintPropertiesWidget)
     {
         if (QPrintPropertiesWidget->objectName().isEmpty())
-            QPrintPropertiesWidget->setObjectName("QPrintPropertiesWidget");
+            QPrintPropertiesWidget->setObjectName(QString::fromUtf8("QPrintPropertiesWidget"));
         QPrintPropertiesWidget->resize(396, 288);
         verticalLayout_4 = new QVBoxLayout(QPrintPropertiesWidget);
         verticalLayout_4->setContentsMargins(0, 0, 0, 0);
-        verticalLayout_4->setObjectName("verticalLayout_4");
+        verticalLayout_4->setObjectName(QString::fromUtf8("verticalLayout_4"));
         tabs = new QTabWidget(QPrintPropertiesWidget);
-        tabs->setObjectName("tabs");
+        tabs->setObjectName(QString::fromUtf8("tabs"));
         tabPage = new QWidget();
-        tabPage->setObjectName("tabPage");
+        tabPage->setObjectName(QString::fromUtf8("tabPage"));
         tabPage->setGeometry(QRect(0, 0, 392, 261));
         horizontalLayout = new QHBoxLayout(tabPage);
-        horizontalLayout->setObjectName("horizontalLayout");
+        horizontalLayout->setObjectName(QString::fromUtf8("horizontalLayout"));
         pageSetup = new QPageSetupWidget(tabPage);
-        pageSetup->setObjectName("pageSetup");
+        pageSetup->setObjectName(QString::fromUtf8("pageSetup"));
 
         horizontalLayout->addWidget(pageSetup);
 
         tabs->addTab(tabPage, QString());
         cupsPropertiesPage = new QWidget();
-        cupsPropertiesPage->setObjectName("cupsPropertiesPage");
+        cupsPropertiesPage->setObjectName(QString::fromUtf8("cupsPropertiesPage"));
         horizontalLayout_2 = new QHBoxLayout(cupsPropertiesPage);
-        horizontalLayout_2->setObjectName("horizontalLayout_2");
+        horizontalLayout_2->setObjectName(QString::fromUtf8("horizontalLayout_2"));
         treeView = new QTreeView(cupsPropertiesPage);
-        treeView->setObjectName("treeView");
+        treeView->setObjectName(QString::fromUtf8("treeView"));
         treeView->setAlternatingRowColors(true);
 
         horizontalLayout_2->addWidget(treeView);

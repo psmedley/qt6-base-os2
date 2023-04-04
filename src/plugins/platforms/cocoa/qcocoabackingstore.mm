@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <AppKit/AppKit.h>
 
@@ -235,22 +271,20 @@ bool QCALayerBackingStore::scroll(const QRegion &region, int dx, int dy)
     m_buffers.back()->lock(QPlatformGraphicsBuffer::SWWriteAccess);
 
     if (!inPlaceRegion.isEmpty()) {
-        // We have to scroll everything in one go, instead of scrolling the
-        // individual rects of the region, as otherwise we may end up reading
-        // already overwritten (scrolled) pixels.
-        const QRect inPlaceBoundingRect = inPlaceRegion.boundingRect();
-
-        qCDebug(lcQpaBackingStore) << "Scrolling" << inPlaceBoundingRect << "in place";
+        qCDebug(lcQpaBackingStore) << "Scrolling" << inPlaceRegion << "in place";
         QImage *backBufferImage = m_buffers.back()->asImage();
         const qreal devicePixelRatio = backBufferImage->devicePixelRatio();
         const QPoint devicePixelDelta = scrollDelta * devicePixelRatio;
 
         extern void qt_scrollRectInImage(QImage &, const QRect &, const QPoint &);
 
-        qt_scrollRectInImage(*backBufferImage,
-            QRect(inPlaceBoundingRect.topLeft() * devicePixelRatio,
-                  inPlaceBoundingRect.size() * devicePixelRatio),
-                  devicePixelDelta);
+        for (const QRect &rect : inPlaceRegion) {
+            qt_scrollRectInImage(*backBufferImage,
+                QRect(rect.topLeft() * devicePixelRatio,
+                      rect.size() * devicePixelRatio),
+                      devicePixelDelta);
+        }
+
     }
 
     if (!frontBufferRegion.isEmpty()) {
@@ -394,22 +428,20 @@ void QCALayerBackingStore::windowDestroyed(QObject *object)
     m_subWindowBackingstores.erase(window);
 }
 
-QPlatformBackingStore::FlushResult QCALayerBackingStore::rhiFlush(QWindow *window,
-                                                                  qreal sourceDevicePixelRatio,
-                                                                  const QRegion &region,
-                                                                  const QPoint &offset,
-                                                                  QPlatformTextureList *textures,
-                                                                  bool translucentBackground)
+#ifndef QT_NO_OPENGL
+void QCALayerBackingStore::composeAndFlush(QWindow *window, const QRegion &region, const QPoint &offset,
+                                    QPlatformTextureList *textures, bool translucentBackground)
 {
     if (!m_buffers.back()) {
         qCWarning(lcQpaBackingStore) << "Tried to flush backingstore without painting to it first";
-        return FlushFailed;
+        return;
     }
 
     finalizeBackBuffer();
 
-    return QPlatformBackingStore::rhiFlush(window, sourceDevicePixelRatio, region, offset, textures, translucentBackground);
+    QPlatformBackingStore::composeAndFlush(window, region, offset, textures, translucentBackground);
 }
+#endif
 
 QImage QCALayerBackingStore::toImage() const
 {
@@ -559,6 +591,6 @@ QImage *QCALayerBackingStore::GraphicsBuffer::asImage()
     return &m_image;
 }
 
-QT_END_NAMESPACE
-
 #include "moc_qcocoabackingstore.cpp"
+
+QT_END_NAMESPACE

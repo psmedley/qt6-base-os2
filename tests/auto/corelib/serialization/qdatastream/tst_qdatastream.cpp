@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QBuffer>
@@ -18,8 +43,6 @@
 #include <QtGui/QPicture>
 #include <QtGui/QPixmap>
 #include <QtGui/QTextLength>
-
-using namespace Qt::StringLiterals;
 
 static_assert(QTypeTraits::has_ostream_operator_v<QDataStream, int>);
 static_assert(QTypeTraits::has_ostream_operator_v<QDataStream, QList<int>>);
@@ -960,10 +983,10 @@ static void QBitArrayData(QBitArray *b, int index)
     case 18: filler = "1111111111111111111111111111111111111111111111111111111111111111"; break;
     }
 
-    b->resize(filler.size());
+    b->resize(filler.length());
     b->fill(0); // reset all bits to zero
 
-    for (int i = 0; i < filler.size(); ++i) {
+    for (int i = 0; i < filler.length(); ++i) {
         if (filler.at(i) == '1')
             b->setBit(i, true);
     }
@@ -1205,15 +1228,15 @@ void tst_QDataStream::readQCursor(QDataStream *s)
     QCOMPARE(d5.hotSpot(), test.hotSpot());
 
     // Comparing non-null QBitmaps will fail. Upcast them first to pass.
-    QCOMPARE(d5.bitmap().isNull(), test.bitmap().isNull());
+    QCOMPARE(d5.bitmap(Qt::ReturnByValue).isNull(), test.bitmap(Qt::ReturnByValue).isNull());
     QCOMPARE(
-        static_cast<QPixmap>(d5.bitmap()),
-        static_cast<QPixmap>(test.bitmap())
+        static_cast<QPixmap>(d5.bitmap(Qt::ReturnByValue)),
+        static_cast<QPixmap>(test.bitmap(Qt::ReturnByValue))
     );
-    QCOMPARE(d5.mask().isNull(), test.mask().isNull());
+    QCOMPARE(d5.mask(Qt::ReturnByValue).isNull(), test.mask(Qt::ReturnByValue).isNull());
     QCOMPARE(
-        static_cast<QPixmap>(d5.mask()),
-        static_cast<QPixmap>(test.mask())
+        static_cast<QPixmap>(d5.mask(Qt::ReturnByValue)),
+        static_cast<QPixmap>(test.mask(Qt::ReturnByValue))
     );
 }
 #endif
@@ -3881,7 +3904,7 @@ void tst_QDataStream::typedefQt5Compat()
         // writing in Qt 6 results in the same file
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        QFile file(dir.filePath(u"typedef.q6"_s));
+        QFile file(dir.filePath(u"typedef.q6"_qs));
         file.open(QIODevice::WriteOnly);
         QDataStream stream(&file);
         stream.setVersion(QDataStream::Qt_5_15);

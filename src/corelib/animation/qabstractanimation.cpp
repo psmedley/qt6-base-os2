@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /*!
     \class QAbstractAnimation
@@ -113,6 +149,7 @@
 #include "qabstractanimation_p.h"
 
 #include <QtCore/qmath.h>
+#include <QtCore/qthreadstorage.h>
 #include <QtCore/qcoreevent.h>
 #include <QtCore/qpointer.h>
 #include <QtCore/qscopedvaluerollback.h>
@@ -177,6 +214,8 @@ typedef QList<QAbstractAnimation*>::ConstIterator AnimationListConstIt;
     QUnifiedTimer drives animations indirectly, via QAbstractAnimationTimer.
 */
 
+Q_GLOBAL_STATIC(QThreadStorage<QUnifiedTimer *>, unifiedTimer)
+
 QUnifiedTimer::QUnifiedTimer() :
     QObject(), defaultDriver(this), lastTick(0), timingInterval(DEFAULT_TIMER_INTERVAL),
     currentAnimationIdx(0), insideTick(false), insideRestart(false), consistentTiming(false), slowMode(false),
@@ -188,18 +227,15 @@ QUnifiedTimer::QUnifiedTimer() :
     driver = &defaultDriver;
 }
 
-QUnifiedTimer::~QUnifiedTimer()
-    = default;
 
 QUnifiedTimer *QUnifiedTimer::instance(bool create)
 {
     QUnifiedTimer *inst;
-    static thread_local std::unique_ptr<QUnifiedTimer> unifiedTimer;
-    if (create && !unifiedTimer) {
+    if (create && !unifiedTimer()->hasLocalData()) {
         inst = new QUnifiedTimer;
-        unifiedTimer.reset(inst);
+        unifiedTimer()->setLocalData(inst);
     } else {
-        inst = unifiedTimer.get();
+        inst = unifiedTimer() ? unifiedTimer()->localData() : nullptr;
     }
     return inst;
 }
@@ -283,7 +319,7 @@ void QUnifiedTimer::updateAnimationTimers()
         QScopedValueRollback<bool> guard(insideTick, true);
         if (profilerCallback)
             profilerCallback(delta);
-        for (currentAnimationIdx = 0; currentAnimationIdx < animationTimers.size(); ++currentAnimationIdx) {
+        for (currentAnimationIdx = 0; currentAnimationIdx < animationTimers.count(); ++currentAnimationIdx) {
             QAbstractAnimationTimer *animation = animationTimers.at(currentAnimationIdx);
             animation->updateAnimationsTime(delta);
         }
@@ -294,7 +330,7 @@ void QUnifiedTimer::updateAnimationTimers()
 int QUnifiedTimer::runningAnimationCount()
 {
     int count = 0;
-    for (int i = 0; i < animationTimers.size(); ++i)
+    for (int i = 0; i < animationTimers.count(); ++i)
         count += animationTimers.at(i)->runningAnimationCount();
     return count;
 }
@@ -309,7 +345,7 @@ void QUnifiedTimer::localRestart()
     if (insideRestart)
         return;
 
-    if (!pausedAnimationTimers.isEmpty() && (animationTimers.size() + animationTimersToStart.size() == pausedAnimationTimers.size())) {
+    if (!pausedAnimationTimers.isEmpty() && (animationTimers.count() + animationTimersToStart.count() == pausedAnimationTimers.count())) {
         driver->stop();
         int closestTimeToFinish = closestPausedAnimationTimerTimeToFinish();
         // use a precise timer if the pause will be short
@@ -327,7 +363,7 @@ void QUnifiedTimer::restart()
 {
     {
         QScopedValueRollback<bool> guard(insideRestart, true);
-        for (int i = 0; i < animationTimers.size(); ++i)
+        for (int i = 0; i < animationTimers.count(); ++i)
             animationTimers.at(i)->restartAnimationTimer();
     }
 
@@ -512,6 +548,10 @@ bool QUnifiedTimer::canUninstallAnimationDriver(QAnimationDriver *d)
     return d == driver && driver != &defaultDriver;
 }
 
+#if QT_CONFIG(thread)
+Q_GLOBAL_STATIC(QThreadStorage<QAnimationTimer *>, animationTimer)
+#endif
+
 QAnimationTimer::QAnimationTimer() :
     QAbstractAnimationTimer(), lastTick(0),
     currentAnimationIdx(0), insideTick(false),
@@ -520,19 +560,15 @@ QAnimationTimer::QAnimationTimer() :
 {
 }
 
-QAnimationTimer::~QAnimationTimer()
-    = default;
-
 QAnimationTimer *QAnimationTimer::instance(bool create)
 {
     QAnimationTimer *inst;
 #if QT_CONFIG(thread)
-    static thread_local std::unique_ptr<QAnimationTimer> animationTimer;
-    if (create && !animationTimer) {
+    if (create && !animationTimer()->hasLocalData()) {
         inst = new QAnimationTimer;
-        animationTimer.reset(inst);
+        animationTimer()->setLocalData(inst);
     } else {
-        inst = animationTimer.get();
+        inst = animationTimer() ? animationTimer()->localData() : nullptr;
     }
 #else
     Q_UNUSED(create);
@@ -568,7 +604,7 @@ void QAnimationTimer::updateAnimationsTime(qint64 delta)
     //when the CPU load is high
     if (delta) {
         QScopedValueRollback<bool> guard(insideTick, true);
-        for (currentAnimationIdx = 0; currentAnimationIdx < animations.size(); ++currentAnimationIdx) {
+        for (currentAnimationIdx = 0; currentAnimationIdx < animations.count(); ++currentAnimationIdx) {
             QAbstractAnimation *animation = animations.at(currentAnimationIdx);
             int elapsed = QAbstractAnimationPrivate::get(animation)->totalCurrentTime
                           + (animation->direction() == QAbstractAnimation::Forward ? delta : -delta);
@@ -860,9 +896,6 @@ QDefaultAnimationDriver::QDefaultAnimationDriver(QUnifiedTimer *timer)
     connect(this, SIGNAL(stopped()), this, SLOT(stopTimer()));
 }
 
-QDefaultAnimationDriver::~QDefaultAnimationDriver()
-    = default;
-
 void QDefaultAnimationDriver::timerEvent(QTimerEvent *e)
 {
     Q_ASSERT(e->timerId() == m_timer.timerId());
@@ -880,21 +913,6 @@ void QDefaultAnimationDriver::stopTimer()
 {
     m_timer.stop();
 }
-
-QAnimationDriverPrivate::QAnimationDriverPrivate()
-    = default;
-
-QAnimationDriverPrivate::~QAnimationDriverPrivate()
-    = default;
-
-QAbstractAnimationTimer::QAbstractAnimationTimer()
-    = default;
-
-QAbstractAnimationTimer::~QAbstractAnimationTimer()
-    = default;
-
-QAbstractAnimationPrivate::QAbstractAnimationPrivate()
-    = default;
 
 QAbstractAnimationPrivate::~QAbstractAnimationPrivate() { }
 

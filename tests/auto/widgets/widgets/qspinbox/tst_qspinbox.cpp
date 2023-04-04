@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <qdebug.h>
 #include <qapplication.h>
@@ -105,28 +130,6 @@ public:
     Qt::KeyboardModifier stepModifier = Qt::ControlModifier;
 };
 
-class SelectAllOnStepStyle : public QProxyStyle
-{
-public:
-    SelectAllOnStepStyle(bool selectAll)
-    : selectAll(selectAll)
-    {}
-
-    int styleHint(QStyle::StyleHint hint, const QStyleOption *option,
-                  const QWidget *widget, QStyleHintReturn *returnData = nullptr) const override
-    {
-        switch (hint) {
-        case QStyle::SH_SpinBox_SelectOnStep:
-            return selectAll;
-        default:
-            return QProxyStyle::styleHint(hint, option, widget, returnData);
-        }
-    }
-
-private:
-    const bool selectAll;
-};
-
 class tst_QSpinBox : public QObject
 {
     Q_OBJECT
@@ -207,10 +210,6 @@ private slots:
 
     void stepModifierPressAndHold_data();
     void stepModifierPressAndHold();
-
-    void stepSelectAll_data();
-    void stepSelectAll();
-
 public slots:
     void textChangedHelper(const QString &);
     void valueChangedHelper(int);
@@ -939,38 +938,38 @@ void tst_QSpinBox::editingFinished()
     QTest::keyClick(box, Qt::Key_Up);
     QTest::keyClick(box, Qt::Key_Up);
 
-    QCOMPARE(editingFinishedSpy1.size(), 0);
-    QCOMPARE(editingFinishedSpy2.size(), 0);
+    QCOMPARE(editingFinishedSpy1.count(), 0);
+    QCOMPARE(editingFinishedSpy2.count(), 0);
 
     QTest::keyClick(box2, Qt::Key_Up);
     QTest::keyClick(box2, Qt::Key_Up);
     box2->setFocus();
-    QCOMPARE(editingFinishedSpy1.size(), 1);
+    QCOMPARE(editingFinishedSpy1.count(), 1);
     box->setFocus();
-    QCOMPARE(editingFinishedSpy1.size(), 1);
-    QCOMPARE(editingFinishedSpy2.size(), 1);
+    QCOMPARE(editingFinishedSpy1.count(), 1);
+    QCOMPARE(editingFinishedSpy2.count(), 1);
     QTest::keyClick(box, Qt::Key_Up);
-    QCOMPARE(editingFinishedSpy1.size(), 1);
-    QCOMPARE(editingFinishedSpy2.size(), 1);
+    QCOMPARE(editingFinishedSpy1.count(), 1);
+    QCOMPARE(editingFinishedSpy2.count(), 1);
     QTest::keyClick(box, Qt::Key_Enter);
-    QCOMPARE(editingFinishedSpy1.size(), 2);
-    QCOMPARE(editingFinishedSpy2.size(), 1);
+    QCOMPARE(editingFinishedSpy1.count(), 2);
+    QCOMPARE(editingFinishedSpy2.count(), 1);
     QTest::keyClick(box, Qt::Key_Return);
-    QCOMPARE(editingFinishedSpy1.size(), 3);
-    QCOMPARE(editingFinishedSpy2.size(), 1);
+    QCOMPARE(editingFinishedSpy1.count(), 3);
+    QCOMPARE(editingFinishedSpy2.count(), 1);
     box2->setFocus();
-    QCOMPARE(editingFinishedSpy1.size(), 4);
-    QCOMPARE(editingFinishedSpy2.size(), 1);
+    QCOMPARE(editingFinishedSpy1.count(), 4);
+    QCOMPARE(editingFinishedSpy2.count(), 1);
     QTest::keyClick(box2, Qt::Key_Enter);
-    QCOMPARE(editingFinishedSpy1.size(), 4);
-    QCOMPARE(editingFinishedSpy2.size(), 2);
+    QCOMPARE(editingFinishedSpy1.count(), 4);
+    QCOMPARE(editingFinishedSpy2.count(), 2);
     QTest::keyClick(box2, Qt::Key_Return);
-    QCOMPARE(editingFinishedSpy1.size(), 4);
-    QCOMPARE(editingFinishedSpy2.size(), 3);
+    QCOMPARE(editingFinishedSpy1.count(), 4);
+    QCOMPARE(editingFinishedSpy2.count(), 3);
 
     testFocusWidget.hide();
-    QCOMPARE(editingFinishedSpy1.size(), 4);
-    QCOMPARE(editingFinishedSpy2.size(), 4);
+    QCOMPARE(editingFinishedSpy1.count(), 4);
+    QCOMPARE(editingFinishedSpy2.count(), 4);
 
     //task203285
     editingFinishedSpy1.clear();
@@ -987,7 +986,7 @@ void tst_QSpinBox::editingFinished()
     box2->setFocus();
     QTRY_VERIFY(qApp->focusWidget() != box);
     QCOMPARE(box->text(), QLatin1String("20"));
-    QCOMPARE(editingFinishedSpy1.size(), 1);
+    QCOMPARE(editingFinishedSpy1.count(), 1);
 }
 
 void tst_QSpinBox::removeAll()
@@ -1150,32 +1149,33 @@ public:
 
 void tst_QSpinBox::sizeHint()
 {
-    QWidget widget;
-    QHBoxLayout *layout = new QHBoxLayout(&widget);
-
+    QWidget *widget = new QWidget;
+    QHBoxLayout *layout = new QHBoxLayout(widget);
     sizeHint_SpinBox *spinBox = new sizeHint_SpinBox;
     layout->addWidget(spinBox);
-    // Make sure all layout requests posted by the QHBoxLayout constructor and addWidget
-    // are processed before the widget is shown
-    QCoreApplication::sendPostedEvents(&widget, QEvent::LayoutRequest);
-    widget.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+    widget->show();
+    QVERIFY(QTest::qWaitForWindowExposed(widget));
 
     // Prefix
     spinBox->sizeHintRequests = 0;
     spinBox->setPrefix(QLatin1String("abcdefghij"));
+    qApp->processEvents();
     QTRY_VERIFY(spinBox->sizeHintRequests > 0);
 
     // Suffix
     spinBox->sizeHintRequests = 0;
     spinBox->setSuffix(QLatin1String("abcdefghij"));
+    qApp->processEvents();
     QTRY_VERIFY(spinBox->sizeHintRequests > 0);
 
     // Range
     spinBox->sizeHintRequests = 0;
     spinBox->setRange(0, 1234567890);
     spinBox->setValue(spinBox->maximum());
+    qApp->processEvents();
     QTRY_VERIFY(spinBox->sizeHintRequests > 0);
+
+    delete widget;
 }
 
 void tst_QSpinBox::taskQTBUG_5008_textFromValueAndValidate()
@@ -1256,7 +1256,7 @@ void tst_QSpinBox::lineEditReturnPressed()
     QSignalSpy spyCurrentChanged(spinBox.lineEdit(), SIGNAL(returnPressed()));
     spinBox.show();
     QTest::keyClick(&spinBox, Qt::Key_Return);
-    QCOMPARE(spyCurrentChanged.size(), 1);
+    QCOMPARE(spyCurrentChanged.count(), 1);
 }
 
 void tst_QSpinBox::positiveSign()
@@ -1846,50 +1846,13 @@ void tst_QSpinBox::stepModifierPressAndHold()
     qDebug() << "QGuiApplication::focusWindow():" << QGuiApplication::focusWindow();
     qDebug() << "QGuiApplication::topLevelWindows():" << QGuiApplication::topLevelWindows();
     QTest::mousePress(&spin, Qt::LeftButton, modifiers, buttonRect.center());
-    QTRY_VERIFY2(spy.size() >= 3, qPrintable(QString::fromLatin1(
-        "Expected valueChanged() to be emitted 3 or more times, but it was only emitted %1 times").arg(spy.size())));
+    QTRY_VERIFY2(spy.length() >= 3, qPrintable(QString::fromLatin1(
+        "Expected valueChanged() to be emitted 3 or more times, but it was only emitted %1 times").arg(spy.length())));
     QTest::mouseRelease(&spin, Qt::LeftButton, modifiers, buttonRect.center());
 
     const auto value = spy.last().at(0);
     QVERIFY(value.metaType().id() == QMetaType::Int);
-    QCOMPARE(value.toInt(), spy.size() * expectedStepModifier);
-}
-
-void tst_QSpinBox::stepSelectAll_data()
-{
-    QTest::addColumn<bool>("stepShouldSelectAll");
-    QTest::addColumn<QStringList>("selectedText");
-
-    QTest::addRow("select all") << true << QStringList{"1", "0", "5", "4", "9"};
-    QTest::addRow("don't select all") << false << QStringList{{}, {}, {}, {}, "94"};
-}
-
-void tst_QSpinBox::stepSelectAll()
-{
-    QFETCH(bool, stepShouldSelectAll);
-    QFETCH(QStringList, selectedText);
-    SelectAllOnStepStyle style(stepShouldSelectAll);
-
-    SpinBox spinBox;
-    spinBox.setStyle(&style);
-
-    QCOMPARE(spinBox.lineEdit()->selectedText(), QString());
-
-    auto it = selectedText.cbegin();
-    spinBox.stepUp();
-    QCOMPARE(spinBox.lineEdit()->selectedText(), *(it++));
-    spinBox.lineEdit()->deselect();
-    spinBox.stepDown();
-    QCOMPARE(spinBox.lineEdit()->selectedText(), *(it++));
-    spinBox.lineEdit()->deselect();
-    spinBox.stepBy(5);
-    QCOMPARE(spinBox.lineEdit()->selectedText(), *(it++));
-    spinBox.lineEdit()->deselect();
-    QTest::keyClick(&spinBox, Qt::Key_Down);
-    QCOMPARE(spinBox.lineEdit()->selectedText(), *(it++));
-    QTest::keyClicks(&spinBox, "9");
-    QCOMPARE(spinBox.lineEdit()->selectedText(), QString());
-    QCOMPARE(spinBox.lineEdit()->text(), *(it++));
+    QCOMPARE(value.toInt(), spy.length() * expectedStepModifier);
 }
 
 QTEST_MAIN(tst_QSpinBox)

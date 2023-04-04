@@ -1,5 +1,41 @@
-// Copyright (C) 2019 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2019 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the Qt Gui module
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qshader_p_p.h"
 #include <QDataStream>
@@ -335,7 +371,7 @@ QByteArray QShader::serialized() const
     ds << QShaderPrivate::QSB_VERSION;
     ds << int(d->stage);
     d->desc.serialize(&ds);
-    ds << int(d->shaders.size());
+    ds << int(d->shaders.count());
     for (auto it = d->shaders.cbegin(), itEnd = d->shaders.cend(); it != itEnd; ++it) {
         const QShaderKey &k(it.key());
         writeShaderKey(&ds, k);
@@ -343,28 +379,16 @@ QByteArray QShader::serialized() const
         ds << shader.shader();
         ds << shader.entryPoint();
     }
-    ds << int(d->bindings.size());
+    ds << int(d->bindings.count());
     for (auto it = d->bindings.cbegin(), itEnd = d->bindings.cend(); it != itEnd; ++it) {
         const QShaderKey &k(it.key());
         writeShaderKey(&ds, k);
         const NativeResourceBindingMap &map(it.value());
-        ds << int(map.size());
+        ds << int(map.count());
         for (auto mapIt = map.cbegin(), mapItEnd = map.cend(); mapIt != mapItEnd; ++mapIt) {
             ds << mapIt.key();
             ds << mapIt.value().first;
             ds << mapIt.value().second;
-        }
-    }
-    ds << int(d->combinedImageMap.size());
-    for (auto it = d->combinedImageMap.cbegin(), itEnd = d->combinedImageMap.cend(); it != itEnd; ++it) {
-        const QShaderKey &k(it.key());
-        writeShaderKey(&ds, k);
-        const SeparateToCombinedImageSamplerMappingList &list(it.value());
-        ds << int(list.size());
-        for (auto listIt = list.cbegin(), listItEnd = list.cend(); listIt != listItEnd; ++listIt) {
-            ds << listIt->combinedSamplerName;
-            ds << listIt->textureBinding;
-            ds << listIt->samplerBinding;
         }
     }
 
@@ -407,7 +431,6 @@ QShader QShader::fromSerialized(const QByteArray &data)
     ds >> intVal;
     d->qsbVersion = intVal;
     if (d->qsbVersion != QShaderPrivate::QSB_VERSION
-            && d->qsbVersion != QShaderPrivate::QSB_VERSION_WITHOUT_SEPARATE_IMAGES_AND_SAMPLERS
             && d->qsbVersion != QShaderPrivate::QSB_VERSION_WITHOUT_VAR_ARRAYDIMS
             && d->qsbVersion != QShaderPrivate::QSB_VERSION_WITH_CBOR
             && d->qsbVersion != QShaderPrivate::QSB_VERSION_WITH_BINARY_JSON
@@ -463,27 +486,6 @@ QShader QShader::fromSerialized(const QByteArray &data)
         }
     }
 
-    if (d->qsbVersion > QShaderPrivate::QSB_VERSION_WITHOUT_SEPARATE_IMAGES_AND_SAMPLERS) {
-        ds >> count;
-        for (int i = 0; i < count; ++i) {
-            QShaderKey k;
-            readShaderKey(&ds, &k);
-            SeparateToCombinedImageSamplerMappingList list;
-            int listSize;
-            ds >> listSize;
-            for (int b = 0; b < listSize; ++b) {
-                QByteArray combinedSamplerName;
-                ds >> combinedSamplerName;
-                int textureBinding;
-                ds >> textureBinding;
-                int samplerBinding;
-                ds >> samplerBinding;
-                list.append({ combinedSamplerName, textureBinding, samplerBinding });
-            }
-            d->combinedImageMap.insert(k, list);
-        }
-    }
-
     return bs;
 }
 
@@ -516,8 +518,8 @@ QShaderKey::QShaderKey(QShader::Source s,
 bool operator==(const QShader &lhs, const QShader &rhs) noexcept
 {
     return lhs.d->stage == rhs.d->stage
-            && lhs.d->shaders == rhs.d->shaders
-            && lhs.d->bindings == rhs.d->bindings;
+            && lhs.d->shaders == rhs.d->shaders;
+    // do not bother with desc and bindings, if the shader code is the same, the description must match too
 }
 
 /*!
@@ -682,20 +684,17 @@ QDebug operator<<(QDebug dbg, const QShaderVersion &v)
     \c binding layout qualifier in the Vulkan-compatible GLSL shader.
 
     Graphics APIs other than Vulkan may use a resource binding model that is
-    not fully compatible with this. The generator of the shader code translated
-    from SPIR-V may choose not to take the SPIR-V binding qualifiers into
-    account, for various reasons. This is the case with the Metal backend of
-    SPIRV-Cross, for example. In addition, even when an automatic, implicit
-    translation is mostly possible (e.g. by using SPIR-V binding points as HLSL
-    resource register indices), assigning resource bindings without being
-    constrained by the SPIR-V binding points can lead to better results.
+    not fully compatible with this. In addition, the generator of the shader
+    code translated from SPIR-V may choose not to take the SPIR-V binding
+    qualifiers into account, for various reasons. (this is the case with the
+    Metal backend of SPIRV-Cross, for example).
 
     Therefore, a QShader may expose an additional map that describes what the
-    native binding point for a given SPIR-V binding is. The QRhi backends, for
-    which this is relevant, are expected to use this map automatically, as
-    appropriate. The value is a pair, because combined image samplers may map
-    to two native resources (a texture and a sampler) in some shading
-    languages. In that case the second value refers to the sampler.
+    native binding point for a given SPIR-V binding is. The QRhi backends are
+    expected to use this map automatically, as appropriate. The value is a
+    pair, because combined image samplers may map to two native resources (a
+    texture and a sampler) in some shading languages. In that case the second
+    value refers to the sampler.
 
     \note The native binding may be -1, in case there is no active binding for
     the resource in the shader. (for example, there is a uniform block
@@ -706,17 +705,16 @@ QDebug operator<<(QDebug dbg, const QShaderVersion &v)
 */
 
 /*!
-    \return the native binding map for \a key. The map is empty if no mapping
-    is available for \a key (for example, because the map is not applicable for
-    the API and shading language described by \a key).
+    \return the native binding map for \a key or null if no extra mapping is
+    available, or is not applicable.
  */
-QShader::NativeResourceBindingMap QShader::nativeResourceBindingMap(const QShaderKey &key) const
+const QShader::NativeResourceBindingMap *QShader::nativeResourceBindingMap(const QShaderKey &key) const
 {
     auto it = d->bindings.constFind(key);
     if (it == d->bindings.cend())
-        return {};
+        return nullptr;
 
-    return it.value();
+    return &it.value();
 }
 
 /*!
@@ -741,64 +739,6 @@ void QShader::removeResourceBindingMap(const QShaderKey &key)
 
     detach();
     d->bindings.erase(it);
-}
-
-/*!
-    \typedef QShader::SeparateToCombinedImageSamplerMappingList
-
-    Synonym for QList<QShader::SeparateToCombinedImageSamplerMapping>.
- */
-
-/*!
-    \struct QShader::SeparateToCombinedImageSamplerMapping
-
-    Describes a mapping from a traditional combined image sampler uniform to
-    binding points for a separate texture and sampler.
-
-    For example, if \c combinedImageSampler is \c{"_54"}, \c textureBinding is
-    \c 1, and \c samplerBinding is \c 2, this means that the GLSL shader code
-    contains a \c sampler2D (or sampler3D, etc.) uniform with the name of
-    \c{_54} which corresponds to two separate resource bindings (\c 1 and \c 2)
-    in the original shader.
- */
-
-/*!
-    \return the combined image sampler mapping list for \a key, or an empty
-    list if there is no data available for \a key, for example because such a
-    mapping is not applicable for the shading language.
- */
-QShader::SeparateToCombinedImageSamplerMappingList QShader::separateToCombinedImageSamplerMappingList(const QShaderKey &key) const
-{
-    auto it = d->combinedImageMap.constFind(key);
-    if (it == d->combinedImageMap.cend())
-        return {};
-
-    return it.value();
-}
-
-/*!
-    Stores the given combined image sampler mapping \a list associated with \a key.
-
-    \sa separateToCombinedImageSamplerMappingList()
- */
-void QShader::setSeparateToCombinedImageSamplerMappingList(const QShaderKey &key,
-                                                           const SeparateToCombinedImageSamplerMappingList &list)
-{
-    detach();
-    d->combinedImageMap[key] = list;
-}
-
-/*!
-    Removes the combined image sampler mapping list for \a key.
- */
-void QShader::removeSeparateToCombinedImageSamplerMappingList(const QShaderKey &key)
-{
-    auto it = d->combinedImageMap.find(key);
-    if (it == d->combinedImageMap.end())
-        return;
-
-    detach();
-    d->combinedImageMap.erase(it);
 }
 
 QT_END_NAMESPACE

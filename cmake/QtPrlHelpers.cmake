@@ -107,7 +107,6 @@ function(qt_generate_prl_file target install_dir)
         "RCC_OBJECTS = ${rcc_objects}
 QMAKE_PRL_BUILD_DIR = ${CMAKE_CURRENT_BINARY_DIR}
 QMAKE_PRL_TARGET = $<TARGET_LINKER_FILE_NAME:${target}>
-QMAKE_PRL_TARGET_PATH_FOR_CMAKE = $<TARGET_LINKER_FILE:${target}>
 QMAKE_PRL_CONFIG = ${prl_config}
 QMAKE_PRL_VERSION = ${PROJECT_VERSION}
 ${prl_step1_content_libs}
@@ -137,18 +136,6 @@ ${prl_step1_content_libs}
     if(QT_WILL_INSTALL)
         list(APPEND qt_lib_dirs
              "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_LIBDIR}")
-    endif()
-
-    set(qt_plugin_dirs "${QT_BUILD_DIR}/${INSTALL_PLUGINSDIR}")
-    if(QT_WILL_INSTALL)
-        list(APPEND qt_plugin_dirs
-             "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_PLUGINSDIR}")
-    endif()
-
-    set(qt_qml_dirs "${QT_BUILD_DIR}/${INSTALL_QMLDIR}")
-    if(QT_WILL_INSTALL)
-        list(APPEND qt_qml_dirs
-             "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_QMLDIR}")
     endif()
 
     foreach(config ${configs})
@@ -185,8 +172,6 @@ ${prl_step1_content_libs}
                     "-DLIBRARY_SUFFIXES=${library_suffixes}"
                     "-DLINK_LIBRARY_FLAG=${link_library_flag}"
                     "-DQT_LIB_DIRS=${qt_lib_dirs}"
-                    "-DQT_PLUGIN_DIRS=${qt_plugin_dirs}"
-                    "-DQT_QML_DIRS=${qt_qml_dirs}"
                     "-DIMPLICIT_LINK_DIRECTORIES=${implicit_link_directories}"
                     -P "${QT_CMAKE_DIR}/QtFinishPrlFile.cmake"
             VERBATIM

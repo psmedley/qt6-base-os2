@@ -1,3 +1,0 @@
-/home/psmedley/qt6-base-os2/build/config.tests/x86_simd_avx512er/CMakeFiles/SimdTestavx512er.dir
-/home/psmedley/qt6-base-os2/build/config.tests/x86_simd_avx512er/CMakeFiles/edit_cache.dir
-/home/psmedley/qt6-base-os2/build/config.tests/x86_simd_avx512er/CMakeFiles/rebuild_cache.dir

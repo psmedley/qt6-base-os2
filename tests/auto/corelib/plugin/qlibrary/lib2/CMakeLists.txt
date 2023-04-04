@@ -40,36 +40,25 @@ if(WIN32)
 endif()
 
 if (UNIX)
-    if(NOT ANDROID)
-        add_custom_command(TARGET mylib2 POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:mylib2>
-                "${CMAKE_CURRENT_BINARY_DIR}/../system.qt.test.mylib.so"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:mylib2>
-                "${CMAKE_CURRENT_BINARY_DIR}/../libmylib.so.2.0.0"
-            COMMAND ${CMAKE_COMMAND} -E create_symlink
-                "libmylib.so.2.0.0"
-                "${CMAKE_CURRENT_BINARY_DIR}/../libmylib.so.2"
-            COMMAND ${CMAKE_COMMAND} -E remove
-                "${CMAKE_CURRENT_BINARY_DIR}/../libmylib.so"
-            COMMAND ${CMAKE_COMMAND} -E create_symlink
-                "libmylib.so.2.0.0"
-                "${CMAKE_CURRENT_BINARY_DIR}/../libmylib.so"
-            COMMAND ${CMAKE_COMMAND} -E create_symlink
-                "libmylib.so.2.0.0"
-                "${CMAKE_CURRENT_BINARY_DIR}/../libmylib.so2"
-            VERBATIM)
-    else()
-        # Android does not use symlinks. Also, according to our conventions,
-        # libraries on Android MUST be named in the following pattern:
-        # lib*.so
-        add_custom_command(TARGET mylib2 POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    add_custom_command(TARGET mylib2 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE:mylib2>
-            "${CMAKE_CURRENT_BINARY_DIR}/../libsystem.qt.test.mylib.so"
-            VERBATIM)
-    endif()
+            "${CMAKE_CURRENT_BINARY_DIR}/../system.qt.test.mylib.so"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:mylib2>
+            "${CMAKE_CURRENT_BINARY_DIR}/../libmylib.so.2.0.0"
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+            "libmylib.so.2.0.0"
+            "${CMAKE_CURRENT_BINARY_DIR}/../libmylib.so.2"
+        COMMAND ${CMAKE_COMMAND} -E remove
+            "${CMAKE_CURRENT_BINARY_DIR}/../libmylib.so"
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+            "libmylib.so.2.0.0"
+            "${CMAKE_CURRENT_BINARY_DIR}/../libmylib.so"
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+            "libmylib.so.2.0.0"
+            "${CMAKE_CURRENT_BINARY_DIR}/../libmylib.so2"
+    )
 else() #Win32
     add_custom_command(TARGET mylib2 POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -78,7 +67,7 @@ else() #Win32
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE:mylib2>
             "${CMAKE_CURRENT_BINARY_DIR}/../mylib.dl2"
-        VERBATIM)
+    )
 endif()
 # special case end
 

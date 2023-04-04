@@ -1,5 +1,41 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtTest module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 #include "qtestblacklist_p.h"
 #include "qtestresult_p.h"
 
@@ -16,8 +52,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 /*
   The BLACKLIST file format is a grouped listing of keywords.
 
@@ -25,25 +59,17 @@ using namespace Qt::StringLiterals;
   referring to this documentation is kind to readers.  Comments can also be used
   to indicate the reasons for ignoring particular cases.
 
-  The key "ci" applies only when run by COIN. The key "cmake" applies when Qt
-  is built using CMake. Other keys name platforms, operating systems,
-  distributions, tool-chains or architectures; a ! prefix reverses what it
-  checks. A version, joined to a key (at present, only for distributions and
-  for msvc) with a hyphen, limits the key to the specific version. A keyword
-  line matches if every key on it applies to the present run. Successive lines
-  are alternate conditions for ignoring a test.
+  The key "ci" applies only when run by COIN.
+  The key "cmake" applies when Qt is built using CMake. Other keys name platforms,
+  operating systems, distributions, tool-chains or architectures; a !  prefix
+  reverses what it checks.  A version, joined to a key (at present, only for
+  distributions and for msvc) with a hyphen, limits the key to the specific
+  version.  A keyword line matches if every key on it applies to the present
+  run.  Successive lines are alternate conditions for ignoring a test.
 
-  Ungrouped lines at the beginning of a file apply to the whole testcase. A
-  group starts with a [square-bracketed] identification of a test function to
-  ignore. For data-driven tests, this identification can be narrowed by the
-  inclusion of global and local data row tags, separated from the function name
-  and each other by colons. If both global and function-specific data rows tags
-  are supplied, the global one comes first (as in the tag reported in test
-  output, albeit in parentheses after the function name). Even when a test does
-  have global and local data tags, you can omit either or both. (If a global
-  data row's name coincides with that of a local data row, some unintended
-  matches may result; try to keep your data-row tags distinct.)
-
+  Ungrouped lines at the beginning of a file apply to the whole testcase.
+  A group starts with a [square-bracketed] identification of a test function,
+  optionally with (after a colon, the name of) a specific data set, to ignore.
   Subsequent lines give conditions for ignoring this test.
 
         # See qtbase/src/testlib/qtestblacklist.cpp for format
@@ -62,9 +88,6 @@ using namespace Qt::StringLiterals;
         # Needs basic C++11 support
         [testfunction2:testData]
         msvc-2010
-
-        [getFile:withProxy SSL:localhost]
-        android
 
   QML test functions are identified using the following format:
 
@@ -124,9 +147,6 @@ static QSet<QByteArray> keywords()
 #ifdef Q_OS_OS2
             << "os2"
 #endif
-#ifdef Q_OS_WEBOS
-            << "webos"
-#endif
 
 #if QT_POINTER_SIZE == 8
             << "64bit"
@@ -152,10 +172,8 @@ static QSet<QByteArray> keywords()
             << "msvc-2015"
 #  elif _MSC_VER <= 1916
             << "msvc-2017"
-#  elif _MSC_VER <= 1929
-            << "msvc-2019"
 #  else
-            << "msvc-2022"
+            << "msvc-2019"
 #  endif
 #endif
 
@@ -173,12 +191,14 @@ static QSet<QByteArray> keywords()
             << "cmake"
             ;
 
+#if QT_CONFIG(properties)
             QCoreApplication *app = QCoreApplication::instance();
             if (app) {
                 const QVariant platformName = app->property("platformName");
                 if (platformName.isValid())
                     set << platformName.toByteArray();
             }
+#endif
 
             return set;
 }
@@ -262,7 +282,7 @@ void parseBlackList()
         if (line.isEmpty())
             continue;
         if (line.startsWith('[')) {
-            function = line.mid(1, line.size() - 2);
+            function = line.mid(1, line.length() - 2);
             continue;
         }
         bool condition = checkCondition(line);
@@ -278,25 +298,17 @@ void parseBlackList()
     }
 }
 
-void checkBlackLists(const char *slot, const char *data, const char *global)
+void checkBlackLists(const char *slot, const char *data)
 {
     bool ignore = ignoreAll;
 
     if (!ignore && ignoredTests) {
         QByteArray s = slot;
-        ignore = ignoredTests->find(s) != ignoredTests->end();
+        ignore = (ignoredTests->find(s) != ignoredTests->end());
         if (!ignore && data) {
-            s = (s + ':') + data;
-            ignore = ignoredTests->find(s) != ignoredTests->end();
-        }
-
-        if (!ignore && global) {
-            s = slot + ":"_ba + global;
-            ignore = ignoredTests->find(s) != ignoredTests->end();
-            if (!ignore && data) {
-                s = (s + ':') + data;
-                ignore = ignoredTests->find(s) != ignoredTests->end();
-            }
+            s += ':';
+            s += data;
+            ignore = (ignoredTests->find(s) != ignoredTests->end());
         }
     }
 

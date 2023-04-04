@@ -1,3 +1,5 @@
+# Generated from dbus.pro.
+
 if(NOT TARGET Qt::DBus)
     return()
 endif()

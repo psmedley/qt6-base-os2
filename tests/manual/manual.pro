@@ -27,7 +27,6 @@ qnetworkaccessmanager/qget \
 qnetworkreply \
 qstorageinfo \
 qscreen \
-qscreen_xrandr \
 qssloptions \
 qsslsocket \
 qsysinfo \
@@ -47,6 +46,8 @@ windowflags \
 windowgeometry \
 windowmodality \
 widgetgrab \
+xembed-raster \
+xembed-widgets \
 shortcuts \
 dialogs \
 windowtransparency \
@@ -64,5 +65,3 @@ qtConfig(opengl) {
 win32: SUBDIRS -= network_remote_stresstest network_stresstest
 
 qtConfig(vulkan): SUBDIRS += qvulkaninstance
-
-qtConfig(xcb): SUBDIRS += xembed

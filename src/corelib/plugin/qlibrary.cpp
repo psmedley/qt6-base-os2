@@ -1,57 +1,84 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// Copyright (C) 2021 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2018 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
+#include "qplatformdefs.h"
 #include "qlibrary.h"
-#include "qlibrary_p.h"
 
-#include <q20algorithm.h>
-#include <qbytearraymatcher.h>
-#include <qdebug.h>
-#include <qendian.h>
+#include "qfactoryloader_p.h"
+#include "qlibrary_p.h"
+#include <qstringlist.h>
 #include <qfile.h>
 #include <qfileinfo.h>
-#include <qjsondocument.h>
-#include <qmap.h>
 #include <qmutex.h>
-#include <qoperatingsystemversion.h>
-#include <qstringlist.h>
-
+#include <qmap.h>
+#include <private/qcoreapplication_p.h>
+#include <private/qsystemerror_p.h>
 #ifdef Q_OS_MAC
 #  include <private/qcore_mac_p.h>
 #endif
-#include <private/qcoreapplication_p.h>
-#include <private/qloggingregistry_p.h>
-#include <private/qsystemerror_p.h>
-
-#include "qcoffpeparser_p.h"
+#ifndef NO_ERRNO_H
+#include <errno.h>
+#endif // NO_ERROR_H
+#include <qdebug.h>
+#include <qlist.h>
+#include <qdir.h>
+#include <qendian.h>
+#include <qjsondocument.h>
+#include <qjsonvalue.h>
 #include "qelfparser_p.h"
-#include "qfactoryloader_p.h"
 #include "qmachparser_p.h"
 
 #include <qtcore_tracepoints_p.h>
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
-// On Unix systema and on Windows with MinGW, we can mix and match debug and
-// release plugins without problems. (unless compiled in debug-and-release mode
-// - why?)
-static constexpr bool PluginMustMatchQtDebug =
-        QOperatingSystemVersion::currentType() == QOperatingSystemVersion::Windows
-#if defined(Q_CC_MINGW)
-        && QT_CONFIG(debug_and_release)
-#endif
-        ;
-
 #ifdef QT_NO_DEBUG
-static constexpr bool QtBuildIsDebug = false;
+#  define QLIBRARY_AS_DEBUG false
 #else
-static constexpr bool QtBuildIsDebug = true;
+#  define QLIBRARY_AS_DEBUG true
 #endif
 
-Q_LOGGING_CATEGORY_WITH_ENV_OVERRIDE(qt_lcDebugPlugins, "QT_DEBUG_PLUGINS", "qt.core.plugin.loader")
-static Q_LOGGING_CATEGORY_WITH_ENV_OVERRIDE(lcDebugLibrary, "QT_DEBUG_PLUGINS", "qt.core.library")
+#if defined(Q_OS_UNIX) || (defined(Q_CC_MINGW) && !QT_CONFIG(debug_and_release))
+// We don't use separate debug and release libs on UNIX, so we want
+// to allow loading plugins, regardless of how they were built.
+#  define QT_NO_DEBUG_PLUGIN_CHECK
+#endif
 
 /*!
     \class QLibrary
@@ -158,43 +185,43 @@ static Q_LOGGING_CATEGORY_WITH_ENV_OVERRIDE(lcDebugLibrary, "QT_DEBUG_PLUGINS", 
     \sa loadHints
 */
 
-static QLibraryScanResult qt_find_pattern(const char *s, qsizetype s_len, QString *errMsg)
+
+static qsizetype qt_find_pattern(const char *s, qsizetype s_len,
+                             const char *pattern, ulong p_len)
 {
     /*
-      We used to search from the end of the file so we'd skip the code and find
-      the read-only data that usually follows. Unfortunately, in debug builds,
-      the debug sections come after and are usually much bigger than everything
-      else, making this process slower than necessary with debug plugins.
+      we search from the end of the file because on the supported
+      systems, the read-only data/text segments are placed at the end
+      of the file.  HOWEVER, when building with debugging enabled, all
+      the debug symbols are placed AFTER the data/text segments.
 
-      More importantly, the pattern string may exist in the debug information due
-      to it being used in the plugin in the first place.
+      what does this mean?  when building in release mode, the search
+      is fast because the data we are looking for is at the end of the
+      file... when building in debug mode, the search is slower
+      because we have to skip over all the debugging symbols first
     */
-#if defined(Q_OF_ELF)
-    return QElfParser::parse({s, s_len}, errMsg);
-#elif defined(Q_OF_MACH_O)
-    return QMachOParser::parse(s, s_len, errMsg);
-#elif defined(Q_OS_WIN)
-    return QCoffPeParser::parse({s, s_len}, errMsg);
-#else
-#   warning "Qt does not know how to efficiently parse your platform's binary format; using slow fall-back."
-#endif
-    static constexpr auto matcher = [] {
-        // QPluginMetaData::MagicString is not NUL-terminated, but
-        // qMakeStaticByteArrayMatcher requires its argument to be, so
-        // duplicate here, but statically check we didn't mess up:
-        constexpr auto &pattern = "QTMETADATA !";
-        constexpr auto magic = std::string_view(QPluginMetaData::MagicString,
-                                                sizeof(QPluginMetaData::MagicString));
-        static_assert(pattern == magic);
-        return qMakeStaticByteArrayMatcher(pattern);
-    }();
-    qsizetype i = matcher.indexIn({s, s_len});
-    if (i < 0) {
-        *errMsg = QLibrary::tr("'%1' is not a Qt plugin").arg(*errMsg);
-        return QLibraryScanResult{};
+
+    if (!s || !pattern || qsizetype(p_len) > s_len)
+        return -1;
+
+    size_t i, hs = 0, hp = 0, delta = s_len - p_len;
+
+    for (i = 0; i < p_len; ++i) {
+        hs += s[delta + i];
+        hp += pattern[i];
     }
-    i += sizeof(QPluginMetaData::MagicString);
-    return { i, s_len - i };
+    i = delta;
+    for (;;) {
+        if (hs == hp && qstrncmp(s + i, pattern, p_len) == 0)
+            return i;   // can't overflow, by construction
+        if (i == 0)
+            break;
+        --i;
+        hs -= s[i + p_len];
+        hs += s[i];
+    }
+
+    return -1;
 }
 
 /*
@@ -207,15 +234,17 @@ static QLibraryScanResult qt_find_pattern(const char *s, qsizetype s_len, QStrin
                 information could not be read.
   Returns  true if version information is present and successfully read.
 */
-static QLibraryScanResult findPatternUnloaded(const QString &library, QLibraryPrivate *lib)
+static bool findPatternUnloaded(const QString &library, QLibraryPrivate *lib)
 {
     QFile file(library);
     if (!file.open(QIODevice::ReadOnly)) {
         if (lib)
             lib->errorString = file.errorString();
-        qCWarning(qt_lcDebugPlugins, "%ls: cannot open: %ls", qUtf16Printable(library),
-                  qUtf16Printable(file.errorString()));
-        return {};
+        if (qt_debug_component()) {
+            qWarning("%s: %ls", QFile::encodeName(library).constData(),
+                     qUtf16Printable(QSystemError::stdString()));
+        }
+        return false;
     }
 
     // Files can be bigger than the virtual memory size on 32-bit systems, so
@@ -230,9 +259,10 @@ static QLibraryScanResult findPatternUnloaded(const QString &library, QLibraryPr
     if (filedata == nullptr) {
         // If we can't mmap(), then the dynamic loader won't be able to either.
         // This can't be used as a plugin.
-        qCWarning(qt_lcDebugPlugins, "%ls: failed to map to memory: %ls",
-                  qUtf16Printable(library), qUtf16Printable(file.errorString()));
-        return {};
+        if (qt_debug_component())
+            qWarning("%s: failed to map to memory: %ls", QFile::encodeName(library).constData(),
+                     qUtf16Printable(file.errorString()));
+        return false;
     }
 #else
     QByteArray data;
@@ -246,31 +276,77 @@ static QLibraryScanResult findPatternUnloaded(const QString &library, QLibraryPr
     }
 #endif
 
-    QString errMsg = library;
-    QLibraryScanResult r = qt_find_pattern(filedata, fdlen, &errMsg);
-    if (r.length) {
-#if defined(Q_OF_MACH_O)
-        if (r.isEncrypted)
-            return r;
-#endif
-        if (!lib->metaData.parse(QByteArrayView(filedata + r.pos, r.length))) {
-            errMsg = lib->metaData.errorString();
-            qCWarning(qt_lcDebugPlugins, "Found invalid metadata in lib %ls: %ls",
-                      qUtf16Printable(library), qUtf16Printable(errMsg));
-        } else {
-            qCDebug(qt_lcDebugPlugins, "Found metadata in lib %ls, metadata=\n%s\n",
-                    qUtf16Printable(library),
-                    QJsonDocument(lib->metaData.toJson()).toJson().constData());
-            return r;
+    /*
+       ELF and Mach-O binaries with GCC have .qplugin sections.
+    */
+    bool hasMetaData = false;
+    qsizetype pos = 0;
+    char pattern[] = "qTMETADATA ";
+    pattern[0] = 'Q'; // Ensure the pattern "QTMETADATA" is not found in this library should QPluginLoader ever encounter it.
+    const ulong plen = ulong(qstrlen(pattern));
+#if defined (Q_OF_ELF) && defined(Q_CC_GNU)
+    QElfParser::ScanResult r = QElfParser().parse(filedata, fdlen, library, lib, &pos, &fdlen);
+    if (r == QElfParser::Corrupt || r == QElfParser::NotElf) {
+            if (lib && qt_debug_component()) {
+                qWarning("QElfParser: %ls", qUtf16Printable(lib->errorString));
+            }
+            return false;
+    } else if (r == QElfParser::QtMetaDataSection) {
+        qsizetype rel = qt_find_pattern(filedata + pos, fdlen, pattern, plen);
+        if (rel < 0)
+            pos = -1;
+        else
+            pos += rel;
+        hasMetaData = true;
+    }
+#elif defined(Q_OF_MACH_O)
+    {
+        QString errorString;
+        int r = QMachOParser::parse(filedata, fdlen, library, &errorString, &pos, &fdlen);
+        if (r == QMachOParser::NotSuitable) {
+            if (qt_debug_component())
+                qWarning("QMachOParser: %ls", qUtf16Printable(errorString));
+            if (lib)
+                lib->errorString = errorString;
+            return false;
         }
-    } else {
-        qCDebug(qt_lcDebugPlugins, "Failed to find metadata in lib %ls: %ls",
-                qUtf16Printable(library), qUtf16Printable(errMsg));
+        // even if the metadata section was not found, the Mach-O parser will
+        // at least return the boundaries of the right architecture
+        qsizetype rel = qt_find_pattern(filedata + pos, fdlen, pattern, plen);
+        if (rel < 0)
+            pos = -1;
+        else
+            pos += rel;
+        hasMetaData = true;
+    }
+#else
+    pos = qt_find_pattern(filedata, fdlen, pattern, plen);
+    if (pos > 0)
+        hasMetaData = true;
+#endif // defined(Q_OF_ELF) && defined(Q_CC_GNU)
+
+    bool ret = false;
+
+    if (pos >= 0 && hasMetaData) {
+        const char *data = filedata + pos;
+        QString errMsg;
+        QJsonDocument doc = qJsonFromRawLibraryMetaData(data, fdlen, &errMsg);
+        if (doc.isNull()) {
+            qWarning("Found invalid metadata in lib %ls: %ls",
+                     qUtf16Printable(library), qUtf16Printable(errMsg));
+        } else {
+            lib->metaData = doc.object();
+            if (qt_debug_component())
+                qWarning("Found metadata in lib %s, metadata=\n%s\n",
+                         library.toLocal8Bit().constData(), doc.toJson().constData());
+            ret = !doc.isNull();
+        }
     }
 
-    lib->errorString = QLibrary::tr("Failed to extract plugin meta data from '%1': %2")
-            .arg(library, errMsg);
-    return {};
+    if (!ret && lib)
+        lib->errorString = QLibrary::tr("Failed to extract plugin meta data from '%1'").arg(library);
+    file.close();
+    return ret;
 }
 
 static void installCoverageTool(QLibraryPrivate *libPrivate)
@@ -291,7 +367,8 @@ static void installCoverageTool(QLibraryPrivate *libPrivate)
 
     int ret = __coveragescanner_register_library(libPrivate->fileName.toLocal8Bit());
 
-    if (ret >= 0) {
+    if (qt_debug_component()) {
+        if (ret >= 0) {
             qDebug("coverage data for %ls registered",
                    qUtf16Printable(libPrivate->fileName));
         } else {
@@ -322,9 +399,9 @@ private:
     LibraryMap libraryMap;
 };
 
-Q_CONSTINIT static QBasicMutex qt_library_mutex;
-Q_CONSTINIT static QLibraryStore *qt_library_data = nullptr;
-Q_CONSTINIT static bool qt_library_data_once;
+static QBasicMutex qt_library_mutex;
+static QLibraryStore *qt_library_data = nullptr;
+static bool qt_library_data_once;
 
 QLibraryStore::~QLibraryStore()
 {
@@ -364,13 +441,12 @@ inline void QLibraryStore::cleanup()
         }
     }
 
-    // dump all objects that remain
-    if (lcDebugLibrary().isDebugEnabled()) {
-        for (QLibraryPrivate *lib : std::as_const(data->libraryMap)) {
+    if (qt_debug_component()) {
+        // dump all objects that remain
+        for (QLibraryPrivate *lib : qAsConst(data->libraryMap)) {
             if (lib)
-                qDebug(lcDebugLibrary)
-                        << "On QtCore unload," << lib->fileName << "was leaked, with"
-                        << lib->libraryRefCount.loadRelaxed() << "users";
+                qDebug() << "On QtCore unload," << lib->fileName << "was leaked, with"
+                         << lib->libraryRefCount.loadRelaxed() << "users";
         }
     }
 
@@ -483,7 +559,7 @@ void QLibraryPrivate::setLoadHints(QLibrary::LoadHints lh)
 QObject *QLibraryPrivate::pluginInstance()
 {
     // first, check if the instance is cached and hasn't been deleted
-    QObject *obj = [&](){ QMutexLocker locker(&mutex); return inst.data(); }();
+    QObject *obj = (QMutexLocker(&mutex), inst.data());
     if (obj)
         return obj;
 
@@ -519,9 +595,13 @@ bool QLibraryPrivate::load()
     Q_TRACE(QLibraryPrivate_load_entry, fileName);
 
     bool ret = load_sys();
-    qCDebug(lcDebugLibrary)
-            << fileName
-            << (ret ? "loaded library" : qUtf8Printable(u"cannot load: " + errorString));
+    if (qt_debug_component()) {
+        if (ret) {
+            qDebug() << "loaded library" << fileName;
+        } else {
+            qDebug() << qUtf8Printable(errorString);
+        }
+    }
     if (ret) {
         //when loading a library we add a reference to it so that the QLibraryPrivate won't get deleted
         //this allows to unload the library at a later time
@@ -543,8 +623,9 @@ bool QLibraryPrivate::unload(UnloadFlag flag)
         QMutexLocker locker(&mutex);
         delete inst.data();
         if (flag == NoUnloadSys || unload_sys()) {
-            qCDebug(lcDebugLibrary) << fileName << "unloaded library"
-                                    << (flag == NoUnloadSys ? "(faked)" : "");
+            if (qt_debug_component())
+                qWarning() << "QLibraryPrivate::unload succeeded on" << fileName
+                           << (flag == NoUnloadSys ? "(faked)" : "");
             // when the library is unloaded, we release the reference on it so that 'this'
             // can get deleted
             libraryRefCount.deref();
@@ -575,7 +656,8 @@ QtPluginInstanceFunction QLibraryPrivate::loadPlugin()
         instanceFactory.storeRelease(ptr); // two threads may store the same value
         return ptr;
     }
-    qCDebug(qt_lcDebugPlugins) << "QLibraryPrivate::loadPlugin failed on" << fileName << ":" << errorString;
+    if (qt_debug_component())
+        qWarning() << "QLibraryPrivate::loadPlugin failed on" << fileName << ":" << errorString;
     pluginState = IsNotAPlugin;
     return nullptr;
 }
@@ -598,43 +680,35 @@ QtPluginInstanceFunction QLibraryPrivate::loadPlugin()
 bool QLibrary::isLibrary(const QString &fileName)
 {
 #if defined(Q_OS_DOSLIKE)
-    return fileName.endsWith(".dll"_L1, Qt::CaseInsensitive);
+    return fileName.endsWith(QLatin1String(".dll"), Qt::CaseInsensitive);
 #else // Generic Unix
-# if defined(Q_OS_DARWIN)
-    // On Apple platforms, dylib look like libmylib.1.0.0.dylib
-    if (fileName.endsWith(".dylib"_L1))
-        return true;
-# endif
     QString completeSuffix = QFileInfo(fileName).completeSuffix();
     if (completeSuffix.isEmpty())
         return false;
+    const auto suffixes = QStringView{completeSuffix}.split(QLatin1Char('.'));
+    QStringList validSuffixList;
 
-    // if this throws an empty-array error, you need to fix the #ifdef's:
-    const QLatin1StringView candidates[] = {
 # if defined(Q_OS_HPUX)
 /*
     See "HP-UX Linker and Libraries User's Guide", section "Link-time Differences between PA-RISC and IPF":
     "In PA-RISC (PA-32 and PA-64) shared libraries are suffixed with .sl. In IPF (32-bit and 64-bit),
     the shared libraries are suffixed with .so. For compatibility, the IPF linker also supports the .sl suffix."
-*/
-        "sl"_L1,
+ */
+    validSuffixList << QLatin1String("sl");
 #  if defined __ia64
-        "so"_L1,
+    validSuffixList << QLatin1String("so");
 #  endif
 # elif defined(Q_OS_AIX)
-        "a"_L1,
-        "so"_L1,
+    validSuffixList << QLatin1String("a") << QLatin1String("so");
 # elif defined(Q_OS_DARWIN)
-        "so"_L1,
-        "bundle"_L1,
-# elif defined(Q_OS_UNIX)
-        "so"_L1,
-# endif
-    }; // candidates
+    // On Apple platforms, dylib look like libmylib.1.0.0.dylib
+    if (suffixes.last() == QLatin1String("dylib"))
+        return true;
 
-    auto isValidSuffix = [&candidates](QStringView s) {
-        return std::find(std::begin(candidates), std::end(candidates), s) != std::end(candidates);
-    };
+    validSuffixList << QLatin1String("so") << QLatin1String("bundle");
+# elif defined(Q_OS_UNIX)
+    validSuffixList << QLatin1String("so");
+# endif
 
     // Examples of valid library names:
     //  libfoo.so
@@ -643,54 +717,36 @@ bool QLibrary::isLibrary(const QString &fileName)
     //  libfoo-0.3.so
     //  libfoo-0.3.so.0.3.0
 
-    auto suffixes = qTokenize(completeSuffix, u'.');
-    auto it = suffixes.begin();
-    const auto end = suffixes.end();
+    int suffix;
+    int suffixPos = -1;
+    for (suffix = 0; suffix < validSuffixList.count() && suffixPos == -1; ++suffix)
+        suffixPos = suffixes.indexOf(validSuffixList.at(suffix));
 
-    auto isNumeric = [](QStringView s) { bool ok; (void)s.toInt(&ok); return ok; };
-
-    while (it != end) {
-        if (isValidSuffix(*it++))
-            return q20::ranges::all_of(it, end, isNumeric);
-    }
-    return false; // no valid suffix found
+    bool valid = suffixPos != -1;
+    for (int i = suffixPos + 1; i < suffixes.count() && valid; ++i)
+        if (i != suffixPos)
+            (void)suffixes.at(i).toInt(&valid);
+    return valid;
 #endif
 }
 
 static bool qt_get_metadata(QLibraryPrivate *priv, QString *errMsg)
 {
-    auto error = [=](QString &&explanation) {
-        *errMsg = QLibrary::tr("'%1' is not a Qt plugin (%2)").arg(priv->fileName, std::move(explanation));
-        return false;
+    auto getMetaData = [](QFunctionPointer fptr) {
+        auto f = reinterpret_cast<QPluginMetaData (*)()>(fptr);
+        return f();
     };
 
-    QPluginMetaData metaData;
-    QFunctionPointer pfn = priv->resolve("qt_plugin_query_metadata_v2");
-    if (pfn) {
-        metaData = reinterpret_cast<QPluginMetaData (*)()>(pfn)();
-#if QT_VERSION <= QT_VERSION_CHECK(7, 0, 0)
-    } else if ((pfn = priv->resolve("qt_plugin_query_metadata"))) {
-        metaData = reinterpret_cast<QPluginMetaData (*)()>(pfn)();
-        if (metaData.size < sizeof(QPluginMetaData::MagicHeader))
-            return error(QLibrary::tr("metadata too small"));
+    QFunctionPointer pfn = priv->resolve("qt_plugin_query_metadata");
+    if (!pfn)
+        return false;
 
-        // adjust the meta data to point to the header
-        auto data = reinterpret_cast<const char *>(metaData.data);
-        data += sizeof(QPluginMetaData::MagicString);
-        metaData.data = data;
-        metaData.size -= sizeof(QPluginMetaData::MagicString);
-#endif
-    } else {
-        return error(QLibrary::tr("entrypoint to query the plugin meta data not found"));
-    }
-
-    if (metaData.size < sizeof(QPluginMetaData::Header))
-        return error(QLibrary::tr("metadata too small"));
-
-    if (priv->metaData.parse(metaData))
-        return true;
-    *errMsg = priv->metaData.errorString();
-    return false;
+    auto metaData = getMetaData(pfn);
+    QJsonDocument doc = qJsonFromRawLibraryMetaData(reinterpret_cast<const char *>(metaData.data), metaData.size, errMsg);
+    if (doc.isNull())
+        return false;
+    priv->metaData = doc.object();
+    return true;
 }
 
 bool QLibraryPrivate::isPlugin()
@@ -711,7 +767,7 @@ void QLibraryPrivate::updatePluginState()
     bool success = false;
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
-    if (fileName.endsWith(".debug"_L1)) {
+    if (fileName.endsWith(QLatin1String(".debug"))) {
         // refuse to load a file that ends in .debug
         // these are the debug symbols from the libraries
         // the problem is that they are valid shared library files
@@ -726,22 +782,7 @@ void QLibraryPrivate::updatePluginState()
 
     if (!pHnd.loadRelaxed()) {
         // scan for the plugin metadata without loading
-        QLibraryScanResult result = findPatternUnloaded(fileName, this);
-#if defined(Q_OF_MACH_O)
-        if (result.length && result.isEncrypted) {
-            // We found the .qtmetadata section, but since the library is encrypted
-            // we need to dlopen() it before we can parse the metadata for further
-            // validation.
-            qCDebug(qt_lcDebugPlugins, "Library is encrypted. Doing prospective load before parsing metadata");
-            locker.unlock();
-            load();
-            locker.relock();
-            success = qt_get_metadata(this, &errorString);
-        } else
-#endif
-        {
-            success = result.length != 0;
-        }
+        success = findPatternUnloaded(fileName, this);
     } else {
         // library is already loaded (probably via QLibrary)
         // simply get the target function and call it.
@@ -761,24 +802,28 @@ void QLibraryPrivate::updatePluginState()
 
     pluginState = IsNotAPlugin; // be pessimistic
 
-    uint qt_version = uint(metaData.value(QtPluginMetaDataKeys::QtVersion).toInteger());
-    bool debug = metaData.value(QtPluginMetaDataKeys::IsDebug).toBool();
+    uint qt_version = (uint)metaData.value(QLatin1String("version")).toDouble();
+    bool debug = metaData.value(QLatin1String("debug")).toBool();
     if ((qt_version & 0x00ff00) > (QT_VERSION & 0x00ff00) || (qt_version & 0xff0000) != (QT_VERSION & 0xff0000)) {
-        qCWarning(qt_lcDebugPlugins, "In %s:\n"
+        if (qt_debug_component()) {
+            qWarning("In %s:\n"
                  "  Plugin uses incompatible Qt library (%d.%d.%d) [%s]",
                  QFile::encodeName(fileName).constData(),
                  (qt_version&0xff0000) >> 16, (qt_version&0xff00) >> 8, qt_version&0xff,
                  debug ? "debug" : "release");
+        }
         errorString = QLibrary::tr("The plugin '%1' uses incompatible Qt library. (%2.%3.%4) [%5]")
-            .arg(fileName,
-                 QString::number((qt_version & 0xff0000) >> 16),
-                 QString::number((qt_version & 0xff00) >> 8),
-                 QString::number(qt_version & 0xff),
-                 debug ? "debug"_L1 : "release"_L1);
-    } else if (PluginMustMatchQtDebug && debug != QtBuildIsDebug) {
+            .arg(fileName)
+            .arg((qt_version&0xff0000) >> 16)
+            .arg((qt_version&0xff00) >> 8)
+            .arg(qt_version&0xff)
+            .arg(debug ? QLatin1String("debug") : QLatin1String("release"));
+#ifndef QT_NO_DEBUG_PLUGIN_CHECK
+    } else if (debug != QLIBRARY_AS_DEBUG) {
         //don't issue a qWarning since we will hopefully find a non-debug? --Sam
         errorString = QLibrary::tr("The plugin '%1' uses incompatible Qt library."
                  " (Cannot mix debug and release libraries.)").arg(fileName);
+#endif
     } else {
         pluginState = IsAPlugin;
     }
@@ -933,7 +978,13 @@ QLibrary::~QLibrary()
 
 void QLibrary::setFileName(const QString &fileName)
 {
-    setFileNameAndVersion(fileName, QString());
+    QLibrary::LoadHints lh;
+    if (d) {
+        lh = d->loadHints();
+        d->release();
+        d = {};
+    }
+    d = QLibraryPrivate::findOrCreate(fileName, QString(), lh);
 }
 
 QString QLibrary::fileName() const
@@ -956,7 +1007,13 @@ QString QLibrary::fileName() const
 */
 void QLibrary::setFileNameAndVersion(const QString &fileName, int verNum)
 {
-    setFileNameAndVersion(fileName, verNum >= 0 ? QString::number(verNum) : QString());
+    QLibrary::LoadHints lh;
+    if (d) {
+        lh = d->loadHints();
+        d->release();
+        d = {};
+    }
+    d = QLibraryPrivate::findOrCreate(fileName, verNum >= 0 ? QString::number(verNum) : QString(), lh);
 }
 
 /*!
@@ -974,10 +1031,9 @@ void QLibrary::setFileNameAndVersion(const QString &fileName, const QString &ver
     if (d) {
         lh = d->loadHints();
         d->release();
+        d = {};
     }
-    QLibraryPrivate *dd = QLibraryPrivate::findOrCreate(fileName, version, lh);
-    d = dd;
-    d.setTag(isLoaded() ? Loaded : NotLoaded);
+    d = QLibraryPrivate::findOrCreate(fileName, version, lh);
 }
 
 /*!

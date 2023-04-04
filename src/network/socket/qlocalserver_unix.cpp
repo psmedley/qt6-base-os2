@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qlocalserver.h"
 #include "qlocalserver_p.h"
@@ -16,15 +52,11 @@
 #include <qdir.h>
 #include <qdatetime.h>
 
-#include <optional>
-
 #ifdef Q_OS_VXWORKS
 #  include <selectLib.h>
 #endif
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 namespace {
 QLocalServer::SocketOptions optionsForPlatform(QLocalServer::SocketOptions srcOptions)
@@ -51,11 +83,11 @@ bool QLocalServerPrivate::removeServer(const QString &name)
 {
 #ifndef Q_OS_OS2
     QString fileName;
-    if (name.startsWith(u'/')) {
+    if (name.startsWith(QLatin1Char('/'))) {
         fileName = name;
     } else {
         fileName = QDir::cleanPath(QDir::tempPath());
-        fileName += u'/' + name;
+        fileName += QLatin1Char('/') + name;
     }
     if (QFile::exists(fileName))
         return QFile::remove(fileName);
@@ -83,33 +115,33 @@ bool QLocalServerPrivate::listen(const QString &requestedServerName)
         fullServerName = socketPath + requestedServerName;
 #else
     if (options.testFlag(QLocalServer::AbstractNamespaceOption)
-        ||  requestedServerName.startsWith(u'/')) {
+        ||  requestedServerName.startsWith(QLatin1Char('/'))) {
         fullServerName = requestedServerName;
     } else {
         fullServerName = QDir::cleanPath(QDir::tempPath());
-        fullServerName += u'/' + requestedServerName;
+        fullServerName += QLatin1Char('/') + requestedServerName;
     }
 #endif
     serverName = requestedServerName;
 
     QByteArray encodedTempPath;
     const QByteArray encodedFullServerName = QFile::encodeName(fullServerName);
-    std::optional<QTemporaryDir> tempDir;
+    QScopedPointer<QTemporaryDir> tempDir;
 
     if (options & QLocalServer::WorldAccessOption) {
         QFileInfo serverNameFileInfo(fullServerName);
-        tempDir.emplace(serverNameFileInfo.absolutePath() + u'/');
+        tempDir.reset(new QTemporaryDir(serverNameFileInfo.absolutePath() + QLatin1Char('/')));
         if (!tempDir->isValid()) {
-            setError("QLocalServer::listen"_L1);
+            setError(QLatin1String("QLocalServer::listen"));
             return false;
         }
-        encodedTempPath = QFile::encodeName(tempDir->path() + "/s"_L1);
+        encodedTempPath = QFile::encodeName(tempDir->path() + QLatin1String("/s"));
     }
 
     // create the unix socket
     listenSocket = qt_safe_socket(PF_UNIX, SOCK_STREAM, 0);
     if (-1 == listenSocket) {
-        setError("QLocalServer::listen"_L1);
+        setError(QLatin1String("QLocalServer::listen"));
         closeServer();
         return false;
     }
@@ -124,7 +156,7 @@ bool QLocalServerPrivate::listen(const QString &requestedServerName)
     constexpr unsigned int extraCharacters = PlatformSupportsAbstractNamespace ? 2 : 1;
 
     if (sizeof(addr.sun_path) < static_cast<size_t>(encodedFullServerName.size() + extraCharacters)) {
-        setError("QLocalServer::listen"_L1);
+        setError(QLatin1String("QLocalServer::listen"));
         closeServer();
         return false;
     }
@@ -138,7 +170,7 @@ bool QLocalServerPrivate::listen(const QString &requestedServerName)
         addrSize = offsetof(::sockaddr_un, sun_path) + encodedFullServerName.size() + 1;
     } else if (options & QLocalServer::WorldAccessOption) {
         if (sizeof(addr.sun_path) < static_cast<size_t>(encodedTempPath.size() + 1)) {
-            setError("QLocalServer::listen"_L1);
+            setError(QLatin1String("QLocalServer::listen"));
             closeServer();
             return false;
         }
@@ -151,7 +183,7 @@ bool QLocalServerPrivate::listen(const QString &requestedServerName)
 
     // bind
     if (-1 == QT_SOCKET_BIND(listenSocket, (sockaddr *)&addr, addrSize)) {
-        setError("QLocalServer::listen"_L1);
+        setError(QLatin1String("QLocalServer::listen"));
         // if address is in use already, just close the socket, but do not delete the file
         if (errno == EADDRINUSE)
             QT_CLOSE(listenSocket);
@@ -163,8 +195,8 @@ bool QLocalServerPrivate::listen(const QString &requestedServerName)
     }
 
     // listen for connections
-    if (-1 == qt_safe_listen(listenSocket, listenBacklog)) {
-        setError("QLocalServer::listen"_L1);
+    if (-1 == qt_safe_listen(listenSocket, 50)) {
+        setError(QLatin1String("QLocalServer::listen"));
         closeServer();
         return false;
     }
@@ -182,13 +214,13 @@ bool QLocalServerPrivate::listen(const QString &requestedServerName)
             mode |= S_IRWXO;
 
         if (::chmod(encodedTempPath.constData(), mode) == -1) {
-            setError("QLocalServer::listen"_L1);
+            setError(QLatin1String("QLocalServer::listen"));
             closeServer();
             return false;
         }
 
         if (::rename(encodedTempPath.constData(), encodedFullServerName.constData()) == -1) {
-            setError("QLocalServer::listen"_L1);
+            setError(QLatin1String("QLocalServer::listen"));
             closeServer();
             return false;
         }
@@ -218,10 +250,6 @@ bool QLocalServerPrivate::listen(qintptr socketDescriptor)
     QT_SOCKLEN_T len = sizeof(addr);
     memset(&addr, 0, sizeof(addr));
     if (::getsockname(socketDescriptor, (sockaddr *)&addr, &len) == 0) {
-#if defined(Q_OS_QNX)
-        if (addr.sun_path[0] == 0 && addr.sun_path[1] == 0)
-            len = SUN_LEN(&addr);
-#endif
         if (QLocalSocketPrivate::parseSockaddr(addr, len, fullServerName, serverName,
                                                abstractAddress)) {
             QLocalServer::SocketOptions options = socketOptions.value();
@@ -280,7 +308,7 @@ void QLocalServerPrivate::_q_onNewConnection()
     QT_SOCKLEN_T length = sizeof(sockaddr_un);
     int connectedSocket = qt_safe_accept(listenSocket, (sockaddr *)&addr, &length);
     if (-1 == connectedSocket) {
-        setError("QLocalSocket::activated"_L1);
+        setError(QLatin1String("QLocalSocket::activated"));
         closeServer();
     } else {
         socketNotifier->setEnabled(pendingConnections.size()
@@ -309,7 +337,7 @@ void QLocalServerPrivate::waitForNewConnection(int msec, bool *timedOut)
         errno = EBADF;
         Q_FALLTHROUGH();
     case -1:
-        setError("QLocalServer::waitForNewConnection"_L1);
+        setError(QLatin1String("QLocalServer::waitForNewConnection"));
         closeServer();
         break;
     }

@@ -1,10 +1,47 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QTCORE_RESULTSTORE_H
 #define QTCORE_RESULTSTORE_H
 
 #include <QtCore/qmap.h>
+#include <QtCore/qdebug.h>
 
 #include <utility>
 
@@ -71,7 +108,7 @@ public:
     template <typename T>
     T *pointer()
     {
-        const T *p = std::as_const(*this).pointer<T>();
+        const T *p = qAsConst(*this).pointer<T>();
         return const_cast<T *>(p);
     }
 
@@ -85,7 +122,7 @@ public:
     }
 };
 
-class Q_CORE_EXPORT ResultStoreBase final
+class Q_CORE_EXPORT ResultStoreBase
 {
 public:
     ResultStoreBase();
@@ -99,8 +136,6 @@ public:
     ResultIteratorBase resultAt(int index) const;
     bool contains(int index) const;
     int count() const;
-    // ### Qt 7: 'virtual' isn't required, can be removed, along with renaming
-    // the class to ResultStore and changing the members below to be private.
     virtual ~ResultStoreBase();
 
 protected:
@@ -164,23 +199,23 @@ public:
         if (containsValidResultItem(index)) // reject if already present
             return -1;
 
-        return addResults(index, new QList<T>(*results), results->size(), results->size());
+        return addResults(index, new QList<T>(*results), results->count(), results->count());
     }
 
     template<typename T>
     int addResults(int index, const QList<T> *results, int totalCount)
     {
         // reject if results are empty, and nothing is filtered away
-        if ((m_filterMode == false || results->size() == totalCount) && results->empty())
+        if ((m_filterMode == false || results->count() == totalCount) && results->empty())
             return -1;
 
         if (containsValidResultItem(index)) // reject if already present
             return -1;
 
-        if (m_filterMode == true && results->size() != totalCount && 0 == results->size())
+        if (m_filterMode == true && results->count() != totalCount && 0 == results->count())
             return addResults(index, nullptr, 0, totalCount);
 
-        return addResults(index, new QList<T>(*results), results->size(), totalCount);
+        return addResults(index, new QList<T>(*results), results->count(), totalCount);
     }
 
     int addCanceledResult(int index)

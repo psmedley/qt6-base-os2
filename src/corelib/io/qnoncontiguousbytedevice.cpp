@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qnoncontiguousbytedevice_p.h"
 #include <qbuffer.h>
@@ -191,9 +227,10 @@ qint64 QNonContiguousByteDeviceByteArrayImpl::pos() const
     return currentPosition;
 }
 
-QNonContiguousByteDeviceRingBufferImpl::QNonContiguousByteDeviceRingBufferImpl(std::shared_ptr<QRingBuffer> rb)
-    : QNonContiguousByteDevice(), ringBuffer(std::move(rb))
+QNonContiguousByteDeviceRingBufferImpl::QNonContiguousByteDeviceRingBufferImpl(QSharedPointer<QRingBuffer> rb)
+    : QNonContiguousByteDevice(), currentPosition(0)
 {
+    ringBuffer = rb;
 }
 
 QNonContiguousByteDeviceRingBufferImpl::~QNonContiguousByteDeviceRingBufferImpl()
@@ -458,44 +495,44 @@ QNonContiguousByteDevice *QNonContiguousByteDeviceFactory::create(QIODevice *dev
 }
 
 /*!
-    Create a QNonContiguousByteDevice out of a QIODevice, return it in a std::shared_ptr.
+    Create a QNonContiguousByteDevice out of a QIODevice, return it in a QSharedPointer.
     For QFile, QBuffer and all other QIODevice, sequential or not.
 
     \internal
 */
-std::shared_ptr<QNonContiguousByteDevice> QNonContiguousByteDeviceFactory::createShared(QIODevice *device)
+QSharedPointer<QNonContiguousByteDevice> QNonContiguousByteDeviceFactory::createShared(QIODevice *device)
 {
     // shortcut if it is a QBuffer
     if (QBuffer *buffer = qobject_cast<QBuffer*>(device))
-        return std::make_shared<QNonContiguousByteDeviceBufferImpl>(buffer);
+        return QSharedPointer<QNonContiguousByteDeviceBufferImpl>::create(buffer);
 
     // ### FIXME special case if device is a QFile that supports map()
     // then we can actually deal with the file without using read/peek
 
     // generic QIODevice
-    return std::make_shared<QNonContiguousByteDeviceIoDeviceImpl>(device); // FIXME
+    return QSharedPointer<QNonContiguousByteDeviceIoDeviceImpl>::create(device); // FIXME
 }
 
 /*!
-    \fn static QNonContiguousByteDevice* QNonContiguousByteDeviceFactory::create(std::shared_ptr<QRingBuffer> ringBuffer)
+    \fn static QNonContiguousByteDevice* QNonContiguousByteDeviceFactory::create(QSharedPointer<QRingBuffer> ringBuffer)
 
     Create a QNonContiguousByteDevice out of a QRingBuffer.
 
     \internal
 */
-QNonContiguousByteDevice* QNonContiguousByteDeviceFactory::create(std::shared_ptr<QRingBuffer> ringBuffer)
+QNonContiguousByteDevice* QNonContiguousByteDeviceFactory::create(QSharedPointer<QRingBuffer> ringBuffer)
 {
     return new QNonContiguousByteDeviceRingBufferImpl(ringBuffer);
 }
 
 /*!
-    Create a QNonContiguousByteDevice out of a QRingBuffer, return it in a std::shared_ptr.
+    Create a QNonContiguousByteDevice out of a QRingBuffer, return it in a QSharedPointer.
 
     \internal
 */
-std::shared_ptr<QNonContiguousByteDevice> QNonContiguousByteDeviceFactory::createShared(std::shared_ptr<QRingBuffer> ringBuffer)
+QSharedPointer<QNonContiguousByteDevice> QNonContiguousByteDeviceFactory::createShared(QSharedPointer<QRingBuffer> ringBuffer)
 {
-    return std::make_shared<QNonContiguousByteDeviceRingBufferImpl>(std::move(ringBuffer));
+    return QSharedPointer<QNonContiguousByteDeviceRingBufferImpl>::create(std::move(ringBuffer));
 }
 
 /*!
@@ -515,9 +552,9 @@ QNonContiguousByteDevice* QNonContiguousByteDeviceFactory::create(QByteArray *by
 
     \internal
 */
-std::shared_ptr<QNonContiguousByteDevice> QNonContiguousByteDeviceFactory::createShared(QByteArray *byteArray)
+QSharedPointer<QNonContiguousByteDevice> QNonContiguousByteDeviceFactory::createShared(QByteArray *byteArray)
 {
-    return std::make_shared<QNonContiguousByteDeviceByteArrayImpl>(byteArray);
+    return QSharedPointer<QNonContiguousByteDeviceByteArrayImpl>::create(byteArray);
 }
 
 /*!

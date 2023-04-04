@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -68,8 +93,6 @@ private slots:
 
     void setScaledClipRect_data();
     void setScaledClipRect();
-
-    void setFormat();
 
     void imageFormat_data();
     void imageFormat();
@@ -487,36 +510,7 @@ void tst_QImageReader::setScaledClipRect()
     QImageReader originalReader(prefix + fileName);
     originalReader.setScaledSize(QSize(300, 300));
     QImage originalImage = originalReader.read();
-    if (format.contains("svg")) {
-        // rendering of subrect may yield slight rounding differences, truncate them away
-        image.convertTo(QImage::Format_RGB444);
-        originalImage.convertTo(QImage::Format_RGB444);
-    }
     QCOMPARE(originalImage.copy(newRect), image);
-}
-
-void tst_QImageReader::setFormat()
-{
-    QByteArray ppmImage = "P1 2 2\n1 0\n0 1";
-    QBuffer buf(&ppmImage);
-    QImageReader reader(&buf);
-
-    // read image in autodetected format
-    QCOMPARE(reader.size(), QSize(2,2));
-    buf.close();
-
-    // try reading with non-matching format, must not succeed
-    reader.setDecideFormatFromContent(false);
-    reader.setFormat("bmp");
-    reader.setDevice(&buf);
-    QCOMPARE(reader.size(), QSize());
-    buf.close();
-
-    // read with manually set matching format
-    reader.setFormat("ppm");
-    reader.setDevice(&buf);
-    QCOMPARE(reader.size(), QSize(2,2));
-    buf.close();
 }
 
 void tst_QImageReader::imageFormat_data()
@@ -1959,10 +1953,6 @@ void tst_QImageReader::readText_data()
 
 void tst_QImageReader::readText()
 {
-#ifdef QT_NO_IMAGEIO_TEXT_LOADING
-    QSKIP("Reading text from image is configured away");
-#endif
-
     QFETCH(QString, fileName);
     QFETCH(QString, key);
     QFETCH(QString, text);
@@ -2004,10 +1994,6 @@ void tst_QImageReader::preserveTexts_data()
 
 void tst_QImageReader::preserveTexts()
 {
-#ifdef QT_NO_IMAGEIO_TEXT_LOADING
-    QSKIP("Reading text from image is configured away");
-#endif
-
     QFETCH(QString, fileName);
     QByteArray format = fileName.right(3).toLatin1();
     QFETCH(QString, text);

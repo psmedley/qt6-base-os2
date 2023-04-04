@@ -1,5 +1,41 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qaction.h"
 #include "qactiongroup.h"
@@ -23,16 +59,14 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 /*
   internal: guesses a descriptive text from a text suited for a menu entry
  */
 static QString qt_strippedText(QString s)
 {
-    s.remove("..."_L1);
+    s.remove(QLatin1String("..."));
     for (int i = 0; i < s.size(); ++i) {
-        if (s.at(i) == u'&')
+        if (s.at(i) == QLatin1Char('&'))
             s.remove(i, 1);
     }
     return s.trimmed();
@@ -81,26 +115,26 @@ void QActionPrivate::sendDataChanged()
 void QActionPrivate::redoGrab(QShortcutMap &map)
 {
     Q_Q(QAction);
-    for (int id : std::as_const(shortcutIds)) {
+    for (int id : qAsConst(shortcutIds)) {
         if (id)
             map.removeShortcut(id, q);
     }
 
     shortcutIds.clear();
-    for (const QKeySequence &shortcut : std::as_const(shortcuts)) {
+    for (const QKeySequence &shortcut : qAsConst(shortcuts)) {
         if (!shortcut.isEmpty())
             shortcutIds.append(map.addShortcut(q, shortcut, shortcutContext, contextMatcher()));
         else
             shortcutIds.append(0);
     }
     if (!enabled) {
-        for (int id : std::as_const(shortcutIds)) {
+        for (int id : qAsConst(shortcutIds)) {
             if (id)
                 map.setShortcutEnabled(false, id, q);
         }
     }
     if (!autorepeat) {
-        for (int id : std::as_const(shortcutIds)) {
+        for (int id : qAsConst(shortcutIds)) {
             if (id)
                 map.setShortcutAutoRepeat(false, id, q);
         }
@@ -110,7 +144,7 @@ void QActionPrivate::redoGrab(QShortcutMap &map)
 void QActionPrivate::setShortcutEnabled(bool enable, QShortcutMap &map)
 {
     Q_Q(QAction);
-    for (int id : std::as_const(shortcutIds)) {
+    for (int id : qAsConst(shortcutIds)) {
         if (id)
             map.setShortcutEnabled(enable, id, q);
     }
@@ -150,18 +184,17 @@ QObject *QActionPrivate::menu() const
     user interface used, it is useful to represent each command as
     an \e action.
 
-    Actions can be added to user interface elements such as menus and toolbars,
-    and will automatically keep the UI in sync. For example, in a word
-    processor, if the user presses a Bold toolbar button, the Bold menu item
+    Actions can be added to menus and toolbars, and will
+    automatically keep them in sync. For example, in a word processor,
+    if the user presses a Bold toolbar button, the Bold menu item
     will automatically be checked.
 
-    A QAction may contain an icon, descriptive text, icon text, a keyboard
-    shortcut, status text, "What's This?" text, and a tooltip. All properties
-    can be set independently with setIcon(), setText(), setIconText(),
-    setShortcut(), setStatusTip(), setWhatsThis(), and setToolTip(). Icon and
-    text, as the two most important properties, can also be set in the
-    constructor. It's possible to set an individual font with setFont(), which
-    e.g. menus respect when displaying the action as a menu item.
+    A QAction may contain an icon, menu text, a shortcut, status text,
+    "What's This?" text, and a tooltip. Most of these can be set in
+    the constructor. They can also be set independently with
+    setIcon(), setText(), setIconText(), setShortcut(),
+    setStatusTip(), setWhatsThis(), and setToolTip(). For menu items,
+    it is possible to set an individual font with setFont().
 
     We recommend that actions are created as children of the window
     they are used in. In most cases actions will be children of
@@ -239,11 +272,13 @@ QAction::QAction(QObject *parent)
     parent is an action group the action will be automatically
     inserted into the group.
 
-    A stripped version of \a text (for example, "\&Menu Option..." becomes
-    "Menu Option") will be used for tooltips and icon text unless you specify a
-    different text using setToolTip() or setIconText(), respectively.
+    The action uses a stripped version of \a text (e.g. "\&Menu
+    Option..." becomes "Menu Option") as descriptive text for
+    tool buttons. You can override this by setting a specific
+    description with setText(). The same text will be used for
+    tooltips unless you specify a different text using
+    setToolTip().
 
-    \sa text
 */
 QAction::QAction(const QString &text, QObject *parent)
     : QAction(parent)
@@ -257,11 +292,12 @@ QAction::QAction(const QString &text, QObject *parent)
     parent. If \a parent is an action group the action will be
     automatically inserted into the group.
 
-    A stripped version of \a text (for example, "\&Menu Option..." becomes
-    "Menu Option") will be used for tooltips and icon text unless you specify a
-    different text using setToolTip() or setIconText(), respectively.
-
-    \sa text, icon
+    The action uses a stripped version of \a text (e.g. "\&Menu
+    Option..." becomes "Menu Option") as descriptive text for
+    tool buttons. You can override this by setting a specific
+    description with setText(). The same text will be used for
+    tooltips unless you specify a different text using
+    setToolTip().
 */
 QAction::QAction(const QIcon &icon, const QString &text, QObject *parent)
     : QAction(text, parent)
@@ -456,7 +492,7 @@ QAction::~QAction()
         d->group->removeAction(this);
 #if QT_CONFIG(shortcut)
     if (qApp) {
-        for (int id : std::as_const(d->shortcutIds)) {
+        for (int id : qAsConst(d->shortcutIds)) {
             if (id)
                 QGuiApplicationPrivate::instance()->shortcutMap.removeShortcut(id, this);
         }
@@ -512,14 +548,14 @@ QList<QObject*> QAction::associatedObjects() const
 
 /*!
     \fn QWidget *QAction::parentWidget() const
-    \deprecated [6.0] Use parent() with qobject_cast() instead.
+    \deprecated Use parent() with qobject_cast() instead.
 
     Returns the parent widget.
 */
 
 /*!
     \fn QList<QWidget*> QAction::associatedWidgets() const
-    \deprecated [6.0] Use associatedObjects() with qobject_cast() instead.
+    \deprecated Use associatedObjects() with qobject_cast() instead.
 
     Returns a list of widgets this action has been added to.
 
@@ -528,7 +564,7 @@ QList<QObject*> QAction::associatedObjects() const
 
 /*!
     \fn QList<QWidget*> QAction::associatedGraphicsWidgets() const
-    \deprecated [6.0] Use associatedObjects() with qobject_cast() instead.
+    \deprecated Use associatedObjects() with qobject_cast() instead.
 
     Returns a list of graphics widgets this action has been added to.
 
@@ -600,14 +636,6 @@ bool QAction::isSeparator() const
     by using setText(), the action's description icon text will be
     used as text. There is no default text.
 
-    Certain UI elements, such as menus or buttons, can use '&' in front of a
-    character to automatically create a mnemonic (a shortcut) for that
-    character. For example, "&File" for a menu will create the shortcut
-    \uicontrol Alt+F, which will open the File menu. "E&xit" will create the
-    shortcut \uicontrol Alt+X for a button, or in a menu allow navigating to
-    the menu item by pressing "x". (use '&&' to display an actual ampersand).
-    The widget might consume and perform an action on a given shortcut.
-
     \sa iconText
 */
 void QAction::setText(const QString &text)
@@ -626,7 +654,7 @@ QString QAction::text() const
     QString s = d->text;
     if (s.isEmpty()) {
         s = d->iconText;
-        s.replace(u'&', "&&"_L1);
+        s.replace(QLatin1Char('&'), QLatin1String("&&"));
     }
     return s;
 }
@@ -1030,7 +1058,7 @@ bool QAction::event(QEvent *e)
 {
     Q_D(QAction);
     if (e->type() == QEvent::ActionChanged) {
-        for (auto object : std::as_const(d->associatedObjects))
+        for (auto object : qAsConst(d->associatedObjects))
             QCoreApplication::sendEvent(object, e);
     }
 
@@ -1197,13 +1225,14 @@ QAction::MenuRole QAction::menuRole() const
 
 /*!
     \fn QMenu *QAction::menu() const
+    \deprecated
 
     Returns the menu contained by this action.
 
     In widget applications, actions that contain menus can be used to create menu
     items with submenus, or inserted into toolbars to create buttons with popup menus.
 
-    \sa QMenu::addAction(), QMenu::menuInAction()
+    \sa QMenu::addAction()
 */
 QObject* QAction::menuObject() const
 {
@@ -1213,6 +1242,7 @@ QObject* QAction::menuObject() const
 
 /*!
     \fn void QAction::setMenu(QMenu *menu)
+    \deprecated
 
     Sets the menu contained by this action to the specified \a menu.
 */

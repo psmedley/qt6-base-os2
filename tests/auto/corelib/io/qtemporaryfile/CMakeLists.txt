@@ -31,7 +31,7 @@ qt_internal_add_resource(tst_qtemporaryfile "qtemporaryfile"
 ## Scopes:
 #####################################################################
 
-if(ANDROID)
+if(ANDROID AND NOT ANDROID_EMBEDDED)
     # Resources:
     set(android_testdata_resource_files
         "resources/test.txt"

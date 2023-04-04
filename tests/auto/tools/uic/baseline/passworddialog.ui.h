@@ -37,19 +37,19 @@ public:
     void setupUi(QDialog *PasswordDialog)
     {
         if (PasswordDialog->objectName().isEmpty())
-            PasswordDialog->setObjectName("PasswordDialog");
+            PasswordDialog->setObjectName(QString::fromUtf8("PasswordDialog"));
         PasswordDialog->resize(399, 148);
         gridLayout = new QGridLayout(PasswordDialog);
-        gridLayout->setObjectName("gridLayout");
+        gridLayout->setObjectName(QString::fromUtf8("gridLayout"));
         hboxLayout = new QHBoxLayout();
-        hboxLayout->setObjectName("hboxLayout");
+        hboxLayout->setObjectName(QString::fromUtf8("hboxLayout"));
         iconLabel = new QLabel(PasswordDialog);
-        iconLabel->setObjectName("iconLabel");
+        iconLabel->setObjectName(QString::fromUtf8("iconLabel"));
 
         hboxLayout->addWidget(iconLabel);
 
         introLabel = new QLabel(PasswordDialog);
-        introLabel->setObjectName("introLabel");
+        introLabel->setObjectName(QString::fromUtf8("introLabel"));
         QSizePolicy sizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
         sizePolicy.setHorizontalStretch(0);
         sizePolicy.setVerticalStretch(0);
@@ -62,28 +62,28 @@ public:
         gridLayout->addLayout(hboxLayout, 0, 0, 1, 2);
 
         label = new QLabel(PasswordDialog);
-        label->setObjectName("label");
+        label->setObjectName(QString::fromUtf8("label"));
 
         gridLayout->addWidget(label, 1, 0, 1, 1);
 
         userNameLineEdit = new QLineEdit(PasswordDialog);
-        userNameLineEdit->setObjectName("userNameLineEdit");
+        userNameLineEdit->setObjectName(QString::fromUtf8("userNameLineEdit"));
 
         gridLayout->addWidget(userNameLineEdit, 1, 1, 1, 1);
 
         lblPassword = new QLabel(PasswordDialog);
-        lblPassword->setObjectName("lblPassword");
+        lblPassword->setObjectName(QString::fromUtf8("lblPassword"));
 
         gridLayout->addWidget(lblPassword, 2, 0, 1, 1);
 
         passwordLineEdit = new QLineEdit(PasswordDialog);
-        passwordLineEdit->setObjectName("passwordLineEdit");
+        passwordLineEdit->setObjectName(QString::fromUtf8("passwordLineEdit"));
         passwordLineEdit->setEchoMode(QLineEdit::Password);
 
         gridLayout->addWidget(passwordLineEdit, 2, 1, 1, 1);
 
         buttonBox = new QDialogButtonBox(PasswordDialog);
-        buttonBox->setObjectName("buttonBox");
+        buttonBox->setObjectName(QString::fromUtf8("buttonBox"));
         buttonBox->setOrientation(Qt::Horizontal);
         buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
 

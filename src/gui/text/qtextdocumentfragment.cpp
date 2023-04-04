@@ -1,16 +1,46 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qtextdocumentfragment.h"
 #include "qtextdocumentfragment_p.h"
 #include "qtextcursor_p.h"
 #include "qtextlist.h"
-#if QT_CONFIG(textmarkdownreader)
-#include "qtextmarkdownimporter_p.h"
-#endif
-#if QT_CONFIG(textmarkdownwriter)
-#include "qtextmarkdownwriter_p.h"
-#endif
 
 #include <qdebug.h>
 #include <qbytearray.h>
@@ -18,8 +48,6 @@
 #include <qdatetime.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 QTextCopyHelper::QTextCopyHelper(const QTextCursor &_source, const QTextCursor &_destination, bool forceCharFormat, const QTextCharFormat &fmt)
 #if defined(Q_CC_DIAB) // compiler bug
@@ -84,7 +112,7 @@ int QTextCopyHelper::appendFragment(int pos, int endPos, int objectIndex)
     }
 
     QString txtToInsert(originalText.constData() + frag->stringPosition + inFragmentOffset, charsToCopy);
-    if (txtToInsert.size() == 1
+    if (txtToInsert.length() == 1
         && (txtToInsert.at(0) == QChar::ParagraphSeparator
             || txtToInsert.at(0) == QTextBeginningOfFrame
             || txtToInsert.at(0) == QTextEndOfFrame
@@ -109,7 +137,7 @@ int QTextCopyHelper::appendFragment(int pos, int endPos, int objectIndex)
         const int userState = nextBlock.userState();
         if (userState != -1)
             dst->blocksFind(insertPos).setUserState(userState);
-        insertPos += txtToInsert.size();
+        insertPos += txtToInsert.length();
     }
 
     return charsToCopy;
@@ -238,10 +266,11 @@ void QTextDocumentFragmentPrivate::insert(QTextCursor &_cursor) const
     document fragment. Document fragments can also be created by the
     static functions, fromPlainText() and fromHtml().
 
-    The contents of a document fragment can be obtained as raw text
-    by using the toRawText() function, as ASCII with toPlainText(),
-    as HTML with toHtml(), or as Markdown with toMarkdown().
+    The contents of a document fragment can be obtained as plain text
+    by using the toPlainText() function, or it can be obtained as HTML
+    with toHtml().
 */
+
 
 /*!
     Constructs an empty QTextDocumentFragment.
@@ -329,15 +358,10 @@ bool QTextDocumentFragment::isEmpty() const
 }
 
 /*!
-    This function returns the same as toRawText(), but will replace
-    some unicode characters with ASCII alternatives.
-    In particular, no-break space (U+00A0) is replaced by a regular
-    space (U+0020), and both paragraph (U+2029) and line (U+2028)
-    separators are replaced by line feed (U+000A).
-    If you need the precise contents of the document, use toRawText()
-    instead.
+    Returns the document fragment's text as plain text (i.e. with no
+    formatting information).
 
-    \sa toHtml(), toMarkdown(), toRawText()
+    \sa toHtml()
 */
 QString QTextDocumentFragment::toPlainText() const
 {
@@ -347,21 +371,6 @@ QString QTextDocumentFragment::toPlainText() const
     return d->doc->toPlainText();
 }
 
-/*!
-    Returns the document fragment's text as raw text (i.e. with no
-    formatting information).
-
-    \since 6.4
-    \sa toHtml(), toMarkdown(), toPlainText()
-*/
-QString QTextDocumentFragment::toRawText() const
-{
-    if (!d)
-        return QString();
-
-    return d->doc->toRawText();
-}
-
 #ifndef QT_NO_TEXTHTMLPARSER
 
 /*!
@@ -369,7 +378,7 @@ QString QTextDocumentFragment::toRawText() const
 
     Returns the contents of the document fragment as HTML.
 
-    \sa toPlainText(), toMarkdown(), QTextDocument::toHtml()
+    \sa toPlainText(), QTextDocument::toHtml()
 */
 QString QTextDocumentFragment::toHtml() const
 {
@@ -380,26 +389,6 @@ QString QTextDocumentFragment::toHtml() const
 }
 
 #endif // QT_NO_TEXTHTMLPARSER
-
-#if QT_CONFIG(textmarkdownwriter)
-
-/*!
-    \since 6.4
-
-    Returns the contents of the document fragment as Markdown,
-    with the specified \a features. The default is GitHub dialect.
-
-    \sa toPlainText(), QTextDocument::toMarkdown()
-*/
-QString QTextDocumentFragment::toMarkdown(QTextDocument::MarkdownFeatures features) const
-{
-    if (!d)
-        return QString();
-
-    return d->doc->toMarkdown(features);
-}
-
-#endif // textmarkdownwriter
 
 /*!
     Returns a document fragment that contains the given \a plainText.
@@ -436,14 +425,14 @@ QTextHtmlImporter::QTextHtmlImporter(QTextDocument *_doc, const QString &_html, 
     wsm = QTextHtmlParserNode::WhiteSpaceNormal;
 
     QString html = _html;
-    const int startFragmentPos = html.indexOf("<!--StartFragment-->"_L1);
+    const int startFragmentPos = html.indexOf(QLatin1String("<!--StartFragment-->"));
     if (startFragmentPos != -1) {
-        const auto qt3RichTextHeader = "<meta name=\"qrichtext\" content=\"1\" />"_L1;
+        const QLatin1String qt3RichTextHeader("<meta name=\"qrichtext\" content=\"1\" />");
 
         // Hack for Qt3
         const bool hasQtRichtextMetaTag = html.contains(qt3RichTextHeader);
 
-        const int endFragmentPos = html.indexOf("<!--EndFragment-->"_L1);
+        const int endFragmentPos = html.indexOf(QLatin1String("<!--EndFragment-->"));
         if (startFragmentPos < endFragmentPos)
             html = html.mid(startFragmentPos, endFragmentPos - startFragmentPos);
         else
@@ -580,14 +569,14 @@ bool QTextHtmlImporter::appendNodeText()
     QString textToInsert;
     textToInsert.reserve(text.size());
 
-    for (int i = 0; i < text.size(); ++i) {
+    for (int i = 0; i < text.length(); ++i) {
         QChar ch = text.at(i);
 
         if (ch.isSpace()
             && ch != QChar::Nbsp
             && ch != QChar::ParagraphSeparator) {
 
-            if (wsm == QTextHtmlParserNode::WhiteSpacePreLine && (ch == u'\n' || ch == u'\r'))
+            if (wsm == QTextHtmlParserNode::WhiteSpacePreLine && (ch == QLatin1Char('\n') || ch == QLatin1Char('\r')))
                 compressNextWhitespace = PreserveWhiteSpace;
 
             if (compressNextWhitespace == CollapseWhiteSpace)
@@ -598,30 +587,30 @@ bool QTextHtmlImporter::appendNodeText()
             if (wsm == QTextHtmlParserNode::WhiteSpacePre
                 || textEditMode
                ) {
-                if (ch == u'\n') {
+                if (ch == QLatin1Char('\n')) {
                     if (textEditMode)
                         continue;
-                } else if (ch == u'\r') {
+                } else if (ch == QLatin1Char('\r')) {
                     continue;
                 }
             } else if (wsm != QTextHtmlParserNode::WhiteSpacePreWrap) {
                 compressNextWhitespace = RemoveWhiteSpace;
-                if (wsm == QTextHtmlParserNode::WhiteSpacePreLine && (ch == u'\n' || ch == u'\r'))
+                if (wsm == QTextHtmlParserNode::WhiteSpacePreLine && (ch == QLatin1Char('\n') || ch == QLatin1Char('\r')))
                 { }
                 else if (wsm == QTextHtmlParserNode::WhiteSpaceNoWrap)
                     ch = QChar::Nbsp;
                 else
-                    ch = u' ';
+                    ch = QLatin1Char(' ');
             }
         } else {
             compressNextWhitespace = PreserveWhiteSpace;
         }
 
-        if (ch == u'\n'
+        if (ch == QLatin1Char('\n')
             || ch == QChar::ParagraphSeparator) {
 
             if (!textToInsert.isEmpty()) {
-                if (wsm == QTextHtmlParserNode::WhiteSpacePreLine && textToInsert.at(textToInsert.size() - 1) == u' ')
+                if (wsm == QTextHtmlParserNode::WhiteSpacePreLine && textToInsert.at(textToInsert.length() - 1) == QLatin1Char(' '))
                     textToInsert = textToInsert.chopped(1);
                 cursor.insertText(textToInsert, format);
                 textToInsert.clear();
@@ -906,7 +895,7 @@ QTextHtmlImporter::Table QTextHtmlImporter::scanTable(int tableNodeIdx)
 
     int tableHeaderRowCount = 0;
     QList<int> rowNodes;
-    rowNodes.reserve(at(tableNodeIdx).children.size());
+    rowNodes.reserve(at(tableNodeIdx).children.count());
     for (int row : at(tableNodeIdx).children) {
         switch (at(row).id) {
             case Html_tr:
@@ -931,7 +920,7 @@ QTextHtmlImporter::Table QTextHtmlImporter::scanTable(int tableNodeIdx)
     QList<RowColSpanInfo> rowColSpanForColumn;
 
     int effectiveRow = 0;
-    for (int row : std::as_const(rowNodes)) {
+    for (int row : qAsConst(rowNodes)) {
         int colsInRow = 0;
 
         for (int cell : at(row).children) {
@@ -959,7 +948,7 @@ QTextHtmlImporter::Table QTextHtmlImporter::scanTable(int tableNodeIdx)
                 if (spanInfo.colSpan > 1 || spanInfo.rowSpan > 1)
                     rowColSpans.append(spanInfo);
 
-                columnWidths.resize(qMax(columnWidths.size(), colsInRow));
+                columnWidths.resize(qMax(columnWidths.count(), colsInRow));
                 rowColSpanForColumn.resize(columnWidths.size());
                 for (int i = currentColumn; i < currentColumn + c.tableCellColSpan; ++i) {
                     if (columnWidths.at(i).type() == QTextLength::VariableLength) {
@@ -1041,7 +1030,7 @@ QTextHtmlImporter::Table QTextHtmlImporter::scanTable(int tableNodeIdx)
         QTextTable *textTable = cursor.insertTable(table.rows, table.columns, fmt.toTableFormat());
         table.frame = textTable;
 
-        for (int i = 0; i < rowColSpans.size(); ++i) {
+        for (int i = 0; i < rowColSpans.count(); ++i) {
             const RowColSpanInfo &nfo = rowColSpans.at(i);
             textTable->mergeCells(nfo.row, nfo.col, nfo.rowSpan, nfo.colSpan);
         }
@@ -1266,6 +1255,9 @@ void QTextHtmlImporter::appendBlock(const QTextBlockFormat &format, QTextCharFor
         compressNextWhitespace = RemoveWhiteSpace;
 }
 
+#endif // QT_NO_TEXTHTMLPARSER
+
+#ifndef QT_NO_TEXTHTMLPARSER
 /*!
     \fn QTextDocumentFragment QTextDocumentFragment::fromHtml(const QString &text, const QTextDocument *resourceProvider)
     \since 4.2
@@ -1290,32 +1282,5 @@ QTextDocumentFragment QTextDocumentFragment::fromHtml(const QString &html, const
 }
 
 #endif // QT_NO_TEXTHTMLPARSER
-
-#if QT_CONFIG(textmarkdownreader)
-
-/*!
-    \fn QTextDocumentFragment QTextDocumentFragment::fromMarkdown(const QString &markdown, QTextDocument::MarkdownFeatures features)
-    \since 6.4
-
-    Returns a QTextDocumentFragment based on the given \a markdown text with
-    the specified \a features. The default is GitHub dialect.
-
-    The formatting is preserved as much as possible; for example, \c {**bold**}
-    will become a document fragment containing the text "bold" with a bold
-    character style.
-
-    \note Loading external resources is not supported.
-*/
-QTextDocumentFragment QTextDocumentFragment::fromMarkdown(const QString &markdown, QTextDocument::MarkdownFeatures features)
-{
-    QTextDocumentFragment res;
-    res.d = new QTextDocumentFragmentPrivate;
-
-    QTextMarkdownImporter importer(features);
-    importer.import(res.d->doc, markdown);
-    return res;
-}
-
-#endif // textmarkdownreader
 
 QT_END_NAMESPACE

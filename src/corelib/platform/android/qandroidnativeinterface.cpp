@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtCore/qcoreapplication_platform.h>
 
@@ -7,10 +43,8 @@
 #include <QtCore/private/qjnihelpers_p.h>
 #include <QtCore/qjniobject.h>
 #if QT_CONFIG(future) && !defined(QT_NO_QOBJECT)
-#include <QtCore/qfuture.h>
-#include <QtCore/qfuturewatcher.h>
+#include <QtConcurrent/QtConcurrent>
 #include <QtCore/qpromise.h>
-#include <QtCore/qthreadpool.h>
 #include <deque>
 #endif
 
@@ -19,12 +53,8 @@ QT_BEGIN_NAMESPACE
 #if QT_CONFIG(future) && !defined(QT_NO_QOBJECT)
 static const char qtNativeClassName[] = "org/qtproject/qt/android/QtNative";
 
-struct PendingRunnable {
-    std::function<QVariant()> function;
-    QSharedPointer<QPromise<QVariant>> promise;
-};
-
-using PendingRunnables = std::deque<PendingRunnable>;
+typedef std::pair<std::function<QVariant()>, QSharedPointer<QPromise<QVariant>>> RunnablePair;
+typedef std::deque<RunnablePair> PendingRunnables;
 Q_GLOBAL_STATIC(PendingRunnables, g_pendingRunnables);
 static QBasicMutex g_pendingRunnablesMutex;
 #endif
@@ -44,14 +74,14 @@ static QBasicMutex g_pendingRunnablesMutex;
 QT_DEFINE_NATIVE_INTERFACE(QAndroidApplication);
 
 /*!
-    \fn jobject QNativeInterface::QAndroidApplication::context()
+     \fn jobject QNativeInterface::QAndroidApplication::context()
 
     Returns the Android context as a \c jobject. The context is an \c Activity
     if the main activity object is valid. Otherwise, the context is a \c Service.
 
     \since 6.2
 */
-QtJniTypes::Context QNativeInterface::QAndroidApplication::context()
+jobject QNativeInterface::QAndroidApplication::context()
 {
     return QtAndroidPrivate::context();
 }
@@ -165,8 +195,8 @@ QFuture<QVariant> QNativeInterface::QAndroidApplication::runOnAndroidMainThread(
     QFuture<QVariant> future = promise->future();
     promise->start();
 
-    if (!timeout.isForever()) {
-        QThreadPool::globalInstance()->start([=]() mutable {
+    (void) QtConcurrent::run([=, &future]() {
+        if (!timeout.isForever()) {
             QEventLoop loop;
             QTimer::singleShot(timeout.remainingTime(), &loop, [&]() {
                 future.cancel();
@@ -182,24 +212,12 @@ QFuture<QVariant> QNativeInterface::QAndroidApplication::runOnAndroidMainThread(
                 loop.quit();
             });
             watcher.setFuture(future);
-
-            // we're going to sleep, make sure we don't block
-            // QThreadPool::globalInstance():
-
-            QThreadPool::globalInstance()->releaseThread();
-            const auto sg = qScopeGuard([] {
-               QThreadPool::globalInstance()->reserveThread();
-            });
             loop.exec();
-        });
-    }
+        }
+    });
 
     QMutexLocker locker(&g_pendingRunnablesMutex);
-#ifdef __cpp_aggregate_paren_init
-    g_pendingRunnables->emplace_back(runnable, std::move(promise));
-#else
-    g_pendingRunnables->push_back({runnable, std::move(promise)});
-#endif
+    g_pendingRunnables->push_back(std::pair(runnable, promise));
     locker.unlock();
 
     QJniObject::callStaticMethod<void>(qtNativeClassName,
@@ -217,14 +235,15 @@ static void runPendingCppRunnables(JNIEnv */*env*/, jobject /*obj*/)
         if (g_pendingRunnables->empty())
             break;
 
-        PendingRunnable r = std::move(g_pendingRunnables->front());
+        std::pair pair = std::move(g_pendingRunnables->front());
         g_pendingRunnables->pop_front();
         locker.unlock();
 
         // run the runnable outside the sync block!
-        if (!r.promise->isCanceled())
-            r.promise->addResult(r.function());
-        r.promise->finish();
+        auto promise = pair.second;
+        if (!promise->isCanceled())
+            promise->addResult(pair.first());
+        promise->finish();
     }
 }
 #endif
@@ -232,7 +251,7 @@ static void runPendingCppRunnables(JNIEnv */*env*/, jobject /*obj*/)
 bool QtAndroidPrivate::registerNativeInterfaceNatives()
 {
 #if QT_CONFIG(future) && !defined(QT_NO_QOBJECT)
-    const JNINativeMethod methods = {"runPendingCppRunnables", "()V", (void *)runPendingCppRunnables};
+    JNINativeMethod methods = {"runPendingCppRunnables", "()V", (void *)runPendingCppRunnables};
     return QJniEnvironment().registerNativeMethods(qtNativeClassName, &methods, 1);
 #else
     return true;

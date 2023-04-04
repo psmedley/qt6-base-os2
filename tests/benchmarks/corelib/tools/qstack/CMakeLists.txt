@@ -1,10 +1,12 @@
+# Generated from qstack.pro.
+
 #####################################################################
-## tst_bench_qstack Binary:
+## tst_bench_stack Binary:
 #####################################################################
 
-qt_internal_add_benchmark(tst_bench_qstack
+qt_internal_add_benchmark(tst_bench_stack
     SOURCES
-        tst_bench_qstack.cpp
+        main.cpp
     PUBLIC_LIBRARIES
         Qt::CorePrivate
         Qt::Test

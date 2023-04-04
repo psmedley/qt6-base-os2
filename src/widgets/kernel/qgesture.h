@@ -1,12 +1,47 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QGESTURE_H
 #define QGESTURE_H
 
 #include <QtWidgets/qtwidgetsglobal.h>
 #include <QtCore/qobject.h>
-#include <QtCore/qmap.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qdatetime.h>
 #include <QtCore/qpoint.h>
@@ -16,10 +51,8 @@
 
 #ifndef QT_NO_GESTURES
 
-// ### move to qnamespace.h
-QT_DECL_METATYPE_EXTERN_TAGGED(Qt::GestureState, Qt__GestureState, Q_WIDGETS_EXPORT)
-// ### move to qnamespace.h
-QT_DECL_METATYPE_EXTERN_TAGGED(Qt::GestureType, Qt__GestureType, Q_WIDGETS_EXPORT)
+Q_DECLARE_METATYPE(Qt::GestureState)
+Q_DECLARE_METATYPE(Qt::GestureType)
 
 QT_BEGIN_NAMESPACE
 
@@ -110,7 +143,7 @@ public:
         RotationAngleChanged = 0x2,
         CenterPointChanged = 0x4
     };
-    Q_ENUM(ChangeFlag)
+    Q_FLAG(ChangeFlag)
     Q_DECLARE_FLAGS(ChangeFlags, ChangeFlag)
     Q_FLAG(ChangeFlags)
 
@@ -167,8 +200,7 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QPinchGesture::ChangeFlags)
 
 QT_END_NAMESPACE
 
-QT_DECL_METATYPE_EXTERN_TAGGED(QPinchGesture::ChangeFlags,
-                               QPinchGesture__ChangeFlags, Q_WIDGETS_EXPORT)
+Q_DECLARE_METATYPE(QPinchGesture::ChangeFlags)
 
 QT_BEGIN_NAMESPACE
 
@@ -291,9 +323,7 @@ Q_WIDGETS_EXPORT QDebug operator<<(QDebug, const QGestureEvent *);
 
 QT_END_NAMESPACE
 
-QT_DECL_METATYPE_EXTERN_TAGGED(QGesture::GestureCancelPolicy,
-                               QGesture__GestureCancelPolicy, Q_WIDGETS_EXPORT)
-
+Q_DECLARE_METATYPE(QGesture::GestureCancelPolicy)
 #endif // QT_NO_GESTURES
 
 #endif // QGESTURE_H

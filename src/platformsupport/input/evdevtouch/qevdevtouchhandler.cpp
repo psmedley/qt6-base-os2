@@ -1,6 +1,42 @@
-// Copyright (C) 2019 The Qt Company Ltd.
-// Copyright (C) 2016 Jolla Ltd, author: <gunnar.sletta@jollamobile.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2019 The Qt Company Ltd.
+** Copyright (C) 2016 Jolla Ltd, author: <gunnar.sletta@jollamobile.com>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qevdevtouchhandler_p.h"
 #include "qoutputmapping_p.h"
@@ -40,8 +76,6 @@ extern "C" {
 #endif
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 Q_LOGGING_CATEGORY(qLcEvdevTouch, "qt.qpa.input")
 Q_LOGGING_CATEGORY(qLcEvents, "qt.qpa.input.events")
@@ -175,15 +209,15 @@ QEvdevTouchScreenHandler::QEvdevTouchScreenHandler(const QString &device, const 
       , m_mtdev(nullptr)
 #endif
 {
-    setObjectName("Evdev Touch Handler"_L1);
+    setObjectName(QLatin1String("Evdev Touch Handler"));
 
-    const QStringList args = spec.split(u':');
+    const QStringList args = spec.split(QLatin1Char(':'));
     int rotationAngle = 0;
     bool invertx = false;
     bool inverty = false;
-    for (int i = 0; i < args.size(); ++i) {
-        if (args.at(i).startsWith("rotate"_L1)) {
-            QString rotateArg = args.at(i).section(u'=', 1, 1);
+    for (int i = 0; i < args.count(); ++i) {
+        if (args.at(i).startsWith(QLatin1String("rotate"))) {
+            QString rotateArg = args.at(i).section(QLatin1Char('='), 1, 1);
             bool ok;
             uint argValue = rotateArg.toUInt(&ok);
             if (ok) {
@@ -196,9 +230,9 @@ QEvdevTouchScreenHandler::QEvdevTouchScreenHandler(const QString &device, const 
                     break;
                 }
             }
-        } else if (args.at(i) == "invertx"_L1) {
+        } else if (args.at(i) == QLatin1String("invertx")) {
             invertx = true;
-        } else if (args.at(i) == "inverty"_L1) {
+        } else if (args.at(i) == QLatin1String("inverty")) {
             inverty = true;
         }
     }
@@ -289,7 +323,7 @@ QEvdevTouchScreenHandler::QEvdevTouchScreenHandler(const QString &device, const 
     }
 
     // Fix up the coordinate ranges for am335x in case the kernel driver does not have them fixed.
-    if (d->hw_name == "ti-tsc"_L1) {
+    if (d->hw_name == QLatin1String("ti-tsc")) {
         if (d->hw_range_x_min == 0 && d->hw_range_x_max == 4095) {
             d->hw_range_x_min = 165;
             d->hw_range_x_max = 4016;
@@ -318,8 +352,8 @@ QEvdevTouchScreenHandler::QEvdevTouchScreenHandler(const QString &device, const 
         d->m_rotate *= QTransform::fromTranslate(0.5, 0.5).scale(1.0, -1.0).translate(-0.5, -0.5);
 
     QOutputMapping *mapping = QOutputMapping::get();
+    d->m_screenName = mapping->screenNameForDeviceNode(d->deviceNode);
     if (mapping->load()) {
-        d->m_screenName = mapping->screenNameForDeviceNode(d->deviceNode);
         if (!d->m_screenName.isEmpty())
             qCDebug(qLcEvdevTouch, "evdevtouch: Mapping device %ls to screen %ls",
                     qUtf16Printable(d->deviceNode), qUtf16Printable(d->m_screenName));
@@ -440,46 +474,9 @@ void QEvdevTouchScreenHandler::registerPointingDevice()
     QWindowSystemInterface::registerInputDevice(m_device);
 }
 
-/*! \internal
-
-    QEvdevTouchScreenHandler::unregisterPointingDevice can be called by several cases.
-
-    First of all, the case that an application is terminated, and destroy all input devices
-    immediately to unregister in this case.
-
-    Secondly, the case that removing a device without touch events for the device while the
-    application is still running. In this case, the destructor of QEvdevTouchScreenHandler from
-    the connection with QDeviceDiscovery::deviceRemoved in QEvdevTouchManager calls this method.
-    And this method moves a device into the main thread and then deletes it later but there is no
-    touch events for the device so that the device would be deleted in appropriate time.
-
-    Finally, this case is similar as the second one but with touch events, that is, a device is
-    removed while touch events are given to the device and the application is still running.
-    In this case, this method is called by readData with ENODEV error and the destructor of
-    QEvdevTouchScreenHandler. So in order to prevent accessing the device which is already nullptr,
-    check the nullity of a device first. And as same as the second case, move the device into the
-    main thread and then delete it later. But in this case, cannot guarantee which event is
-    handled first since the list or queue where posting QDeferredDeleteEvent and appending touch
-    events are different.
-    If touch events are handled first, there is no problem because the device which is used for
-    these events is registered. However if QDeferredDeleteEvent for deleting the device is
-    handled first, this may cause a crash due to using unregistered device when processing touch
-    events later. In order to prevent processing such touch events, check a device which is used
-    for touch events is registered when processing touch events.
-
-    see QGuiApplicationPrivate::processTouchEvent().
- */
 void QEvdevTouchScreenHandler::unregisterPointingDevice()
 {
-    if (!m_device)
-        return;
-
-    if (QGuiApplication::instance()) {
-        m_device->moveToThread(QGuiApplication::instance()->thread());
-        m_device->deleteLater();
-    } else {
-        delete m_device;
-    }
+    delete m_device;
     m_device = nullptr;
 }
 
@@ -565,7 +562,7 @@ void QEvdevTouchScreenData::processInputEvent(input_event *data)
         // Until that use a temporary key.
         int key = m_currentData.trackingId;
         if (key == -1)
-            key = m_contacts.size();
+            key = m_contacts.count();
 
         m_contacts.insert(key, m_currentData);
         m_currentData = Contact();
@@ -774,7 +771,7 @@ void QEvdevTouchScreenData::reportPoints()
 
     // Map the coordinates based on the normalized position. QPA expects 'area'
     // to be in screen coordinates.
-    const int pointCount = m_touchPoints.size();
+    const int pointCount = m_touchPoints.count();
     for (int i = 0; i < pointCount; ++i) {
         QWindowSystemInterface::TouchPoint &tp(m_touchPoints[i]);
 
@@ -901,7 +898,7 @@ void QEvdevTouchScreenHandlerThread::filterAndSendTouchPoints()
 
     } else {
         // Update our estimate for the touch rate. We're making the assumption
-        // that this value will be mostly accurate with the occasional bump,
+        // that this value will be mostly accurate with the occational bump,
         // so we're weighting the existing value high compared to the update.
         const double ratio = 0.9;
         m_touchRate = sqrt(m_touchRate * m_touchRate * ratio + touchDelta * touchDelta * (1.0 - ratio));
@@ -983,5 +980,3 @@ void QEvdevTouchScreenHandlerThread::filterAndSendTouchPoints()
 
 
 QT_END_NAMESPACE
-
-#include "moc_qevdevtouchhandler_p.cpp"

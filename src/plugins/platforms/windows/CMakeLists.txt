@@ -59,10 +59,6 @@ qt_internal_add_plugin(QWindowsIntegrationPlugin
         winmm
         winspool
         wtsapi32
-        shcore
-        comdlg32
-        d3d9
-        runtimeobject
 )
 
 # Resources:
@@ -132,7 +128,7 @@ qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION QT_FEATURE_tablete
     SOURCES
         qwindowstabletsupport.cpp qwindowstabletsupport.h
     INCLUDE_DIRECTORIES
-        ${QtBase_SOURCE_DIR}/src/3rdparty/wintab
+        ${QT_SOURCE_TREE}/src/3rdparty/wintab
 )
 
 qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION QT_FEATURE_sessionmanager

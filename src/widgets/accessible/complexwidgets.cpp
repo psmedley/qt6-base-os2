@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "complexwidgets_p.h"
 
@@ -36,11 +72,9 @@
 #endif
 #include <QDebug>
 
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 QString qt_accStripAmp(const QString &text);
 QString qt_accHotKey(const QString &text);
@@ -177,7 +211,7 @@ QAccessibleTabBar::QAccessibleTabBar(QWidget *w)
 
 QAccessibleTabBar::~QAccessibleTabBar()
 {
-    for (QAccessible::Id id : std::as_const(m_childInterfaces))
+    for (QAccessible::Id id : qAsConst(m_childInterfaces))
         QAccessible::deleteAccessibleInterface(id);
 }
 
@@ -320,16 +354,6 @@ int QAccessibleComboBox::indexOfChild(const QAccessibleInterface *child) const
     return -1;
 }
 
-QAccessibleInterface *QAccessibleComboBox::focusChild() const
-{
-    // The editable combobox is the focus proxy of its lineedit, so the
-    // lineedit itself never gets focus. But it is the accessible focus
-    // child of an editable combobox.
-    if (comboBox()->isEditable())
-        return child(1);
-    return nullptr;
-}
-
 /*! \reimp */
 QString QAccessibleComboBox::text(QAccessible::Text t) const
 {
@@ -358,16 +382,6 @@ QString QAccessibleComboBox::text(QAccessible::Text t) const
     if (str.isEmpty())
         str = QAccessibleWidget::text(t);
     return str;
-}
-
-QAccessible::State QAccessibleComboBox::state() const
-{
-    QAccessible::State s = QAccessibleWidget::state();
-
-    s.expandable = true;
-    s.expanded = isValid() && comboBox()->view()->isVisible();
-
-    return s;
 }
 
 QStringList QAccessibleComboBox::actionNames() const
@@ -430,7 +444,7 @@ QAccessibleInterface *QAccessibleAbstractScrollArea::child(int index) const
 
 int QAccessibleAbstractScrollArea::childCount() const
 {
-    return accessibleChildren().size();
+    return accessibleChildren().count();
 }
 
 int QAccessibleAbstractScrollArea::indexOfChild(const QAccessibleInterface *child) const
@@ -503,9 +517,9 @@ QAccessibleAbstractScrollArea::elementType(QWidget *widget) const
         return Self;
     if (widget == abstractScrollArea()->viewport())
         return Viewport;
-    if (widget->objectName() == "qt_scrollarea_hcontainer"_L1)
+    if (widget->objectName() == QLatin1String("qt_scrollarea_hcontainer"))
         return HorizontalContainer;
-    if (widget->objectName() == "qt_scrollarea_vcontainer"_L1)
+    if (widget->objectName() == QLatin1String("qt_scrollarea_vcontainer"))
         return VerticalContainer;
     if (widget == abstractScrollArea()->cornerWidget())
         return CornerWidget;
@@ -528,4 +542,4 @@ QAccessibleScrollArea::QAccessibleScrollArea(QWidget *widget)
 
 QT_END_NAMESPACE
 
-#endif // QT_CONFIG(accessibility)
+#endif // QT_NO_ACCESSIBILITY

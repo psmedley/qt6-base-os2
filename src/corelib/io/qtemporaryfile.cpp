@@ -1,6 +1,42 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2017 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qtemporaryfile.h"
 
@@ -23,8 +59,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 #if defined(Q_OS_WIN)
 typedef ushort Char;
 
@@ -45,19 +79,19 @@ QTemporaryFileName::QTemporaryFileName(const QString &templateName)
 {
     // Ensure there is a placeholder mask
     QString qfilename = QDir::fromNativeSeparators(templateName);
-    uint phPos = qfilename.size();
+    uint phPos = qfilename.length();
     uint phLength = 0;
 
     while (phPos != 0) {
         --phPos;
 
-        if (qfilename[phPos] == u'X') {
+        if (qfilename[phPos] == QLatin1Char('X')) {
             ++phLength;
             continue;
         }
 
         if (phLength >= 6
-                || qfilename[phPos] == u'/') {
+                || qfilename[phPos] == QLatin1Char('/')) {
             ++phPos;
             break;
         }
@@ -67,7 +101,7 @@ QTemporaryFileName::QTemporaryFileName(const QString &templateName)
     }
 
     if (phLength < 6)
-        qfilename.append(".XXXXXX"_L1);
+        qfilename.append(QLatin1String(".XXXXXX"));
 
     // "Nativify" :-)
     QFileSystemEntry::NativePath filename = QFileSystemEngine::absoluteName(
@@ -75,7 +109,7 @@ QTemporaryFileName::QTemporaryFileName(const QString &templateName)
         .nativeFilePath();
 
     // Find mask in native path
-    phPos = filename.size();
+    phPos = filename.length();
     phLength = 0;
     while (phPos != 0) {
         --phPos;
@@ -109,8 +143,8 @@ QTemporaryFileName::QTemporaryFileName(const QString &templateName)
 QFileSystemEntry::NativePath QTemporaryFileName::generateNext()
 {
     Q_ASSERT(length != 0);
-    Q_ASSERT(pos < path.size());
-    Q_ASSERT(length <= path.size() - pos);
+    Q_ASSERT(pos < path.length());
+    Q_ASSERT(length <= path.length() - pos);
 
     Char *const placeholderStart = (Char *)path.data() + pos;
     Char *const placeholderEnd = placeholderStart + length;
@@ -309,8 +343,7 @@ void QTemporaryFileEngine::setFileName(const QString &file)
     QFSFileEngine::setFileName(file);
 }
 
-bool QTemporaryFileEngine::open(QIODevice::OpenMode openMode,
-                                std::optional<QFile::Permissions> permissions)
+bool QTemporaryFileEngine::open(QIODevice::OpenMode openMode)
 {
     Q_D(QFSFileEngine);
     Q_ASSERT(!isReallyOpen());
@@ -318,7 +351,7 @@ bool QTemporaryFileEngine::open(QIODevice::OpenMode openMode,
     openMode |= QIODevice::ReadWrite;
 
     if (!filePathIsTemplate)
-        return QFSFileEngine::open(openMode, permissions);
+        return QFSFileEngine::open(openMode);
 
     QTemporaryFileName tfn(templateName);
 
@@ -409,7 +442,7 @@ bool QTemporaryFileEngine::close()
 QString QTemporaryFileEngine::fileName(QAbstractFileEngine::FileName file) const
 {
     if (isUnnamedFile()) {
-        if (file == AbsoluteLinkTarget) {
+        if (file == LinkName) {
             // we know our file isn't (won't be) a symlink
             return QString();
         }
@@ -545,9 +578,9 @@ QString QTemporaryFilePrivate::defaultTemplateName()
     baseName = QCoreApplication::applicationName();
     if (baseName.isEmpty())
 #endif
-        baseName = "qt_temp"_L1;
+        baseName = QLatin1String("qt_temp");
 
-    return QDir::tempPath() + u'/' + baseName + ".XXXXXX"_L1;
+    return QDir::tempPath() + QLatin1Char('/') + baseName + QLatin1String(".XXXXXX");
 }
 
 //************* QTemporaryFile
@@ -589,9 +622,6 @@ QString QTemporaryFilePrivate::defaultTemplateName()
     be placed into the temporary path as returned by QDir::tempPath().
     If you specify your own filename, a relative file path will not be placed in the
     temporary directory by default, but be relative to the current working directory.
-    It is important to specify the correct directory if the rename() function will be
-    called, as QTemporaryFile can only rename files within the same volume / filesystem
-    as the temporary file itself was created on.
 
     Specified filenames can contain the following template \c XXXXXX
     (six upper case "X" characters), which will be replaced by the
@@ -643,11 +673,7 @@ QTemporaryFile::QTemporaryFile()
 
     If \a templateName is a relative path, the path will be relative to the
     current working directory. You can use QDir::tempPath() to construct \a
-    templateName if you want use the system's temporary directory. It is
-    important to specify the correct directory if the rename() function will be
-    called, as QTemporaryFile can only rename files within the same volume /
-    filesystem as the temporary file itself was created on.
-
+    templateName if you want use the system's temporary directory.
 
     \sa open(), fileTemplate()
 */
@@ -680,10 +706,7 @@ QTemporaryFile::QTemporaryFile(QObject *parent)
 
     If \a templateName is a relative path, the path will be relative to the
     current working directory. You can use QDir::tempPath() to construct \a
-    templateName if you want use the system's temporary directory. It is
-    important to specify the correct directory if the rename() function will be
-    called, as QTemporaryFile can only rename files within the same volume /
-    filesystem as the temporary file itself was created on.
+    templateName if you want use the system's temporary directory.
 
     \sa open(), fileTemplate()
 */
@@ -802,10 +825,7 @@ QString QTemporaryFile::fileTemplate() const
 
     If \a name contains a relative file path, the path will be relative to the
     current working directory. You can use QDir::tempPath() to construct \a
-    name if you want use the system's temporary directory. It is important to
-    specify the correct directory if the rename() function will be called, as
-    QTemporaryFile can only rename files within the same volume / filesystem as
-    the temporary file itself was created on.
+    name if you want use the system's temporary directory.
 
    \sa fileTemplate()
 */
@@ -816,22 +836,11 @@ void QTemporaryFile::setFileTemplate(const QString &name)
 }
 
 /*!
-    Renames the current temporary file to \a newName and returns true if it
-    succeeded.
+    \internal
 
-    This function has an important difference compared to QFile::rename(): it
-    will not perform a copy+delete if the low-level system call to rename the
-    file fails, something that could happen if \a newName specifies a file in a
-    different volume or filesystem than the temporary file was created on. In
-    other words, QTemporaryFile only supports atomic file renaming.
-
-    This functionality is intended to support materializing the destination
-    file with all contents already present, so another process cannot see an
-    incomplete file in the process of being written. The \l QSaveFile class can
-    be used for a similar purpose too, particularly if the destination file is
-    not temporary.
-
-    \sa QSaveFile, QSaveFile::commit(), QFile::rename()
+    This is just a simplified version of QFile::rename() because we know a few
+    extra details about what kind of file we have. The documentation is hidden
+    from the user because QFile::rename() should be enough.
 */
 bool QTemporaryFile::rename(const QString &newName)
 {

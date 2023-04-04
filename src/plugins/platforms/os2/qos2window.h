@@ -46,8 +46,6 @@
 
 #include <QtCore/QPointer>
 
-#include <qhash.h>
-
 QT_BEGIN_NAMESPACE
 
 class QOS2Window : public QPlatformWindow

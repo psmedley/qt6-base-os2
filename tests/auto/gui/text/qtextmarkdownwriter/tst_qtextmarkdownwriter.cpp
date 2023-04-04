@@ -1,5 +1,30 @@
-// Copyright (C) 2019 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2019 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QTextDocument>
@@ -9,12 +34,8 @@
 #include <QTextTable>
 #include <QBuffer>
 #include <QDebug>
-#include <QFontInfo>
-#include <QLoggingCategory>
 
 #include <private/qtextmarkdownwriter_p.h>
-
-Q_LOGGING_CATEGORY(lcTests, "qt.text.tests")
 
 // #define DEBUG_WRITE_OUTPUT
 
@@ -41,8 +62,6 @@ private slots:
     void fromHtml();
 
 private:
-    bool isMainFontFixed();
-    bool isFixedFontProportional();
     QString documentToUnixMarkdown();
 
 private:
@@ -59,39 +78,10 @@ void tst_QTextMarkdownWriter::cleanup()
     delete document;
 }
 
-bool tst_QTextMarkdownWriter::isMainFontFixed()
-{
-    bool ret = QFontInfo(QGuiApplication::font()).fixedPitch();
-    if (ret) {
-        qCWarning(lcTests) << "QFontDatabase::GeneralFont is monospaced: markdown writing is likely to use too many backticks"
-                           << QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    }
-    return ret;
-}
-
-bool tst_QTextMarkdownWriter::isFixedFontProportional()
-{
-    bool ret = !QFontInfo(QFontDatabase::systemFont(QFontDatabase::FixedFont)).fixedPitch();
-    if (ret) {
-        qCWarning(lcTests) << "QFontDatabase::FixedFont is NOT monospaced: markdown writing is likely to use too few backticks"
-                           << QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    }
-    return ret;
-}
-
-QString tst_QTextMarkdownWriter::documentToUnixMarkdown()
-{
-    QString ret;
-    QTextStream ts(&ret, QIODevice::WriteOnly);
-    QTextMarkdownWriter writer(ts, QTextDocument::MarkdownDialectGitHub);
-    writer.writeAll(document);
-    return ret;
-}
-
 void tst_QTextMarkdownWriter::testWriteParagraph_data()
 {
     QTest::addColumn<QString>("input");
-    QTest::addColumn<QString>("expectedOutput");
+    QTest::addColumn<QString>("output");
 
     QTest::newRow("empty") << "" <<
         "";
@@ -114,15 +104,12 @@ void tst_QTextMarkdownWriter::testWriteParagraph_data()
 void tst_QTextMarkdownWriter::testWriteParagraph()
 {
     QFETCH(QString, input);
-    QFETCH(QString, expectedOutput);
+    QFETCH(QString, output);
 
     QTextCursor cursor(document);
     cursor.insertText(input);
 
-    const QString output = documentToUnixMarkdown();
-    if (output != expectedOutput && isMainFontFixed())
-        QEXPECT_FAIL("", "fixed-pitch main font (QTBUG-103484)", Continue);
-    QCOMPARE(output, expectedOutput);
+    QCOMPARE(documentToUnixMarkdown(), output);
 }
 
 void tst_QTextMarkdownWriter::testWriteList()
@@ -135,11 +122,8 @@ void tst_QTextMarkdownWriter::testWriteList()
     cursor.insertText("ListItem 2");
     list->add(cursor.block());
 
-    const QString output = documentToUnixMarkdown();
-    const QString expected = QString::fromLatin1("- ListItem 1\n- ListItem 2\n");
-    if (output != expected && isMainFontFixed())
-        QEXPECT_FAIL("", "fixed-pitch main font (QTBUG-103484)", Continue);
-    QCOMPARE(output, expected);
+    QCOMPARE(documentToUnixMarkdown(), QString::fromLatin1(
+        "- ListItem 1\n- ListItem 2\n"));
 }
 
 void tst_QTextMarkdownWriter::testWriteEmptyList()
@@ -174,12 +158,8 @@ void tst_QTextMarkdownWriter::testWriteCheckboxListItemEndingWithCode()
     QCOMPARE(cursor.selectedText(), QString::fromLatin1("Image.originalSize"));
     cursor.setCharFormat(fmt);
 
-    const QString output = documentToUnixMarkdown();
-    const QString expected = QString::fromLatin1(
-                "- [ ] `Image.originalSize` property (not necessary; `PdfDocument.pagePointSize()`\n  substitutes)\n");
-    if (output != expected && isMainFontFixed())
-        QEXPECT_FAIL("", "fixed-pitch main font (QTBUG-103484)", Continue);
-    QCOMPARE(output, expected);
+    QCOMPARE(documentToUnixMarkdown(), QString::fromLatin1(
+        "- [ ] `Image.originalSize` property (not necessary; `PdfDocument.pagePointSize()`\n  substitutes)\n"));
 }
 
 void tst_QTextMarkdownWriter::testWriteNestedBulletLists_data()
@@ -261,7 +241,7 @@ void tst_QTextMarkdownWriter::testWriteNestedBulletLists()
         cursor.insertText("continuation");
     }
 
-    const QString output = documentToUnixMarkdown();
+    QString output = documentToUnixMarkdown();
 #ifdef DEBUG_WRITE_OUTPUT
     {
         QFile out("/tmp/" + QLatin1String(QTest::currentDataTag()) + ".md");
@@ -270,9 +250,7 @@ void tst_QTextMarkdownWriter::testWriteNestedBulletLists()
         out.close();
     }
 #endif
-    if (output != expectedOutput && isMainFontFixed())
-        QEXPECT_FAIL("", "fixed-pitch main font (QTBUG-103484)", Continue);
-    QCOMPARE(output, expectedOutput);
+    QCOMPARE(documentToUnixMarkdown(), expectedOutput);
 }
 
 void tst_QTextMarkdownWriter::testWriteNestedNumericLists()
@@ -304,13 +282,9 @@ void tst_QTextMarkdownWriter::testWriteNestedNumericLists()
     cursor.insertText("ListItem 5");
     list2->add(cursor.block());
 
-    const QString output = documentToUnixMarkdown();
     // There's no QTextList API to set the starting number so we hard-coded all lists to start at 1 (QTBUG-65384)
-    const QString expected = QString::fromLatin1(
-                "1.  ListItem 1\n    1)  ListItem 2\n        1.  ListItem 3\n2.  ListItem 4\n    2)  ListItem 5\n");
-    if (output != expected && isMainFontFixed())
-        QEXPECT_FAIL("", "fixed-pitch main font (QTBUG-103484)", Continue);
-    QCOMPARE(output, expected);
+    QCOMPARE(documentToUnixMarkdown(), QString::fromLatin1(
+                 "1.  ListItem 1\n    1)  ListItem 2\n        1.  ListItem 3\n2.  ListItem 4\n    2)  ListItem 5\n"));
 }
 
 void tst_QTextMarkdownWriter::testWriteTable()
@@ -363,8 +337,6 @@ void tst_QTextMarkdownWriter::testWriteTable()
 
     QString expected = QString::fromLatin1(
         "\n|one   |two |three|\n|------|----|-----|\n|alice |bob |carl |\n|dennis|eric|fiona|\n|gina  |    |     |\n\n");
-    if (md != expected && isMainFontFixed())
-        QEXPECT_FAIL("", "fixed-pitch main font (QTBUG-103484)", Continue);
     QCOMPARE(md, expected);
 
     // create table with merged cells
@@ -414,10 +386,7 @@ void tst_QTextMarkdownWriter::testWriteTable()
     }
 #endif
 
-    expected = QString::fromLatin1("\n|a ||b|\n|-|-|-|\n|c|d ||\n|e|f| |\n\n");
-    if (md != expected && isMainFontFixed())
-        QEXPECT_FAIL("", "fixed-pitch main font (QTBUG-103484)", Continue);
-    QCOMPARE(md, expected);
+    QCOMPARE(md, QString::fromLatin1("\n|a ||b|\n|-|-|-|\n|c|d ||\n|e|f| |\n\n"));
 }
 
 void tst_QTextMarkdownWriter::rewriteDocument_data()
@@ -450,14 +419,12 @@ void tst_QTextMarkdownWriter::rewriteDocument()
     out.close();
 #endif
 
-    if (md != orig && isMainFontFixed())
-        QEXPECT_FAIL("", "fixed-pitch main font (QTBUG-103484)", Continue);
     QCOMPARE(md, orig);
 }
 
 void tst_QTextMarkdownWriter::fromHtml_data()
 {
-    QTest::addColumn<QString>("input");
+    QTest::addColumn<QString>("expectedInput");
     QTest::addColumn<QString>("expectedOutput");
 
     QTest::newRow("long URL") <<
@@ -494,25 +461,22 @@ void tst_QTextMarkdownWriter::fromHtml_data()
         "![foo](/url \"title\")\n\n";
     QTest::newRow("code") <<
         "<pre class=\"language-pseudocode\">\n#include \"foo.h\"\n\nblock {\n    statement();\n}\n\n</pre>" <<
-        "```pseudocode\n#include \"foo.h\"\n\nblock {\n    statement();\n}\n\n```\n\n";
+        "```pseudocode\n#include \"foo.h\"\n\nblock {\n    statement();\n}\n```\n\n";
     // TODO
 //    QTest::newRow("escaped number and paren after double newline") <<
 //        "<p>(The first sentence of this paragraph is a line, the next paragraph has a number</p>13) but that's not part of an ordered list" <<
 //        "(The first sentence of this paragraph is a line, the next paragraph has a number\n\n13\\) but that's not part of an ordered list\n\n";
     QTest::newRow("preformats with embedded backticks") <<
-        "<pre>none `one` ``two``</pre>plain<pre>```three``` ````four````</pre>plain" <<
-        "```\nnone `one` ``two``\n\n```\nplain\n\n```\n```three``` ````four````\n\n```\nplain\n\n";
-    QTest::newRow("list items with and without checkboxes") <<
-        "<ul><li>bullet</li><li class=\"unchecked\">unchecked item</li><li class=\"checked\">checked item</li></ul>" <<
-        "- bullet\n- [ ] unchecked item\n- [x] checked item\n";
+        "<pre>none `one` ``two``</pre><pre>```three``` ````four````</pre>plain" <<
+        "``` none `one` ``two`` ```\n\n````` ```three``` ````four```` `````\n\nplain\n\n";
 }
 
 void tst_QTextMarkdownWriter::fromHtml()
 {
-    QFETCH(QString, input);
+    QFETCH(QString, expectedInput);
     QFETCH(QString, expectedOutput);
 
-    document->setHtml(input);
+    document->setHtml(expectedInput);
     QString output = documentToUnixMarkdown();
 
 #ifdef DEBUG_WRITE_OUTPUT
@@ -524,9 +488,16 @@ void tst_QTextMarkdownWriter::fromHtml()
     }
 #endif
 
-    if (output != expectedOutput && (isMainFontFixed() || isFixedFontProportional()))
-        QEXPECT_FAIL("", "fixed main font or proportional fixed font (QTBUG-103484)", Continue);
     QCOMPARE(output, expectedOutput);
+}
+
+QString tst_QTextMarkdownWriter::documentToUnixMarkdown()
+{
+    QString ret;
+    QTextStream ts(&ret, QIODevice::WriteOnly);
+    QTextMarkdownWriter writer(ts, QTextDocument::MarkdownDialectGitHub);
+    writer.writeAll(document);
+    return ret;
 }
 
 QTEST_MAIN(tst_QTextMarkdownWriter)

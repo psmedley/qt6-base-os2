@@ -1,5 +1,41 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /*!
     \class QtIcoHandler
@@ -22,8 +58,6 @@
 QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcIco, "qt.gui.imageio.ico")
-
-namespace {
 
 // These next two structs represent how the icon information is stored
 // in an ICO file.
@@ -63,8 +97,6 @@ typedef struct {                    // BMP information header
     quint32_le biClrImportant;        // number of important colors
 } BMP_INFOHDR ,*LPBMP_INFOHDR;
 #define BMP_INFOHDR_SIZE 40
-
-}
 
 class ICOReader
 {
@@ -176,7 +208,9 @@ bool ICOReader::canRead(QIODevice *iodev)
 
         ICONDIR ikonDir;
         if (readIconDir(iodev, &ikonDir)) {
+            qint64 readBytes = ICONDIR_SIZE;
             if (readIconDirEntry(iodev, &ikonDir.idEntries[0])) {
+                readBytes += ICONDIRENTRY_SIZE;
                 // ICO format does not have a magic identifier, so we read 6 different values, which will hopefully be enough to identify the file.
                 if (   ikonDir.idReserved == 0
                     && (ikonDir.idType == 1 || ikonDir.idType == 2)
@@ -434,9 +468,7 @@ QImage ICOReader::iconAt(int index)
 
             static const uchar pngMagicData[] = { 137, 80, 78, 71, 13, 10, 26, 10 };
 
-            if (!iod->seek(iconEntry.dwImageOffset)
-                || iconEntry.dwBytesInRes > iod->bytesAvailable())
-                return img;
+            iod->seek(iconEntry.dwImageOffset);
 
             const QByteArray pngMagic = QByteArray::fromRawData((const char*)pngMagicData, sizeof(pngMagicData));
             const bool isPngImage = (iod->read(pngMagic.size()) == pngMagic);
@@ -565,14 +597,14 @@ bool ICOReader::write(QIODevice *device, const QList<QImage> &images)
 {
     bool retValue = false;
 
-    if (images.size()) {
+    if (images.count()) {
 
         qint64 origOffset = device->pos();
 
         ICONDIR id;
         id.idReserved = 0;
         id.idType = 1;
-        id.idCount = images.size();
+        id.idCount = images.count();
 
         ICONDIRENTRY * entries = new ICONDIRENTRY[id.idCount];
         BMP_INFOHDR * bmpHeaders = new BMP_INFOHDR[id.idCount];

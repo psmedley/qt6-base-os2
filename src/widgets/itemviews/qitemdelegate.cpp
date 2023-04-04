@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qitemdelegate.h"
 
@@ -22,7 +58,6 @@
 #include <qmetaobject.h>
 #include <qtextlayout.h>
 #include <private/qabstractitemdelegate_p.h>
-#include <private/qabstractitemmodel_p.h>
 #include <private/qtextengine_p.h>
 #include <qdebug.h>
 #include <qlocale.h>
@@ -59,7 +94,7 @@ public:
 
     inline static QString replaceNewLine(QString text)
         {
-            text.replace(u'\n', QChar::LineSeparator);
+            text.replace(QLatin1Char('\n'), QChar::LineSeparator);
             return text;
         }
 
@@ -397,7 +432,7 @@ void QItemDelegate::paint(QPainter *painter,
     Qt::CheckState checkState = Qt::Unchecked;
     value = index.data(Qt::CheckStateRole);
     if (value.isValid()) {
-        checkState = QtPrivate::legacyEnumValueFromModelData<Qt::CheckState>(value);
+        checkState = static_cast<Qt::CheckState>(value.toInt());
         checkRect = doCheck(opt, opt.rect, value);
     }
 
@@ -487,6 +522,10 @@ QWidget *QItemDelegate::createEditor(QWidget *parent,
 
 void QItemDelegate::setEditorData(QWidget *editor, const QModelIndex &index) const
 {
+#ifdef QT_NO_PROPERTIES
+    Q_UNUSED(editor);
+    Q_UNUSED(index);
+#else
     QVariant v = index.data(Qt::EditRole);
     QByteArray n = editor->metaObject()->userProperty().name();
 
@@ -495,6 +534,7 @@ void QItemDelegate::setEditorData(QWidget *editor, const QModelIndex &index) con
             v = QVariant(editor->property(n).metaType());
         editor->setProperty(n, v);
     }
+#endif
 }
 
 /*!
@@ -512,6 +552,11 @@ void QItemDelegate::setModelData(QWidget *editor,
                                  QAbstractItemModel *model,
                                  const QModelIndex &index) const
 {
+#ifdef QT_NO_PROPERTIES
+    Q_UNUSED(model);
+    Q_UNUSED(editor);
+    Q_UNUSED(index);
+#else
     Q_D(const QItemDelegate);
     Q_ASSERT(model);
     Q_ASSERT(editor);
@@ -521,6 +566,7 @@ void QItemDelegate::setModelData(QWidget *editor,
             model->data(index, Qt::EditRole).userType());
     if (!n.isEmpty())
         model->setData(index, editor->property(n), Qt::EditRole);
+#endif
 }
 
 /*!
@@ -1005,10 +1051,10 @@ QRect QItemDelegate::rect(const QStyleOptionViewItem &option,
             break;
         case QMetaType::QPixmap: {
             const QPixmap &pixmap = qvariant_cast<QPixmap>(value);
-            return QRect(QPoint(0, 0), pixmap.deviceIndependentSize().toSize()); }
+            return QRect(QPoint(0, 0), pixmap.size() / pixmap.devicePixelRatio() ); }
         case QMetaType::QImage: {
             const QImage &image = qvariant_cast<QImage>(value);
-            return QRect(QPoint(0, 0), image.deviceIndependentSize().toSize()); }
+            return QRect(QPoint(0, 0), image.size() /  image.devicePixelRatio() ); }
         case QMetaType::QIcon: {
             QIcon::Mode mode = d->iconMode(option.state);
             QIcon::State state = d->iconState(option.state);
@@ -1147,7 +1193,7 @@ bool QItemDelegate::editorEvent(QEvent *event,
         return false;
     }
 
-    Qt::CheckState state = QtPrivate::legacyEnumValueFromModelData<Qt::CheckState>(value);
+    Qt::CheckState state = static_cast<Qt::CheckState>(value.toInt());
     if (flags & Qt::ItemIsUserTristate)
         state = ((Qt::CheckState)((state + 1) % 3));
     else
@@ -1174,7 +1220,7 @@ QStyleOptionViewItem QItemDelegate::setOptions(const QModelIndex &index,
     // set text alignment
     value = index.data(Qt::TextAlignmentRole);
     if (value.isValid())
-        opt.displayAlignment = QtPrivate::legacyFlagValueFromModelData<Qt::Alignment>(value);
+        opt.displayAlignment = Qt::Alignment(value.toInt());
 
     // set foreground brush
     value = index.data(Qt::ForegroundRole);

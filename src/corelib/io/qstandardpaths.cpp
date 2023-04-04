@@ -1,6 +1,42 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qstandardpaths.h"
 
@@ -24,7 +60,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
 /*!
     \class QStandardPaths
     \inmodule QtCore
@@ -118,14 +153,6 @@ using namespace Qt::StringLiterals;
            configuration files should be written. This is an application-specific directory,
            and the returned path is never empty.
            This enum value was added in Qt 5.5.
-    \value PublicShareLocation Returns a directory location where user-specific publicly shared files
-           and directories can be stored. This is a generic value. Note that the returned path may be
-           empty if the system has no concept of a publicly shared location.
-           This enum value was added in Qt 6.4.
-    \value TemplatesLocation Returns a directory location where user-specific
-           template files can be stored. This is a generic value. Note that the returned path may be
-           empty if the system has no concept of a templates location.
-           This enum value was added in Qt 6.4.
 
     The following table gives examples of paths on different operating systems.
     The first path is the writable path (unless noted). Other, additional
@@ -190,12 +217,6 @@ using namespace Qt::StringLiterals;
     \row \li AppConfigLocation
          \li "~/Library/Preferences/<APPNAME>"
          \li "C:/Users/<USER>/AppData/Local/<APPNAME>", "C:/ProgramData/<APPNAME>"
-    \row \li PublicShareLocation
-         \li "~/Public"
-         \li "C:/Users/Public"
-    \row \li TemplatesLocation
-         \li "~/Templates"
-         \li "C:/Users/<USER>/AppData/Roaming/Microsoft/Windows/Templates"
     \endtable
 
     \table
@@ -238,10 +259,6 @@ using namespace Qt::StringLiterals;
          \li "~/.local/share/<APPNAME>", "/usr/local/share/<APPNAME>", "/usr/share/<APPNAME>"
     \row \li AppConfigLocation
          \li "~/.config/<APPNAME>", "/etc/xdg/<APPNAME>"
-    \row \li PublicShareLocation
-         \li "~/Public"
-    \row \li TemplatesLocation
-         \li "~/Templates"
     \endtable
 
     \table
@@ -303,12 +320,6 @@ using namespace Qt::StringLiterals;
     \row \li AppConfigLocation
          \li "<APPROOT>/files/settings"
          \li "<APPROOT>/Library/Preferences/<APPNAME>"
-    \row \li PublicShareLocation
-         \li not supported
-         \li not supported
-    \row \li TemplatesLocation
-         \li not supported
-         \li not supported
     \endtable
 
     In the table above, \c <APPNAME> is usually the organization name, the
@@ -377,7 +388,7 @@ QString QStandardPaths::locate(StandardLocation type, const QString &fileName, L
 {
     const QStringList &dirs = standardLocations(type);
     for (QStringList::const_iterator dir = dirs.constBegin(); dir != dirs.constEnd(); ++dir) {
-        const QString path = *dir + u'/' + fileName;
+        const QString path = *dir + QLatin1Char('/') + fileName;
         if (existsAsSpecified(path, options))
             return path;
     }
@@ -392,7 +403,7 @@ QStringList QStandardPaths::locateAll(StandardLocation type, const QString &file
     const QStringList &dirs = standardLocations(type);
     QStringList result;
     for (QStringList::const_iterator dir = dirs.constBegin(); dir != dirs.constEnd(); ++dir) {
-        const QString path = *dir + u'/' + fileName;
+        const QString path = *dir + QLatin1Char('/') + fileName;
         if (existsAsSpecified(path, options))
             result.append(path);
     }
@@ -404,9 +415,11 @@ static QStringList executableExtensions()
 {
 #ifdef Q_OS_WIN
     // If %PATHEXT% does not contain .exe, it is either empty, malformed, or distorted in ways that we cannot support, anyway.
-    const QStringList pathExt = QString::fromLocal8Bit(qgetenv("PATHEXT")).toLower().split(u';');
-    return pathExt.contains(".exe"_L1, Qt::CaseInsensitive) ?
-           pathExt : QStringList{".exe"_L1, ".com"_L1, ".bat"_L1, ".cmd"_L1};
+    const QStringList pathExt = QString::fromLocal8Bit(qgetenv("PATHEXT")).toLower().split(QLatin1Char(';'));
+    return pathExt.contains(QLatin1String(".exe"), Qt::CaseInsensitive) ?
+           pathExt :
+           QStringList() << QLatin1String(".exe") << QLatin1String(".com")
+                         << QLatin1String(".bat") << QLatin1String(".cmd");
 #elif defined(Q_OS_OS2)
     // Limit to .exe and .cmd for now (.com and .bat require MS-DOS support which we don't support anyway)
     return QStringList() << QLatin1String(".exe") << QLatin1String(".cmd");
@@ -429,7 +442,7 @@ static inline QString searchExecutable(const QStringList &searchPaths,
 {
     const QDir currentDir = QDir::current();
     for (const QString &searchPath : searchPaths) {
-        const QString candidate = currentDir.absoluteFilePath(searchPath + u'/' + executableName);
+        const QString candidate = currentDir.absoluteFilePath(searchPath + QLatin1Char('/') + executableName);
         const QString absPath = checkExecutable(candidate);
         if (!absPath.isEmpty())
             return absPath;
@@ -448,7 +461,7 @@ static inline QString
 {
     const QDir currentDir = QDir::current();
     for (const QString &searchPath : searchPaths) {
-        const QString candidateRoot = currentDir.absoluteFilePath(searchPath + u'/' + executableName);
+        const QString candidateRoot = currentDir.absoluteFilePath(searchPath + QLatin1Char('/') + executableName);
         for (const QString &suffix : suffixes) {
             const QString absPath = checkExecutable(candidateRoot + suffix);
             if (!absPath.isEmpty())
@@ -498,7 +511,7 @@ QString QStandardPaths::findExecutable(const QString &executableName, const QStr
         searchPaths.reserve(rawPaths.size());
         for (const QString &rawPath : rawPaths) {
             QString cleanPath = QDir::cleanPath(rawPath);
-            if (cleanPath.size() > 1 && cleanPath.endsWith(u'/'))
+            if (cleanPath.size() > 1 && cleanPath.endsWith(QLatin1Char('/')))
                 cleanPath.truncate(cleanPath.size() - 1);
             searchPaths.push_back(cleanPath);
         }
@@ -508,9 +521,9 @@ QString QStandardPaths::findExecutable(const QString &executableName, const QStr
     // On Windows, if the name does not have a suffix or a suffix not
     // in PATHEXT ("xx.foo"), append suffixes from PATHEXT.
     static const QStringList executable_extensions = executableExtensions();
-    if (executableName.contains(u'.')) {
+    if (executableName.contains(QLatin1Char('.'))) {
         const QString suffix = QFileInfo(executableName).suffix();
-        if (suffix.isEmpty() || !executable_extensions.contains(u'.' + suffix, Qt::CaseInsensitive))
+        if (suffix.isEmpty() || !executable_extensions.contains(QLatin1Char('.') + suffix, Qt::CaseInsensitive))
             return searchExecutableAppendSuffix(searchPaths, executableName, executable_extensions);
     } else {
         return searchExecutableAppendSuffix(searchPaths, executableName, executable_extensions);
@@ -564,10 +577,6 @@ QString QStandardPaths::displayName(StandardLocation type)
     case AppDataLocation:
     case AppConfigLocation:
         return QCoreApplication::translate("QStandardPaths", "Application Configuration");
-    case PublicShareLocation:
-        return QCoreApplication::translate("QStandardPaths", "Public");
-    case TemplatesLocation:
-        return QCoreApplication::translate("QStandardPaths", "Templates");
     }
     // not reached
     return QString();
@@ -580,7 +589,7 @@ QString QStandardPaths::displayName(StandardLocation type)
   \include standardpath/functiondocs.qdocinc setTestModeEnabled
 */
 
-Q_CONSTINIT static bool qsp_testMode = false;
+static bool qsp_testMode = false;
 
 void QStandardPaths::setTestModeEnabled(bool testMode)
 {

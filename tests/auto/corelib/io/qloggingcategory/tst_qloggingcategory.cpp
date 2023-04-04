@@ -1,11 +1,34 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QMutexLocker>
 #include <QLoggingCategory>
-#include <QMap>
-#include <QStringList>
 
 Q_LOGGING_CATEGORY(TST_LOG, "tst.log")
 Q_LOGGING_CATEGORY(Digia_Oslo_Office_com, "Digia.Oslo.Office.com")
@@ -78,7 +101,7 @@ public:
     {
         QString ret;
         QTextStream out(&ret);
-        for (int a = 0; a < _configitemEntryOrder.size(); a++) {
+        for (int a = 0; a < _configitemEntryOrder.count(); a++) {
             out << _configitemEntryOrder[a]
                    << " = "
                    << _values.value(_configitemEntryOrder[a]) << Qt::endl;
@@ -153,7 +176,7 @@ inline QString cleanLogLine(const QString &qstring)
     buf.remove("../");
     buf.remove("qlog/");
     QString ret;
-    for (int i = 0; i < buf.size(); i++) {
+    for (int i = 0; i < buf.length(); i++) {
         if (buf[i] >= '!' && buf[i] <= 'z')
             ret += buf[i];
     }
@@ -903,7 +926,7 @@ private slots:
         buf = QStringLiteral("Digia.Berlin.Office.com.debug: Berlin  \"from Thread 2\"  :false");
         compareagainst.append(cleanLogLine(buf));
 
-        for (int i = 0; i < threadtest.size(); i++) {
+        for (int i = 0; i < threadtest.count(); i++) {
             if (!compareagainst.contains(cleanLogLine(threadtest[i]))){
                 fprintf(stdout, "%s\r\n", threadtest[i].toLatin1().constData());
                 QVERIFY2(false, "Multithread log is not complete!");

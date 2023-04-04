@@ -123,7 +123,6 @@ struct hb_sanitize_context_t :
   hb_sanitize_context_t () :
 	start (nullptr), end (nullptr),
 	max_ops (0), max_subtables (0),
-        recursion_depth (0),
 	writable (false), edit_count (0),
 	blob (nullptr),
 	num_glyphs (65536),
@@ -146,14 +145,14 @@ struct hb_sanitize_context_t :
   private:
   template <typename T, typename ...Ts> auto
   _dispatch (const T &obj, hb_priority<1>, Ts&&... ds) HB_AUTO_RETURN
-  ( obj.sanitize (this, std::forward<Ts> (ds)...) )
+  ( obj.sanitize (this, hb_forward<Ts> (ds)...) )
   template <typename T, typename ...Ts> auto
   _dispatch (const T &obj, hb_priority<0>, Ts&&... ds) HB_AUTO_RETURN
-  ( obj.dispatch (this, std::forward<Ts> (ds)...) )
+  ( obj.dispatch (this, hb_forward<Ts> (ds)...) )
   public:
   template <typename T, typename ...Ts> auto
   dispatch (const T &obj, Ts&&... ds) HB_AUTO_RETURN
-  ( _dispatch (obj, hb_prioritize, std::forward<Ts> (ds)...) )
+  ( _dispatch (obj, hb_prioritize, hb_forward<Ts> (ds)...) )
 
 
   void init (hb_blob_t *b)
@@ -198,16 +197,14 @@ struct hb_sanitize_context_t :
   void start_processing ()
   {
     reset_object ();
-    unsigned m;
-    if (unlikely (hb_unsigned_mul_overflows (this->end - this->start, HB_SANITIZE_MAX_OPS_FACTOR, &m)))
+    if (unlikely (hb_unsigned_mul_overflows (this->end - this->start, HB_SANITIZE_MAX_OPS_FACTOR)))
       this->max_ops = HB_SANITIZE_MAX_OPS_MAX;
     else
-      this->max_ops = hb_clamp (m,
+      this->max_ops = hb_clamp ((unsigned) (this->end - this->start) * HB_SANITIZE_MAX_OPS_FACTOR,
 				(unsigned) HB_SANITIZE_MAX_OPS_MIN,
 				(unsigned) HB_SANITIZE_MAX_OPS_MAX);
     this->edit_count = 0;
     this->debug_depth = 0;
-    this->recursion_depth = 0;
 
     DEBUG_MSG_LEVEL (SANITIZE, start, 0, +1,
 		     "start [%p..%p] (%lu bytes)",
@@ -240,7 +237,7 @@ struct hb_sanitize_context_t :
 
     DEBUG_MSG_LEVEL (SANITIZE, p, this->debug_depth+1, 0,
 		     "check_range [%p..%p]"
-		     " (%u bytes) in [%p..%p] -> %s",
+		     " (%d bytes) in [%p..%p] -> %s",
 		     p, p + len, len,
 		     this->start, this->end,
 		     ok ? "OK" : "OUT-OF-RANGE");
@@ -253,9 +250,8 @@ struct hb_sanitize_context_t :
 		    unsigned int a,
 		    unsigned int b) const
   {
-    unsigned m;
-    return !hb_unsigned_mul_overflows (a, b, &m) &&
-	   this->check_range (base, m);
+    return !hb_unsigned_mul_overflows (a, b) &&
+	   this->check_range (base, a * b);
   }
 
   template <typename T>
@@ -264,9 +260,8 @@ struct hb_sanitize_context_t :
 		    unsigned int b,
 		    unsigned int c) const
   {
-    unsigned m;
-    return !hb_unsigned_mul_overflows (a, b, &m) &&
-	   this->check_range (base, m, c);
+    return !hb_unsigned_mul_overflows (a, b) &&
+	   this->check_range (base, a * b, c);
   }
 
   template <typename T>
@@ -283,18 +278,6 @@ struct hb_sanitize_context_t :
     return this->check_range (base, a, b, hb_static_size (T));
   }
 
-  bool check_start_recursion (int max_depth)
-  {
-    if (unlikely (recursion_depth >= max_depth)) return false;
-    return ++recursion_depth;
-  }
-
-  bool end_recursion (bool result)
-  {
-    recursion_depth--;
-    return result;
-  }
-
   template <typename Type>
   bool check_struct (const Type *obj) const
   { return likely (this->check_range (obj, obj->min_size)); }
@@ -308,7 +291,7 @@ struct hb_sanitize_context_t :
     this->edit_count++;
 
     DEBUG_MSG_LEVEL (SANITIZE, p, this->debug_depth+1, 0,
-       "may_edit(%u) [%p..%p] (%u bytes) in [%p..%p] -> %s",
+       "may_edit(%u) [%p..%p] (%d bytes) in [%p..%p] -> %s",
        this->edit_count,
        p, p + len, len,
        this->start, this->end,
@@ -353,13 +336,13 @@ struct hb_sanitize_context_t :
     {
       if (edit_count)
       {
-	DEBUG_MSG_FUNC (SANITIZE, start, "passed first round with %u edits; going for second round", edit_count);
+	DEBUG_MSG_FUNC (SANITIZE, start, "passed first round with %d edits; going for second round", edit_count);
 
 	/* sanitize again to ensure no toe-stepping */
 	edit_count = 0;
 	sane = t->sanitize (this);
 	if (edit_count) {
-	  DEBUG_MSG_FUNC (SANITIZE, start, "requested %u edits in second round; FAILLING", edit_count);
+	  DEBUG_MSG_FUNC (SANITIZE, start, "requested %d edits in second round; FAILLING", edit_count);
 	  sane = false;
 	}
       }
@@ -406,7 +389,6 @@ struct hb_sanitize_context_t :
   const char *start, *end;
   mutable int max_ops, max_subtables;
   private:
-  int recursion_depth;
   bool writable;
   unsigned int edit_count;
   hb_blob_t *blob;

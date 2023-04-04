@@ -1,5 +1,41 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "private/qabstractbutton_p.h"
 
@@ -16,10 +52,9 @@
 #include "qpainter.h"
 #include "qapplication.h"
 #include "qstyle.h"
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
 #endif
-#include <qpa/qplatformtheme.h>
 
 #include <algorithm>
 
@@ -180,10 +215,10 @@ QAbstractButton *QAbstractButtonPrivate::queryCheckedButton() const
 
     Q_Q(const QAbstractButton);
     QList<QAbstractButton *> buttonList = queryButtonList();
-    if (!autoExclusive || buttonList.size() == 1) // no group
+    if (!autoExclusive || buttonList.count() == 1) // no group
         return nullptr;
 
-    for (int i = 0; i < buttonList.size(); ++i) {
+    for (int i = 0; i < buttonList.count(); ++i) {
         QAbstractButton *b = buttonList.at(i);
         if (b->d_func()->checked && b != q)
             return b;
@@ -227,7 +262,7 @@ void QAbstractButtonPrivate::moveFocus(int key)
     QPoint goal = target.center();
     uint focus_flag = qt_tab_all_widgets() ? Qt::TabFocus : Qt::StrongFocus;
 
-    for (int i = 0; i < buttonList.size(); ++i) {
+    for (int i = 0; i < buttonList.count(); ++i) {
         QAbstractButton *button = buttonList.at(i);
         if (button != f && button->window() == f->window() && button->isEnabled() && !button->isHidden() &&
             (exclusive || (button->focusPolicy() & focus_flag) == focus_flag)) {
@@ -310,7 +345,7 @@ void QAbstractButtonPrivate::fixFocusPolicy()
         return;
 
     QList<QAbstractButton *> buttonList = queryButtonList();
-    for (int i = 0; i < buttonList.size(); ++i) {
+    for (int i = 0; i < buttonList.count(); ++i) {
         QAbstractButton *b = buttonList.at(i);
         if (!b->isCheckable())
             continue;
@@ -490,7 +525,7 @@ void QAbstractButton::setText(const QString &text)
     d->sizeHint = QSize();
     update();
     updateGeometry();
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
     QAccessibleEvent event(this, QAccessible::NameChanged);
     QAccessible::updateAccessibility(&event);
 #endif
@@ -614,7 +649,7 @@ void QAbstractButton::setChecked(bool checked)
         d->emitToggled(checked);
 
 
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
     QAccessible::State s;
     s.checked = true;
     QAccessibleStateChangeEvent event(this, s);
@@ -904,6 +939,9 @@ bool QAbstractButton::event(QEvent *e)
         case QEvent::HoverEnter:
         case QEvent::HoverLeave:
         case QEvent::ContextMenu:
+#if QT_CONFIG(wheelevent)
+        case QEvent::Wheel:
+#endif
             return true;
         default:
             break;
@@ -1005,19 +1043,19 @@ void QAbstractButton::keyPressEvent(QKeyEvent *e)
 {
     Q_D(QAbstractButton);
     bool next = true;
-
-    const auto key = e->key();
-    const auto buttonPressKeys = QGuiApplicationPrivate::platformTheme()
-                                         ->themeHint(QPlatformTheme::ButtonPressKeys)
-                                         .value<QList<Qt::Key>>();
-    if (buttonPressKeys.contains(key) && !e->isAutoRepeat()) {
-        setDown(true);
-        repaint();
-        d->emitPressed();
-        return;
-    }
-
-    switch (key) {
+    switch (e->key()) {
+    case Qt::Key_Enter:
+    case Qt::Key_Return:
+        e->ignore();
+        break;
+    case Qt::Key_Select:
+    case Qt::Key_Space:
+        if (!e->isAutoRepeat()) {
+            setDown(true);
+            repaint();
+            d->emitPressed();
+        }
+        break;
     case Qt::Key_Up:
         next = false;
         Q_FALLTHROUGH();
@@ -1047,7 +1085,7 @@ void QAbstractButton::keyPressEvent(QKeyEvent *e)
             // cleaned up when fixing task 194373. It's here to ensure that we
             // keep compatibility outside QAbstractItemView.
             d->moveFocus(e->key());
-            if (hasFocus()) // nothing happened, propagate
+            if (hasFocus()) // nothing happend, propagate
                 e->ignore();
         } else {
             // Prefer parent widget, use this if parent is absent
@@ -1082,15 +1120,15 @@ void QAbstractButton::keyReleaseEvent(QKeyEvent *e)
     if (!e->isAutoRepeat())
         d->repeatTimer.stop();
 
-    const auto buttonPressKeys = QGuiApplicationPrivate::platformTheme()
-                                         ->themeHint(QPlatformTheme::ButtonPressKeys)
-                                         .value<QList<Qt::Key>>();
-    if (buttonPressKeys.contains(e->key()) && !e->isAutoRepeat() && d->down) {
-        d->click();
-        return;
+    switch (e->key()) {
+    case Qt::Key_Select:
+    case Qt::Key_Space:
+        if (!e->isAutoRepeat() && d->down)
+            d->click();
+        break;
+    default:
+        e->ignore();
     }
-
-    e->ignore();
 }
 
 /*!\reimp

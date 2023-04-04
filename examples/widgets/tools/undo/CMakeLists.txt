@@ -1,18 +1,23 @@
+# Generated from undo.pro.
+
 cmake_minimum_required(VERSION 3.16)
 project(undo LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-    set(INSTALL_EXAMPLESDIR "examples")
+  set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/widgets/tools/undo")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 COMPONENTS Core)
+find_package(Qt6 COMPONENTS Gui)
+find_package(Qt6 COMPONENTS Widgets)
 
 qt_add_executable(undo
     commands.cpp commands.h
@@ -20,17 +25,16 @@ qt_add_executable(undo
     main.cpp
     mainwindow.cpp mainwindow.h mainwindow.ui
 )
-
 set_target_properties(undo PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
-
 target_link_libraries(undo PUBLIC
     Qt::Core
     Qt::Gui
     Qt::Widgets
 )
+
 
 # Resources:
 set(undo_resource_files
@@ -52,7 +56,7 @@ set(undo_resource_files
     "icons/undo.png"
 )
 
-qt_add_resources(undo "undo"
+qt6_add_resources(undo "undo"
     PREFIX
         "/"
     FILES

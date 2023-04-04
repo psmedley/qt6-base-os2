@@ -1,11 +1,46 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qwindowsopengltester.h"
 #include "qwindowscontext.h"
 
 #include <QtCore/qvariant.h>
-#include <QtCore/qmap.h>
 #include <QtCore/qdebug.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qcoreapplication.h>
@@ -21,6 +56,7 @@
 #endif
 
 #include <QtCore/qt_windows.h>
+#include <private/qsystemlibrary_p.h>
 #include <d3d9.h>
 
 QT_BEGIN_NAMESPACE
@@ -59,12 +95,19 @@ public:
     bool retrieveAdapterIdentifier(UINT n, D3DADAPTER_IDENTIFIER9 *adapterIdentifier) const;
 
 private:
+    QSystemLibrary m_d3d9lib;
     IDirect3D9 *m_direct3D9 = nullptr;
 };
 
-QDirect3D9Handle::QDirect3D9Handle()
+QDirect3D9Handle::QDirect3D9Handle() :
+    m_d3d9lib(QStringLiteral("d3d9"))
 {
-    m_direct3D9 = Direct3DCreate9(D3D_SDK_VERSION);
+    using PtrDirect3DCreate9 = IDirect3D9 *(WINAPI *)(UINT);
+
+    if (m_d3d9lib.load()) {
+        if (auto direct3DCreate9 = (PtrDirect3DCreate9)m_d3d9lib.resolve("Direct3DCreate9"))
+            m_direct3D9 = direct3DCreate9(D3D_SDK_VERSION);
+    }
 }
 
 QDirect3D9Handle::~QDirect3D9Handle()
@@ -182,13 +225,13 @@ QVariant GpuDescription::toVariant() const
     result.insert(QStringLiteral("deviceId"), QVariant(deviceId));
     result.insert(QStringLiteral("subSysId"),QVariant(subSysId));
     result.insert(QStringLiteral("revision"), QVariant(revision));
-    result.insert(QStringLiteral("driver"), QVariant(QLatin1StringView(driverName)));
+    result.insert(QStringLiteral("driver"), QVariant(QLatin1String(driverName)));
     result.insert(QStringLiteral("driverProduct"), QVariant(driverVersion.segmentAt(0)));
     result.insert(QStringLiteral("driverVersion"), QVariant(driverVersion.segmentAt(1)));
     result.insert(QStringLiteral("driverSubVersion"), QVariant(driverVersion.segmentAt(2)));
     result.insert(QStringLiteral("driverBuild"), QVariant(driverVersion.segmentAt(3)));
     result.insert(QStringLiteral("driverVersionString"), driverVersion.toString());
-    result.insert(QStringLiteral("description"), QVariant(QLatin1StringView(description)));
+    result.insert(QStringLiteral("description"), QVariant(QLatin1String(description)));
     result.insert(QStringLiteral("printable"), QVariant(toString()));
     return result;
 }

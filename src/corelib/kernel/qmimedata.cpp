@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qmimedata.h"
 
@@ -9,8 +45,6 @@
 #include "qstringconverter.h"
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 static inline QString textUriListLiteral() { return QStringLiteral("text/uri-list"); }
 static inline QString textHtmlLiteral() { return QStringLiteral("text/html"); }
@@ -84,7 +118,7 @@ QVariant QMimeDataPrivate::retrieveTypedData(const QString &format, QMetaType ty
     QVariant data = q->retrieveData(format, type);
 
     // Text data requested: fallback to URL data if available
-    if (format == "text/plain"_L1 && !data.isValid()) {
+    if (format == QLatin1String("text/plain") && !data.isValid()) {
         data = retrieveTypedData(textUriListLiteral(), QMetaType(QMetaType::QVariantList));
         if (data.metaType().id() == QMetaType::QUrl) {
             data = QVariant(data.toUrl().toDisplayString());
@@ -94,7 +128,7 @@ QVariant QMimeDataPrivate::retrieveTypedData(const QString &format, QMetaType ty
             const QList<QVariant> list = data.toList();
             for (int i = 0; i < list.size(); ++i) {
                 if (list.at(i).metaType().id() == QMetaType::QUrl) {
-                    text += list.at(i).toUrl().toDisplayString() + u'\n';
+                    text += list.at(i).toUrl().toDisplayString() + QLatin1Char('\n');
                     ++numUrls;
                 }
             }
@@ -124,12 +158,11 @@ QVariant QMimeDataPrivate::retrieveTypedData(const QString &format, QMetaType ty
         switch (typeId) {
         case QMetaType::QString: {
             const QByteArray ba = data.toByteArray();
-            if (ba.isNull())
-                return QVariant();
-            if (format == "text/html"_L1) {
-                QStringDecoder decoder = QStringDecoder::decoderForHtml(ba);
-                if (decoder.isValid()) {
-                    return QString(decoder(ba));
+            if (format == QLatin1String("text/html")) {
+                auto encoding = QStringConverter::encodingForHtml(ba);
+                if (encoding) {
+                    QStringDecoder toUtf16(*encoding);
+                    return QString(toUtf16(ba));
                 }
                 // fall back to utf8
             }
@@ -137,11 +170,13 @@ QVariant QMimeDataPrivate::retrieveTypedData(const QString &format, QMetaType ty
         }
         case QMetaType::QColor: {
             QVariant newData = data;
-            newData.convert(QMetaType(QMetaType::QColor));
+QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
+            newData.convert(QMetaType::QColor);
+QT_WARNING_POP
             return newData;
         }
         case QMetaType::QVariantList: {
-            if (format != "text/uri-list"_L1)
+            if (format != QLatin1String("text/uri-list"))
                 break;
             Q_FALLTHROUGH();
         }
@@ -559,7 +594,7 @@ void QMimeData::setData(const QString &mimeType, const QByteArray &data)
 {
     Q_D(QMimeData);
 
-    if (mimeType == "text/uri-list"_L1) {
+    if (mimeType == QLatin1String("text/uri-list")) {
         QByteArray ba = data;
         if (ba.endsWith('\0'))
             ba.chop(1);

@@ -1,6 +1,42 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// Copyright (C) 2013 BogDan Vatra <bogdan@kde.org>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2018 The Qt Company Ltd.
+** Copyright (C) 2013 BogDan Vatra <bogdan@kde.org>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qandroidplatformdialoghelpers.h"
 #include "androidjnimain.h"
@@ -12,20 +48,16 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 namespace QtAndroidDialogHelpers {
-static jclass g_messageDialogHelperClass = nullptr;
+static jclass g_messageDialogHelperClass = 0;
+
+static const char QtMessageHandlerHelperClassName[] = "org/qtproject/qt/android/QtMessageDialogHelper";
 
 QAndroidPlatformMessageDialogHelper::QAndroidPlatformMessageDialogHelper()
-    : m_javaMessageDialog(g_messageDialogHelperClass, "(Landroid/app/Activity;)V",
-                          QtAndroid::activity())
+    :m_buttonId(-1)
+    ,m_javaMessageDialog(g_messageDialogHelperClass, "(Landroid/app/Activity;)V", QtAndroid::activity())
+    ,m_shown(false)
 {
-}
-
-QAndroidPlatformMessageDialogHelper::~QAndroidPlatformMessageDialogHelper()
-{
-    hide();
 }
 
 void QAndroidPlatformMessageDialogHelper::exec()
@@ -39,13 +71,13 @@ static QString htmlText(QString text)
 {
     if (Qt::mightBeRichText(text))
         return text;
-    text.remove(u'\r');
-    return text.toHtmlEscaped().replace(u'\n', "<br />"_L1);
+    text.remove(QLatin1Char('\r'));
+    return text.toHtmlEscaped().replace(QLatin1Char('\n'), QLatin1String("<br />"));
 }
 
-bool QAndroidPlatformMessageDialogHelper::show(Qt::WindowFlags windowFlags,
-                                               Qt::WindowModality windowModality,
-                                               QWindow *parent)
+bool QAndroidPlatformMessageDialogHelper::show(Qt::WindowFlags windowFlags
+                                         , Qt::WindowModality windowModality
+                                         , QWindow *parent)
 {
     Q_UNUSED(windowFlags);
     Q_UNUSED(windowModality);
@@ -57,32 +89,24 @@ bool QAndroidPlatformMessageDialogHelper::show(Qt::WindowFlags windowFlags,
     m_javaMessageDialog.callMethod<void>("setIcon", "(I)V", opt->icon());
 
     QString str = htmlText(opt->windowTitle());
-    if (!str.isEmpty()) {
-        m_javaMessageDialog.callMethod<void>("setTile", "(Ljava/lang/String;)V",
-                                             QJniObject::fromString(str).object());
-    }
+    if (!str.isEmpty())
+        m_javaMessageDialog.callMethod<void>("setTile", "(Ljava/lang/String;)V", QJniObject::fromString(str).object());
 
     str = htmlText(opt->text());
-    if (!str.isEmpty()) {
-        m_javaMessageDialog.callMethod<void>("setText", "(Ljava/lang/String;)V",
-                                             QJniObject::fromString(str).object());
-    }
+    if (!str.isEmpty())
+        m_javaMessageDialog.callMethod<void>("setText", "(Ljava/lang/String;)V", QJniObject::fromString(str).object());
 
     str = htmlText(opt->informativeText());
-    if (!str.isEmpty()) {
-        m_javaMessageDialog.callMethod<void>("setInformativeText", "(Ljava/lang/String;)V",
-                                             QJniObject::fromString(str).object());
-    }
+    if (!str.isEmpty())
+        m_javaMessageDialog.callMethod<void>("setInformativeText", "(Ljava/lang/String;)V", QJniObject::fromString(str).object());
 
     str = htmlText(opt->detailedText());
-    if (!str.isEmpty()) {
-        m_javaMessageDialog.callMethod<void>("setDetailedText", "(Ljava/lang/String;)V",
-                                             QJniObject::fromString(str).object());
-    }
+    if (!str.isEmpty())
+        m_javaMessageDialog.callMethod<void>("setDetailedText", "(Ljava/lang/String;)V", QJniObject::fromString(str).object());
 
-    const int *currentLayout = buttonLayout(Qt::Horizontal, AndroidLayout);
+    const int * currentLayout = buttonLayout(Qt::Horizontal, AndroidLayout);
     while (*currentLayout != QPlatformDialogHelper::EOL) {
-        const int role = (*currentLayout & ~QPlatformDialogHelper::Reverse);
+        int role = (*currentLayout & ~QPlatformDialogHelper::Reverse);
         addButtons(opt, static_cast<ButtonRole>(role));
         ++currentLayout;
     }
@@ -92,8 +116,7 @@ bool QAndroidPlatformMessageDialogHelper::show(Qt::WindowFlags windowFlags,
     return true;
 }
 
-void QAndroidPlatformMessageDialogHelper::addButtons(QSharedPointer<QMessageDialogOptions> opt,
-                                                     ButtonRole role)
+void QAndroidPlatformMessageDialogHelper::addButtons(QSharedPointer<QMessageDialogOptions> opt, ButtonRole role)
 {
     for (const QMessageDialogOptions::CustomButton &b : opt->customButtons()) {
         if (b.role == role) {
@@ -108,8 +131,7 @@ void QAndroidPlatformMessageDialogHelper::addButtons(QSharedPointer<QMessageDial
         StandardButton b = static_cast<StandardButton>(i);
         if (buttonRole(b) == role && (opt->standardButtons() & i)) {
             const QString text = QGuiApplicationPrivate::platformTheme()->standardButtonText(b);
-            m_javaMessageDialog.callMethod<void>("addButton", "(ILjava/lang/String;)V", i,
-                                                 QJniObject::fromString(text).object());
+            m_javaMessageDialog.callMethod<void>("addButton", "(ILjava/lang/String;)V", i, QJniObject::fromString(text).object());
         }
     }
 }
@@ -122,17 +144,17 @@ void QAndroidPlatformMessageDialogHelper::hide()
 
 void QAndroidPlatformMessageDialogHelper::dialogResult(int buttonID)
 {
+    m_buttonId = buttonID;
     if (m_loop.isRunning())
         m_loop.exit();
-    if (buttonID < 0) {
+    if (m_buttonId < 0) {
         emit reject();
         return;
     }
 
-    const StandardButton standardButton = static_cast<StandardButton>(buttonID);
-    ButtonRole role = QPlatformDialogHelper::buttonRole(standardButton);
+    QPlatformDialogHelper::StandardButton standardButton = static_cast<QPlatformDialogHelper::StandardButton>(buttonID);
+    QPlatformDialogHelper::ButtonRole role = QPlatformDialogHelper::buttonRole(standardButton);
     if (buttonID > QPlatformDialogHelper::LastButton) {
-        // In case of a custom button
         const QMessageDialogOptions::CustomButton *custom = options()->customButton(buttonID);
         Q_ASSERT(custom);
         role = custom->role;
@@ -161,7 +183,6 @@ static JNINativeMethod methods[] = {
 
 bool registerNatives(JNIEnv *env)
 {
-    const char QtMessageHandlerHelperClassName[] = "org/qtproject/qt/android/QtMessageDialogHelper";
     QJniEnvironment qenv;
     jclass clazz = qenv.findClass(QtMessageHandlerHelperClassName);
     if (!clazz) {

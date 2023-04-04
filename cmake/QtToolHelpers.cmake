@@ -1,4 +1,6 @@
 # This function is used to define a "Qt tool", such as moc, uic or rcc.
+# The BOOTSTRAP option allows building it as standalone program, otherwise
+# it will be linked against QtCore.
 #
 # USER_FACING can be passed to mark the tool as a program that is supposed to be
 # started directly by users.
@@ -26,19 +28,13 @@
 #     TOOLS_TARGET
 #         Specifies the module this tool belongs to. The module's Qt6${module}Tools.cmake file
 #         will then contain targets for this tool.
-#     CORE_LIBRARY
-#         The argument accepts 'Bootstrap' or 'None' values. If the argument value is set to
-#         'Bootstrap' the Qt::Bootstrap library is linked to the executable instead of Qt::Core.
-#         The 'None' value points that core library is not necessary and avoids linking neither
-#         Qt::Core or Qt::Bootstrap libraries. Otherwise the Qt::Core library will be publicly
-#         linked to the executable target by default.
+#
 function(qt_internal_add_tool target_name)
     qt_tool_target_to_name(name ${target_name})
-    set(option_keywords NO_INSTALL USER_FACING INSTALL_VERSIONED_LINK EXCEPTIONS)
+    set(option_keywords BOOTSTRAP NO_INSTALL USER_FACING INSTALL_VERSIONED_LINK EXCEPTIONS)
     set(one_value_keywords
         TOOLS_TARGET
         INSTALL_DIR
-        CORE_LIBRARY
         ${__default_target_info_args})
     set(multi_value_keywords
         EXTRA_CMAKE_FILES
@@ -56,7 +52,7 @@ function(qt_internal_add_tool target_name)
                             " (QT_WILL_BUILD_TOOLS is ${QT_WILL_BUILD_TOOLS}).")
     endif()
 
-    if(QT_WILL_RENAME_TOOL_TARGETS AND (name STREQUAL target_name))
+    if(CMAKE_CROSSCOMPILING AND QT_BUILD_TOOLS_WHEN_CROSSCOMPILING AND (name STREQUAL target_name))
         message(FATAL_ERROR
             "qt_internal_add_tool must be passed a target obtained from qt_get_tool_target_name.")
     endif()
@@ -65,8 +61,8 @@ function(qt_internal_add_tool target_name)
     set(imported_tool_target_already_found FALSE)
 
     # This condition can only be TRUE if a previous find_package(Qt6${arg_TOOLS_TARGET}Tools)
-    # was already done. That can happen if QT_FORCE_FIND_TOOLS was ON or we're cross-compiling.
-    # In such a case, we need to exit early if we're not going to also build the tools.
+    # was already done. That can happen if we are cross compiling or QT_FORCE_FIND_TOOLS was ON.
+    # In such a case, we need to exit early if we're not going to also cross-build the tools.
     if(TARGET ${full_name})
         get_property(path TARGET ${full_name} PROPERTY LOCATION)
         message(STATUS "Tool '${full_name}' was found at ${path}.")
@@ -76,12 +72,15 @@ function(qt_internal_add_tool target_name)
         endif()
     endif()
 
-    # We need to search for the host Tools package when doing a cross-build
-    # or when QT_FORCE_FIND_TOOLS is ON.
+    # We need to search for the host Tools package when:
+    # - doing a cross-build and tools are not cross-built
+    # - doing a cross-build and tools ARE cross-built
+    # - QT_FORCE_FIND_TOOLS is ON
+    # This collapses to the condition below.
     # As an optimiziation, we don't search for the package one more time if the target
     # was already brought into scope from a previous find_package.
     set(search_for_host_package FALSE)
-    if(NOT QT_WILL_BUILD_TOOLS OR QT_WILL_RENAME_TOOL_TARGETS)
+    if(NOT QT_WILL_BUILD_TOOLS OR QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
         set(search_for_host_package TRUE)
     endif()
     if(search_for_host_package AND NOT imported_tool_target_already_found)
@@ -121,7 +120,7 @@ function(qt_internal_add_tool target_name)
             # This should never happen, serves as an assert.
             message(FATAL_ERROR
                 "Neither QT_HOST_PATH_CMAKE_DIR nor "
-                "Qt${PROJECT_VERSION_MAJOR}HostInfo_DIR available.")
+                "Qt${PROJECT_VERSION_MAJOR}HostInfo_DIR} available.")
         endif()
         set(CMAKE_PREFIX_PATH "${qt_host_path_cmake_dir_absolute}")
 
@@ -161,38 +160,35 @@ function(qt_internal_add_tool target_name)
             qt_internal_append_known_modules_with_tools("${arg_TOOLS_TARGET}")
             get_property(path TARGET ${full_name} PROPERTY LOCATION)
             message(STATUS "${full_name} was found at ${path} using package ${tools_package_name}.")
-            if (NOT QT_FORCE_BUILD_TOOLS)
+            if (NOT QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
                 return()
             endif()
         endif()
     endif()
 
     if(NOT QT_WILL_BUILD_TOOLS)
-        if(${${tools_package_name}_FOUND})
-            set(pkg_found_msg "")
-            string(APPEND pkg_found_msg
-                "the ${tools_package_name} package, but the package did not contain the tool. "
-                "Make sure that the host module ${arg_TOOLS_TARGET} was built with all features "
-                "enabled (no explicitly disabled tools).")
-        else()
-            set(pkg_found_msg "")
-            string(APPEND pkg_found_msg
-                "the ${tools_package_name} package, but the package could not be found. "
-                "Make sure you have built and installed the host ${arg_TOOLS_TARGET} module, "
-                "which will ensure the creation of the ${tools_package_name} package.")
-        endif()
-        message(FATAL_ERROR
-            "Failed to find the host tool \"${full_name}\". It is part of "
-            ${pkg_found_msg})
+        message(FATAL_ERROR "The tool \"${full_name}\" was not found in the "
+                           "${tools_package_name} package. "
+                           "Package found: ${${tools_package_name}_FOUND}")
     else()
-        message(STATUS "Tool '${full_name}' will be built from source.")
+        if(QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
+            message(STATUS "Tool '${target_name}' will be cross-built from source.")
+        else()
+            message(STATUS "Tool '${full_name}' will be built from source.")
+        endif()
     endif()
 
     set(disable_autogen_tools "${arg_DISABLE_AUTOGEN_TOOLS}")
-    set(corelib "")
-    if(arg_CORE_LIBRARY STREQUAL "Bootstrap" OR arg_CORE_LIBRARY STREQUAL "None")
-        set(corelib CORE_LIBRARY ${arg_CORE_LIBRARY})
+    if (arg_BOOTSTRAP)
+        set(corelib ${QT_CMAKE_EXPORT_NAMESPACE}::Bootstrap)
         list(APPEND disable_autogen_tools "uic" "moc" "rcc")
+    else()
+        set(corelib ${QT_CMAKE_EXPORT_NAMESPACE}::Core)
+    endif()
+
+    set(bootstrap "")
+    if(arg_BOOTSTRAP)
+        set(bootstrap BOOTSTRAP)
     endif()
 
     set(exceptions "")
@@ -209,6 +205,7 @@ function(qt_internal_add_tool target_name)
 
     qt_internal_add_executable("${target_name}"
         OUTPUT_DIRECTORY "${output_dir}"
+        ${bootstrap}
         ${exceptions}
         NO_INSTALL
         SOURCES ${arg_SOURCES}
@@ -217,7 +214,7 @@ function(qt_internal_add_tool target_name)
         DEFINES
             QT_USE_QSTRINGBUILDER
             ${arg_DEFINES}
-        ${corelib}
+        PUBLIC_LIBRARIES ${corelib}
         LIBRARIES ${arg_LIBRARIES} Qt::PlatformToolInternal
         COMPILE_OPTIONS ${arg_COMPILE_OPTIONS}
         LINK_OPTIONS ${arg_LINK_OPTIONS}
@@ -233,13 +230,6 @@ function(qt_internal_add_tool target_name)
     _qt_internal_apply_strict_cpp("${target_name}")
     qt_internal_adjust_main_config_runtime_output_dir("${target_name}" "${output_dir}")
 
-    set_target_properties(${target_name} PROPERTIES
-        _qt_package_version "${PROJECT_VERSION}"
-    )
-    set_property(TARGET ${target_name}
-                 APPEND PROPERTY
-                 EXPORT_PROPERTIES "_qt_package_version")
-
     if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19.0" AND QT_FEATURE_debug_and_release)
         set_property(TARGET "${target_name}"
             PROPERTY EXCLUDE_FROM_ALL "$<NOT:$<CONFIG:${QT_MULTI_CONFIG_FIRST_CONFIG}>>")
@@ -254,7 +244,7 @@ function(qt_internal_add_tool target_name)
 
     if(TARGET host_tools)
         add_dependencies(host_tools "${target_name}")
-        if(arg_CORE_LIBRARY STREQUAL "Bootstrap")
+        if(bootstrap)
             add_dependencies(bootstrap_tools "${target_name}")
         endif()
     endif()
@@ -316,7 +306,7 @@ function(qt_internal_add_tool target_name)
         endif()
 
         qt_apply_rpaths(TARGET "${target_name}" INSTALL_PATH "${install_dir}" RELATIVE_RPATH)
-        qt_internal_apply_staging_prefix_build_rpath_workaround()
+
     endif()
 
     qt_enable_separate_debug_info(${target_name} "${install_dir}" QT_EXECUTABLE)
@@ -355,8 +345,6 @@ function(qt_export_tools module_name)
     set(extra_cmake_files "")
     set(extra_cmake_includes "")
 
-    set(first_tool_package_version "")
-
     foreach(tool_name ${QT_KNOWN_MODULE_${module_name}_TOOLS})
         # Specific tools can have package dependencies.
         # e.g. qtwaylandscanner depends on WaylandScanner (non-qt package).
@@ -378,7 +366,7 @@ function(qt_export_tools module_name)
             list(APPEND extra_cmake_includes "${_extra_cmake_includes}")
         endif()
 
-        if (QT_WILL_RENAME_TOOL_TARGETS)
+        if (CMAKE_CROSSCOMPILING AND QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
             string(REGEX REPLACE "_native$" "" tool_name ${tool_name})
         endif()
         set(extra_cmake_statements "${extra_cmake_statements}
@@ -388,13 +376,6 @@ endif()
 ")
         list(APPEND tool_targets "${QT_CMAKE_EXPORT_NAMESPACE}::${tool_name}")
         list(APPEND tool_targets_non_prefixed "${tool_name}")
-
-        if(NOT first_tool_package_version)
-            qt_internal_get_package_version_of_target("${tool_name}" tool_package_version)
-            if(tool_package_version)
-                set(first_tool_package_version "${tool_package_version}")
-            endif()
-        endif()
     endforeach()
 
     string(APPEND extra_cmake_statements
@@ -440,30 +421,9 @@ endif()
         "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}Config.cmake"
         INSTALL_DESTINATION "${config_install_dir}"
     )
-
-    # There might be Tools packages which don't have a corresponding real module_name target, like
-    # WaylandScannerTools.
-    # In that case we'll use the package version of the first tool that belongs to that package.
-    if(TARGET "${module_name}")
-        qt_internal_get_package_version_of_target("${module_name}" tools_package_version)
-    elseif(first_tool_package_version)
-        set(tools_package_version "${first_tool_package_version}")
-    else()
-        # This should never happen, because tools_package_version should always have at least some
-        # value. Issue an assertion message just in case the pre-condition ever changes.
-        set(tools_package_version "${PROJECT_VERSION}")
-        if(FEATURE_developer_build)
-            message(WARNING
-                "Could not determine package version of tools package ${module_name}. "
-                "Defaulting to project version ${PROJECT_VERSION}.")
-        endif()
-    endif()
-    message(TRACE
-        "Exporting tools package ${module_name}Tools with package version ${tools_package_version}"
-        "\n     included targets: ${tool_targets_non_prefixed}")
     write_basic_package_version_file(
         "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}ConfigVersionImpl.cmake"
-        VERSION "${tools_package_version}"
+        VERSION ${PROJECT_VERSION}
         COMPATIBILITY AnyNewerVersion
         ARCH_INDEPENDENT
     )
@@ -511,7 +471,7 @@ endfunction()
 # If the user specifies to build tools when cross-compiling, then the
 # suffix "_native" is appended.
 function(qt_get_tool_target_name out_var name)
-    if (QT_WILL_RENAME_TOOL_TARGETS)
+    if (CMAKE_CROSSCOMPILING AND QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
         set(${out_var} ${name}_native PARENT_SCOPE)
     else()
         set(${out_var} ${name} PARENT_SCOPE)
@@ -522,46 +482,21 @@ endfunction()
 # This is the inverse of qt_get_tool_target_name.
 function(qt_tool_target_to_name out_var target)
     set(name ${target})
-    if (QT_WILL_RENAME_TOOL_TARGETS)
+    if (CMAKE_CROSSCOMPILING AND QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
         string(REGEX REPLACE "_native$" "" name ${target})
     endif()
     set(${out_var} ${name} PARENT_SCOPE)
 endfunction()
 
-# Sets QT_WILL_BUILD_TOOLS if tools will be built and QT_WILL_RENAME_TOOL_TARGETS
-# if those tools have replaced naming.
+# Sets QT_WILL_BUILD_TOOLS if tools will be built.
 function(qt_check_if_tools_will_be_built)
-    # By default, we build our own tools unless we're cross-building.
-    set(need_target_rename FALSE)
-    if(CMAKE_CROSSCOMPILING)
+    if(QT_FORCE_FIND_TOOLS OR (CMAKE_CROSSCOMPILING AND NOT QT_BUILD_TOOLS_WHEN_CROSSCOMPILING))
         set(will_build_tools FALSE)
-        if(QT_FORCE_BUILD_TOOLS)
-            set(will_build_tools TRUE)
-            set(need_target_rename TRUE)
-        endif()
     else()
         set(will_build_tools TRUE)
-        if(QT_FORCE_FIND_TOOLS)
-            set(will_build_tools FALSE)
-            if(QT_FORCE_BUILD_TOOLS)
-                set(will_build_tools TRUE)
-                set(need_target_rename TRUE)
-            endif()
-        endif()
     endif()
-
     set(QT_WILL_BUILD_TOOLS ${will_build_tools} CACHE INTERNAL "Are tools going to be built" FORCE)
-    set(QT_WILL_RENAME_TOOL_TARGETS ${need_target_rename} CACHE INTERNAL
-        "Do tool targets need to be renamed" FORCE)
 endfunction()
-
-# Use this macro to exit a file or function scope unless we're building tools. This is supposed to
-# be called after qt_internal_add_tools() to avoid special-casing operations on imported targets.
-macro(qt_internal_return_unless_building_tools)
-    if(NOT QT_WILL_BUILD_TOOLS)
-        return()
-    endif()
-endmacro()
 
 # Equivalent of qmake's qtNomakeTools(directory1 directory2).
 # If QT_BUILD_TOOLS_BY_DEFAULT is true, then targets within the given directories will be excluded

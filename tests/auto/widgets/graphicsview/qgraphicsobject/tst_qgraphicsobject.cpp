@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -41,28 +66,28 @@ void tst_QGraphicsObject::pos()
     QSignalSpy ySpy(&object, SIGNAL(yChanged()));
     QVERIFY(object.pos() == QPointF(0, 0));
     object.setPos(10, 10);
-    QCOMPARE(xSpy.size(), 1);
-    QCOMPARE(ySpy.size(), 1);
+    QCOMPARE(xSpy.count(), 1);
+    QCOMPARE(ySpy.count(), 1);
 
     QCOMPARE(object.pos(), QPointF(10,10));
 
     object.setPos(10, 10);
-    QCOMPARE(xSpy.size(), 1);
-    QCOMPARE(ySpy.size(), 1);
+    QCOMPARE(xSpy.count(), 1);
+    QCOMPARE(ySpy.count(), 1);
 
     object.setProperty("pos", QPointF(0, 0));
-    QCOMPARE(xSpy.size(), 2);
-    QCOMPARE(ySpy.size(), 2);
+    QCOMPARE(xSpy.count(), 2);
+    QCOMPARE(ySpy.count(), 2);
     QCOMPARE(object.property("pos").toPointF(), QPointF(0,0));
 
     object.setProperty("pos", QPointF(10, 0));
-    QCOMPARE(xSpy.size(), 3);
-    QCOMPARE(ySpy.size(), 2);
+    QCOMPARE(xSpy.count(), 3);
+    QCOMPARE(ySpy.count(), 2);
     QCOMPARE(object.property("pos").toPointF(), QPointF(10,0));
 
     object.setProperty("pos", QPointF(10, 10));
-    QCOMPARE(xSpy.size(), 3);
-    QCOMPARE(ySpy.size(), 3);
+    QCOMPARE(xSpy.count(), 3);
+    QCOMPARE(ySpy.count(), 3);
     QVERIFY(object.property("pos") == QPointF(10, 10));
 }
 
@@ -73,19 +98,19 @@ void tst_QGraphicsObject::x()
     QSignalSpy ySpy(&object, SIGNAL(yChanged()));
     QVERIFY(object.pos() == QPointF(0, 0));
     object.setX(10);
-    QCOMPARE(xSpy.size(), 1);
-    QCOMPARE(ySpy.size(), 0);
+    QCOMPARE(xSpy.count(), 1);
+    QCOMPARE(ySpy.count(), 0);
 
     QVERIFY(object.pos() == QPointF(10, 0));
     QCOMPARE(object.x(), qreal(10));
 
     object.setX(10);
-    QCOMPARE(xSpy.size(), 1);
-    QCOMPARE(ySpy.size(), 0);
+    QCOMPARE(xSpy.count(), 1);
+    QCOMPARE(ySpy.count(), 0);
 
     object.setProperty("x", 0);
-    QCOMPARE(xSpy.size(), 2);
-    QCOMPARE(ySpy.size(), 0);
+    QCOMPARE(xSpy.count(), 2);
+    QCOMPARE(ySpy.count(), 0);
     QCOMPARE(object.property("x").toDouble(), double(0));
 }
 
@@ -96,19 +121,19 @@ void tst_QGraphicsObject::y()
     QSignalSpy ySpy(&object, SIGNAL(yChanged()));
     QVERIFY(object.pos() == QPointF(0, 0));
     object.setY(10);
-    QCOMPARE(xSpy.size(), 0);
-    QCOMPARE(ySpy.size(), 1);
+    QCOMPARE(xSpy.count(), 0);
+    QCOMPARE(ySpy.count(), 1);
 
     QVERIFY(object.pos() == QPointF(0, 10));
     QCOMPARE(object.y(), qreal(10));
 
     object.setY(10);
-    QCOMPARE(xSpy.size(), 0);
-    QCOMPARE(ySpy.size(), 1);
+    QCOMPARE(xSpy.count(), 0);
+    QCOMPARE(ySpy.count(), 1);
 
     object.setProperty("y", 0);
-    QCOMPARE(xSpy.size(), 0);
-    QCOMPARE(ySpy.size(), 2);
+    QCOMPARE(xSpy.count(), 0);
+    QCOMPARE(ySpy.count(), 2);
     QCOMPARE(object.property("y").toDouble(), qreal(0));
 }
 
@@ -118,15 +143,15 @@ void tst_QGraphicsObject::z()
     QSignalSpy zSpy(&object, SIGNAL(zChanged()));
     QCOMPARE(object.zValue(), qreal(0));
     object.setZValue(10);
-    QCOMPARE(zSpy.size(), 1);
+    QCOMPARE(zSpy.count(), 1);
 
     QCOMPARE(object.zValue(), qreal(10));
 
     object.setZValue(10);
-    QCOMPARE(zSpy.size(), 1);
+    QCOMPARE(zSpy.count(), 1);
 
     object.setProperty("z", 0);
-    QCOMPARE(zSpy.size(), 2);
+    QCOMPARE(zSpy.count(), 2);
     QCOMPARE(object.property("z").toDouble(), double(0));
 }
 
@@ -136,15 +161,15 @@ void tst_QGraphicsObject::opacity()
     QSignalSpy spy(&object, SIGNAL(opacityChanged()));
     QCOMPARE(object.opacity(), 1.);
     object.setOpacity(0);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 
     QCOMPARE(object.opacity(), 0.);
 
     object.setOpacity(0);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 
     object.setProperty("opacity", .5);
-    QCOMPARE(spy.size(), 2);
+    QCOMPARE(spy.count(), 2);
     QCOMPARE(object.property("opacity").toDouble(), .5);
 }
 
@@ -154,15 +179,15 @@ void tst_QGraphicsObject::enabled()
     QSignalSpy spy(&object, SIGNAL(enabledChanged()));
     QVERIFY(object.isEnabled());
     object.setEnabled(false);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 
     QVERIFY(!object.isEnabled());
 
     object.setEnabled(false);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 
     object.setProperty("enabled", true);
-    QCOMPARE(spy.size(), 2);
+    QCOMPARE(spy.count(), 2);
     QVERIFY(object.property("enabled").toBool());
 }
 
@@ -172,15 +197,15 @@ void tst_QGraphicsObject::visible()
     QSignalSpy spy(&object, SIGNAL(visibleChanged()));
     QVERIFY(object.isVisible());
     object.setVisible(false);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 
     QVERIFY(!object.isVisible());
 
     object.setVisible(false);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 
     object.setProperty("visible", true);
-    QCOMPARE(spy.size(), 2);
+    QCOMPARE(spy.count(), 2);
     QVERIFY(object.property("visible").toBool());
 }
 

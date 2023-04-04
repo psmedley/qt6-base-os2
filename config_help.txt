@@ -7,10 +7,6 @@ Top-level installation directories:
   -prefix <dir> ...... The deployment directory, as seen on the target device.
                        [/usr/local/Qt-$QT_VERSION; qtbase build directory if
                        -developer-build]
-  -no-prefix ......... The deployment directory is set to the qtbase build
-                       directory. Can be used instead of -developer-build
-                       to not have to install, as well as avoid
-                       -developer-build's default of -warnings-are-errors.
   -extprefix <dir> ... The installation directory, as seen on the host machine.
                        [SYSROOT/PREFIX]
 
@@ -137,10 +133,8 @@ Build options:
 
   -pch ................. Use precompiled headers [auto]
   -ltcg ................ Use Link Time Code Generation [no]
-  -intelcet ............ Use Intel Control-flow Enforcement Technology [no]
-  -linker [bfd,gold,lld,mold]
-                         Force use of the GNU ld, GNU gold, LLVM/LLD or mold
-                         linker instead of default one (GCC and clang only)
+  -linker [bfd,gold,lld] Force use of the GNU ld, GNU gold or LLVM/LLD linker
+                         instead of default one (GCC only)
   -ccache .............. Use the ccache compiler cache [no] (Unix only)
 
   -warnings-are-errors . Treat warnings as errors [no; yes if -developer-build]

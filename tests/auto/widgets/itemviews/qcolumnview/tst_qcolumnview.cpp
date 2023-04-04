@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QColumnView>
 #include <QScrollBar>
@@ -497,11 +522,11 @@ void tst_QColumnView::selectAll()
 
     view.setModel(&m_fakeDirModel);
     view.selectAll();
-    QVERIFY(view.selectionModel()->selectedIndexes().size() >= 0);
+    QVERIFY(view.selectionModel()->selectedIndexes().count() >= 0);
 
     view.setCurrentIndex(m_fakeDirHomeIndex);
     view.selectAll();
-    QVERIFY(view.selectionModel()->selectedIndexes().size() > 0);
+    QVERIFY(view.selectionModel()->selectedIndexes().count() > 0);
 
     QModelIndex file;
     for (int i = 0; i < m_fakeDirModel.rowCount(m_fakeDirHomeIndex); ++i) {
@@ -512,10 +537,10 @@ void tst_QColumnView::selectAll()
     }
     view.setCurrentIndex(file);
     view.selectAll();
-    QVERIFY(view.selectionModel()->selectedIndexes().size() > 0);
+    QVERIFY(view.selectionModel()->selectedIndexes().count() > 0);
 
     view.setCurrentIndex(QModelIndex());
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), 0);
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), 0);
 }
 
 void tst_QColumnView::clicked()
@@ -536,13 +561,13 @@ void tst_QColumnView::clicked()
 
     QPoint localPoint = view.visualRect(m_fakeDirHomeIndex).center();
     QTest::mouseClick(view.viewport(), Qt::LeftButton, {}, localPoint);
-    QCOMPARE(clickedSpy.size(), 1);
+    QCOMPARE(clickedSpy.count(), 1);
     QCoreApplication::processEvents();
 
     if (sizeof(qreal) != sizeof(double))
         QSKIP("Skipped due to rounding errors");
 
-    for (int i = 0; i < view.createdColumns.size(); ++i) {
+    for (int i = 0; i < view.createdColumns.count(); ++i) {
         QAbstractItemView *column = view.createdColumns.at(i);
         if (column && column->selectionModel() && (column->rootIndex() == m_fakeDirHomeIndex))
                 QVERIFY(column->selectionModel()->selectedIndexes().isEmpty());
@@ -560,7 +585,7 @@ void tst_QColumnView::selectedColumns()
 
     QTest::qWait(ANIMATION_DELAY);
 
-    for (int i = 0; i < view.createdColumns.size(); ++i) {
+    for (int i = 0; i < view.createdColumns.count(); ++i) {
         QAbstractItemView *column = view.createdColumns.at(i);
         if (!column)
             continue;
@@ -591,7 +616,7 @@ void tst_QColumnView::setSelectionModel()
     view.setSelectionModel(selectionModel);
 
     bool found = false;
-    for (int i = 0; i < view.createdColumns.size(); ++i) {
+    for (int i = 0; i < view.createdColumns.count(); ++i) {
         if (view.createdColumns.at(i)->selectionModel() == selectionModel) {
             found = true;
             break;
@@ -631,7 +656,7 @@ void tst_QColumnView::moveGrip_basic()
     view.setMinimumWidth(200);
     grip->moveGrip(-800);
     QCOMPARE(view.width(), 200);
-    QCOMPARE(spy.size(), 5);
+    QCOMPARE(spy.count(), 5);
 }
 
 void tst_QColumnView::moveGrip_data()
@@ -659,7 +684,7 @@ void tst_QColumnView::moveGrip()
     topLevel.show();
     QVERIFY(QTest::qWaitForWindowActive(&topLevel));
 
-    int columnNum = view.createdColumns.size() - 2;
+    int columnNum = view.createdColumns.count() - 2;
     QVERIFY(columnNum >= 0);
     const QObjectList list = view.createdColumns[columnNum]->children();
     QColumnViewGrip *grip = nullptr;
@@ -687,7 +712,7 @@ void tst_QColumnView::doubleClick()
     QCOMPARE(view.width(), 200);
     QTest::mouseDClick(grip, Qt::LeftButton);
     QCOMPARE(view.width(), view.sizeHint().width());
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 }
 
 void tst_QColumnView::gripMoved()
@@ -711,7 +736,7 @@ void tst_QColumnView::gripMoved()
     QCoreApplication::processEvents();
     QTest::mouseRelease(grip, Qt::LeftButton);
 
-    QTRY_COMPARE(spy.size(), 1);
+    QTRY_COMPARE(spy.count(), 1);
     QCOMPARE(view.width(), oldWidth + 65);
 }
 
@@ -776,7 +801,7 @@ void tst_QColumnView::setPreviewWidget()
 void tst_QColumnView::sizes()
 {
     QColumnView view;
-    QCOMPARE(view.columnWidths().size(), 0);
+    QCOMPARE(view.columnWidths().count(), 0);
 
     const QList<int> newSizes{ 10, 4, 50, 6 };
 
@@ -787,16 +812,16 @@ void tst_QColumnView::sizes()
     view.setModel(&m_fakeDirModel);
     view.setCurrentIndex(m_fakeDirHomeIndex);
 
-    QList<int> postSizes = view.columnWidths().mid(0, newSizes.size());
-    QCOMPARE(postSizes, newSizes.mid(0, postSizes.size()));
+    QList<int> postSizes = view.columnWidths().mid(0, newSizes.count());
+    QCOMPARE(postSizes, newSizes.mid(0, postSizes.count()));
 
-    QVERIFY(view.columnWidths().size() > 1);
+    QVERIFY(view.columnWidths().count() > 1);
     QList<int> smallerSizes{ 6 };
     view.setColumnWidths(smallerSizes);
     QList<int> expectedSizes = newSizes;
     expectedSizes[0] = 6;
-    postSizes = view.columnWidths().mid(0, newSizes.size());
-    QCOMPARE(postSizes, expectedSizes.mid(0, postSizes.size()));
+    postSizes = view.columnWidths().mid(0, newSizes.count());
+    QCOMPARE(postSizes, expectedSizes.mid(0, postSizes.count()));
 }
 
 void tst_QColumnView::rowDelegate()
@@ -806,7 +831,7 @@ void tst_QColumnView::rowDelegate()
     view.setItemDelegateForRow(3, d);
 
     view.setModel(&m_fakeDirModel);
-    for (int i = 0; i < view.createdColumns.size(); ++i) {
+    for (int i = 0; i < view.createdColumns.count(); ++i) {
         QAbstractItemView *column = view.createdColumns.at(i);
         QCOMPARE(column->itemDelegateForRow(3), d);
     }
@@ -956,7 +981,7 @@ void tst_QColumnView::dynamicModelChanges()
     model.appendRow(item);
 
     QVERIFY(QTest::qWaitForWindowExposed(&view)); //let the time for painting to occur
-    QTRY_COMPARE(delegate.paintedIndexes.size(), 1);
+    QTRY_COMPARE(delegate.paintedIndexes.count(), 1);
     QCOMPARE(*delegate.paintedIndexes.begin(), model.index(0,0));
 }
 

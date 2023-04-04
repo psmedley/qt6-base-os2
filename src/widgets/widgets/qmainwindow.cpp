@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 //#define QT_EXPERIMENTAL_CLIENT_DECORATIONS
 
@@ -176,6 +212,9 @@ void QMainWindowPrivate::init()
     layout below.
 
     \image mainwindowlayout.png
+
+    \note Creating a main window without a central widget is not supported.
+    You must have a central widget even if it is just a placeholder.
 
     \section1 Creating Main Window Components
 
@@ -576,7 +615,7 @@ void QMainWindow::setStatusBar(QStatusBar *statusbar)
 
 /*!
     Returns the central widget for the main window. This function
-    returns \nullptr if the central widget has not been set.
+    returns zero if the central widget has not been set.
 
     \sa setCentralWidget()
 */
@@ -1124,7 +1163,7 @@ QList<QDockWidget*> QMainWindow::tabifiedDockWidgets(QDockWidget *dockwidget) co
     QList<QDockWidget*> ret;
     const QDockAreaLayoutInfo *info = d_func()->layout->layoutState.dockAreaLayout.info(dockwidget);
     if (info && info->tabbed && info->tabBar) {
-        for(int i = 0; i < info->item_list.size(); ++i) {
+        for(int i = 0; i < info->item_list.count(); ++i) {
             const QDockAreaLayoutItem &item = info->item_list.at(i);
             if (item.widgetItem) {
                 if (QDockWidget *dock = qobject_cast<QDockWidget*>(item.widgetItem->widget())) {
@@ -1217,7 +1256,6 @@ QByteArray QMainWindow::saveState(int version) const
 {
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
-    stream.setVersion(QDataStream::Qt_5_0);
     stream << QMainWindowLayout::VersionMarker;
     stream << version;
     d_func()->layout->saveState(stream);
@@ -1246,7 +1284,6 @@ bool QMainWindow::restoreState(const QByteArray &state, int version)
         return false;
     QByteArray sd = state;
     QDataStream stream(&sd, QIODevice::ReadOnly);
-    stream.setVersion(QDataStream::Qt_5_0);
     int marker, v;
     stream >> marker;
     stream >> v;

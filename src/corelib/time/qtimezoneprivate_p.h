@@ -1,6 +1,42 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// Copyright (C) 2013 John Layt <jlayt@kde.org>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2013 John Layt <jlayt@kde.org>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #ifndef QTIMEZONEPRIVATE_P_H
@@ -33,7 +69,7 @@ Q_FORWARD_DECLARE_OBJC_CLASS(NSTimeZone);
 #include <qt_windows.h>
 #endif // Q_OS_WIN
 
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
 #include <QJniObject>
 #endif
 
@@ -101,14 +137,10 @@ public:
     virtual void serialize(QDataStream &ds) const;
 
     // Static Utility Methods
-    [[nodiscard]] static constexpr qint64 maxMSecs()
-    { return (std::numeric_limits<qint64>::max)(); }
-    [[nodiscard]] static constexpr qint64 minMSecs()
-    { return (std::numeric_limits<qint64>::min)() + 1; }
-    [[nodiscard]] static constexpr qint64 invalidMSecs()
-    { return (std::numeric_limits<qint64>::min)(); }
-    [[nodiscard]] static constexpr qint64 invalidSeconds()
-    { return (std::numeric_limits<int>::min)(); }
+    static inline qint64 maxMSecs() { return std::numeric_limits<qint64>::max(); }
+    static inline qint64 minMSecs() { return std::numeric_limits<qint64>::min() + 1; }
+    static inline qint64 invalidMSecs() { return std::numeric_limits<qint64>::min(); }
+    static inline qint64 invalidSeconds() { return std::numeric_limits<int>::min(); }
     static Data invalidData();
     static QTimeZone::OffsetData invalidOffsetData();
     static QTimeZone::OffsetData toOffsetData(const Data &data);
@@ -242,7 +274,7 @@ private:
 };
 #endif
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN) && !defined(Q_OS_ANDROID)
+#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN) && (!defined(Q_OS_ANDROID) || defined(Q_OS_ANDROID_EMBEDDED))
 struct QTzTransitionTime
 {
     qint64 atMSecsSinceEpoch;
@@ -423,11 +455,10 @@ public:
 
     QList<QByteArray> availableTimeZoneIds() const override;
 
-    // For use within implementation's TransitionTimePair:
-    QTimeZonePrivate::Data ruleToData(const QWinTransitionRule &rule, qint64 atMSecsSinceEpoch,
-                                      QTimeZone::TimeType type, bool fakeDst = false) const;
 private:
     void init(const QByteArray &ianaId);
+    QTimeZonePrivate::Data ruleToData(const QWinTransitionRule &rule, qint64 atMSecsSinceEpoch,
+                                      QTimeZone::TimeType type, bool fakeDst = false) const;
 
     QByteArray m_windowsId;
     QString m_displayName;
@@ -437,7 +468,7 @@ private:
 };
 #endif // Q_OS_WIN
 
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
 class QAndroidTimeZonePrivate final : public QTimeZonePrivate
 {
 public:

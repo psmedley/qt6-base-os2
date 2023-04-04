@@ -1,6 +1,30 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// Copyright (C) 2020 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2020 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the documentation of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:FDL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Free Documentation License Usage
+** Alternatively, this file may be used under the terms of the GNU Free
+** Documentation License version 1.3 as published by the Free Software
+** Foundation and appearing in the file included in the packaging of
+** this file. Please review the following information to ensure
+** the GNU Free Documentation License version 1.3 requirements
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /*!
     \namespace Qt
@@ -774,18 +798,14 @@
 /*!
     \enum Qt::DockWidgetArea
 
-    Represents the areas a QDockWidget can be plugged to.
-    \note A floating dock widget with tabs can be docked anywhere.
-
-    \value LeftDockWidgetArea The left dock area of a QMainWindow.
-    \value RightDockWidgetArea The right dock area of a QMainWindow.
-    \value TopDockWidgetArea The top dock area of a QMainWindow.
-    \value BottomDockWidgetArea The bottom dock area of a QMainWindow.
-    \value AllDockWidgetAreas All dock widget areas (default).
-    \value NoDockWidgetArea No dock widget areas.
+    \value LeftDockWidgetArea
+    \value RightDockWidgetArea
+    \value TopDockWidgetArea
+    \value BottomDockWidgetArea
+    \value AllDockWidgetAreas
+    \value NoDockWidgetArea
 
     \omitvalue DockWidgetArea_Mask
-    \sa QDockWidget::setAllowedAreas, QDockWidget::isAreaAllowed
 */
 
 /*!
@@ -1106,10 +1126,10 @@
     e.g., when a hidden widget was resized. This flag is set or cleared by the
     Qt kernel.
 
-    \value WA_QuitOnClose Indicates that the widget should be taken into account
-    when deciding whether to quit the application when the last window is closed.
-    This behavior can be modified with the QGuiApplication::quitOnLastWindowClosed
-    property. By default this attribute is set for all widgets of type Qt::Window.
+    \value WA_QuitOnClose Makes Qt quit the application when the last widget
+    with the attribute set has accepted closeEvent(). This behavior can be
+    modified with the QGuiApplication::quitOnLastWindowClosed property. By default
+    this attribute is set for all widgets of type Qt::Window.
 
     \value WA_Resized Indicates that the widget has an explicit size. This flag
     is set or cleared by QWidget::resize() and QWidget::setGeometry().
@@ -1283,7 +1303,7 @@
     to this top level window. This attribute has no effect on non-X11
     platforms.
 
-    \value [since 5.4] WA_AlwaysStackOnTop Forces QOpenGLWidget and
+    \value WA_AlwaysStackOnTop Since Qt 5.4, this value forces QOpenGLWidget and
     QQuickWidget to be drawn last, on top of other widgets. Ignored for other
     type of widgets. Setting this attribute breaks the stacking order, but
     allows having a semi-transparent OpenGL widget with other widgets visible
@@ -2202,16 +2222,10 @@
            you call QWidget::activateWindow() manually).
 
     \value FramelessWindowHint  Produces a borderless window.
-
-           On X11, the result of the flag is dependent on the window manager and its
+           The user cannot move or resize a borderless window via the window
+           system. On X11, the result of the flag is dependent on the window manager and its
            ability to understand Motif and/or NETWM hints. Most existing
            modern window managers can handle this.
-
-           \note If the window manager relies on the frame to interactively manipulate
-           the window, the user can no longer move or resize the window via the window
-           system, but this side effect should not be relied on. To produce a fixed
-           size window that can not be resized, please set QWindow::setMinimumSize()
-           and QWindow::setMaximumSize() to the same size.
 
     \value NoDropShadowWindowHint  Disables window drop shadow on supporting platforms.
 
@@ -3016,11 +3030,6 @@
 */
 
 /*!
-    \enum Qt::Disambiguated_t
-    \internal
-*/
-
-/*!
     \enum Qt::CoordinateSystem
     \since 4.6
 
@@ -3101,8 +3110,8 @@
     the Qt::GestureStarted state and ending with a gesture in the
     Qt::GestureFinished or Qt::GestureCanceled states.
 
-    \value [since 4.7] IgnoredGesturesPropagateToParent Allows fine-tuning of
-    gesture event propagation. By setting the flag when
+    \value IgnoredGesturesPropagateToParent Since Qt 4.7, this flag allows you
+    to fine-tune gesture event propagation. By setting the flag when
     \l{QGraphicsObject::grabGesture()}{grabbing} a gesture all ignored partial
     gestures will propagate to their parent items.
 

@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qdbusmenutypes_p.h"
 
@@ -19,18 +55,6 @@
 #include "qdbusplatformmenu_p.h"
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
-
-QT_IMPL_METATYPE_EXTERN(QDBusMenuItem)
-QT_IMPL_METATYPE_EXTERN(QDBusMenuItemList)
-QT_IMPL_METATYPE_EXTERN(QDBusMenuItemKeys)
-QT_IMPL_METATYPE_EXTERN(QDBusMenuItemKeysList)
-QT_IMPL_METATYPE_EXTERN(QDBusMenuLayoutItem)
-QT_IMPL_METATYPE_EXTERN(QDBusMenuLayoutItemList)
-QT_IMPL_METATYPE_EXTERN(QDBusMenuEvent)
-QT_IMPL_METATYPE_EXTERN(QDBusMenuEventList)
-QT_IMPL_METATYPE_EXTERN(QDBusMenuShortcut)
 
 const QDBusArgument &operator<<(QDBusArgument &arg, const QDBusMenuItem &item)
 {
@@ -69,7 +93,7 @@ uint QDBusMenuLayoutItem::populate(int id, int depth, const QStringList &propert
     qCDebug(qLcMenu) << id << "depth" << depth << propertyNames;
     m_id = id;
     if (id == 0) {
-        m_properties.insert("children-display"_L1, "submenu"_L1);
+        m_properties.insert(QLatin1String("children-display"), QLatin1String("submenu"));
         if (topLevelMenu)
             populate(topLevelMenu, depth, propertyNames);
         return 1; // revision
@@ -158,34 +182,34 @@ QDBusMenuItem::QDBusMenuItem(const QDBusPlatformMenuItem *item)
     : m_id(item->dbusID())
 {
     if (item->isSeparator()) {
-        m_properties.insert("type"_L1, "separator"_L1);
+        m_properties.insert(QLatin1String("type"), QLatin1String("separator"));
     } else {
-        m_properties.insert("label"_L1, convertMnemonic(item->text()));
+        m_properties.insert(QLatin1String("label"), convertMnemonic(item->text()));
         if (item->menu())
-            m_properties.insert("children-display"_L1, "submenu"_L1);
-        m_properties.insert("enabled"_L1, item->isEnabled());
+            m_properties.insert(QLatin1String("children-display"), QLatin1String("submenu"));
+        m_properties.insert(QLatin1String("enabled"), item->isEnabled());
         if (item->isCheckable()) {
-            QString toggleType = item->hasExclusiveGroup() ? "radio"_L1 : "checkmark"_L1;
-            m_properties.insert("toggle-type"_L1, toggleType);
-            m_properties.insert("toggle-state"_L1, item->isChecked() ? 1 : 0);
+            QString toggleType = item->hasExclusiveGroup() ? QLatin1String("radio") : QLatin1String("checkmark");
+            m_properties.insert(QLatin1String("toggle-type"), toggleType);
+            m_properties.insert(QLatin1String("toggle-state"), item->isChecked() ? 1 : 0);
         }
 #ifndef QT_NO_SHORTCUT
         const QKeySequence &scut = item->shortcut();
         if (!scut.isEmpty()) {
             QDBusMenuShortcut shortcut = convertKeySequence(scut);
-            m_properties.insert("shortcut"_L1, QVariant::fromValue(shortcut));
+            m_properties.insert(QLatin1String("shortcut"), QVariant::fromValue(shortcut));
         }
 #endif
         const QIcon &icon = item->icon();
         if (!icon.name().isEmpty()) {
-            m_properties.insert("icon-name"_L1, icon.name());
+            m_properties.insert(QLatin1String("icon-name"), icon.name());
         } else if (!icon.isNull()) {
             QBuffer buf;
             icon.pixmap(16).save(&buf, "PNG");
-            m_properties.insert("icon-data"_L1, buf.data());
+            m_properties.insert(QLatin1String("icon-data"), buf.data());
         }
     }
-    m_properties.insert("visible"_L1, item->isVisible());
+    m_properties.insert(QLatin1String("visible"), item->isVisible());
 }
 
 QDBusMenuItemList QDBusMenuItem::items(const QList<int> &ids, const QStringList &propertyNames)
@@ -203,11 +227,11 @@ QString QDBusMenuItem::convertMnemonic(const QString &label)
 {
     // convert only the first occurrence of ampersand which is not at the end
     // dbusmenu uses underscore instead of ampersand
-    int idx = label.indexOf(u'&');
-    if (idx < 0 || idx == label.size() - 1)
+    int idx = label.indexOf(QLatin1Char('&'));
+    if (idx < 0 || idx == label.length() - 1)
         return label;
     QString ret(label);
-    ret[idx] = u'_';
+    ret[idx] = QLatin1Char('_');
     return ret;
 }
 
@@ -230,9 +254,9 @@ QDBusMenuShortcut QDBusMenuItem::convertKeySequence(const QKeySequence &sequence
             tokens << QStringLiteral("Num");
 
         QString keyName = QKeySequencePrivate::keyName(key, QKeySequence::PortableText);
-        if (keyName == "+"_L1)
+        if (keyName == QLatin1String("+"))
             tokens << QStringLiteral("plus");
-        else if (keyName == "-"_L1)
+        else if (keyName == QLatin1String("-"))
             tokens << QStringLiteral("minus");
         else
             tokens << keyName;
@@ -271,7 +295,7 @@ QDebug operator<<(QDebug d, const QDBusMenuLayoutItem &item)
 {
     QDebugStateSaver saver(d);
     d.nospace();
-    d << "QDBusMenuLayoutItem(id=" << item.m_id << ", properties=" << item.m_properties << ", " << item.m_children.size() << " children)";
+    d << "QDBusMenuLayoutItem(id=" << item.m_id << ", properties=" << item.m_properties << ", " << item.m_children.count() << " children)";
     return d;
 }
 #endif

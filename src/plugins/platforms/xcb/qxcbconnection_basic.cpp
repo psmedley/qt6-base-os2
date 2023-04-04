@@ -1,5 +1,41 @@
-// Copyright (C) 2018 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2018 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 #include "qxcbconnection_basic.h"
 #include "qxcbbackingstore.h" // for createSystemVShmSegment()
 
@@ -303,14 +339,11 @@ void QXcbBasicConnection::initializeXRandr()
                                     XCB_RANDR_MINOR_VERSION);
     if (!xrandrQuery || (xrandrQuery->major_version < 1 ||
                         (xrandrQuery->major_version == 1 && xrandrQuery->minor_version < 2))) {
-        qCWarning(lcQpaXcb, "failed to initialize XRandr 1.2");
+        qCWarning(lcQpaXcb, "failed to initialize XRandr");
         return;
     }
 
     m_hasXRandr = true;
-
-    m_xrandr1Minor = xrandrQuery->minor_version;
-
     m_xrandrFirstEvent = reply->first_event;
 }
 
@@ -322,9 +355,7 @@ void QXcbBasicConnection::initializeXInput2()
         return;
     }
 
-    // depending on whether bundled xcb is used we may support different XCB protocol versions.
-    auto xinputQuery = Q_XCB_REPLY(xcb_input_xi_query_version, m_xcbConnection,
-                                   2, XCB_INPUT_MINOR_VERSION);
+    auto xinputQuery = Q_XCB_REPLY(xcb_input_xi_query_version, m_xcbConnection, 2, 2);
     if (!xinputQuery || xinputQuery->major_version != 2) {
         qCWarning(lcQpaXcb, "X server does not support XInput 2");
         return;
@@ -385,5 +416,3 @@ void QXcbBasicConnection::initializeXKB()
 }
 
 QT_END_NAMESPACE
-
-#include "moc_qxcbconnection_basic.cpp"

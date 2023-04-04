@@ -1,6 +1,42 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2022 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 //#define QABSTRACTSOCKET_DEBUG
 
@@ -464,11 +500,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
-QT_IMPL_METATYPE_EXTERN_TAGGED(QAbstractSocket::SocketState, QAbstractSocket__SocketState)
-QT_IMPL_METATYPE_EXTERN_TAGGED(QAbstractSocket::SocketError, QAbstractSocket__SocketError)
-
 static const int DefaultConnectTimeout = 30000;
 
 static bool isProxyError(QAbstractSocket::SocketError error)
@@ -491,6 +522,25 @@ static bool isProxyError(QAbstractSocket::SocketError error)
     Constructs a QAbstractSocketPrivate. Initializes all members.
 */
 QAbstractSocketPrivate::QAbstractSocketPrivate()
+    : emittedReadyRead(false),
+      emittedBytesWritten(false),
+      abortCalled(false),
+      pendingClose(false),
+      pauseMode(QAbstractSocket::PauseNever),
+      port(0),
+      localPort(0),
+      peerPort(0),
+      socketEngine(nullptr),
+      cachedSocketDescriptor(-1),
+      readBufferMaxSize(0),
+      isBuffered(false),
+      hasPendingData(false),
+      connectTimer(nullptr),
+      hostLookupId(-1),
+      socketType(QAbstractSocket::UnknownSocketType),
+      state(QAbstractSocket::UnconnectedState),
+      socketError(QAbstractSocket::UnknownSocketError),
+      preferredNetworkLayerProtocol(QAbstractSocket::UnknownNetworkLayerProtocol)
 {
     writeBufferChunkSize = QABSTRACTSOCKET_BUFFERSIZE;
 }
@@ -542,14 +592,14 @@ bool QAbstractSocketPrivate::initSocketLayer(QAbstractSocket::NetworkLayerProtoc
     Q_Q(QAbstractSocket);
 #if defined (QABSTRACTSOCKET_DEBUG)
     QString typeStr;
-    if (q->socketType() == QAbstractSocket::TcpSocket) typeStr = "TcpSocket"_L1;
-    else if (q->socketType() == QAbstractSocket::UdpSocket) typeStr = "UdpSocket"_L1;
-    else if (q->socketType() == QAbstractSocket::SctpSocket) typeStr = "SctpSocket"_L1;
-    else typeStr = "UnknownSocketType"_L1;
+    if (q->socketType() == QAbstractSocket::TcpSocket) typeStr = QLatin1String("TcpSocket");
+    else if (q->socketType() == QAbstractSocket::UdpSocket) typeStr = QLatin1String("UdpSocket");
+    else if (q->socketType() == QAbstractSocket::SctpSocket) typeStr = QLatin1String("SctpSocket");
+    else typeStr = QLatin1String("UnknownSocketType");
     QString protocolStr;
-    if (protocol == QAbstractSocket::IPv4Protocol) protocolStr = "IPv4Protocol"_L1;
-    else if (protocol == QAbstractSocket::IPv6Protocol) protocolStr = "IPv6Protocol"_L1;
-    else protocolStr = "UnknownNetworkLayerProtocol"_L1;
+    if (protocol == QAbstractSocket::IPv4Protocol) protocolStr = QLatin1String("IPv4Protocol");
+    else if (protocol == QAbstractSocket::IPv6Protocol) protocolStr = QLatin1String("IPv6Protocol");
+    else protocolStr = QLatin1String("UnknownNetworkLayerProtocol");
 #endif
 
     resetSocketLayer();
@@ -836,7 +886,7 @@ void QAbstractSocketPrivate::resolveProxy(const QString &hostname, quint16 port)
     }
 
     // return the first that we can use
-    for (const QNetworkProxy &p : std::as_const(proxies)) {
+    for (const QNetworkProxy &p : qAsConst(proxies)) {
         if (socketType == QAbstractSocket::UdpSocket &&
             (p.capabilities() & QNetworkProxy::UdpTunnelingCapability) == 0)
             continue;
@@ -935,12 +985,12 @@ void QAbstractSocketPrivate::_q_startConnecting(const QHostInfo &hostInfo)
 
 
 #if defined(QABSTRACTSOCKET_DEBUG)
-    QString s = "{"_L1;
+    QString s = QLatin1String("{");
     for (int i = 0; i < addresses.count(); ++i) {
-        if (i != 0) s += ", "_L1;
+        if (i != 0) s += QLatin1String(", ");
         s += addresses.at(i).toString();
     }
-    s += u'}';
+    s += QLatin1Char('}');
     qDebug("QAbstractSocketPrivate::_q_startConnecting(hostInfo == %s)", s.toLatin1().constData());
 #endif
 
@@ -1915,9 +1965,8 @@ bool QAbstractSocket::setSocketDescriptor(qintptr socketDescriptor, SocketState 
     \since 4.6
     Sets the given \a option to the value described by \a value.
 
-    \note Since the options are set on an internal socket the options
-    only apply if the socket has been created. This is only guaranteed to
-    have happened after a call to bind(), or when connected() has been emitted.
+    \note On Windows Runtime, QAbstractSocket::KeepAliveOption must be set
+    before the socket is connected.
 
     \sa socketOption()
 */

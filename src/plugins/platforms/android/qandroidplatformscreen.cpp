@@ -1,6 +1,42 @@
-// Copyright (C) 2014 BogDan Vatra <bogdan@kde.org>
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2014 BogDan Vatra <bogdan@kde.org>
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QDebug>
 #include <QTime>
@@ -155,9 +191,7 @@ void QAndroidPlatformScreen::addWindow(QAndroidPlatformWindow *window)
     if (window->parent() && window->isRaster())
         return;
 
-    if (m_windowStack.contains(window))
-        return;
-
+    Q_ASSERT(!m_windowStack.contains(window));
     m_windowStack.prepend(window);
     if (window->isRaster()) {
         m_rasterSurfaces.ref();
@@ -174,10 +208,10 @@ void QAndroidPlatformScreen::removeWindow(QAndroidPlatformWindow *window)
     if (window->parent() && window->isRaster())
         return;
 
-    m_windowStack.removeOne(window);
 
-    if (m_windowStack.contains(window))
-        qWarning() << "Failed to remove window";
+    Q_ASSERT(m_windowStack.contains(window));
+    m_windowStack.removeOne(window);
+    Q_ASSERT(!m_windowStack.contains(window));
 
     if (window->isRaster()) {
         m_rasterSurfaces.deref();
@@ -249,35 +283,12 @@ void QAndroidPlatformScreen::setSize(const QSize &size)
     QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry(), availableGeometry());
 }
 
-void QAndroidPlatformScreen::setSizeParameters(const QSize &physicalSize, const QSize &size,
-                                               const QRect &availableGeometry)
-{
-    // The goal of this method is to set all geometry-related parameters
-    // at the same time and generate only one screen geometry change event.
-    m_physicalSize = physicalSize;
-    m_size = size;
-    // If available geometry has changed, the event will be handled in
-    // setAvailableGeometry. Otherwise we need to explicitly handle it to
-    // retain the behavior, because setSize() does the handling unconditionally.
-    if (m_availableGeometry != availableGeometry) {
-        setAvailableGeometry(availableGeometry);
-    } else {
-        QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry(),
-                                                           this->availableGeometry());
-    }
-}
-
 void QAndroidPlatformScreen::setRefreshRate(qreal refreshRate)
 {
     if (refreshRate == m_refreshRate)
         return;
     m_refreshRate = refreshRate;
     QWindowSystemInterface::handleScreenRefreshRateChange(QPlatformScreen::screen(), refreshRate);
-}
-
-void QAndroidPlatformScreen::setOrientation(Qt::ScreenOrientation orientation)
-{
-    QWindowSystemInterface::handleScreenOrientationChange(QPlatformScreen::screen(), orientation);
 }
 
 void QAndroidPlatformScreen::setAvailableGeometry(const QRect &rect)
@@ -312,7 +323,7 @@ void QAndroidPlatformScreen::setAvailableGeometry(const QRect &rect)
 
 void QAndroidPlatformScreen::applicationStateChanged(Qt::ApplicationState state)
 {
-    for (QAndroidPlatformWindow *w : std::as_const(m_windowStack))
+    for (QAndroidPlatformWindow *w : qAsConst(m_windowStack))
         w->applicationStateChanged(state);
 
     if (state <=  Qt::ApplicationHidden) {
@@ -353,7 +364,7 @@ void QAndroidPlatformScreen::doRedraw(QImage* screenGrabImage)
     // windows that have renderToTexture children (i.e. they need the OpenGL path) then
     // we do not need an overlay surface.
     bool hasVisibleRasterWindows = false;
-    for (QAndroidPlatformWindow *window : std::as_const(m_windowStack)) {
+    for (QAndroidPlatformWindow *window : qAsConst(m_windowStack)) {
         if (window->window()->isVisible() && window->isRaster() && !qt_window_private(window->window())->compositing) {
             hasVisibleRasterWindows = true;
             break;
@@ -408,7 +419,7 @@ void QAndroidPlatformScreen::doRedraw(QImage* screenGrabImage)
     compositePainter.setCompositionMode(QPainter::CompositionMode_Source);
 
     QRegion visibleRegion(m_dirtyRect);
-    for (QAndroidPlatformWindow *window : std::as_const(m_windowStack)) {
+    for (QAndroidPlatformWindow *window : qAsConst(m_windowStack)) {
         if (!window->window()->isVisible()
                 || qt_window_private(window->window())->compositing
                 || !window->isRaster())
@@ -466,7 +477,7 @@ static const int androidLogicalDpi = 72;
 
 QDpi QAndroidPlatformScreen::logicalDpi() const
 {
-    qreal lDpi = QtAndroid::pixelDensity() * androidLogicalDpi;
+    qreal lDpi = QtAndroid::scaledDensity() * androidLogicalDpi;
     return QDpi(lDpi, lDpi);
 }
 

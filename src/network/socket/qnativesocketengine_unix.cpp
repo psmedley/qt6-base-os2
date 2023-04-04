@@ -1,6 +1,42 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 //#define QNATIVESOCKETENGINE_DEBUG
 #include "qnativesocketengine_p.h"
@@ -10,10 +46,6 @@
 #include "qelapsedtimer.h"
 #include "qvarlengtharray.h"
 #include "qnetworkinterface.h"
-#include "qendian.h"
-#ifdef Q_OS_WASM
-#include <private/qeventdispatcher_wasm_p.h>
-#endif
 #include <time.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -326,12 +358,12 @@ int QNativeSocketEnginePrivate::option(QNativeSocketEngine::SocketOption opt) co
     }
 
     int n, level;
-    int v = 0;
+    int v = -1;
     QT_SOCKOPTLEN_T len = sizeof(v);
 
     convertToLevelAndOption(opt, socketProtocol, level, n);
     if (n != -1 && ::getsockopt(socketDescriptor, level, n, (char *) &v, &len) != -1)
-        return len == 1 ? qFromUnaligned<quint8>(&v) : v;
+        return v;
 
     return -1;
 }
@@ -590,7 +622,7 @@ bool QNativeSocketEnginePrivate::nativeListen(int backlog)
     return true;
 }
 
-qintptr QNativeSocketEnginePrivate::nativeAccept()
+int QNativeSocketEnginePrivate::nativeAccept()
 {
     int acceptedDescriptor = qt_safe_accept(socketDescriptor, nullptr, nullptr);
     if (acceptedDescriptor == -1) {
@@ -636,7 +668,7 @@ qintptr QNativeSocketEnginePrivate::nativeAccept()
         }
     }
 
-    return qintptr(acceptedDescriptor);
+    return acceptedDescriptor;
 }
 
 #ifndef QT_NO_NETWORKINTERFACE
@@ -771,10 +803,10 @@ QNetworkInterface QNativeSocketEnginePrivate::nativeMulticastInterface() const
     if (v.s_addr != 0 && sizeofv >= QT_SOCKOPTLEN_T(sizeof(v))) {
         QHostAddress ipv4(ntohl(v.s_addr));
         QList<QNetworkInterface> ifaces = QNetworkInterface::allInterfaces();
-        for (int i = 0; i < ifaces.size(); ++i) {
+        for (int i = 0; i < ifaces.count(); ++i) {
             const QNetworkInterface &iface = ifaces.at(i);
             QList<QNetworkAddressEntry> entries = iface.addressEntries();
-            for (int j = 0; j < entries.size(); ++j) {
+            for (int j = 0; j < entries.count(); ++j) {
                 const QNetworkAddressEntry &entry = entries.at(j);
                 if (entry.ip() == ipv4)
                     return iface;
@@ -796,7 +828,7 @@ bool QNativeSocketEnginePrivate::nativeSetMulticastInterface(const QNetworkInter
     struct in_addr v;
     if (iface.isValid()) {
         QList<QNetworkAddressEntry> entries = iface.addressEntries();
-        for (int i = 0; i < entries.size(); ++i) {
+        for (int i = 0; i < entries.count(); ++i) {
             const QNetworkAddressEntry &entry = entries.at(i);
             const QHostAddress &ip = entry.ip();
             if (ip.protocol() == QAbstractSocket::IPv4Protocol) {
@@ -1435,8 +1467,6 @@ int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool selectForRead) co
     return nativeSelect(timeout, selectForRead, !selectForRead, &dummy, &dummy);
 }
 
-#ifndef Q_OS_WASM
-
 int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool checkRead, bool checkWrite,
                        bool *selectForRead, bool *selectForWrite) const
 {
@@ -1466,25 +1496,5 @@ int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool checkRead, bool c
 
     return ret;
 }
-
-#else
-
-int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool checkRead, bool checkWrite,
-                        bool *selectForRead, bool *selectForWrite) const
-{
-    *selectForRead = checkRead;
-    *selectForWrite = checkWrite;
-    bool socketDisconnect = false;
-    QEventDispatcherWasm::socketSelect(timeout, socketDescriptor, checkRead, checkWrite,selectForRead, selectForWrite, &socketDisconnect);
-
-    // The disconnect/close handling code in QAbstractsScket::canReadNotification()
-    // does not detect remote disconnect properly; do that here as a workardound.
-    if (socketDisconnect)
-        receiver->closeNotification();
-
-    return 1;
-}
-
-#endif // Q_OS_WASM
 
 QT_END_NAMESPACE

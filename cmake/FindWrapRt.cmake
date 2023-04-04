@@ -21,7 +21,7 @@ check_cxx_source_compiles("
 #include <unistd.h>
 #include <time.h>
 
-int main(int, char **) {
+int main(int argc, char *argv[]) {
     timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
 }" HAVE_GETTIME)
 

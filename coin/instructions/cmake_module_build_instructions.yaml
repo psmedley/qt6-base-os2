@@ -6,18 +6,11 @@ instructions:
     directory: "{{.SourceDir}}"
   - type: ChangeDirectory
     directory: "{{.BuildDir}}"
-
-  - type: EnvironmentVariable
-    variableName: COIN_CONFIGURE_ARGS
-    variableValue: "{{.Env.NON_QTBASE_CONFIGURE_ARGS}}"
   - type: EnvironmentVariable
     variableName: COIN_CMAKE_ARGS
-    variableValue: "{{.Env.NON_QTBASE_CMAKE_ARGS}} {{.Env.COMMON_NON_QTBASE_CMAKE_ARGS}}"
-  - type: EnvironmentVariable
-    variableName: CONFIGURE_ENV_PREFIX
-    variableValue: "{{.Env.ENV_PREFIX}}"
-  - !include "{{qt/qtbase}}/call_configure_module.yaml"
-
+    # The lack of space between the non qtbase configure args and the rest of the args is important!
+    variableValue: "{{.Env.NON_QTBASE_CONFIGURE_ARGS}} {{.SourceDir}}"
+  - !include "{{qt/qtbase}}/call_cmake.yaml"
   - type: EnvironmentVariable
     variableName: CMAKE_BUILD_TIMEOUT
     variableValue: "6000"
@@ -33,11 +26,11 @@ instructions:
       env_var: CMAKE_BUILD_OUTPUT_TIMEOUT
       equals_value: null
   - type: ExecuteCommand
-    command: "{{.Env.CONFIGURE_ENV_PREFIX}} cmake --build . --parallel -v"
+    command: "{{.Env.ENV_PREFIX}} cmake --build . --parallel -v"
     maxTimeInSeconds: "{{.Env.CMAKE_BUILD_TIMEOUT}}"
     maxTimeBetweenOutput: "{{.Env.CMAKE_BUILD_OUTPUT_TIMEOUT}}"
     userMessageOnFailure: >
-      Failed to build sources.
+      Failed to build sources. In the current state bug can be everywhere.
   - type: EnvironmentVariable
     variableName: COIN_CMAKE_INSTALL_SCRIPT_PATH
     variableValue: "{{.InstallDir}}"

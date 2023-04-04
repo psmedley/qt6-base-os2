@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qnetworkaccessauthenticationmanager_p.h"
 #include "qnetworkaccessmanager.h"
@@ -15,8 +51,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 class QNetworkAuthenticationCache : private QList<QNetworkAuthenticationCredential>,
                                     public QNetworkAccessCache::CacheableObject
 {
@@ -28,23 +62,20 @@ public:
         reserve(1);
     }
 
-    using QList<QNetworkAuthenticationCredential>::begin;
-    using QList<QNetworkAuthenticationCredential>::end;
-
-    iterator findClosestMatch(const QString &domain)
+    QNetworkAuthenticationCredential *findClosestMatch(const QString &domain)
     {
         iterator it = std::lower_bound(begin(), end(), domain);
         if (it == end() && !isEmpty())
             --it;
         if (it == end() || !domain.startsWith(it->domain))
-            return end();
-        return it;
+            return nullptr;
+        return &*it;
     }
 
     void insert(const QString &domain, const QString &user, const QString &password)
     {
-        iterator closestMatch = findClosestMatch(domain);
-        if (closestMatch != end() && closestMatch->domain == domain) {
+        QNetworkAuthenticationCredential *closestMatch = findClosestMatch(domain);
+        if (closestMatch && closestMatch->domain == domain) {
             // we're overriding the current credentials
             closestMatch->user = user;
             closestMatch->password = password;
@@ -54,7 +85,7 @@ public:
             newCredential.user = user;
             newCredential.password = password;
 
-            if (closestMatch != end())
+            if (closestMatch)
                 QList<QNetworkAuthenticationCredential>::insert(++closestMatch, newCredential);
             else
                 QList<QNetworkAuthenticationCredential>::insert(end(), newCredential);
@@ -71,16 +102,16 @@ static QByteArray proxyAuthenticationKey(const QNetworkProxy &proxy, const QStri
 
     switch (proxy.type()) {
     case QNetworkProxy::Socks5Proxy:
-        key.setScheme("proxy-socks5"_L1);
+        key.setScheme(QLatin1String("proxy-socks5"));
         break;
 
     case QNetworkProxy::HttpProxy:
     case QNetworkProxy::HttpCachingProxy:
-        key.setScheme("proxy-http"_L1);
+        key.setScheme(QLatin1String("proxy-http"));
         break;
 
     case QNetworkProxy::FtpCachingProxy:
-        key.setScheme("proxy-ftp"_L1);
+        key.setScheme(QLatin1String("proxy-ftp"));
         break;
 
     case QNetworkProxy::DefaultProxy:
@@ -256,9 +287,9 @@ QNetworkAccessAuthenticationManager::fetchCachedCredentials(const QUrl &url,
 
     QNetworkAuthenticationCache *auth =
         static_cast<QNetworkAuthenticationCache *>(authenticationCache.requestEntryNow(cacheKey));
-    auto cred = auth->findClosestMatch(url.path());
+    QNetworkAuthenticationCredential *cred = auth->findClosestMatch(url.path());
     QNetworkAuthenticationCredential ret;
-    if (cred != auth->end())
+    if (cred)
         ret = *cred;
     authenticationCache.releaseEntry(cacheKey);
     return ret;

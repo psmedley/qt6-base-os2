@@ -15,7 +15,6 @@ qt_internal_add_tool(${target_name}
         QT_NO_FOREACH
         QTPATHS_VERSION_STR="2.0"
 )
-qt_internal_return_unless_building_tools()
 
 ## Scopes:
 #####################################################################

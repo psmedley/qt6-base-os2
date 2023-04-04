@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtOpenGL module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qopenglengineshadermanager_p.h"
 #include "qopenglengineshadersource_p.h"
@@ -10,7 +46,6 @@
 #include <QtCore/qthreadstorage.h>
 
 #include <algorithm>
-#include <memory>
 
 #if defined(QT_DEBUG)
 #include <QMetaEnum>
@@ -337,7 +372,7 @@ QOpenGLEngineShaderProg *QOpenGLEngineSharedShaders::findProgramInCache(const QO
         }
     }
 
-    std::unique_ptr<QOpenGLEngineShaderProg> newProg;
+    QScopedPointer<QOpenGLEngineShaderProg> newProg;
 
     do {
         QByteArray fragSource;
@@ -360,10 +395,10 @@ QOpenGLEngineShaderProg *QOpenGLEngineSharedShaders::findProgramInCache(const QO
         vertexSource.append(qShaderSnippets[prog.mainVertexShader]);
         vertexSource.append(qShaderSnippets[prog.positionVertexShader]);
 #endif
-        auto shaderProgram = std::make_unique<QOpenGLShaderProgram>();
+        QScopedPointer<QOpenGLShaderProgram> shaderProgram(new QOpenGLShaderProgram);
 
         CachedShader shaderCache(fragSource, vertexSource);
-        bool inCache = shaderCache.load(shaderProgram.get(), QOpenGLContext::currentContext());
+        bool inCache = shaderCache.load(shaderProgram.data(), QOpenGLContext::currentContext());
 
         if (!inCache) {
             if (!shaderProgram->addCacheableShaderFromSourceCode(QOpenGLShader::Vertex, vertexSource)) {
@@ -411,16 +446,18 @@ QOpenGLEngineShaderProg *QOpenGLEngineSharedShaders::findProgramInCache(const QO
         }
 
         newProg.reset(new QOpenGLEngineShaderProg(prog));
-        newProg->program = shaderProgram.release();
+        newProg->program = shaderProgram.take();
 
         newProg->program->link();
         if (newProg->program->isLinked()) {
             if (!inCache)
                 shaderCache.store(newProg->program, QOpenGLContext::currentContext());
         } else {
-            qWarning("Shader program failed to link\n"
-                    "  Error Log:\n"
-                    "    %ls", qUtf16Printable(newProg->program->log()));
+            QString error;
+            error = QLatin1String("Shader program failed to link")
+                    + QLatin1String("  Error Log:\n")
+                    + QLatin1String("    ") + newProg->program->log();
+            qWarning() << error;
             break;
         }
 
@@ -431,7 +468,7 @@ QOpenGLEngineShaderProg *QOpenGLEngineSharedShaders::findProgramInCache(const QO
             newProg->program->setUniformValue(location, QT_MASK_TEXTURE_UNIT);
         }
 
-        if (cachedPrograms.size() > 30) {
+        if (cachedPrograms.count() > 30) {
             // The cache is full, so delete the last 5 programs in the list.
             // These programs will be least used, as a program us bumped to
             // the top of the list when it's used.
@@ -441,10 +478,10 @@ QOpenGLEngineShaderProg *QOpenGLEngineSharedShaders::findProgramInCache(const QO
             }
         }
 
-        cachedPrograms.insert(0, newProg.get());
+        cachedPrograms.insert(0, newProg.data());
     } while (false);
 
-    return newProg.release();
+    return newProg.take();
 }
 
 void QOpenGLEngineSharedShaders::cleanupCustomStage(QOpenGLCustomShaderStage* stage)
@@ -857,5 +894,3 @@ bool QOpenGLEngineShaderManager::useCorrectShaderProg()
 }
 
 QT_END_NAMESPACE
-
-#include "moc_qopenglengineshadermanager_p.cpp"

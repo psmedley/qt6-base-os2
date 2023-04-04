@@ -1,7 +1,43 @@
 #!/usr/bin/env perl
-# Copyright (C) 2016 The Qt Company Ltd.
-# Copyright (C) 2016 Intel Corporation.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+#############################################################################
+##
+## Copyright (C) 2016 The Qt Company Ltd.
+## Copyright (C) 2016 Intel Corporation.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is part of the build configuration tools of the Qt Toolkit.
+##
+## $QT_BEGIN_LICENSE:LGPL$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU Lesser General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU Lesser
+## General Public License version 3 as published by the Free Software
+## Foundation and appearing in the file LICENSE.LGPL3 included in the
+## packaging of this file. Please review the following information to
+## ensure the GNU Lesser General Public License version 3 requirements
+## will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 2.0 or (at your option) the GNU General
+## Public license version 3 or any later version approved by the KDE Free
+## Qt Foundation. The licenses are as published by the Free Software
+## Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-2.0.html and
+## https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
 
 #
 # Synchronizes Qt header files - internal development tool.
@@ -157,33 +193,6 @@ sub shouldMasterInclude {
 }
 
 ######################################################################
-# Syntax:  filterDeprecationMacros(line)
-# Params:  line: a line of C++ source
-#
-# Purpose: Removes occurrences of QT_DEPRECATED_* macro calls.
-#          The calls may have an argument list that is also removed.
-# Returns: The filtered line.
-######################################################################
-sub filterDeprecationMacros {
-    my $line = $_[0];
-    my $rest;
-    if ($line =~ /(.*\s+)QT_DEPRECATED_[[:upper:][:digit:]_]+\s*(.*)/) {
-        $line = $1;
-        $rest = $2;
-
-        # Does the macro call have an argument list? If so, remove it.
-        # The regular expression matches balanced parenthesis anywhere in $rest.
-        # Therefore, we must check whether the match starts at index zero.
-        if ($rest =~ /\((?:[^)(]+|(?R))*+\)/ && $-[0] == 0) {
-            $line .= substr($rest, $+[0]);
-        } else {
-            $line .= $rest;
-        }
-    }
-    return $line;
-}
-
-######################################################################
 # Syntax:  classNames(iheader, clean, requires)
 # Params:  iheader, string, filename to parse for classname "symlinks"
 #          (out) clean, boolean, will be set to false if the header isn't clean
@@ -289,7 +298,7 @@ sub classNames {
 
         if($definition) {
             $definition =~ s=[\n\r]==g;
-            $definition = filterDeprecationMacros($definition);
+            $definition =~ s/QT_DEPRECATED_X\s*\(\s*".*?"\s*\)//g;
             my @symbols;
             my $post_kw = qr/Q_DECL_FINAL|final|sealed/; # add here macros and keywords that go after the class-name of a class definition
             if($definition =~ m/^ *typedef *.*\(\*([^\)]*)\)\(.*\);$/) {
@@ -326,8 +335,7 @@ sub check_header {
 
     return if ($ignore_for_include_check{$header});
     if ($public_header) {
-        $header_skip_qt_begin_namespace_test = $header &&
-             ($ignore_for_qt_begin_namespace_check{$header} || $header =~ m,(^|/)q\w+global\.h$,);
+        $header_skip_qt_begin_namespace_test = 1 if ($ignore_for_qt_begin_namespace_check{$header});
     }
 
     local $/ = "\x0a";
@@ -1059,9 +1067,7 @@ foreach my $lib (@modules_to_sync) {
                             # We need both $public_header and $private_header because QPA headers count as neither
                             my $private_header = !$public_header && !$qpa_header
                                 && $header =~ /_p\.h$/ && $subdir !~ /3rdparty/;
-                            if ($is_qt) { # skip check since this header is not qt header
-                                check_header($lib, $header, $iheader, $public_header, $private_header);
-                            }
+                            check_header($lib, $header, $iheader, $public_header, $private_header);
                         }
                         my @classes = ();
                         push @classes, classNames($iheader, \$clean_header, \$requires)
@@ -1078,13 +1084,7 @@ foreach my $lib (@modules_to_sync) {
                             #find out all the places it goes..
                             my $oheader;
                             if ($public_header) {
-                                if ($is_qt || $headers_dir eq $subdir) { # this is qt header or header is not in subdirectory
-                                    $oheader = "$out_basedir/include/$lib/$header";
-                                } else {
-                                    my $subdirname = $subdir;
-                                    $subdirname =~ s/^$headers_dir//;
-                                    $oheader = "$out_basedir/include/$lib/$subdirname/$header"; # keep subdirectory name
-                                }
+                                $oheader = "$out_basedir/include/$lib/$header";
                                 foreach my $full_class (@classes) {
                                     my $header_base = basename($header);
                                     # Strip namespaces:
@@ -1208,11 +1208,11 @@ foreach my $lib (@modules_to_sync) {
                     "#endif\n" .
                     "#endif\n";
                 if (writeFile($header_path, $hdrcont)) {
-                    if ($verbose_level > 0 and $verbose_level < 3) {
+                    if ($verbose_level < 3) {
                         my $line_prefix = ",";
                         $line_prefix = "$lib: created deprecated header(s) {" if ($first);
                         print "$line_prefix $header";
-                    } elsif ($verbose_level >= 3) {
+                    } else {
                         print "$lib: created deprecated header $header => $include\n";
                     }
                     $first = 0;
@@ -1221,7 +1221,7 @@ foreach my $lib (@modules_to_sync) {
 
             $pri_install_gfiles .= "$header ";
         }
-        if ($verbose_level > 0 and $verbose_level < 3) {
+        if ($verbose_level < 3) {
             print " }\n" unless ($first);
         }
 

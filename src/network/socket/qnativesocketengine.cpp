@@ -1,6 +1,42 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 //#define QNATIVESOCKETENGINE_DEBUG
 
@@ -98,8 +134,6 @@
 #endif
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 //#define QNATIVESOCKETENGINE_DEBUG
 
@@ -414,13 +448,13 @@ bool QNativeSocketEngine::initialize(QAbstractSocket::SocketType socketType, QAb
     // Create the socket
     if (!d->createNewSocket(socketType, protocol)) {
 #if defined (QNATIVESOCKETENGINE_DEBUG)
-        QString typeStr = "UnknownSocketType"_L1;
-        if (socketType == QAbstractSocket::TcpSocket) typeStr = "TcpSocket"_L1;
-        else if (socketType == QAbstractSocket::UdpSocket) typeStr = "UdpSocket"_L1;
-        else if (socketType == QAbstractSocket::SctpSocket) typeStr = "SctpSocket"_L1;
-        QString protocolStr = "UnknownProtocol"_L1;
-        if (protocol == QAbstractSocket::IPv4Protocol) protocolStr = "IPv4Protocol"_L1;
-        else if (protocol == QAbstractSocket::IPv6Protocol) protocolStr = "IPv6Protocol"_L1;
+        QString typeStr = QLatin1String("UnknownSocketType");
+        if (socketType == QAbstractSocket::TcpSocket) typeStr = QLatin1String("TcpSocket");
+        else if (socketType == QAbstractSocket::UdpSocket) typeStr = QLatin1String("UdpSocket");
+        else if (socketType == QAbstractSocket::SctpSocket) typeStr = QLatin1String("SctpSocket");
+        QString protocolStr = QLatin1String("UnknownProtocol");
+        if (protocol == QAbstractSocket::IPv4Protocol) protocolStr = QLatin1String("IPv4Protocol");
+        else if (protocol == QAbstractSocket::IPv6Protocol) protocolStr = QLatin1String("IPv6Protocol");
         qDebug("QNativeSocketEngine::initialize(type == %s, protocol == %s) failed: %s",
                typeStr.toLatin1().constData(), protocolStr.toLatin1().constData(), d->socketErrorString.toLatin1().constData());
 #endif
@@ -442,18 +476,16 @@ bool QNativeSocketEngine::initialize(QAbstractSocket::SocketType socketType, QAb
     }
 
 
-#ifndef Q_OS_WASM
     // Make sure we receive out-of-band data
     if (socketType == QAbstractSocket::TcpSocket
         && !setOption(ReceiveOutOfBandData, 1)) {
         qWarning("QNativeSocketEngine::initialize unable to inline out-of-band data");
     }
-#endif
 
     // Before Qt 4.6, we always set the send and receive buffer size to 49152 as
     // this was found to be an optimal value. However, modern OS
     // all have some kind of auto tuning for this and we therefore don't set
-    // this explicitly anymore.
+    // this explictly anymore.
     // If it introduces any performance regressions for Qt 4.6.x (x > 0) then
     // it will be put back in.
     //
@@ -657,7 +689,7 @@ bool QNativeSocketEngine::bind(const QHostAddress &address, quint16 port)
 
     \sa bind(), accept()
 */
-bool QNativeSocketEngine::listen(int backlog)
+bool QNativeSocketEngine::listen()
 {
     Q_D(QNativeSocketEngine);
     Q_CHECK_VALID_SOCKETLAYER(QNativeSocketEngine::listen(), false);
@@ -669,7 +701,11 @@ bool QNativeSocketEngine::listen(int backlog)
     Q_CHECK_TYPE(QNativeSocketEngine::listen(), QAbstractSocket::TcpSocket, false);
 #endif
 
-    return d->nativeListen(backlog);
+    // We're using a backlog of 50. Most modern kernels support TCP
+    // syncookies by default, and if they do, the backlog is ignored.
+    // When there is no support for TCP syncookies, this value is
+    // fine.
+    return d->nativeListen(50);
 }
 
 /*!
@@ -679,7 +715,7 @@ bool QNativeSocketEngine::listen(int backlog)
 
     \sa bind(), listen()
 */
-qintptr QNativeSocketEngine::accept()
+int QNativeSocketEngine::accept()
 {
     Q_D(QNativeSocketEngine);
     Q_CHECK_VALID_SOCKETLAYER(QNativeSocketEngine::accept(), -1);
@@ -1255,7 +1291,7 @@ bool QReadNotifier::event(QEvent *e)
 class QWriteNotifier : public QSocketNotifier
 {
 public:
-    QWriteNotifier(qintptr fd, QNativeSocketEngine *parent)
+    QWriteNotifier(int fd, QNativeSocketEngine *parent)
         : QSocketNotifier(fd, QSocketNotifier::Write, parent) { engine = parent; }
 
 protected:
@@ -1279,7 +1315,7 @@ bool QWriteNotifier::event(QEvent *e)
 class QExceptionNotifier : public QSocketNotifier
 {
 public:
-    QExceptionNotifier(qintptr fd, QNativeSocketEngine *parent)
+    QExceptionNotifier(int fd, QNativeSocketEngine *parent)
         : QSocketNotifier(fd, QSocketNotifier::Exception, parent) { engine = parent; }
 
 protected:

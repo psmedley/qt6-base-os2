@@ -48,7 +48,7 @@ struct VertOriginMetric
   }
 
   public:
-  HBGlyphID16	glyph;
+  HBGlyphID	glyph;
   FWORD		vertOriginY;
 
   public:

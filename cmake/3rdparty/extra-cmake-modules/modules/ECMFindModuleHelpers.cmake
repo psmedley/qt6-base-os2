@@ -68,7 +68,7 @@
 # If SKIP_DEPENDENCY_HANDLING is not set, the INTERFACE_LINK_LIBRARIES property
 # of the imported target for <component> will be set to contain the imported
 # targets for the components listed in <name>_<component>_component_deps.
-# <component>_FOUND will also be set to false if any of the components in
+# <component>_FOUND will also be set to false if any of the compoments in
 # <name>_<component>_component_deps are not found.  This requires the components
 # in <name>_<component>_component_deps to be listed before <component> in the
 # COMPONENTS argument.
@@ -122,6 +122,8 @@
 # THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+include(CMakeParseArguments)
 
 macro(ecm_find_package_version_check module_name)
     if(CMAKE_VERSION VERSION_LESS 2.8.12)

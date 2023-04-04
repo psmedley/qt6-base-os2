@@ -1,8 +1,44 @@
-// Copyright (C) 2017 The Qt Company Ltd.
-// Copyright (C) 2014 BlackBerry Limited. All rights reserved.
-// Copyright (C) 2014 Governikus GmbH & Co. KG.
-// Copyright (C) 2016 Richard J. Moore <rich@kde.org>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
+** Copyright (C) 2014 Governikus GmbH & Co. KG.
+** Copyright (C) 2016 Richard J. Moore <rich@kde.org>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtNetwork/qsslsocket.h>
 #include <QtNetwork/qssldiffiehellmanparameters.h>
@@ -63,20 +99,17 @@ static inline QString msgErrorSettingEllipticCurves(const QString &why)
     return QSslSocket::tr("Error when setting the elliptic curves (%1)").arg(why);
 }
 
-qssloptions QSslContext::setupOpenSslOptions(QSsl::SslProtocol protocol, QSsl::SslOptions sslOptions)
+long QSslContext::setupOpenSslOptions(QSsl::SslProtocol protocol, QSsl::SslOptions sslOptions)
 {
-    qssloptions options;
+    long options;
     switch (protocol) {
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
+    case QSsl::SecureProtocols:
     case QSsl::TlsV1_0OrLater:
         options = SSL_OP_ALL | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
         break;
     case QSsl::TlsV1_1OrLater:
         options = SSL_OP_ALL | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1;
         break;
-QT_WARNING_POP
-    case QSsl::SecureProtocols:
     case QSsl::TlsV1_2OrLater:
         options = SSL_OP_ALL | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1;
         break;
@@ -137,15 +170,21 @@ QSslContext::~QSslContext()
         q_SSL_SESSION_free(session);
 }
 
-std::shared_ptr<QSslContext> QSslContext::sharedFromConfiguration(QSslSocket::SslMode mode, const QSslConfiguration &configuration, bool allowRootCertOnDemandLoading)
+QSslContext* QSslContext::fromConfiguration(QSslSocket::SslMode mode, const QSslConfiguration &configuration, bool allowRootCertOnDemandLoading)
 {
-    struct AccessToPrivateCtor : QSslContext {};
-    std::shared_ptr<QSslContext> sslContext = std::make_shared<AccessToPrivateCtor>();
-    initSslContext(sslContext.get(), mode, configuration, allowRootCertOnDemandLoading);
+    QSslContext *sslContext = new QSslContext();
+    initSslContext(sslContext, mode, configuration, allowRootCertOnDemandLoading);
     return sslContext;
 }
 
-std::shared_ptr<QSslContext> QSslContext::sharedFromPrivateConfiguration(QSslSocket::SslMode mode, QSslConfigurationPrivate *privConfiguration,
+QSharedPointer<QSslContext> QSslContext::sharedFromConfiguration(QSslSocket::SslMode mode, const QSslConfiguration &configuration, bool allowRootCertOnDemandLoading)
+{
+    QSharedPointer<QSslContext> sslContext = QSharedPointer<QSslContext>::create();
+    initSslContext(sslContext.data(), mode, configuration, allowRootCertOnDemandLoading);
+    return sslContext;
+}
+
+QSharedPointer<QSslContext> QSslContext::sharedFromPrivateConfiguration(QSslSocket::SslMode mode, QSslConfigurationPrivate *privConfiguration,
                                                                         bool allowRootCertOnDemandLoading)
 {
     return sharedFromConfiguration(mode, privConfiguration, allowRootCertOnDemandLoading);
@@ -218,7 +257,7 @@ SSL* QSslContext::createSsl()
     QList<QByteArray> protocols = sslConfiguration.d.constData()->nextAllowedProtocols;
     if (!protocols.isEmpty()) {
         m_supportedNPNVersions.clear();
-        for (int a = 0; a < protocols.size(); ++a) {
+        for (int a = 0; a < protocols.count(); ++a) {
             if (protocols.at(a).size() > 255) {
                 qCWarning(lcTlsBackend) << "TLS NPN extension" << protocols.at(a)
                                  << "is too long and will be ignored.";
@@ -230,7 +269,7 @@ SSL* QSslContext::createSsl()
         }
         if (m_supportedNPNVersions.size()) {
             m_npnContext.data = reinterpret_cast<unsigned char *>(m_supportedNPNVersions.data());
-            m_npnContext.len = m_supportedNPNVersions.size();
+            m_npnContext.len = m_supportedNPNVersions.count();
             m_npnContext.status = QSslConfiguration::NextProtocolNegotiationNone;
             // Callback's type has a parameter 'const unsigned char ** out'
             // since it was introduced in 1.0.2. Internally, OpenSSL's own code
@@ -325,11 +364,8 @@ void QSslContext::initSslContext(QSslContext *sslContext, QSslSocket::SslMode mo
     bool isDtls = false;
 init_context:
     switch (sslContext->sslConfiguration.protocol()) {
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
     case QSsl::DtlsV1_0:
     case QSsl::DtlsV1_0OrLater:
-QT_WARNING_POP
     case QSsl::DtlsV1_2:
     case QSsl::DtlsV1_2OrLater:
 #if QT_CONFIG(dtls)
@@ -384,8 +420,6 @@ QT_WARNING_POP
     long maxVersion = anyVersion;
 
     switch (sslContext->sslConfiguration.protocol()) {
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
     case QSsl::TlsV1_0:
         minVersion = TLS1_VERSION;
         maxVersion = TLS1_VERSION;
@@ -394,7 +428,6 @@ QT_WARNING_DISABLE_DEPRECATED
         minVersion = TLS1_1_VERSION;
         maxVersion = TLS1_1_VERSION;
         break;
-QT_WARNING_POP
     case QSsl::TlsV1_2:
         minVersion = TLS1_2_VERSION;
         maxVersion = TLS1_2_VERSION;
@@ -411,8 +444,7 @@ QT_WARNING_POP
         break;
     // Ranges:
     case QSsl::AnyProtocol:
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
+    case QSsl::SecureProtocols:
     case QSsl::TlsV1_0OrLater:
         minVersion = TLS1_VERSION;
         maxVersion = 0;
@@ -421,14 +453,10 @@ QT_WARNING_DISABLE_DEPRECATED
         minVersion = TLS1_1_VERSION;
         maxVersion = 0;
         break;
-QT_WARNING_POP
-    case QSsl::SecureProtocols:
     case QSsl::TlsV1_2OrLater:
         minVersion = TLS1_2_VERSION;
         maxVersion = 0;
         break;
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
     case QSsl::DtlsV1_0:
         minVersion = DTLS1_VERSION;
         maxVersion = DTLS1_VERSION;
@@ -437,7 +465,6 @@ QT_WARNING_DISABLE_DEPRECATED
         minVersion = DTLS1_VERSION;
         maxVersion = 0;
         break;
-QT_WARNING_POP
     case QSsl::DtlsV1_2:
         minVersion = DTLS1_2_VERSION;
         maxVersion = DTLS1_2_VERSION;
@@ -476,7 +503,7 @@ QT_WARNING_POP
     }
 
     // Enable bug workarounds.
-    const qssloptions options = setupOpenSslOptions(configuration.protocol(), configuration.d->sslOptions);
+    const long options = setupOpenSslOptions(configuration.protocol(), configuration.d->sslOptions);
     q_SSL_CTX_set_options(sslContext->ctx, options);
 
     // Tell OpenSSL to release memory early
@@ -632,7 +659,7 @@ QT_WARNING_POP
 
         // If we have any intermediate certificates then we need to add them to our chain
         bool first = true;
-        for (const QSslCertificate &cert : std::as_const(configuration.d->localCertificateChain)) {
+        for (const QSslCertificate &cert : qAsConst(configuration.d->localCertificateChain)) {
             if (first) {
                 first = false;
                 continue;
@@ -702,7 +729,7 @@ QT_WARNING_POP
         const QByteArray &params = dhparams.d->derData;
         const char *ptr = params.constData();
         DH *dh = q_d2i_DHparams(nullptr, reinterpret_cast<const unsigned char **>(&ptr),
-                                params.size());
+                                params.length());
         if (dh == nullptr)
             qFatal("q_d2i_DHparams failed to convert QSslDiffieHellmanParameters to DER form");
         q_SSL_CTX_set_tmp_dh(sslContext->ctx, dh);

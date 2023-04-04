@@ -10,6 +10,9 @@ qhp.qmake.file                = qmake.qhp
 qhp.qmake.namespace           = org.qt-project.qmake.$QT_VERSION_TAG
 qhp.qmake.virtualFolder       = qmake
 qhp.qmake.indexTitle          = QMake Manual
+qhp.qmake.filterAttributes    = qt $QT_VERSION tools qmake
+qhp.qmake.customFilters.qmake.name = qmake Manual
+qhp.qmake.customFilters.qmake.filterAttributes = qt tools qmake
 qhp.qmake.subprojects         = manual
 qhp.qmake.subprojects.manual.title = Manual
 qhp.qmake.subprojects.manual.indexTitle = qmake Manual
@@ -23,8 +26,6 @@ imagedirs               = images
 exampledirs             = snippets
 
 tagfile = qmake.tags
-
-macro.qtbug = "\\l{https://bugreports.qt.io/browse/\1}{\1}"
 
 depends += \
     activeqt \
@@ -49,6 +50,8 @@ depends += \
     qtquick \
     qtquickcontrols \
     qtquickdialogs \
+    qtscript \
+    qtscripttools \
     qtsensors \
     qtserialport \
     qtsql \
@@ -56,9 +59,9 @@ depends += \
     qttestlib \
     qtuitools \
     qtwidgets \
-    qtxml
+    qtwinextras \
+    qtx11extras \
+    qtxml \
+    qtxmlpatterns
 
 navigation.landingpage = "qmake Manual"
-
-# Fail the documentation build if there are more warnings than the limit
-warninglimit = 0

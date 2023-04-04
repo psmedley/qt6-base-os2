@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <private/qapplication_p.h>
 #include <private/qdatetimeedit_p.h>
@@ -15,7 +51,6 @@
 #include <qlayout.h>
 #include <qset.h>
 #include <qstyle.h>
-#include <qstylepainter.h>
 #if QT_CONFIG(timezone)
 #include <QTimeZone>
 #endif
@@ -32,8 +67,6 @@
 #endif
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 // --- QDateTimeEdit ---
 
@@ -190,9 +223,7 @@ QDateTimeEdit::QDateTimeEdit(QTime time, QWidget *parent)
   \internal
 */
 QDateTimeEdit::QDateTimeEdit(const QVariant &var, QMetaType::Type parserType, QWidget *parent)
-    : QAbstractSpinBox(*new QDateTimeEditPrivate(
-                           parserType == QMetaType::QDateTime ? Qt::LocalTime : Qt::UTC),
-                       parent)
+    : QAbstractSpinBox(*new QDateTimeEditPrivate, parent)
 {
     Q_D(QDateTimeEdit);
     d->parserType = parserType;
@@ -1031,9 +1062,9 @@ QSize QDateTimeEdit::sizeHint() const
         int h = d->edit->sizeHint().height();
         int w = 0;
         QString s;
-        s = d->textFromValue(d->minimum) + u' ';
+        s = d->textFromValue(d->minimum) + QLatin1Char(' ');
         w = qMax<int>(w, fm.horizontalAdvance(s));
-        s = d->textFromValue(d->maximum) + u' ';
+        s = d->textFromValue(d->maximum) + QLatin1Char(' ');
         w = qMax<int>(w, fm.horizontalAdvance(s));
         if (d->specialValueText.size()) {
             s = d->specialValueText;
@@ -1597,7 +1628,7 @@ QTimeEdit::QTimeEdit(QWidget *parent)
 */
 
 QTimeEdit::QTimeEdit(QTime time, QWidget *parent)
-    : QDateTimeEdit(time.isValid() ? time : QDATETIMEEDIT_TIME_MIN, QMetaType::QTime, parent)
+    : QDateTimeEdit(time, QMetaType::QTime, parent)
 {
     connect(this, &QTimeEdit::timeChanged, this, &QTimeEdit::userTimeChanged);
 }
@@ -1667,7 +1698,7 @@ QDateEdit::QDateEdit(QWidget *parent)
 */
 
 QDateEdit::QDateEdit(QDate date, QWidget *parent)
-    : QDateTimeEdit(date.isValid() ? date : QDATETIMEEDIT_DATE_INITIAL, QMetaType::QDate, parent)
+    : QDateTimeEdit(date, QMetaType::QDate, parent)
 {
     connect(this, &QDateEdit::dateChanged, this, &QDateEdit::userDateChanged);
 }
@@ -1703,17 +1734,16 @@ QDateEdit::~QDateEdit()
 */
 
 
-QDateTimeEditPrivate::QDateTimeEditPrivate(Qt::TimeSpec timeSpec)
-    : QDateTimeParser(QMetaType::QDateTime, QDateTimeParser::DateTimeEdit, QCalendar()),
-      spec(timeSpec)
+QDateTimeEditPrivate::QDateTimeEditPrivate()
+    : QDateTimeParser(QMetaType::QDateTime, QDateTimeParser::DateTimeEdit, QCalendar())
 {
     fixday = true;
     type = QMetaType::QDateTime;
     currentSectionIndex = FirstSectionIndex;
 
     first.pos = 0;
-    minimum = QDATETIMEEDIT_COMPAT_DATE_MIN.startOfDay(spec);
-    maximum = QDATETIMEEDIT_DATE_MAX.endOfDay(spec);
+    minimum = QDATETIMEEDIT_COMPAT_DATE_MIN.startOfDay();
+    maximum = QDATETIMEEDIT_DATE_MAX.endOfDay();
     readLocaleSettings();
 }
 
@@ -1830,7 +1860,7 @@ int QDateTimeEditPrivate::sectionAt(int pos) const
     const int textSize = text.size();
     if (textSize - pos < separators.last().size() + 1) {
         if (separators.last().size() == 0) {
-            return sectionNodes.size() - 1;
+            return sectionNodes.count() - 1;
         }
         return (pos == textSize ? LastSectionIndex : NoSectionIndex);
     }
@@ -1916,7 +1946,7 @@ int QDateTimeEditPrivate::nextPrevSection(int current, bool forward) const
 
 void QDateTimeEditPrivate::clearSection(int index)
 {
-    const auto space = u' ';
+    const QLatin1Char space(' ');
     int cursorPos = edit->cursorPosition();
     const QSignalBlocker blocker(edit);
     QString t = edit->text();
@@ -2071,45 +2101,15 @@ QDateTime QDateTimeEditPrivate::stepBy(int sectionIndex, int steps, bool test) c
         v = q->dateTimeFromText(str);
     int val = getDigit(v, sectionIndex);
 
+    val += steps;
+
     const int min = absoluteMin(sectionIndex);
     const int max = absoluteMax(sectionIndex, value.toDateTime());
 
-    if (sn.type & DayOfWeekSectionMask) {
-        // Must take locale's first day of week into account when *not*
-        // wrapping; min and max don't help us.
-#ifndef QT_ALWAYS_WRAP_WEEKDAY // (documentation, not an actual define)
-        if (!wrapping) {
-            /* It's not clear this is ever really a desirable behavior.
-
-               It refuses to step backwards from the first day of the week or
-               forwards from the day before, only allowing day-of-week stepping
-               from start to end of one week. That's strictly what non-wrapping
-               behavior must surely mean, when put in locale-neutral terms.
-
-               It is, however, likely that users would prefer the "more natural"
-               behavior of cycling through the week.
-            */
-            const int first = int(locale().firstDayOfWeek()); // Mon = 1 through 7 = Sun
-            val = qBound(val < first ? first - 7 : first,
-                         val + steps,
-                         val < first ? first - 1 : first + 6);
-        } else
-#endif
-        {
-            val += steps;
-        }
-
-        // Restore to range from 1 through 7:
-        val = val % 7;
-        if (val <= 0)
-            val += 7;
-    } else {
-        val += steps;
-        const int span = max - min + 1;
-        if (val < min)
-            val = wrapping ? val + span : min;
-        else if (val > max)
-            val = wrapping ? val - span : max;
+    if (val < min) {
+        val = (wrapping ? max - (min - val) + 1 : min);
+    } else if (val > max) {
+        val = (wrapping ? min + val - max - 1 : max);
     }
 
     const int oldDay = v.date().day(calendar);
@@ -2132,8 +2132,7 @@ QDateTime QDateTimeEditPrivate::stepBy(int sectionIndex, int steps, bool test) c
     const QDateTime minimumDateTime = minimum.toDateTime();
     const QDateTime maximumDateTime = maximum.toDateTime();
     // changing one section should only modify that section, if possible
-    if (sn.type != AmPmSection && !(sn.type & DayOfWeekSectionMask)
-        && (v < minimumDateTime || v > maximumDateTime)) {
+    if (sn.type != AmPmSection && (v < minimumDateTime || v > maximumDateTime)) {
         const int localmin = getDigit(minimumDateTime, sectionIndex);
         const int localmax = getDigit(maximumDateTime, sectionIndex);
 
@@ -2408,8 +2407,8 @@ void QDateTimeEdit::paintEvent(QPaintEvent *event)
         optCombo.state &= ~QStyle::State_Enabled;
     }
 
-    QStylePainter p(this);
-    p.drawComplexControl(QStyle::CC_ComboBox, optCombo);
+    QPainter p(this);
+    style()->drawComplexControl(QStyle::CC_ComboBox, &optCombo, &p, this);
 }
 
 int QDateTimeEditPrivate::absoluteIndex(QDateTimeEdit::Section s, int index) const
@@ -2480,25 +2479,25 @@ void QDateTimeEditPrivate::init(const QVariant &var)
     Q_Q(QDateTimeEdit);
     switch (var.userType()) {
     case QMetaType::QDate:
-        value = var.toDate().startOfDay(spec);
+        value = var.toDate().startOfDay();
         updateTimeSpec();
         q->setDisplayFormat(defaultDateFormat);
         if (sectionNodes.isEmpty()) // ### safeguard for broken locale
-            q->setDisplayFormat("dd/MM/yyyy"_L1);
+            q->setDisplayFormat(QLatin1String("dd/MM/yyyy"));
         break;
     case QMetaType::QDateTime:
         value = var;
         updateTimeSpec();
         q->setDisplayFormat(defaultDateTimeFormat);
         if (sectionNodes.isEmpty()) // ### safeguard for broken locale
-            q->setDisplayFormat("dd/MM/yyyy hh:mm:ss"_L1);
+            q->setDisplayFormat(QLatin1String("dd/MM/yyyy hh:mm:ss"));
         break;
     case QMetaType::QTime:
-        value = QDateTime(QDATETIMEEDIT_DATE_INITIAL, var.toTime(), spec);
+        value = QDateTime(QDATETIMEEDIT_DATE_INITIAL, var.toTime());
         updateTimeSpec();
         q->setDisplayFormat(defaultTimeFormat);
         if (sectionNodes.isEmpty()) // ### safeguard for broken locale
-            q->setDisplayFormat("hh:mm:ss"_L1);
+            q->setDisplayFormat(QLatin1String("hh:mm:ss"));
         break;
     default:
         Q_ASSERT_X(0, "QDateTimeEditPrivate::init", "Internal error");
@@ -2602,7 +2601,7 @@ void QDateTimeEditPrivate::initCalendarPopup(QCalendarWidget *cw)
     Q_Q(QDateTimeEdit);
     if (!monthCalendar) {
         monthCalendar = new QCalendarPopup(q, cw, calendar);
-        monthCalendar->setObjectName("qt_datetimedit_calendar"_L1);
+        monthCalendar->setObjectName(QLatin1String("qt_datetimedit_calendar"));
         QObject::connect(monthCalendar, SIGNAL(newDateSelected(QDate)), q, SLOT(setDate(QDate)));
         QObject::connect(monthCalendar, SIGNAL(hidingCalendar(QDate)), q, SLOT(setDate(QDate)));
         QObject::connect(monthCalendar, SIGNAL(activated(QDate)), q, SLOT(setDate(QDate)));

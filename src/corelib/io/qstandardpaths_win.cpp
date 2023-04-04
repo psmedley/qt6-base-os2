@@ -1,15 +1,53 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qstandardpaths.h"
 
 #include <qdir.h>
+#include <private/qsystemlibrary_p.h>
 #include <qstringlist.h>
 
 #ifndef QT_BOOTSTRAPPED
 #include <qcoreapplication.h>
 #endif
 
+#include <qoperatingsystemversion.h>
 #include <qt_windows.h>
 #include <shlobj.h>
 #include <intshcut.h>
@@ -18,8 +56,6 @@
 #ifndef QT_NO_STANDARDPATHS
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 static QString convertCharArray(const wchar_t *path)
 {
@@ -43,10 +79,10 @@ static void appendOrganizationAndApp(QString &path) // Courtesy qstandardpaths_u
 #ifndef QT_BOOTSTRAPPED
     const QString &org = QCoreApplication::organizationName();
     if (!org.isEmpty())
-        path += u'/' + org;
+        path += QLatin1Char('/') + org;
     const QString &appName = QCoreApplication::applicationName();
     if (!appName.isEmpty())
-        path += u'/' + appName;
+        path += QLatin1Char('/') + appName;
 #else // !QT_BOOTSTRAPPED
     Q_UNUSED(path);
 #endif
@@ -55,12 +91,17 @@ static void appendOrganizationAndApp(QString &path) // Courtesy qstandardpaths_u
 static inline void appendTestMode(QString &path)
 {
     if (QStandardPaths::isTestModeEnabled())
-        path += "/qttest"_L1;
+        path += QLatin1String("/qttest");
 }
 
-static bool isProcessLowIntegrity()
-{
-    // same as GetCurrentProcessToken()
+static bool isProcessLowIntegrity() {
+#ifdef Q_CC_MINGW
+    // GetCurrentProcessToken was introduced in MinGW w64 in v7
+    // Disable function until Qt CI is updated
+    return false;
+#else
+    // non-leaking pseudo-handle. Expanded inline function GetCurrentProcessToken()
+    // (was made an inline function in Windows 8).
     const auto process_token = HANDLE(quintptr(-4));
 
     QVarLengthArray<char,256> token_info_buf(256);
@@ -78,6 +119,7 @@ static bool isProcessLowIntegrity()
     // there's no point in checking before dereferencing
     DWORD integrity_level = *GetSidSubAuthority(token_info->Label.Sid, *GetSidSubAuthorityCount(token_info->Label.Sid) - 1);
     return (integrity_level < SECURITY_MANDATORY_MEDIUM_RID);
+#endif
 }
 
 // Map QStandardPaths::StandardLocation to KNOWNFOLDERID of SHGetKnownFolderPath()
@@ -98,15 +140,12 @@ static GUID writableSpecialFolderId(QStandardPaths::StandardLocation type)
         FOLDERID_LocalAppData,  // GenericDataLocation ("Local" path)
         GUID(),                 // RuntimeLocation
         FOLDERID_LocalAppData,  // ConfigLocation ("Local" path)
-        FOLDERID_Downloads,     // DownloadLocation
-        GUID(),                 // GenericCacheLocation
+        GUID(), GUID(),         // DownloadLocation/GenericCacheLocation
         FOLDERID_LocalAppData,  // GenericConfigLocation ("Local" path)
         FOLDERID_RoamingAppData,// AppDataLocation ("Roaming" path)
         FOLDERID_LocalAppData,  // AppConfigLocation ("Local" path)
-        FOLDERID_Public,        // PublicShareLocation
-        FOLDERID_Templates,     // TemplatesLocation
     };
-    static_assert(sizeof(folderIds) / sizeof(folderIds[0]) == size_t(QStandardPaths::TemplatesLocation + 1));
+    static_assert(sizeof(folderIds) / sizeof(folderIds[0]) == size_t(QStandardPaths::AppConfigLocation + 1));
 
     // folders for low integrity processes
     static const GUID folderIds_li[] = {
@@ -123,13 +162,10 @@ static GUID writableSpecialFolderId(QStandardPaths::StandardLocation type)
         FOLDERID_LocalAppDataLow,// GenericDataLocation ("Local" path)
         GUID(),                  // RuntimeLocation
         FOLDERID_LocalAppDataLow,// ConfigLocation ("Local" path)
-        FOLDERID_Downloads,      // DownloadLocation
-        GUID(),                  // GenericCacheLocation
+        GUID(), GUID(),          // DownloadLocation/GenericCacheLocation
         FOLDERID_LocalAppDataLow,// GenericConfigLocation ("Local" path)
         FOLDERID_RoamingAppData, // AppDataLocation ("Roaming" path)
         FOLDERID_LocalAppDataLow,// AppConfigLocation ("Local" path)
-        FOLDERID_Public,         // PublicShareLocation
-        FOLDERID_Templates,      // TemplatesLocation
     };
     static_assert(sizeof(folderIds_li) == sizeof(folderIds));
 
@@ -155,6 +191,12 @@ QString QStandardPaths::writableLocation(StandardLocation type)
 {
     QString result;
     switch (type) {
+    case DownloadLocation:
+        result = sHGetKnownFolderPath(FOLDERID_Downloads);
+        if (result.isEmpty())
+            result = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+        break;
+
     case CacheLocation:
         // Although Microsoft has a Cache key it is a pointer to IE's cache, not a cache
         // location for everyone.  Most applications seem to be using a
@@ -163,7 +205,7 @@ QString QStandardPaths::writableLocation(StandardLocation type)
         if (!result.isEmpty()) {
             appendTestMode(result);
             appendOrganizationAndApp(result);
-            result += "/cache"_L1;
+            result += QLatin1String("/cache");
         }
         break;
 
@@ -171,7 +213,7 @@ QString QStandardPaths::writableLocation(StandardLocation type)
         result = sHGetKnownFolderPath(writableSpecialFolderId(GenericDataLocation));
         if (!result.isEmpty()) {
             appendTestMode(result);
-            result += "/cache"_L1;
+            result += QLatin1String("/cache");
         }
         break;
 
@@ -222,7 +264,7 @@ QStringList QStandardPaths::standardLocations(StandardLocation type)
         QString applicationDirPath = qApp ? QCoreApplication::applicationDirPath()
             : QFileInfo(qAppFileName()).path();
         dirs.append(applicationDirPath);
-        const QString dataDir = applicationDirPath + "/data"_L1;
+        const QString dataDir = applicationDirPath + QLatin1String("/data");
         dirs.append(dataDir);
 
         if (!isGenericConfigLocation(type)) {

@@ -38,50 +38,50 @@ public:
     void setupUi(QDialog *Dialog)
     {
         if (Dialog->objectName().isEmpty())
-            Dialog->setObjectName("Dialog");
+            Dialog->setObjectName(QString::fromUtf8("Dialog"));
         Dialog->resize(389, 243);
         gridLayout = new QGridLayout(Dialog);
-        gridLayout->setObjectName("gridLayout");
+        gridLayout->setObjectName(QString::fromUtf8("gridLayout"));
         label = new QLabel(Dialog);
-        label->setObjectName("label");
+        label->setObjectName(QString::fromUtf8("label"));
         label->setWordWrap(false);
 
         gridLayout->addWidget(label, 0, 0, 1, 2);
 
         label_2 = new QLabel(Dialog);
-        label_2->setObjectName("label_2");
+        label_2->setObjectName(QString::fromUtf8("label_2"));
 
         gridLayout->addWidget(label_2, 2, 0, 1, 1);
 
         userEdit = new QLineEdit(Dialog);
-        userEdit->setObjectName("userEdit");
+        userEdit->setObjectName(QString::fromUtf8("userEdit"));
 
         gridLayout->addWidget(userEdit, 2, 1, 1, 1);
 
         label_3 = new QLabel(Dialog);
-        label_3->setObjectName("label_3");
+        label_3->setObjectName(QString::fromUtf8("label_3"));
 
         gridLayout->addWidget(label_3, 3, 0, 1, 1);
 
         passwordEdit = new QLineEdit(Dialog);
-        passwordEdit->setObjectName("passwordEdit");
+        passwordEdit->setObjectName(QString::fromUtf8("passwordEdit"));
 
         gridLayout->addWidget(passwordEdit, 3, 1, 1, 1);
 
         buttonBox = new QDialogButtonBox(Dialog);
-        buttonBox->setObjectName("buttonBox");
+        buttonBox->setObjectName(QString::fromUtf8("buttonBox"));
         buttonBox->setOrientation(Qt::Horizontal);
         buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
 
         gridLayout->addWidget(buttonBox, 5, 0, 1, 2);
 
         label_4 = new QLabel(Dialog);
-        label_4->setObjectName("label_4");
+        label_4->setObjectName(QString::fromUtf8("label_4"));
 
         gridLayout->addWidget(label_4, 1, 0, 1, 1);
 
         siteDescription = new QLabel(Dialog);
-        siteDescription->setObjectName("siteDescription");
+        siteDescription->setObjectName(QString::fromUtf8("siteDescription"));
         QFont font;
         font.setBold(true);
         siteDescription->setFont(font);

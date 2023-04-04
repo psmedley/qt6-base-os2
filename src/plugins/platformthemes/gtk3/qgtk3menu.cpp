@@ -1,5 +1,41 @@
-// Copyright (C) 2017 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qgtk3menu.h"
 
@@ -49,7 +85,6 @@ QGtk3MenuItem::QGtk3MenuItem()
       m_checkable(false),
       m_checked(false),
       m_enabled(true),
-      m_exclusive(false),
       m_underline(false),
       m_invalid(true),
       m_menu(nullptr),
@@ -123,23 +158,23 @@ static QString convertMnemonics(QString text, bool *found)
 {
     *found = false;
 
-    qsizetype i = text.size() - 1;
+    int i = text.length() - 1;
     while (i >= 0) {
         const QChar c = text.at(i);
-        if (c == u'&') {
-            if (i == 0 || text.at(i - 1) != u'&') {
+        if (c == QLatin1Char('&')) {
+            if (i == 0 || text.at(i - 1) != QLatin1Char('&')) {
                 // convert Qt to GTK mnemonic
-                if (i < text.size() - 1 && !text.at(i + 1).isSpace()) {
-                    text.replace(i, 1, u'_');
+                if (i < text.length() - 1 && !text.at(i + 1).isSpace()) {
+                    text.replace(i, 1, QLatin1Char('_'));
                     *found = true;
                 }
-            } else if (text.at(i - 1) == u'&') {
+            } else if (text.at(i - 1) == QLatin1Char('&')) {
                 // unescape ampersand
-                text.replace(--i, 2, u'&');
+                text.replace(--i, 2, QLatin1Char('&'));
             }
-        } else if (c == u'_') {
+        } else if (c == QLatin1Char('_')) {
             // escape GTK mnemonic
-            text.insert(i, u'_');
+            text.insert(i, QLatin1Char('_'));
         }
         --i;
     }
@@ -329,7 +364,7 @@ void QGtk3Menu::insertMenuItem(QPlatformMenuItem *item, QPlatformMenuItem *befor
     GtkWidget *handle = gitem->create();
     int index = m_items.indexOf(static_cast<QGtk3MenuItem *>(before));
     if (index < 0)
-        index = m_items.size();
+        index = m_items.count();
     m_items.insert(index, gitem);
     gtk_menu_shell_insert(GTK_MENU_SHELL(m_menu), handle, index);
 }
@@ -448,5 +483,3 @@ void QGtk3Menu::onHide(GtkWidget *, void *data)
 }
 
 QT_END_NAMESPACE
-
-#include "moc_qgtk3menu.cpp"

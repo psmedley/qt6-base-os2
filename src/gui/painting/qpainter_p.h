@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QPAINTER_P_H
 #define QPAINTER_P_H
@@ -30,7 +66,6 @@
 #include <private/qpen_p.h>
 
 #include <memory>
-#include <stack>
 
 QT_BEGIN_NAMESPACE
 
@@ -158,29 +193,28 @@ class QPainterPrivate
 {
     Q_DECLARE_PUBLIC(QPainter)
 public:
-    explicit QPainterPrivate(QPainter *painter);
+    QPainterPrivate(QPainter *painter)
+    : q_ptr(painter), d_ptrs(nullptr), state(nullptr), dummyState(nullptr), txinv(0), inDestructor(false), d_ptrs_size(0),
+        refcount(1), device(nullptr), original_device(nullptr), helper_device(nullptr), engine(nullptr), emulationEngine(nullptr),
+        extended(nullptr)
+    {
+    }
+
     ~QPainterPrivate();
 
     QPainter *q_ptr;
-    // Allocate space for 4 d-pointers (enough for up to 4 sub-sequent
-    // redirections within the same paintEvent(), which should be enough
-    // in 99% of all cases). E.g: A renders B which renders C which renders D.
-    static constexpr qsizetype NDPtrs = 4;
-    QVarLengthArray<QPainterPrivate*, NDPtrs> d_ptrs;
+    QPainterPrivate **d_ptrs;
 
-    std::unique_ptr<QPainterState> state;
-    template <typename T, std::size_t N = 8>
-    struct SmallStack : std::stack<T, QVarLengthArray<T, N>> {
-        void clear() { this->c.clear(); }
-    };
-    SmallStack<std::unique_ptr<QPainterState>> savedStates;
+    QPainterState *state;
+    QVarLengthArray<QPainterState *, 8> states;
 
     mutable std::unique_ptr<QPainterDummyState> dummyState;
 
     QTransform invMatrix;
     uint txinv:1;
     uint inDestructor : 1;
-    uint refcount = 1;
+    uint d_ptrs_size;
+    uint refcount;
 
     enum DrawOperation { StrokeDraw        = 0x1,
                          FillDraw          = 0x2,
@@ -196,7 +230,6 @@ public:
     void updateEmulationSpecifier(QPainterState *s);
     void updateStateImpl(QPainterState *state);
     void updateState(QPainterState *state);
-    void updateState(std::unique_ptr<QPainterState> &state) { updateState(state.get()); }
 
     void draw_helper(const QPainterPath &path, DrawOperation operation = StrokeAndFillDraw);
     void drawStretchedGradient(const QPainterPath &path, DrawOperation operation);
@@ -216,7 +249,7 @@ public:
 
     static QPainterPrivate *get(QPainter *painter)
     {
-        return painter->d_ptr.get();
+        return painter->d_ptr.data();
     }
 
     QTransform viewTransform() const;
@@ -226,21 +259,12 @@ public:
     void detachPainterPrivate(QPainter *q);
     void initFrom(const QPaintDevice *device);
 
-    QPaintDevice *device = nullptr;
-    QPaintDevice *original_device = nullptr;
-    QPaintDevice *helper_device = nullptr;
-
-    struct QPaintEngineDestructor {
-        void operator()(QPaintEngine *pe) const noexcept
-        {
-            if (pe && pe->autoDestruct())
-                delete pe;
-        }
-    };
-    std::unique_ptr<QPaintEngine, QPaintEngineDestructor> engine;
-
-    std::unique_ptr<QEmulationPaintEngine> emulationEngine;
-    QPaintEngineEx *extended = nullptr;
+    QPaintDevice *device;
+    QPaintDevice *original_device;
+    QPaintDevice *helper_device;
+    QPaintEngine *engine;
+    QEmulationPaintEngine *emulationEngine;
+    QPaintEngineEx *extended;
     QBrush colorBrush;          // for fill with solid color
 };
 

@@ -1,6 +1,42 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtDBus module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qdbusconnection_p.h"
 
@@ -26,8 +62,6 @@
 #ifndef QT_NO_DBUS
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 // defined in qdbusxmlgenerator.cpp
 extern QString qDBusGenerateMetaObjectXml(QString interface, const QMetaObject *mo,
@@ -82,7 +116,7 @@ static QString generateSubObjectXml(QObject *object)
     for ( ; it != end; ++it) {
         QString name = (*it)->objectName();
         if (!name.isEmpty() && QDBusUtil::isValidPartOfObjectPath(name))
-            retval += "  <node name=\""_L1 + name + "\"/>\n"_L1;
+            retval += QLatin1String("  <node name=\"") + name + QLatin1String("\"/>\n");
     }
     return retval;
 }
@@ -93,8 +127,8 @@ QString qDBusIntrospectObject(const QDBusConnectionPrivate::ObjectTreeNode &node
 {
     // object may be null
 
-    QString xml_data(DBUS_INTROSPECT_1_0_XML_DOCTYPE_DECL_NODE ""_L1);
-    xml_data += "<node>\n"_L1;
+    QString xml_data(QLatin1String(DBUS_INTROSPECT_1_0_XML_DOCTYPE_DECL_NODE));
+    xml_data += QLatin1String("<node>\n");
 
     if (node.obj) {
         Q_ASSERT_X(QThread::currentThread() == node.obj->thread(),
@@ -141,11 +175,11 @@ QString qDBusIntrospectObject(const QDBusConnectionPrivate::ObjectTreeNode &node
             xml_data += node.treeNode->introspect(path);
         }
 
-        xml_data += QLatin1StringView(propertiesInterfaceXml);
+        xml_data += QLatin1String( propertiesInterfaceXml );
     }
 
-    xml_data += QLatin1StringView(introspectableInterfaceXml);
-    xml_data += QLatin1StringView(peerInterfaceXml);
+    xml_data += QLatin1String( introspectableInterfaceXml );
+    xml_data += QLatin1String( peerInterfaceXml );
 
     if (node.flags & QDBusConnection::ExportChildObjects) {
         xml_data += generateSubObjectXml(node.obj);
@@ -157,10 +191,10 @@ QString qDBusIntrospectObject(const QDBusConnectionPrivate::ObjectTreeNode &node
             node.children.constEnd();
         for ( ; it != end; ++it)
             if (it->obj || !it->children.isEmpty())
-                xml_data += "  <node name=\""_L1 + it->name + "\"/>\n"_L1;
+                xml_data += QLatin1String("  <node name=\"") + it->name + QLatin1String("\"/>\n");
     }
 
-    xml_data += "</node>\n"_L1;
+    xml_data += QLatin1String("</node>\n");
     return xml_data;
 }
 
@@ -169,7 +203,7 @@ QString qDBusIntrospectObject(const QDBusConnectionPrivate::ObjectTreeNode &node
 static inline QDBusMessage interfaceNotFoundError(const QDBusMessage &msg, const QString &interface_name)
 {
     return msg.createErrorReply(QDBusError::UnknownInterface,
-                                "Interface %1 was not found in object %2"_L1
+                                QLatin1String("Interface %1 was not found in object %2")
                                 .arg(interface_name, msg.path()));
 }
 
@@ -177,17 +211,17 @@ static inline QDBusMessage
 propertyNotFoundError(const QDBusMessage &msg, const QString &interface_name, const QByteArray &property_name)
 {
     return msg.createErrorReply(QDBusError::UnknownProperty,
-                                "Property %1%2%3 was not found in object %4"_L1
+                                QLatin1String("Property %1%2%3 was not found in object %4")
                                 .arg(interface_name,
-                                     interface_name.isEmpty() ? ""_L1 : "."_L1,
-                                     QLatin1StringView(property_name),
+                                     QLatin1String(interface_name.isEmpty() ? "" : "."),
+                                     QLatin1String(property_name),
                                      msg.path()));
 }
 
 QDBusMessage qDBusPropertyGet(const QDBusConnectionPrivate::ObjectTreeNode &node,
                               const QDBusMessage &msg)
 {
-    Q_ASSERT(msg.arguments().size() == 2);
+    Q_ASSERT(msg.arguments().count() == 2);
     Q_ASSERT_X(!node.obj || QThread::currentThread() == node.obj->thread(),
                "QDBusConnection: internal threading error",
                "function called for an object that is in another thread!!");
@@ -217,7 +251,7 @@ QDBusMessage qDBusPropertyGet(const QDBusConnectionPrivate::ObjectTreeNode &node
             QDBusAdaptorConnector::AdaptorMap::ConstIterator it;
             it = std::lower_bound(connector->adaptors.constBegin(), connector->adaptors.constEnd(),
                                   interface_name);
-            if (it != connector->adaptors.constEnd() && interface_name == QLatin1StringView(it->interface)) {
+            if (it != connector->adaptors.constEnd() && interface_name == QLatin1String(it->interface)) {
                 interfaceFound = true;
                 value = it->adaptor->property(property_name);
             }
@@ -268,16 +302,16 @@ static QDBusMessage propertyWriteReply(const QDBusMessage &msg, const QString &i
         return propertyNotFoundError(msg, interface_name, property_name);
     case PropertyTypeMismatch:
         return msg.createErrorReply(QDBusError::InvalidArgs,
-                                    "Invalid arguments for writing to property %1%2%3"_L1
+                                    QLatin1String("Invalid arguments for writing to property %1%2%3")
                                     .arg(interface_name,
-                                         interface_name.isEmpty() ? ""_L1 : "."_L1,
-                                         QLatin1StringView(property_name)));
+                                         QLatin1String(interface_name.isEmpty() ? "" : "."),
+                                         QLatin1String(property_name)));
     case PropertyReadOnly:
         return msg.createErrorReply(QDBusError::PropertyReadOnly,
-                                    "Property %1%2%3 is read-only"_L1
+                                    QLatin1String("Property %1%2%3 is read-only")
                                     .arg(interface_name,
-                                         interface_name.isEmpty() ? ""_L1 : "."_L1,
-                                         QLatin1StringView(property_name)));
+                                         QLatin1String(interface_name.isEmpty() ? "" : "."),
+                                         QLatin1String(property_name)));
     case PropertyWriteFailed:
         return msg.createErrorReply(QDBusError::InternalError,
                                     QString::fromLatin1("Internal error"));
@@ -345,7 +379,7 @@ static int writeProperty(QObject *obj, const QByteArray &property_name, QVariant
 QDBusMessage qDBusPropertySet(const QDBusConnectionPrivate::ObjectTreeNode &node,
                               const QDBusMessage &msg)
 {
-    Q_ASSERT(msg.arguments().size() == 3);
+    Q_ASSERT(msg.arguments().count() == 3);
     Q_ASSERT_X(!node.obj || QThread::currentThread() == node.obj->thread(),
                "QDBusConnection: internal threading error",
                "function called for an object that is in another thread!!");
@@ -372,7 +406,7 @@ QDBusMessage qDBusPropertySet(const QDBusConnectionPrivate::ObjectTreeNode &node
             QDBusAdaptorConnector::AdaptorMap::ConstIterator it;
             it = std::lower_bound(connector->adaptors.constBegin(), connector->adaptors.constEnd(),
                                   interface_name);
-            if (it != connector->adaptors.cend() && interface_name == QLatin1StringView(it->interface)) {
+            if (it != connector->adaptors.cend() && interface_name == QLatin1String(it->interface)) {
                 return propertyWriteReply(msg, interface_name, property_name,
                                           writeProperty(it->adaptor, property_name, value));
             }
@@ -445,7 +479,7 @@ static QVariantMap readAllProperties(QObject *object, int flags)
 QDBusMessage qDBusPropertyGetAll(const QDBusConnectionPrivate::ObjectTreeNode &node,
                                  const QDBusMessage &msg)
 {
-    Q_ASSERT(msg.arguments().size() == 1);
+    Q_ASSERT(msg.arguments().count() == 1);
     Q_ASSERT_X(!node.obj || QThread::currentThread() == node.obj->thread(),
                "QDBusConnection: internal threading error",
                "function called for an object that is in another thread!!");
@@ -470,7 +504,7 @@ QDBusMessage qDBusPropertyGetAll(const QDBusConnectionPrivate::ObjectTreeNode &n
             QDBusAdaptorConnector::AdaptorMap::ConstIterator it;
             it = std::lower_bound(connector->adaptors.constBegin(), connector->adaptors.constEnd(),
                                   interface_name);
-            if (it != connector->adaptors.constEnd() && interface_name == QLatin1StringView(it->interface)) {
+            if (it != connector->adaptors.constEnd() && interface_name == QLatin1String(it->interface)) {
                 interfaceFound = true;
                 result = readAllProperties(it->adaptor, QDBusConnection::ExportAllProperties);
             }

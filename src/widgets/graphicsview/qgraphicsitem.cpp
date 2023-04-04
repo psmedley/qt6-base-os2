@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /*!
     \class QGraphicsItem
@@ -96,6 +132,7 @@
 
     \image graphicsview-parentchild.png
 
+    \target Transformations
     \section1 Transformations
 
     QGraphicsItem supports projective transformations in addition to its base
@@ -792,8 +829,6 @@
 
 QT_BEGIN_NAMESPACE
 
-QT_IMPL_METATYPE_EXTERN_TAGGED(QGraphicsItem*, QGraphicsItem_ptr)
-
 static inline void _q_adjustRect(QRect *rect)
 {
     Q_ASSERT(rect);
@@ -1036,7 +1071,7 @@ void QGraphicsItemPrivate::setIsMemberOfGroup(bool enabled)
     Q_Q(QGraphicsItem);
     isMemberOfGroup = enabled;
     if (!qgraphicsitem_cast<QGraphicsItemGroup *>(q)) {
-        for (QGraphicsItem *child : std::as_const(children))
+        for (QGraphicsItem *child : qAsConst(children))
             child->d_func()->setIsMemberOfGroup(enabled);
     }
 }
@@ -2175,7 +2210,7 @@ bool QGraphicsItem::isBlockedByModalPanel(QGraphicsItem **blockingPanel) const
     if (!scene_d->popupWidgets.isEmpty() && scene_d->popupWidgets.first() == this)
         return false;
 
-    for (int i = 0; i < scene_d->modalPanels.size(); ++i) {
+    for (int i = 0; i < scene_d->modalPanels.count(); ++i) {
         QGraphicsItem *modalPanel = scene_d->modalPanels.at(i);
         if (modalPanel->panelModality() == QGraphicsItem::SceneModal) {
             // Scene modal panels block all non-descendents.
@@ -2458,7 +2493,7 @@ void QGraphicsItemPrivate::setVisibleHelper(bool newVisible, bool explicitly,
     const bool updateChildren = update && !((flags & QGraphicsItem::ItemClipsChildrenToShape
                                              || flags & QGraphicsItem::ItemContainsChildrenInShape)
                                             && !(flags & QGraphicsItem::ItemHasNoContents));
-    for (QGraphicsItem *child : std::as_const(children)) {
+    for (QGraphicsItem *child : qAsConst(children)) {
         if (!newVisible || !child->d_ptr->explicitlyHidden)
             child->d_ptr->setVisibleHelper(newVisible, false, updateChildren, hiddenByPanel);
     }
@@ -2650,7 +2685,7 @@ void QGraphicsItemPrivate::setEnabledHelper(bool newEnabled, bool explicitly, bo
     if (update)
         q_ptr->update();
 
-    for (QGraphicsItem *child : std::as_const(children)) {
+    for (QGraphicsItem *child : qAsConst(children)) {
         if (!newEnabled || !child->d_ptr->explicitlyDisabled)
             child->d_ptr->setEnabledHelper(newEnabled, /* explicitly = */ false);
     }
@@ -3091,7 +3126,7 @@ Qt::MouseButtons QGraphicsItem::acceptedMouseButtons() const
     mouse events to the first item beneath it that does.
 
     To disable mouse events for an item (i.e., make it transparent for mouse
-    events), call setAcceptedMouseButtons(Qt::NoButton).
+    events), call setAcceptedMouseButtons(0).
 
     \sa acceptedMouseButtons(), mousePressEvent()
 */
@@ -3213,7 +3248,7 @@ bool QGraphicsItem::filtersChildEvents() const
     \since 4.6
 
     If \a enabled is true, this item is set to filter all events for
-    all its children (i.e., all events intended for any of its
+    all its children (i.e., all events intented for any of its
     children are instead sent to this item); otherwise, if \a enabled
     is false, this item will only handle its own events. The default
     value is false.
@@ -3255,7 +3290,7 @@ bool QGraphicsItem::handlesChildEvents() const
     \deprecated
 
     If \a enabled is true, this item is set to handle all events for
-    all its children (i.e., all events intended for any of its
+    all its children (i.e., all events intented for any of its
     children are instead sent to this item); otherwise, if \a enabled
     is false, this item will only handle its own events. The default
     value is false.
@@ -3917,7 +3952,7 @@ void QGraphicsItem::ensureVisible(const QRectF &rect, int xmargin, int ymargin)
             sceneRect = sceneTransform().mapRect(rect);
         else
             sceneRect = sceneBoundingRect();
-        for (QGraphicsView *view : std::as_const(d_ptr->scene->d_func()->views))
+        for (QGraphicsView *view : qAsConst(d_ptr->scene->d_func()->views))
             view->ensureVisible(sceneRect, xmargin, ymargin);
     }
 }
@@ -4627,7 +4662,7 @@ inline void QGraphicsItemPrivate::sendScenePosChange()
         if (flags & QGraphicsItem::ItemSendsScenePositionChanges)
             q->itemChange(QGraphicsItem::ItemScenePositionHasChanged, q->scenePos());
         if (scenePosDescendants) {
-            for (QGraphicsItem *item : std::as_const(scene->d_func()->scenePosItems)) {
+            for (QGraphicsItem *item : qAsConst(scene->d_func()->scenePosItems)) {
                 if (q->isAncestorOf(item))
                     item->itemChange(QGraphicsItem::ItemScenePositionHasChanged, item->scenePos());
             }
@@ -7083,7 +7118,7 @@ void QGraphicsItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
             selectedItems = d_ptr->scene->selectedItems();
             initialPositions = d_ptr->scene->d_func()->movingItemsInitialPositions;
             if (initialPositions.isEmpty()) {
-                for (QGraphicsItem *item : std::as_const(selectedItems))
+                for (QGraphicsItem *item : qAsConst(selectedItems))
                     initialPositions[item] = item->pos();
                 initialPositions[this] = pos();
             }
@@ -7192,7 +7227,7 @@ void QGraphicsItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                     // temporarily removing this item from the selection list.
                     if (d_ptr->selected) {
                         scene->d_func()->selectedItems.remove(this);
-                        for (QGraphicsItem *item : std::as_const(scene->d_func()->selectedItems)) {
+                        for (QGraphicsItem *item : qAsConst(scene->d_func()->selectedItems)) {
                             if (item->isSelected()) {
                                 selectionChanged = true;
                                 break;
@@ -7665,13 +7700,13 @@ void QGraphicsItemPrivate::children_append(QDeclarativeListProperty<QGraphicsObj
 int QGraphicsItemPrivate::children_count(QDeclarativeListProperty<QGraphicsObject> *list)
 {
     QGraphicsItemPrivate *d = QGraphicsItemPrivate::get(static_cast<QGraphicsObject *>(list->object));
-    return d->children.size();
+    return d->children.count();
 }
 
 QGraphicsObject *QGraphicsItemPrivate::children_at(QDeclarativeListProperty<QGraphicsObject> *list, int index)
 {
     QGraphicsItemPrivate *d = QGraphicsItemPrivate::get(static_cast<QGraphicsObject *>(list->object));
-    if (index >= 0 && index < d->children.size())
+    if (index >= 0 && index < d->children.count())
         return d->children.at(index)->toGraphicsObject();
     else
         return nullptr;
@@ -7680,7 +7715,7 @@ QGraphicsObject *QGraphicsItemPrivate::children_at(QDeclarativeListProperty<QGra
 void QGraphicsItemPrivate::children_clear(QDeclarativeListProperty<QGraphicsObject> *list)
 {
     QGraphicsItemPrivate *d = QGraphicsItemPrivate::get(static_cast<QGraphicsObject *>(list->object));
-    int childCount = d->children.size();
+    int childCount = d->children.count();
     if (d->sendParentChangeNotification) {
         for (int index = 0; index < childCount; index++)
             d->children.at(0)->setParentItem(nullptr);
@@ -9551,9 +9586,9 @@ QRectF QGraphicsPixmapItem::boundingRect() const
         return QRectF();
     if (d->flags & ItemIsSelectable) {
         qreal pw = 1.0;
-        return QRectF(d->offset, d->pixmap.deviceIndependentSize()).adjusted(-pw/2, -pw/2, pw/2, pw/2);
+        return QRectF(d->offset, QSizeF(d->pixmap.size()) / d->pixmap.devicePixelRatio()).adjusted(-pw/2, -pw/2, pw/2, pw/2);
     } else {
-        return QRectF(d->offset, d->pixmap.deviceIndependentSize());
+        return QRectF(d->offset, QSizeF(d->pixmap.size()) / d->pixmap.devicePixelRatio());
     }
 }
 
@@ -10274,9 +10309,7 @@ void QGraphicsTextItem::hoverLeaveEvent(QGraphicsSceneHoverEvent *event)
 QVariant QGraphicsTextItem::inputMethodQuery(Qt::InputMethodQuery query) const
 {
     QVariant v;
-    if (query == Qt::ImEnabled)
-        return isEnabled();
-    else if (query == Qt::ImHints)
+    if (query == Qt::ImHints)
         v = int(inputMethodHints());
     else if (dd->control)
         v = dd->control->inputMethodQuery(query, QVariant());
@@ -10364,16 +10397,16 @@ QWidgetTextControl *QGraphicsTextItemPrivate::textControl() const
         control = new QWidgetTextControl(that);
         control->setTextInteractionFlags(Qt::NoTextInteraction);
 
-        QObject::connect(control, &QWidgetTextControl::updateRequest, qq,
-                         [dd = that->dd](const QRectF &rect) { dd->_q_update(rect); });
-        QObject::connect(control, &QWidgetTextControl::documentSizeChanged, qq,
-                         [dd = that->dd](QSizeF size) { dd->_q_updateBoundingRect(size); });
-        QObject::connect(control, &QWidgetTextControl::visibilityRequest, qq,
-                         [dd = that->dd](const QRectF &rect) { dd->_q_ensureVisible(rect); });
-        QObject::connect(control, &QWidgetTextControl::linkActivated, qq,
-                         &QGraphicsTextItem::linkActivated);
-        QObject::connect(control, &QWidgetTextControl::linkHovered, qq,
-                         &QGraphicsTextItem::linkHovered);
+        QObject::connect(control, SIGNAL(updateRequest(QRectF)),
+                         qq, SLOT(_q_update(QRectF)));
+        QObject::connect(control, SIGNAL(documentSizeChanged(QSizeF)),
+                         qq, SLOT(_q_updateBoundingRect(QSizeF)));
+        QObject::connect(control, SIGNAL(visibilityRequest(QRectF)),
+                         qq, SLOT(_q_ensureVisible(QRectF)));
+        QObject::connect(control, SIGNAL(linkActivated(QString)),
+                         qq, SIGNAL(linkActivated(QString)));
+        QObject::connect(control, SIGNAL(linkHovered(QString)),
+                         qq, SIGNAL(linkHovered(QString)));
 
         const QSizeF pgSize = control->document()->pageSize();
         if (pgSize.height() != -1) {
@@ -10576,7 +10609,7 @@ void QGraphicsSimpleTextItemPrivate::updateBoundingRect()
         br = QRectF();
     } else {
         QString tmp = text;
-        tmp.replace(u'\n', QChar::LineSeparator);
+        tmp.replace(QLatin1Char('\n'), QChar::LineSeparator);
         QStackTextEngine engine(tmp, font);
         QTextLayout layout(&engine);
         br = setupTextLayout(&layout);
@@ -10737,7 +10770,7 @@ void QGraphicsSimpleTextItem::paint(QPainter *painter, const QStyleOptionGraphic
     painter->setFont(d->font);
 
     QString tmp = d->text;
-    tmp.replace(u'\n', QChar::LineSeparator);
+    tmp.replace(QLatin1Char('\n'), QChar::LineSeparator);
     QStackTextEngine engine(tmp, d->font);
     QTextLayout layout(&engine);
 
@@ -10749,7 +10782,7 @@ void QGraphicsSimpleTextItem::paint(QPainter *painter, const QStyleOptionGraphic
     } else {
         QTextLayout::FormatRange range;
         range.start = 0;
-        range.length = layout.text().size();
+        range.length = layout.text().length();
         range.format.setTextOutline(d->pen);
         layout.setFormats(QList<QTextLayout::FormatRange>(1, range));
     }

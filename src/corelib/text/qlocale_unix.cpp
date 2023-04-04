@@ -1,5 +1,41 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qlocale_p.h"
 
@@ -10,8 +46,6 @@
 #include "qreadwritelock.h"
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 #ifndef QT_NO_SYSTEMLOCALE
 struct QSystemLocaleData
@@ -43,8 +77,6 @@ void QSystemLocaleData::readEnvironment()
 {
     QWriteLocker locker(&lock);
 
-    // See https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap08.html#tag_08_02
-    // for the semantics of each of these:
     QByteArray all = qgetenv("LC_ALL");
     QByteArray numeric  = all.isEmpty() ? qgetenv("LC_NUMERIC") : all;
     QByteArray time     = all.isEmpty() ? qgetenv("LC_TIME") : all;
@@ -79,7 +111,7 @@ Q_GLOBAL_STATIC(QSystemLocaleData, qSystemLocaleData)
 
 #ifndef QT_NO_SYSTEMLOCALE
 
-static bool contradicts(QStringView maybe, const QString &known)
+static bool contradicts(const QString &maybe, const QString &known)
 {
     if (maybe.isEmpty())
         return false;
@@ -110,15 +142,16 @@ QLocale QSystemLocale::fallbackLocale() const
     if (lang.isEmpty())
         lang = qEnvironmentVariable("LANG");
     // if the locale is the "C" locale, then we can return the language we found here:
-    if (lang.isEmpty() || lang == "C"_L1 || lang == "POSIX"_L1)
+    if (lang.isEmpty() || lang == QLatin1String("C") || lang == QLatin1String("POSIX"))
         return QLocale(lang);
 
     // ... otherwise, if the first part of LANGUAGE says more than or
     // contradicts what we have, use that:
-    for (const auto &language : qEnvironmentVariable("LANGUAGE").tokenize(u':')) {
+    QString language = qEnvironmentVariable("LANGUAGE");
+    if (!language.isEmpty()) {
+        language = language.split(QLatin1Char(':')).constFirst();
         if (contradicts(language, lang))
             return QLocale(language);
-        break; // We only look at the first entry.
     }
 
     return QLocale(lang);
@@ -226,9 +259,9 @@ QVariant QSystemLocale::query(QueryType type, QVariant in) const
     }
     case MeasurementSystem: {
         const QString meas_locale = QString::fromLatin1(d->lc_measurement_var);
-        if (meas_locale.compare("Metric"_L1, Qt::CaseInsensitive) == 0)
+        if (meas_locale.compare(QLatin1String("Metric"), Qt::CaseInsensitive) == 0)
             return QLocale::MetricSystem;
-        if (meas_locale.compare("Other"_L1, Qt::CaseInsensitive) == 0)
+        if (meas_locale.compare(QLatin1String("Other"), Qt::CaseInsensitive) == 0)
             return QLocale::MetricSystem;
         return QVariant((int)QLocale(meas_locale).measurementSystem());
     }
@@ -242,17 +275,16 @@ QVariant QSystemLocale::query(QueryType type, QVariant in) const
         if (languages.isEmpty())
             lst.append(QString::fromLatin1(d->lc_messages_var));
         else
-            lst = languages.split(u':');
+            lst = languages.split(QLatin1Char(':'));
 
-        for (const QString &e : std::as_const(lst)) {
-            QStringView language, script, territory;
-            if (qt_splitLocaleName(e, &language, &script, &territory)) {
-                QString joined = language.isEmpty() ? u"und"_s : language.toString();
-                if (!script.isEmpty())
-                    joined += u'-' + script;
-                if (!territory.isEmpty())
-                    joined += u'-' + territory;
-                d->uiLanguages.append(joined);
+        // Inadequate for various cases of a language that's written in more
+        // than one script in the same country, e.g. Sindhi in India.
+        // However, can clients of the UILanguage query cope if we include script ?
+        for (int i = 0; i < lst.size(); ++i) {
+            QStringView lang, cntry;
+            if (qt_splitLocaleName(lst.at(i), &lang, nullptr, &cntry)) {
+                d->uiLanguages.append(
+                    cntry.size() ? lang % QLatin1Char('-') % cntry : lang.toString());
             }
         }
         return d->uiLanguages.isEmpty() ? QVariant() : QVariant(d->uiLanguages);

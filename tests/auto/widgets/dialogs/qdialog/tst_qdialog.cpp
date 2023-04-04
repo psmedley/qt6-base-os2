@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "../../../shared/highdpi.h"
 
@@ -21,7 +46,6 @@
 #include <private/qguiapplication_p.h>
 #include <qpa/qplatformtheme.h>
 #include <qpa/qplatformtheme_p.h>
-#include <qpa/qplatformintegration.h>
 
 QT_FORWARD_DECLARE_CLASS(QDialog)
 
@@ -285,10 +309,6 @@ void tst_QDialog::showAsTool()
 {
     if (QStringList{"xcb", "offscreen"}.contains(QGuiApplication::platformName()))
         QSKIP("activeWindow() is not respected by all Xcb window managers and the offscreen plugin");
-
-    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
-        QSKIP("QWindow::requestActivate() is not supported.");
-
     DummyDialog testWidget;
     testWidget.resize(200, 200);
     testWidget.setWindowTitle(QTest::currentTestFunction());
@@ -483,9 +503,6 @@ void tst_QDialog::snapToDefaultButton()
 #else
     if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("This platform does not support setting the cursor position.");
-#ifdef Q_OS_ANDROID
-    QSKIP("Android does not support cursor");
-#endif
 
     const QRect dialogGeometry(QGuiApplication::primaryScreen()->availableGeometry().topLeft()
                                + QPoint(100, 100), QSize(200, 200));
@@ -627,9 +644,7 @@ void tst_QDialog::virtualsOnClose()
         dialog.show();
         QVERIFY(QTest::qWaitForWindowExposed(&dialog));
         dialog.accept();
-        // we used to only hide the dialog, and we still don't want a
-        // closeEvent call for application-triggered calls to QDialog::done
-        QCOMPARE(dialog.closeEventCount, 0);
+        QCOMPARE(dialog.closeEventCount, 0); // we only hide the dialog
         QCOMPARE(dialog.acceptCount, 1);
         QCOMPARE(dialog.rejectCount, 0);
         QCOMPARE(dialog.doneCount, 1);
@@ -640,7 +655,7 @@ void tst_QDialog::virtualsOnClose()
         dialog.show();
         QVERIFY(QTest::qWaitForWindowExposed(&dialog));
         dialog.reject();
-        QCOMPARE(dialog.closeEventCount, 0);
+        QCOMPARE(dialog.closeEventCount, 0); // we only hide the dialog
         QCOMPARE(dialog.acceptCount, 0);
         QCOMPARE(dialog.rejectCount, 1);
         QCOMPARE(dialog.doneCount, 1);
@@ -694,7 +709,7 @@ void tst_QDialog::virtualsOnClose()
         // Qt doesn't deliver events to QWidgets closed during destruction
         QCOMPARE(filter.closeEventCount, 0);
         // QDialog doesn't emit signals when closed by destruction
-        QCOMPARE(rejectedSpy.size(), 0);
+        QCOMPARE(rejectedSpy.count(), 0);
     }
 }
 
@@ -747,7 +762,7 @@ void tst_QDialog::quitOnDone()
     // also quit with a timer in case the test fails
     QTimer::singleShot(1000, QApplication::instance(), &QApplication::quit);
     QApplication::exec();
-    QCOMPARE(quitSpy.size(), 1);
+    QCOMPARE(quitSpy.count(), 1);
 }
 
 void tst_QDialog::focusWidgetAfterOpen()

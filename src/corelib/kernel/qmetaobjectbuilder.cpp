@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qmetaobjectbuilder_p.h"
 
@@ -1083,7 +1119,7 @@ static void writeString(char *out, int i, const QByteArray &str,
     memcpy(out + 2 * i * sizeof(uint), &offsetLen, 2 * sizeof(uint));
 
     memcpy(out + offset, str.constData(), size);
-    out[offset + size] = '\0';
+    out[offsetOfStringdataMember + stringdataOffset + size] = '\0';
 
     stringdataOffset += size + 1;
 }
@@ -1403,39 +1439,41 @@ static int buildMetaObject(QMetaObjectBuilderPrivate *d, char *buf,
         size += sizeof(SuperData) * (d->relatedMetaObjects.size() + 1);
     }
 
-    ALIGN(size, QtPrivate::QMetaTypeInterface *);
-    auto types = reinterpret_cast<QtPrivate::QMetaTypeInterface **>(buf + size);
-    if constexpr (mode == Construct) {
-        meta->d.metaTypes = types;
-        for (const auto &prop : d->properties) {
-            QMetaType mt = prop.metaType;
-            *types = reinterpret_cast<QtPrivate::QMetaTypeInterface *&>(mt);
-            types++;
-        }
-        // add metatype interface for this metaobject - must be null
-        // as we can't know our metatype
-        *types = nullptr;
-        types++;
-        for (const auto &method: d->methods) {
-            QMetaType mt(QMetaType::fromName(method.returnType).id());
-            *types = reinterpret_cast<QtPrivate::QMetaTypeInterface *&>(mt);
-            types++;
-            for (const auto &parameterType: method.parameterTypes()) {
-                QMetaType mt = QMetaType::fromName(parameterType);
+    if (d->properties.size() > 0 || d->methods.size() > 0 || d->constructors.size() > 0) {
+        ALIGN(size, QtPrivate::QMetaTypeInterface *);
+        auto types = reinterpret_cast<QtPrivate::QMetaTypeInterface **>(buf + size);
+        if constexpr (mode == Construct) {
+            meta->d.metaTypes = types;
+            for (const auto &prop : d->properties) {
+                QMetaType mt = prop.metaType;
                 *types = reinterpret_cast<QtPrivate::QMetaTypeInterface *&>(mt);
                 types++;
             }
-        }
-        for (const auto &constructor : d->constructors) {
-            for (const auto &parameterType : constructor.parameterTypes()) {
-                QMetaType mt = QMetaType::fromName(parameterType);
+            // add metatype interface for this metaobject - must be null
+            // as we can't know our metatype
+            *types = nullptr;
+            types++;
+            for (const auto &method: d->methods) {
+                QMetaType mt(QMetaType::fromName(method.returnType).id());
                 *types = reinterpret_cast<QtPrivate::QMetaTypeInterface *&>(mt);
                 types++;
+                for (const auto &parameterType: method.parameterTypes()) {
+                    QMetaType mt = QMetaType::fromName(parameterType);
+                    *types = reinterpret_cast<QtPrivate::QMetaTypeInterface *&>(mt);
+                    types++;
+                }
+            }
+            for (const auto &constructor : d->constructors) {
+                for (const auto &parameterType : constructor.parameterTypes()) {
+                    QMetaType mt = QMetaType::fromName(parameterType);
+                    *types = reinterpret_cast<QtPrivate::QMetaTypeInterface *&>(mt);
+                    types++;
+                }
             }
         }
+        // parameterMetaTypesIndex is equal to the total number of metatypes
+        size += sizeof(QMetaType) * parameterMetaTypesIndex;
     }
-    // parameterMetaTypesIndex is equal to the total number of metatypes
-    size += sizeof(QMetaType) * parameterMetaTypesIndex;
 
     // Align the final size and return it.
     ALIGN(size, void *);

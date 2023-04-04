@@ -41,15 +41,12 @@ namespace OT {
 
 struct BaseCoordFormat1
 {
-  hb_position_t get_coord (hb_font_t *font, hb_direction_t direction) const
-  {
-    return HB_DIRECTION_IS_HORIZONTAL (direction) ? font->em_scale_y (coordinate) : font->em_scale_x (coordinate);
-  }
+  hb_position_t get_coord () const { return coordinate; }
 
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    return_trace (c->check_struct (this));
+    return_trace (likely (c->check_struct (this)));
   }
 
   protected:
@@ -61,10 +58,10 @@ struct BaseCoordFormat1
 
 struct BaseCoordFormat2
 {
-  hb_position_t get_coord (hb_font_t *font, hb_direction_t direction) const
+  hb_position_t get_coord () const
   {
     /* TODO */
-    return HB_DIRECTION_IS_HORIZONTAL (direction) ? font->em_scale_y (coordinate) : font->em_scale_x (coordinate);
+    return coordinate;
   }
 
   bool sanitize (hb_sanitize_context_t *c) const
@@ -76,7 +73,7 @@ struct BaseCoordFormat2
   protected:
   HBUINT16	format;		/* Format identifier--format = 2 */
   FWORD		coordinate;	/* X or Y value, in design units */
-  HBGlyphID16	referenceGlyph;	/* Glyph ID of control glyph */
+  HBGlyphID	referenceGlyph;	/* Glyph ID of control glyph */
   HBUINT16	coordPoint;	/* Index of contour point on the
 				 * reference glyph */
   public:
@@ -90,10 +87,9 @@ struct BaseCoordFormat3
 			   hb_direction_t direction) const
   {
     const Device &device = this+deviceTable;
-
-    return HB_DIRECTION_IS_HORIZONTAL (direction)
-	 ? font->em_scale_y (coordinate) + device.get_y_delta (font, var_store)
-	 : font->em_scale_x (coordinate) + device.get_x_delta (font, var_store);
+    return coordinate + (HB_DIRECTION_IS_VERTICAL (direction) ?
+			 device.get_y_delta (font, var_store) :
+			 device.get_x_delta (font, var_store));
   }
 
 
@@ -124,8 +120,8 @@ struct BaseCoord
 			   hb_direction_t        direction) const
   {
     switch (u.format) {
-    case 1: return u.format1.get_coord (font, direction);
-    case 2: return u.format2.get_coord (font, direction);
+    case 1: return u.format1.get_coord ();
+    case 2: return u.format2.get_coord ();
     case 3: return u.format3.get_coord (font, var_store, direction);
     default:return 0;
     }

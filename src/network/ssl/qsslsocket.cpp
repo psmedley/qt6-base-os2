@@ -1,6 +1,42 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// Copyright (C) 2014 BlackBerry Limited. All rights reserved.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 //#define QSSLSOCKET_DEBUG
@@ -18,10 +54,10 @@
 
     QSslSocket establishes a secure, encrypted TCP connection you can
     use for transmitting encrypted data. It can operate in both client
-    and server mode, and it supports modern TLS protocols, including
-    TLS 1.3. By default, QSslSocket uses only TLS protocols
+    and server mode, and it supports modern SSL protocols, including
+    SSL 3 and TLS 1.2. By default, QSslSocket uses only SSL protocols
     which are considered to be secure (QSsl::SecureProtocols), but you can
-    change the TLS protocol by calling setProtocol() as long as you do
+    change the SSL protocol by calling setProtocol() as long as you do
     it before the handshake has started.
 
     SSL encryption operates on top of the existing TCP stream after
@@ -362,8 +398,6 @@
 #include <QtNetwork/qhostinfo.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 class QSslSocketGlobalData
 {
@@ -2051,15 +2085,13 @@ void QSslSocketPrivate::init()
 */
 bool QSslSocketPrivate::verifyProtocolSupported(const char *where)
 {
-    auto protocolName = "DTLS"_L1;
+    QLatin1String protocolName("DTLS");
     switch (configuration.protocol) {
     case QSsl::UnknownProtocol:
         // UnknownProtocol, according to our docs, is for cipher whose protocol is unknown.
         // Should not be used when configuring QSslSocket.
-        protocolName = "UnknownProtocol"_L1;
+        protocolName = QLatin1String("UnknownProtocol");
         Q_FALLTHROUGH();
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
     case QSsl::DtlsV1_0:
     case QSsl::DtlsV1_2:
     case QSsl::DtlsV1_0OrLater:
@@ -2068,7 +2100,6 @@ QT_WARNING_DISABLE_DEPRECATED
         setErrorAndEmit(QAbstractSocket::SslInvalidUserDataError,
                         QSslSocket::tr("Attempted to use an unsupported protocol."));
         return false;
-QT_WARNING_POP
     default:
         return true;
     }
@@ -2661,7 +2692,7 @@ bool QSslSocketPrivate::verifyErrorsHaveBeenIgnored()
         // was called)
         const auto &sslErrors = backend->tlsErrors();
         doEmitSslError = false;
-        for (int a = 0; a < sslErrors.size(); a++) {
+        for (int a = 0; a < sslErrors.count(); a++) {
             if (!ignoreErrorsList.contains(sslErrors.at(a))) {
                 doEmitSslError = true;
                 break;
@@ -2799,11 +2830,11 @@ QByteArray QSslSocketPrivate::peek(qint64 maxSize)
         QByteArray ret;
         ret.reserve(maxSize);
         ret.resize(buffer.peek(ret.data(), maxSize, transactionPos));
-        if (ret.size() == maxSize)
+        if (ret.length() == maxSize)
             return ret;
         //peek at data in the plain socket
         if (plainSocket)
-            return ret + plainSocket->peek(maxSize - ret.size());
+            return ret + plainSocket->peek(maxSize - ret.length());
 
         return QByteArray();
     } else {
@@ -2941,32 +2972,26 @@ void QSslSocketPrivate::setRootCertOnDemandLoadingSupported(bool supported)
 */
 QList<QByteArray> QSslSocketPrivate::unixRootCertDirectories()
 {
-    const auto ba = [](const auto &cstr) constexpr {
-        return QByteArray::fromRawData(std::begin(cstr), std::size(cstr) - 1);
-    };
-    static const QByteArray dirs[] = {
 #ifdef Q_OS_OS2
-        ba("/@unixroot/etc/ssl/certs/"),
-        ba("/@unixroot/usr/local/ssl/"),
+    return QList<QByteArray>() << "/@unixroot/etc/ssl/certs/"
+                               << "/@unixroot/usr/local/ssl/";
 #else
-        ba("/etc/ssl/certs/"), // (K)ubuntu, OpenSUSE, Mandriva ...
-        ba("/usr/lib/ssl/certs/"), // Gentoo, Mandrake
-        ba("/usr/share/ssl/"), // Centos, Redhat, SuSE
-        ba("/usr/local/ssl/"), // Normal OpenSSL Tarball
-        ba("/var/ssl/certs/"), // AIX
-        ba("/usr/local/ssl/certs/"), // Solaris
-        ba("/etc/openssl/certs/"), // BlackBerry
-        ba("/opt/openssl/certs/"), // HP-UX
-        ba("/etc/ssl/"), // OpenBSD
+    return QList<QByteArray>() <<  "/etc/ssl/certs/" // (K)ubuntu, OpenSUSE, Mandriva ...
+                               << "/usr/lib/ssl/certs/" // Gentoo, Mandrake
+                               << "/usr/share/ssl/" // Centos, Redhat, SuSE
+                               << "/usr/local/ssl/" // Normal OpenSSL Tarball
+                               << "/var/ssl/certs/" // AIX
+                               << "/usr/local/ssl/certs/" // Solaris
+                               << "/etc/openssl/certs/" // BlackBerry
+                               << "/opt/openssl/certs/" // HP-UX
+                               << "/etc/ssl/"; // OpenBSD
 #endif
-    };
-    return QList<QByteArray>::fromReadOnlyData(dirs);
 }
 
 /*!
     \internal
 */
-void QSslSocketPrivate::checkSettingSslContext(QSslSocket* socket, std::shared_ptr<QSslContext> tlsContext)
+void QSslSocketPrivate::checkSettingSslContext(QSslSocket* socket, QSharedPointer<QSslContext> tlsContext)
 {
     if (!socket)
         return;
@@ -2978,7 +3003,7 @@ void QSslSocketPrivate::checkSettingSslContext(QSslSocket* socket, std::shared_p
 /*!
     \internal
 */
-std::shared_ptr<QSslContext> QSslSocketPrivate::sslContext(QSslSocket *socket)
+QSharedPointer<QSslContext> QSslSocketPrivate::sslContext(QSslSocket *socket)
 {
     if (!socket)
         return {};
@@ -3026,17 +3051,17 @@ bool QSslSocketPrivate::isMatchingHostname(const QSslCertificate &cert, const QS
  */
 bool QSslSocketPrivate::isMatchingHostname(const QString &cn, const QString &hostname)
 {
-    qsizetype wildcard = cn.indexOf(u'*');
+    int wildcard = cn.indexOf(QLatin1Char('*'));
 
     // Check this is a wildcard cert, if not then just compare the strings
     if (wildcard < 0)
-        return QLatin1StringView(QUrl::toAce(cn)) == hostname;
+        return QLatin1String(QUrl::toAce(cn)) == hostname;
 
-    qsizetype firstCnDot = cn.indexOf(u'.');
-    qsizetype secondCnDot = cn.indexOf(u'.', firstCnDot+1);
+    int firstCnDot = cn.indexOf(QLatin1Char('.'));
+    int secondCnDot = cn.indexOf(QLatin1Char('.'), firstCnDot+1);
 
     // Check at least 3 components
-    if ((-1 == secondCnDot) || (secondCnDot+1 >= cn.size()))
+    if ((-1 == secondCnDot) || (secondCnDot+1 >= cn.length()))
         return false;
 
     // Check * is last character of 1st component (ie. there's a following .)
@@ -3044,12 +3069,12 @@ bool QSslSocketPrivate::isMatchingHostname(const QString &cn, const QString &hos
         return false;
 
     // Check only one star
-    if (cn.lastIndexOf(u'*') != wildcard)
+    if (cn.lastIndexOf(QLatin1Char('*')) != wildcard)
         return false;
 
     // Reject wildcard character embedded within the A-labels or U-labels of an internationalized
     // domain name (RFC6125 section 7.2)
-    if (cn.startsWith("xn--"_L1, Qt::CaseInsensitive))
+    if (cn.startsWith(QLatin1String("xn--"), Qt::CaseInsensitive))
         return false;
 
     // Check characters preceding * (if any) match
@@ -3057,9 +3082,9 @@ bool QSslSocketPrivate::isMatchingHostname(const QString &cn, const QString &hos
         return false;
 
     // Check characters following first . match
-    qsizetype hnDot = hostname.indexOf(u'.');
+    int hnDot = hostname.indexOf(QLatin1Char('.'));
     if (QStringView{hostname}.mid(hnDot + 1) != QStringView{cn}.mid(firstCnDot + 1)
-        && QStringView{hostname}.mid(hnDot + 1) != QLatin1StringView(QUrl::toAce(cn.mid(firstCnDot + 1)))) {
+        && QStringView{hostname}.mid(hnDot + 1) != QLatin1String(QUrl::toAce(cn.mid(firstCnDot + 1)))) {
         return false;
     }
 
@@ -3089,14 +3114,7 @@ QTlsBackend *QSslSocketPrivate::tlsBackendInUse()
         return nullptr;
     }
 
-    tlsBackend = QTlsBackend::findBackend(activeBackendName);
-    if (tlsBackend) {
-        QObject::connect(tlsBackend, &QObject::destroyed, [] {
-            const QMutexLocker locker(&backendMutex);
-            tlsBackend = nullptr;
-        });
-    }
-    return tlsBackend;
+    return tlsBackend = QTlsBackend::findBackend(activeBackendName);
 }
 
 /*!

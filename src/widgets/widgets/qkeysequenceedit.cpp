@@ -1,6 +1,42 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2013 Ivan Komissarov.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2013 Ivan Komissarov.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qkeysequenceedit.h"
 #include "qkeysequenceedit_p.h"
@@ -19,13 +55,6 @@ void QKeySequenceEditPrivate::init()
 
     lineEdit = new QLineEdit(q);
     lineEdit->setObjectName(QStringLiteral("qt_keysequenceedit_lineedit"));
-    lineEdit->setClearButtonEnabled(false);
-    q->connect(lineEdit, &QLineEdit::textChanged, [q](const QString& text) {
-        // Clear the shortcut if the user clicked on the clear icon
-        if (text.isEmpty())
-            q->clear();
-    });
-
     keyNum = 0;
     prevKey = -1;
     releaseTimer = 0;
@@ -44,6 +73,8 @@ void QKeySequenceEditPrivate::init()
     q->setFocusPolicy(Qt::StrongFocus);
     q->setAttribute(Qt::WA_MacShowFocusRect, true);
     q->setAttribute(Qt::WA_InputMethodEnabled, false);
+
+    // TODO: add clear button
 }
 
 int QKeySequenceEditPrivate::translateModifiers(Qt::KeyboardModifiers state, const QString &text)
@@ -142,31 +173,6 @@ QKeySequence QKeySequenceEdit::keySequence() const
     Q_D(const QKeySequenceEdit);
 
     return d->keySequence;
-}
-
-/*!
-    \property QKeySequenceEdit::clearButtonEnabled
-    \brief Whether the key sequence edit displays a clear button when it is not
-    empty.
-
-    If enabled, the key sequence edit displays a trailing \e clear button when
-    it contains some text, otherwise the line edit does not show a clear button
-    (the default).
-
-    \since 6.4
-*/
-void QKeySequenceEdit::setClearButtonEnabled(bool enable)
-{
-    Q_D(QKeySequenceEdit);
-
-    d->lineEdit->setClearButtonEnabled(enable);
-}
-
-bool QKeySequenceEdit::isClearButtonEnabled() const
-{
-    Q_D(const QKeySequenceEdit);
-
-    return d->lineEdit->isClearButtonEnabled();
 }
 
 void QKeySequenceEdit::setKeySequence(const QKeySequence &keySequence)
@@ -283,8 +289,9 @@ void QKeySequenceEdit::keyPressEvent(QKeyEvent *e)
     d->key[d->keyNum] = QKeyCombination::fromCombined(nextKey);
     d->keyNum++;
 
-    d->rebuildKeySequence();
-    QString text = d->keySequence.toString(QKeySequence::NativeText);
+    QKeySequence key(d->key[0], d->key[1], d->key[2], d->key[3]);
+    d->keySequence = key;
+    QString text = key.toString(QKeySequence::NativeText);
     if (d->keyNum < QKeySequencePrivate::MaxKeyCount) {
         //: This text is an "unfinished" shortcut, expands like "Ctrl+A, ..."
         text = tr("%1, ...").arg(text);
@@ -321,16 +328,6 @@ void QKeySequenceEdit::timerEvent(QTimerEvent *e)
     }
 
     QWidget::timerEvent(e);
-}
-
-/*!
-    \reimp
-*/
-void QKeySequenceEdit::focusOutEvent(QFocusEvent *e)
-{
-    Q_D(QKeySequenceEdit);
-    d->finishEditing();
-    QWidget::focusOutEvent(e);
 }
 
 QT_END_NAMESPACE

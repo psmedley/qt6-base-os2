@@ -239,7 +239,9 @@ struct hb_uniscribe_shaper_funcs_t
   }
 };
 
-static inline void free_static_uniscribe_shaper_funcs ();
+#if HB_USE_ATEXIT
+static void free_static_uniscribe_shaper_funcs ();
+#endif
 
 static struct hb_uniscribe_shaper_funcs_lazy_loader_t : hb_lazy_loader_t<hb_uniscribe_shaper_funcs_t,
 									 hb_uniscribe_shaper_funcs_lazy_loader_t>
@@ -252,7 +254,9 @@ static struct hb_uniscribe_shaper_funcs_lazy_loader_t : hb_lazy_loader_t<hb_unis
 
     funcs->init ();
 
-    hb_atexit (free_static_uniscribe_shaper_funcs);
+#if HB_USE_ATEXIT
+    atexit (free_static_uniscribe_shaper_funcs);
+#endif
 
     return funcs;
   }
@@ -266,11 +270,13 @@ static struct hb_uniscribe_shaper_funcs_lazy_loader_t : hb_lazy_loader_t<hb_unis
   }
 } static_uniscribe_shaper_funcs;
 
-static inline
+#if HB_USE_ATEXIT
+static
 void free_static_uniscribe_shaper_funcs ()
 {
   static_uniscribe_shaper_funcs.free_instance ();
 }
+#endif
 
 static hb_uniscribe_shaper_funcs_t *
 hb_uniscribe_shaper_get_funcs ()
@@ -355,7 +361,7 @@ _hb_rename_font (hb_blob_t *blob, wchar_t *new_name)
     return nullptr;
   }
 
-  hb_memcpy(new_sfnt_data, orig_sfnt_data, length);
+  memcpy(new_sfnt_data, orig_sfnt_data, length);
 
   OT::name &name = StructAtOffset<OT::name> (new_sfnt_data, name_table_offset);
   name.format = 0;
@@ -478,11 +484,11 @@ populate_log_font (LOGFONTW  *lf,
 		   hb_font_t *font,
 		   unsigned int font_size)
 {
-  hb_memset (lf, 0, sizeof (*lf));
+  memset (lf, 0, sizeof (*lf));
   lf->lfHeight = - (int) font_size;
   lf->lfCharSet = DEFAULT_CHARSET;
 
-  hb_memcpy (lf->lfFaceName, font->face->data.uniscribe->face_name, sizeof (lf->lfFaceName));
+  memcpy (lf->lfFaceName, font->face->data.uniscribe->face_name, sizeof (lf->lfFaceName));
 
   return true;
 }
@@ -878,8 +884,7 @@ retry:
   if (backward)
     hb_buffer_reverse (buffer);
 
-  buffer->clear_glyph_flags ();
-  buffer->unsafe_to_break ();
+  buffer->unsafe_to_break_all ();
 
   /* Wow, done! */
   return true;

@@ -1,10 +1,44 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qwindowsfontdatabase_p.h"
-#ifndef QT_NO_FREETYPE
-#  include "qwindowsfontdatabase_ft_p.h" // for default font
-#endif
+#include "qwindowsfontdatabase_ft_p.h" // for default font
 #include "qwindowsfontengine_p.h"
 #include <QtCore/qt_windows.h>
 
@@ -17,8 +51,7 @@
 #include <QtCore/QDebug>
 #include <QtCore/QFile>
 #include <QtCore/QtEndian>
-#include <QtCore/QStandardPaths>
-#include <QtCore/private/qduplicatetracker_p.h>
+#include <QtCore/private/qsystemlibrary_p.h>
 #include <QtCore/private/qwinregistry_p.h>
 
 #include <wchar.h>
@@ -34,9 +67,11 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 #if QT_CONFIG(directwrite)
+// ### fixme: Consider direct linking of dwrite.dll once Windows Vista pre SP2 is dropped (QTBUG-49711)
+
+typedef HRESULT (WINAPI *DWriteCreateFactoryType)(DWRITE_FACTORY_TYPE, const IID &, IUnknown **);
+
 static inline bool useDirectWrite(QFont::HintingPreference hintingPreference,
                                   const QString &familyName = QString(),
                                   bool isColorFont = false)
@@ -47,7 +82,7 @@ static inline bool useDirectWrite(QFont::HintingPreference hintingPreference,
 
     // At some scales, GDI will misrender the MingLiU font, so we force use of
     // DirectWrite to work around the issue.
-    if (Q_UNLIKELY(familyName.startsWith("MingLiU"_L1)))
+    if (Q_UNLIKELY(familyName.startsWith(QLatin1String("MingLiU"))))
         return true;
 
     if (isColorFont)
@@ -399,7 +434,7 @@ QString qt_getEnglishName(const QString &familyName, bool includeStyle)
         const QFontNames names = qt_getCanonicalFontNames(table, bytes);
         i18n_name = names.name;
         if (includeStyle)
-            i18n_name += u' ' + names.style;
+            i18n_name += QLatin1Char(' ') + names.style;
     }
 error:
     delete [] table;
@@ -449,7 +484,7 @@ static QChar *createFontFile(const QString &faceName)
     if (!faceName.isEmpty()) {
         const int nameLength = qMin(faceName.length(), LF_FACESIZE - 1);
         faceNamePtr = new QChar[nameLength + 1];
-        memcpy(static_cast<void *>(faceNamePtr), faceName.data(), sizeof(wchar_t) * nameLength);
+        memcpy(static_cast<void *>(faceNamePtr), faceName.utf16(), sizeof(wchar_t) * nameLength);
         faceNamePtr[nameLength] = u'\0';
     }
     return faceNamePtr;
@@ -464,7 +499,7 @@ namespace {
         {}
 
         QString populatedFontFamily;
-        QDuplicateTracker<FontAndStyle> foundFontAndStyles;
+        QSet<FontAndStyle> foundFontAndStyles;
         QWindowsFontDatabase *windowsFontDatabase;
     };
 }
@@ -478,7 +513,7 @@ static bool addFontToDatabase(QString familyName,
                               StoreFontPayload *sfp)
 {
     // the "@family" fonts are just the same as "family". Ignore them.
-    if (familyName.isEmpty() || familyName.at(0) == u'@' || familyName.startsWith("WST_"_L1))
+    if (familyName.isEmpty() || familyName.at(0) == QLatin1Char('@') || familyName.startsWith(QLatin1String("WST_")))
         return false;
 
     uchar charSet = logFont.lfCharSet;
@@ -509,7 +544,7 @@ static bool addFontToDatabase(QString familyName,
             str << " TRUETYPE";
         str << " scalable=" << scalable << " Size=" << size
                 << " Style=" << style << " Weight=" << weight
-                << " stretch=" << stretch << " styleName=" << styleName;
+                << " stretch=" << stretch;
         qCDebug(lcQpaFonts) << message;
     }
 #endif
@@ -527,13 +562,7 @@ static bool addFontToDatabase(QString familyName,
         subFamilyStyle = styleName;
         faceName = familyName; // Remember the original name for later lookups
         familyName = canonicalNames.preferredName;
-        // Preferred style / typographic subfamily name:
-        // "If it is absent, then name ID 2 is considered to be the typographic subfamily name."
-        // From: https://docs.microsoft.com/en-us/windows/win32/directwrite/opentype-variable-fonts
-        // Name ID 2 is already stored in the styleName variable. Furthermore, for variable fonts,
-        // styleName holds the variation instance name, which should be used over name ID 2.
-        if (!canonicalNames.preferredStyle.isEmpty())
-            styleName = canonicalNames.preferredStyle;
+        styleName = canonicalNames.preferredStyle;
     }
 
     QSupportedWritingSystems writingSystems;
@@ -553,7 +582,7 @@ static bool addFontToDatabase(QString familyName,
         // display Thai text by default. As a temporary work around, we special case Segoe UI
         // and remove the Thai script from its list of supported writing systems.
         if (writingSystems.supported(QFontDatabase::Thai) &&
-                familyName == "Segoe UI"_L1)
+                familyName == QLatin1String("Segoe UI"))
             writingSystems.setSupported(QFontDatabase::Thai, false);
     } else {
         const QFontDatabase::WritingSystem ws = writingSystemFromCharSet(charSet);
@@ -613,8 +642,10 @@ static int QT_WIN_CALLBACK storeFont(const LOGFONT *logFont, const TEXTMETRIC *t
         signature = &reinterpret_cast<const NEWTEXTMETRICEX *>(textmetric)->ntmFontSig;
         // We get a callback for each script-type supported, but we register them all
         // at once using the signature, so we only need one call to addFontToDatabase().
-        if (sfp->foundFontAndStyles.hasSeen({familyName, styleName}))
+        FontAndStyle fontAndStyle = {familyName, styleName};
+        if (sfp->foundFontAndStyles.contains(fontAndStyle))
             return 1;
+        sfp->foundFontAndStyles.insert(fontAndStyle);
     }
     addFontToDatabase(familyName, styleName, *logFont, textmetric, signature, type, sfp);
 
@@ -675,48 +706,24 @@ static int QT_WIN_CALLBACK populateFontFamilies(const LOGFONT *logFont, const TE
     return 1; // continue
 }
 
-namespace {
-
-QString resolveFontPath(const QString &fontPath)
-{
-    if (fontPath.isEmpty())
-        return QString();
-
-    if (QFile::exists(fontPath))
-        return fontPath;
-
-    // resolve the path relatively to Windows Fonts directory
-    return QStandardPaths::locate(QStandardPaths::FontsLocation, fontPath);
-}
-
-}
-
 void QWindowsFontDatabase::addDefaultEUDCFont()
 {
     const QString path = QWinRegistryKey(HKEY_CURRENT_USER, LR"(EUDC\1252)")
                          .stringValue(L"SystemDefaultEUDCFont");
-    if (path.isEmpty()) {
-        qCDebug(lcQpaFonts) << "There's no default EUDC font specified";
-        return;
-    }
+    if (!path.isEmpty()) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            qCWarning(lcQpaFonts) << "Unable to open default EUDC font:" << path;
+            return;
+        }
 
-    const QString absolutePath = resolveFontPath(path);
-    if (absolutePath.isEmpty()) {
-        qCDebug(lcQpaFonts) << "Unable to locate default EUDC font:" << path;
-        return;
+        m_eudcFonts = addApplicationFont(file.readAll(), path);
     }
-
-    QFile file(absolutePath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qCWarning(lcQpaFonts) << "Unable to open default EUDC font:" << absolutePath;
-        return;
-    }
-
-    m_eudcFonts = addApplicationFont(file.readAll(), absolutePath);
 }
 
 void QWindowsFontDatabase::populateFontDatabase()
 {
+    removeApplicationFonts();
     HDC dummy = GetDC(0);
     LOGFONT lf;
     lf.lfCharSet = DEFAULT_CHARSET;
@@ -729,11 +736,6 @@ void QWindowsFontDatabase::populateFontDatabase()
     if (QPlatformFontDatabase::resolveFontFamilyAlias(systemDefaultFamily) == systemDefaultFamily)
         QPlatformFontDatabase::registerFontFamily(systemDefaultFamily);
     addDefaultEUDCFont();
-}
-
-void QWindowsFontDatabase::invalidate()
-{
-    removeApplicationFonts();
 }
 
 QWindowsFontDatabase::QWindowsFontDatabase()
@@ -780,10 +782,10 @@ QFontEngine *QWindowsFontDatabase::fontEngine(const QByteArray &fontData, qreal 
 
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_GCC("-Wstrict-aliasing")
-        QString uniqueFamilyName = u'f'
-                + QString::number(guid.Data1, 36) + u'-'
-                + QString::number(guid.Data2, 36) + u'-'
-                + QString::number(guid.Data3, 36) + u'-'
+        QString uniqueFamilyName = QLatin1Char('f')
+                + QString::number(guid.Data1, 36) + QLatin1Char('-')
+                + QString::number(guid.Data2, 36) + QLatin1Char('-')
+                + QString::number(guid.Data3, 36) + QLatin1Char('-')
                 + QString::number(*reinterpret_cast<quint64 *>(guid.Data4), 36);
 QT_WARNING_POP
 
@@ -994,7 +996,7 @@ QStringList QWindowsFontDatabase::addApplicationFont(const QByteArray &fontData,
             HDC hdc = GetDC(0);
             LOGFONT lf;
             memset(&lf, 0, sizeof(LOGFONT));
-            memcpy(lf.lfFaceName, familyName.data(), sizeof(wchar_t) * qMin(LF_FACESIZE - 1, familyName.size()));
+            memcpy(lf.lfFaceName, familyName.utf16(), sizeof(wchar_t) * qMin(LF_FACESIZE - 1, familyName.size()));
             lf.lfCharSet = DEFAULT_CHARSET;
             const QFontValues &values = fontValues.at(j);
             lf.lfWeight = values.weight;
@@ -1075,7 +1077,7 @@ QStringList QWindowsFontDatabase::addApplicationFont(const QByteArray &fontData,
 
 void QWindowsFontDatabase::removeApplicationFonts()
 {
-    for (const WinApplicationFont &font : std::as_const(m_applicationFonts)) {
+    for (const WinApplicationFont &font : qAsConst(m_applicationFonts)) {
         if (font.handle) {
             RemoveFontMemResourceEx(font.handle);
         } else {
@@ -1168,7 +1170,7 @@ QFontEngine *QWindowsFontDatabase::createEngine(const QFontDef &request, const Q
         const QString nameSubstitute = QWindowsFontEngineDirectWrite::fontNameSubstitute(fam);
         if (nameSubstitute != fam) {
             const int nameSubstituteLength = qMin(nameSubstitute.length(), LF_FACESIZE - 1);
-            memcpy(lf.lfFaceName, nameSubstitute.data(), nameSubstituteLength * sizeof(wchar_t));
+            memcpy(lf.lfFaceName, nameSubstitute.utf16(), nameSubstituteLength * sizeof(wchar_t));
             lf.lfFaceName[nameSubstituteLength] = 0;
         }
 

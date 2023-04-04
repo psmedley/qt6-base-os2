@@ -34,10 +34,18 @@ target_compile_definitions(QtLibraryInfo PUBLIC
     QT_BUILD_QMAKE
     QT_USE_QSTRINGBUILDER
     QT_NO_FOREACH
+    QT_VERSION_STR="${PROJECT_VERSION}" # special case
+    QT_VERSION_MAJOR=${PROJECT_VERSION_MAJOR} # special case
+    QT_VERSION_MINOR=${PROJECT_VERSION_MINOR} # special case
+    QT_VERSION_PATCH=${PROJECT_VERSION_PATCH} # special case
     QT_HOST_MKSPEC="${QT_QMAKE_HOST_MKSPEC}"
     QT_TARGET_MKSPEC="${QT_QMAKE_TARGET_MKSPEC}"
     QT_HOST_DATADIR="${hostdatadir}"
 )
+
+# qmake is out of any module, so we manually evaluate the required features.
+include("${CMAKE_CURRENT_SOURCE_DIR}/configure.cmake")
+qt_feature_evaluate_features("${CMAKE_CURRENT_SOURCE_DIR}/configure.cmake")
 
 if(NOT QT_FEATURE_qmake)
     return()
@@ -89,7 +97,6 @@ qt_internal_add_tool(${target_name}
         Qt::CorePrivate
         QtLibraryInfo
 )
-qt_internal_return_unless_building_tools()
 
 # Add QMAKE_VERSION_STR only if qmake is part of the build.
 target_compile_definitions(QtLibraryInfo PUBLIC

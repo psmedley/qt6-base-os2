@@ -1,3 +1,5 @@
+# Generated from ipc.pro.
+
 if(NOT TARGET Qt::Widgets)
     return()
 endif()

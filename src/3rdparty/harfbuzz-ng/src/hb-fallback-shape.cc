@@ -75,6 +75,16 @@ _hb_fallback_shape (hb_shape_plan_t    *shape_plan HB_UNUSED,
 		    const hb_feature_t *features HB_UNUSED,
 		    unsigned int        num_features HB_UNUSED)
 {
+  /* TODO
+   *
+   * - Apply fallback kern.
+   * - Handle Variation Selectors?
+   * - Apply normalization?
+   *
+   * This will make the fallback shaper into a dumb "TrueType"
+   * shaper which many people unfortunately still request.
+   */
+
   hb_codepoint_t space;
   bool has_space = (bool) font->get_nominal_glyph (' ', &space);
 
@@ -107,7 +117,7 @@ _hb_fallback_shape (hb_shape_plan_t    *shape_plan HB_UNUSED,
   if (HB_DIRECTION_IS_BACKWARD (direction))
     hb_buffer_reverse (buffer);
 
-  buffer->clear_glyph_flags ();
+  buffer->safe_to_break_all ();
 
   return true;
 }

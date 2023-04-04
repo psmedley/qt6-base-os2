@@ -8,7 +8,6 @@ qt_internal_add_module(Widgets
     QMAKE_MODULE_CONFIG uic
     PLUGIN_TYPES styles
     SOURCES
-        compat/removed_api.cpp
         itemviews/qfileiconprovider.cpp itemviews/qfileiconprovider.h itemviews/qfileiconprovider_p.h
         kernel/qapplication.cpp kernel/qapplication.h kernel/qapplication_p.h
         kernel/qboxlayout.cpp kernel/qboxlayout.h
@@ -35,7 +34,7 @@ qt_internal_add_module(Widgets
         styles/qpixmapstyle.cpp styles/qpixmapstyle_p.h
         styles/qpixmapstyle_p_p.h
         styles/qproxystyle.cpp styles/qproxystyle.h styles/qproxystyle_p.h
-        styles/qstyle.cpp styles/qstyle.h styles/qstyle_p.h
+        styles/qstyle.cpp styles/qstyle.h
         styles/qstylefactory.cpp styles/qstylefactory.h
         styles/qstylehelper.cpp styles/qstylehelper_p.h
         styles/qstyleoption.cpp styles/qstyleoption.h
@@ -64,7 +63,6 @@ qt_internal_add_module(Widgets
         Qt::GuiPrivate
     PRECOMPILED_HEADER
         "kernel/qt_widgets_pch.h"
-    GENERATE_CPP_EXPORTS
 )
 
 # Resources:
@@ -237,15 +235,6 @@ set(qstyle_resource_files
     "styles/images/viewlist-16.png"
     "styles/images/viewlist-32.png"
 )
-
-set(widgets_no_pch_sources
-    compat/removed_api.cpp
-)
-
-foreach(src ${widgets_no_pch_sources})
-    qt_update_ignore_pch_source(Widgets ${src})
-endforeach()
-
 
 qt_internal_add_resource(Widgets "qstyle"
     PREFIX
@@ -760,7 +749,6 @@ qt_internal_extend_target(Widgets CONDITION QT_FEATURE_treewidget
     SOURCES
         itemviews/qtreewidget.cpp itemviews/qtreewidget.h itemviews/qtreewidget_p.h
         itemviews/qtreewidgetitemiterator.cpp itemviews/qtreewidgetitemiterator.h
-        itemviews/qtreewidgetitemiterator_p.h
 )
 
 qt_internal_extend_target(Widgets CONDITION QT_FEATURE_graphicsview

@@ -38,15 +38,16 @@ typedef biased_subrs_t<CFF1Subrs>   cff1_biased_subrs_t;
 struct cff1_cs_interp_env_t : cs_interp_env_t<number_t, CFF1Subrs>
 {
   template <typename ACC>
-  cff1_cs_interp_env_t (const hb_ubytes_t &str, ACC &acc, unsigned int fd,
-			const int *coords_=nullptr, unsigned int num_coords_=0)
-    : SUPER (str, acc.globalSubrs, acc.privateDicts[fd].localSubrs)
+  void init (const byte_str_t &str, ACC &acc, unsigned int fd)
   {
+    SUPER::init (str, acc.globalSubrs, acc.privateDicts[fd].localSubrs);
     processed_width = false;
     has_width = false;
     arg_start = 0;
     in_seac = false;
   }
+
+  void fini () { SUPER::fini (); }
 
   void set_width (bool has_width_)
   {
@@ -153,7 +154,7 @@ struct cff1_cs_opset_t : cs_opset_t<number_t, OPSET, cff1_cs_interp_env_t, PARAM
 };
 
 template <typename OPSET, typename PARAM>
-using cff1_cs_interpreter_t = cs_interpreter_t<cff1_cs_interp_env_t, OPSET, PARAM>;
+struct cff1_cs_interpreter_t : cs_interpreter_t<cff1_cs_interp_env_t, OPSET, PARAM> {};
 
 } /* namespace CFF */
 

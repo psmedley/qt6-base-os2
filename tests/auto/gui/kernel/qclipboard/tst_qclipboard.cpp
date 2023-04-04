@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -124,7 +149,7 @@ public:
 
     operator bool() const
     {
-        if (m_timer.elapsed() && !m_spy.size())
+        if (m_timer.elapsed() && !m_spy.count())
             return true;
         m_spy.clear();
         return false;
@@ -166,11 +191,11 @@ void tst_QClipboard::testSignals()
 
     // Test the default mode signal.
     clipboard->setText(text);
-    QTRY_COMPARE(dataChangedSpy.size(), 1);
-    QCOMPARE(searchChangedSpy.size(), 0);
-    QCOMPARE(selectionChangedSpy.size(), 0);
-    QCOMPARE(changedSpy.size(), 1);
-    QCOMPARE(changedSpy.at(0).size(), 1);
+    QTRY_COMPARE(dataChangedSpy.count(), 1);
+    QCOMPARE(searchChangedSpy.count(), 0);
+    QCOMPARE(selectionChangedSpy.count(), 0);
+    QCOMPARE(changedSpy.count(), 1);
+    QCOMPARE(changedSpy.at(0).count(), 1);
     QCOMPARE(qvariant_cast<QClipboard::Mode>(changedSpy.at(0).at(0)), QClipboard::Clipboard);
 
     changedSpy.clear();
@@ -178,29 +203,29 @@ void tst_QClipboard::testSignals()
     // Test the selection mode signal.
     if (clipboard->supportsSelection()) {
         clipboard->setText(text, QClipboard::Selection);
-        QCOMPARE(selectionChangedSpy.size(), 1);
-        QCOMPARE(changedSpy.size(), 1);
-        QCOMPARE(changedSpy.at(0).size(), 1);
+        QCOMPARE(selectionChangedSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), 1);
+        QCOMPARE(changedSpy.at(0).count(), 1);
         QCOMPARE(qvariant_cast<QClipboard::Mode>(changedSpy.at(0).at(0)), QClipboard::Selection);
     } else {
-        QCOMPARE(selectionChangedSpy.size(), 0);
+        QCOMPARE(selectionChangedSpy.count(), 0);
     }
-    QCOMPARE(dataChangedSpy.size(), 1);
-    QCOMPARE(searchChangedSpy.size(), 0);
+    QCOMPARE(dataChangedSpy.count(), 1);
+    QCOMPARE(searchChangedSpy.count(), 0);
 
     changedSpy.clear();
 
     // Test the search mode signal.
     if (clipboard->supportsFindBuffer()) {
         clipboard->setText(text, QClipboard::FindBuffer);
-        QCOMPARE(searchChangedSpy.size(), 1);
-        QCOMPARE(changedSpy.size(), 1);
-        QCOMPARE(changedSpy.at(0).size(), 1);
+        QCOMPARE(searchChangedSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), 1);
+        QCOMPARE(changedSpy.at(0).count(), 1);
         QCOMPARE(qvariant_cast<QClipboard::Mode>(changedSpy.at(0).at(0)), QClipboard::FindBuffer);
     } else {
-        QCOMPARE(searchChangedSpy.size(), 0);
+        QCOMPARE(searchChangedSpy.count(), 0);
     }
-    QCOMPARE(dataChangedSpy.size(), 1);
+    QCOMPARE(dataChangedSpy.count(), 1);
 }
 
 #if defined(Q_OS_WIN) || defined(Q_OS_MAC) || defined(Q_OS_QNX)
@@ -340,16 +365,16 @@ void tst_QClipboard::setMimeData()
     QGuiApplication::clipboard()->clear(QClipboard::FindBuffer);
 
     if (QGuiApplication::clipboard()->supportsSelection())
-        QCOMPARE(spySelection.size(), 1);
+        QCOMPARE(spySelection.count(), 1);
     else
-        QCOMPARE(spySelection.size(), 0);
+        QCOMPARE(spySelection.count(), 0);
 
     if (QGuiApplication::clipboard()->supportsFindBuffer())
-        QCOMPARE(spyFindBuffer.size(), 1);
+        QCOMPARE(spyFindBuffer.count(), 1);
     else
-        QCOMPARE(spyFindBuffer.size(), 0);
+        QCOMPARE(spyFindBuffer.count(), 0);
 
-    QTRY_COMPARE(spyData.size(), 1);
+    QTRY_COMPARE(spyData.count(), 1);
 
     // an other crash test
     data = new QMimeData;
@@ -376,16 +401,16 @@ void tst_QClipboard::setMimeData()
         QGuiApplication::clipboard()->setMimeData(newData, QClipboard::FindBuffer);
 
     if (QGuiApplication::clipboard()->supportsSelection())
-        QCOMPARE(spySelection.size(), 1);
+        QCOMPARE(spySelection.count(), 1);
     else
-        QCOMPARE(spySelection.size(), 0);
+        QCOMPARE(spySelection.count(), 0);
 
     if (QGuiApplication::clipboard()->supportsFindBuffer())
-        QCOMPARE(spyFindBuffer.size(), 1);
+        QCOMPARE(spyFindBuffer.count(), 1);
     else
-        QCOMPARE(spyFindBuffer.size(), 0);
+        QCOMPARE(spyFindBuffer.count(), 0);
 
-    QTRY_COMPARE(spyData.size(), 1);
+    QTRY_COMPARE(spyData.count(), 1);
 }
 
 void tst_QClipboard::clearBeforeSetText()

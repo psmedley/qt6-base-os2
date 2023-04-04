@@ -1,5 +1,41 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qinputdevice.h"
 #include "qinputdevice_p.h"
@@ -11,8 +47,6 @@
 #include <QScreen>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*!
     \class QInputDevice
@@ -67,7 +101,7 @@ using namespace Qt::StringLiterals;
     \value Scroll
            Indicates that the device has a scroll capability.
 
-    \value [since 6.2] PixelScroll
+    \value PixelScroll \since 6.2
            Indicates that the device (usually a
            \l {QInputDevice::DeviceType::TouchPad}{touchpad})
            scrolls with \l {QWheelEvent::pixelDelta()}{pixel precision}.
@@ -230,7 +264,7 @@ QString QInputDevice::seatName() const
 
 using InputDevicesList = QList<const QInputDevice *>;
 Q_GLOBAL_STATIC(InputDevicesList, deviceList)
-Q_CONSTINIT static QBasicMutex devicesMutex;
+static QBasicMutex devicesMutex;
 
 /*!
     Returns a list of all registered input devices (keyboards and pointing devices).
@@ -247,37 +281,16 @@ QList<const QInputDevice *> QInputDevice::devices()
 }
 
 /*!
-    \since 6.3
-
-    Returns a list of seat names for all registered input devices (keyboards and pointing devices).
-*/
-QStringList QInputDevice::seatNames()
-{
-    QMutexLocker locker(&devicesMutex);
-    const InputDevicesList devices = *deviceList();
-    locker.unlock();
-    QStringList result;
-    for (const QInputDevice *d : devices) {
-        if (!result.contains(d->seatName()))
-            result.append(d->seatName());
-    }
-
-    return result;
-}
-
-/*!
     Returns the core or master keyboard on the given seat \a seatName.
 */
 const QInputDevice *QInputDevice::primaryKeyboard(const QString& seatName)
 {
     QMutexLocker locker(&devicesMutex);
-    const InputDevicesList devices = *deviceList();
+    InputDevicesList v = *deviceList();
     locker.unlock();
     const QInputDevice *ret = nullptr;
-    for (const QInputDevice *d : devices) {
-        if (d->type() != DeviceType::Keyboard)
-            continue;
-        if (seatName.isNull() || d->seatName() == seatName) {
+    for (const QInputDevice *d : v) {
+        if (d->type() == DeviceType::Keyboard && d->seatName() == seatName) {
             // the master keyboard's parent is not another input device
             if (!d->parent() || !qobject_cast<const QInputDevice *>(d->parent()))
                 return d;
@@ -289,7 +302,7 @@ const QInputDevice *QInputDevice::primaryKeyboard(const QString& seatName)
         qCDebug(lcQpaInputDevices) << "no keyboards registered for seat" << seatName
                                    << "The platform plugin should have provided one via "
                                       "QWindowSystemInterface::registerInputDevice(). Creating a default one for now.";
-        ret = new QInputDevice("core keyboard"_L1, 0, DeviceType::Keyboard, seatName, QCoreApplication::instance());
+        ret = new QInputDevice(QLatin1String("core keyboard"), 0, DeviceType::Keyboard, seatName, QCoreApplication::instance());
         QInputDevicePrivate::registerDevice(ret);
         return ret;
     }
@@ -379,5 +392,3 @@ QDebug operator<<(QDebug debug, const QInputDevice *device)
 #endif // !QT_NO_DEBUG_STREAM
 
 QT_END_NAMESPACE
-
-#include "moc_qinputdevice.cpp"

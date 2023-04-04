@@ -1,7 +1,43 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// Copyright (C) 2022 Intel Corporation.
-// Copyright (C) 2019 Klarälvdalens Datakonsult AB.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2020 Intel Corporation.
+** Copyright (C) 2019 Klarälvdalens Datakonsult AB.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef Q_QDOC
 
@@ -26,16 +62,12 @@ QT_END_NAMESPACE
 
 #include <new>
 #include <QtCore/qatomic.h>
+#include <QtCore/qobject.h>    // for qobject_cast
 #include <QtCore/qhashfunctions.h>
-#include <QtCore/qmetatype.h> // for IsPointerToTypeDerivedFromQObject
 
 #include <memory>
 
 QT_BEGIN_NAMESPACE
-
-class QObject;
-template <class T>
-T qobject_cast(const QObject *object);
 
 //
 // forward declarations
@@ -480,9 +512,13 @@ private:
         qt_ptr_swap(this->value, other.value);
     }
 
+#if defined(Q_NO_TEMPLATE_FRIENDS)
+public:
+#else
     template <class X> friend class QSharedPointer;
     template <class X> friend class QWeakPointer;
     template <class X, class Y> friend QSharedPointer<X> QtSharedPointer::copyAndSetPointer(X * ptr, const QSharedPointer<Y> &src);
+#endif
     void ref() const noexcept { d->weakref.ref(); d->strongref.ref(); }
 
     inline void internalSet(Data *o, T *actual)
@@ -551,23 +587,6 @@ public:
         other.value = nullptr;
     }
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_MOVE_AND_SWAP(QWeakPointer)
-
-    template <class X, IfCompatible<X> = true>
-    QWeakPointer(QWeakPointer<X> &&other) noexcept
-        : d(other.d), value(other.value)
-    {
-        other.d = nullptr;
-        other.value = nullptr;
-    }
-
-    template <class X, IfCompatible<X> = true>
-    QWeakPointer &operator=(QWeakPointer<X> &&other) noexcept
-    {
-        QWeakPointer moved(std::move(other));
-        swap(moved);
-        return *this;
-    }
-
     QWeakPointer &operator=(const QWeakPointer &other) noexcept
     {
         QWeakPointer copy(other);
@@ -619,6 +638,10 @@ public:
     // std::weak_ptr compatibility:
     inline QSharedPointer<T> lock() const { return toStrongRef(); }
 
+#if defined(QWEAKPOINTER_ENABLE_ARROW)
+    inline T *operator->() const { return data(); }
+#endif
+
     template <class X>
     bool operator==(const QWeakPointer<X> &o) const noexcept
     { return d == o.d && value == static_cast<const T *>(o.value); }
@@ -653,9 +676,12 @@ public:
 
 private:
     friend struct QtPrivate::EnableInternalData;
+#if defined(Q_NO_TEMPLATE_FRIENDS)
+public:
+#else
     template <class X> friend class QSharedPointer;
-    template <class X> friend class QWeakPointer;
     template <class X> friend class QPointer;
+#endif
 
     template <class X>
     inline QWeakPointer &assign(X *ptr)
@@ -712,8 +738,12 @@ public:
     inline QSharedPointer<T> sharedFromThis() { return QSharedPointer<T>(weakPointer); }
     inline QSharedPointer<const T> sharedFromThis() const { return QSharedPointer<const T>(weakPointer); }
 
+#ifndef Q_NO_TEMPLATE_FRIENDS
 private:
     template <class X> friend class QSharedPointer;
+#else
+public:
+#endif
     template <class X>
     inline void initializeFromSharedPointer(const QSharedPointer<X> &ptr) const
     {

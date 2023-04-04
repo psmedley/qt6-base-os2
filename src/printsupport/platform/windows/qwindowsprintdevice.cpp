@@ -1,6 +1,42 @@
-// Copyright (C) 2014 John Layt <jlayt@kde.org>
-// Copyright (C) 2018 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2014 John Layt <jlayt@kde.org>
+** Copyright (C) 2018 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtPrintSupport module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qwindowsprintdevice_p.h"
 
@@ -25,6 +61,25 @@ static inline uint qwcsnlen(const wchar_t *str, uint maxlen)
             length++;
     }
     return length;
+}
+
+static QPrint::InputSlot paperBinToInputSlot(int windowsId, const QString &name)
+{
+    QPrint::InputSlot slot;
+    slot.name = name;
+    int i;
+    for (i = 0; inputSlotMap[i].id != QPrint::CustomInputSlot; ++i) {
+        if (inputSlotMap[i].windowsId == windowsId) {
+            slot.key = inputSlotMap[i].key;
+            slot.id = inputSlotMap[i].id;
+            slot.windowsId = inputSlotMap[i].windowsId;
+            return slot;
+        }
+    }
+    slot.key = inputSlotMap[i].key;
+    slot.id = inputSlotMap[i].id;
+    slot.windowsId = windowsId;
+    return slot;
 }
 
 static LPDEVMODE getDevmode(HANDLE hPrinter, const QString &printerId)
@@ -314,7 +369,7 @@ void QWindowsPrintDevice::loadInputSlots() const
             for (int i = 0; i < int(binCount); ++i) {
                 wchar_t *binName = binNames.data() + (i * 24);
                 QString name = QString::fromWCharArray(binName, qwcsnlen(binName, 24));
-                m_inputSlots.append(QPrintUtils::paperBinToInputSlot(bins[i], name));
+                m_inputSlots.append(paperBinToInputSlot(bins[i], name));
             }
 
         }
@@ -333,8 +388,7 @@ QPrint::InputSlot QWindowsPrintDevice::defaultInputSlot() const
     if (LPDEVMODE pDevMode = getDevmode(m_hPrinter, m_id)) {
         // Get the default input slot
         if (pDevMode->dmFields & DM_DEFAULTSOURCE) {
-            QPrint::InputSlot tempSlot =
-                    QPrintUtils::paperBinToInputSlot(pDevMode->dmDefaultSource, QString());
+            QPrint::InputSlot tempSlot = paperBinToInputSlot(pDevMode->dmDefaultSource, QString());
             const auto inputSlots = supportedInputSlots();
             for (const QPrint::InputSlot &slot : inputSlots) {
                 if (slot.key == tempSlot.key) {
@@ -445,7 +499,7 @@ QStringList QWindowsPrintDevice::availablePrintDeviceIds()
 QString QWindowsPrintDevice::defaultPrintDeviceId()
 {
     DWORD size = 0;
-    if (GetDefaultPrinter(nullptr, &size) == ERROR_FILE_NOT_FOUND || size < 2)
+    if (GetDefaultPrinter(nullptr, &size) == ERROR_FILE_NOT_FOUND)
        return QString();
 
     QScopedArrayPointer<wchar_t> name(new wchar_t[size]);

@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the qmake application of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "msvc_nmake.h"
 #include "option.h"
@@ -149,10 +174,6 @@ QString NmakeMakefileGenerator::var(const ProKey &value) const
     return MakefileGenerator::var(value);
 }
 
-void NmakeMakefileGenerator::suppressBuiltinRules(QTextStream &) const
-{
-}
-
 void NmakeMakefileGenerator::init()
 {
     /* this should probably not be here, but I'm using it to wrap the .t files */
@@ -264,9 +285,9 @@ QStringList NmakeMakefileGenerator::sourceFilesForImplicitRulesFilter()
 {
     QStringList filter;
     const QChar wildcard = QLatin1Char('*');
-    for (const QString &ext : std::as_const(Option::c_ext))
+    for (const QString &ext : qAsConst(Option::c_ext))
         filter << wildcard + ext;
-    for (const QString &ext : std::as_const(Option::cpp_ext))
+    for (const QString &ext : qAsConst(Option::cpp_ext))
         filter << wildcard + ext;
     return filter;
 }
@@ -290,7 +311,7 @@ void NmakeMakefileGenerator::writeImplicitRulesPart(QTextStream &t)
         for (int y = 0; directories[y]; y++) {
             QString dirTemp = project->first(directories[y]).toQString();
             if (dirTemp.endsWith("\\"))
-                dirTemp.truncate(dirTemp.size()-1);
+                dirTemp.truncate(dirTemp.length()-1);
             if(!dirTemp.isEmpty())
                 source_directories.insert(dirTemp);
         }
@@ -314,10 +335,11 @@ void NmakeMakefileGenerator::writeImplicitRulesPart(QTextStream &t)
         const QStringList sourceFilesFilter = sourceFilesForImplicitRulesFilter();
         QStringList fixifiedSourceDirs = fileFixify(QList<QString>(source_directories.constBegin(), source_directories.constEnd()), FileFixifyAbsolute);
         fixifiedSourceDirs.removeDuplicates();
-        for (const QString &sourceDir : std::as_const(fixifiedSourceDirs)) {
+        for (const QString &sourceDir : qAsConst(fixifiedSourceDirs)) {
             QDirIterator dit(sourceDir, sourceFilesFilter, QDir::Files | QDir::NoDotAndDotDot);
             while (dit.hasNext()) {
-                const QFileInfo fi = dit.nextFileInfo();
+                dit.next();
+                const QFileInfo fi = dit.fileInfo();
                 QString &duplicate = fileNames[fi.completeBaseName()];
                 if (duplicate.isNull()) {
                     duplicate = fi.filePath();
@@ -339,7 +361,7 @@ void NmakeMakefileGenerator::writeImplicitRulesPart(QTextStream &t)
         project->variables().remove("QMAKE_RUN_CXX");
         project->variables().remove("QMAKE_RUN_CC");
 
-        for (const QString &sourceDir : std::as_const(source_directories)) {
+        for (const QString &sourceDir : qAsConst(source_directories)) {
             if (sourceDir.isEmpty())
                 continue;
             QString objDir = var("OBJECTS_DIR");

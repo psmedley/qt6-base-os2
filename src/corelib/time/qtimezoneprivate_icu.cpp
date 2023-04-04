@@ -1,6 +1,42 @@
-// Copyright (C) 2013 John Layt <jlayt@kde.org>
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2013 John Layt <jlayt@kde.org>
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qtimezone.h"
 #include "qtimezoneprivate_p.h"
@@ -147,7 +183,8 @@ static bool ucalOffsetsAtTime(UCalendar *m_ucal, qint64 atMSecsSinceEpoch,
     return false;
 }
 
-#if U_ICU_VERSION_MAJOR_NUM >= 50
+// ICU Draft api in v50, should be stable in ICU v51. Available in C++ api from ICU v3.8
+#if U_ICU_VERSION_MAJOR_NUM == 50
 // Qt wrapper around qt_ucal_getTimeZoneTransitionDate & ucal_get
 static QTimeZonePrivate::Data ucalTimeZoneTransition(UCalendar *m_ucal,
                                                      UTimeZoneTransitionType type,
@@ -169,14 +206,6 @@ static QTimeZonePrivate::Data ucalTimeZoneTransition(UCalendar *m_ucal,
     UDate tranMSecs = 0;
     status = U_ZERO_ERROR;
     bool ok = ucal_getTimeZoneTransitionDate(ucal, type, &tranMSecs, &status);
-
-    // Catch a known violation (in ICU 67) of the specified behavior:
-    if (U_SUCCESS(status) && ok && type == UCAL_TZ_TRANSITION_NEXT) {
-        // At the end of time, that can "succeed" with tranMSecs ==
-        // atMSecsSinceEpoch, which should be treated as a failure.
-        // (At the start of time, previous correctly fails.)
-        ok = qint64(tranMSecs) > atMSecsSinceEpoch;
-    }
 
     // Set the transition time to find the offsets for
     if (U_SUCCESS(status) && ok) {
@@ -349,17 +378,8 @@ int QIcuTimeZonePrivate::daylightTimeOffset(qint64 atMSecsSinceEpoch) const
 
 bool QIcuTimeZonePrivate::hasDaylightTime() const
 {
-    if (ucalDaylightOffset(m_id) != 0)
-        return true;
-#if U_ICU_VERSION_MAJOR_NUM >= 50
-    for (qint64 when = minMSecs(); when != invalidMSecs(); ) {
-        auto data = nextTransition(when);
-        if (data.daylightTimeOffset && data.daylightTimeOffset != invalidSeconds())
-            return true;
-        when = data.atMSecsSinceEpoch;
-    }
-#endif
-    return false;
+    // TODO No direct ICU C api, work-around below not reliable?  Find a better way?
+    return (ucalDaylightOffset(m_id) != 0);
 }
 
 bool QIcuTimeZonePrivate::isDaylightTime(qint64 atMSecsSinceEpoch) const
@@ -387,18 +407,17 @@ bool QIcuTimeZonePrivate::isDaylightTime(qint64 atMSecsSinceEpoch) const
 QTimeZonePrivate::Data QIcuTimeZonePrivate::data(qint64 forMSecsSinceEpoch) const
 {
     // Available in ICU C++ api, and draft C api in v50
+    // TODO When v51 released see if api is stable
     QTimeZonePrivate::Data data = invalidData();
-#if U_ICU_VERSION_MAJOR_NUM >= 50
+#if U_ICU_VERSION_MAJOR_NUM == 50
     data = ucalTimeZoneTransition(m_ucal, UCAL_TZ_TRANSITION_PREVIOUS_INCLUSIVE,
                                   forMSecsSinceEpoch);
-    if (data.atMSecsSinceEpoch == invalidMSecs()) // before first transition
-#endif
-    {
-        ucalOffsetsAtTime(m_ucal, forMSecsSinceEpoch, &data.standardTimeOffset,
-                          &data.daylightTimeOffset);
-        data.offsetFromUtc = data.standardTimeOffset + data.daylightTimeOffset;
-        data.abbreviation = abbreviation(forMSecsSinceEpoch);
-    }
+#else
+    ucalOffsetsAtTime(m_ucal, forMSecsSinceEpoch, &data.standardTimeOffset,
+                      &data.daylightTimeOffset);
+    data.offsetFromUtc = data.standardTimeOffset + data.daylightTimeOffset;
+    data.abbreviation = abbreviation(forMSecsSinceEpoch);
+#endif // U_ICU_VERSION_MAJOR_NUM == 50
     data.atMSecsSinceEpoch = forMSecsSinceEpoch;
     return data;
 }
@@ -406,33 +425,36 @@ QTimeZonePrivate::Data QIcuTimeZonePrivate::data(qint64 forMSecsSinceEpoch) cons
 bool QIcuTimeZonePrivate::hasTransitions() const
 {
     // Available in ICU C++ api, and draft C api in v50
-#if U_ICU_VERSION_MAJOR_NUM >= 50
+    // TODO When v51 released see if api is stable
+#if U_ICU_VERSION_MAJOR_NUM == 50
     return true;
 #else
     return false;
-#endif
+#endif // U_ICU_VERSION_MAJOR_NUM == 50
 }
 
 QTimeZonePrivate::Data QIcuTimeZonePrivate::nextTransition(qint64 afterMSecsSinceEpoch) const
 {
     // Available in ICU C++ api, and draft C api in v50
-#if U_ICU_VERSION_MAJOR_NUM >= 50
+    // TODO When v51 released see if api is stable
+#if U_ICU_VERSION_MAJOR_NUM == 50
     return ucalTimeZoneTransition(m_ucal, UCAL_TZ_TRANSITION_NEXT, afterMSecsSinceEpoch);
 #else
     Q_UNUSED(afterMSecsSinceEpoch);
     return invalidData();
-#endif
+#endif // U_ICU_VERSION_MAJOR_NUM == 50
 }
 
 QTimeZonePrivate::Data QIcuTimeZonePrivate::previousTransition(qint64 beforeMSecsSinceEpoch) const
 {
     // Available in ICU C++ api, and draft C api in v50
-#if U_ICU_VERSION_MAJOR_NUM >= 50
+    // TODO When v51 released see if api is stable
+#if U_ICU_VERSION_MAJOR_NUM == 50
     return ucalTimeZoneTransition(m_ucal, UCAL_TZ_TRANSITION_PREVIOUS, beforeMSecsSinceEpoch);
 #else
     Q_UNUSED(beforeMSecsSinceEpoch);
     return invalidData();
-#endif
+#endif // U_ICU_VERSION_MAJOR_NUM == 50
 }
 
 QByteArray QIcuTimeZonePrivate::systemTimeZoneId() const
@@ -455,7 +477,7 @@ QList<QByteArray> QIcuTimeZonePrivate::availableTimeZoneIds() const
 
 QList<QByteArray> QIcuTimeZonePrivate::availableTimeZoneIds(QLocale::Territory territory) const
 {
-    const QLatin1StringView regionCode = QLocalePrivate::territoryToCode(territory);
+    const QLatin1String regionCode = QLocalePrivate::territoryToCode(territory);
     const QByteArray regionCodeUtf8 = QString(regionCode).toUtf8();
     UErrorCode status = U_ZERO_ERROR;
     UEnumeration *uenum = ucal_openCountryTimeZones(regionCodeUtf8.data(), &status);

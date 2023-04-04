@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -100,7 +125,7 @@ public:
 
             virtual void highlightBlock(const QString &text) override
             {
-                for (int i = 0; i < formats.size(); ++i) {
+                for (int i = 0; i < formats.count(); ++i) {
                     const QTextLayout::FormatRange &range = formats.at(i);
                     setFormat(range.start, range.length, range.format);
                 }
@@ -161,7 +186,7 @@ public:
             commentFormat.setForeground(Qt::darkGreen);
             commentFormat.setFontWeight(QFont::StyleItalic);
             commentFormat.setFontFixedPitch(true);
-            int textLength = text.size();
+            int textLength = text.length();
 
             if (text.startsWith(QLatin1Char(';'))){
                 // The entire line is a comment
@@ -414,7 +439,7 @@ void tst_QSyntaxHighlighter::preservePreeditArea()
     QCOMPARE(hl->callCount, 1);
 
     formats = layout->formats();
-    QCOMPARE(formats.size(), 3);
+    QCOMPARE(formats.count(), 3);
 
     range = formats.at(0);
 
@@ -493,7 +518,7 @@ void tst_QSyntaxHighlighter::noContentsChangedDuringHighlight()
     QSignalSpy contentsChangedSpy(doc, SIGNAL(contentsChanged()));
     cursor.insertText("Hello World");
 
-    QCOMPARE(contentsChangedSpy.size(), 1);
+    QCOMPARE(contentsChangedSpy.count(), 1);
     QVERIFY(hl->highlighted);
     QVERIFY(lout->documentChangedCalled);
 }

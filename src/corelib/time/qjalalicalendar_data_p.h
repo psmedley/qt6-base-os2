@@ -1,5 +1,41 @@
-// Copyright (C) 2019 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2019 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QPERSIANCALENDAR_DATA_P_H
 #define QPERSIANCALENDAR_DATA_P_H
@@ -23,8 +59,8 @@ QT_BEGIN_NAMESPACE
 // GENERATED PART STARTS HERE
 
 /*
-    This part of the file was generated on 2022-04-07 from the
-    Common Locale Data Repository v41
+    This part of the file was generated on 2021-11-09 from the
+    Common Locale Data Repository v40
 
     http://www.unicode.org/cldr/
 
@@ -202,7 +238,6 @@ static const QCalendarLocale locale_data[] = {
       {    75,    66,   141,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// English/Latin/Madagascar
       {    75,    66,   142,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// English/Latin/Malawi
       {    75,    66,   143,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// English/Latin/Malaysia
-      {    75,    66,   144,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// English/Latin/Maldives
       {    75,    66,   146,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// English/Latin/Malta
       {    75,    66,   147,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// English/Latin/Marshall Islands
       {    75,    66,   150,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// English/Latin/Mauritius
@@ -655,10 +690,6 @@ static const QCalendarLocale locale_data[] = {
       {   324,    66,    25,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// Yoruba/Latin/Benin
       {   325,    66,   170,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// Zarma/Latin/Niger
       {   327,    66,   216,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// Zulu/Latin/South Africa
-      {   328,    66,    32,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// Kaingang/Latin/Brazil
-      {   329,    66,    32,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// Nheengatu/Latin/Brazil
-      {   329,    66,    54,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// Nheengatu/Latin/Colombia
-      {   329,    66,   254,    0,    0,    0,    0,  153,  153, 83, 83, 83, 83, 26, 26 },// Nheengatu/Latin/Venezuela
       {     0,     0,     0,    0,    0,    0,    0,    0,    0,  0,  0,  0,  0,  0,  0 },// trailing zeros
 };
 

@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -665,16 +690,16 @@ void tst_QGraphicsView::openGLViewport()
 
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
-    QTRY_VERIFY(spy1.size() > 0);
-    QTRY_VERIFY(spy2.size() >= spy1.size());
+    QTRY_VERIFY(spy1.count() > 0);
+    QTRY_VERIFY(spy2.count() >= spy1.count());
     spy1.clear();
     spy2.clear();
 
     // Now test for resize (QTBUG-52419). This is special when the viewport is
     // a QOpenGLWidget since the underlying FBO must also be maintained.
     view.resize(300, 300);
-    QTRY_VERIFY(spy1.size() > 0);
-    QTRY_VERIFY(spy2.size() >= spy1.size());
+    QTRY_VERIFY(spy1.count() > 0);
+    QTRY_VERIFY(spy2.count() >= spy1.count());
     // There is no sane way to check if the framebuffer contents got updated
     // (grabFramebuffer is no good for the viewport case as that does not go
     // through paintGL). So skip the actual verification.
@@ -718,9 +743,8 @@ void tst_QGraphicsView::dragMode_scrollHand()
             int verticalScrollBarValue = view.verticalScrollBar()->value();
             {
                 // Press
-                auto pos = view.viewport()->rect().center();
-                QMouseEvent event(QEvent::MouseButtonPress, pos,
-                                  view.viewport()->mapToGlobal(pos),
+                QMouseEvent event(QEvent::MouseButtonPress,
+                                  view.viewport()->rect().center(),
                                   Qt::LeftButton, Qt::LeftButton, {});
                 event.setAccepted(true);
                 QApplication::sendEvent(view.viewport(), &event);
@@ -736,9 +760,8 @@ void tst_QGraphicsView::dragMode_scrollHand()
 #endif
                 {
                     // Move
-                    auto pos = view.viewport()->rect().center() + QPoint(10, 0);
-                    QMouseEvent event(QEvent::MouseMove, pos,
-                                      view.viewport()->mapToGlobal(pos),
+                    QMouseEvent event(QEvent::MouseMove,
+                                      view.viewport()->rect().center() + QPoint(10, 0),
                                       Qt::LeftButton, Qt::LeftButton, {});
                     event.setAccepted(true);
                     QApplication::sendEvent(view.viewport(), &event);
@@ -749,9 +772,8 @@ void tst_QGraphicsView::dragMode_scrollHand()
                 QCOMPARE(view.verticalScrollBar()->value(), verticalScrollBarValue);
                 {
                     // Move
-                    auto pos = view.viewport()->rect().center() + QPoint(10, 10);
-                    QMouseEvent event(QEvent::MouseMove, pos,
-                                      view.viewport()->mapToGlobal(pos),
+                    QMouseEvent event(QEvent::MouseMove,
+                                      view.viewport()->rect().center() + QPoint(10, 10),
                                       Qt::LeftButton, Qt::LeftButton, {});
                     event.setAccepted(true);
                     QApplication::sendEvent(view.viewport(), &event);
@@ -764,9 +786,8 @@ void tst_QGraphicsView::dragMode_scrollHand()
 
             {
                 // Release
-                auto pos = view.viewport()->rect().center() + QPoint(10, 10);
-                QMouseEvent event(QEvent::MouseButtonRelease, pos,
-                                  view.viewport()->mapToGlobal(pos),
+                QMouseEvent event(QEvent::MouseButtonRelease,
+                                  view.viewport()->rect().center() + QPoint(10, 10),
                                   Qt::LeftButton, Qt::LeftButton, {});
                 event.setAccepted(true);
                 QApplication::sendEvent(view.viewport(), &event);
@@ -787,17 +808,15 @@ void tst_QGraphicsView::dragMode_scrollHand()
             // Check that a click will still unselect the item.
             {
                 // Press
-                auto pos = view.viewport()->rect().center() + QPoint(10, 10);
-                QMouseEvent event(QEvent::MouseButtonPress, pos,
-                                  view.viewport()->mapToGlobal(pos),
+                QMouseEvent event(QEvent::MouseButtonPress,
+                                  view.viewport()->rect().center() + QPoint(10, 10),
                                   Qt::LeftButton, Qt::LeftButton, {});
                 QApplication::sendEvent(view.viewport(), &event);
             }
             {
                 // Release
-                auto pos = view.viewport()->rect().center() + QPoint(10, 10);
-                QMouseEvent event(QEvent::MouseButtonRelease, pos,
-                                  view.viewport()->mapToGlobal(pos),
+                QMouseEvent event(QEvent::MouseButtonRelease,
+                                  view.viewport()->rect().center() + QPoint(10, 10),
                                   Qt::LeftButton, Qt::LeftButton, {});
                 QApplication::sendEvent(view.viewport(), &event);
             }
@@ -846,9 +865,8 @@ void tst_QGraphicsView::dragMode_rubberBand()
         int verticalScrollBarValue = view.verticalScrollBar()->value();
         {
             // Press
-            auto pos = view.viewport()->rect().center();
-            QMouseEvent event(QEvent::MouseButtonPress, pos,
-                              view.viewport()->mapToGlobal(pos),
+            QMouseEvent event(QEvent::MouseButtonPress,
+                              view.viewport()->rect().center(),
                               Qt::LeftButton, Qt::LeftButton, {});
             event.setAccepted(true);
             QApplication::sendEvent(view.viewport(), &event);
@@ -862,9 +880,8 @@ void tst_QGraphicsView::dragMode_rubberBand()
 
         {
             // Move
-            auto pos = view.viewport()->rect().center() + QPoint(100, 0);
-            QMouseEvent event(QEvent::MouseMove, pos,
-                              view.viewport()->mapToGlobal(pos),
+            QMouseEvent event(QEvent::MouseMove,
+                              view.viewport()->rect().center() + QPoint(100, 0),
                               Qt::LeftButton, Qt::LeftButton, {});
             event.setAccepted(true);
             QApplication::sendEvent(view.viewport(), &event);
@@ -878,9 +895,8 @@ void tst_QGraphicsView::dragMode_rubberBand()
 
         {
             // Move
-            auto pos = view.viewport()->rect().center() + QPoint(100, 100);
-            QMouseEvent event(QEvent::MouseMove, pos,
-                              view.viewport()->mapToGlobal(pos),
+            QMouseEvent event(QEvent::MouseMove,
+                              view.viewport()->rect().center() + QPoint(100, 100),
                               Qt::LeftButton, Qt::LeftButton, {});
             event.setAccepted(true);
             QApplication::sendEvent(view.viewport(), &event);
@@ -891,9 +907,8 @@ void tst_QGraphicsView::dragMode_rubberBand()
 
         {
             // Release
-            auto pos = view.viewport()->rect().center() + QPoint(100, 100);
-            QMouseEvent event(QEvent::MouseButtonRelease, pos,
-                              view.viewport()->mapToGlobal(pos),
+            QMouseEvent event(QEvent::MouseButtonRelease,
+                              view.viewport()->rect().center() + QPoint(100, 100),
                               Qt::LeftButton, Qt::LeftButton, {});
             event.setAccepted(true);
             QApplication::sendEvent(view.viewport(), &event);
@@ -1044,7 +1059,7 @@ void tst_QGraphicsView::rotated_rubberBand()
     sendMousePress(view.viewport(), QPoint(midWidth - 2, 0), Qt::LeftButton);
     sendMouseMove(view.viewport(), QPoint(midWidth + 2, view.viewport()->height()),
                   Qt::LeftButton, Qt::LeftButton);
-    QCOMPARE(scene.selectedItems().size(), dim);
+    QCOMPARE(scene.selectedItems().count(), dim);
     foreach (const QGraphicsItem *item, scene.items()) {
         QCOMPARE(item->isSelected(), item->data(0).toBool());
     }
@@ -3280,8 +3295,7 @@ void tst_QGraphicsView::task186827_deleteReplayedItem()
 
     QCOMPARE(view.mouseMoves, 0);
     {
-        auto pos = view.mapFromScene(25, 25);
-        QMouseEvent event(QEvent::MouseMove, pos, view.viewport()->mapToGlobal(pos), Qt::NoButton, {}, {});
+        QMouseEvent event(QEvent::MouseMove, view.mapFromScene(25, 25), Qt::NoButton, {}, {});
         QApplication::sendEvent(view.viewport(), &event);
     }
     QCOMPARE(view.mouseMoves, 1);
@@ -3289,8 +3303,7 @@ void tst_QGraphicsView::task186827_deleteReplayedItem()
     QTRY_COMPARE(view.mouseMoves, 1);
     QTest::qWait(25);
     {
-        auto pos = view.mapFromScene(25, 25);
-        QMouseEvent event(QEvent::MouseMove, pos, view.viewport()->mapToGlobal(pos), Qt::NoButton, {}, {});
+        QMouseEvent event(QEvent::MouseMove, view.mapFromScene(25, 25), Qt::NoButton, {}, {});
         QApplication::sendEvent(view.viewport(), &event);
     }
     QCOMPARE(view.mouseMoves, 2);
@@ -3336,10 +3349,8 @@ void tst_QGraphicsView::task210599_unsetDragWhileDragging()
     // Enable and do a drag
     {
         view.setDragMode(QGraphicsView::ScrollHandDrag);
-        QMouseEvent press(QEvent::MouseButtonPress, origPos,
-                          view.viewport()->mapToGlobal(origPos), Qt::LeftButton, {}, {});
-        QMouseEvent move(QEvent::MouseMove, step1Pos,
-                         view.viewport()->mapToGlobal(step1Pos), Qt::LeftButton, {}, {});
+        QMouseEvent press(QEvent::MouseButtonPress, origPos, Qt::LeftButton, {}, {});
+        QMouseEvent move(QEvent::MouseMove, step1Pos, Qt::LeftButton, {}, {});
         QApplication::sendEvent(view.viewport(), &press);
         QApplication::sendEvent(view.viewport(), &move);
     }
@@ -3347,8 +3358,7 @@ void tst_QGraphicsView::task210599_unsetDragWhileDragging()
     // unset drag and release mouse, inverse order
     {
         view.setDragMode(QGraphicsView::NoDrag);
-        QMouseEvent release(QEvent::MouseButtonRelease, step1Pos,
-                            view.viewport()->mapToGlobal(step1Pos), Qt::LeftButton, {}, {});
+        QMouseEvent release(QEvent::MouseButtonRelease, step1Pos, Qt::LeftButton, {}, {});
         QApplication::sendEvent(view.viewport(), &release);
     }
 
@@ -3357,8 +3367,7 @@ void tst_QGraphicsView::task210599_unsetDragWhileDragging()
     // reset drag, and move mouse without holding button down.
     {
         view.setDragMode(QGraphicsView::ScrollHandDrag);
-        QMouseEvent move(QEvent::MouseMove, step2Pos,
-                         view.viewport()->mapToGlobal(step2Pos), Qt::LeftButton, {}, {});
+        QMouseEvent move(QEvent::MouseMove, step2Pos, Qt::LeftButton, {}, {});
         QApplication::sendEvent(view.viewport(), &move);
     }
 
@@ -3538,9 +3547,6 @@ void tst_QGraphicsView::embeddedViewsWithFocus()
         void focusInEvent(QFocusEvent *) override { ++focusCount; }
         void focusOutEvent(QFocusEvent *) override { --focusCount; }
     };
-
-    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
-        QSKIP("QWindow::requestActivate() is not supported.");
 
     QGraphicsScene innerScene;
     FocusWidget *innerWidget = new FocusWidget;
@@ -3865,9 +3871,8 @@ void tst_QGraphicsView::mouseTracking2()
 
     EventSpy spy(&scene, QEvent::GraphicsSceneMouseMove);
     QCOMPARE(spy.count(), 0);
-    auto pos = view.viewport()->rect().center();
-    QMouseEvent event(QEvent::MouseMove, pos, view.viewport()->mapToGlobal(pos),
-                      Qt::NoButton, Qt::MouseButtons(Qt::NoButton), {});
+    QMouseEvent event(QEvent::MouseMove,view.viewport()->rect().center(), Qt::NoButton,
+                      Qt::MouseButtons(Qt::NoButton), {});
     QApplication::sendEvent(view.viewport(), &event);
     QCOMPARE(spy.count(), 1);
 }

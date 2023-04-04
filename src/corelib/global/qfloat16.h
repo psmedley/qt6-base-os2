@@ -1,6 +1,42 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// Copyright (C) 2016 by Southwest Research Institute (R)
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2016 by Southwest Research Institute (R)
+** Contact: http://www.qt-project.org/legal
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QFLOAT16_H
 #define QFLOAT16_H
@@ -13,13 +49,12 @@
 #include <limits>
 
 #if defined(QT_COMPILER_SUPPORTS_F16C) && defined(__AVX2__) && !defined(__F16C__)
-// All processors that support AVX2 do support F16C too, so we could enable the
-// feature unconditionally if __AVX2__ is defined. However, all currently
-// supported compilers except Microsoft's are able to define __F16C__ on their
-// own when the user enables the feature, so we'll trust them.
-#  if defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
+// All processors that support AVX2 do support F16C too. That doesn't mean
+// we're allowed to use the intrinsics directly, so we'll do it only for
+// the Intel and Microsoft's compilers.
+#  if defined(Q_CC_INTEL) || defined(Q_CC_MSVC)
 #    define __F16C__        1
-#  endif
+# endif
 #endif
 
 #if defined(QT_COMPILER_SUPPORTS_F16C) && defined(__F16C__)
@@ -31,10 +66,6 @@ QT_BEGIN_NAMESPACE
 #if 0
 #pragma qt_class(QFloat16)
 #pragma qt_no_master_include
-#endif
-
-#ifndef QT_NO_DATASTREAM
-class QDataStream;
 #endif
 
 class qfloat16
@@ -170,11 +201,6 @@ QT_WARNING_DISABLE_FLOAT_COMPARE
 #undef QF16_MAKE_BOOL_OP_INT
 
 QT_WARNING_POP
-
-#ifndef QT_NO_DATASTREAM
-    friend Q_CORE_EXPORT QDataStream &operator<<(QDataStream &ds, qfloat16 f);
-    friend Q_CORE_EXPORT QDataStream &operator>>(QDataStream &ds, qfloat16 &f);
-#endif
 };
 
 Q_DECLARE_TYPEINFO(qfloat16, Q_PRIMITIVE_TYPE);
@@ -250,12 +276,8 @@ inline qfloat16::qfloat16(float f) noexcept
         if (mantissa) // keep nan from truncating to inf
             mantissa = qMax(1U << shift, mantissa);
     } else {
-        // Round half to even. First round up by adding one in the most
-        // significant bit we'll be discarding:
+        // round half to even
         mantissa += round;
-        // If the last bit we'll be keeping is now set, but all later bits are
-        // clear, we were at half and shouldn't have rounded up; decrement will
-        // clear this last kept bit. Any later set bit hides the decrement.
         if (mantissa & (1 << shift))
             --mantissa;
     }
@@ -312,7 +334,7 @@ template <> inline auto qHypot(qfloat16 x, qfloat16 y)
     return qfloat16(qHypot(float(x), float(y)));
 #endif
 }
-#if defined(__cpp_lib_hypot) && __cpp_lib_hypot >= 201603L // Expected to be true
+#if __cpp_lib_hypot >= 201603L // Expected to be true
 // If any are not qfloat16, convert each qfloat16 to float:
 /* (The following splits the some-but-not-all-qfloat16 cases up, using
    (X|Y|Z)&~(X&Y&Z) = X ? ~(Y&Z) : Y|Z = X&~(Y&Z) | ~X&Y | ~X&~Y&Z,
@@ -346,7 +368,7 @@ inline auto qHypot(qfloat16 x, qfloat16 y, qfloat16 z)
 
 QT_END_NAMESPACE
 
-QT_DECL_METATYPE_EXTERN(qfloat16, Q_CORE_EXPORT)
+Q_DECLARE_METATYPE(qfloat16)
 
 namespace std {
 template<>

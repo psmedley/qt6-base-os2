@@ -1,6 +1,42 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// Copyright (C) 2021 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2020 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QNUMERIC_P_H
 #define QNUMERIC_P_H
@@ -18,12 +54,11 @@
 
 #include "QtCore/private/qglobal_p.h"
 #include "QtCore/qnumeric.h"
-#include "QtCore/qsimd.h"
 #include <cmath>
 #include <limits>
 #include <type_traits>
 
-#if !defined(Q_CC_MSVC) && defined(Q_OS_QNX)
+#if !defined(Q_CC_MSVC) && (defined(Q_OS_QNX) || defined(Q_CC_INTEL))
 #  include <math.h>
 #  ifdef isnan
 #    define QT_MATH_H_DEFINES_MACROS
@@ -154,21 +189,6 @@ template<typename T>
 static inline bool convertDoubleTo(double v, T *value, bool allow_precision_upgrade = true)
 {
     static_assert(std::numeric_limits<T>::is_integer);
-    static_assert(std::is_integral_v<T>);
-    constexpr bool TypeIsLarger = std::numeric_limits<T>::digits > std::numeric_limits<double>::digits;
-
-    if constexpr (TypeIsLarger) {
-        using S = std::make_signed_t<T>;
-        constexpr S max_mantissa = S(1) << std::numeric_limits<double>::digits;
-        // T has more bits than double's mantissa, so don't allow "upgrading"
-        // to T (makes it look like the number had more precision than really
-        // was transmitted)
-        if (!allow_precision_upgrade && !(v <= double(max_mantissa) && v >= double(-max_mantissa - 1)))
-            return false;
-    }
-
-    constexpr T Tmin = (std::numeric_limits<T>::min)();
-    constexpr T Tmax = (std::numeric_limits<T>::max)();
 
     // The [conv.fpint] (7.10 Floating-integral conversions) section of the C++
     // standard says only exact conversions are guaranteed. Converting
@@ -180,90 +200,23 @@ static inline bool convertDoubleTo(double v, T *value, bool allow_precision_upgr
     // correct, but Clang, ICC and MSVC don't realize that it's a constant and
     // the math call stays in the compiled code.
 
-#ifdef Q_PROCESSOR_X86_64
-    // Of course, UB doesn't apply if we use intrinsics, in which case we are
-    // allowed to dpeend on exactly the processor's behavior. This
-    // implementation uses the truncating conversions from Scalar Double to
-    // integral types (CVTTSD2SI and VCVTTSD2USI), which is documented to
-    // return the "indefinite integer value" if the range of the target type is
-    // exceeded. (only implemented for x86-64 to avoid having to deal with the
-    // non-existence of the 64-bit intrinsics on i386)
-
-    if (std::numeric_limits<T>::is_signed) {
-        __m128d mv = _mm_set_sd(v);
-#  ifdef __AVX512F__
-        // use explicit round control and suppress exceptions
-        if (sizeof(T) > 4)
-            *value = T(_mm_cvtt_roundsd_i64(mv, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
-        else
-            *value = _mm_cvtt_roundsd_i32(mv, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
-#  else
-        *value = sizeof(T) > 4 ? T(_mm_cvttsd_si64(mv)) : _mm_cvttsd_si32(mv);
-#  endif
-
-        // if *value is the "indefinite integer value", check if the original
-        // variable \a v is the same value (Tmin is an exact representation)
-        if (*value == Tmin && !_mm_ucomieq_sd(mv, _mm_set_sd(Tmin))) {
-            // v != Tmin, so it was out of range
-            if (v > 0)
-                *value = Tmax;
-            return false;
-        }
-
-        // convert the integer back to double and compare for equality with v,
-        // to determine if we've lost any precision
-        __m128d mi = _mm_setzero_pd();
-        mi = sizeof(T) > 4 ? _mm_cvtsi64_sd(mv, *value) : _mm_cvtsi32_sd(mv, *value);
-        return _mm_ucomieq_sd(mv, mi);
-    }
-
-#  ifdef __AVX512F__
-    if (!std::numeric_limits<T>::is_signed) {
-        // Same thing as above, but this function operates on absolute values
-        // and the "indefinite integer value" for the 64-bit unsigned
-        // conversion (Tmax) is not representable in double, so it can never be
-        // the result of an in-range conversion. This is implemented for AVX512
-        // and later because of the unsigned conversion instruction. Converting
-        // to unsigned without losing an extra bit of precision prior to AVX512
-        // is left to the compiler below.
-
-        v = fabs(v);
-        __m128d mv = _mm_set_sd(v);
-
-        // use explicit round control and suppress exceptions
-        if (sizeof(T) > 4)
-            *value = T(_mm_cvtt_roundsd_u64(mv, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
-        else
-            *value = _mm_cvtt_roundsd_u32(mv, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
-
-        if (*value == Tmax) {
-            // no double can have an exact value of quint64(-1), but they can
-            // quint32(-1), so we need to compare for that
-            if (TypeIsLarger || _mm_ucomieq_sd(mv, _mm_set_sd(Tmax)))
-                return false;
-        }
-
-        // return true if it was an exact conversion
-        __m128d mi = _mm_setzero_pd();
-        mi = sizeof(T) > 4 ? _mm_cvtu64_sd(mv, *value) : _mm_cvtu32_sd(mv, *value);
-        return _mm_ucomieq_sd(mv, mi);
-    }
-#  endif
-#endif
-
     double supremum;
     if (std::numeric_limits<T>::is_signed) {
-        supremum = -1.0 * Tmin;     // -1 * (-2^63) = 2^63, exact (for T = qint64)
-        *value = Tmin;
-        if (v < Tmin)
+        supremum = -1.0 * std::numeric_limits<T>::min();    // -1 * (-2^63) = 2^63, exact (for T = qint64)
+        *value = std::numeric_limits<T>::min();
+        if (v < std::numeric_limits<T>::min())
             return false;
     } else {
         using ST = typename std::make_signed<T>::type;
-        supremum = -2.0 * (std::numeric_limits<ST>::min)();   // -2 * (-2^63) = 2^64, exact (for T = quint64)
+        supremum = -2.0 * std::numeric_limits<ST>::min();   // -2 * (-2^63) = 2^64, exact (for T = quint64)
         v = fabs(v);
     }
+    if (std::is_integral<T>::value && sizeof(T) > 4 && !allow_precision_upgrade) {
+        if (v > double(Q_INT64_C(1)<<53) || v < double(-((Q_INT64_C(1)<<53) + 1)))
+            return false;
+    }
 
-    *value = Tmax;
+    *value = std::numeric_limits<T>::max();
     if (v >= supremum)
         return false;
 
@@ -313,41 +266,6 @@ template <auto V2, typename T> bool mul_overflow(T v1, T *r)
 }
 }
 #endif // Q_CLANG_QDOC
-
-/*
-    Safely narrows \a x to \c{To}. Let \c L be
-    \c{std::numeric_limit<To>::min()} and \c H be \c{std::numeric_limit<To>::max()}.
-
-    If \a x is less than L, returns L. If \a x is greater than H,
-    returns H. Otherwise, returns \c{To(x)}.
-*/
-template <typename To, typename From>
-static constexpr auto qt_saturate(From x)
-{
-    static_assert(std::is_integral_v<To>);
-    static_assert(std::is_integral_v<From>);
-
-    [[maybe_unused]]
-    constexpr auto Lo = (std::numeric_limits<To>::min)();
-    constexpr auto Hi = (std::numeric_limits<To>::max)();
-
-    if constexpr (std::is_signed_v<From> == std::is_signed_v<To>) {
-        // same signedness, we can accept regular integer conversion rules
-        return x < Lo  ? Lo :
-               x > Hi  ? Hi :
-               /*else*/  To(x);
-    } else {
-        if constexpr (std::is_signed_v<From>) { // ie. !is_signed_v<To>
-            if (x < From{0})
-                return To{0};
-        }
-
-        // from here on, x >= 0
-        using FromU = std::make_unsigned_t<From>;
-        using ToU = std::make_unsigned_t<To>;
-        return FromU(x) > ToU(Hi) ? Hi : To(x); // assumes Hi >= 0
-    }
-}
 
 QT_END_NAMESPACE
 

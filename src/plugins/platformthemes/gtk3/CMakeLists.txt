@@ -1,10 +1,7 @@
 # Generated from gtk3.pro.
 
 qt_find_package(GTK3) # special case
-
-if(QT_FEATURE_xlib)
-    qt_find_package(X11) # special case
-endif()
+qt_find_package(X11) # special case
 
 #####################################################################
 ## QGtk3ThemePlugin Plugin:
@@ -27,10 +24,6 @@ qt_internal_add_plugin(QGtk3ThemePlugin
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
-)
-
-qt_internal_extend_target(QGtk3ThemePlugin CONDITION QT_FEATURE_xlib
-    LIBRARIES
         X11::X11 # special case
 )
 

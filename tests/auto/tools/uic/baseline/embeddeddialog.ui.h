@@ -36,49 +36,49 @@ public:
     void setupUi(QDialog *embeddedDialog)
     {
         if (embeddedDialog->objectName().isEmpty())
-            embeddedDialog->setObjectName("embeddedDialog");
+            embeddedDialog->setObjectName(QString::fromUtf8("embeddedDialog"));
         embeddedDialog->resize(407, 134);
         formLayout = new QFormLayout(embeddedDialog);
-        formLayout->setObjectName("formLayout");
+        formLayout->setObjectName(QString::fromUtf8("formLayout"));
         label = new QLabel(embeddedDialog);
-        label->setObjectName("label");
+        label->setObjectName(QString::fromUtf8("label"));
 
         formLayout->setWidget(0, QFormLayout::LabelRole, label);
 
         layoutDirection = new QComboBox(embeddedDialog);
         layoutDirection->addItem(QString());
         layoutDirection->addItem(QString());
-        layoutDirection->setObjectName("layoutDirection");
+        layoutDirection->setObjectName(QString::fromUtf8("layoutDirection"));
 
         formLayout->setWidget(0, QFormLayout::FieldRole, layoutDirection);
 
         label_2 = new QLabel(embeddedDialog);
-        label_2->setObjectName("label_2");
+        label_2->setObjectName(QString::fromUtf8("label_2"));
 
         formLayout->setWidget(1, QFormLayout::LabelRole, label_2);
 
         fontComboBox = new QFontComboBox(embeddedDialog);
-        fontComboBox->setObjectName("fontComboBox");
+        fontComboBox->setObjectName(QString::fromUtf8("fontComboBox"));
 
         formLayout->setWidget(1, QFormLayout::FieldRole, fontComboBox);
 
         label_3 = new QLabel(embeddedDialog);
-        label_3->setObjectName("label_3");
+        label_3->setObjectName(QString::fromUtf8("label_3"));
 
         formLayout->setWidget(2, QFormLayout::LabelRole, label_3);
 
         style = new QComboBox(embeddedDialog);
-        style->setObjectName("style");
+        style->setObjectName(QString::fromUtf8("style"));
 
         formLayout->setWidget(2, QFormLayout::FieldRole, style);
 
         label_4 = new QLabel(embeddedDialog);
-        label_4->setObjectName("label_4");
+        label_4->setObjectName(QString::fromUtf8("label_4"));
 
         formLayout->setWidget(3, QFormLayout::LabelRole, label_4);
 
         spacing = new QSlider(embeddedDialog);
-        spacing->setObjectName("spacing");
+        spacing->setObjectName(QString::fromUtf8("spacing"));
         spacing->setOrientation(Qt::Horizontal);
 
         formLayout->setWidget(3, QFormLayout::FieldRole, spacing);

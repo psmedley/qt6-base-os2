@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 #include <QCoreApplication>
 #include <QDebug>
 #include <QElapsedTimer>
@@ -21,8 +46,6 @@ private slots:
     void startFinish();
     void progressValueChanged();
     void canceled();
-    void cancelAndFinish_data();
-    void cancelAndFinish();
     void resultAt();
     void resultReadyAt();
     void futureSignals();
@@ -206,42 +229,6 @@ void tst_QFutureWatcher::canceled()
     future.waitForFinished();
 }
 
-void tst_QFutureWatcher::cancelAndFinish_data()
-{
-    QTest::addColumn<bool>("isCanceled");
-    QTest::addColumn<bool>("isFinished");
-
-    QTest::addRow("running") << false << false;
-    QTest::addRow("canceled") << true << false;
-    QTest::addRow("finished") << false << true;
-    QTest::addRow("canceledAndFinished") << true << true;
-}
-
-void tst_QFutureWatcher::cancelAndFinish()
-{
-    QFETCH(bool, isCanceled);
-    QFETCH(bool, isFinished);
-
-    QFutureInterface<void> fi;
-    QFutureWatcher<void> futureWatcher;
-    QSignalSpy finishedSpy(&futureWatcher, &QFutureWatcher<void>::finished);
-    QSignalSpy canceledSpy(&futureWatcher, &QFutureWatcher<void>::canceled);
-    futureWatcher.setFuture(fi.future());
-
-    fi.reportStarted();
-
-    if (isCanceled)
-        fi.cancel();
-    if (isFinished)
-        fi.reportFinished();
-
-    fi.cancelAndFinish();
-
-    // The signals should be emitted only once
-    QTRY_COMPARE(canceledSpy.size(), 1);
-    QTRY_COMPARE(finishedSpy.size(), 1);
-}
-
 class IntTask : public RunFunctionTaskBase<int>
 {
 public:
@@ -349,21 +336,21 @@ void tst_QFutureWatcher::futureSignals()
 
         const int progress = 1;
         a.setProgressValue(progress);
-        QTRY_COMPARE(progressSpy.size(), 2);
+        QTRY_COMPARE(progressSpy.count(), 2);
         QCOMPARE(progressSpy.takeFirst().at(0).toInt(), 0);
         QCOMPARE(progressSpy.takeFirst().at(0).toInt(), 1);
 
         const int result = 10;
         a.reportResult(&result);
         QVERIFY(resultReadySpy.wait());
-        QCOMPARE(resultReadySpy.size(), 1);
+        QCOMPARE(resultReadySpy.count(), 1);
         a.reportFinished(&result);
 
-        QTRY_COMPARE(resultReadySpy.size(), 2);
+        QTRY_COMPARE(resultReadySpy.count(), 2);
         QCOMPARE(resultReadySpy.takeFirst().at(0).toInt(), 0); // check the index
         QCOMPARE(resultReadySpy.takeFirst().at(0).toInt(), 1);
 
-        QCOMPARE(finishedSpy.size(), 1);
+        QCOMPARE(finishedSpy.count(), 1);
     }
 }
 
@@ -402,10 +389,10 @@ void tst_QFutureWatcher::watchFinishedFuture()
     watcher.setFuture(f);
     QVERIFY(finishedSpy.wait());
 
-    QCOMPARE(startedSpy.size(), 1);
-    QCOMPARE(finishedSpy.size(), 1);
-    QCOMPARE(resultReadySpy.size(), 1);
-    QCOMPARE(canceledSpy.size(), 0);
+    QCOMPARE(startedSpy.count(), 1);
+    QCOMPARE(finishedSpy.count(), 1);
+    QCOMPARE(resultReadySpy.count(), 1);
+    QCOMPARE(canceledSpy.count(), 0);
 }
 
 void tst_QFutureWatcher::watchCanceledFuture()
@@ -436,10 +423,10 @@ void tst_QFutureWatcher::watchCanceledFuture()
     watcher.setFuture(f);
     QVERIFY(finishedSpy.wait());
 
-    QCOMPARE(startedSpy.size(), 1);
-    QCOMPARE(finishedSpy.size(), 1);
-    QCOMPARE(resultReadySpy.size(), 0);
-    QCOMPARE(canceledSpy.size(), 1);
+    QCOMPARE(startedSpy.count(), 1);
+    QCOMPARE(finishedSpy.count(), 1);
+    QCOMPARE(resultReadySpy.count(), 0);
+    QCOMPARE(canceledSpy.count(), 1);
 }
 
 void tst_QFutureWatcher::disconnectRunningFuture()
@@ -462,17 +449,17 @@ void tst_QFutureWatcher::disconnectRunningFuture()
     const int result = 10;
     a.reportResult(&result);
     QVERIFY(resultReadySpy.wait());
-    QCOMPARE(resultReadySpy.size(), 1);
+    QCOMPARE(resultReadySpy.count(), 1);
 
     delete watcher;
 
     a.reportResult(&result);
     QTest::qWait(10);
-    QCOMPARE(resultReadySpy.size(), 1);
+    QCOMPARE(resultReadySpy.count(), 1);
 
     a.reportFinished(&result);
     QTest::qWait(10);
-    QCOMPARE(finishedSpy.size(), 0);
+    QCOMPARE(finishedSpy.count(), 0);
 }
 
 const int maxProgress = 100000;
@@ -672,14 +659,14 @@ void tst_QFutureWatcher::changeFuture()
     watcher.setFuture(b); // But oh no! we're switching to another future
     QTest::qWait(10);     // before the event gets delivered.
 
-    QCOMPARE(resultReadySpy.size(), 0);
+    QCOMPARE(resultReadySpy.count(), 0);
 
     watcher.setFuture(a);
     watcher.setFuture(b);
     watcher.setFuture(a); // setting it back gets us one event, not two.
     QVERIFY(resultReadySpy.wait());
 
-    QCOMPARE(resultReadySpy.size(), 1);
+    QCOMPARE(resultReadySpy.count(), 1);
 }
 
 // Test that events aren't delivered from canceled futures
@@ -707,7 +694,7 @@ void tst_QFutureWatcher::cancelEvents()
 
     QVERIFY(finishedSpy.wait());
 
-    QCOMPARE(resultReadySpy.size(), 0);
+    QCOMPARE(resultReadySpy.count(), 0);
 }
 
 #if QT_DEPRECATED_SINCE(6, 0)
@@ -734,14 +721,14 @@ void tst_QFutureWatcher::pauseEvents()
         watcher.setFuture(iface.future());
         watcher.pause();
 
-        QTRY_COMPARE(pauseSpy.size(), 1);
+        QTRY_COMPARE(pauseSpy.count(), 1);
 
         int value = 0;
         iface.reportFinished(&value);
 
         // A result is reported, although the watcher is paused.
         // The corresponding event should be also reported.
-        QTRY_COMPARE(resultReadySpy.size(), 1);
+        QTRY_COMPARE(resultReadySpy.count(), 1);
 
         watcher.resume();
     }
@@ -769,7 +756,7 @@ void tst_QFutureWatcher::pauseEvents()
         a.resume();           // should give us no results.
 
         QTest::qWait(10);
-        QCOMPARE(resultReadySpy.size(), 0);
+        QCOMPARE(resultReadySpy.count(), 0);
     }
 }
 
@@ -789,23 +776,23 @@ void tst_QFutureWatcher::pausedSuspendedOrder()
     bool pausedBeforeSuspended = false;
     bool notSuspendedBeforePaused = false;
     connect(&watcher, &QFutureWatcher<void>::paused,
-            [&] { notSuspendedBeforePaused = (suspendedSpy.size() == 0); });
+            [&] { notSuspendedBeforePaused = (suspendedSpy.count() == 0); });
     connect(&watcher, &QFutureWatcher<void>::suspended,
-            [&] { pausedBeforeSuspended = (pausedSpy.size() == 1); });
+            [&] { pausedBeforeSuspended = (pausedSpy.count() == 1); });
 
     watcher.setFuture(iface.future());
     iface.reportSuspended();
 
     // Make sure reportPaused() is ignored if the state is not paused
     pausedSpy.wait(100);
-    QCOMPARE(pausedSpy.size(), 0);
-    QCOMPARE(suspendedSpy.size(), 0);
+    QCOMPARE(pausedSpy.count(), 0);
+    QCOMPARE(suspendedSpy.count(), 0);
 
     iface.setPaused(true);
     iface.reportSuspended();
 
-    QTRY_COMPARE(suspendedSpy.size(), 1);
-    QCOMPARE(pausedSpy.size(), 1);
+    QTRY_COMPARE(suspendedSpy.count(), 1);
+    QCOMPARE(pausedSpy.count(), 1);
     QVERIFY(notSuspendedBeforePaused);
     QVERIFY(pausedBeforeSuspended);
 
@@ -836,14 +823,14 @@ void tst_QFutureWatcher::suspendEvents()
         watcher.setFuture(iface.future());
         watcher.suspend();
 
-        QTRY_COMPARE(suspendingSpy.size(), 1);
+        QTRY_COMPARE(suspendingSpy.count(), 1);
 
         int value = 0;
         iface.reportFinished(&value);
 
         // A result is reported, although the watcher is paused.
         // The corresponding event should be also reported.
-        QTRY_COMPARE(resultReadySpy.size(), 1);
+        QTRY_COMPARE(resultReadySpy.count(), 1);
 
         watcher.resume();
     }
@@ -872,7 +859,7 @@ void tst_QFutureWatcher::suspendEvents()
         a.resume();           // should give us no results.
 
         QTest::qWait(10);
-        QCOMPARE(resultReadySpy.size(), 0);
+        QCOMPARE(resultReadySpy.count(), 0);
     }
 }
 
@@ -910,29 +897,29 @@ QT_WARNING_POP
 
     watcher.suspend();
     watcher.suspend();
-    QTRY_COMPARE(suspendedSpy.size(), 1); // suspended() should be emitted only once
-    QCOMPARE(suspendingSpy.size(), 2); // suspending() is emitted as many times as requested
+    QTRY_COMPARE(suspendedSpy.count(), 1); // suspended() should be emitted only once
+    QCOMPARE(suspendingSpy.count(), 2); // suspending() is emitted as many times as requested
 #if QT_DEPRECATED_SINCE(6, 0)
-    QCOMPARE(pausedSpy.size(), 2); // paused() is emitted as many times as requested
+    QCOMPARE(pausedSpy.count(), 2); // paused() is emitted as many times as requested
 #endif
 
     // Make sure QFutureWatcher::resultReadyAt() is emitted only for already started threads.
-    const auto resultReadyAfterPaused = resultReadySpy.size();
+    const auto resultReadyAfterPaused = resultReadySpy.count();
     QCOMPARE(resultReadyAfterPaused, count);
 
     // Make sure no more results are reported before resuming.
     QThread::msleep(200);
-    QCOMPARE(resultReadyAfterPaused, resultReadySpy.size());
+    QCOMPARE(resultReadyAfterPaused, resultReadySpy.count());
     resultReadySpy.clear();
 
     watcher.resume();
-    QTRY_COMPARE(finishedSpy.size(), 1);
+    QTRY_COMPARE(finishedSpy.count(), 1);
 
     // Make sure that no more suspended() signals have been emitted.
-    QCOMPARE(suspendedSpy.size(), 1);
+    QCOMPARE(suspendedSpy.count(), 1);
 
     // Make sure the rest of results were reported after resume.
-    QCOMPARE(resultReadySpy.size(), numValues - resultReadyAfterPaused);
+    QCOMPARE(resultReadySpy.count(), numValues - resultReadyAfterPaused);
 }
 
 void tst_QFutureWatcher::suspendedEventsOrder()
@@ -951,23 +938,23 @@ void tst_QFutureWatcher::suspendedEventsOrder()
     bool suspendingBeforeSuspended = false;
     bool notSuspendedBeforeSuspending = false;
     connect(&watcher, &QFutureWatcher<void>::suspending,
-            [&] { notSuspendedBeforeSuspending = (suspendedSpy.size() == 0); });
+            [&] { notSuspendedBeforeSuspending = (suspendedSpy.count() == 0); });
     connect(&watcher, &QFutureWatcher<void>::suspended,
-            [&] { suspendingBeforeSuspended = (suspendingSpy.size() == 1); });
+            [&] { suspendingBeforeSuspended = (suspendingSpy.count() == 1); });
 
     watcher.setFuture(iface.future());
     iface.reportSuspended();
 
     // Make sure reportPaused() is ignored if the state is not paused
     suspendingSpy.wait(100);
-    QCOMPARE(suspendingSpy.size(), 0);
-    QCOMPARE(suspendedSpy.size(), 0);
+    QCOMPARE(suspendingSpy.count(), 0);
+    QCOMPARE(suspendedSpy.count(), 0);
 
     iface.setSuspended(true);
     iface.reportSuspended();
 
-    QTRY_COMPARE(suspendedSpy.size(), 1);
-    QCOMPARE(suspendingSpy.size(), 1);
+    QTRY_COMPARE(suspendedSpy.count(), 1);
+    QCOMPARE(suspendingSpy.count(), 1);
     QVERIFY(notSuspendedBeforeSuspending);
     QVERIFY(suspendingBeforeSuspended);
 
@@ -997,7 +984,7 @@ void tst_QFutureWatcher::throttling()
 
     QVERIFY(iface.isThrottled());
 
-    QTRY_COMPARE(resultSpy.size(), resultCount); // Process the results
+    QTRY_COMPARE(resultSpy.count(), resultCount); // Process the results
 
     QVERIFY(!iface.isThrottled());
 

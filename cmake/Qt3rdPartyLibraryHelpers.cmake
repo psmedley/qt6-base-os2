@@ -162,24 +162,13 @@ function(qt_internal_add_3rdparty_library target)
 
     qt_internal_add_common_qt_library_helper(${target} ${library_helper_args})
 
+    if(NOT arg_INTERFACE)
+        qt_set_common_target_properties(${target})
+    endif()
+
     set_target_properties(${target} PROPERTIES
         _qt_module_interface_name "${target}"
-        _qt_package_version "${PROJECT_VERSION}"
-        _qt_package_name "${INSTALL_CMAKE_NAMESPACE}${target}"
-        _qt_module_is_3rdparty_library TRUE
     )
-
-    set(export_properties
-        "_qt_module_interface_name"
-        "_qt_package_version"
-        "_qt_package_name"
-        "_qt_module_is_3rdparty_library"
-    )
-
-    set_property(TARGET ${target}
-                 APPEND PROPERTY
-                 EXPORT_PROPERTIES "${export_properties}")
-
     qt_internal_add_qt_repo_known_module(${target})
     qt_internal_add_target_aliases(${target})
     _qt_internal_apply_strict_cpp(${target})
@@ -192,22 +181,14 @@ function(qt_internal_add_3rdparty_library target)
         ARCHIVE_OUTPUT_DIRECTORY "${QT_BUILD_DIR}/${INSTALL_LIBDIR}"
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR}
-        _qt_module_skip_depends_include TRUE
+        QT_MODULE_IS_3RDPARTY_LIBRARY TRUE
+        QT_MODULE_SKIP_DEPENDS_INCLUDE TRUE
     )
-    set_property(TARGET "${target}"
-                 APPEND PROPERTY EXPORT_PROPERTIES _qt_module_is_3rdparty_library)
-    set_property(TARGET "${target}"
-                 APPEND PROPERTY EXPORT_PROPERTIES _qt_module_skip_depends_include)
-
     qt_handle_multi_config_output_dirs("${target}")
 
     set_target_properties(${target} PROPERTIES
         OUTPUT_NAME "${INSTALL_CMAKE_NAMESPACE}${target}"
     )
-
-    if(NOT arg_INTERFACE)
-        qt_set_common_target_properties(${target})
-    endif()
 
     if(NOT arg_SKIP_AUTOMOC)
         qt_autogen_tools_initial_setup(${target})
@@ -330,37 +311,4 @@ function(qt_install_3rdparty_library_wrap_config_extra_file target)
         DESTINATION "${QT_CONFIG_INSTALL_DIR}/${INSTALL_CMAKE_NAMESPACE}"
         COMPONENT Devel
     )
-endfunction()
-
-# This function implements qmake's qt_helper_lib MODULE_EXT_HEADERS and MODULE_EXT_HEADERS_DIR features.
-# It creates a header-only module exposing a subset or all headers of a 3rd-party library.
-function(qt_internal_add_3rdparty_header_module target)
-    set(single_args
-        EXTERNAL_HEADERS_DIR
-    )
-    set(multi_args
-        EXTERNAL_HEADERS
-    )
-    qt_parse_all_arguments(arg "qt_internal_add_header_module"
-        "${option_args}"
-        "${single_args}"
-        "${multi_args}"
-        ${ARGN}
-    )
-    qt_internal_add_module(${target}
-        INTERNAL_MODULE
-        HEADER_MODULE
-        NO_CONFIG_HEADER_FILE
-        EXTERNAL_HEADERS ${arg_EXTERNAL_HEADERS}
-        EXTERNAL_HEADERS_DIR ${arg_EXTERNAL_HEADERS_DIR}
-    )
-
-    set_target_properties(${target} PROPERTIES
-        _qt_module_is_3rdparty_header_library TRUE
-        _qt_module_skip_depends_include TRUE
-    )
-    set_property(TARGET "${target}"
-                 APPEND PROPERTY EXPORT_PROPERTIES _qt_module_is_3rdparty_header_library)
-    set_property(TARGET "${target}"
-                 APPEND PROPERTY EXPORT_PROPERTIES _qt_module_skip_depends_include)
 endfunction()

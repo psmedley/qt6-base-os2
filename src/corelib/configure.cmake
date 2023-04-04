@@ -14,14 +14,10 @@ set_property(CACHE INPUT_libb2 PROPERTY STRINGS undefined no qt system)
 
 #### Libraries
 
-if((UNIX AND NOT QNX) OR QT_FIND_ALL_PACKAGES_ALWAYS)
-    # QNX's libbacktrace has an API wholly different from all the other Unix
-    # offerings
+if((UNIX) OR QT_FIND_ALL_PACKAGES_ALWAYS)
     qt_find_package(WrapBacktrace PROVIDED_TARGETS WrapBacktrace::WrapBacktrace MODULE_NAME core QMAKE_LIB backtrace)
 endif()
-qt_find_package(WrapSystemDoubleConversion
-                PROVIDED_TARGETS WrapSystemDoubleConversion::WrapSystemDoubleConversion
-                MODULE_NAME core QMAKE_LIB doubleconversion)
+qt_find_package(WrapDoubleConversion PROVIDED_TARGETS WrapDoubleConversion::WrapDoubleConversion MODULE_NAME core QMAKE_LIB doubleconversion)
 qt_find_package(GLIB2 PROVIDED_TARGETS GLIB2::GLIB2 MODULE_NAME core QMAKE_LIB glib)
 qt_find_package(ICU COMPONENTS i18n uc data PROVIDED_TARGETS ICU::i18n ICU::uc ICU::data MODULE_NAME core QMAKE_LIB icu)
 if(QT_FEATURE_dlopen)
@@ -178,23 +174,6 @@ std::filesystem::copy(
 "
 )
 
-# dladdr
-qt_config_compile_test(dladdr
-    LABEL "dladdr"
-    LIBRARIES
-        dl
-    CODE
-"#define _GNU_SOURCE 1
-#include <dlfcn.h>
-int i = 0;
-int main(void)
-{
-    Dl_info info;
-    dladdr(&i, &info);
-    return 0;
-}"
-)
-
 # eventfd
 qt_config_compile_test(eventfd
     LABEL "eventfd"
@@ -264,9 +243,6 @@ qt_config_compile_test(getentropy
     LABEL "getentropy()"
     CODE
 "#include <unistd.h>
-#if __has_include(<sys/random.h>)
-#  include <sys/random.h>
-#endif
 
 int main(void)
 {
@@ -437,7 +413,7 @@ qt_config_compile_test(renameat2
 #include <fcntl.h>
 #include <stdio.h>
 
-int main(int, char **argv)
+int main(void)
 {
     /* BEGIN TEST: */
 renameat2(AT_FDCWD, argv[1], AT_FDCWD, argv[2], RENAME_NOREPLACE | RENAME_WHITEOUT);
@@ -550,7 +526,7 @@ qt_feature("doubleconversion" PUBLIC PRIVATE
 qt_feature_definition("doubleconversion" "QT_NO_DOUBLECONVERSION" NEGATE VALUE "1")
 qt_feature("system-doubleconversion" PRIVATE
     LABEL "  Using system DoubleConversion"
-    CONDITION QT_FEATURE_doubleconversion AND WrapSystemDoubleConversion_FOUND
+    CONDITION QT_FEATURE_doubleconversion AND WrapDoubleConversion_FOUND
     ENABLE INPUT_doubleconversion STREQUAL 'system'
     DISABLE INPUT_doubleconversion STREQUAL 'qt'
 )
@@ -561,10 +537,6 @@ qt_feature("cxx11_future" PUBLIC
 qt_feature("cxx17_filesystem" PUBLIC
     LABEL "C++17 <filesystem>"
     CONDITION TEST_cxx17_filesystem
-)
-qt_feature("dladdr" PRIVATE
-    LABEL "dladdr"
-    CONDITION QT_FEATURE_dlopen AND TEST_dladdr
 )
 qt_feature("eventfd" PUBLIC
     LABEL "eventfd"
@@ -595,7 +567,7 @@ qt_feature("glib" PUBLIC PRIVATE
 qt_feature_definition("glib" "QT_NO_GLIB" NEGATE VALUE "1")
 qt_feature("glibc" PRIVATE
     LABEL "GNU libc"
-    AUTODETECT ( LINUX OR HURD )
+    AUTODETECT LINUX
     CONDITION TEST_glibc
 )
 qt_feature("icu" PRIVATE
@@ -629,7 +601,7 @@ qt_feature("system-libb2" PRIVATE
 # Currently only used by QTemporaryFile; linkat() exists on Android, but hardlink creation fails due to security rules
 qt_feature("linkat" PRIVATE
     LABEL "linkat()"
-    AUTODETECT ( LINUX AND NOT ANDROID ) OR HURD
+    AUTODETECT LINUX AND NOT ANDROID
     CONDITION TEST_linkat
 )
 qt_feature("std-atomic64" PUBLIC
@@ -686,7 +658,7 @@ qt_feature("qqnx_pps" PRIVATE
 )
 qt_feature("renameat2" PRIVATE
     LABEL "renameat2()"
-    CONDITION ( LINUX OR HURD ) AND TEST_renameat2
+    CONDITION LINUX AND TEST_renameat2
 )
 qt_feature("slog2" PRIVATE
     LABEL "slog2"
@@ -694,7 +666,7 @@ qt_feature("slog2" PRIVATE
 )
 qt_feature("statx" PRIVATE
     LABEL "statx() in libc"
-    CONDITION ( LINUX OR HURD ) AND TEST_statx
+    CONDITION LINUX AND TEST_statx
 )
 qt_feature("syslog" PRIVATE
     LABEL "syslog"
@@ -707,6 +679,12 @@ qt_feature("threadsafe-cloexec"
 )
 qt_feature_definition("threadsafe-cloexec" "QT_THREADSAFE_CLOEXEC" VALUE "1")
 qt_feature_config("threadsafe-cloexec" QMAKE_PUBLIC_QT_CONFIG)
+qt_feature("properties" PUBLIC
+    SECTION "Kernel"
+    LABEL "Properties"
+    PURPOSE "Supports scripting Qt-based applications."
+)
+qt_feature_definition("properties" "QT_NO_PROPERTIES" NEGATE VALUE "1")
 qt_feature("regularexpression" PUBLIC
     SECTION "Kernel"
     LABEL "QRegularExpression"
@@ -743,7 +721,7 @@ qt_feature("xmlstream" PUBLIC
     LABEL "XML Streaming APIs"
     PURPOSE "Provides a simple streaming API for XML."
 )
-qt_feature("cpp-winrt" PRIVATE PUBLIC
+qt_feature("cpp-winrt" PRIVATE
     LABEL "cpp/winrt base"
     PURPOSE "basic cpp/winrt language projection support"
     CONDITION WIN32 AND TEST_cpp_winrt
@@ -883,7 +861,7 @@ qt_feature("animation" PUBLIC
     SECTION "Utilities"
     LABEL "Animation"
     PURPOSE "Provides a framework for animations."
-    CONDITION QT_FEATURE_easingcurve
+    CONDITION QT_FEATURE_properties AND QT_FEATURE_easingcurve
 )
 qt_feature_definition("animation" "QT_NO_ANIMATION" NEGATE VALUE "1")
 qt_feature("gestures" PUBLIC

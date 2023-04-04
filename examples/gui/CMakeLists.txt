@@ -1,3 +1,5 @@
+# Generated from gui.pro.
+
 if(NOT TARGET Qt::Gui)
     return()
 endif()

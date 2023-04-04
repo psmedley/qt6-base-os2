@@ -1,13 +1,35 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <qpainter.h>
 #include <qrasterwindow.h>
 #include <qscreen.h>
 #include <qpa/qwindowsysteminterface.h>
-#include <qpa/qplatformintegration.h>
-#include <private/qguiapplication_p.h>
-#include <private/qhighdpiscaling_p.h>
 
 #include <QTest>
 #include <QSignalSpy>
@@ -158,35 +180,34 @@ void tst_QScreen::orientationChange()
     QWindowSystemInterface::handleScreenOrientationChange(screen, Qt::LandscapeOrientation);
     QWindowSystemInterface::flushWindowSystemEvents();
     QTRY_COMPARE(screen->orientation(), Qt::LandscapeOrientation);
-    QCOMPARE(spy.size(), ++expectedSignalCount);
+    QCOMPARE(spy.count(), ++expectedSignalCount);
 
     QWindowSystemInterface::handleScreenOrientationChange(screen, Qt::PortraitOrientation);
     QWindowSystemInterface::flushWindowSystemEvents();
     QTRY_COMPARE(screen->orientation(), Qt::PortraitOrientation);
-    QCOMPARE(spy.size(), ++expectedSignalCount);
+    QCOMPARE(spy.count(), ++expectedSignalCount);
 
     QWindowSystemInterface::handleScreenOrientationChange(screen, Qt::InvertedLandscapeOrientation);
     QWindowSystemInterface::flushWindowSystemEvents();
     QTRY_COMPARE(screen->orientation(), Qt::InvertedLandscapeOrientation);
-    QCOMPARE(spy.size(), ++expectedSignalCount);
+    QCOMPARE(spy.count(), ++expectedSignalCount);
 
     QWindowSystemInterface::handleScreenOrientationChange(screen, Qt::InvertedPortraitOrientation);
     QWindowSystemInterface::flushWindowSystemEvents();
     QTRY_COMPARE(screen->orientation(), Qt::InvertedPortraitOrientation);
-    QCOMPARE(spy.size(), ++expectedSignalCount);
+    QCOMPARE(spy.count(), ++expectedSignalCount);
 
     QWindowSystemInterface::handleScreenOrientationChange(screen, Qt::LandscapeOrientation);
     QWindowSystemInterface::flushWindowSystemEvents();
     QTRY_COMPARE(screen->orientation(), Qt::LandscapeOrientation);
-    QCOMPARE(spy.size(), ++expectedSignalCount);
+    QCOMPARE(spy.count(), ++expectedSignalCount);
 }
 
 void tst_QScreen::grabWindow_data()
 {
-    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(
-                QPlatformIntegration::ScreenWindowGrabbing)) {
-        QSKIP("This platform does not support grabbing windows on screen.");
-    }
+    if (QGuiApplication::platformName().startsWith(QLatin1String("offscreen"), Qt::CaseInsensitive))
+        QSKIP("Offscreen: Screen grabbing not implemented.");
+
     QTest::addColumn<int>("screenIndex");
     QTest::addColumn<QByteArray>("screenName");
     QTest::addColumn<bool>("grabWindow");
@@ -258,30 +279,20 @@ void tst_QScreen::grabWindow()
     QCOMPARE(screen->name().toUtf8(), screenName);
     const double screenDpr = screen->devicePixelRatio();
 
-    if (QHighDpiScaling::isActive()) {
-        const float rawFactor = QHighDpiScaling::factor(screen);
-        const float roundedFactor = qRound(rawFactor);
-        if (!qFuzzyCompare(roundedFactor, rawFactor))
-            QSKIP("HighDPI enabled with non-integer factor. Skip due to possible rounding errors.");
-    }
-
     Window window(screen);
     window.setGeometry(windowRect);
-#ifndef Q_OS_ANDROID
     window.show();
-#else
-    window.showNormal();
-#endif
 
     if (!QTest::qWaitForWindowExposed(&window))
         QSKIP("Failed to expose window - aborting");
 
-    // this is necessary because of scrolling effects combined with potential slowness of VMs
-    QTest::qWait(1500);
+    if (QGuiApplication::platformName().startsWith(QLatin1String("xcb"), Qt::CaseInsensitive))
+        QTest::qWait(1500); // this is ridiculously necessary because of effects combined with slowness of VMs
+#ifdef Q_OS_MACOS // wait for desktop on screen to scroll into place
+    QTest::qWait(1000);
+#endif
 
-    QSize expectedGrabSize = grabRect.isValid()
-                           ? grabRect.size()
-                           : (grabWindow ?  windowRect.size() : screen->size());
+    QSize expectedGrabSize = grabRect.isValid() ? grabRect.size() : (grabWindow ?  windowRect.size() : screen->size());
     // we ask for pixel coordinates, but will get a pixmap with device-specific DPR
     expectedGrabSize *= screen->devicePixelRatio();
 
@@ -289,12 +300,12 @@ void tst_QScreen::grabWindow()
     QImage paintedImage = window.image;
     QCOMPARE(paintedImage.devicePixelRatio(), screenDpr);
 
-    const QPixmap pixmap = screen->grabWindow(grabWindow
-                         ? window.winId()
-                         : 0, grabRect.x(), grabRect.y(), grabRect.width(), grabRect.height());
+    const QPixmap pixmap = screen->grabWindow(grabWindow ? window.winId() : 0, grabRect.x(), grabRect.y(), grabRect.width(), grabRect.height());
 
     QImage grabbedImage = pixmap.toImage();
     const QSize grabbedSize = grabbedImage.size();
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QEXPECT_FAIL("", "Wayland: Screen grabbing not implemented, See QTBUG-100792.", Abort);
     QCOMPARE(grabbedSize, expectedGrabSize);
 
     QPoint pixelOffset = QPoint(0, 0);

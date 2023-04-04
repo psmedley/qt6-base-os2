@@ -1,16 +1,45 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "controllerwidget.h"
 #include <controls.h>
 
-#include <QtWidgets>
+#if QT_VERSION >= 0x050000
+#    include <QtWidgets>
+#    include <QWindow>
+#    include <QBackingStore>
+#    include <QPaintDevice>
+#    include <QPainter>
+#else
+#    include <QtGui>
+#endif
 
-#include <QBackingStore>
-#include <QPaintDevice>
-#include <QPainter>
 #include <QResizeEvent>
-#include <QWindow>
 
 CoordinateControl::CoordinateControl(const QString &sep) : m_x(new QSpinBox), m_y(new QSpinBox)
 {
@@ -262,6 +291,8 @@ void WidgetWindowControl::statesChanged()
     w->setWindowState(m_statesControl->states());
 }
 
+#if QT_VERSION >= 0x050000
+
 // Test window drawing diagonal lines
 class Window : public QWindow
 {
@@ -357,10 +388,14 @@ void WindowControl::stateChanged()
     w->setWindowStates(m_statesControl->states());
 }
 
+#endif
+
 ControllerWidget::ControllerWidget(QWidget *parent)
     : QMainWindow(parent)
     , m_testWidget(new QWidget)
+#if QT_VERSION >= 0x050000
     , m_testWindow(new Window)
+#endif
 {
     QMenu *fileMenu = menuBar()->addMenu(tr("File"));
     QAction *exitAction = fileMenu->addAction(tr("Exit"));
@@ -369,8 +404,10 @@ ControllerWidget::ControllerWidget(QWidget *parent)
 
     QString title = QLatin1String("Geometry test, (Qt ");
     title += QLatin1String(QT_VERSION_STR);
+#if QT_VERSION >= 0x050000
     title += QLatin1String(", ");
     title += qApp->platformName();
+#endif
     title += QLatin1Char(')');
     setWindowTitle(title);
 
@@ -380,6 +417,9 @@ ControllerWidget::ControllerWidget(QWidget *parent)
     const int offsetArgIndex = args.indexOf(QLatin1String("-offset"));
     if (offsetArgIndex >=0 && offsetArgIndex < args.size() - 1) {
         y += args.at(offsetArgIndex + 1).toInt();
+    } else {
+        if (QT_VERSION < 0x050000)
+            y += 400;
     }
 
     move(x, y);
@@ -403,6 +443,7 @@ ControllerWidget::ControllerWidget(QWidget *parent)
     else
         m_testWidget->show();
 
+#if QT_VERSION >= 0x050000
     x += 300;
     m_testWindow->setFlags(Qt::Window | Qt::WindowSystemMenuHint | Qt::WindowCloseButtonHint
                                  | Qt::WindowMinimizeButtonHint | Qt::WindowMaximizeButtonHint
@@ -418,6 +459,7 @@ ControllerWidget::ControllerWidget(QWidget *parent)
     else
         m_testWindow->show();
     m_testWindow->setTitle(tr("TestWindow"));
+#endif
 
     QWidget *central = new QWidget ;
     QVBoxLayout *l = new QVBoxLayout(central);
@@ -436,9 +478,11 @@ ControllerWidget::ControllerWidget(QWidget *parent)
     widgetControl->refresh();
     l->addWidget(widgetControl);
 
+#if QT_VERSION >= 0x050000
     BaseWindowControl *windowControl = new WindowControl(m_testWindow.data());
     windowControl->refresh();
     l->addWidget(windowControl);
+#endif
 
     setCentralWidget(central);
 }

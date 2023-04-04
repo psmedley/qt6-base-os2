@@ -1,5 +1,41 @@
-// Copyright (C) 2019 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2019 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the Qt Gui module
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QRHI_H
 #define QRHI_H
@@ -38,7 +74,7 @@ class QRhiSampler;
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 class QRhiResourceUpdateBatchPrivate;
-class QRhiSwapChain;
+class QRhiProfiler;
 
 class Q_GUI_EXPORT QRhiDepthStencilClearValue
 {
@@ -260,9 +296,6 @@ class Q_GUI_EXPORT QRhiShaderStage
 public:
     enum Type {
         Vertex,
-        TessellationControl,
-        TessellationEvaluation,
-        Geometry,
         Fragment,
         Compute
     };
@@ -303,8 +336,6 @@ public:
     enum Type {
         UniformBuffer,
         SampledTexture,
-        Texture,
-        Sampler,
         ImageLoad,
         ImageStore,
         ImageLoadStore,
@@ -315,11 +346,8 @@ public:
 
     enum StageFlag {
         VertexStage = 1 << 0,
-        TessellationControlStage = 1 << 1,
-        TessellationEvaluationStage = 1 << 2,
-        GeometryStage = 1 << 3,
-        FragmentStage = 1 << 4,
-        ComputeStage = 1 << 5
+        FragmentStage = 1 << 1,
+        ComputeStage = 1 << 2
     };
     Q_DECLARE_FLAGS(StageFlags, StageFlag)
 
@@ -338,10 +366,6 @@ public:
         QRhiSampler *sampler;
     };
     static QRhiShaderResourceBinding sampledTextures(int binding, StageFlags stage, int count, const TextureAndSampler *texSamplers);
-
-    static QRhiShaderResourceBinding texture(int binding, StageFlags stage, QRhiTexture *tex);
-    static QRhiShaderResourceBinding textures(int binding, StageFlags stage, int count, QRhiTexture **tex);
-    static QRhiShaderResourceBinding sampler(int binding, StageFlags stage, QRhiSampler *sampler);
 
     static QRhiShaderResourceBinding imageLoad(int binding, StageFlags stage, QRhiTexture *tex, int level);
     static QRhiShaderResourceBinding imageStore(int binding, StageFlags stage, QRhiTexture *tex, int level);
@@ -366,7 +390,7 @@ public:
             bool hasDynamicOffset;
         };
         static const int MAX_TEX_SAMPLER_ARRAY_SIZE = 16;
-        struct TextureAndOrSamplerData {
+        struct SampledTextureData {
             int count;
             TextureAndSampler texSamplers[MAX_TEX_SAMPLER_ARRAY_SIZE];
         };
@@ -381,17 +405,10 @@ public:
         };
         union {
             UniformBufferData ubuf;
-            TextureAndOrSamplerData stex;
+            SampledTextureData stex;
             StorageImageData simage;
             StorageBufferData sbuf;
         } u;
-
-        int arraySize() const
-        {
-            return type == QRhiShaderResourceBinding::SampledTexture || type == QRhiShaderResourceBinding::Texture
-                    ? u.stex.count
-                    : 1;
-        }
 
         template<typename Output>
         Output serialize(Output dst) const
@@ -400,7 +417,7 @@ public:
             *dst++ = quint32(binding);
             *dst++ = quint32(stage);
             *dst++ = quint32(type);
-            *dst++ = quint32(arraySize());
+            *dst++ = quint32(type == QRhiShaderResourceBinding::SampledTexture ? u.stex.count : 1);
             return dst;
         }
     };
@@ -662,7 +679,7 @@ public:
         Sampler,
         RenderBuffer,
         RenderPassDescriptor,
-        SwapChainRenderTarget,
+        RenderTarget,
         TextureRenderTarget,
         ShaderResourceBindings,
         GraphicsPipeline,
@@ -756,8 +773,7 @@ public:
         UsedAsCompressedAtlas = 1 << 8,
         ExternalOES = 1 << 9,
         ThreeDimensional = 1 << 10,
-        TextureRectangleGL = 1 << 11,
-        TextureArray = 1 << 12
+        TextureRectangleGL = 1 << 11
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -776,8 +792,6 @@ public:
         RGBA32F,
         R16F,
         R32F,
-
-        RGB10A2,
 
         D16,
         D24,
@@ -828,17 +842,6 @@ public:
     int depth() const { return m_depth; }
     void setDepth(int depth) { m_depth = depth; }
 
-    int arraySize() const { return m_arraySize; }
-    void setArraySize(int arraySize) { m_arraySize = arraySize; }
-
-    int arrayRangeStart() const { return m_arrayRangeStart; }
-    int arrayRangeLength() const { return m_arrayRangeLength; }
-    void setArrayRange(int startIndex, int count)
-    {
-        m_arrayRangeStart = startIndex;
-        m_arrayRangeLength = count;
-    }
-
     Flags flags() const { return m_flags; }
     void setFlags(Flags f) { m_flags = f; }
 
@@ -852,15 +855,12 @@ public:
 
 protected:
     QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_, int depth_,
-                int arraySize_, int sampleCount_, Flags flags_);
+                int sampleCount_, Flags flags_);
     Format m_format;
     QSize m_pixelSize;
     int m_depth;
-    int m_arraySize;
     int m_sampleCount;
     Flags m_flags;
-    int m_arrayRangeStart = -1;
-    int m_arrayRangeLength = -1;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTexture::Flags)
@@ -996,6 +996,8 @@ protected:
 class Q_GUI_EXPORT QRhiRenderTarget : public QRhiResource
 {
 public:
+    QRhiResource::Type resourceType() const override;
+
     virtual QSize pixelSize() const = 0;
     virtual float devicePixelRatio() const = 0;
     virtual int sampleCount() const = 0;
@@ -1006,17 +1008,6 @@ public:
 protected:
     QRhiRenderTarget(QRhiImplementation *rhi);
     QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
-};
-
-class Q_GUI_EXPORT QRhiSwapChainRenderTarget : public QRhiRenderTarget
-{
-public:
-    QRhiResource::Type resourceType() const override;
-    QRhiSwapChain *swapChain() const { return m_swapchain; }
-
-protected:
-    QRhiSwapChainRenderTarget(QRhiImplementation *rhi, QRhiSwapChain *swapchain_);
-    QRhiSwapChain *m_swapchain;
 };
 
 class Q_GUI_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
@@ -1116,8 +1107,7 @@ public:
         TriangleFan,
         Lines,
         LineStrip,
-        Points,
-        Patches
+        Points
     };
 
     enum CullMode {
@@ -1209,11 +1199,6 @@ public:
         CompareOp compareOp = Always;
     };
 
-    enum PolygonMode {
-        Fill,
-        Line
-    };
-
     QRhiResource::Type resourceType() const override;
 
     Flags flags() const { return m_flags; }
@@ -1293,12 +1278,6 @@ public:
     QRhiRenderPassDescriptor *renderPassDescriptor() const { return m_renderPassDesc; }
     void setRenderPassDescriptor(QRhiRenderPassDescriptor *desc) { m_renderPassDesc = desc; }
 
-    int patchControlPointCount() const { return m_patchControlPointCount; }
-    void setPatchControlPointCount(int count) { m_patchControlPointCount = count; }
-
-    PolygonMode polygonMode() const {return m_polygonMode; }
-    void setPolygonMode(PolygonMode mode) {m_polygonMode = mode; }
-
     virtual bool create() = 0;
 
 protected:
@@ -1320,8 +1299,6 @@ protected:
     float m_lineWidth = 1.0f;
     int m_depthBias = 0;
     float m_slopeScaledDepthBias = 0.0f;
-    int m_patchControlPointCount = 3;
-    PolygonMode m_polygonMode = Fill;
     QVarLengthArray<QRhiShaderStage, 4> m_shaderStages;
     QRhiVertexInputLayout m_vertexInputLayout;
     QRhiShaderResourceBindings *m_shaderResourceBindings = nullptr;
@@ -1331,31 +1308,6 @@ protected:
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::ColorMask)
 Q_DECLARE_TYPEINFO(QRhiGraphicsPipeline::TargetBlend, Q_RELOCATABLE_TYPE);
-
-struct QRhiSwapChainHdrInfo
-{
-    bool isHardCodedDefaults;
-    enum LimitsType {
-        LuminanceInNits,
-        ColorComponentValue
-    };
-    LimitsType limitsType;
-    union {
-        struct {
-            float minLuminance;
-            float maxLuminance;
-        } luminanceInNits;
-        struct {
-            float maxColorComponentValue;
-        } colorComponentValue;
-    } limits;
-};
-
-Q_DECLARE_TYPEINFO(QRhiSwapChainHdrInfo, Q_RELOCATABLE_TYPE);
-
-#ifndef QT_NO_DEBUG_STREAM
-Q_GUI_EXPORT QDebug operator<<(QDebug, const QRhiSwapChainHdrInfo &);
-#endif
 
 class Q_GUI_EXPORT QRhiSwapChain : public QRhiResource
 {
@@ -1370,12 +1322,6 @@ public:
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
-    enum Format {
-        SDR,
-        HDRExtendedSrgbLinear,
-        HDR10
-    };
-
     QRhiResource::Type resourceType() const override;
 
     QWindow *window() const { return m_window; }
@@ -1383,9 +1329,6 @@ public:
 
     Flags flags() const { return m_flags; }
     void setFlags(Flags f) { m_flags = f; }
-
-    Format format() const { return m_format; }
-    void setFormat(Format f) { m_format = f; }
 
     QRhiRenderBuffer *depthStencil() const { return m_depthStencil; }
     void setDepthStencil(QRhiRenderBuffer *ds) { m_depthStencil = ds; }
@@ -1401,16 +1344,13 @@ public:
     virtual QRhiCommandBuffer *currentFrameCommandBuffer() = 0;
     virtual QRhiRenderTarget *currentFrameRenderTarget() = 0;
     virtual QSize surfacePixelSize() = 0;
-    virtual bool isFormatSupported(Format f) = 0;
     virtual QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() = 0;
     virtual bool createOrResize() = 0;
-    virtual QRhiSwapChainHdrInfo hdrInfo();
 
 protected:
     QRhiSwapChain(QRhiImplementation *rhi);
     QWindow *m_window = nullptr;
     Flags m_flags;
-    Format m_format = SDR;
     QRhiRenderBuffer *m_depthStencil = nullptr;
     int m_sampleCount = 1;
     QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
@@ -1583,20 +1523,6 @@ Q_DECLARE_TYPEINFO(QRhiDriverInfo, Q_RELOCATABLE_TYPE);
 Q_GUI_EXPORT QDebug operator<<(QDebug, const QRhiDriverInfo &);
 #endif
 
-struct Q_GUI_EXPORT QRhiMemAllocStats
-{
-    quint32 blockCount = 0;
-    quint32 allocCount = 0;
-    quint64 usedBytes = 0;
-    quint64 unusedBytes = 0;
-};
-
-Q_DECLARE_TYPEINFO(QRhiMemAllocStats, Q_RELOCATABLE_TYPE);
-
-#ifndef QT_NO_DEBUG_STREAM
-Q_GUI_EXPORT QDebug operator<<(QDebug, const QRhiMemAllocStats &);
-#endif
-
 struct Q_GUI_EXPORT QRhiInitParams
 {
 };
@@ -1657,12 +1583,7 @@ public:
         ImageDataStride,
         RenderBufferImport,
         ThreeDimensionalTextures,
-        RenderTo3DTextureSlice,
-        TextureArrays,
-        Tessellation,
-        GeometryShader,
-        TextureArrayRange,
-        NonFillPolygonMode
+        RenderTo3DTextureSlice
     };
 
     enum BeginFrameFlag {
@@ -1685,10 +1606,7 @@ public:
         MaxThreadGroupX,
         MaxThreadGroupY,
         MaxThreadGroupZ,
-        TextureArraySizeMax,
-        MaxUniformBufferRange,
-        MaxVertexInputs,
-        MaxVertexOutputs
+        MaxUniformBufferRange
     };
 
     ~QRhi();
@@ -1697,7 +1615,6 @@ public:
                         QRhiInitParams *params,
                         Flags flags = {},
                         QRhiNativeHandles *importDevice = nullptr);
-    static bool probe(Implementation impl, QRhiInitParams *params);
 
     Implementation backend() const;
     const char *backendName() const;
@@ -1707,9 +1624,6 @@ public:
     using CleanupCallback = std::function<void(QRhi *)>;
     void addCleanupCallback(const CleanupCallback &callback);
     void runCleanup();
-
-    using GpuFrameTimeCallback = std::function<void(float t)>;
-    void addGpuFrameTimeCallback(const GpuFrameTimeCallback &callback);
 
     QRhiGraphicsPipeline *newGraphicsPipeline();
     QRhiComputePipeline *newComputePipeline();
@@ -1734,12 +1648,6 @@ public:
                             int width, int height, int depth,
                             int sampleCount = 1,
                             QRhiTexture::Flags flags = {});
-
-    QRhiTexture *newTextureArray(QRhiTexture::Format format,
-                                 int arraySize,
-                                 const QSize &pixelSize,
-                                 int sampleCount = 1,
-                                 QRhiTexture::Flags flags = {});
 
     QRhiSampler *newSampler(QRhiSampler::Filter magFilter,
                             QRhiSampler::Filter minFilter,
@@ -1785,6 +1693,8 @@ public:
     const QRhiNativeHandles *nativeHandles();
     bool makeThreadLocalNativeContextCurrent();
 
+    QRhiProfiler *profiler();
+
     static const int MAX_MIP_LEVELS = 16; // a width and/or height of 65536 should be enough for everyone
 
     void releaseCachedResources();
@@ -1793,8 +1703,6 @@ public:
 
     QByteArray pipelineCacheData();
     void setPipelineCacheData(const QByteArray &data);
-
-    QRhiMemAllocStats graphicsMemoryAllocationStatistics() const;
 
 protected:
     QRhi();

@@ -1,3 +1,6 @@
+# special case skip regeneration
+# Port of shared.pri to be included by painting examples
+
 add_library(painting_shared OBJECT)
 add_library(painting_shared::painting_shared ALIAS painting_shared)
 qt6_wrap_cpp(moc_files arthurwidgets.h hoverpoints.h) # no automoc for OBJECT libs:-/
@@ -7,7 +10,6 @@ target_sources(painting_shared PRIVATE
     hoverpoints.cpp hoverpoints.h
     ${moc_files}
 )
-
 target_link_libraries(painting_shared PUBLIC Qt::Widgets)
 target_include_directories(painting_shared PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 

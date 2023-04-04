@@ -1,5 +1,30 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QSignalSpy>
@@ -11,10 +36,6 @@
 #include <QStyleOptionTab>
 #include <QProxyStyle>
 #include <QTimer>
-#include <QScreen>
-#include <QWindow>
-
-using namespace Qt::StringLiterals;
 
 class TabBar;
 
@@ -57,7 +78,6 @@ private slots:
     void setUsesScrollButtons();
 
     void removeLastTab();
-    void removeLastVisibleTab();
 
     void closeButton();
 
@@ -81,18 +101,11 @@ private slots:
     void mouseReleaseOutsideTabBar();
 
     void mouseWheel();
-    void kineticWheel_data();
-    void kineticWheel();
-    void highResolutionWheel_data();
-    void highResolutionWheel();
 
     void scrollButtons_data();
     void scrollButtons();
 
     void currentTabLargeFont();
-
-    void hoverTab_data();
-    void hoverTab();
 
 private:
     void checkPositions(const TabBar &tabbar, const QList<int> &positions);
@@ -209,7 +222,7 @@ void tst_QTabBar::testCurrentChanged()
     QCOMPARE(tabBar.currentIndex(), 0);
     tabBar.setCurrentIndex(tabToSet);
     QCOMPARE(tabBar.currentIndex(), tabToSet);
-    QCOMPARE(spy.size(), expectedCount);
+    QCOMPARE(spy.count(), expectedCount);
 }
 
 class TabBar : public QTabBar
@@ -283,7 +296,7 @@ void tst_QTabBar::removeTab()
     tabbar.setCurrentIndex(currentIndex);
     QSignalSpy spy(&tabbar, SIGNAL(currentChanged(int)));
     tabbar.removeTab(deleteIndex);
-    QTEST(int(spy.size()), "spyCount");
+    QTEST(int(spy.count()), "spyCount");
     QTEST(tabbar.currentIndex(), "finalIndex");
 }
 
@@ -314,7 +327,7 @@ void tst_QTabBar::hideTab()
     tabbar.setCurrentIndex(currentIndex);
     QSignalSpy spy(&tabbar, &QTabBar::currentChanged);
     tabbar.setTabVisible(hideIndex, false);
-    QTEST(int(spy.size()), "spyCount");
+    QTEST(int(spy.count()), "spyCount");
     QTEST(tabbar.currentIndex(), "finalIndex");
 }
 
@@ -458,47 +471,14 @@ void tst_QTabBar::removeLastTab()
     QTabBar tabbar;
     QSignalSpy spy(&tabbar, SIGNAL(currentChanged(int)));
     int index = tabbar.addTab("foo");
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.at(0).at(0).toInt(), index);
     spy.clear();
 
     tabbar.removeTab(index);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.at(0).at(0).toInt(), -1);
     spy.clear();
-}
-
-void tst_QTabBar::removeLastVisibleTab()
-{
-    QTabBar tabbar;
-    tabbar.setSelectionBehaviorOnRemove(QTabBar::SelectionBehavior::SelectRightTab);
-
-    int invisible = tabbar.addTab("invisible");
-    int visible = tabbar.addTab("visible");
-    tabbar.setCurrentIndex(visible);
-    tabbar.adjustSize();
-
-    tabbar.setTabVisible(invisible, false);
-    {
-        QSignalSpy spy(&tabbar, SIGNAL(currentChanged(int)));
-        tabbar.removeTab(visible);
-        QCOMPARE(spy.size(), 1);
-        QCOMPARE(spy.at(0).at(0).toInt(), -1);
-        QCOMPARE(tabbar.currentIndex(), -1);
-    }
-
-    tabbar.setSelectionBehaviorOnRemove(QTabBar::SelectionBehavior::SelectLeftTab);
-    visible = tabbar.insertTab(0, "visible");
-    ++invisible;
-    QVERIFY(!tabbar.isTabVisible(invisible));
-    tabbar.setCurrentIndex(visible);
-    {
-        QSignalSpy spy(&tabbar, SIGNAL(currentChanged(int)));
-        tabbar.removeTab(visible);
-        QCOMPARE(spy.size(), 1);
-        QCOMPARE(spy.at(0).at(0).toInt(), -1);
-        QCOMPARE(tabbar.currentIndex(), -1);
-    }
 }
 
 void tst_QTabBar::closeButton()
@@ -519,7 +499,7 @@ void tst_QTabBar::closeButton()
     QSignalSpy spy(&tabbar, SIGNAL(tabCloseRequested(int)));
     button->click();
     QCOMPARE(tabbar.count(), 1);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 }
 
 Q_DECLARE_METATYPE(QTabBar::ButtonPosition)
@@ -791,36 +771,36 @@ void tst_QTabBar::tabBarClicked()
     QSignalSpy clickSpy(&tabBar, SIGNAL(tabBarClicked(int)));
     QSignalSpy doubleClickSpy(&tabBar, SIGNAL(tabBarDoubleClicked(int)));
 
-    QCOMPARE(clickSpy.size(), 0);
-    QCOMPARE(doubleClickSpy.size(), 0);
+    QCOMPARE(clickSpy.count(), 0);
+    QCOMPARE(doubleClickSpy.count(), 0);
 
     Qt::MouseButton button = Qt::LeftButton;
     while (button <= Qt::MaxMouseButton) {
         const QPoint tabPos = tabBar.tabRect(0).center();
 
         QTest::mouseClick(&tabBar, button, {}, tabPos);
-        QCOMPARE(clickSpy.size(), 1);
+        QCOMPARE(clickSpy.count(), 1);
         QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), 0);
-        QCOMPARE(doubleClickSpy.size(), 0);
+        QCOMPARE(doubleClickSpy.count(), 0);
 
         QTest::mouseDClick(&tabBar, button, {}, tabPos);
-        QCOMPARE(clickSpy.size(), 1);
+        QCOMPARE(clickSpy.count(), 1);
         QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), 0);
-        QCOMPARE(doubleClickSpy.size(), 1);
+        QCOMPARE(doubleClickSpy.count(), 1);
         QCOMPARE(doubleClickSpy.takeFirst().takeFirst().toInt(), 0);
         QTest::mouseRelease(&tabBar, button, {}, tabPos);
 
         const QPoint barPos(tabBar.tabRect(0).right() + 5, tabBar.tabRect(0).center().y());
 
         QTest::mouseClick(&tabBar, button, {}, barPos);
-        QCOMPARE(clickSpy.size(), 1);
+        QCOMPARE(clickSpy.count(), 1);
         QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), -1);
-        QCOMPARE(doubleClickSpy.size(), 0);
+        QCOMPARE(doubleClickSpy.count(), 0);
 
         QTest::mouseDClick(&tabBar, button, {}, barPos);
-        QCOMPARE(clickSpy.size(), 1);
+        QCOMPARE(clickSpy.count(), 1);
         QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), -1);
-        QCOMPARE(doubleClickSpy.size(), 1);
+        QCOMPARE(doubleClickSpy.count(), 1);
         QCOMPARE(doubleClickSpy.takeFirst().takeFirst().toInt(), -1);
         QTest::mouseRelease(&tabBar, button, {}, barPos);
 
@@ -906,25 +886,20 @@ void tst_QTabBar::checkPositions(const TabBar &tabbar, const QList<int> &positio
 }
 
 #if QT_CONFIG(wheelevent)
+// defined to be 120 by the wheel mouse vendors according to the docs
+#define WHEEL_DELTA 120
 
 class TabBarScrollingProxyStyle : public QProxyStyle
 {
 public:
-    TabBarScrollingProxyStyle(const QString &defStyle = {})
-        : QProxyStyle(defStyle), scrolling(true)
+    TabBarScrollingProxyStyle() : QProxyStyle(), scrolling(true)
     { }
 
     int styleHint(StyleHint hint, const QStyleOption *option = 0,
                   const QWidget *widget = 0, QStyleHintReturn *returnData = 0) const override
     {
-        switch (hint) {
-        case QStyle::SH_TabBar_AllowWheelScrolling:
+        if (hint == QStyle::SH_TabBar_AllowWheelScrolling)
             return scrolling;
-        case SH_TabBar_ElideMode:
-            return Qt::ElideNone;
-        default:
-            break;
-        }
 
         return QProxyStyle::styleHint(hint, option, widget, returnData);
     }
@@ -934,233 +909,34 @@ public:
 
 void tst_QTabBar::mouseWheel()
 {
-    TabBar tabbar;
 
-    // apply custom style to the tabbar, which can toggle tabbar scrolling behavior
-    TabBarScrollingProxyStyle proxyStyle;
-    tabbar.setStyle(&proxyStyle);
+    // apply custom style to app, which can toggle tabbar scrolling behavior
+    QCoreApplication *applicationInstance = QApplication::instance();
+    QVERIFY(applicationInstance != 0);
+    auto *proxyStyle = new TabBarScrollingProxyStyle;
+    QApplication::setStyle(proxyStyle);
 
     // make tabbar with three tabs, select the middle one
+    TabBar tabbar;
     tabbar.addTab("one");
     tabbar.addTab("two");
     tabbar.addTab("three");
     int startIndex = 1;
     tabbar.setCurrentIndex(startIndex);
 
-    const auto systemId = QPointingDevice::primaryPointingDevice()->systemId() + 1;
-    QPointingDevice clickyWheel("test clicky wheel", systemId, QInputDevice::DeviceType::Mouse,
-                                QPointingDevice::PointerType::Generic,
-                                QInputDevice::Capability::Position | QInputDevice::Capability::Scroll,
-                                1, 3);
-
     // define scroll event
     const QPoint wheelPoint = tabbar.rect().bottomRight();
-    QWheelEvent event(wheelPoint, tabbar.mapToGlobal(wheelPoint),
-                      QPoint(), QPoint(0, QWheelEvent::DefaultDeltasPerStep),
-                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false,
-                      Qt::MouseEventSynthesizedByApplication, &clickyWheel);
+    QWheelEvent event(wheelPoint, tabbar.mapToGlobal(wheelPoint), QPoint(), QPoint(0, WHEEL_DELTA),
+                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
 
     // disable scrolling, send scroll event, confirm that tab did not change
-    proxyStyle.scrolling = false;
-    QVERIFY(QApplication::sendEvent(&tabbar, &event));
+    proxyStyle->scrolling = false;
+    QVERIFY(applicationInstance->sendEvent(&tabbar, &event));
     QVERIFY(tabbar.currentIndex() == startIndex);
 
     // enable scrolling, send scroll event, confirm that tab changed
-    proxyStyle.scrolling = true;
-    QVERIFY(QApplication::sendEvent(&tabbar, &event));
-    QVERIFY(tabbar.currentIndex() != startIndex);
-}
-
-void tst_QTabBar::kineticWheel_data()
-{
-    QTest::addColumn<QTabBar::Shape>("tabShape");
-
-    QTest::addRow("North") << QTabBar::RoundedNorth;
-    QTest::addRow("East") << QTabBar::RoundedEast;
-    QTest::addRow("South") << QTabBar::RoundedSouth;
-    QTest::addRow("West") << QTabBar::RoundedWest;
-}
-
-void tst_QTabBar::kineticWheel()
-{
-    const auto systemId = QPointingDevice::primaryPointingDevice()->systemId() + 1;
-    QPointingDevice pixelPad("test pixel pad", systemId, QInputDevice::DeviceType::TouchPad,
-                             QPointingDevice::PointerType::Generic,
-                             QInputDevice::Capability::Position | QInputDevice::Capability::PixelScroll,
-                             1, 3);
-
-    QFETCH(QTabBar::Shape, tabShape);
-    QWidget window;
-    TabBar tabbar(&window);
-    // Since the macOS style makes sure that all tabs are always visible, we
-    // replace it with the windows style for this test, and use the proxy that
-    // makes sure that scrolling is enabled and that tab texts are not elided.
-    QString defaultStyle;
-    if (QApplication::style()->name() == QStringLiteral("macos"))
-        defaultStyle = "windows";
-    TabBarScrollingProxyStyle proxyStyle(defaultStyle);
-    tabbar.setStyle(&proxyStyle);
-
-    tabbar.addTab("long tab text 1");
-    tabbar.addTab("long tab text 2");
-    tabbar.addTab("long tab text 3");
-
-    // Make sure we don't have enough space for the tabs and need to scroll
-    const int tabbarLength = tabbar.tabRect(0).width() * 2;
-
-    tabbar.setShape(tabShape);
-    const bool horizontal = tabShape == QTabBar::RoundedNorth
-                         || tabShape == QTabBar::RoundedSouth;
-    if (horizontal)
-        tabbar.setFixedWidth(tabbarLength);
-    else
-        tabbar.setFixedHeight(tabbarLength);
-
-    // start with the middle tab, QTabBar will scroll to make it visible
-    const int startIndex = 1;
-    tabbar.setCurrentIndex(startIndex);
-
-    window.setMinimumSize(tabbarLength, tabbarLength);
-    window.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&window));
-
-    const auto *leftButton = tabbar.findChild<QAbstractButton*>(u"ScrollLeftButton"_s);
-    const auto *rightButton = tabbar.findChild<QAbstractButton*>(u"ScrollRightButton"_s);
-    QVERIFY(leftButton && rightButton);
-    QVERIFY(leftButton->isEnabled() && rightButton->isEnabled());
-
-    // Figure out if any of the buttons is laid out to be in front of the tabs.
-    // We can't use setUsesScrollButtons(false), as then several styles will enforce
-    // a minimum size for the tab bar.
-    const bool leftInFront = ((horizontal && leftButton->pos().x() < tabbar.rect().center().x())
-                           || (!horizontal && leftButton->pos().y() < tabbar.rect().center().y()));
-    const bool rightInFront = ((horizontal && rightButton->pos().x() < tabbar.rect().center().x())
-                            || (!horizontal && rightButton->pos().y() < tabbar.rect().center().y()));
-    QPoint leftEdge;
-    QPoint rightEdge;
-    if (leftInFront && rightInFront) { // both on the left
-        leftEdge = rightButton->geometry().bottomRight();
-        rightEdge = tabbar.rect().bottomRight();
-    } else if (leftInFront && !rightInFront) {
-        leftEdge = leftButton->geometry().bottomRight();
-        rightEdge = rightButton->geometry().topLeft();
-    } else { // both on the right
-        leftEdge = QPoint(0, 0);
-        rightEdge = leftButton->geometry().topLeft();
-    }
-    // avoid border lines
-    leftEdge += QPoint(2, 2);
-    if (horizontal) {
-        rightEdge += QPoint(-2, 2);
-    } else {
-        rightEdge += QPoint(2, -2);
-    }
-
-    QCOMPARE(tabbar.tabAt(leftEdge), 0);
-    QCOMPARE(tabbar.tabAt(rightEdge), 1);
-
-    const QPoint delta = horizontal ? QPoint(10, 0) : QPoint(0, 10);
-    const QPoint wheelPoint = tabbar.rect().center();
-
-    bool accepted = true;
-    Qt::ScrollPhase phase = Qt::ScrollBegin;
-    // scroll all the way to the end
-    while (accepted) {
-        QWheelEvent event(wheelPoint, tabbar.mapToGlobal(wheelPoint), -delta, -delta,
-                          Qt::NoButton, Qt::NoModifier, phase, false,
-                          Qt::MouseEventSynthesizedByApplication, &pixelPad);
-        if (phase == Qt::ScrollBegin)
-            phase = Qt::ScrollUpdate;
-        QApplication::sendEvent(&tabbar, &event);
-        accepted = event.isAccepted();
-    }
-    QCOMPARE(tabbar.tabAt(leftEdge), 1);
-    QCOMPARE(tabbar.tabAt(rightEdge), 2);
-    QVERIFY(leftButton->isEnabled());
-    QVERIFY(!rightButton->isEnabled());
-    // kinetic wheel events don't change the current index
-    QVERIFY(tabbar.currentIndex() == startIndex);
-
-    // scroll all the way to the beginning
-    accepted = true;
-    while (accepted) {
-        QWheelEvent event(wheelPoint, tabbar.mapToGlobal(wheelPoint), delta, delta,
-                          Qt::NoButton, Qt::NoModifier, phase, false,
-                          Qt::MouseEventSynthesizedByApplication, &pixelPad);
-        QApplication::sendEvent(&tabbar, &event);
-        accepted = event.isAccepted();
-    }
-
-    QCOMPARE(tabbar.tabAt(leftEdge), 0);
-    QCOMPARE(tabbar.tabAt(rightEdge), 1);
-    QVERIFY(!leftButton->isEnabled());
-    QVERIFY(rightButton->isEnabled());
-    // kinetic wheel events don't change the current index
-    QVERIFY(tabbar.currentIndex() == startIndex);
-
-    // make tabs small so that we have enough space, and verify sure we can't scroll
-    tabbar.setTabText(0, "A");
-    tabbar.setTabText(1, "B");
-    tabbar.setTabText(2, "C");
-    QVERIFY(tabbar.sizeHint().width() <= tabbar.width() && tabbar.sizeHint().height() <= tabbar.height());
-
-    {
-        QWheelEvent event(wheelPoint, tabbar.mapToGlobal(wheelPoint), -delta, -delta,
-                          Qt::NoButton, Qt::NoModifier, phase, false,
-                          Qt::MouseEventSynthesizedByApplication, &pixelPad);
-        QApplication::sendEvent(&tabbar, &event);
-        QVERIFY(!event.isAccepted());
-    }
-
-    {
-        QWheelEvent event(wheelPoint, tabbar.mapToGlobal(wheelPoint), delta, delta,
-                          Qt::NoButton, Qt::NoModifier, phase, false,
-                          Qt::MouseEventSynthesizedByApplication, &pixelPad);
-        QApplication::sendEvent(&tabbar, &event);
-        QVERIFY(!event.isAccepted());
-    }
-}
-
-void tst_QTabBar::highResolutionWheel_data()
-{
-    QTest::addColumn<int>("angleDelta");
-    // Smallest angleDelta for a Logitech MX Master 3 with Linux/X11/Libinput
-    QTest::addRow("increment index") << -16;
-    QTest::addRow("decrement index") << 16;
-}
-
-void tst_QTabBar::highResolutionWheel()
-{
-    TabBar tabbar;
-    TabBarScrollingProxyStyle proxyStyle;
-    tabbar.setStyle(&proxyStyle);
-
-    tabbar.addTab("tab1");
-    tabbar.addTab("tab2");
-    QFETCH(int, angleDelta);
-    // Negative values increment, positive values decrement
-    int startIndex = angleDelta < 0 ? 0 : 1;
-    tabbar.setCurrentIndex(startIndex);
-
-    const auto systemId = QPointingDevice::primaryPointingDevice()->systemId() + 1;
-    QPointingDevice hiResWheel(
-            "test high resolution wheel", systemId, QInputDevice::DeviceType::Mouse,
-            QPointingDevice::PointerType::Generic,
-            QInputDevice::Capability::Position | QInputDevice::Capability::Scroll, 1, 3);
-
-    const QPoint wheelPoint = tabbar.rect().bottomRight();
-    QWheelEvent event(wheelPoint, tabbar.mapToGlobal(wheelPoint), QPoint(),
-                      QPoint(angleDelta, angleDelta), Qt::NoButton, Qt::NoModifier,
-                      Qt::NoScrollPhase, false, Qt::MouseEventSynthesizedByApplication,
-                      &hiResWheel);
-
-    proxyStyle.scrolling = true;
-    for (int accumulated = 0; accumulated < QWheelEvent::DefaultDeltasPerStep;
-         accumulated += qAbs(angleDelta)) {
-        // verify that nothing has changed until the threshold has been reached
-        QVERIFY(tabbar.currentIndex() == startIndex);
-        QVERIFY(QApplication::sendEvent(&tabbar, &event));
-    }
+    proxyStyle->scrolling = true;
+    QVERIFY(applicationInstance->sendEvent(&tabbar, &event));
     QVERIFY(tabbar.currentIndex() != startIndex);
 }
 
@@ -1203,8 +979,8 @@ void tst_QTabBar::scrollButtons()
     window.show();
     QVERIFY(QTest::qWaitForWindowActive(&window));
 
-    auto *leftB = tabWidget.tabBar()->findChild<QAbstractButton*>(u"ScrollLeftButton"_s);
-    auto *rightB = tabWidget.tabBar()->findChild<QAbstractButton*>(u"ScrollRightButton"_s);
+    auto *leftB = tabWidget.tabBar()->findChild<QAbstractButton*>(u"ScrollLeftButton"_qs);
+    auto *rightB = tabWidget.tabBar()->findChild<QAbstractButton*>(u"ScrollRightButton"_qs);
 
     QVERIFY(leftB->isVisible());
     QVERIFY(!leftB->isEnabled());
@@ -1255,95 +1031,6 @@ void tst_QTabBar::currentTabLargeFont()
     QList<QRect> newTabRects;
     newTabRects << tabBar.tabRect(0) << tabBar.tabRect(1) << tabBar.tabRect(2);
     QVERIFY(oldTabRects != newTabRects);
-}
-
-void tst_QTabBar::hoverTab_data()
-{
-    // Move the cursor away from the widget as not to interfere.
-    // skip this test if we can't
-    const QPoint topLeft = QGuiApplication::primaryScreen()->availableGeometry().topLeft();
-    const QPoint cursorPos = topLeft + QPoint(10, 10);
-    QCursor::setPos(cursorPos);
-    if (!QTest::qWaitFor([cursorPos]{ return QCursor::pos() == cursorPos; }, 500))
-        QSKIP("Can't move mouse");
-
-    QTest::addColumn<bool>("documentMode");
-    QTest::addRow("normal mode") << true;
-    QTest::addRow("document mode") << true;
-}
-
-void tst_QTabBar::hoverTab()
-{
-    QFETCH(bool, documentMode);
-    QWidget topLevel;
-    class TabBar : public QTabBar
-    {
-    public:
-        using QTabBar::QTabBar;
-        void initStyleOption(QStyleOptionTab *option, int tabIndex) const override
-        {
-            QTabBar::initStyleOption(option, tabIndex);
-            styleOptions[tabIndex] = *option;
-        }
-        mutable QHash<int, QStyleOptionTab> styleOptions;
-    } tabbar(&topLevel);
-
-    tabbar.setDocumentMode(documentMode);
-    tabbar.addTab("A");
-    tabbar.addTab("B");
-    tabbar.addTab("C");
-    tabbar.addTab("D");
-
-    tabbar.move(0,0);
-    const QSize size = tabbar.sizeHint();
-    const auto center = topLevel.screen()->availableGeometry().center();
-    topLevel.move(center - QPoint{size.width(), size.height()} / 2);
-    topLevel.setMinimumSize(size);
-    tabbar.ensurePolished();
-
-    // some styles set those flags, some don't. If not, use a style sheet
-    if (!(tabbar.testAttribute(Qt::WA_Hover) || tabbar.hasMouseTracking())) {
-        tabbar.setStyleSheet(R"(
-            QTabBar::tab { background: blue; }
-            QTabBar::tab::hover { background: yellow; }
-            QTabBar::tab::selected { background: red; }
-        )");
-    }
-
-    topLevel.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
-    auto *window = topLevel.windowHandle();
-
-    auto pos = tabbar.mapToParent(tabbar.tabRect(0).center());
-    QTest::mouseMove(window, pos);
-    QTRY_VERIFY(tabbar.styleOptions[0].state & QStyle::State_Selected);
-    QTRY_COMPARE(tabbar.styleOptions[1].state & QStyle::State_MouseOver, QStyle::State_None);
-    QTRY_COMPARE(tabbar.styleOptions[2].state & QStyle::State_MouseOver, QStyle::State_None);
-    QTRY_COMPARE(tabbar.styleOptions[3].state & QStyle::State_MouseOver, QStyle::State_None);
-
-    pos = tabbar.mapToParent(tabbar.tabRect(1).center());
-    QTest::mouseMove(window, pos);
-    QTRY_COMPARE(tabbar.styleOptions[1].state & QStyle::State_MouseOver, QStyle::State_MouseOver);
-    QCOMPARE(tabbar.styleOptions[2].state & QStyle::State_MouseOver, QStyle::State_None);
-    QCOMPARE(tabbar.styleOptions[3].state & QStyle::State_MouseOver, QStyle::State_None);
-
-    pos = tabbar.mapToParent(tabbar.tabRect(2).center());
-    QTest::mouseMove(window, pos);
-    QTRY_COMPARE(tabbar.styleOptions[2].state & QStyle::State_MouseOver, QStyle::State_MouseOver);
-    QCOMPARE(tabbar.styleOptions[1].state & QStyle::State_MouseOver, QStyle::State_None);
-    QCOMPARE(tabbar.styleOptions[3].state & QStyle::State_MouseOver, QStyle::State_None);
-
-    // removing tab 2 lays the tabs out so that they stretch across the
-    // tab bar; tab 1 is now where the cursor was. What matters is that a
-    // different tab is now hovered (rather than none).
-    tabbar.removeTab(2);
-    QTRY_COMPARE(tabbar.styleOptions[1].state & QStyle::State_MouseOver, QStyle::State_MouseOver);
-    QCOMPARE(tabbar.styleOptions[2].state & QStyle::State_MouseOver, QStyle::State_None);
-
-    // inserting a tab at index 2 again should paint the new tab hovered
-    tabbar.insertTab(2, "C2");
-    QTRY_COMPARE(tabbar.styleOptions[2].state & QStyle::State_MouseOver, QStyle::State_MouseOver);
-    QCOMPARE(tabbar.styleOptions[1].state & QStyle::State_MouseOver, QStyle::State_None);
 }
 
 QTEST_MAIN(tst_QTabBar)

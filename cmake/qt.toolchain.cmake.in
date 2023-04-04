@@ -3,7 +3,8 @@ set(__qt_toolchain_used_variables
     QT_TOOLCHAIN_INCLUDE_FILE
     QT_TOOLCHAIN_RELOCATABLE_CMAKE_DIR
     QT_TOOLCHAIN_RELOCATABLE_PREFIX
-    QT_ADDITIONAL_PACKAGES_PREFIX_PATH
+    QT_HOST_PATH
+    QT_HOST_PATH_CMAKE_DIR
 )
 @init_additional_used_variables@
 
@@ -34,7 +35,7 @@ if(__qt_chainload_toolchain_file)
                           "${__qt_chainload_toolchain_file}" REALPATH)
     if(__qt_chainload_toolchain_file_real_path STREQUAL CMAKE_CURRENT_LIST_FILE)
         message(FATAL_ERROR
-                "Woah, the Qt toolchain file tried to include itself recursively! '${__qt_chainload_toolchain_file}' "
+                "Woah, the Qt toolchain file tried to include itself recusively! '${__qt_chainload_toolchain_file}' "
                 "Make sure to remove qtbase/CMakeCache.txt and reconfigure qtbase with 'cmake' "
                 "rather than 'qt-cmake', and then you can reconfigure your own project."
         )
@@ -94,14 +95,8 @@ if(QT_ADDITIONAL_PACKAGES_PREFIX_PATH)
 endif()
 if(DEFINED ENV{QT_ADDITIONAL_PACKAGES_PREFIX_PATH}
     AND NOT "$ENV{QT_ADDITIONAL_PACKAGES_PREFIX_PATH}" STREQUAL "")
-    set(__qt_env_additional_packages_prefixes $ENV{QT_ADDITIONAL_PACKAGES_PREFIX_PATH})
-    if(NOT CMAKE_HOST_WIN32)
-        string(REPLACE ":" ";" __qt_env_additional_packages_prefixes
-            "${__qt_env_additional_packages_prefixes}")
-    endif()
     list(APPEND __qt_toolchain_additional_packages_prefixes
-        ${__qt_env_additional_packages_prefixes})
-    unset(__qt_env_additional_packages_prefixes)
+         $ENV{QT_ADDITIONAL_PACKAGES_PREFIX_PATH})
 endif()
 
 if(__qt_toolchain_additional_packages_prefixes)
@@ -148,6 +143,62 @@ if(QT_TOOLCHAIN_INCLUDE_FILE)
         message(WARNING "The passed extra toolchain file to be included does not exist: "
                 "${__qt_toolchain_include_file_real_path}")
     endif()
+endif()
+
+# Set up QT_HOST_PATH and do sanity checks.
+# A host path is required when cross-compiling but optional when doing a native build.
+set(__qt_toolchain_host_path_required "@qt_host_path_required@")
+set(__qt_toolchain_initial_qt_host_path
+    "@qt_host_path_absolute@")
+set(__qt_toolchain_initial_qt_host_path_cmake_dir
+    "@qt_host_path_cmake_dir_absolute@")
+
+# Prefer initially configured path if none was explicitly set.
+if(NOT DEFINED QT_HOST_PATH AND __qt_toolchain_initial_qt_host_path
+      AND EXISTS "${__qt_toolchain_initial_qt_host_path}")
+    set(QT_HOST_PATH "${__qt_toolchain_initial_qt_host_path}" CACHE PATH "")
+endif()
+
+if(NOT QT_HOST_PATH STREQUAL "")
+    get_filename_component(__qt_toolchain_host_path_absolute "${QT_HOST_PATH}" ABSOLUTE)
+endif()
+
+if(__qt_toolchain_host_path_required AND
+      ("${QT_HOST_PATH}" STREQUAL "" OR NOT EXISTS "${__qt_toolchain_host_path_absolute}"))
+    message(FATAL_ERROR
+        "To use a cross-compiled Qt, please set the QT_HOST_PATH cache variable to the location "
+        "of your host Qt installation.")
+endif()
+
+# QT_HOST_PATH_CMAKE_DIR is needed to work around the rerooting issue when looking for host tools
+# See REROOT_PATH_ISSUE_MARKER.
+# Prefer initially configured path if none was explicitly set.
+if(__qt_toolchain_host_path_required AND NOT DEFINED QT_HOST_PATH_CMAKE_DIR)
+    if(__qt_toolchain_initial_qt_host_path_cmake_dir
+          AND EXISTS "${__qt_toolchain_initial_qt_host_path_cmake_dir}")
+        set(QT_HOST_PATH_CMAKE_DIR "${__qt_toolchain_initial_qt_host_path_cmake_dir}" CACHE PATH "")
+    else()
+        # First try to auto-compute the location instead of requiring to set QT_HOST_PATH_CMAKE_DIR
+        # explicitly.
+        set(__qt_candidate_host_path_cmake_dir "${QT_HOST_PATH}/lib/cmake")
+        if(__qt_candidate_host_path_cmake_dir AND EXISTS "${__qt_candidate_host_path_cmake_dir}")
+            set(QT_HOST_PATH_CMAKE_DIR
+                "${__qt_candidate_host_path_cmake_dir}" CACHE PATH "")
+        endif()
+    endif()
+endif()
+
+if(NOT QT_HOST_PATH_CMAKE_DIR STREQUAL "")
+    get_filename_component(__qt_toolchain_host_path_cmake_dir_absolute
+                           "${QT_HOST_PATH_CMAKE_DIR}" ABSOLUTE)
+endif()
+
+if(__qt_toolchain_host_path_required AND
+      ("${QT_HOST_PATH_CMAKE_DIR}" STREQUAL ""
+       OR NOT EXISTS "${__qt_toolchain_host_path_cmake_dir_absolute}"))
+    message(FATAL_ERROR
+        "To use a cross-compiled Qt, please set the QT_HOST_PATH_CMAKE_DIR cache variable to "
+        "the location of your host Qt installation lib/cmake directory.")
 endif()
 
 # Store initial build type (if any is specified) to be read by QtBuildInternals.cmake when building

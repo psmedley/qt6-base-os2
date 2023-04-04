@@ -1,6 +1,42 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// Copyright (C) 2019 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2019 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QOBJECTDEFS_H
 #define QOBJECTDEFS_H
@@ -36,27 +72,24 @@ class QString;
 Q_CORE_EXPORT const char *qFlagLocation(const char *method);
 
 #ifndef QT_NO_META_MACROS
-# define QMETHOD_CODE  0                        // member type codes
-# define QSLOT_CODE    1
-# define QSIGNAL_CODE  2
-# define QT_PREFIX_CODE(code, a) QT_STRINGIFY(code) #a
-# define QT_STRINGIFY_METHOD(a) QT_PREFIX_CODE(QMETHOD_CODE, a)
-# define QT_STRINGIFY_SLOT(a) QT_PREFIX_CODE(QSLOT_CODE, a)
-# define QT_STRINGIFY_SIGNAL(a) QT_PREFIX_CODE(QSIGNAL_CODE, a)
-# ifndef QT_NO_DEBUG
-#  define QLOCATION "\0" __FILE__ ":" QT_STRINGIFY(__LINE__)
-#  ifndef QT_NO_KEYWORDS
-#   define METHOD(a)   qFlagLocation(QT_STRINGIFY_METHOD(a) QLOCATION)
-#  endif
-#  define SLOT(a)     qFlagLocation(QT_STRINGIFY_SLOT(a) QLOCATION)
-#  define SIGNAL(a)   qFlagLocation(QT_STRINGIFY_SIGNAL(a) QLOCATION)
-# else
-#  ifndef QT_NO_KEYWORDS
-#   define METHOD(a)  QT_STRINGIFY_METHOD(a)
-#  endif
-#  define SLOT(a)     QT_STRINGIFY_SLOT(a)
-#  define SIGNAL(a)   QT_STRINGIFY_SIGNAL(a)
+#ifndef QT_NO_DEBUG
+# define QLOCATION "\0" __FILE__ ":" QT_STRINGIFY(__LINE__)
+# ifndef QT_NO_KEYWORDS
+#  define METHOD(a)   qFlagLocation("0"#a QLOCATION)
 # endif
+# define SLOT(a)     qFlagLocation("1"#a QLOCATION)
+# define SIGNAL(a)   qFlagLocation("2"#a QLOCATION)
+#else
+# ifndef QT_NO_KEYWORDS
+#  define METHOD(a)   "0"#a
+# endif
+# define SLOT(a)     "1"#a
+# define SIGNAL(a)   "2"#a
+#endif
+
+#define QMETHOD_CODE  0                        // member type codes
+#define QSLOT_CODE    1
+#define QSIGNAL_CODE  2
 #endif // QT_NO_META_MACROS
 
 #define Q_ARG(type, data) QArgument<type >(#type, data)
@@ -356,8 +389,7 @@ struct Q_CORE_EXPORT QMetaObject
         IndexOfMethod,
         RegisterPropertyMetaType,
         RegisterMethodArgumentMetaType,
-        BindableProperty,
-        CustomCall
+        BindableProperty
     };
 
     int static_metacall(Call, int, void **) const;
@@ -369,7 +401,6 @@ struct Q_CORE_EXPORT QMetaObject
     }
 
     struct SuperData {
-        using Getter = const QMetaObject *(*)();
         const QMetaObject *direct;
         SuperData() = default;
         constexpr SuperData(std::nullptr_t) : direct(nullptr) {}
@@ -378,6 +409,7 @@ struct Q_CORE_EXPORT QMetaObject
         constexpr const QMetaObject *operator->() const { return operator const QMetaObject *(); }
 
 #ifdef QT_NO_DATA_RELOCATION
+        using Getter = const QMetaObject *(*)();
         Getter indirect = nullptr;
         constexpr SuperData(Getter g) : direct(nullptr), indirect(g) {}
         constexpr operator const QMetaObject *() const
@@ -385,7 +417,6 @@ struct Q_CORE_EXPORT QMetaObject
         template <const QMetaObject &MO> static constexpr SuperData link()
         { return SuperData(QMetaObject::staticMetaObject<MO>); }
 #else
-        constexpr SuperData(Getter g) : direct(g()) {}
         constexpr operator const QMetaObject *() const
         { return direct; }
         template <const QMetaObject &MO> static constexpr SuperData link()

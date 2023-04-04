@@ -1,5 +1,41 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QPROPERTYPRIVATE_H
 #define QPROPERTYPRIVATE_H
@@ -18,7 +54,6 @@
 #include <QtCore/qglobal.h>
 #include <QtCore/qtaggedpointer.h>
 #include <QtCore/qmetatype.h>
-#include <QtCore/qcontainerfwd.h>
 
 #include <functional>
 
@@ -26,11 +61,8 @@ QT_BEGIN_NAMESPACE
 
 class QBindingStorage;
 
-template<typename Class, typename T, auto Offset, auto Setter, auto Signal, auto Getter>
+template<typename Class, typename T, auto Offset, auto Setter, auto Signal>
 class QObjectCompatProperty;
-
-struct QBindingObserverPtr;
-using PendingBindingObserverList = QVarLengthArray<QBindingObserverPtr>;
 
 namespace QtPrivate {
 // QPropertyBindingPrivatePtr operates on a RefCountingMixin solely so that we can inline
@@ -119,8 +151,6 @@ private:
 class QUntypedPropertyBinding;
 class QPropertyBindingPrivate;
 struct QPropertyBindingDataPointer;
-class QPropertyObserver;
-struct QPropertyObserverPointer;
 
 class QUntypedPropertyData
 {
@@ -239,7 +269,7 @@ class Q_CORE_EXPORT QPropertyBindingData
     friend class QT_PREPEND_NAMESPACE(QQmlPropertyBinding);
     friend struct QT_PREPEND_NAMESPACE(QPropertyDelayedNotifications);
 
-    template<typename Class, typename T, auto Offset, auto Setter, auto Signal, auto Getter>
+    template<typename Class, typename T, auto Offset, auto Setter, auto Signal>
     friend class QT_PREPEND_NAMESPACE(QObjectCompatProperty);
 
     Q_DISABLE_COPY(QPropertyBindingData)
@@ -304,23 +334,12 @@ private:
     {
         quintptr &d = d_ptr;
         if (isNotificationDelayed())
-            return proxyData()->d_ptr;
+            return reinterpret_cast<QPropertyProxyBindingData *>(d_ptr & ~(BindingBit|DelayedNotificationBit))->d_ptr;
         return d;
     }
     quintptr d() const { return d_ref(); }
-    QPropertyProxyBindingData *proxyData() const
-    {
-        Q_ASSERT(isNotificationDelayed());
-        return reinterpret_cast<QPropertyProxyBindingData *>(d_ptr & ~(BindingBit|DelayedNotificationBit));
-    }
     void registerWithCurrentlyEvaluatingBinding_helper(BindingEvaluationState *currentBinding) const;
     void removeBinding_helper();
-
-    enum NotificationResult { Delayed, Evaluated };
-    NotificationResult notifyObserver_helper(
-            QUntypedPropertyData *propertyDataPtr, QBindingStorage *storage,
-            QPropertyObserverPointer observer,
-            PendingBindingObserverList &bindingObservers) const;
 };
 
 template <typename T, typename Tag>

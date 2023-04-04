@@ -1,6 +1,31 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "tst_qdbusconnection.h"
 
@@ -114,7 +139,7 @@ void tst_QDBusConnection::sendSignalToName()
 
     QVERIFY(con.send(msg));
 
-    QTRY_COMPARE(spy.args.size(), 1);
+    QTRY_COMPARE(spy.args.count(), 1);
     QCOMPARE(spy.args.at(0).toString(), QString("ping"));
 }
 
@@ -139,7 +164,7 @@ void tst_QDBusConnection::sendSignalToOtherName()
 
     QTest::qWait(1000);
 
-    QCOMPARE(spy.args.size(), 0);
+    QCOMPARE(spy.args.count(), 0);
 }
 
 void tst_QDBusConnection::send()
@@ -153,7 +178,7 @@ void tst_QDBusConnection::send()
 
     QDBusMessage reply = con.call(msg);
 
-    QCOMPARE(reply.arguments().size(), 1);
+    QCOMPARE(reply.arguments().count(), 1);
     QCOMPARE(reply.arguments().at(0).typeName(), "QStringList");
     QVERIFY(reply.arguments().at(0).toStringList().contains(con.baseService()));
 }
@@ -172,7 +197,7 @@ void tst_QDBusConnection::sendWithGui()
 
     QDBusMessage reply = con.call(msg, QDBus::BlockWithGui);
 
-    QCOMPARE(reply.arguments().size(), 1);
+    QCOMPARE(reply.arguments().count(), 1);
     QCOMPARE(reply.arguments().at(0).typeName(), "QStringList");
     QVERIFY(reply.arguments().at(0).toStringList().contains(con.baseService()));
 }
@@ -191,7 +216,7 @@ void tst_QDBusConnection::sendAsync()
             "/org/freedesktop/DBus", "org.freedesktop.DBus", "ListNames");
     QVERIFY(con.callWithCallback(msg, &spy, SLOT(asyncReply(QDBusMessage))));
 
-    QTRY_COMPARE(spy.args.size(), 1);
+    QTRY_COMPARE(spy.args.count(), 1);
     QCOMPARE(spy.args.value(0).typeName(), "QStringList");
     QVERIFY(spy.args.at(0).toStringList().contains(con.baseService()));
 }
@@ -214,7 +239,7 @@ void tst_QDBusConnection::connect()
 
     QVERIFY(con.send(msg));
 
-    QTRY_COMPARE(spy.args.size(), 1);
+    QTRY_COMPARE(spy.args.count(), 1);
     QCOMPARE(spy.args.at(0).toString(), QString("ping"));
 }
 
@@ -1026,7 +1051,7 @@ void tst_QDBusConnection::multipleInterfacesInQObject()
                                                       "local.BaseObject", "anotherMethod");
     QDBusMessage reply = con.call(msg, QDBus::Block);
     QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
-    QCOMPARE(reply.arguments().size(), 0);
+    QCOMPARE(reply.arguments().count(), 0);
     QVERIFY_HOOKCALLED();
 }
 

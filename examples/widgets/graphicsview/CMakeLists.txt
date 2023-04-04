@@ -1,6 +1,6 @@
-if(QT_FEATURE_cursor AND QT_FEATURE_opengl)
-    qt_internal_add_example(chip)
-endif()
+# Generated from graphicsview.pro.
+
+qt_internal_add_example(chip)
 qt_internal_add_example(elasticnodes)
 qt_internal_add_example(embeddeddialogs)
 qt_internal_add_example(collidingmice)

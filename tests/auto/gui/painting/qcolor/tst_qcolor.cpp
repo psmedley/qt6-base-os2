@@ -1,5 +1,30 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -12,12 +37,6 @@
 #include <private/qcolortrclut_p.h>
 #include <private/qdrawingprimitive_sse2_p.h>
 #include <qrgba64.h>
-
-#if QT_DEPRECATED_SINCE(6, 6)
-# define DEPRECATED_IN_6_6(...) QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED __VA_ARGS__ QT_WARNING_POP
-#else
-# define DEPRECATED_IN_6_6(...)
-#endif
 
 class tst_QColor : public QObject
 {
@@ -35,8 +54,8 @@ private slots:
     void name();
     void namehex_data();
     void namehex();
-    void fromString_data();
-    void fromString();
+    void setNamedColor_data();
+    void setNamedColor();
 
     void constructNamedColorWithSpace();
 
@@ -224,13 +243,13 @@ void tst_QColor::isValid_data()
     QTest::newRow("defaultConstructor") << QColor() << false;
     QTest::newRow("rgbConstructor-valid") << QColor(2,5,7) << true;
     QTest::newRow("rgbConstructor-invalid") << QColor(2,5,999) << false;
-    QTest::newRow("nameQStringConstructor-valid") << QColor::fromString("#ffffff") << true;
-    QTest::newRow("nameQStringConstructor-invalid") << QColor::fromString("#ffffgg") << false;
-    QTest::newRow("nameQStringConstructor-empty") << QColor::fromString("") << false;
-    QTest::newRow("nameQStringConstructor-named") << QColor::fromString("red") << true;
-    QTest::newRow("nameCharConstructor-valid") << QColor::fromString("#ffffff") << true;
-    QTest::newRow("nameCharConstructor-invalid") << QColor::fromString("#ffffgg") << false;
-    QTest::newRow("nameCharConstructor-invalid-2") << QColor::fromString("#fffffg") << false;
+    QTest::newRow("nameQStringConstructor-valid") << QColor(QString("#ffffff")) << true;
+    QTest::newRow("nameQStringConstructor-invalid") << QColor(QString("#ffffgg")) << false;
+    QTest::newRow("nameQStringConstructor-empty") << QColor(QString("")) << false;
+    QTest::newRow("nameQStringConstructor-named") << QColor(QString("red")) << true;
+    QTest::newRow("nameCharConstructor-valid") << QColor("#ffffff") << true;
+    QTest::newRow("nameCharConstructor-invalid") << QColor("#ffffgg") << false;
+    QTest::newRow("nameCharConstructor-invalid-2") << QColor("#fffffg") << false;
 }
 
 void tst_QColor::isValid()
@@ -316,10 +335,7 @@ void tst_QColor::namehex()
 {
     QFETCH(QString, hexcolor);
     QFETCH(QColor, color);
-    DEPRECATED_IN_6_6(
     QCOMPARE(QColor(hexcolor), color);
-    )
-    QCOMPARE(QColor::fromString(hexcolor), color);
 }
 
 void tst_QColor::globalColors_data()
@@ -705,36 +721,25 @@ static const int rgbTblSize = sizeof(rgbTbl) / sizeof(RGBData);
 
 #undef rgb
 
-void tst_QColor::fromString_data()
+void tst_QColor::setNamedColor_data()
 {
-#if QT_DEPRECATED_SINCE(6, 6)
     QTest::addColumn<QColor>("byCtor");
     QTest::addColumn<QColor>("bySetNamedColor");
-#endif
-    QTest::addColumn<QColor>("byFromString");
     QTest::addColumn<QColor>("expected");
 
     for (const auto e : rgbTbl) {
         QColor expected;
         expected.setRgba(e.value);
 
-#define ROW(expr) row(expr, #expr)
-        auto row = [&] (auto expr, const char *exprS) {
-            QT_WARNING_PUSH
-        #if QT_DEPRECATED_SINCE(6, 6)
-            QT_WARNING_DISABLE_DEPRECATED
-            QColor bySetNamedColor;
-            bySetNamedColor.setNamedColor(expr);
-            auto byCtor = QColor(expr);
-        #endif
-            QTest::addRow("%s: %s", e.name, exprS)
-        #if QT_DEPRECATED_SINCE(6, 6)
-                << byCtor << bySetNamedColor
-        #endif
-                << QColor::fromString(expr)
-                << expected;
-            QT_WARNING_POP
-        };
+#define ROW(expr)                                \
+        do {                                     \
+            QColor bySetNamedColor;              \
+            bySetNamedColor.setNamedColor(expr); \
+            auto byCtor = QColor(expr);          \
+            QTest::addRow("%s: %s", e.name, #expr) \
+                << byCtor << bySetNamedColor << expected;    \
+        } while (0)                              \
+        /*end*/
 
         const auto l1 = QLatin1String(e.name);
         const auto l1UpperBA = QByteArray(e.name).toUpper();
@@ -761,42 +766,29 @@ void tst_QColor::fromString_data()
     }
 }
 
-void tst_QColor::fromString()
+void tst_QColor::setNamedColor()
 {
-#if QT_DEPRECATED_SINCE(6, 6)
     QFETCH(QColor, byCtor);
     QFETCH(QColor, bySetNamedColor);
-#endif
-    QFETCH(QColor, byFromString);
     QFETCH(QColor, expected);
 
-#if QT_DEPRECATED_SINCE(6, 6)
     QCOMPARE(byCtor, expected);
     QCOMPARE(bySetNamedColor, expected);
-#endif
-    QCOMPARE(byFromString, expected);
 }
 
 
 void tst_QColor::constructNamedColorWithSpace()
 {
-    DEPRECATED_IN_6_6(
     QColor whiteSmoke("white smoke");
     QCOMPARE(whiteSmoke, QColor(245, 245, 245));
-    )
-    QCOMPARE(QColor::fromString("white smoke"), QColorConstants::Svg::whitesmoke);
 }
 
 void tst_QColor::colorNames()
 {
-    const QStringList all = QColor::colorNames();
+    QStringList all = QColor::colorNames();
     QCOMPARE(all.size(), rgbTblSize);
     for (int i = 0; i < all.size(); ++i)
         QCOMPARE(all.at(i), QLatin1String(rgbTbl[i].name));
-    for (const QString &name : all)
-        QVERIFY(QColor::isValidColorName(name));
-    for (const auto &e : rgbTbl)
-        QVERIFY(QColor::isValidColorName(e.name));
 }
 
 void tst_QColor::spec()
@@ -1869,7 +1861,7 @@ void tst_QColor::qcolorprofile()
 {
     QFETCH(float, gammaC);
     QFETCH(int, tolerance);
-    std::shared_ptr cp = QColorTrcLut::fromGamma(gammaC);
+    QColorTrcLut *cp = QColorTrcLut::fromGamma(gammaC);
 
     // Test we are accurate for most values after converting through gamma-correction.
     int error = 0;
@@ -1880,6 +1872,7 @@ void tst_QColor::qcolorprofile()
         error += qAbs(qRed(cin) - qRed(cout));
     }
     QVERIFY(error <= tolerance);
+    delete cp;
 }
 
 QTEST_MAIN(tst_QColor)

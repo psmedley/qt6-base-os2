@@ -18,6 +18,7 @@
 
 #include "jinclude.h"
 #include "jdmainct.h"
+#include "jconfigint.h"
 
 
 /*

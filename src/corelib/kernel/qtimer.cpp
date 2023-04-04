@@ -1,10 +1,44 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qtimer.h"
-#include "qtimer_p.h"
-
 #include "qabstracteventdispatcher.h"
 #include "qcoreapplication.h"
 #include "qobject_p.h"
@@ -13,6 +47,24 @@
 #include "qproperty_p.h"
 
 QT_BEGIN_NAMESPACE
+
+static constexpr int INV_TIMER = -1;                // invalid timer id
+
+class QTimerPrivate : public QObjectPrivate
+{
+    Q_DECLARE_PUBLIC(QTimer)
+public:
+    void setInterval(int msec) { q_func()->setInterval(msec); }
+    bool isActiveActualCalculation() const { return id >= 0; }
+
+    int id = INV_TIMER;
+    Q_OBJECT_COMPAT_PROPERTY_WITH_ARGS(QTimerPrivate, int, inter, &QTimerPrivate::setInterval, 0)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(QTimerPrivate, bool, single, false)
+    bool nulltimer = false;
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(QTimerPrivate, Qt::TimerType, type, Qt::CoarseTimer)
+    Q_OBJECT_COMPUTED_PROPERTY(QTimerPrivate, bool, isActiveData,
+                               &QTimerPrivate::isActiveActualCalculation)
+};
 
 /*!
     \class QTimer
@@ -124,7 +176,7 @@ QTimer::QTimer(QObject *parent)
 
 QTimer::~QTimer()
 {
-    if (d_func()->id != QTimerPrivate::INV_TIMER) // stop running timer
+    if (d_func()->id != INV_TIMER)                        // stop running timer
         stop();
 }
 
@@ -185,8 +237,9 @@ int QTimer::timerId() const
 void QTimer::start()
 {
     Q_D(QTimer);
-    if (d->id != QTimerPrivate::INV_TIMER) // stop running timer
+    if (d->id != INV_TIMER)                        // stop running timer
         stop();
+    d->nulltimer = (!d->inter && d->single);
     d->id = QObject::startTimer(d->inter, d->type);
     d->isActiveData.notify();
 }
@@ -200,8 +253,6 @@ void QTimer::start()
 
     If \l singleShot is true, the timer will be activated only once.
 
-    \note   Keeping the event loop busy with a zero-timer is bound to
-            cause trouble and highly erratic behavior of the UI.
 */
 void QTimer::start(int msec)
 {
@@ -224,9 +275,9 @@ void QTimer::start(int msec)
 void QTimer::stop()
 {
     Q_D(QTimer);
-    if (d->id != QTimerPrivate::INV_TIMER) {
+    if (d->id != INV_TIMER) {
         QObject::killTimer(d->id);
-        d->id = QTimerPrivate::INV_TIMER;
+        d->id = INV_TIMER;
         d->isActiveData.notify();
     }
 }
@@ -706,7 +757,7 @@ void QTimer::setInterval(int msec)
     Q_D(QTimer);
     const bool intervalChanged = msec != d->inter;
     d->inter.setValue(msec);
-    if (d->id != QTimerPrivate::INV_TIMER) { // create new timer
+    if (d->id != INV_TIMER) {                        // create new timer
         QObject::killTimer(d->id);                        // restart timer
         d->id = QObject::startTimer(msec, d->type);
         // No need to call markDirty() for d->isActiveData here,
@@ -740,7 +791,7 @@ QBindable<int> QTimer::bindableInterval()
 int QTimer::remainingTime() const
 {
     Q_D(const QTimer);
-    if (d->id != QTimerPrivate::INV_TIMER) {
+    if (d->id != INV_TIMER) {
         return QAbstractEventDispatcher::instance()->remainingTime(d->id);
     }
 

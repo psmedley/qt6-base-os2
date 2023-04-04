@@ -1,6 +1,42 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qmetaobject.h"
 #include "qmetatype.h"
@@ -26,11 +62,8 @@
 #include "private/qmetaobject_moc_p.h"
 
 #include <ctype.h>
-#include <memory>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*!
     \class QMetaObject
@@ -124,13 +157,13 @@ static inline const char *rawStringData(const QMetaObject *mo, int index)
     return reinterpret_cast<const char *>(mo->d.stringdata) + offset;
 }
 
-static inline QLatin1StringView stringDataView(const QMetaObject *mo, int index)
+static inline QLatin1String stringDataView(const QMetaObject *mo, int index)
 {
     Q_ASSERT(priv(mo->d.data)->revision >= 7);
     uint offset = mo->d.stringdata[2*index];
     uint length = mo->d.stringdata[2*index + 1];
     const char *string = reinterpret_cast<const char *>(mo->d.stringdata) + offset;
-    return {string, qsizetype(length)};
+    return QLatin1String(string, length);
 }
 
 static inline QByteArray stringData(const QMetaObject *mo, int index)
@@ -227,7 +260,7 @@ QObject *QMetaObject::newInstance(QGenericArgument val0,
             constructorName.remove(0, idx+1); // remove qualified part
     }
     QVarLengthArray<char, 512> sig;
-    sig.append(constructorName.constData(), constructorName.size());
+    sig.append(constructorName.constData(), constructorName.length());
     sig.append('(');
 
     enum { MaximumParamCount = 10 };
@@ -357,7 +390,6 @@ QString QMetaObject::tr(const char *s, const char *c, int n) const
 {
     return QCoreApplication::translate(objectClassName(this), s, c, n);
 }
-#endif // QT_NO_TRANSLATION
 
 /*!
     \since 6.2
@@ -385,6 +417,7 @@ QMetaType QMetaObject::metaType() const
             return QMetaType::fromName(className()); // try lookup by name in that case
     }
 }
+#endif // QT_NO_TRANSLATION
 
 /*!
     Returns the method offset for this class; i.e. the index position
@@ -2366,7 +2399,7 @@ bool QMetaMethod::invoke(QObject *object,
             return false;
         }
 
-        auto event = std::make_unique<QMetaCallEvent>(idx_offset, idx_relative, callFunction, nullptr, -1, paramCount);
+        QScopedPointer<QMetaCallEvent> event(new QMetaCallEvent(idx_offset, idx_relative, callFunction, nullptr, -1, paramCount));
         QMetaType *types = event->types();
         void **args = event->args();
 
@@ -2390,7 +2423,7 @@ bool QMetaMethod::invoke(QObject *object,
             }
         }
 
-        QCoreApplication::postEvent(object, event.release());
+        QCoreApplication::postEvent(object, event.take());
     } else { // blocking queued connection
 #if QT_CONFIG(thread)
         if (receiverInSameThread) {
@@ -2797,19 +2830,6 @@ const char *QMetaEnum::valueToKey(int value) const
     return nullptr;
 }
 
-static auto parse_scope(QLatin1StringView qualifiedKey) noexcept
-{
-    struct R {
-        std::optional<QLatin1StringView> scope;
-        QLatin1StringView key;
-    };
-    const auto scopePos = qualifiedKey.lastIndexOf("::"_L1);
-    if (scopePos < 0)
-        return R{std::nullopt, qualifiedKey};
-    else
-        return R{qualifiedKey.first(scopePos), qualifiedKey.sliced(scopePos + 2)};
-}
-
 /*!
     Returns the value derived from combining together the values of
     the \a keys using the OR operator, or -1 if \a keys is not
@@ -2826,25 +2846,34 @@ int QMetaEnum::keysToValue(const char *keys, bool *ok) const
         *ok = false;
     if (!mobj || !keys)
         return -1;
-
-    auto lookup = [&] (QLatin1StringView key) -> std::optional<int> {
-        for (int i = data.keyCount() - 1; i >= 0; --i) {
-            if (key == stringDataView(mobj, mobj->d.data[data.data() + 2*i]))
-                return mobj->d.data[data.data() + 2*i + 1];
-        }
-        return std::nullopt;
-    };
-    auto className = [&] { return stringDataView(mobj, priv(mobj->d.data)->className); };
-
+    const QString keysString = QString::fromLatin1(keys);
+    const auto splitKeys = QStringView{keysString}.split(QLatin1Char('|'));
+    // ### TODO write proper code: do not allocate memory, so we can go nothrow
     int value = 0;
-    for (const QLatin1StringView &untrimmed : qTokenize(QLatin1StringView{keys}, u'|')) {
-        const auto parsed = parse_scope(untrimmed.trimmed());
-        if (parsed.scope && *parsed.scope != className())
-            return -1; // wrong type name in qualified name
-        if (auto thisValue = lookup(parsed.key))
-            value |= *thisValue;
-        else
-            return -1; // no such enumerator
+    for (QStringView untrimmed : splitKeys) {
+        const QStringView trimmed = untrimmed.trimmed();
+        QByteArray qualified_key = trimmed.toLatin1();
+        const char *key = qualified_key.constData();
+        uint scope = 0;
+        const char *s = key + qstrlen(key);
+        while (s > key && *s != ':')
+            --s;
+        if (s > key && *(s - 1) == ':') {
+            scope = s - key - 1;
+            key += scope + 2;
+        }
+        int i;
+        for (i = data.keyCount() - 1; i >= 0; --i) {
+            const QByteArray className = stringData(mobj, priv(mobj->d.data)->className);
+            if ((!scope || (className.size() == int(scope) && strncmp(qualified_key.constData(), className.constData(), scope) == 0))
+                 && strcmp(key, rawStringData(mobj, mobj->d.data[data.data() + 2*i])) == 0) {
+                value |= mobj->d.data[data.data() + 2*i + 1];
+                break;
+            }
+        }
+        if (i < 0) {
+            return -1;
+        }
     }
     if (ok != nullptr)
         *ok = true;
@@ -2884,7 +2913,7 @@ QByteArray QMetaEnum::valueToKeys(int value) const
     QByteArray keys;
     if (!mobj)
         return keys;
-    QVarLengthArray<QLatin1StringView, sizeof(int) * CHAR_BIT> parts;
+    QVarLengthArray<QLatin1String, sizeof(int) * CHAR_BIT> parts;
     int v = value;
     // reverse iterate to ensure values like Qt::Dialog=0x2|Qt::Window are processed first.
     for (int i = data.keyCount() - 1; i >= 0; --i) {
@@ -3127,20 +3156,19 @@ bool QMetaProperty::isAlias() const
     return (data.flags() & Alias);
 }
 
-#if QT_DEPRECATED_SINCE(6, 4)
 /*!
     \internal
-    Historically:
     Executes metacall with QMetaObject::RegisterPropertyMetaType flag.
     Returns id of registered type or QMetaType::UnknownType if a type
     could not be registered for any reason.
-    Obsolete since Qt 6
 */
 int QMetaProperty::registerPropertyType() const
 {
-    return typeId();
+    int registerResult = -1;
+    void *argv[] = { &registerResult };
+    mobj->static_metacall(QMetaObject::RegisterPropertyMetaType, data.index(mobj), argv);
+    return registerResult == -1 ? QMetaType::UnknownType : registerResult;
 }
-#endif
 
 QMetaProperty::QMetaProperty(const QMetaObject *mobj, int index)
     : mobj(mobj),
@@ -3148,37 +3176,37 @@ QMetaProperty::QMetaProperty(const QMetaObject *mobj, int index)
 {
     Q_ASSERT(index >= 0 && index < priv(mobj->d.data)->propertyCount);
 
-    if (!(data.flags() & EnumOrFlag))
-        return;
-    const char *type = rawTypeNameFromTypeInfo(mobj, data.type());
-    menum = mobj->enumerator(mobj->indexOfEnumerator(type));
-    if (menum.isValid())
-        return;
-    const char *enum_name = type;
-    const char *scope_name = objectClassName(mobj);
-    char *scope_buffer = nullptr;
+    if (data.flags() & EnumOrFlag) {
+        const char *type = rawTypeNameFromTypeInfo(mobj, data.type());
+        menum = mobj->enumerator(mobj->indexOfEnumerator(type));
+        if (!menum.isValid()) {
+            const char *enum_name = type;
+            const char *scope_name = objectClassName(mobj);
+            char *scope_buffer = nullptr;
 
-    const char *colon = strrchr(enum_name, ':');
-    // ':' will always appear in pairs
-    Q_ASSERT(colon <= enum_name || *(colon - 1) == ':');
-    if (colon > enum_name) {
-        int len = colon - enum_name - 1;
-        scope_buffer = (char *)malloc(len + 1);
-        memcpy(scope_buffer, enum_name, len);
-        scope_buffer[len] = '\0';
-        scope_name = scope_buffer;
-        enum_name = colon + 1;
+            const char *colon = strrchr(enum_name, ':');
+            // ':' will always appear in pairs
+            Q_ASSERT(colon <= enum_name || *(colon - 1) == ':');
+            if (colon > enum_name) {
+                int len = colon - enum_name - 1;
+                scope_buffer = (char *)malloc(len + 1);
+                memcpy(scope_buffer, enum_name, len);
+                scope_buffer[len] = '\0';
+                scope_name = scope_buffer;
+                enum_name = colon + 1;
+            }
+
+            const QMetaObject *scope = nullptr;
+            if (qstrcmp(scope_name, "Qt") == 0)
+                scope = &Qt::staticMetaObject;
+            else
+                scope = QMetaObject_findMetaObject(mobj, scope_name);
+            if (scope)
+                menum = scope->enumerator(scope->indexOfEnumerator(enum_name));
+            if (scope_buffer)
+                free(scope_buffer);
+        }
     }
-
-    const QMetaObject *scope = nullptr;
-    if (qstrcmp(scope_name, "Qt") == 0)
-        scope = &Qt::staticMetaObject;
-    else
-        scope = QMetaObject_findMetaObject(mobj, scope_name);
-    if (scope)
-        menum = scope->enumerator(scope->indexOfEnumerator(enum_name));
-    if (scope_buffer)
-        free(scope_buffer);
 }
 
 /*!

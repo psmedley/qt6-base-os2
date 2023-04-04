@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -210,9 +235,6 @@ void tst_QGridLayout::badDistributionBug()
 
 void tst_QGridLayout::setMinAndMaxSize()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("This test crashes on Wayland, see also QTBUG-107184");
-
     QWidget widget;
     setFrameless(&widget);
     QGridLayout layout(&widget);
@@ -661,7 +683,7 @@ void tst_QGridLayout::spacingsAndMargins()
         QSKIP("The screen is too small to run this test case");
 
 // We are relying on the order here...
-    for (int pi = 0; pi < sizehinters.size(); ++pi) {
+    for (int pi = 0; pi < sizehinters.count(); ++pi) {
         QPoint pt = sizehinters.at(pi)->mapTo(&toplevel, QPoint(0, 0));
         QCOMPARE(pt, expectedpositions.at(pi));
     }
@@ -831,7 +853,7 @@ void tst_QGridLayout::minMaxSize()
         QList<QPointer<SizeHinterFrame> > sizehinters;
         for (int i = 0; i < rows; ++i) {
             for (int j = 0; j < columns; ++j) {
-                SizeInfo si = sizeinfos.at(sizehinters.size());
+                SizeInfo si = sizeinfos.at(sizehinters.count());
                 int numpixels = si.hfwNumPixels;
                 if (pass == 1 && numpixels == -1)
                     numpixels = -2; //### yuk, (and don't fake it if it already tests sizehint)
@@ -860,7 +882,7 @@ void tst_QGridLayout::minMaxSize()
             QTRY_COMPARE(toplevel.size(), toplevel.sizeHint());
         }
         // We are relying on the order here...
-        for (int pi = 0; pi < sizehinters.size(); ++pi) {
+        for (int pi = 0; pi < sizehinters.count(); ++pi) {
             QPoint pt = sizehinters.at(pi)->mapTo(&toplevel, QPoint(0, 0));
             QCOMPARE(pt, sizeinfos.at(pi).expectedPos);
         }
@@ -1030,7 +1052,7 @@ void tst_QGridLayout::styleDependentSpacingsAndMargins()
     widget.adjustSize();
     QApplication::processEvents();
 
-    for (int pi = 0; pi < expectedpositions.size(); ++pi) {
+    for (int pi = 0; pi < expectedpositions.count(); ++pi) {
         QCOMPARE(sizehinters.at(pi)->pos(), expectedpositions.at(pi));
     }
 }
@@ -1420,7 +1442,7 @@ void tst_QGridLayout::layoutSpacing()
 
     QLayout *layout = widget->layout();
     QVERIFY(layout);
-    for (int pi = 0; pi < expectedpositions.size(); ++pi) {
+    for (int pi = 0; pi < expectedpositions.count(); ++pi) {
         QLayoutItem *item = layout->itemAt(pi);
         //qDebug()  << item->widget()->pos();
         QCOMPARE(item->widget()->pos(), expectedpositions.at(pi));

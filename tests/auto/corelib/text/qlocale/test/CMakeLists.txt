@@ -1,3 +1,5 @@
+# Generated from test.pro.
+
 #####################################################################
 ## tst_qlocale Test:
 #####################################################################
@@ -23,7 +25,5 @@ qt_internal_extend_target(tst_qlocale CONDITION NOT QT_FEATURE_doubleconversion 
         QT_NO_DOUBLECONVERSION
 )
 
-## Depends on ../syslocaleapp
-if(QT_FEATURE_process)
-    add_dependencies(tst_qlocale syslocaleapp)
-endif()
+#### Keys ignored in scope 7:.:.:test.pro:NOT ANDROID:
+# TEST_HELPER_INSTALLS = "../syslocaleapp/syslocaleapp"

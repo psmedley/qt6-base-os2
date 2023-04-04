@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtTest module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QPROPERTYTESTHELPER_P_H
 #define QPROPERTYTESTHELPER_P_H
@@ -19,7 +55,6 @@
 #include <QtCore/QProperty>
 #include <QtTest/QSignalSpy>
 #include <QTest>
-#include <private/qglobal_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -129,7 +164,7 @@ void testReadWritePropertyBasics(
             testedObj.property(propertyName).template value<PropertyType>(), initial, comparator,
             represent);
     if (spy)
-        QCOMPARE(spy->size(), 1);
+        QCOMPARE(spy->count(), 1);
 
     QUntypedBindable bindable = metaProperty.bindable(&instance);
 
@@ -148,7 +183,7 @@ void testReadWritePropertyBasics(
     QPROPERTY_TEST_COMPARISON_HELPER(propObserver.value(), changed, comparator, represent);
     QPROPERTY_TEST_COMPARISON_HELPER(propObserverLambda.value(), changed, comparator, represent);
     if (spy)
-        QCOMPARE(spy->size(), 2);
+        QCOMPARE(spy->count(), 2);
 
     // Bind object's property to other property
     QProperty<PropertyType> propSetter(initial);
@@ -162,7 +197,7 @@ void testReadWritePropertyBasics(
     QPROPERTY_TEST_COMPARISON_HELPER(propObserver.value(), initial, comparator, represent);
     QPROPERTY_TEST_COMPARISON_HELPER(propObserverLambda.value(), initial, comparator, represent);
     if (spy)
-        QCOMPARE(spy->size(), 3);
+        QCOMPARE(spy->count(), 3);
 
     // Count notifications triggered; should only happen on actual change.
     int updateCount = 0;
@@ -177,7 +212,7 @@ void testReadWritePropertyBasics(
     QPROPERTY_TEST_COMPARISON_HELPER(propObserverLambda.value(), changed, comparator, represent);
     QCOMPARE(updateCount, 1);
     if (spy)
-        QCOMPARE(spy->size(), 4);
+        QCOMPARE(spy->count(), 4);
 
     // Test that manually setting the value (even the same one) breaks the
     // binding.
@@ -188,7 +223,7 @@ void testReadWritePropertyBasics(
 
     // value didn't change -> the signal should not be emitted
     if (spy)
-        QCOMPARE(spy->size(), 4);
+        QCOMPARE(spy->count(), 4);
 }
 
 /*!
@@ -287,7 +322,7 @@ void testWriteOncePropertyBasics(
             represent);
     QPROPERTY_TEST_COMPARISON_HELPER(propObserver.value(), changed, comparator, represent);
     if (spy)
-        QCOMPARE(spy->size(), 1);
+        QCOMPARE(spy->count(), 1);
 
     // Attempt to set back the 'prior' value and verify that it has no effect
     testedObj.setProperty(propertyName, QVariant::fromValue(prior));
@@ -296,7 +331,7 @@ void testWriteOncePropertyBasics(
             represent);
     QPROPERTY_TEST_COMPARISON_HELPER(propObserver.value(), changed, comparator, represent);
     if (spy)
-        QCOMPARE(spy->size(), 1);
+        QCOMPARE(spy->count(), 1);
     if (bindingPreservedOnWrite)
         QVERIFY(bindable.hasBinding());
     else
@@ -386,7 +421,7 @@ void testReadOnlyPropertyBasics(
             testedObj.property(propertyName).template value<PropertyType>(), initial, comparator,
             represent);
     if (spy)
-        QCOMPARE(spy->size(), 0);
+        QCOMPARE(spy->count(), 0);
 
     QProperty<PropertyType> propObserver;
     propObserver.setBinding(bindable.makeBinding());
@@ -402,7 +437,7 @@ void testReadOnlyPropertyBasics(
     QPROPERTY_TEST_COMPARISON_HELPER(propObserver.value(), changed, comparator, represent);
 
     if (spy)
-        QCOMPARE(spy->size(), 1);
+        QCOMPARE(spy->count(), 1);
 }
 
 } // namespace QTestPrivate

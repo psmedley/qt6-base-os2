@@ -75,6 +75,3 @@ osx
 macos
 [backgroundRequestConnectInBackground]
 osx
-#QTBUG-103055
-[ioGetFromHttpWithProxyAuth]
-qnx

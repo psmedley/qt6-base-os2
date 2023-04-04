@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qnetworkcookie.h"
 #include "qnetworkcookie_p.h"
@@ -18,10 +54,6 @@
 #include "private/qobject_p.h"
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
-
-QT_IMPL_METATYPE_EXTERN(QNetworkCookie)
 
 /*!
     \class QNetworkCookie
@@ -380,7 +412,7 @@ static QPair<QByteArray, QByteArray> nextField(const QByteArray &text, int &posi
     //    (1)  token
     //    (2)  token = token
     //    (3)  token = quoted-string
-    const int length = text.size();
+    const int length = text.length();
     position = nextNonWhitespace(text, position);
 
     int semiColonPosition = text.indexOf(';', position);
@@ -501,11 +533,11 @@ QByteArray QNetworkCookie::toRawForm(RawForm form) const
         if (!isSessionCookie()) {
             result += "; expires=";
             result += QLocale::c().toString(d->expirationDate.toUTC(),
-                                            "ddd, dd-MMM-yyyy hh:mm:ss 'GMT"_L1).toLatin1();
+                                            QLatin1String("ddd, dd-MMM-yyyy hh:mm:ss 'GMT")).toLatin1();
         }
         if (!d->domain.isEmpty()) {
             result += "; domain=";
-            if (d->domain.startsWith(u'.')) {
+            if (d->domain.startsWith(QLatin1Char('.'))) {
                 result += '.';
                 result += QUrl::toAce(d->domain.mid(1));
             } else {
@@ -578,7 +610,7 @@ static bool checkStaticArray(int &val, const QByteArray &dateString, int at, con
 {
     if (dateString[at] < 'a' || dateString[at] > 'z')
         return false;
-    if (val == -1 && dateString.size() >= at + 3) {
+    if (val == -1 && dateString.length() >= at + 3) {
         int j = 0;
         int i = 0;
         while (i <= size) {
@@ -632,11 +664,10 @@ static QDateTime parseDateString(const QByteArray &dateString)
     int zoneOffset = -1;
 
     // hour:minute:second.ms pm
-    static const QRegularExpression timeRx(
-            u"(\\d\\d?):(\\d\\d?)(?::(\\d\\d?)(?:\\.(\\d{1,3}))?)?(?:\\s*(am|pm))?"_s);
+    QRegularExpression timeRx(QLatin1String("(\\d{1,2}):(\\d{1,2})(:(\\d{1,2})|)(\\.(\\d{1,3})|)((\\s{0,}(am|pm))|)"));
 
     int at = 0;
-    while (at < dateString.size()) {
+    while (at < dateString.length()) {
 #ifdef PARSEDATESTRINGDEBUG
         qDebug() << dateString.mid(at);
 #endif
@@ -677,7 +708,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
                     && (dateString[at - 1] == 't')))) {
 
             int end = 1;
-            while (end < 5 && dateString.size() > at+end
+            while (end < 5 && dateString.length() > at+end
                    && dateString[at + end] >= '0' && dateString[at + end] <= '9')
                 ++end;
             int minutes = 0;
@@ -709,25 +740,25 @@ static QDateTime parseDateString(const QByteArray &dateString)
 
         // Time
         if (isNum && time.isNull()
-            && dateString.size() >= at + 3
+            && dateString.length() >= at + 3
             && (dateString[at + 2] == ':' || dateString[at + 1] == ':')) {
             // While the date can be found all over the string the format
             // for the time is set and a nice regexp can be used.
-            // This string needs to stay for as long as the QRegularExpressionMatch is used,
-            // or else we get use-after-free issues:
-            QString dateToString = QString::fromLatin1(dateString);
-            if (auto match = timeRx.match(dateToString, at); match.hasMatch()) {
-                int h = match.capturedView(1).toInt();
-                int m = match.capturedView(2).toInt();
-                int s = match.capturedView(3).toInt();
-                int ms = match.capturedView(4).toInt();
-                QStringView ampm = match.capturedView(5);
+            QRegularExpressionMatch match;
+            int pos = QString::fromLatin1(dateString).indexOf(timeRx, at, &match);
+            if (pos != -1) {
+                QStringList list = match.capturedTexts();
+                int h = match.captured(1).toInt();
+                int m = match.captured(2).toInt();
+                int s = match.captured(4).toInt();
+                int ms = match.captured(6).toInt();
+                QString ampm = match.captured(9);
                 if (h < 12 && !ampm.isEmpty())
-                    if (ampm == "pm"_L1)
+                    if (ampm == QLatin1String("pm"))
                         h += 12;
                 time = QTime(h, m, s, ms);
 #ifdef PARSEDATESTRINGDEBUG
-                qDebug() << "Time:" << match.capturedTexts() << match.capturedLength();
+                qDebug() << "Time:" << list << timeRx.matchedLength();
 #endif
                 at += match.capturedLength();
                 continue;
@@ -737,7 +768,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
         // 4 digit Year
         if (isNum
             && year == -1
-            && dateString.size() > at + 3) {
+            && dateString.length() > at + 3) {
             if (isNumber(dateString[at + 1])
                 && isNumber(dateString[at + 2])
                 && isNumber(dateString[at + 3])) {
@@ -754,7 +785,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
         // Could be month, day or year
         if (isNum) {
             int length = 1;
-            if (dateString.size() > at + 1
+            if (dateString.length() > at + 1
                 && isNumber(dateString[at + 1]))
                 ++length;
             int x = atoi(dateString.mid(at, length).constData());
@@ -953,7 +984,7 @@ QList<QNetworkCookie> QNetworkCookiePrivate::parseSetCookieHeaderLine(const QByt
     const QDateTime now = QDateTime::currentDateTimeUtc();
 
     int position = 0;
-    const int length = cookieString.size();
+    const int length = cookieString.length();
     while (position < length) {
         QNetworkCookie cookie;
 
@@ -974,7 +1005,7 @@ QList<QNetworkCookie> QNetworkCookiePrivate::parseSetCookieHeaderLine(const QByt
                 field.first = field.first.toLower(); // everything but the NAME=VALUE is case-insensitive
 
                 if (field.first == "expires") {
-                    position -= field.second.size();
+                    position -= field.second.length();
                     int end;
                     for (end = position; end < length; ++end)
                         if (isValueSeparator(cookieString.at(end)))
@@ -992,7 +1023,7 @@ QList<QNetworkCookie> QNetworkCookiePrivate::parseSetCookieHeaderLine(const QByt
                     if (!rawDomain.isEmpty()) {
                         QString maybeLeadingDot;
                         if (rawDomain.startsWith('.')) {
-                            maybeLeadingDot = u'.';
+                            maybeLeadingDot = QLatin1Char('.');
                             rawDomain = rawDomain.mid(1);
                         }
 
@@ -1060,9 +1091,9 @@ void QNetworkCookie::normalize(const QUrl &url)
     // don't do path checking. See QTBUG-5815
     if (d->path.isEmpty()) {
         QString pathAndFileName = url.path();
-        QString defaultPath = pathAndFileName.left(pathAndFileName.lastIndexOf(u'/') + 1);
+        QString defaultPath = pathAndFileName.left(pathAndFileName.lastIndexOf(QLatin1Char('/'))+1);
         if (defaultPath.isEmpty())
-            defaultPath = u'/';
+            defaultPath = QLatin1Char('/');
         d->path = defaultPath;
     }
 
@@ -1072,12 +1103,12 @@ void QNetworkCookie::normalize(const QUrl &url)
         QHostAddress hostAddress(d->domain);
         if (hostAddress.protocol() != QAbstractSocket::IPv4Protocol
                 && hostAddress.protocol() != QAbstractSocket::IPv6Protocol
-                && !d->domain.startsWith(u'.')) {
+                && !d->domain.startsWith(QLatin1Char('.'))) {
             // Ensure the domain starts with a dot if its field was not empty
             // in the HTTP header. There are some servers that forget the
             // leading dot and this is actually forbidden according to RFC 2109,
             // but all browsers accept it anyway so we do that as well.
-            d->domain.prepend(u'.');
+            d->domain.prepend(QLatin1Char('.'));
         }
     }
 }
@@ -1093,5 +1124,3 @@ QDebug operator<<(QDebug s, const QNetworkCookie &cookie)
 #endif
 
 QT_END_NAMESPACE
-
-#include "moc_qnetworkcookie.cpp"

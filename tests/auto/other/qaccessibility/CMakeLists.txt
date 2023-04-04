@@ -4,6 +4,12 @@ if(NOT QT_FEATURE_accessibility)
     return()
 endif()
 
+# special case begin
+if (WIN32 AND NOT TARGET Qt::WindowsUIAutomationSupport)
+    return()
+endif()
+# special case end
+
 #####################################################################
 ## tst_qaccessibility Test:
 #####################################################################

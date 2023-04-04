@@ -1,6 +1,31 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 
@@ -10,8 +35,6 @@
 #include <limits.h>
 #include <private/qtools_p.h>
 
-#include "../shared/test_number_shared.h"
-
 class tst_QByteArray : public QObject
 {
     Q_OBJECT
@@ -19,10 +42,16 @@ class tst_QByteArray : public QObject
 public:
     tst_QByteArray();
 private slots:
-    // Note: much of the shared API is tested in ../qbytearrayapisymmetry/
     void swap();
     void qChecksum_data();
     void qChecksum();
+    void qCompress_data();
+#ifndef QT_NO_COMPRESS
+    void qCompress();
+    void qUncompressCorruptedData_data();
+    void qUncompressCorruptedData();
+    void qCompressionZeroTermination();
+#endif
     void constByteArray();
     void leftJustified();
     void rightJustified();
@@ -57,13 +86,27 @@ private slots:
     void replace_data();
     void replace();
     void replaceWithSpecifiedLength();
+    void toLong_data();
+    void toLong();
+    void toULong_data();
+    void toULong();
+    void toLongLong_data();
+    void toLongLong();
+    void toULongLong_data();
+    void toULongLong();
 
     void number();
-    void number_double_data();
-    void number_double();
     void number_base_data();
     void number_base();
-    void nullness();
+    void toShort();
+    void toUShort();
+    void toInt_data();
+    void toInt();
+    void toUInt_data();
+    void toUInt();
+    void toFloat();
+    void toDouble_data();
+    void toDouble();
     void blockSizeCalculations();
 
     void resizeAfterFromRawData();
@@ -75,8 +118,8 @@ private slots:
     void fromPercentEncoding();
     void toPercentEncoding_data();
     void toPercentEncoding();
-    void pecentEncodingRoundTrip_data();
-    void pecentEncodingRoundTrip();
+    void toPercentEncoding2_data();
+    void toPercentEncoding2();
 
     void qstrcmp_data();
     void qstrcmp();
@@ -93,7 +136,6 @@ private slots:
     void reserve();
     void reserveExtended_data();
     void reserveExtended();
-    void resize();
     void movablity_data();
     void movablity();
     void literals();
@@ -111,6 +153,8 @@ private slots:
     void fill();
     void dataPointers();
     void truncate();
+    void trimmed();
+    void trimmed_data();
     void simplified();
     void simplified_data();
     void left();
@@ -143,7 +187,7 @@ QByteArray verifyZeroTermination(const QByteArray &ba)
     if (!baDataPtr->isMutable())
         return ba;
 
-    qsizetype baSize = ba.size();
+    int baSize = ba.size();
     char baTerminator = ba.constData()[baSize];
     if ('\0' != baTerminator)
         return QString::fromUtf8(
@@ -224,6 +268,85 @@ void tst_QByteArray::qChecksum()
     QCOMPARE(::qChecksum(QByteArrayView(data.constData(), len), standard), static_cast<quint16>(checksum));
 }
 
+void tst_QByteArray::qCompress_data()
+{
+    QTest::addColumn<QByteArray>("ba");
+
+    const int size1 = 1024*1024;
+    QByteArray ba1( size1, 0 );
+
+    QTest::newRow( "00" ) << QByteArray();
+
+    int i;
+    for ( i=0; i<size1; i++ )
+        ba1[i] = (char)( i / 1024 );
+    QTest::newRow( "01" ) << ba1;
+
+    for ( i=0; i<size1; i++ )
+        ba1[i] = (char)( i % 256 );
+    QTest::newRow( "02" ) << ba1;
+
+    ba1.fill( 'A' );
+    QTest::newRow( "03" ) << ba1;
+
+    QFile file( QFINDTESTDATA("rfc3252.txt") );
+    QVERIFY( file.open(QIODevice::ReadOnly) );
+    QTest::newRow( "04" ) << file.readAll();
+}
+
+#ifndef QT_NO_COMPRESS
+void tst_QByteArray::qCompress()
+{
+    QFETCH( QByteArray, ba );
+    QByteArray compressed = ::qCompress( ba );
+    QTEST( ::qUncompress( compressed ), "ba" );
+}
+
+void tst_QByteArray::qUncompressCorruptedData_data()
+{
+    QTest::addColumn<QByteArray>("in");
+
+    QTest::newRow("0x00000000") << QByteArray("\x00\x00\x00\x00", 4);
+    QTest::newRow("0x000000ff") << QByteArray("\x00\x00\x00\xff", 4);
+    QTest::newRow("0x3f000000") << QByteArray("\x3f\x00\x00\x00", 4);
+    QTest::newRow("0x3fffffff") << QByteArray("\x3f\xff\xff\xff", 4);
+    QTest::newRow("0x7fffff00") << QByteArray("\x7f\xff\xff\x00", 4);
+    QTest::newRow("0x7fffffff") << QByteArray("\x7f\xff\xff\xff", 4);
+    QTest::newRow("0x80000000") << QByteArray("\x80\x00\x00\x00", 4);
+    QTest::newRow("0x800000ff") << QByteArray("\x80\x00\x00\xff", 4);
+    QTest::newRow("0xcf000000") << QByteArray("\xcf\x00\x00\x00", 4);
+    QTest::newRow("0xcfffffff") << QByteArray("\xcf\xff\xff\xff", 4);
+    QTest::newRow("0xffffff00") << QByteArray("\xff\xff\xff\x00", 4);
+    QTest::newRow("0xffffffff") << QByteArray("\xff\xff\xff\xff", 4);
+}
+
+// Corrupt data causes this test to lock up on HP-UX / PA-RISC with gcc,
+// SOLARIS, and Windows.
+// This test is expected to produce some warning messages in the test output.
+void tst_QByteArray::qUncompressCorruptedData()
+{
+#if !(defined(Q_OS_HPUX) && !defined(__ia64) && defined(Q_CC_GNU)) && !defined(Q_OS_SOLARIS) && !defined(Q_OS_WIN)
+    QFETCH(QByteArray, in);
+
+    QByteArray res;
+    res = ::qUncompress(in);
+    QCOMPARE(res, QByteArray());
+
+    res = ::qUncompress(in + "blah");
+    QCOMPARE(res, QByteArray());
+#else
+    QSKIP("This test freezes on this platform");
+#endif
+}
+
+void tst_QByteArray::qCompressionZeroTermination()
+{
+    QString s = "Hello, I'm a string.";
+    QByteArray ba = ::qUncompress(::qCompress(s.toLocal8Bit()));
+    QVERIFY((int) *(ba.data() + ba.size()) == 0);
+}
+
+#endif
 
 void tst_QByteArray::constByteArray()
 {
@@ -700,18 +823,18 @@ void tst_QByteArray::qvsnprintf()
 void tst_QByteArray::qstrlen()
 {
     const char *src = "Something about ... \0 a string.";
-    QCOMPARE(::qstrlen(nullptr), size_t(0));
-    QCOMPARE(::qstrlen(src), size_t(20));
+    QCOMPARE(::qstrlen((char*)0), (uint)0);
+    QCOMPARE(::qstrlen(src), (uint)20);
 }
 
 void tst_QByteArray::qstrnlen()
 {
     const char *src = "Something about ... \0 a string.";
-    QCOMPARE(::qstrnlen(nullptr, 1), size_t(0));
-    QCOMPARE(::qstrnlen(src, 31), size_t(20));
-    QCOMPARE(::qstrnlen(src, 19), size_t(19));
-    QCOMPARE(::qstrnlen(src, 21), size_t(20));
-    QCOMPARE(::qstrnlen(src, 20), size_t(20));
+    QCOMPARE(::qstrnlen((char*)0, 1), (uint)0);
+    QCOMPARE(::qstrnlen(src, 31), (uint)20);
+    QCOMPARE(::qstrnlen(src, 19), (uint)19);
+    QCOMPARE(::qstrnlen(src, 21), (uint)20);
+    QCOMPARE(::qstrnlen(src, 20), (uint)20);
 }
 
 void tst_QByteArray::qstrcpy()
@@ -854,7 +977,6 @@ void tst_QByteArray::append()
     QCOMPARE(QByteArray().append(2, 'a'), QByteArray("aa"));
     QCOMPARE(QByteArray().append(QByteArray("data")), QByteArray("data"));
     QCOMPARE(QByteArray().append(data), QByteArray("data"));
-    QCOMPARE(QByteArray().append(data, -1), QByteArray("data"));
     QCOMPARE(QByteArray().append(data, 2), QByteArray("da"));
     QCOMPARE(QByteArray().append(QByteArrayView(data)), QByteArray("data"));
 
@@ -1162,56 +1284,18 @@ void tst_QByteArray::replaceWithSpecifiedLength()
 
 void tst_QByteArray::number()
 {
-    QCOMPARE(QByteArray::number(quint64(0)), QByteArray("0"));
-    QCOMPARE(QByteArray::number(Q_UINT64_C(0xFFFFFFFFFFFFFFFF)),
-             QByteArray("18446744073709551615"));
-    QCOMPARE(QByteArray::number(Q_INT64_C(0xFFFFFFFFFFFFFFFF)), QByteArray("-1"));
-    QCOMPARE(QByteArray::number(qint64(0)), QByteArray("0"));
-    QCOMPARE(QByteArray::number(Q_INT64_C(0x7FFFFFFFFFFFFFFF)),
-             QByteArray("9223372036854775807"));
-    QCOMPARE(QByteArray::number(Q_INT64_C(0x8000000000000000)),
-             QByteArray("-9223372036854775808"));
-}
-
-void tst_QByteArray::number_double_data()
-{
-    QTest::addColumn<double>("value");
-    QTest::addColumn<char>("format");
-    QTest::addColumn<int>("precision");
-    QTest::addColumn<QByteArray>("expected");
-
-    // This function is implemented in ../shared/test_number_shared.h
-    add_number_double_shared_data([](NumberDoubleTestData datum) {
-        QByteArray ba(datum.expected.data(), datum.expected.size());
-        const char *title = !datum.optTitle.isEmpty() ? datum.optTitle.data() : ba.data();
-        QTest::addRow("%s, format '%c', precision %d", title, datum.f, datum.p)
-                << datum.d << datum.f << datum.p << ba;
-        if (datum.f != 'f') { // Also test uppercase format
-            datum.f = toupper(datum.f);
-            QByteArray upper = ba.toUpper();
-            QByteArray upperTitle = QByteArray(title);
-            if (!datum.optTitle.isEmpty())
-                upperTitle += ", uppercase";
-            else
-                upperTitle = upperTitle.toUpper();
-            QTest::addRow("%s, format '%c', precision %d", upperTitle.data(), datum.f, datum.p)
-                    << datum.d << datum.f << datum.p << upper;
-        }
-    });
-}
-
-void tst_QByteArray::number_double()
-{
-    QFETCH(double, value);
-    QFETCH(char, format);
-    QFETCH(int, precision);
-
-    if constexpr (std::numeric_limits<double>::has_denorm != std::denorm_present) {
-        if (::qstrcmp(QTest::currentDataTag(), "Very small number, very high precision, format 'f', precision 350") == 0) {
-            QSKIP("Skipping 'denorm' as this type lacks denormals on this system");
-        }
-    }
-    QTEST(QByteArray::number(value, format, precision), "expected");
+    QCOMPARE(QString(QByteArray::number((quint64) 0)),
+             QString(QByteArray("0")));
+    QCOMPARE(QString(QByteArray::number(Q_UINT64_C(0xFFFFFFFFFFFFFFFF))),
+             QString(QByteArray("18446744073709551615")));
+    QCOMPARE(QString(QByteArray::number(Q_INT64_C(0xFFFFFFFFFFFFFFFF))),
+             QString(QByteArray("-1")));
+    QCOMPARE(QString(QByteArray::number(qint64(0))),
+             QString(QByteArray("0")));
+    QCOMPARE(QString(QByteArray::number(Q_INT64_C(0x7FFFFFFFFFFFFFFF))),
+             QString(QByteArray("9223372036854775807")));
+    QCOMPARE(QString(QByteArray::number(Q_INT64_C(0x8000000000000000))),
+             QString(QByteArray("-9223372036854775808")));
 }
 
 void tst_QByteArray::number_base_data()
@@ -1265,36 +1349,398 @@ void tst_QByteArray::number_base()
     }
 }
 
-void tst_QByteArray::nullness()
+void tst_QByteArray::toShort()
 {
-    {
-        QByteArray ba;
-        QVERIFY(ba.isNull());
+    bool ok = true; // opposite to the next expected result
+
+    QCOMPARE(QByteArray().toShort(&ok), 0);
+    QVERIFY(!ok);
+
+    QCOMPARE(QByteArray("").toShort(&ok), 0);
+    QVERIFY(!ok);
+
+    QCOMPARE(QByteArray("12345").toShort(&ok), 12345);
+    QVERIFY(ok);
+
+    QCOMPARE(QByteArray("-12345").toShort(&ok), -12345);
+    QVERIFY(ok);
+
+    QCOMPARE(QByteArray("32767").toShort(&ok), 32767);
+    QVERIFY(ok);
+
+    QCOMPARE(QByteArray("-32768").toShort(&ok), -32768);
+    QVERIFY(ok);
+
+    QCOMPARE(QByteArray("32768").toShort(&ok), 0);
+    QVERIFY(!ok);
+
+    QCOMPARE(QByteArray("-32769").toShort(&ok), 0);
+    QVERIFY(!ok);
+}
+
+void tst_QByteArray::toUShort()
+{
+    bool ok = true; // opposite to the next expected result
+
+    QCOMPARE(QByteArray().toUShort(&ok), 0);
+    QVERIFY(!ok);
+
+    QCOMPARE(QByteArray("").toUShort(&ok), 0);
+    QVERIFY(!ok);
+
+    QCOMPARE(QByteArray("12345").toUShort(&ok), 12345);
+    QVERIFY(ok);
+
+    QCOMPARE(QByteArray("-12345").toUShort(&ok), 0);
+    QVERIFY(!ok);
+
+    QCOMPARE(QByteArray("32767").toUShort(&ok), 32767);
+    QVERIFY(ok);
+
+    QCOMPARE(QByteArray("32768").toUShort(&ok), 32768);
+    QVERIFY(ok);
+
+    QCOMPARE(QByteArray("65535").toUShort(&ok), 65535);
+    QVERIFY(ok);
+
+    QCOMPARE(QByteArray("65536").toUShort(&ok), 0);
+    QVERIFY(!ok);
+}
+
+// defined later
+extern const char globalChar;
+
+void tst_QByteArray::toInt_data()
+{
+    QTest::addColumn<QByteArray>("string");
+    QTest::addColumn<int>("base");
+    QTest::addColumn<int>("expectednumber");
+    QTest::addColumn<bool>("expectedok");
+
+    QTest::newRow("null") << QByteArray() << 10 << 0 << false;
+    QTest::newRow("empty") << QByteArray("") << 10 << 0 << false;
+
+    QTest::newRow("base 10") << QByteArray("100") << 10 << int(100) << true;
+    QTest::newRow("base 16-1") << QByteArray("100") << 16 << int(256) << true;
+    QTest::newRow("base 16-2") << QByteArray("0400") << 16 << int(1024) << true;
+    QTest::newRow("base 2") << QByteArray("1111") << 2 << int(15) << true;
+    QTest::newRow("base 8") << QByteArray("100") << 8 << int(64) << true;
+    QTest::newRow("base 0-1") << QByteArray("0x10") << 0 << int(16) << true;
+    QTest::newRow("base 0-2") << QByteArray("10") << 0 << int(10) << true;
+    QTest::newRow("base 0-3") << QByteArray("010") << 0 << int(8) << true;
+    QTest::newRow("empty") << QByteArray() << 0 << int(0) << false;
+
+    QTest::newRow("leading space") << QByteArray(" 100") << 10 << int(100) << true;
+    QTest::newRow("trailing space") << QByteArray("100 ") << 10 << int(100) << true;
+    QTest::newRow("leading junk") << QByteArray("x100") << 10 << int(0) << false;
+    QTest::newRow("trailing junk") << QByteArray("100x") << 10 << int(0) << false;
+
+    // using fromRawData
+    QTest::newRow("raw1") << QByteArray::fromRawData("1", 1) << 10 << 1 << true;
+    QTest::newRow("raw2") << QByteArray::fromRawData("1foo", 1) << 10 << 1 << true;
+    QTest::newRow("raw3") << QByteArray::fromRawData("12", 1) << 10 << 1 << true;
+    QTest::newRow("raw4") << QByteArray::fromRawData("123456789", 1) << 10 << 1 << true;
+    QTest::newRow("raw5") << QByteArray::fromRawData("123456789", 2) << 10 << 12 << true;
+
+    QTest::newRow("raw-static") << QByteArray::fromRawData(&globalChar, 1) << 10 << 1 << true;
+}
+
+void tst_QByteArray::toInt()
+{
+    QFETCH( QByteArray, string );
+    QFETCH( int, base );
+    QFETCH( int, expectednumber );
+    QFETCH( bool, expectedok );
+
+    bool ok;
+    int number = string.toInt(&ok, base);
+
+    QCOMPARE( ok, expectedok );
+    QCOMPARE( number, expectednumber );
+}
+
+void tst_QByteArray::toUInt_data()
+{
+    QTest::addColumn<QByteArray>("string");
+    QTest::addColumn<int>("base");
+    QTest::addColumn<uint>("expectednumber");
+    QTest::addColumn<bool>("expectedok");
+
+    QTest::newRow("null") << QByteArray() << 10 << 0u << false;
+    QTest::newRow("empty") << QByteArray("") << 10 << 0u << false;
+
+    QTest::newRow("negative value") << QByteArray("-50") << 10 << 0u << false;
+    QTest::newRow("more than MAX_INT") << QByteArray("3234567890") << 10 << 3234567890u << true;
+    QTest::newRow("2^32 - 1") << QByteArray("4294967295") << 10 << 4294967295u << true;
+    if (sizeof(int) == 4)
+        QTest::newRow("2^32") << QByteArray("4294967296") << 10 << 0u << false;
+}
+
+void tst_QByteArray::toUInt()
+{
+    QFETCH(QByteArray, string);
+    QFETCH(int, base);
+    QFETCH(uint, expectednumber);
+    QFETCH(bool, expectedok);
+
+    bool ok;
+    const uint number = string.toUInt(&ok, base);
+
+    QCOMPARE(ok, expectedok);
+    QCOMPARE(number, expectednumber);
+}
+
+void tst_QByteArray::toFloat()
+{
+    bool ok = true; // opposite to the next expected result
+
+    QCOMPARE(QByteArray().toFloat(&ok), 0.0f);
+    QVERIFY(!ok);
+
+    QCOMPARE(QByteArray("").toFloat(&ok), 0.0f);
+    QVERIFY(!ok);
+
+    const QByteArray data("0.000000000931322574615478515625");
+    const float expectedValue = 9.31322574615478515625e-10f;
+    QCOMPARE(data.toFloat(&ok), expectedValue);
+    QVERIFY(ok);
+}
+
+void tst_QByteArray::toDouble_data()
+{
+    QTest::addColumn<QByteArray>("string");
+    QTest::addColumn<double>("expectedNumber");
+    QTest::addColumn<bool>("expectedOk");
+
+    QTest::newRow("null") << QByteArray() << 0.0 << false;
+    QTest::newRow("empty") << QByteArray("") << 0.0 << false;
+
+    QTest::newRow("decimal") << QByteArray("1.2345") << 1.2345 << true;
+    QTest::newRow("exponent lowercase") << QByteArray("1.2345e+01") << 12.345 << true;
+    QTest::newRow("exponent uppercase") << QByteArray("1.2345E+02") << 123.45 << true;
+    QTest::newRow("leading spaces") << QByteArray(" \n\r\t1.2345") << 1.2345 << true;
+    QTest::newRow("trailing spaces") << QByteArray("1.2345 \n\r\t") << 1.2345 << true;
+    QTest::newRow("leading junk") << QByteArray("x1.2345") << 0.0 << false;
+    QTest::newRow("trailing junk") << QByteArray("1.2345x") << 0.0 << false;
+    QTest::newRow("high precision") << QByteArray("0.000000000931322574615478515625")
+                                    << 0.000000000931322574615478515625 << true;
+
+    QTest::newRow("raw, null plus junk") << QByteArray::fromRawData("1.2\0 junk", 9) << 0.0 << false;
+    QTest::newRow("raw, null-terminator not included") << QByteArray::fromRawData("2.3", 3) << 2.3 << true;
+}
+
+void tst_QByteArray::toDouble()
+{
+    QFETCH(QByteArray, string);
+    QFETCH(double, expectedNumber);
+    QFETCH(bool, expectedOk);
+
+    bool ok;
+    const double number = string.toDouble(&ok);
+
+    QCOMPARE(ok, expectedOk);
+    QCOMPARE(number, expectedNumber);
+}
+
+void tst_QByteArray::toLong_data()
+{
+    QTest::addColumn<QByteArray>("str");
+    QTest::addColumn<int>("base");
+    QTest::addColumn<long>("result");
+    QTest::addColumn<bool>("ok");
+
+    QTest::newRow("null") << QByteArray() << 10 << 0L << false;
+    QTest::newRow("empty") << QByteArray("") << 16 << 0L << false;
+    QTest::newRow("in range dec") << QByteArray("1608507359") << 10 << 1608507359L << true;
+    QTest::newRow("in range dec neg") << QByteArray("-1608507359") << 10 << -1608507359L << true;
+    QTest::newRow("in range hex") << QByteArray("12ABCDEF") << 16 << 0x12ABCDEFL << true;
+    QTest::newRow("in range hex neg") << QByteArray("-12ABCDEF") << 16 << -0x12ABCDEFL << true;
+    QTest::newRow("Fibonacci's last int32") << QByteArray("1836311903") << 10 << 1836311903L
+                                            << true;
+
+    QTest::newRow("leading spaces") << QByteArray(" \r\n\tABC123") << 16 << 0xABC123L << true;
+    QTest::newRow("trailing spaces") << QByteArray("1234567\t\r \n") << 10 << 1234567L << true;
+    QTest::newRow("leading junk") << QByteArray("q12345") << 10 << 0L << false;
+    QTest::newRow("trailing junk") << QByteArray("abc12345t") << 16 << 0L << false;
+
+    QTest::newRow("dec with base 0") << QByteArray("123") << 0 << 123L << true;
+    QTest::newRow("neg dec with base 0") << QByteArray("-123") << 0 << -123L << true;
+    QTest::newRow("hex with base 0") << QByteArray("0x123") << 0 << 0x123L << true;
+    QTest::newRow("neg hex with base 0") << QByteArray("-0x123") << 0 << -0x123L << true;
+    QTest::newRow("oct with base 0") << QByteArray("0123") << 0 << 0123L << true;
+    QTest::newRow("neg oct with base 0") << QByteArray("-0123") << 0 << -0123L << true;
+
+    QTest::newRow("base 3") << QByteArray("12012") << 3 << 140L << true;
+    QTest::newRow("neg base 3") << QByteArray("-201") << 3 << -19L << true;
+
+    using Bounds = std::numeric_limits<long>;
+    QTest::newRow("long max") << QByteArray::number(Bounds::max()) << 10 << Bounds::max() << true;
+    QTest::newRow("long min") << QByteArray::number(Bounds::min()) << 10 << Bounds::min() << true;
+
+    using B32 = std::numeric_limits<qint32>;
+    QTest::newRow("int32 min bin") << (QByteArray("-1") + QByteArray(31, '0')) << 2
+                                   << long(B32::min()) << true;
+    QTest::newRow("int32 max bin") << QByteArray(31, '1') << 2 << long(B32::max()) << true;
+    QTest::newRow("int32 min hex") << QByteArray("-80000000") << 16 << long(B32::min()) << true;
+    QTest::newRow("int32 max hex") << QByteArray("7fffffff") << 16 << long(B32::max()) << true;
+    QTest::newRow("int32 min dec") << QByteArray("-2147483648") << 10 << long(B32::min()) << true;
+    QTest::newRow("int32 max dec") << QByteArray("2147483647") << 10 << long(B32::max()) << true;
+
+    if constexpr (sizeof(long) < sizeof(qlonglong)) {
+        const qlonglong longMaxPlusOne = static_cast<qlonglong>(Bounds::max()) + 1;
+        const qlonglong longMinMinusOne = static_cast<qlonglong>(Bounds::min()) - 1;
+        QTest::newRow("long max + 1") << QByteArray::number(longMaxPlusOne) << 10 << 0L << false;
+        QTest::newRow("long min - 1") << QByteArray::number(longMinMinusOne) << 10 << 0L << false;
     }
-    {
-        QByteArray ba = nullptr;
-        QVERIFY(ba.isNull());
+}
+
+void tst_QByteArray::toLong()
+{
+    QFETCH(QByteArray, str);
+    QFETCH(int, base);
+    QFETCH(long, result);
+    QFETCH(bool, ok);
+
+    bool b;
+    QCOMPARE(str.toLong(nullptr, base), result);
+    QCOMPARE(str.toLong(&b, base), result);
+    QCOMPARE(b, ok);
+    if (base == 10) {
+        // check that by default base is assumed to be 10
+        QCOMPARE(str.toLong(&b), result);
+        QCOMPARE(b, ok);
     }
-    {
-        const char *ptr = nullptr;
-        QByteArray ba = ptr;
-        QVERIFY(ba.isNull());
+}
+
+void tst_QByteArray::toULong_data()
+{
+    QTest::addColumn<QByteArray>("str");
+    QTest::addColumn<int>("base");
+    QTest::addColumn<ulong>("result");
+    QTest::addColumn<bool>("ok");
+
+    ulong LongMaxPlusOne = (ulong)LONG_MAX + 1;
+    QTest::newRow("LONG_MAX+1") << QString::number(LongMaxPlusOne).toUtf8() << 10 << LongMaxPlusOne << true;
+    QTest::newRow("null") << QByteArray() << 10 << 0UL << false;
+    QTest::newRow("empty") << QByteArray("") << 10 << 0UL << false;
+    QTest::newRow("ulong1") << QByteArray("3234567890") << 10 << 3234567890UL << true;
+    QTest::newRow("ulong2") << QByteArray("fFFfFfFf") << 16 << 0xFFFFFFFFUL << true;
+
+    QTest::newRow("leading spaces") << QByteArray(" \n\r\t100") << 10 << 100UL << true;
+    QTest::newRow("trailing spaces") << QByteArray("100 \n\r\t") << 10 << 100UL << true;
+    QTest::newRow("leading junk") << QByteArray("x100") << 10 << 0UL << false;
+    QTest::newRow("trailing junk") << QByteArray("100x") << 10 << 0UL << false;
+}
+
+void tst_QByteArray::toULong()
+{
+    QFETCH(QByteArray, str);
+    QFETCH(int, base);
+    QFETCH(ulong, result);
+    QFETCH(bool, ok);
+
+    bool b;
+    QCOMPARE(str.toULong(0, base), result);
+    QCOMPARE(str.toULong(&b, base), result);
+    QCOMPARE(b, ok);
+}
+
+void tst_QByteArray::toLongLong_data()
+{
+    QTest::addColumn<QByteArray>("str");
+    QTest::addColumn<int>("base");
+    QTest::addColumn<qlonglong>("result");
+    QTest::addColumn<bool>("ok");
+
+    QTest::newRow("null") << QByteArray() << 10 << 0LL << false;
+    QTest::newRow("empty") << QByteArray("") << 10 << 0LL << false;
+    QTest::newRow("out of base bound") << QByteArray("c") << 10 << 0LL << false;
+
+    QTest::newRow("in range dec") << QByteArray("7679359922672374856") << 10
+                                  << 7679359922672374856LL << true;
+    QTest::newRow("in range dec neg") << QByteArray("-7679359922672374856") << 10
+                                      << -7679359922672374856LL << true;
+    QTest::newRow("in range hex") << QByteArray("6A929129A5421448") << 16 << 0x6A929129A5421448LL
+                                  << true;
+    QTest::newRow("in range hex neg") << QByteArray("-6A929129A5421448") << 16
+                                      << -0x6A929129A5421448LL << true;
+    QTest::newRow("Fibonacci's last int64") << QByteArray("7540113804746346429") << 10
+                                            << 7540113804746346429LL << true;
+
+    QTest::newRow("leading spaces") << QByteArray(" \r\n\tABCFFFFFFF123") << 16
+                                    << 0xABCFFFFFFF123LL << true;
+    QTest::newRow("trailing spaces") << QByteArray("9876543210\t\r \n") << 10
+                                     << 9876543210LL << true;
+    QTest::newRow("leading junk") << QByteArray("q12345") << 10 << 0LL << false;
+    QTest::newRow("trailing junk") << QByteArray("abc12345t") << 16 << 0LL << false;
+
+    QTest::newRow("dec with base 0") << QByteArray("9876543210") << 0 << 9876543210LL << true;
+    QTest::newRow("neg dec with base 0") << QByteArray("-9876543210") << 0 << -9876543210LL << true;
+    QTest::newRow("hex with base 0") << QByteArray("0x9876543210") << 0 << 0x9876543210LL << true;
+    QTest::newRow("neg hex with base 0") << QByteArray("-0x9876543210") << 0 << -0x9876543210LL
+                                         << true;
+    QTest::newRow("oct with base 0") << QByteArray("07654321234567") << 0 << 07654321234567LL
+                                     << true;
+    QTest::newRow("neg oct with base 0") << QByteArray("-07654321234567") << 0 << -07654321234567LL
+                                         << true;
+
+    QTest::newRow("base 3") << QByteArray("12012") << 3 << 140LL << true;
+    QTest::newRow("neg base 3") << QByteArray("-201") << 3 << -19LL << true;
+
+    QTest::newRow("max dec") << QByteArray("9223372036854775807") << 10 << 9223372036854775807LL
+                             << true;
+    QTest::newRow("mix hex") << QByteArray("-7FFFFFFFFFFFFFFF") << 16 << -0x7FFFFFFFFFFFFFFFLL
+                             << true;
+
+    QTest::newRow("max + 1 dec") << QByteArray("9223372036854775808") << 10 << 0LL << false;
+    QTest::newRow("min - 1 hex") << QByteArray("-8000000000000001") << 16 << 0LL << false;
+}
+
+void tst_QByteArray::toLongLong()
+{
+    QFETCH(QByteArray, str);
+    QFETCH(int, base);
+    QFETCH(qlonglong, result);
+    QFETCH(bool, ok);
+
+    bool b;
+    QCOMPARE(str.toLongLong(nullptr, base), result);
+    QCOMPARE(str.toLongLong(&b, base), result);
+    QCOMPARE(b, ok);
+    if (base == 10) {
+        QCOMPARE(str.toLongLong(&b), result);
+        QCOMPARE(b, ok);
     }
-    {
-        QByteArray ba(nullptr, 0);
-        QVERIFY(ba.isNull());
-    }
-    {
-        const char *ptr = nullptr;
-        QByteArray ba(ptr, 0);
-        QVERIFY(ba.isNull());
-    }
-    {
-        QByteArrayView bav;
-        QVERIFY(bav.isNull());
-        QByteArray ba = bav.toByteArray();
-        QVERIFY(ba.isNull());
-    }
+}
+
+void tst_QByteArray::toULongLong_data()
+{
+    QTest::addColumn<QByteArray>("str");
+    QTest::addColumn<int>("base");
+    QTest::addColumn<qulonglong>("result");
+    QTest::addColumn<bool>("ok");
+
+    QTest::newRow("null") << QByteArray() << 10 << (qulonglong)0 << false;
+    QTest::newRow("empty") << QByteArray("") << 10 << (qulonglong)0 << false;
+    QTest::newRow("out of base bound") << QByteArray("c") << 10 << (qulonglong)0 << false;
+
+    QTest::newRow("leading spaces") << QByteArray(" \n\r\t100") << 10 << qulonglong(100) << true;
+    QTest::newRow("trailing spaces") << QByteArray("100 \n\r\t") << 10 << qulonglong(100) << true;
+    QTest::newRow("leading junk") << QByteArray("x100") << 10 << qulonglong(0) << false;
+    QTest::newRow("trailing junk") << QByteArray("100x") << 10 << qulonglong(0) << false;
+}
+
+void tst_QByteArray::toULongLong()
+{
+    QFETCH(QByteArray, str);
+    QFETCH(int, base);
+    QFETCH(qulonglong, result);
+    QFETCH(bool, ok);
+
+    bool b;
+    QCOMPARE(str.toULongLong(0, base), result);
+    QCOMPARE(str.toULongLong(&b, base), result);
+    QCOMPARE(b, ok);
 }
 
 static bool checkSize(qsizetype value, qsizetype min)
@@ -1547,16 +1993,16 @@ void tst_QByteArray::toFromPercentEncoding()
     QCOMPARE(QByteArray("").toPercentEncoding(), QByteArray(""));
 
     QByteArray data = arr.toPercentEncoding();
-    QCOMPARE(data, QByteArray("Qt%20is%20great%21"));
-    QCOMPARE(data.percentDecoded(), arr);
+    QCOMPARE(QString(data), QString("Qt%20is%20great%21"));
+    QCOMPARE(QByteArray::fromPercentEncoding(data), arr);
 
     data = arr.toPercentEncoding("! ", "Qt");
-    QCOMPARE(data, QByteArray("%51%74 is grea%74!"));
-    QCOMPARE(data.percentDecoded(), arr);
+    QCOMPARE(QString(data), QString("%51%74 is grea%74!"));
+    QCOMPARE(QByteArray::fromPercentEncoding(data), arr);
 
     data = arr.toPercentEncoding(QByteArray(), "abcdefghijklmnopqrstuvwxyz", 'Q');
-    QCOMPARE(data, QByteArray("Q51Q74Q20Q69Q73Q20Q67Q72Q65Q61Q74Q21"));
-    QCOMPARE(data.percentDecoded('Q'), arr);
+    QCOMPARE(QString(data), QString("Q51Q74Q20Q69Q73Q20Q67Q72Q65Q61Q74Q21"));
+    QCOMPARE(QByteArray::fromPercentEncoding(data, 'Q'), arr);
 
     // verify that to/from percent encoding preserves nullity
     arr = "";
@@ -1572,16 +2018,8 @@ void tst_QByteArray::toFromPercentEncoding()
     QVERIFY(arr.isNull());
     QVERIFY(arr.toPercentEncoding().isEmpty());
     QVERIFY(arr.toPercentEncoding().isNull());
-    QVERIFY(QByteArray().percentDecoded().isEmpty());
-    QVERIFY(QByteArray().percentDecoded().isNull());
-
-    // Verify that literal % in the string to be encoded does round-trip:
-    arr = "Qt%20is%20great%21";
-    data = arr.toPercentEncoding();
-    QCOMPARE(data.percentDecoded(), arr);
-    arr = "87% of all statistics are made up!";
-    data = arr.toPercentEncoding();
-    QCOMPARE(data.percentDecoded(), arr);
+    QVERIFY(QByteArray::fromPercentEncoding(QByteArray()).isEmpty());
+    QVERIFY(QByteArray::fromPercentEncoding(QByteArray()).isNull());
 }
 
 void tst_QByteArray::fromPercentEncoding_data()
@@ -1603,7 +2041,7 @@ void tst_QByteArray::fromPercentEncoding()
     QFETCH(QByteArray, encodedString);
     QFETCH(QByteArray, decodedString);
 
-    QCOMPARE(encodedString.percentDecoded(), decodedString);
+    QCOMPARE(QByteArray::fromPercentEncoding(encodedString), decodedString);
 }
 
 void tst_QByteArray::toPercentEncoding_data()
@@ -1628,34 +2066,36 @@ void tst_QByteArray::toPercentEncoding()
     QCOMPARE(decodedString.toPercentEncoding("/.").constData(), encodedString.constData());
 }
 
-void tst_QByteArray::pecentEncodingRoundTrip_data()
+void tst_QByteArray::toPercentEncoding2_data()
 {
     QTest::addColumn<QByteArray>("original");
     QTest::addColumn<QByteArray>("encoded");
     QTest::addColumn<QByteArray>("excludeInEncoding");
     QTest::addColumn<QByteArray>("includeInEncoding");
 
-    QTest::newRow("unchanged")
-        << QByteArray("abcdevghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345678-._~")
-        << QByteArray("abcdevghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345678-._~")
-        << QByteArray("") << QByteArray("");
-    QTest::newRow("enclosed-space-quote")
-        << QByteArray("{\t\n\r^\"abc}")
-        << QByteArray("%7B%09%0A%0D%5E%22abc%7D")
-        << QByteArray("") << QByteArray("");
-    QTest::newRow("punctuate")
-        << QByteArray("://?#[]@!$&'()*+,;=")
-        << QByteArray("%3A%2F%2F%3F%23%5B%5D%40%21%24%26%27%28%29%2A%2B%2C%3B%3D")
-        << QByteArray("") << QByteArray("");
-    QTest::newRow("punctuate-exclude")
-        << QByteArray("://?#[]@!$&'()*+,;=")
-        << QByteArray("%3A%2F%2F%3F%23%5B%5D%40!$&'()*+,;=")
-        << QByteArray("!$&'()*+,;=") << QByteArray("");
-    QTest::newRow("text-include")
-        << QByteArray("abcd") << QByteArray("a%62%63d") << QByteArray("") << QByteArray("bc");
+    QTest::newRow("test_01") << QByteArray("abcdevghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345678-._~")
+                          << QByteArray("abcdevghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345678-._~")
+                          << QByteArray("")
+                          << QByteArray("");
+    QTest::newRow("test_02") << QByteArray("{\t\n\r^\"abc}")
+                          << QByteArray("%7B%09%0A%0D%5E%22abc%7D")
+                          << QByteArray("")
+                          << QByteArray("");
+    QTest::newRow("test_03") << QByteArray("://?#[]@!$&'()*+,;=")
+                          << QByteArray("%3A%2F%2F%3F%23%5B%5D%40%21%24%26%27%28%29%2A%2B%2C%3B%3D")
+                          << QByteArray("")
+                          << QByteArray("");
+    QTest::newRow("test_04") << QByteArray("://?#[]@!$&'()*+,;=")
+                          << QByteArray("%3A%2F%2F%3F%23%5B%5D%40!$&'()*+,;=")
+                          << QByteArray("!$&'()*+,;=")
+                          << QByteArray("");
+    QTest::newRow("test_05") << QByteArray("abcd")
+                          << QByteArray("a%62%63d")
+                          << QByteArray("")
+                          << QByteArray("bc");
 }
 
-void tst_QByteArray::pecentEncodingRoundTrip()
+void tst_QByteArray::toPercentEncoding2()
 {
     QFETCH(QByteArray, original);
     QFETCH(QByteArray, encoded);
@@ -1663,8 +2103,8 @@ void tst_QByteArray::pecentEncodingRoundTrip()
     QFETCH(QByteArray, includeInEncoding);
 
     QByteArray encodedData = original.toPercentEncoding(excludeInEncoding, includeInEncoding);
-    QCOMPARE(encodedData, encoded);
-    QCOMPARE(encodedData.percentDecoded(), original);
+    QCOMPARE(encodedData.constData(), encoded.constData());
+    QCOMPARE(original, QByteArray::fromPercentEncoding(encodedData));
 }
 
 struct StringComparisonData
@@ -1747,49 +2187,52 @@ void tst_QByteArray::compare_singular()
 void tst_QByteArray::compareCharStar_data()
 {
     QTest::addColumn<QByteArray>("str1");
-    QTest::addColumn<QByteArray>("string2");
+    QTest::addColumn<QString>("string2");
     QTest::addColumn<int>("result");
 
-    QTest::newRow("null-null") << QByteArray() << QByteArray() << 0;
-    QTest::newRow("null-empty") << QByteArray() << QByteArray("") << 0;
-    QTest::newRow("null-full") << QByteArray() << QByteArray("abc") << -1;
-    QTest::newRow("empty-null") << QByteArray("") << QByteArray() << 0;
-    QTest::newRow("empty-empty") << QByteArray("") << QByteArray("") << 0;
-    QTest::newRow("empty-full") << QByteArray("") << QByteArray("abc") << -1;
-    QTest::newRow("raw-null") << QByteArray::fromRawData("abc", 0) << QByteArray() << 0;
-    QTest::newRow("raw-empty") << QByteArray::fromRawData("abc", 0) << QByteArray("") << 0;
-    QTest::newRow("raw-full") << QByteArray::fromRawData("abc", 0) << QByteArray("abc") << -1;
+    QTest::newRow("null-null") << QByteArray() << QString() << 0;
+    QTest::newRow("null-empty") << QByteArray() << "" << 0;
+    QTest::newRow("null-full") << QByteArray() << "abc" << -1;
+    QTest::newRow("empty-null") << QByteArray("") << QString() << 0;
+    QTest::newRow("empty-empty") << QByteArray("") << "" << 0;
+    QTest::newRow("empty-full") << QByteArray("") << "abc" << -1;
+    QTest::newRow("raw-null") << QByteArray::fromRawData("abc", 0) << QString() << 0;
+    QTest::newRow("raw-empty") << QByteArray::fromRawData("abc", 0) << QString("") << 0;
+    QTest::newRow("raw-full") << QByteArray::fromRawData("abc", 0) << "abc" << -1;
 
-    QTest::newRow("full-null") << QByteArray("abc") << QByteArray() << +1;
-    QTest::newRow("full-empty") << QByteArray("abc") << QByteArray("") << +1;
+    QTest::newRow("full-null") << QByteArray("abc") << QString() << +1;
+    QTest::newRow("full-empty") << QByteArray("abc") << "" << +1;
 
-    QTest::newRow("equal1") << QByteArray("abc") << QByteArray("abc") << 0;
-    QTest::newRow("equal2") << QByteArray("abcd", 3) << QByteArray("abc") << 0;
-    QTest::newRow("equal3") << QByteArray::fromRawData("abcd", 3) << QByteArray("abc") << 0;
+    QTest::newRow("equal1") << QByteArray("abc") << "abc" << 0;
+    QTest::newRow("equal2") << QByteArray("abcd", 3) << "abc" << 0;
+    QTest::newRow("equal3") << QByteArray::fromRawData("abcd", 3) << "abc" << 0;
 
-    QTest::newRow("less1") << QByteArray("ab") << QByteArray("abc") << -1;
-    QTest::newRow("less2") << QByteArray("abb") << QByteArray("abc") << -1;
-    QTest::newRow("less3") << QByteArray::fromRawData("abc", 2) << QByteArray("abc") << -1;
-    QTest::newRow("less4") << QByteArray("", 1) << QByteArray("abc") << -1;
-    QTest::newRow("less5") << QByteArray::fromRawData("", 1) << QByteArray("abc") << -1;
-    QTest::newRow("less6") << QByteArray("a\0bc", 4) << QByteArray("a.bc") << -1;
+    QTest::newRow("less1") << QByteArray("ab") << "abc" << -1;
+    QTest::newRow("less2") << QByteArray("abb") << "abc" << -1;
+    QTest::newRow("less3") << QByteArray::fromRawData("abc", 2) << "abc" << -1;
+    QTest::newRow("less4") << QByteArray("", 1) << "abc" << -1;
+    QTest::newRow("less5") << QByteArray::fromRawData("", 1) << "abc" << -1;
+    QTest::newRow("less6") << QByteArray("a\0bc", 4) << "a.bc" << -1;
 
-    QTest::newRow("greater1") << QByteArray("ac") << QByteArray("abc") << +1;
-    QTest::newRow("greater2") << QByteArray("abd") << QByteArray("abc") << +1;
-    QTest::newRow("greater3") << QByteArray("abcd") << QByteArray("abc") << +1;
-    QTest::newRow("greater4") << QByteArray::fromRawData("abcd", 4) << QByteArray("abc") << +1;
+    QTest::newRow("greater1") << QByteArray("ac") << "abc" << +1;
+    QTest::newRow("greater2") << QByteArray("abd") << "abc" << +1;
+    QTest::newRow("greater3") << QByteArray("abcd") << "abc" << +1;
+    QTest::newRow("greater4") << QByteArray::fromRawData("abcd", 4) << "abc" << +1;
 }
 
 void tst_QByteArray::compareCharStar()
 {
     QFETCH(QByteArray, str1);
-    QFETCH(QByteArray, string2);
+    QFETCH(QString, string2);
     QFETCH(int, result);
 
     const bool isEqual   = result == 0;
     const bool isLess    = result < 0;
     const bool isGreater = result > 0;
-    const char *str2 = string2.isNull() ? nullptr : string2.constData();
+    QByteArray qba = string2.toUtf8();
+    const char *str2 = qba.constData();
+    if (string2.isNull())
+        str2 = 0;
 
     // basic tests:
     QCOMPARE(str1 == str2, isEqual);
@@ -1987,23 +2430,6 @@ void tst_QByteArray::reserveExtended()
     QCOMPARE(array.capacity(), array.size());
 }
 
-void tst_QByteArray::resize()
-{
-    QByteArray ba;
-    ba.resize(15);
-    QCOMPARE(ba.size(), qsizetype(15));
-    ba.resize(10);
-    QCOMPARE(ba.size(), 10);
-    ba.resize(0);
-    QCOMPARE(ba.size(), 0);
-    ba.resize(5, 'a');
-    QCOMPARE(ba.size(), 5);
-    QCOMPARE(ba, "aaaaa");
-    ba.resize(10, 'b');
-    QCOMPARE(ba.size(), 10);
-    QCOMPARE(ba, "aaaaabbbbb");
-}
-
 void tst_QByteArray::movablity_data()
 {
     QTest::addColumn<QByteArray>("array");
@@ -2110,52 +2536,25 @@ void tst_QByteArray::literals()
 
 void tst_QByteArray::userDefinedLiterals()
 {
-    {
-        using namespace Qt::StringLiterals;
-        QByteArray str = "abcd"_ba;
+    QByteArray str = "abcd"_qba;
 
-        QVERIFY(str.length() == 4);
-        QCOMPARE(str.capacity(), 0);
-        QVERIFY(str == "abcd");
-        QVERIFY(!str.data_ptr()->isMutable());
+    QVERIFY(str.length() == 4);
+    QCOMPARE(str.capacity(), 0);
+    QVERIFY(str == "abcd");
+    QVERIFY(!str.data_ptr()->isMutable());
 
-        const char *s = str.constData();
-        QByteArray str2 = str;
-        QVERIFY(str2.constData() == s);
-        QCOMPARE(str2.capacity(), 0);
+    const char *s = str.constData();
+    QByteArray str2 = str;
+    QVERIFY(str2.constData() == s);
+    QCOMPARE(str2.capacity(), 0);
 
-        // detach on non const access
-        QVERIFY(str.data() != s);
-        QVERIFY(str.capacity() >= str.length());
+    // detach on non const access
+    QVERIFY(str.data() != s);
+    QVERIFY(str.capacity() >= str.length());
 
-        QVERIFY(str2.constData() == s);
-        QVERIFY(str2.data() != s);
-        QVERIFY(str2.capacity() >= str2.length());
-    }
-
-#if QT_DEPRECATED_SINCE(6, 8)
-    {
-        QT_IGNORE_DEPRECATIONS(QByteArray str = "abcd"_qba;)
-
-        QVERIFY(str.length() == 4);
-        QCOMPARE(str.capacity(), 0);
-        QVERIFY(str == "abcd");
-        QVERIFY(!str.data_ptr()->isMutable());
-
-        const char *s = str.constData();
-        QByteArray str2 = str;
-        QVERIFY(str2.constData() == s);
-        QCOMPARE(str2.capacity(), 0);
-
-        // detach on non const access
-        QVERIFY(str.data() != s);
-        QVERIFY(str.capacity() >= str.length());
-
-        QVERIFY(str2.constData() == s);
-        QVERIFY(str2.data() != s);
-        QVERIFY(str2.capacity() >= str2.length());
-    }
-#endif // QT_DEPRECATED_SINCE(6, 8)
+    QVERIFY(str2.constData() == s);
+    QVERIFY(str2.data() != s);
+    QVERIFY(str2.capacity() >= str2.length());
 }
 
 void tst_QByteArray::toUpperLower_data()
@@ -2188,16 +2587,10 @@ void tst_QByteArray::toUpperLower()
     QFETCH(QByteArray, input);
     QFETCH(QByteArray, upper);
     QFETCH(QByteArray, lower);
-    QVERIFY(upper.isUpper());
-    QVERIFY(lower.isLower());
     QCOMPARE(lower.toLower(), lower);
-    QVERIFY(lower.toLower().isLower());
     QCOMPARE(upper.toUpper(), upper);
-    QVERIFY(upper.toUpper().isUpper());
     QCOMPARE(input.toUpper(), upper);
-    QVERIFY(input.toUpper().isUpper());
     QCOMPARE(input.toLower(), lower);
-    QVERIFY(input.toLower().isLower());
 
     QByteArray copy = input;
     QCOMPARE(std::move(copy).toUpper(), upper);
@@ -2226,12 +2619,12 @@ void tst_QByteArray::toUpperLower()
 
 void tst_QByteArray::isUpper()
 {
-    QVERIFY(QByteArray().isUpper());
-    QVERIFY(QByteArray("").isUpper());
+    QVERIFY(!QByteArray().isUpper());
+    QVERIFY(!QByteArray("").isUpper());
     QVERIFY(QByteArray("TEXT").isUpper());
-    QVERIFY(QByteArray("\xD0\xDE").isUpper());
-    QVERIFY(QByteArray("\xD7").isUpper());
-    QVERIFY(QByteArray("\xDF").isUpper());
+    QVERIFY(!QByteArray("\xD0\xDE").isUpper()); // non-ASCII is neither upper nor lower
+    QVERIFY(!QByteArray("\xD7").isUpper());
+    QVERIFY(!QByteArray("\xDF").isUpper());
     QVERIFY(!QByteArray("text").isUpper());
     QVERIFY(!QByteArray("Text").isUpper());
     QVERIFY(!QByteArray("tExt").isUpper());
@@ -2241,19 +2634,19 @@ void tst_QByteArray::isUpper()
     QVERIFY(!QByteArray("teXT").isUpper());
     QVERIFY(!QByteArray("tEXt").isUpper());
     QVERIFY(!QByteArray("tExT").isUpper());
-    QVERIFY(QByteArray("@ABYZ[").isUpper());
+    QVERIFY(!QByteArray("@ABYZ[").isUpper());
     QVERIFY(!QByteArray("@abyz[").isUpper());
-    QVERIFY(QByteArray("`ABYZ{").isUpper());
+    QVERIFY(!QByteArray("`ABYZ{").isUpper());
     QVERIFY(!QByteArray("`abyz{").isUpper());
 }
 
 void tst_QByteArray::isLower()
 {
-    QVERIFY(QByteArray().isLower());
-    QVERIFY(QByteArray("").isLower());
+    QVERIFY(!QByteArray().isLower());
+    QVERIFY(!QByteArray("").isLower());
     QVERIFY(QByteArray("text").isLower());
-    QVERIFY(QByteArray("\xE0\xFF").isLower());
-    QVERIFY(QByteArray("\xF7").isLower());
+    QVERIFY(!QByteArray("\xE0\xFF").isLower()); // non-ASCII is neither upper nor lower
+    QVERIFY(!QByteArray("\xF7").isLower());
     QVERIFY(!QByteArray("Text").isLower());
     QVERIFY(!QByteArray("tExt").isLower());
     QVERIFY(!QByteArray("teXt").isLower());
@@ -2264,9 +2657,9 @@ void tst_QByteArray::isLower()
     QVERIFY(!QByteArray("tExT").isLower());
     QVERIFY(!QByteArray("TEXT").isLower());
     QVERIFY(!QByteArray("@ABYZ[").isLower());
-    QVERIFY(QByteArray("@abyz[").isLower());
+    QVERIFY(!QByteArray("@abyz[").isLower());
     QVERIFY(!QByteArray("`ABYZ{").isLower());
-    QVERIFY(QByteArray("`abyz{").isLower());
+    QVERIFY(!QByteArray("`abyz{").isLower());
 }
 
 void tst_QByteArray::macTypes()
@@ -2379,6 +2772,32 @@ void tst_QByteArray::truncate()
     QVERIFY(a.isEmpty());
 }
 
+void tst_QByteArray::trimmed()
+{
+    QFETCH(QByteArray, source);
+    QFETCH(QByteArray, expected);
+
+    QCOMPARE(source.trimmed(), expected);
+    QByteArray copy = source;
+    QCOMPARE(std::move(copy).trimmed(), expected);
+
+    if (source.isEmpty())
+        QVERIFY(!source.isDetached());
+}
+
+void tst_QByteArray::trimmed_data()
+{
+    QTest::addColumn<QByteArray>("source");
+    QTest::addColumn<QByteArray>("expected");
+
+    QTest::newRow("null") << QByteArray() << QByteArray();
+    QTest::newRow("empty") << QByteArray("") << QByteArray("");
+    QTest::newRow("no spaces") << QByteArray("a b\nc\td") << QByteArray("a b\nc\td");
+    QTest::newRow("with spaces") << QByteArray("\t \v a b\r\nc \td\ve   f \r\n\f")
+                                 << QByteArray("a b\r\nc \td\ve   f");
+    QTest::newRow("all spaces") << QByteArray("\t \r \n \v \f") << QByteArray("");
+}
+
 void tst_QByteArray::simplified()
 {
     QFETCH(QByteArray, source);
@@ -2463,12 +2882,7 @@ void tst_QByteArray::length()
 
     QCOMPARE(src.length(), res);
     QCOMPARE(src.size(), res);
-#if QT_DEPRECATED_SINCE(6, 4)
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
     QCOMPARE(src.count(), res);
-QT_WARNING_POP
-#endif
 }
 
 void tst_QByteArray::length_data()
@@ -2483,6 +2897,8 @@ void tst_QByteArray::length_data()
     QTest::newRow("with '\\0'") << QByteArray("abc\0def", 7) << qsizetype(7);
     QTest::newRow("with '\\0' no size") << QByteArray("abc\0def") << qsizetype(3);
 }
+
+const char globalChar = '1';
 
 QTEST_MAIN(tst_QByteArray)
 #include "tst_qbytearray.moc"

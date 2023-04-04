@@ -1,6 +1,31 @@
 #!/usr/bin/env python3
-# Copyright (C) 2021 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+#############################################################################
+##
+## Copyright (C) 2018 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is part of the plugins of the Qt Toolkit.
+##
+## $QT_BEGIN_LICENSE:GPL-EXCEPT$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 3 as published by the Free Software
+## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
 
 from pro2cmake import Scope, SetOperation, merge_scopes, recursive_evaluate_scope
 
@@ -281,10 +306,12 @@ def test_qstandardpaths_scopes():
     #     mac {
     #         OBJECTIVE_SOURCES += io/qstandardpaths_mac.mm
     scope7 = _new_scope(parent_scope=scope6, condition='MACOS', SOURCES='qsp_mac.mm')
-    #     } else:android {
+    #     } else:android:!android-embedded {
     #         SOURCES += io/qstandardpaths_android.cpp
     scope8 = _new_scope(parent_scope=scope6, condition='else')
-    scope9 = _new_scope(parent_scope=scope8, condition='ANDROID AND NOT UNKNOWN_PLATFORM', SOURCES='qsp_android.cpp')
+    scope9 = _new_scope(parent_scope=scope8,
+                        condition='ANDROID AND NOT ANDROID_EMBEDDED',
+                        SOURCES='qsp_android.cpp')
     #     } else:haiku {
     #              SOURCES += io/qstandardpaths_haiku.cpp
     scope10 = _new_scope(parent_scope=scope8, condition='else')
@@ -305,10 +332,10 @@ def test_qstandardpaths_scopes():
     assert scope6.total_condition == 'UNIX'
     assert scope7.total_condition == 'MACOS'
     assert scope8.total_condition == 'UNIX AND NOT MACOS'
-    assert scope9.total_condition == 'ANDROID AND NOT UNKNOWN_PLATFORM'
-    assert scope10.total_condition == 'UNIX AND NOT MACOS AND (UNKNOWN_PLATFORM OR NOT ANDROID)'
-    assert scope11.total_condition == 'HAIKU AND (UNKNOWN_PLATFORM OR NOT ANDROID)'
-    assert scope12.total_condition == 'UNIX AND NOT HAIKU AND NOT MACOS AND (UNKNOWN_PLATFORM OR NOT ANDROID)'
+    assert scope9.total_condition == 'ANDROID AND NOT ANDROID_EMBEDDED'
+    assert scope10.total_condition == 'UNIX AND NOT MACOS AND (ANDROID_EMBEDDED OR NOT ANDROID)'
+    assert scope11.total_condition == 'HAIKU AND (ANDROID_EMBEDDED OR NOT ANDROID)'
+    assert scope12.total_condition == 'UNIX AND NOT MACOS AND NOT HAIKU AND (ANDROID_EMBEDDED OR NOT ANDROID)'
 
 def test_recursive_expansion():
     scope = _new_scope(A='Foo',B='$$A/Bar')
@@ -316,3 +343,4 @@ def test_recursive_expansion():
     assert scope.get_string('B') == '$$A/Bar'
     assert scope._expand_value('$$B/Source.cpp') == ['Foo/Bar/Source.cpp']
     assert scope._expand_value('$$B') == ['Foo/Bar']
+

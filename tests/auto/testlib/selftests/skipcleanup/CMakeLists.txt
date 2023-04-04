@@ -1,10 +1,12 @@
+# Generated from skipcleanup.pro.
+
 #####################################################################
 ## skipcleanup Binary:
 #####################################################################
 
 qt_internal_add_executable(skipcleanup
-    NO_INSTALL
-    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    NO_INSTALL # special case
+    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} # special case
     SOURCES
         tst_skipcleanup.cpp
     PUBLIC_LIBRARIES
@@ -14,4 +16,6 @@ qt_internal_add_executable(skipcleanup
 ## Scopes:
 #####################################################################
 
+# special case begin
 qt_internal_apply_testlib_coverage_options(skipcleanup)
+# special case end

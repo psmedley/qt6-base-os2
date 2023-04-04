@@ -15,6 +15,10 @@ qhp.QtXml.virtualFolder       = qtxml
 qhp.QtXml.indexTitle          = Qt XML
 qhp.QtXml.indexRoot           =
 
+qhp.QtXml.filterAttributes    = qtxml $QT_VERSION qtrefdoc
+qhp.QtXml.customFilters.Qt.name = QtXml $QT_VERSION
+qhp.QtXml.customFilters.Qt.filterAttributes = qtxml $QT_VERSION
+
 qhp.QtXml.subprojects         = classes
 qhp.QtXml.subprojects.classes.title = C++ Classes
 qhp.QtXml.subprojects.classes.indexTitle = Qt XML C++ Classes
@@ -41,6 +45,3 @@ navigation.cppclassespage = "Qt XML C++ Classes"
 
 # Add a thumbnail for examples that do not have images
 manifestmeta.thumbnail.names = "QtXml/XML Stream Lint Example"
-
-# Fail the documentation build if there are more warnings than the limit
-warninglimit = 0

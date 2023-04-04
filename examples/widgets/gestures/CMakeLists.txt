@@ -1,3 +1,5 @@
+# Generated from gestures.pro.
+
 if(NOT TARGET Qt::Widgets)
     return()
 endif()

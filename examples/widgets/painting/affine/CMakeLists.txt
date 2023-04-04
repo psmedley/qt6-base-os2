@@ -1,44 +1,55 @@
+# Generated from affine.pro.
+
 cmake_minimum_required(VERSION 3.16)
 project(affine LANGUAGES CXX)
 
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-    set(INSTALL_EXAMPLESDIR "examples")
+  set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/widgets/painting/affine")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 COMPONENTS Core)
+find_package(Qt6 COMPONENTS Gui)
+find_package(Qt6 COMPONENTS Widgets)
 
 qt_add_executable(affine
+    # special case begin
     # remove files from ../shared
     #../shared/arthurstyle.cpp ../shared/arthurstyle.h
     #../shared/arthurwidgets.cpp ../shared/arthurwidgets.h
     #../shared/hoverpoints.cpp ../shared/hoverpoints.h
+    # special case end
     main.cpp
     xform.cpp xform.h
 )
-
 set_target_properties(affine PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
-
 target_include_directories(affine PUBLIC
     ../shared
 )
 
+# special case begin
 if(NOT TARGET painting_shared::painting_shared)
     include(../shared/use_lib.cmake)
 endif()
+# special case end
 
 target_link_libraries(affine PUBLIC
     Qt::Core
     Qt::Gui
     Qt::Widgets
-    painting_shared::painting_shared
+    painting_shared::painting_shared # special case
 )
+
 
 # Resources:
 set(shared_resource_files
@@ -79,7 +90,7 @@ set(shared_resource_files
     "../shared/images/title_stretch.png"
 )
 
-qt_add_resources(affine "shared"
+qt6_add_resources(affine "shared"
     PREFIX
         "/res"
     BASE
@@ -87,20 +98,20 @@ qt_add_resources(affine "shared"
     FILES
         ${shared_resource_files}
 )
-
 set(affine_resource_files
     "bg1.jpg"
     "xform.cpp"
     "xform.html"
 )
 
-qt_add_resources(affine "affine"
+qt6_add_resources(affine "affine"
     PREFIX
         "/res/affine"
     FILES
         ${affine_resource_files}
 )
 
+# special case begin
 # remove files from ../shared
 #if(QT_FEATURE_opengl)
     #target_sources(affine PUBLIC
@@ -111,6 +122,7 @@ qt_add_resources(affine "affine"
         #Qt::OpenGL
     #)
 #endif()
+# special case end
 
 install(TARGETS affine
     RUNTIME DESTINATION "${INSTALL_EXAMPLEDIR}"

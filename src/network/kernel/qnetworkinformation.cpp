@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 // #define DEBUG_LOADING
 
@@ -88,7 +124,7 @@ bool QNetworkInformationPrivate::initializeList()
         return false;
     if (!dataHolder())
         return false;
-    Q_CONSTINIT static QBasicMutex mutex;
+    static QBasicMutex mutex;
     QMutexLocker initLocker(&mutex);
 
 #if QT_CONFIG(library)
@@ -187,7 +223,7 @@ QNetworkInformation *QNetworkInformationPrivate::create(QStringView name)
         } else {
             QString listNames;
             listNames.reserve(8 * dataHolder->factories.count());
-            for (const auto *factory : std::as_const(dataHolder->factories))
+            for (const auto *factory : qAsConst(dataHolder->factories))
                 listNames += factory->name() + QStringLiteral(", ");
             listNames.chop(2);
             qDebug().nospace() << "Couldn't find " << name << " in list with names: { "
@@ -243,7 +279,7 @@ QNetworkInformation *QNetworkInformationPrivate::create(QNetworkInformation::Fea
             } else {
                 QStringList names;
                 names.reserve(dataHolder->factories.count());
-                for (const auto *factory : std::as_const(dataHolder->factories))
+                for (const auto *factory : qAsConst(dataHolder->factories))
                     names += factory->name();
                 qDebug() << "None of the following backends has all the requested features:"
                          << names << features;
@@ -381,7 +417,6 @@ QNetworkInformationBackendFactory::~QNetworkInformationBackendFactory()
 
 /*!
     \class QNetworkInformation
-    \inmodule QtNetwork
     \since 6.1
     \brief QNetworkInformation exposes various network information
     through native backends.
@@ -416,17 +451,6 @@ QNetworkInformationBackendFactory::~QNetworkInformationBackendFactory()
         If the plugin supports this feature then the \c isBehindCaptivePortal
         property will provide useful results. Otherwise it will always return
         \c{false}.
-
-    \value TransportMedium
-        If the plugin supports this feature then the \c transportMedium
-        property will provide useful results. Otherwise it will always return
-        \c{TransportMedium::Unknown}.
-        See also QNetworkInformation::TransportMedium.
-
-    \value Metered
-        If the plugin supports this feature then the \c isMetered
-        property will provide useful results. Otherwise it will always return
-        \c{false}.
 */
 
 /*!
@@ -453,45 +477,16 @@ QNetworkInformationBackendFactory::~QNetworkInformationBackendFactory()
 */
 
 /*!
-    \enum QNetworkInformation::TransportMedium
-    \since 6.3
-
-    Lists the currently recognized media with which one can connect to the
-    internet.
-
-    \value Unknown
-        Returned if either the OS reports no active medium, the active medium is
-        not recognized by Qt, or the TransportMedium feature is not supported.
-    \value Ethernet
-        Indicates that the currently active connection is using ethernet.
-        Note: This value may also be returned when Windows is connected to a
-        Bluetooth personal area network.
-    \value Cellular
-        Indicates that the currently active connection is using a cellular
-        network.
-    \value WiFi
-        Indicates that the currently active connection is using Wi-Fi.
-    \value Bluetooth
-        Indicates that the currently active connection is connected using
-        Bluetooth.
-
-    \sa QNetworkInformation::transportMedium
-*/
-
-/*!
     \internal ctor
 */
 QNetworkInformation::QNetworkInformation(QNetworkInformationBackend *backend)
     : QObject(*(new QNetworkInformationPrivate(backend)))
 {
     connect(backend, &QNetworkInformationBackend::reachabilityChanged, this,
-            &QNetworkInformation::reachabilityChanged);
-    connect(backend, &QNetworkInformationBackend::behindCaptivePortalChanged, this,
-            &QNetworkInformation::isBehindCaptivePortalChanged);
-    connect(backend, &QNetworkInformationBackend::transportMediumChanged, this,
-            &QNetworkInformation::transportMediumChanged);
-    connect(backend, &QNetworkInformationBackend::isMeteredChanged, this,
-           &QNetworkInformation::isMeteredChanged);
+            [this]() { emit reachabilityChanged(d_func()->backend->reachability()); });
+    connect(backend, &QNetworkInformationBackend::behindCaptivePortalChanged, this, [this]() {
+        emit isBehindCaptivePortalChanged(d_func()->backend->behindCaptivePortal());
+    });
 }
 
 /*!
@@ -535,39 +530,6 @@ bool QNetworkInformation::isBehindCaptivePortal() const
 }
 
 /*!
-    \property QNetworkInformation::transportMedium
-    \brief The currently active transport medium for the application
-    \since 6.3
-
-    This property returns the currently active transport medium for the
-    application, on operating systems where such information is available.
-
-    When the current transport medium changes a signal is emitted, this can,
-    for instance, occur when a user leaves the range of a WiFi network, unplugs
-    their ethernet cable or enables Airplane mode.
-*/
-QNetworkInformation::TransportMedium QNetworkInformation::transportMedium() const
-{
-    return d_func()->backend->transportMedium();
-}
-
-/*!
-    \property QNetworkInformation::isMetered
-    \brief Check if the current connection is metered
-    \since 6.3
-
-    This property returns whether the current connection is (known to be)
-    metered or not. You can use this as a guiding factor to decide whether your
-    application should perform certain network requests or uploads.
-    For instance, you may not want to upload logs or diagnostics while this
-    property is \c true.
-*/
-bool QNetworkInformation::isMetered() const
-{
-    return d_func()->backend->isMetered();
-}
-
-/*!
     Returns the name of the currently loaded backend.
 */
 QString QNetworkInformation::backendName() const
@@ -585,121 +547,33 @@ bool QNetworkInformation::supports(Features features) const
 }
 
 /*!
-    \since 6.3
-
-    Returns all the supported features of the current backend.
-*/
-QNetworkInformation::Features QNetworkInformation::supportedFeatures() const
-{
-    return d_func()->backend->featuresSupported();
-}
-
-/*!
-    \since 6.3
-
-    Attempts to load the platform-default backend.
-
-    This platform-to-plugin mapping is as follows:
-
-    \table
-    \header
-        \li Platform
-        \li Plugin-name
-    \row
-        \li Windows
-        \li networklistmanager
-    \row
-        \li Apple (macOS/iOS)
-        \li scnetworkreachability
-    \row
-        \li Android
-        \li android
-    \row
-        \li Linux
-        \li networkmanager
-    \endtable
-
-    This function is provided for convenience where the default for a given
-    platform is good enough. If you are not using the default plugins you must
-    use one of the other load() overloads.
-
-    Returns \c true if it managed to load the backend or if it was already
-    loaded. Returns \c false otherwise.
-
-    \sa instance(), load()
-*/
-bool QNetworkInformation::loadDefaultBackend()
-{
-    int index = -1;
-#ifdef Q_OS_WIN
-    index = QNetworkInformationBackend::PluginNamesWindowsIndex;
-#elif defined(Q_OS_DARWIN)
-    index = QNetworkInformationBackend::PluginNamesAppleIndex;
-#elif defined(Q_OS_ANDROID)
-    index = QNetworkInformationBackend::PluginNamesAndroidIndex;
-#elif defined(Q_OS_LINUX)
-    index = QNetworkInformationBackend::PluginNamesLinuxIndex;
-#endif
-    if (index == -1)
-        return false;
-    return loadBackendByName(QNetworkInformationBackend::PluginNames[index]);
-}
-
-/*!
-    \since 6.4
-
     Attempts to load a backend whose name matches \a backend
     (case insensitively).
 
     Returns \c true if it managed to load the requested backend or
-    if it was already loaded. Returns \c false otherwise.
+    if it was already loaded. Returns \c false otherwise
 
     \sa instance
 */
-bool QNetworkInformation::loadBackendByName(QStringView backend)
+bool QNetworkInformation::load(QStringView backend)
 {
     auto loadedBackend = QNetworkInformationPrivate::create(backend);
     return loadedBackend && loadedBackend->backendName().compare(backend, Qt::CaseInsensitive) == 0;
 }
 
-#if QT_DEPRECATED_SINCE(6,4)
 /*!
-    \deprecated [6.4] Use loadBackendByName() instead.
-
-    \sa loadBackendByName(), loadDefaultBackend(), loadBackendByFeatures()
-*/
-bool QNetworkInformation::load(QStringView backend)
-{
-    return loadBackendByName(backend);
-}
-#endif // QT_DEPRECATED_SINCE(6,4)
-
-/*!
-    \since 6.4
     Load a backend which supports \a features.
 
     Returns \c true if it managed to load the requested backend or
-    if it was already loaded. Returns \c false otherwise.
+    if it was already loaded. Returns \c false otherwise
 
     \sa instance
 */
-bool QNetworkInformation::loadBackendByFeatures(Features features)
+bool QNetworkInformation::load(Features features)
 {
     auto loadedBackend = QNetworkInformationPrivate::create(features);
     return loadedBackend && loadedBackend->supports(features);
 }
-
-#if QT_DEPRECATED_SINCE(6,4)
-/*!
-    \deprecated [6.4] Use loadBackendByFeatures() instead.
-
-    \sa loadBackendByName(), loadDefaultBackend(), loadBackendByFeatures()
-*/
-bool QNetworkInformation::load(Features features)
-{
-    return loadBackendByFeatures(features);
-}
-#endif // QT_DEPRECATED_SINCE(6,4)
 
 /*!
     Returns a list of the names of all currently available backends.
@@ -721,6 +595,3 @@ QNetworkInformation *QNetworkInformation::instance()
 }
 
 QT_END_NAMESPACE
-
-#include "moc_qnetworkinformation.cpp"
-#include "moc_qnetworkinformation_p.cpp"

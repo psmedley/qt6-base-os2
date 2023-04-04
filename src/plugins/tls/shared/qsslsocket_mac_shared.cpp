@@ -1,12 +1,47 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2015 ownCloud Inc
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2015 ownCloud Inc
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtNetwork/private/qtlsbackend_p.h>
 
 #include <QtNetwork/qsslcertificate.h>
 
-#include <QtCore/qloggingcategory.h>
 #include <QtCore/qglobal.h>
 #include <QtCore/qdebug.h>
 
@@ -21,8 +56,6 @@
 #endif // Q_OS_MACOS
 
 QT_BEGIN_NAMESPACE
-
-Q_LOGGING_CATEGORY(lcX509, "qt.mac.shared.x509");
 
 #ifdef Q_OS_MACOS
 namespace {
@@ -77,52 +110,6 @@ bool isCaCertificateTrusted(SecCertificateRef cfCert, int domain)
     return false;
 }
 
-bool canDERBeParsed(CFDataRef derData, const QSslCertificate &qtCert)
-{
-    // We are observing certificates, that while accepted when we copy them
-    // from the keychain(s), later give us 'Failed to create SslCertificate
-    // from QSslCertificate'. It's interesting to know at what step the failure
-    // occurred. Let's check it and skip it below if it's not valid.
-
-    auto checkDer = [](CFDataRef derData, const char *source)
-    {
-        Q_ASSERT(source);
-        Q_ASSERT(derData);
-
-        const auto cfLength = CFDataGetLength(derData);
-        if (cfLength <= 0) {
-            qCWarning(lcX509) << source << "returned faulty DER data with invalid length.";
-            return false;
-        }
-
-        QCFType<SecCertificateRef> secRef = SecCertificateCreateWithData(nullptr, derData);
-        if (!secRef) {
-            qCWarning(lcX509) << source << "returned faulty DER data which cannot be parsed back.";
-            return false;
-        }
-        return true;
-    };
-
-    if (!checkDer(derData, "SecCertificateCopyData")) {
-        qCDebug(lcX509) << "Faulty QSslCertificate is:" << qtCert;// Just in case we managed to parse something.
-        return false;
-    }
-
-    // Generic parser failed?
-    if (qtCert.isNull()) {
-        qCWarning(lcX509, "QSslCertificate failed to parse DER");
-        return false;
-    }
-
-    const QCFType<CFDataRef> qtDerData = qtCert.toDer().toCFData();
-    if (!checkDer(qtDerData, "QSslCertificate")) {
-        qCWarning(lcX509) << "Faulty QSslCertificate is:" << qtCert;
-        return false;
-    }
-
-    return true;
-}
-
 } // unnamed namespace
 #endif // Q_OS_MACOS
 
@@ -143,19 +130,8 @@ QList<QSslCertificate> systemCaCertificates()
                 SecCertificateRef cfCert = (SecCertificateRef)CFArrayGetValueAtIndex(cfCerts, i);
                 QCFType<CFDataRef> derData = SecCertificateCopyData(cfCert);
                 if (isCaCertificateTrusted(cfCert, dom)) {
-                    if (derData) {
-                        const auto newCert = QSslCertificate(QByteArray::fromCFData(derData), QSsl::Der);
-                        if (!canDERBeParsed(derData, newCert)) {
-                            // Last attempt to get some information about the certificate:
-                            CFShow(cfCert);
-                            continue;
-                        }
-                        systemCerts << newCert;
-                    } else {
-                        // "Returns NULL if the data passed in the certificate parameter
-                        // is not a valid certificate object."
-                        qCWarning(lcX509, "SecCertificateCopyData returned invalid DER data (nullptr).");
-                    }
+                    if (derData)
+                        systemCerts << QSslCertificate(QByteArray::fromCFData(derData), QSsl::Der);
                 }
             }
         }

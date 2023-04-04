@@ -1,5 +1,41 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qcombobox.h"
 
@@ -45,21 +81,18 @@
 # include <private/qeffects_p.h>
 #endif
 #include <private/qstyle_p.h>
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
 #endif
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 QComboBoxPrivate::QComboBoxPrivate()
     : QWidgetPrivate(),
       shownOnce(false),
       duplicatesEnabled(false),
       frame(true),
-      inserting(false),
-      hidingPopup(false)
+      inserting(false)
 {
 }
 
@@ -125,7 +158,8 @@ QStyleOptionMenuItem QComboMenuDelegate::getStyleOption(const QStyleOptionViewIt
         menuOption.palette.setBrush(QPalette::All, QPalette::Window,
                                     qvariant_cast<QBrush>(index.data(Qt::BackgroundRole)));
     }
-    menuOption.text = index.model()->data(index, Qt::DisplayRole).toString().replace(u'&', "&&"_L1);
+    menuOption.text = index.model()->data(index, Qt::DisplayRole).toString()
+                           .replace(QLatin1Char('&'), QLatin1String("&&"));
     menuOption.reservedShortcutWidth = 0;
     menuOption.maxIconWidth =  option.decorationSize.width() + 4;
     menuOption.menuRect = option.rect;
@@ -364,7 +398,7 @@ QSize QComboBoxPrivate::recomputeSizeHint(QSize &sh) const
             case QComboBox::AdjustToContents:
             case QComboBox::AdjustToContentsOnFirstShow:
                 if (count == 0) {
-                    sh.rwidth() = 7 * fm.horizontalAdvance(u'x');
+                    sh.rwidth() = 7 * fm.horizontalAdvance(QLatin1Char('x'));
                 } else {
                     for (int i = 0; i < count; ++i) {
                         if (!q->itemIcon(i).isNull()) {
@@ -384,7 +418,7 @@ QSize QComboBoxPrivate::recomputeSizeHint(QSize &sh) const
                 hasIcon = !q->itemIcon(i).isNull();
         }
         if (minimumContentsLength > 0)
-            sh.setWidth(qMax(sh.width(), minimumContentsLength * fm.horizontalAdvance(u'X') + (hasIcon ? iconSize.width() + 4 : 0)));
+            sh.setWidth(qMax(sh.width(), minimumContentsLength * fm.horizontalAdvance(QLatin1Char('X')) + (hasIcon ? iconSize.width() + 4 : 0)));
         if (!placeholderText.isEmpty())
             sh.setWidth(qMax(sh.width(), fm.boundingRect(placeholderText).width()));
 
@@ -736,8 +770,8 @@ bool QComboBoxPrivateContainer::eventFilter(QObject *o, QEvent *e)
             return true;
         default:
 #if QT_CONFIG(shortcut)
-            if (keyEvent->matches(QKeySequence::Cancel) && isVisible()) {
-                keyEvent->accept();
+            if (keyEvent->matches(QKeySequence::Cancel)) {
+                combo->hidePopup();
                 return true;
             }
 #endif
@@ -1008,7 +1042,8 @@ QComboBox::QComboBox(QComboBoxPrivate &dd, QWidget *parent)
     of the view(), e.g., by using
     \l{QAbstractItemView::}{setSelectionMode()}.
 
-    \sa QLineEdit, QSpinBox, QRadioButton, QButtonGroup
+    \sa QLineEdit, QSpinBox, QRadioButton, QButtonGroup,
+        {fowler}{GUI Design Handbook: Combo Box, Drop-Down List Box}
 */
 
 void QComboBoxPrivate::init()
@@ -1083,7 +1118,7 @@ void QComboBoxPrivate::_q_dataChanged(const QModelIndex &topLeft, const QModelIn
             emit q->currentTextChanged(text);
         }
         q->update();
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
         QAccessibleValueChangeEvent event(q, text);
         QAccessible::updateAccessibility(&event);
 #endif
@@ -1386,7 +1421,7 @@ void QComboBoxPrivate::_q_emitCurrentIndexChanged(const QModelIndex &index)
     // signal lineEdit.textChanged already connected to signal currentTextChanged, so don't emit double here
     if (!lineEdit)
         emit q->currentTextChanged(text);
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
     QAccessibleValueChangeEvent event(q, text);
     QAccessible::updateAccessibility(&event);
 #endif
@@ -2136,11 +2171,7 @@ void QComboBoxPrivate::setCurrentIndex(const QModelIndex &mi)
         }
         updateLineEditGeometry();
     }
-    // If the model was reset to an empty, currentIndex will be invalidated
-    // (because it's a QPersistentModelIndex), but the index change will never
-    // be advertised. So we need an explicit check for such condition.
-    const bool modelResetToEmpty = !normalized.isValid() && indexBeforeChange != -1;
-    if (indexChanged || modelResetToEmpty) {
+    if (indexChanged) {
         q->update();
         _q_emitCurrentIndexChanged(currentIndex);
     }
@@ -2298,7 +2329,7 @@ void QComboBox::insertItems(int index, const QStringList &list)
     if (list.isEmpty())
         return;
     index = qBound(0, index, count());
-    int insertCount = qMin(d->maxCount - index, list.size());
+    int insertCount = qMin(d->maxCount - index, list.count());
     if (insertCount <= 0)
         return;
     // For the common case where we are using the built in QStandardItemModel
@@ -2528,8 +2559,8 @@ bool QComboBoxPrivate::showNativePopup()
 #ifdef Q_OS_MACOS
     // The Cocoa popup will swallow any mouse release event.
     // We need to fake one here to un-press the button.
-    QMouseEvent mouseReleased(QEvent::MouseButtonRelease, q->pos(), q->mapToGlobal(QPoint(0, 0)),
-                              Qt::LeftButton, Qt::MouseButtons(Qt::LeftButton), {});
+    QMouseEvent mouseReleased(QEvent::MouseButtonRelease, q->pos(), Qt::LeftButton,
+                              Qt::MouseButtons(Qt::LeftButton), Qt::KeyboardModifiers());
     QCoreApplication::sendEvent(q, &mouseReleased);
 #endif
 
@@ -2806,13 +2837,6 @@ void QComboBox::showPopup()
 void QComboBox::hidePopup()
 {
     Q_D(QComboBox);
-    if (d->hidingPopup)
-        return;
-    d->hidingPopup = true;
-    // can't use QBoolBlocker on a bitfield
-    auto resetHidingPopup = qScopeGuard([d]{
-        d->hidingPopup = false;
-    });
     if (d->container && d->container->isVisible()) {
 #if QT_CONFIG(effects)
         QSignalBlocker modelBlocker(d->model);
@@ -2837,11 +2861,30 @@ void QComboBox::hidePopup()
             }
         }
 
+        // Fade out.
+        bool needFade = style()->styleHint(QStyle::SH_Menu_FadeOutOnHide);
+        bool didFade = false;
+        if (needFade) {
+#if defined(Q_OS_MAC)
+            QPlatformNativeInterface *platformNativeInterface = QGuiApplication::platformNativeInterface();
+            int at = platformNativeInterface->metaObject()->indexOfMethod("fadeWindow()");
+            if (at != -1) {
+                QMetaMethod windowFade = platformNativeInterface->metaObject()->method(at);
+                windowFade.invoke(platformNativeInterface, Q_ARG(QWindow *, d->container->windowHandle()));
+                didFade = true;
+            }
+
+#endif // Q_OS_MAC
+            // Other platform implementations welcome :-)
+        }
         containerBlocker.unblock();
         viewBlocker.unblock();
         modelBlocker.unblock();
+
+        if (!didFade)
 #endif // QT_CONFIG(effects)
-        d->container->hide();
+            // Fade should implicitly hide as well ;-)
+            d->container->hide();
     }
 #ifdef QT_KEYPAD_NAVIGATION
     if (QApplicationPrivate::keypadNavigationEnabled() && isEditable() && hasFocus())
@@ -2860,7 +2903,7 @@ void QComboBox::clear()
 {
     Q_D(QComboBox);
     d->model->removeRows(0, d->model->rowCount(d->root), d->root);
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
     QAccessibleValueChangeEvent event(this, QString());
     QAccessible::updateAccessibility(&event);
 #endif
@@ -2874,7 +2917,7 @@ void QComboBox::clearEditText()
     Q_D(QComboBox);
     if (d->lineEdit)
         d->lineEdit->clear();
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
     QAccessibleValueChangeEvent event(this, QString());
     QAccessible::updateAccessibility(&event);
 #endif
@@ -2888,7 +2931,7 @@ void QComboBox::setEditText(const QString &text)
     Q_D(QComboBox);
     if (d->lineEdit)
         d->lineEdit->setText(text);
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
     QAccessibleValueChangeEvent event(this, text);
     QAccessible::updateAccessibility(&event);
 #endif
@@ -3154,23 +3197,7 @@ void QComboBox::keyPressEvent(QKeyEvent *e)
 
     Move move = NoMove;
     int newIndex = currentIndex();
-
-    bool pressLikeButton = !d->lineEdit;
-#ifdef QT_KEYPAD_NAVIGATION
-    pressLikeButton |= QApplicationPrivate::keypadNavigationEnabled() && !hasEditFocus();
-#endif
-    auto key = e->key();
-    if (pressLikeButton) {
-        const auto buttonPressKeys = QGuiApplicationPrivate::platformTheme()
-                                             ->themeHint(QPlatformTheme::ButtonPressKeys)
-                                             .value<QList<Qt::Key>>();
-        if (buttonPressKeys.contains(key)) {
-            showPopup();
-            return;
-        }
-    }
-
-    switch (key) {
+    switch (e->key()) {
     case Qt::Key_Up:
         if (e->modifiers() & Qt::ControlModifier)
             break; // pass to line edit for auto completion
@@ -3212,6 +3239,12 @@ void QComboBox::keyPressEvent(QKeyEvent *e)
             return;
         }
         break;
+    case Qt::Key_Space:
+        if (!d->lineEdit) {
+            showPopup();
+            return;
+        }
+        break;
     case Qt::Key_Enter:
     case Qt::Key_Return:
     case Qt::Key_Escape:
@@ -3219,6 +3252,13 @@ void QComboBox::keyPressEvent(QKeyEvent *e)
             e->ignore();
         break;
 #ifdef QT_KEYPAD_NAVIGATION
+    case Qt::Key_Select:
+        if (QApplicationPrivate::keypadNavigationEnabled()
+                && (!hasEditFocus() || !d->lineEdit)) {
+            showPopup();
+            return;
+        }
+        break;
     case Qt::Key_Left:
     case Qt::Key_Right:
         if (QApplicationPrivate::keypadNavigationEnabled() && !hasEditFocus())
@@ -3234,11 +3274,6 @@ void QComboBox::keyPressEvent(QKeyEvent *e)
         break;
 #endif
     default:
-        if (d->container && d->container->isVisible() && e->matches(QKeySequence::Cancel)) {
-            hidePopup();
-            e->accept();
-        }
-
         if (!d->lineEdit) {
             if (!e->text().isEmpty())
                 d->keyboardSearchString(e->text());

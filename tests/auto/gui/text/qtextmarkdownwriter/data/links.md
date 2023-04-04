@@ -23,6 +23,3 @@ title")
 * [link](/url "title
 title title")
 * nonlink
-
-Qt has the <https://qt.io> site
-

@@ -33,13 +33,6 @@ function(qt_internal_add_benchmark target)
         ${exec_args}
     )
 
-    # Benchmarks on iOS must be app bundles.
-    if(IOS)
-        set_target_properties(${target} PROPERTIES MACOSX_BUNDLE TRUE)
-    endif()
-
-    qt_internal_add_repo_local_defines(${target})
-
     # Disable the QT_NO_NARROWING_CONVERSIONS_IN_CONNECT define for benchmarks
     qt_internal_undefine_global_definition(${target} QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
 
@@ -47,7 +40,7 @@ function(qt_internal_add_benchmark target)
 
     # Add a ${target}_benchmark generator target, to run single benchmark more easily.
     set(benchmark_wrapper_file "${arg_OUTPUT_DIRECTORY}/${target}Wrapper$<CONFIG>.cmake")
-    _qt_internal_create_command_script(COMMAND "$<TARGET_FILE:${target}>"
+    qt_internal_create_command_script(COMMAND "$<TARGET_FILE:${target}>"
                                       OUTPUT_FILE "${benchmark_wrapper_file}"
                                       ENVIRONMENT "PATH" "${benchmark_env_path}"
                                                   "QT_PLUGIN_PATH" "${benchmark_env_plugin_path}"
@@ -65,8 +58,6 @@ function(qt_internal_add_benchmark target)
     if (TARGET benchmark)
         add_dependencies("benchmark" "${target}_benchmark")
     endif()
-
-    qt_internal_add_test_finalizers("${target}")
 endfunction()
 
 # Simple wrapper around qt_internal_add_executable for manual tests which insure that
@@ -104,15 +95,9 @@ function(qt_internal_add_manual_test target)
         ${exec_args}
     )
 
-    # Tests on iOS must be app bundles.
-    if(IOS)
-        set_target_properties(${target} PROPERTIES MACOSX_BUNDLE TRUE)
-    endif()
-
     # Disable the QT_NO_NARROWING_CONVERSIONS_IN_CONNECT define for manual tests
     qt_internal_undefine_global_definition(${target} QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
 
-    qt_internal_add_test_finalizers("${target}")
 endfunction()
 
 # This function will configure the fixture for the network tests that require docker network services
@@ -161,8 +146,6 @@ function(qt_internal_setup_docker_test_fixture name)
 
     if(DEFINED QT_TESTSERVER_COMPOSE_FILE)
         set(TESTSERVER_COMPOSE_FILE ${QT_TESTSERVER_COMPOSE_FILE})
-    elseif(QNX)
-        set(TESTSERVER_COMPOSE_FILE "${QT_SOURCE_TREE}/tests/testserver/docker-compose-qemu-bridge-network.yml")
     else()
         set(TESTSERVER_COMPOSE_FILE "${QT_SOURCE_TREE}/tests/testserver/docker-compose-bridge-network.yml")
     endif()
@@ -198,39 +181,12 @@ endfunction()
 # You may avoid test wrapping by either passing NO_WRAPPER option or switching QT_NO_TEST_WRAPPERS
 # to ON. This is helpful if you want to use internal CMake tools within tests, like memory or
 # sanitizer checks. See https://cmake.org/cmake/help/v3.19/manual/ctest.1.html#ctest-memcheck-step
-# Arguments:
-#    BUILTIN_TESTDATA the option forces adding the provided TESTDATA to resources.
 function(qt_internal_add_test name)
     # EXCEPTIONS is a noop as they are enabled by default.
-    set(optional_args
-        RUN_SERIAL
-        EXCEPTIONS
-        NO_EXCEPTIONS
-        GUI
-        QMLTEST
-        CATCH
-        LOWDPI
-        NO_WRAPPER
-        BUILTIN_TESTDATA
-    )
-    set(single_value_args
-        OUTPUT_DIRECTORY
-        WORKING_DIRECTORY
-        TIMEOUT
-        VERSION
-    )
-    set(multi_value_args
-        QML_IMPORTPATH
-        TESTDATA
-        QT_TEST_SERVER_LIST
-        ${__default_private_args}
-        ${__default_public_args}
-    )
     qt_parse_all_arguments(arg "qt_add_test"
-        "${optional_args}"
-        "${single_value_args}"
-        "${multi_value_args}"
-        ${ARGN}
+        "RUN_SERIAL;EXCEPTIONS;NO_EXCEPTIONS;GUI;QMLTEST;CATCH;LOWDPI;NO_WRAPPER"
+        "OUTPUT_DIRECTORY;WORKING_DIRECTORY;TIMEOUT;VERSION"
+        "QML_IMPORTPATH;TESTDATA;QT_TEST_SERVER_LIST;${__default_private_args};${__default_public_args}" ${ARGN}
     )
 
     if (NOT arg_OUTPUT_DIRECTORY)
@@ -281,8 +237,6 @@ function(qt_internal_add_test name)
             DISABLE_AUTOGEN_TOOLS ${arg_DISABLE_AUTOGEN_TOOLS}
         )
 
-        qt_internal_add_repo_local_defines(${name})
-
         # Disable the QT_NO_NARROWING_CONVERSIONS_IN_CONNECT define for tests
         qt_internal_undefine_global_definition(${name} QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
 
@@ -293,11 +247,6 @@ function(qt_internal_add_test name)
         # The same goes for WIN32_EXECUTABLE, but because it will detach from the console window
         # and not print anything.
         set_property(TARGET "${name}" PROPERTY WIN32_EXECUTABLE FALSE)
-
-        # Tests on iOS must be app bundles.
-        if(IOS)
-            set_target_properties(${name} PROPERTIES MACOSX_BUNDLE TRUE)
-        endif()
 
         # QMLTest specifics
         qt_internal_extend_target("${name}" CONDITION arg_QMLTEST
@@ -348,18 +297,6 @@ function(qt_internal_add_test name)
     elseif(QNX)
         set(test_working_dir "")
         set(test_executable "${name}")
-    elseif(WASM)
-        # Test script expects html file
-        set(test_executable "${name}.html")
-
-        if(QT6_INSTALL_PREFIX)
-            set(QT_WASM_TESTRUNNER "${QT6_INSTALL_PREFIX}/${INSTALL_LIBEXECDIR}/qt-wasmtestrunner.py")
-        elseif(QT_BUILD_DIR)
-            set(QT_WASM_TESTRUNNER "${QT_BUILD_DIR}/${INSTALL_LIBEXECDIR}/qt-wasmtestrunner.py")
-        endif()
-        # This tells cmake to run the tests with this script, since wasm files can't be
-        # executed directly
-        set_property(TARGET "${name}" PROPERTY CROSSCOMPILING_EMULATOR "${QT_WASM_TESTRUNNER}")
     else()
         if(arg_QMLTEST AND NOT arg_SOURCES)
             set(test_working_dir "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -427,7 +364,7 @@ function(qt_internal_add_test name)
         endif()
     endif()
 
-    if(ANDROID OR IOS OR INTEGRITY OR arg_BUILTIN_TESTDATA)
+    if(ANDROID OR IOS OR WINRT)
         set(builtin_testdata TRUE)
     endif()
 
@@ -484,7 +421,6 @@ function(qt_internal_add_test name)
         endif()
     endif()
 
-    qt_internal_add_test_finalizers("${name}")
 endfunction()
 
 # This function adds test with specified NAME and wraps given test COMMAND with standalone cmake
@@ -495,7 +431,7 @@ endfunction()
 # directly by 'cmake -P path/to/scriptWrapper.cmake', COMMAND will be executed in specified
 # WORKING_DIRECTORY with arguments specified in ARGS.
 #
-# See also _qt_internal_create_command_script for details.
+# See also qt_internal_create_command_script for details.
 function(qt_internal_create_test_script)
     #This style of parsing keeps ';' in ENVIRONMENT variables
     cmake_parse_arguments(PARSE_ARGV 0 arg
@@ -546,9 +482,8 @@ for this function. Will be ignored")
     # Prepend emulator to test command in generated cmake script instead. Keep in mind that
     # CROSSCOMPILING_EMULATOR don't check if actual cross compilation is configured,
     # emulator is prepended independently.
-    set(crosscompiling_emulator "")
-    if(CMAKE_CROSSCOMPILING AND TARGET ${arg_NAME})
-        get_target_property(crosscompiling_emulator ${arg_NAME} CROSSCOMPILING_EMULATOR)
+    if(CMAKE_CROSSCOMPILING)
+        get_test_property(${arg_NAME} CROSSCOMPILING_EMULATOR crosscompiling_emulator)
         if(NOT crosscompiling_emulator)
             set(crosscompiling_emulator "")
         else()
@@ -556,7 +491,7 @@ for this function. Will be ignored")
         endif()
     endif()
 
-    _qt_internal_create_command_script(COMMAND "${crosscompiling_emulator} \${env_test_runner} \
+    qt_internal_create_command_script(COMMAND "${crosscompiling_emulator} \${env_test_runner} \
 \"${executable_file}\" \${env_test_args} ${command_args}"
                                       OUTPUT_FILE "${arg_OUTPUT_FILE}"
                                       WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}"
@@ -568,11 +503,103 @@ for this function. Will be ignored")
     )
 endfunction()
 
+# This function wraps COMMAND with cmake script, that makes possible standalone run with external
+# arguments.
+#
+# Generated wrapper will be written to OUTPUT_FILE.
+# If WORKING_DIRECTORY is not set COMMAND will be executed in CMAKE_CURRENT_BINARY_DIR.
+# Variables from ENVIRONMENT will be set before COMMAND execution.
+# PRE_RUN and POST_RUN arguments may contain extra cmake code that supposed to be executed before
+# and after COMMAND, respectively. Both arguments accept a list of cmake script language
+# constructions. Each item of the list will be concantinated into single string with '\n' sepatator.
+function(qt_internal_create_command_script)
+    #This style of parsing keeps ';' in ENVIRONMENT variables
+    cmake_parse_arguments(PARSE_ARGV 0 arg
+                          ""
+                          "OUTPUT_FILE;WORKING_DIRECTORY"
+                          "COMMAND;ENVIRONMENT;PRE_RUN;POST_RUN"
+    )
 
+    if(NOT arg_COMMAND)
+        message(FATAL_ERROR "qt_internal_create_command_script: COMMAND is not specified")
+    endif()
+
+    if(NOT arg_OUTPUT_FILE)
+        message(FATAL_ERROR "qt_internal_create_command_script: Wrapper OUTPUT_FILE\
+is not specified")
+    endif()
+
+    if(NOT arg_WORKING_DIRECTORY AND NOT QNX)
+        set(arg_WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    endif()
+
+    set(environment_extras)
+    set(skipNext false)
+    if(arg_ENVIRONMENT)
+        list(LENGTH arg_ENVIRONMENT length)
+        math(EXPR length "${length} - 1")
+        foreach(envIdx RANGE ${length})
+            if(skipNext)
+                set(skipNext FALSE)
+                continue()
+            endif()
+
+            set(envVariable "")
+            set(envValue "")
+
+            list(GET arg_ENVIRONMENT ${envIdx} envVariable)
+            math(EXPR envIdx "${envIdx} + 1")
+            if (envIdx LESS_EQUAL ${length})
+                list(GET arg_ENVIRONMENT ${envIdx} envValue)
+            endif()
+
+            if(NOT "${envVariable}" STREQUAL "")
+                set(environment_extras "${environment_extras}\nset(ENV{${envVariable}} \
+\"${envValue}\")")
+            endif()
+            set(skipNext TRUE)
+        endforeach()
+    endif()
+
+    #Escaping environment variables before expand them by file GENERATE
+    string(REPLACE "\\" "\\\\" environment_extras "${environment_extras}")
+
+    if(WIN32)
+        # It's necessary to call actual test inside 'cmd.exe', because 'execute_process' uses
+        # SW_HIDE to avoid showing a console window, it affects other GUI as well.
+        # See https://gitlab.kitware.com/cmake/cmake/-/issues/17690 for details.
+        set(extra_runner "cmd /c")
+    endif()
+
+    if(arg_PRE_RUN)
+        string(JOIN "\n" pre_run ${arg_PRE_RUN})
+    endif()
+
+    if(arg_POST_RUN)
+        string(JOIN "\n" post_run ${arg_POST_RUN})
+    endif()
+
+    file(GENERATE OUTPUT "${arg_OUTPUT_FILE}" CONTENT
+"#!${CMAKE_COMMAND} -P
+# Qt generated command wrapper
+
+${environment_extras}
+${pre_run}
+execute_process(COMMAND ${extra_runner} ${arg_COMMAND}
+                WORKING_DIRECTORY \"${arg_WORKING_DIRECTORY}\"
+                RESULT_VARIABLE result
+)
+${post_run}
+if(NOT result EQUAL 0)
+    string(JOIN \" \" full_command ${arg_COMMAND})
+    message(FATAL_ERROR \"\${full_command} execution failed with exit code \${result}.\")
+endif()"
+    )
+endfunction()
 
 # This function creates an executable for use as a helper program with tests. Some
 # tests launch separate programs to test certain input/output behavior.
-# Specify OVERRIDE_OUTPUT_DIRECTORY if you don't want to place the helper in the parent directory,
+# Specify OVERRIDE_OUTPUT_DIRECTORY if you dont' want to place the helper in the parent directory,
 # in which case you should specify OUTPUT_DIRECTORY "/foo/bar" manually.
 function(qt_internal_add_test_helper name)
 
@@ -655,15 +682,4 @@ function(qt_internal_collect_command_environment out_path out_plugin_path)
     list(JOIN plugin_paths "${QT_PATH_SEPARATOR}" plugin_paths_joined)
     string(REPLACE ";" "\;" plugin_paths_joined "${plugin_paths_joined}")
     set(${out_plugin_path} "${plugin_paths_joined}" PARENT_SCOPE)
-endfunction()
-
-function(qt_internal_add_test_finalizers target)
-    # It might not be safe to run all the finalizers of _qt_internal_finalize_executable
-    # within the context of a Qt build (not a user project) when targeting a host build.
-    # At least one issue is missing qmlimportscanner at configure time.
-    # For now, we limit it to iOS, where it was tested to work, an we know that host tools
-    # should already be built and available.
-    if(IOS)
-        qt_add_list_file_finalizer(_qt_internal_finalize_executable "${target}")
-    endif()
 endfunction()

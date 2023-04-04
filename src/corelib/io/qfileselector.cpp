@@ -1,6 +1,42 @@
-// Copyright (C) 2013 BlackBerry Limited. All rights reserved.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/***************************************************************************
+**
+** Copyright (C) 2013 BlackBerry Limited. All rights reserved.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qfileselector.h"
 #include "qfileselector_p.h"
@@ -16,13 +52,11 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 //Environment variable to allow tooling full control of file selectors
 static const char env_override[] = "QT_NO_BUILTIN_SELECTORS";
 
 Q_GLOBAL_STATIC(QFileSelectorSharedData, sharedData);
-Q_CONSTINIT static QBasicMutex sharedDataMutex;
+static QBasicMutex sharedDataMutex;
 
 QFileSelectorPrivate::QFileSelectorPrivate()
     : QObjectPrivate()
@@ -162,9 +196,9 @@ QString QFileSelector::select(const QString &filePath) const
 
 static bool isLocalScheme(const QString &file)
 {
-    bool local = file == "qrc"_L1;
+    bool local = file == QLatin1String("qrc");
 #ifdef Q_OS_ANDROID
-    local |= file == "assets"_L1;
+    local |= file == QLatin1String("assets");
 #endif
     return local;
 }
@@ -183,11 +217,11 @@ QUrl QFileSelector::select(const QUrl &filePath) const
         return filePath;
     QUrl ret(filePath);
     if (isLocalScheme(filePath.scheme())) {
-        auto scheme = ":"_L1;
+        QLatin1String scheme(":");
 #ifdef Q_OS_ANDROID
         // use other scheme because ":" means "qrc" here
-        if (filePath.scheme() == "assets"_L1)
-            scheme = "assets:"_L1;
+        if (filePath.scheme() == QLatin1String("assets"))
+            scheme = QLatin1String("assets:");
 #endif
 
         QString equivalentPath = scheme + filePath.path();
@@ -210,20 +244,19 @@ QUrl QFileSelector::select(const QUrl &filePath) const
     return ret;
 }
 
-QString QFileSelectorPrivate::selectionHelper(const QString &path, const QString &fileName,
-                                              const QStringList &selectors, QChar indicator)
+QString QFileSelectorPrivate::selectionHelper(const QString &path, const QString &fileName, const QStringList &selectors, const QChar &indicator)
 {
     /* selectionHelper does a depth-first search of possible selected files. Because there is strict
        selector ordering in the API, we can stop checking as soon as we find the file in a directory
        which does not contain any other valid selector directories.
     */
-    Q_ASSERT(path.isEmpty() || path.endsWith(u'/'));
+    Q_ASSERT(path.isEmpty() || path.endsWith(QLatin1Char('/')));
 
     for (const QString &s : selectors) {
         QString prospectiveBase = path;
         if (!indicator.isNull())
             prospectiveBase += indicator;
-        prospectiveBase += s + u'/';
+        prospectiveBase += s + QLatin1Char('/');
         QStringList remainingSelectors = selectors;
         remainingSelectors.removeAll(s);
         if (!QDir(prospectiveBase).exists())
@@ -295,7 +328,7 @@ void QFileSelectorPrivate::updateSelectors()
     QLatin1Char pathSep(',');
     QStringList envSelectors = QString::fromLatin1(qgetenv("QT_FILE_SELECTORS"))
                                 .split(pathSep, Qt::SkipEmptyParts);
-    if (envSelectors.size())
+    if (envSelectors.count())
         sharedData->staticSelectors << envSelectors;
 
     if (!qEnvironmentVariableIsEmpty(env_override))
@@ -332,7 +365,7 @@ QStringList QFileSelectorPrivate::platformSelectors()
     ret << QSysInfo::kernelType();
 #  endif
     QString productName = QSysInfo::productType();
-    if (productName != "unknown"_L1)
+    if (productName != QLatin1String("unknown"))
         ret << productName; // "opensuse", "fedora", "osx", "ios", "android"
 #endif
     return ret;

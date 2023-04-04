@@ -25,7 +25,7 @@ macro(qt_find_package)
     # found as part of a find_dependency() call from a ModuleDependencies.cmake file (or similar),
     # and the provided target is also found, that means this might have been an unnecessary
     # qt_find_package() call, because the dependency was already found via some other transitive
-    # dependency. Return early, so that CMake doesn't fail with an error with trying to promote the
+    # dependency. Return early, so that CMake doesn't fail wiht an error with trying to promote the
     # targets to be global. This behavior is not enabled by default, because there are cases
     # when a regular find_package() (non qt_) can find a package (Freetype -> PNG), and a subsequent
     # qt_find_package(PNG PROVIDED_TARGET PNG::PNG) still needs to succeed and register the provided
@@ -284,8 +284,6 @@ endfunction()
 # Needed to record a dependency on the package that provides WrapVulkanHeaders::WrapVulkanHeaders.
 # The package version, components, whether the package is optional, etc, are queried from the
 # ${dep_target} target properties.
-# Usually these are set at the qt_find_package() call site of a configure.cmake file e.g. using
-# Qt's MARK_OPTIONAL option.
 function(qt_record_extra_third_party_dependency main_target_name dep_target)
     if(NOT TARGET "${main_target_name}")
         qt_get_tool_target_name(main_target_name "${main_target_name}")
@@ -309,110 +307,11 @@ function(qt_internal_is_lib_part_of_qt6_package lib out_var)
             OR lib STREQUAL "GlobalConfigPrivate"
             OR lib STREQUAL "PlatformModuleInternal"
             OR lib STREQUAL "PlatformPluginInternal"
-            OR lib STREQUAL "PlatformToolInternal"
-            OR lib STREQUAL "PlatformCommonInternal"
-    )
+            OR lib STREQUAL "PlatformToolInternal")
         set(${out_var} "TRUE" PARENT_SCOPE)
     else()
         set(${out_var} "FALSE" PARENT_SCOPE)
     endif()
-endfunction()
-
-# Try to get the CMake package version of a Qt target.
-#
-# Query the target's _qt_package_version property, or try to read it from the CMake package version
-# variable set from calling find_package(Qt6${target}).
-# Not all targets will have a find_package _VERSION variable, for example if the target is an
-# executable.
-# A heuristic is used to handle QtFooPrivate module targets.
-# If no version can be found, fall back to ${PROJECT_VERSION} and issue a warning.
-function(qt_internal_get_package_version_of_target target package_version_out_var)
-    qt_internal_is_lib_part_of_qt6_package("${target}" is_part_of_qt6)
-
-    if(is_part_of_qt6)
-        # When building qtbase, Qt6_VERSION is not set (unless examples are built in-tree,
-        # non-ExternalProject). Use the Platform target's version instead which would be the
-        # equivalent.
-        if(TARGET "${QT_CMAKE_EXPORT_NAMESPACE}::Platform")
-            get_target_property(package_version
-                "${QT_CMAKE_EXPORT_NAMESPACE}::Platform" _qt_package_version)
-        endif()
-        if(NOT package_version)
-            set(package_version "${${QT_CMAKE_EXPORT_NAMESPACE}_VERSION}")
-        endif()
-    else()
-        # Try to get the version from the target.
-        # Try the Private target first and if it doesn't exist, try the non-Private target later.
-        if(TARGET "${QT_CMAKE_EXPORT_NAMESPACE}::${target}")
-            get_target_property(package_version
-                "${QT_CMAKE_EXPORT_NAMESPACE}::${target}" _qt_package_version)
-        endif()
-
-        # Try to get the version from the corresponding package version variable.
-        if(NOT package_version)
-            set(package_version "${${QT_CMAKE_EXPORT_NAMESPACE}${target}_VERSION}")
-        endif()
-
-        # Try non-Private target.
-        if(NOT package_version AND target MATCHES "(.*)Private$")
-            set(target "${CMAKE_MATCH_1}")
-        endif()
-
-        if(NOT package_version AND TARGET "${QT_CMAKE_EXPORT_NAMESPACE}::${target}")
-            get_target_property(package_version
-                "${QT_CMAKE_EXPORT_NAMESPACE}::${target}" _qt_package_version)
-        endif()
-
-        if(NOT package_version)
-            set(package_version "${${QT_CMAKE_EXPORT_NAMESPACE}${target}_VERSION}")
-        endif()
-    endif()
-
-    if(NOT package_version)
-        set(package_version "${PROJECT_VERSION}")
-        if(FEATURE_developer_build)
-            message(WARNING
-                "Could not determine package version of target ${target}. "
-                "Defaulting to project version ${PROJECT_VERSION}.")
-        endif()
-    endif()
-
-    set(${package_version_out_var} "${package_version}" PARENT_SCOPE)
-endfunction()
-
-# Get the CMake package name that contains / exported the Qt module target.
-function(qt_internal_get_package_name_of_target target package_name_out_var)
-    qt_internal_is_lib_part_of_qt6_package("${target}" is_part_of_qt6)
-
-    if(is_part_of_qt6)
-        set(package_name "${INSTALL_CMAKE_NAMESPACE}")
-    else()
-        # Get the package name from the module's target property.
-        # If not set, fallback to a name based on the target name.
-        #
-        # TODO: Remove fallback once sufficient time has passed, aka all developers updated
-        # their builds not to contain stale FooDependencies.cmakes files without the
-        # _qt_package_name property.
-        set(package_name "")
-        set(package_name_default "${INSTALL_CMAKE_NAMESPACE}${target}")
-        set(target_namespaced "${QT_CMAKE_EXPORT_NAMESPACE}::${target}")
-        if(TARGET "${target_namespaced}")
-            get_target_property(package_name_from_prop "${target_namespaced}" _qt_package_name)
-            if(package_name_from_prop)
-                set(package_name "${package_name_from_prop}")
-            endif()
-        endif()
-        if(NOT package_name)
-            message(WARNING
-                "Could not find target ${target_namespaced} to query its package name. "
-                "Defaulting to package name ${package_name_default}. Consider re-arranging the "
-                "project structure to ensure the target exists by this point."
-            )
-            set(package_name "${package_name_default}")
-        endif()
-    endif()
-
-    set(${package_name_out_var} "${package_name}" PARENT_SCOPE)
 endfunction()
 
 # This function stores the list of Qt targets a library depend on,
@@ -446,9 +345,12 @@ function(qt_register_target_dependencies target public_libs private_libs)
     foreach(lib IN LISTS lib_list)
         if ("${lib}" MATCHES "^Qt::(.*)")
             set(lib "${CMAKE_MATCH_1}")
-            qt_internal_get_package_name_of_target("${lib}" package_name)
-            qt_internal_get_package_version_of_target("${lib}" package_version)
-            list(APPEND target_deps "${package_name}\;${package_version}")
+            qt_internal_is_lib_part_of_qt6_package("${lib}" is_part_of_qt6)
+            if (is_part_of_qt6)
+                list(APPEND target_deps "Qt6\;${PROJECT_VERSION}")
+            else()
+                list(APPEND target_deps "${INSTALL_CMAKE_NAMESPACE}${lib}\;${PROJECT_VERSION}")
+            endif()
         endif()
     endforeach()
 
@@ -468,9 +370,7 @@ function(qt_register_target_dependencies target public_libs private_libs)
                 qt_internal_is_lib_part_of_qt6_package("${lib}" is_part_of_qt6)
                 get_target_property(lib_type "${lib_namespaced}" TYPE)
                 if(NOT lib_type STREQUAL "STATIC_LIBRARY" AND NOT is_part_of_qt6)
-                    qt_internal_get_package_name_of_target("${lib}" package_name)
-                    qt_internal_get_package_version_of_target("${lib}" package_version)
-                    list(APPEND target_deps "${package_name}\;${package_version}")
+                    list(APPEND target_deps "${INSTALL_CMAKE_NAMESPACE}${lib}\;${PROJECT_VERSION}")
                 endif()
             endif()
         endforeach()

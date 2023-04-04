@@ -1,15 +1,23 @@
+# Generated from icons.pro.
+
 cmake_minimum_required(VERSION 3.16)
 project(icons LANGUAGES CXX)
 
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-    set(INSTALL_EXAMPLESDIR "examples")
+  set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/widgets/widgets/icons")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 COMPONENTS Core)
+find_package(Qt6 COMPONENTS Gui)
+find_package(Qt6 COMPONENTS Widgets)
 
 qt_add_executable(icons
     iconpreviewarea.cpp iconpreviewarea.h
@@ -18,14 +26,12 @@ qt_add_executable(icons
     main.cpp
     mainwindow.cpp mainwindow.h
 )
-
 set_target_properties(icons PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
-
 target_compile_definitions(icons PUBLIC
-    SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}" # special case
 )
 
 target_link_libraries(icons PUBLIC

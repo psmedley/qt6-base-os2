@@ -6,10 +6,10 @@
 
 qt_internal_add_benchmark(tst_bench_lancebench
     SOURCES
-        ../../../../baseline/shared/paintcommands.cpp ../../../../baseline/shared/paintcommands.h
+        ../../../../baseline/painting/paintcommands.cpp ../../../../baseline/painting/paintcommands.h
         tst_lancebench.cpp
     INCLUDE_DIRECTORIES
-        ../../../../baseline/shared
+        ../../../../baseline/painting
     PUBLIC_LIBRARIES
         Qt::Gui
         Qt::GuiPrivate

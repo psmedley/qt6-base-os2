@@ -17,14 +17,8 @@ qt_internal_add_test(tst_qsslsocket
     PUBLIC_LIBRARIES
         Qt::CorePrivate
         Qt::NetworkPrivate
-        Qt::TestPrivate
     TESTDATA ${test_data}
     QT_TEST_SERVER_LIST "squid" "danted" "cyrus" "apache2" "echo" # special case
-)
-
-qt_internal_extend_target(tst_qsslsocket CONDITION QT_FEATURE_private_tests AND QT_FEATURE_openssl_linked
-    LIBRARIES
-        WrapOpenSSL::WrapOpenSSL
 )
 
 #### Keys ignored in scope 1:.:.:qsslsocket.pro:<TRUE>:

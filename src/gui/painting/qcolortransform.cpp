@@ -1,5 +1,42 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2018 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
+
 
 #include "qcolortransform.h"
 #include "qcolortransform_p.h"
@@ -12,7 +49,6 @@
 #include <QtCore/qatomic.h>
 #include <QtCore/qmath.h>
 #include <QtGui/qcolor.h>
-#include <QtGui/qimage.h>
 #include <QtGui/qtransform.h>
 #include <QtCore/private/qsimd_p.h>
 
@@ -20,7 +56,7 @@
 
 QT_BEGIN_NAMESPACE
 
-std::shared_ptr<QColorTrcLut> lutFromTrc(const QColorTrc &trc)
+QColorTrcLut *lutFromTrc(const QColorTrc &trc)
 {
     if (trc.m_type == QColorTrc::Type::Table)
         return QColorTrcLut::fromTransferTable(trc.m_table);
@@ -44,12 +80,12 @@ void QColorTransformPrivate::updateLutsIn() const
     }
 
     if (colorSpaceIn->trc[0] == colorSpaceIn->trc[1] && colorSpaceIn->trc[0] == colorSpaceIn->trc[2]) {
-        colorSpaceIn->lut[0] = lutFromTrc(colorSpaceIn->trc[0]);
+        colorSpaceIn->lut[0].reset(lutFromTrc(colorSpaceIn->trc[0]));
         colorSpaceIn->lut[1] = colorSpaceIn->lut[0];
         colorSpaceIn->lut[2] = colorSpaceIn->lut[0];
     } else {
         for (int i = 0; i < 3; ++i)
-            colorSpaceIn->lut[i] = lutFromTrc(colorSpaceIn->trc[i]);
+            colorSpaceIn->lut[i].reset(lutFromTrc(colorSpaceIn->trc[i]));
     }
 
     colorSpaceIn->lut.generated.storeRelease(1);
@@ -68,12 +104,12 @@ void QColorTransformPrivate::updateLutsOut() const
     }
 
     if (colorSpaceOut->trc[0] == colorSpaceOut->trc[1] && colorSpaceOut->trc[0] == colorSpaceOut->trc[2]) {
-        colorSpaceOut->lut[0] = lutFromTrc(colorSpaceOut->trc[0]);
+        colorSpaceOut->lut[0].reset(lutFromTrc(colorSpaceOut->trc[0]));
         colorSpaceOut->lut[1] = colorSpaceOut->lut[0];
         colorSpaceOut->lut[2] = colorSpaceOut->lut[0];
     } else {
         for (int i = 0; i < 3; ++i)
-            colorSpaceOut->lut[i] = lutFromTrc(colorSpaceOut->trc[i]);
+            colorSpaceOut->lut[i].reset(lutFromTrc(colorSpaceOut->trc[i]));
     }
 
     colorSpaceOut->lut.generated.storeRelease(1);
@@ -105,50 +141,6 @@ QColorTransform::~QColorTransform() = default;
 QT_DEFINE_QESDP_SPECIALIZATION_DTOR(QColorTransformPrivate)
 
 /*!
-    \since 6.4
-    Returns true if the color transform is the identity transform.
-*/
-bool QColorTransform::isIdentity() const noexcept
-{
-    return !d || d->isIdentity();
-}
-
-/*!
-    \fn bool QColorTransform::operator==(const QColorTransform &ct1, const QColorTransform &ct2)
-    \since 6.4
-    Returns true if \a ct1 defines the same color transformation as \a ct2.
-*/
-
-/*!
-    \fn bool QColorTransform::operator!=(const QColorTransform &ct1, const QColorTransform &ct2)
-    \since 6.4
-    Returns true if \a ct1 does not define the same transformation as \a ct2.
-*/
-
-/*! \internal
-*/
-bool QColorTransform::compare(const QColorTransform &other) const
-{
-    if (d == other.d)
-        return true;
-    if (bool(d) != bool(other.d))
-        return d ? d->isIdentity() : other.d->isIdentity();
-    if (d->colorMatrix != other.d->colorMatrix)
-        return false;
-    if (bool(d->colorSpaceIn) != bool(other.d->colorSpaceIn))
-        return false;
-    if (bool(d->colorSpaceOut) != bool(other.d->colorSpaceOut))
-        return false;
-    for (int i = 0; i < 3; ++i) {
-        if (d->colorSpaceIn && d->colorSpaceIn->trc[i] != other.d->colorSpaceIn->trc[i])
-            return false;
-        if (d->colorSpaceOut && d->colorSpaceOut->trc[i] != other.d->colorSpaceOut->trc[i])
-            return false;
-    }
-    return true;
-}
-
-/*!
     Applies the color transformation on the QRgb value \a argb.
 
     The input should be opaque or unpremultiplied.
@@ -159,15 +151,9 @@ QRgb QColorTransform::map(QRgb argb) const
         return argb;
     constexpr float f = 1.0f / 255.0f;
     QColorVector c = { qRed(argb) * f, qGreen(argb) * f, qBlue(argb) * f };
-    if (d->colorSpaceIn->lut.generated.loadAcquire()) {
-        c.x = d->colorSpaceIn->lut[0]->toLinear(c.x);
-        c.y = d->colorSpaceIn->lut[1]->toLinear(c.y);
-        c.z = d->colorSpaceIn->lut[2]->toLinear(c.z);
-    } else {
-        c.x = d->colorSpaceIn->trc[0].apply(c.x);
-        c.y = d->colorSpaceIn->trc[1].apply(c.y);
-        c.z = d->colorSpaceIn->trc[2].apply(c.z);
-    }
+    c.x = d->colorSpaceIn->trc[0].apply(c.x);
+    c.y = d->colorSpaceIn->trc[1].apply(c.y);
+    c.z = d->colorSpaceIn->trc[2].apply(c.z);
     c = d->colorMatrix.map(c);
     c.x = std::max(0.0f, std::min(1.0f, c.x));
     c.y = std::max(0.0f, std::min(1.0f, c.y));
@@ -196,15 +182,9 @@ QRgba64 QColorTransform::map(QRgba64 rgba64) const
         return rgba64;
     constexpr float f = 1.0f / 65535.0f;
     QColorVector c = { rgba64.red() * f, rgba64.green() * f, rgba64.blue() * f };
-    if (d->colorSpaceIn->lut.generated.loadAcquire()) {
-        c.x = d->colorSpaceIn->lut[0]->toLinear(c.x);
-        c.y = d->colorSpaceIn->lut[1]->toLinear(c.y);
-        c.z = d->colorSpaceIn->lut[2]->toLinear(c.z);
-    } else {
-        c.x = d->colorSpaceIn->trc[0].apply(c.x);
-        c.y = d->colorSpaceIn->trc[1].apply(c.y);
-        c.z = d->colorSpaceIn->trc[2].apply(c.z);
-    }
+    c.x = d->colorSpaceIn->trc[0].apply(c.x);
+    c.y = d->colorSpaceIn->trc[1].apply(c.y);
+    c.z = d->colorSpaceIn->trc[2].apply(c.z);
     c = d->colorMatrix.map(c);
     c.x = std::max(0.0f, std::min(1.0f, c.x));
     c.y = std::max(0.0f, std::min(1.0f, c.y));
@@ -219,49 +199,7 @@ QRgba64 QColorTransform::map(QRgba64 rgba64) const
         c.z = d->colorSpaceOut->trc[2].applyInverse(c.z);
     }
 
-    return QRgba64::fromRgba64(c.x * 65535.f + 0.5f, c.y * 65535.f + 0.5f, c.z * 65535.f + 0.5f, rgba64.alpha());
-}
-
-/*!
-    Applies the color transformation on the QRgbaFloat16 value \a rgbafp16.
-
-    The input should be opaque or unpremultiplied.
-    \since 6.4
-*/
-QRgbaFloat16 QColorTransform::map(QRgbaFloat16 rgbafp16) const
-{
-    if (!d)
-        return rgbafp16;
-    QColorVector c;
-    c.x = d->colorSpaceIn->trc[0].applyExtended(rgbafp16.r);
-    c.y = d->colorSpaceIn->trc[1].applyExtended(rgbafp16.g);
-    c.z = d->colorSpaceIn->trc[2].applyExtended(rgbafp16.b);
-    c = d->colorMatrix.map(c);
-    rgbafp16.r = d->colorSpaceOut->trc[0].applyInverseExtended(c.x);
-    rgbafp16.g = d->colorSpaceOut->trc[1].applyInverseExtended(c.y);
-    rgbafp16.b = d->colorSpaceOut->trc[2].applyInverseExtended(c.z);
-    return rgbafp16;
-}
-
-/*!
-    Applies the color transformation on the QRgbaFloat32 value \a rgbafp32.
-
-    The input should be opaque or unpremultiplied.
-    \since 6.4
-*/
-QRgbaFloat32 QColorTransform::map(QRgbaFloat32 rgbafp32) const
-{
-    if (!d)
-        return rgbafp32;
-    QColorVector c;
-    c.x = d->colorSpaceIn->trc[0].applyExtended(rgbafp32.r);
-    c.y = d->colorSpaceIn->trc[1].applyExtended(rgbafp32.g);
-    c.z = d->colorSpaceIn->trc[2].applyExtended(rgbafp32.b);
-    c = d->colorMatrix.map(c);
-    rgbafp32.r = d->colorSpaceOut->trc[0].applyInverseExtended(c.x);
-    rgbafp32.g = d->colorSpaceOut->trc[1].applyInverseExtended(c.y);
-    rgbafp32.b = d->colorSpaceOut->trc[2].applyInverseExtended(c.z);
-    return rgbafp32;
+    return QRgba64::fromRgba64(c.x * 65535, c.y * 65535, c.z * 65535, rgba64.alpha());
 }
 
 /*!
@@ -310,7 +248,6 @@ QColor QColorTransform::map(const QColor &color) const
 
 // Optimized sub-routines for fast block based conversion:
 
-template<bool DoClamp = true>
 static void applyMatrix(QColorVector *buffer, const qsizetype len, const QColorMatrix &colorMatrix)
 {
 #if defined(__SSE2__)
@@ -330,10 +267,8 @@ static void applyMatrix(QColorVector *buffer, const qsizetype len, const QColorM
         cx = _mm_add_ps(cx, cy);
         cx = _mm_add_ps(cx, cz);
         // Clamp:
-        if (DoClamp) {
-            cx = _mm_min_ps(cx, maxV);
-            cx = _mm_max_ps(cx, minV);
-        }
+        cx = _mm_min_ps(cx, maxV);
+        cx = _mm_max_ps(cx, minV);
         _mm_storeu_ps(&buffer[j].x, cx);
     }
 #elif defined(__ARM_NEON__)
@@ -350,22 +285,16 @@ static void applyMatrix(QColorVector *buffer, const qsizetype len, const QColorM
         cx = vaddq_f32(cx, cy);
         cx = vaddq_f32(cx, cz);
         // Clamp:
-        if (DoClamp) {
-            cx = vminq_f32(cx, maxV);
-            cx = vmaxq_f32(cx, minV);
-        }
+        cx = vminq_f32(cx, maxV);
+        cx = vmaxq_f32(cx, minV);
         vst1q_f32(&buffer[j].x, cx);
     }
 #else
     for (int j = 0; j < len; ++j) {
         const QColorVector cv = colorMatrix.map(buffer[j]);
-        if (DoClamp) {
-            buffer[j].x = std::max(0.0f, std::min(1.0f, cv.x));
-            buffer[j].y = std::max(0.0f, std::min(1.0f, cv.y));
-            buffer[j].z = std::max(0.0f, std::min(1.0f, cv.z));
-        } else {
-            buffer[j] = cv;
-        }
+        buffer[j].x = std::max(0.0f, std::min(1.0f, cv.x));
+        buffer[j].y = std::max(0.0f, std::min(1.0f, cv.y));
+        buffer[j].z = std::max(0.0f, std::min(1.0f, cv.z));
     }
 #endif
 }
@@ -456,50 +385,6 @@ static void loadPremultiplied(QColorVector *buffer, const T *src, const qsizetyp
     }
 }
 
-template<>
-void loadPremultiplied<QRgbaFloat32>(QColorVector *buffer, const QRgbaFloat32 *src, const qsizetype len, const QColorTransformPrivate *d_ptr)
-{
-    const __m128 v4080 = _mm_set1_ps(4080.f);
-    const __m128 viFF00 = _mm_set1_ps(1.0f / (255 * 256));
-    const __m128 vZero = _mm_set1_ps(0.0f);
-    const __m128 vOne  = _mm_set1_ps(1.0f);
-    for (qsizetype i = 0; i < len; ++i) {
-        __m128 vf = _mm_loadu_ps(&src[i].r);
-        // Approximate 1/a:
-        __m128 va = _mm_shuffle_ps(vf, vf, _MM_SHUFFLE(3, 3, 3, 3));
-        __m128 via = _mm_rcp_ps(va);
-        via = _mm_sub_ps(_mm_add_ps(via, via), _mm_mul_ps(via, _mm_mul_ps(via, va)));
-        // v * (1/a)
-        vf = _mm_mul_ps(vf, via);
-
-        // Handle zero alpha
-        __m128 vAlphaMask = _mm_cmpeq_ps(va, vZero);
-        vf = _mm_andnot_ps(vAlphaMask, vf);
-
-        // LUT
-        const __m128 under = _mm_cmplt_ps(vf, vZero);
-        const __m128 over = _mm_cmpgt_ps(vf, vOne);
-        if (_mm_movemask_ps(_mm_or_ps(under, over)) == 0) {
-            // Within gamut
-            __m128i v = _mm_cvtps_epi32(_mm_mul_ps(vf, v4080));
-            const int ridx = _mm_extract_epi16(v, 0);
-            const int gidx = _mm_extract_epi16(v, 2);
-            const int bidx = _mm_extract_epi16(v, 4);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceIn->lut[0]->m_toLinear[ridx], 0);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceIn->lut[1]->m_toLinear[gidx], 2);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceIn->lut[2]->m_toLinear[bidx], 4);
-            vf = _mm_mul_ps(_mm_cvtepi32_ps(v), viFF00);
-            _mm_storeu_ps(&buffer[i].x, vf);
-        } else {
-            // Outside 0.0->1.0 gamut
-            _mm_storeu_ps(&buffer[i].x, vf);
-            buffer[i].x = d_ptr->colorSpaceIn->trc[0].applyExtended(buffer[i].x);
-            buffer[i].y = d_ptr->colorSpaceIn->trc[1].applyExtended(buffer[i].y);
-            buffer[i].z = d_ptr->colorSpaceIn->trc[2].applyExtended(buffer[i].z);
-        }
-    }
-}
-
 // Load to [0-4080] in 4x32 SIMD
 template<typename T>
 static inline void loadPU(const T &p, __m128i &v);
@@ -546,37 +431,6 @@ void loadUnpremultiplied(QColorVector *buffer, const T *src, const qsizetype len
         v = _mm_insert_epi16(v, d_ptr->colorSpaceIn->lut[2]->m_toLinear[bidx], 4);
         __m128 vf = _mm_mul_ps(_mm_cvtepi32_ps(v), iFF00);
         _mm_storeu_ps(&buffer[i].x, vf);
-    }
-}
-
-template<>
-void loadUnpremultiplied<QRgbaFloat32>(QColorVector *buffer, const QRgbaFloat32 *src, const qsizetype len, const QColorTransformPrivate *d_ptr)
-{
-    const __m128 v4080 = _mm_set1_ps(4080.f);
-    const __m128 iFF00 = _mm_set1_ps(1.0f / (255 * 256));
-    const __m128 vZero = _mm_set1_ps(0.0f);
-    const __m128 vOne  = _mm_set1_ps(1.0f);
-    for (qsizetype i = 0; i < len; ++i) {
-        __m128 vf = _mm_loadu_ps(&src[i].r);
-        const __m128 under = _mm_cmplt_ps(vf, vZero);
-        const __m128 over = _mm_cmpgt_ps(vf, vOne);
-        if (_mm_movemask_ps(_mm_or_ps(under, over)) == 0) {
-            // Within gamut
-            __m128i v = _mm_cvtps_epi32(_mm_mul_ps(vf, v4080));
-            const int ridx = _mm_extract_epi16(v, 0);
-            const int gidx = _mm_extract_epi16(v, 2);
-            const int bidx = _mm_extract_epi16(v, 4);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceIn->lut[0]->m_toLinear[ridx], 0);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceIn->lut[1]->m_toLinear[gidx], 2);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceIn->lut[2]->m_toLinear[bidx], 4);
-            vf = _mm_mul_ps(_mm_cvtepi32_ps(v), iFF00);
-            _mm_storeu_ps(&buffer[i].x, vf);
-        } else {
-            // Outside 0.0->1.0 gamut
-            buffer[i].x = d_ptr->colorSpaceIn->trc[0].applyExtended(src[i].r);
-            buffer[i].y = d_ptr->colorSpaceIn->trc[1].applyExtended(src[i].g);
-            buffer[i].z = d_ptr->colorSpaceIn->trc[2].applyExtended(src[i].b);
-        }
     }
 }
 
@@ -737,35 +591,6 @@ void loadUnpremultiplied<QRgba64>(QColorVector *buffer, const QRgba64 *src, cons
     }
 }
 #endif
-#if !defined(__SSE2__)
-template<>
-void loadPremultiplied<QRgbaFloat32>(QColorVector *buffer, const QRgbaFloat32 *src, const qsizetype len, const QColorTransformPrivate *d_ptr)
-{
-    for (qsizetype i = 0; i < len; ++i) {
-        const QRgbaFloat32 &p = src[i];
-        const float a = p.a;
-        if (a) {
-            const float ia = 1.0f / a;
-            buffer[i].x = d_ptr->colorSpaceIn->trc[0].applyExtended(p.r * ia);
-            buffer[i].y = d_ptr->colorSpaceIn->trc[1].applyExtended(p.g * ia);
-            buffer[i].z = d_ptr->colorSpaceIn->trc[2].applyExtended(p.b * ia);
-        } else {
-            buffer[i].x = buffer[i].y = buffer[i].z = 0.0f;
-        }
-    }
-}
-
-template<>
-void loadUnpremultiplied<QRgbaFloat32>(QColorVector *buffer, const QRgbaFloat32 *src, const qsizetype len, const QColorTransformPrivate *d_ptr)
-{
-    for (qsizetype i = 0; i < len; ++i) {
-        const QRgbaFloat32 &p = src[i];
-        buffer[i].x = d_ptr->colorSpaceIn->trc[0].applyExtended(p.r);
-        buffer[i].y = d_ptr->colorSpaceIn->trc[1].applyExtended(p.g);
-        buffer[i].z = d_ptr->colorSpaceIn->trc[2].applyExtended(p.b);
-   }
-}
-#endif
 
 #if defined(__SSE2__)
 template<typename T>
@@ -817,45 +642,6 @@ static void storePremultiplied(T *dst, const T *src, const QColorVector *buffer,
     }
 }
 
-template<>
-void storePremultiplied<QRgbaFloat32>(QRgbaFloat32 *dst, const QRgbaFloat32 *src,
-                                      const QColorVector *buffer, const qsizetype len,
-                                      const QColorTransformPrivate *d_ptr)
-{
-    const __m128 v4080 = _mm_set1_ps(4080.f);
-    const __m128 vZero = _mm_set1_ps(0.0f);
-    const __m128 vOne  = _mm_set1_ps(1.0f);
-    const __m128 viFF00 = _mm_set1_ps(1.0f / (255 * 256));
-    for (qsizetype i = 0; i < len; ++i) {
-        const float a = src[i].a;
-        __m128 va = _mm_set1_ps(a);
-        __m128 vf = _mm_loadu_ps(&buffer[i].x);
-        const __m128 under = _mm_cmplt_ps(vf, vZero);
-        const __m128 over = _mm_cmpgt_ps(vf, vOne);
-        if (_mm_movemask_ps(_mm_or_ps(under, over)) == 0) {
-            // Within gamut
-            va = _mm_mul_ps(va, viFF00);
-            __m128i v = _mm_cvtps_epi32(_mm_mul_ps(vf, v4080));
-            const int ridx = _mm_extract_epi16(v, 0);
-            const int gidx = _mm_extract_epi16(v, 2);
-            const int bidx = _mm_extract_epi16(v, 4);
-            v = _mm_setzero_si128();
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceOut->lut[0]->m_fromLinear[ridx], 0);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceOut->lut[1]->m_fromLinear[gidx], 2);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceOut->lut[2]->m_fromLinear[bidx], 4);
-            vf = _mm_mul_ps(_mm_cvtepi32_ps(v), va);
-            _mm_store_ps(&dst[i].r, vf);
-        } else {
-            dst[i].r = d_ptr->colorSpaceOut->trc[0].applyInverseExtended(buffer[i].x);
-            dst[i].g = d_ptr->colorSpaceOut->trc[1].applyInverseExtended(buffer[i].y);
-            dst[i].b = d_ptr->colorSpaceOut->trc[2].applyInverseExtended(buffer[i].z);
-            vf = _mm_mul_ps(_mm_load_ps(&dst[i].r), va);
-            _mm_store_ps(&dst[i].r, vf);
-        }
-        dst[i].a = a;
-    }
-}
-
 template<typename T>
 static inline void storePU(T &p, __m128i &v, int a);
 template<>
@@ -895,41 +681,6 @@ static void storeUnpremultiplied(T *dst, const T *src, const QColorVector *buffe
     }
 }
 
-template<>
-void storeUnpremultiplied<QRgbaFloat32>(QRgbaFloat32 *dst, const QRgbaFloat32 *src,
-                                        const QColorVector *buffer, const qsizetype len,
-                                        const QColorTransformPrivate *d_ptr)
-{
-    const __m128 v4080 = _mm_set1_ps(4080.f);
-    const __m128 vZero = _mm_set1_ps(0.0f);
-    const __m128 vOne  = _mm_set1_ps(1.0f);
-    const __m128 viFF00 = _mm_set1_ps(1.0f / (255 * 256));
-    for (qsizetype i = 0; i < len; ++i) {
-        const float a = src[i].a;
-        __m128 vf = _mm_loadu_ps(&buffer[i].x);
-        const __m128 under = _mm_cmplt_ps(vf, vZero);
-        const __m128 over = _mm_cmpgt_ps(vf, vOne);
-        if (_mm_movemask_ps(_mm_or_ps(under, over)) == 0) {
-            // Within gamut
-            __m128i v = _mm_cvtps_epi32(_mm_mul_ps(vf, v4080));
-            const int ridx = _mm_extract_epi16(v, 0);
-            const int gidx = _mm_extract_epi16(v, 2);
-            const int bidx = _mm_extract_epi16(v, 4);
-            v = _mm_setzero_si128();
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceOut->lut[0]->m_fromLinear[ridx], 0);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceOut->lut[1]->m_fromLinear[gidx], 2);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceOut->lut[2]->m_fromLinear[bidx], 4);
-            vf = _mm_mul_ps(_mm_cvtepi32_ps(v), viFF00);
-            _mm_storeu_ps(&dst[i].r, vf);
-        } else {
-            dst[i].r = d_ptr->colorSpaceOut->trc[0].applyInverseExtended(buffer[i].x);
-            dst[i].g = d_ptr->colorSpaceOut->trc[1].applyInverseExtended(buffer[i].y);
-            dst[i].b = d_ptr->colorSpaceOut->trc[2].applyInverseExtended(buffer[i].z);
-        }
-        dst[i].a = a;
-    }
-}
-
 template<typename T>
 static void storeOpaque(T *dst, const T *src, const QColorVector *buffer, const qsizetype len,
                         const QColorTransformPrivate *d_ptr)
@@ -950,42 +701,6 @@ static void storeOpaque(T *dst, const T *src, const QColorVector *buffer, const 
         storePU<T>(dst[i], v, isARGB ? 255 : 0xffff);
     }
 }
-
-template<>
-void storeOpaque<QRgbaFloat32>(QRgbaFloat32 *dst, const QRgbaFloat32 *src,
-                               const QColorVector *buffer, const qsizetype len,
-                               const QColorTransformPrivate *d_ptr)
-{
-    Q_UNUSED(src);
-    const __m128 v4080 = _mm_set1_ps(4080.f);
-    const __m128 vZero = _mm_set1_ps(0.0f);
-    const __m128 vOne  = _mm_set1_ps(1.0f);
-    const __m128 viFF00 = _mm_set1_ps(1.0f / (255 * 256));
-    for (qsizetype i = 0; i < len; ++i) {
-        __m128 vf = _mm_loadu_ps(&buffer[i].x);
-        const __m128 under = _mm_cmplt_ps(vf, vZero);
-        const __m128 over = _mm_cmpgt_ps(vf, vOne);
-        if (_mm_movemask_ps(_mm_or_ps(under, over)) == 0) {
-            // Within gamut
-            __m128i v = _mm_cvtps_epi32(_mm_mul_ps(vf, v4080));
-            const int ridx = _mm_extract_epi16(v, 0);
-            const int gidx = _mm_extract_epi16(v, 2);
-            const int bidx = _mm_extract_epi16(v, 4);
-            v = _mm_setzero_si128();
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceOut->lut[0]->m_fromLinear[ridx], 0);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceOut->lut[1]->m_fromLinear[gidx], 2);
-            v = _mm_insert_epi16(v, d_ptr->colorSpaceOut->lut[2]->m_fromLinear[bidx], 4);
-            vf = _mm_mul_ps(_mm_cvtepi32_ps(v), viFF00);
-            _mm_store_ps(&dst[i].r, vf);
-        } else {
-            dst[i].r = d_ptr->colorSpaceOut->trc[0].applyInverseExtended(buffer[i].x);
-            dst[i].g = d_ptr->colorSpaceOut->trc[1].applyInverseExtended(buffer[i].y);
-            dst[i].b = d_ptr->colorSpaceOut->trc[2].applyInverseExtended(buffer[i].z);
-        }
-        dst[i].a = 1.0f;
-    }
-}
-
 #elif defined(__ARM_NEON__)
 template<typename T>
 static inline void storeP(T &p, const uint16x4_t &v);
@@ -1154,43 +869,7 @@ static void storeOpaque(QRgba64 *dst, const QRgba64 *src, const QColorVector *bu
     }
 }
 #endif
-#if !defined(__SSE2__)
-static void storePremultiplied(QRgbaFloat32 *dst, const QRgbaFloat32 *src, const QColorVector *buffer,
-                               const qsizetype len, const QColorTransformPrivate *d_ptr)
-{
-    for (qsizetype i = 0; i < len; ++i) {
-        const float a = src[i].a;
-        dst[i].r = d_ptr->colorSpaceOut->trc[0].applyInverseExtended(buffer[i].x) * a;
-        dst[i].g = d_ptr->colorSpaceOut->trc[1].applyInverseExtended(buffer[i].y) * a;
-        dst[i].b = d_ptr->colorSpaceOut->trc[2].applyInverseExtended(buffer[i].z) * a;
-        dst[i].a = a;
-    }
-}
 
-static void storeUnpremultiplied(QRgbaFloat32 *dst, const QRgbaFloat32 *src, const QColorVector *buffer,
-                                 const qsizetype len, const QColorTransformPrivate *d_ptr)
-{
-    for (qsizetype i = 0; i < len; ++i) {
-        const float a = src[i].a;
-        dst[i].r = d_ptr->colorSpaceOut->trc[0].applyInverseExtended(buffer[i].x);
-        dst[i].g = d_ptr->colorSpaceOut->trc[1].applyInverseExtended(buffer[i].y);
-        dst[i].b = d_ptr->colorSpaceOut->trc[2].applyInverseExtended(buffer[i].z);
-        dst[i].a = a;
-    }
-}
-
-static void storeOpaque(QRgbaFloat32 *dst, const QRgbaFloat32 *src, const QColorVector *buffer, const qsizetype len,
-                        const QColorTransformPrivate *d_ptr)
-{
-    Q_UNUSED(src);
-    for (qsizetype i = 0; i < len; ++i) {
-        dst[i].r = d_ptr->colorSpaceOut->trc[0].applyInverseExtended(buffer[i].x);
-        dst[i].g = d_ptr->colorSpaceOut->trc[1].applyInverseExtended(buffer[i].y);
-        dst[i].b = d_ptr->colorSpaceOut->trc[2].applyInverseExtended(buffer[i].z);
-        dst[i].a = 1.0f;
-    }
-}
-#endif
 static void storeGray(quint8 *dst, const QRgb *src, const QColorVector *buffer, const qsizetype len,
                       const QColorTransformPrivate *d_ptr)
 {
@@ -1227,8 +906,7 @@ void QColorTransformPrivate::apply(T *dst, const T *src, qsizetype count, Transf
     updateLutsIn();
     updateLutsOut();
 
-    bool doApplyMatrix = !colorMatrix.isIdentity();
-    constexpr bool DoClip = !std::is_same_v<T, QRgbaFloat16> && !std::is_same_v<T, QRgbaFloat32>;
+    bool doApplyMatrix = (colorMatrix != QColorMatrix::identity());
 
     QUninitialized<QColorVector, WorkBlockSize> buffer;
 
@@ -1241,7 +919,7 @@ void QColorTransformPrivate::apply(T *dst, const T *src, qsizetype count, Transf
             loadUnpremultiplied(buffer, src + i, len, this);
 
         if (doApplyMatrix)
-            applyMatrix<DoClip>(buffer, len, colorMatrix);
+            applyMatrix(buffer, len, colorMatrix);
 
         if (flags & InputOpaque)
             storeOpaque(dst + i, src + i, buffer, len, this);
@@ -1343,23 +1021,6 @@ void QColorTransformPrivate::apply(QRgba64 *dst, const QRgba64 *src, qsizetype c
 
 /*!
     \internal
-    Applies the color transformation on \a count QRgbaFloat32 pixels starting from
-    \a src and stores the result in \a dst.
-
-    Thread-safe if prepare() has been called first.
-
-    Assumes unpremultiplied data by default. Set \a flags to change defaults.
-
-    \sa prepare()
-*/
-void QColorTransformPrivate::apply(QRgbaFloat32 *dst, const QRgbaFloat32 *src, qsizetype count,
-                                   TransformFlags flags) const
-{
-    apply<QRgbaFloat32>(dst, src, count, flags);
-}
-
-/*!
-    \internal
     Is to be called on a color-transform to XYZ, returns only luminance values.
 
 */
@@ -1378,29 +1039,5 @@ void QColorTransformPrivate::apply(quint16 *dst, const QRgba64 *src, qsizetype c
     applyReturnGray<quint16, QRgba64>(dst, src, count, flags);
 }
 
-
-/*!
-    \internal
-*/
-bool QColorTransformPrivate::isIdentity() const
-{
-    if (!colorMatrix.isIdentity())
-        return false;
-    if (colorSpaceIn && colorSpaceOut) {
-        if (colorSpaceIn->transferFunction != colorSpaceOut->transferFunction)
-            return false;
-        if (colorSpaceIn->transferFunction == QColorSpace::TransferFunction::Custom) {
-            return colorSpaceIn->trc[0] == colorSpaceOut->trc[0]
-                && colorSpaceIn->trc[1] == colorSpaceOut->trc[1]
-                && colorSpaceIn->trc[2] == colorSpaceOut->trc[2];
-        }
-    } else {
-        if (colorSpaceIn && colorSpaceIn->transferFunction != QColorSpace::TransferFunction::Linear)
-            return false;
-        if (colorSpaceOut && colorSpaceOut->transferFunction != QColorSpace::TransferFunction::Linear)
-            return false;
-    }
-    return true;
-}
 
 QT_END_NAMESPACE

@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QSignalSpy>
@@ -587,7 +612,7 @@ void tst_QItemModel::setData()
     QVERIFY(currentModel);
     QSignalSpy spy(currentModel, &QAbstractItemModel::dataChanged);
     QVERIFY(spy.isValid());
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
 
     QFETCH(bool, isEmpty);
     if (isEmpty)
@@ -611,7 +636,7 @@ void tst_QItemModel::setData()
     // Changing the text shouldn't change the layout, parent, pointer etc.
     QModelIndex changedIndex = currentModel->index(0, 0, topIndex);
     QCOMPARE(changedIndex, index);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 }
 
 void tst_QItemModel::setHeaderData_data()
@@ -661,7 +686,7 @@ void tst_QItemModel::setHeaderData()
             ++signalCount;
         }
     }
-    QCOMPARE(spy.size(), signalCount);
+    QCOMPARE(spy.count(), signalCount);
 }
 
 void tst_QItemModel::sort_data()
@@ -692,7 +717,7 @@ void tst_QItemModel::sort()
     for (int i=-1; i < 10; ++i){
         currentModel->sort(i);
         if (index != currentModel->index(0, 0, topIndex)){
-            QVERIFY(spy.size() > 0);
+            QVERIFY(spy.count() > 0);
             index = currentModel->index(0, 0, topIndex);
             spy.clear();
         }
@@ -858,7 +883,7 @@ void tst_QItemModel::remove()
     if (shouldSucceed && dyingIndex.isValid())
         QCOMPARE(dyingIndex.row(), start + 1);
 
-    if (rowsAboutToBeRemovedSpy.size() > 0){
+    if (rowsAboutToBeRemovedSpy.count() > 0){
         QList<QVariant> arguments = rowsAboutToBeRemovedSpy.at(0);
         QModelIndex parent = (qvariant_cast<QModelIndex>(arguments.at(0)));
         int first = arguments.at(1).toInt();
@@ -868,7 +893,7 @@ void tst_QItemModel::remove()
         QVERIFY(parentOfRemoved == parent);
     }
 
-    if (rowsRemovedSpy.size() > 0){
+    if (rowsRemovedSpy.count() > 0){
         QList<QVariant> arguments = rowsRemovedSpy.at(0);
         QModelIndex parent = (qvariant_cast<QModelIndex>(arguments.at(0)));
         int first = arguments.at(1).toInt();
@@ -879,26 +904,26 @@ void tst_QItemModel::remove()
     }
 
     // Only the row signals should have been emitted
-    if (modelResetSpy.size() >= 1 || modelLayoutChangedSpy.size() >=1 ){
-        QCOMPARE(columnsAboutToBeRemovedSpy.size(), 0);
-        QCOMPARE(rowsAboutToBeRemovedSpy.size(), 0);
-        QCOMPARE(columnsRemovedSpy.size(), 0);
-        QCOMPARE(rowsRemovedSpy.size(), 0);
+    if (modelResetSpy.count() >= 1 || modelLayoutChangedSpy.count() >=1 ){
+        QCOMPARE(columnsAboutToBeRemovedSpy.count(), 0);
+        QCOMPARE(rowsAboutToBeRemovedSpy.count(), 0);
+        QCOMPARE(columnsRemovedSpy.count(), 0);
+        QCOMPARE(rowsRemovedSpy.count(), 0);
     }
     else {
-        QCOMPARE(columnsAboutToBeRemovedSpy.size(), 0);
-        QCOMPARE(rowsAboutToBeRemovedSpy.size(), numberOfRowsAboutToBeRemovedSignals);
-        QCOMPARE(columnsRemovedSpy.size(), 0);
-        QCOMPARE(rowsRemovedSpy.size(), numberOfRowsRemovedSignals);
+        QCOMPARE(columnsAboutToBeRemovedSpy.count(), 0);
+        QCOMPARE(rowsAboutToBeRemovedSpy.count(), numberOfRowsAboutToBeRemovedSignals);
+        QCOMPARE(columnsRemovedSpy.count(), 0);
+        QCOMPARE(rowsRemovedSpy.count(), numberOfRowsRemovedSignals);
     }
 
     // The row count should only change *after* rowsAboutToBeRemoved has been emitted
     if (shouldSucceed) {
-        if (modelResetSpy.size() == 0 && modelLayoutChangedSpy.size() == 0){
+        if (modelResetSpy.count() == 0 && modelLayoutChangedSpy.count() == 0){
             QCOMPARE(afterAboutToRemoveRowCount, beforeRemoveRowCount);
             QCOMPARE(afterRemoveRowCount, beforeRemoveRowCount-count-(numberOfRowsRemovedSignals-1));
         }
-        if (modelResetSpy.size() == 0 )
+        if (modelResetSpy.count() == 0 )
             QCOMPARE(currentModel->rowCount(parentOfRemoved), beforeRemoveRowCount-count-(numberOfRowsRemovedSignals-1));
     }
     else {
@@ -913,7 +938,7 @@ void tst_QItemModel::remove()
     disconnect(currentModel, SIGNAL(rowsRemoved(QModelIndex,int,int)),
             this, SLOT(slot_rowsRemoved(QModelIndex)));
     modelResetSpy.clear();
-    QCOMPARE(modelResetSpy.size(), 0);
+    QCOMPARE(modelResetSpy.count(), 0);
 
     //
     // Test remove column
@@ -928,26 +953,26 @@ void tst_QItemModel::remove()
     if (currentModel->removeColumns(start, count, parentOfRemoved)) {
         currentModel->submit();
         // Didn't reset the rows, so they should still be at the same value
-        if (modelResetSpy.size() >= 1 || modelLayoutChangedSpy.size() >= 1){
-            QCOMPARE(columnsAboutToBeRemovedSpy.size(), 0);
+        if (modelResetSpy.count() >= 1 || modelLayoutChangedSpy.count() >= 1){
+            QCOMPARE(columnsAboutToBeRemovedSpy.count(), 0);
             //QCOMPARE(rowsAboutToBeRemovedSpy.count(), numberOfRowsAboutToBeRemovedSignals);
-            QCOMPARE(columnsRemovedSpy.size(), 0);
+            QCOMPARE(columnsRemovedSpy.count(), 0);
             //QCOMPARE(rowsRemovedSpy.count(), numberOfRowsRemovedSignals);
         }
         else {
-            QCOMPARE(columnsAboutToBeRemovedSpy.size(), numberOfColumnsAboutToBeRemovedSignals);
-            QCOMPARE(rowsAboutToBeRemovedSpy.size(), numberOfRowsAboutToBeRemovedSignals);
-            QCOMPARE(columnsRemovedSpy.size(), numberOfColumnsRemovedSignals);
-            QCOMPARE(rowsRemovedSpy.size(), numberOfRowsRemovedSignals);
+            QCOMPARE(columnsAboutToBeRemovedSpy.count(), numberOfColumnsAboutToBeRemovedSignals);
+            QCOMPARE(rowsAboutToBeRemovedSpy.count(), numberOfRowsAboutToBeRemovedSignals);
+            QCOMPARE(columnsRemovedSpy.count(), numberOfColumnsRemovedSignals);
+            QCOMPARE(rowsRemovedSpy.count(), numberOfRowsRemovedSignals);
         }
 
         // The column count should only change *after* rowsAboutToBeRemoved has been emitted
         if (shouldSucceed) {
-            if (modelResetSpy.size() == 0 && modelLayoutChangedSpy.size() == 0){
+            if (modelResetSpy.count() == 0 && modelLayoutChangedSpy.count() == 0){
                 QCOMPARE(afterAboutToRemoveColumnCount, beforeRemoveColumnCount);
                 QCOMPARE(afterRemoveColumnCount, beforeRemoveColumnCount-count-(numberOfColumnsRemovedSignals-1));
             }
-            if (modelResetSpy.size() == 0)
+            if (modelResetSpy.count() == 0)
                 QCOMPARE(currentModel->columnCount(parentOfRemoved), beforeRemoveColumnCount-count-(numberOfColumnsRemovedSignals-1));
         }
         else
@@ -958,7 +983,7 @@ void tst_QItemModel::remove()
     disconnect(currentModel, SIGNAL(columnsRemoved(QModelIndex,int,int)),
             this, SLOT(slot_columnsRemoved(QModelIndex)));
 
-    if (columnsAboutToBeRemovedSpy.size() > 0){
+    if (columnsAboutToBeRemovedSpy.count() > 0){
         QList<QVariant> arguments = columnsAboutToBeRemovedSpy.at(0);
         QModelIndex parent = (qvariant_cast<QModelIndex>(arguments.at(0)));
         int first = arguments.at(1).toInt();
@@ -968,7 +993,7 @@ void tst_QItemModel::remove()
         QVERIFY(parentOfRemoved == parent);
     }
 
-    if (columnsRemovedSpy.size() > 0){
+    if (columnsRemovedSpy.count() > 0){
         QList<QVariant> arguments = columnsRemovedSpy.at(0);
         QModelIndex parent = (qvariant_cast<QModelIndex>(arguments.at(0)));
         int first = arguments.at(1).toInt();
@@ -1197,7 +1222,7 @@ void tst_QItemModel::insert()
     QCOMPARE(currentModel->insertRows(start, count, parentOfInserted), shouldSucceed);
     currentModel->submit();
 
-    if (rowsAboutToBeInsertedSpy.size() > 0){
+    if (rowsAboutToBeInsertedSpy.count() > 0){
         QList<QVariant> arguments = rowsAboutToBeInsertedSpy.at(0);
         QModelIndex parent = (qvariant_cast<QModelIndex>(arguments.at(0)));
         int first = arguments.at(1).toInt();
@@ -1207,7 +1232,7 @@ void tst_QItemModel::insert()
         QVERIFY(parentOfInserted == parent);
     }
 
-    if (rowsInsertedSpy.size() > 0){
+    if (rowsInsertedSpy.count() > 0){
         QList<QVariant> arguments = rowsInsertedSpy.at(0);
         QModelIndex parent = (qvariant_cast<QModelIndex>(arguments.at(0)));
         int first = arguments.at(1).toInt();
@@ -1218,25 +1243,25 @@ void tst_QItemModel::insert()
     }
 
     // Only the row signals should have been emitted
-    if (modelResetSpy.size() >= 1 || modelLayoutChangedSpy.size() >= 1) {
-        QCOMPARE(columnsAboutToBeInsertedSpy.size(), 0);
-        QCOMPARE(rowsAboutToBeInsertedSpy.size(), 0);
-        QCOMPARE(columnsInsertedSpy.size(), 0);
-        QCOMPARE(rowsInsertedSpy.size(), 0);
+    if (modelResetSpy.count() >= 1 || modelLayoutChangedSpy.count() >= 1) {
+        QCOMPARE(columnsAboutToBeInsertedSpy.count(), 0);
+        QCOMPARE(rowsAboutToBeInsertedSpy.count(), 0);
+        QCOMPARE(columnsInsertedSpy.count(), 0);
+        QCOMPARE(rowsInsertedSpy.count(), 0);
     }
     else {
-        QCOMPARE(columnsAboutToBeInsertedSpy.size(), 0);
-        QCOMPARE(rowsAboutToBeInsertedSpy.size(), numberOfRowsAboutToBeInsertedSignals);
-        QCOMPARE(columnsInsertedSpy.size(), 0);
-        QCOMPARE(rowsInsertedSpy.size(), numberOfRowsInsertedSignals);
+        QCOMPARE(columnsAboutToBeInsertedSpy.count(), 0);
+        QCOMPARE(rowsAboutToBeInsertedSpy.count(), numberOfRowsAboutToBeInsertedSignals);
+        QCOMPARE(columnsInsertedSpy.count(), 0);
+        QCOMPARE(rowsInsertedSpy.count(), numberOfRowsInsertedSignals);
     }
     // The row count should only change *after* rowsAboutToBeInserted has been emitted
     if (shouldSucceed) {
-        if (modelResetSpy.size() == 0 && modelLayoutChangedSpy.size() == 0) {
+        if (modelResetSpy.count() == 0 && modelLayoutChangedSpy.count() == 0) {
             QCOMPARE(afterAboutToInsertRowCount, beforeInsertRowCount);
             QCOMPARE(afterInsertRowCount, beforeInsertRowCount+count+(numberOfRowsInsertedSignals-1));
         }
-        if (modelResetSpy.size() == 0)
+        if (modelResetSpy.count() == 0)
             QCOMPARE(currentModel->rowCount(parentOfInserted), beforeInsertRowCount+count+(numberOfRowsInsertedSignals-1));
     }
     else {
@@ -1264,27 +1289,27 @@ void tst_QItemModel::insert()
     // Some models don't let you insert the column, only row
     if (currentModel->insertColumns(start, count, parentOfInserted)) {
         currentModel->submit();
-        if (modelResetSpy.size() >= 1 || modelLayoutChangedSpy.size() >= 1) {
+        if (modelResetSpy.count() >= 1 || modelLayoutChangedSpy.count() >= 1) {
             // Didn't reset the rows, so they should still be at the same value
-            QCOMPARE(columnsAboutToBeInsertedSpy.size(), 0);
+            QCOMPARE(columnsAboutToBeInsertedSpy.count(), 0);
             //QCOMPARE(rowsAboutToBeInsertedSpy.count(), numberOfRowsAboutToBeInsertedSignals);
-            QCOMPARE(columnsInsertedSpy.size(), 0);
+            QCOMPARE(columnsInsertedSpy.count(), 0);
             //QCOMPARE(rowsInsertedSpy.count(), numberOfRowsInsertedSignals);
         }
         else {
             // Didn't reset the rows, so they should still be at the same value
-            QCOMPARE(columnsAboutToBeInsertedSpy.size(), numberOfColumnsAboutToBeInsertedSignals);
-            QCOMPARE(rowsAboutToBeInsertedSpy.size(), numberOfRowsAboutToBeInsertedSignals);
-            QCOMPARE(columnsInsertedSpy.size(), numberOfColumnsInsertedSignals);
-            QCOMPARE(rowsInsertedSpy.size(), numberOfRowsInsertedSignals);
+            QCOMPARE(columnsAboutToBeInsertedSpy.count(), numberOfColumnsAboutToBeInsertedSignals);
+            QCOMPARE(rowsAboutToBeInsertedSpy.count(), numberOfRowsAboutToBeInsertedSignals);
+            QCOMPARE(columnsInsertedSpy.count(), numberOfColumnsInsertedSignals);
+            QCOMPARE(rowsInsertedSpy.count(), numberOfRowsInsertedSignals);
         }
         // The column count should only change *after* rowsAboutToBeInserted has been emitted
         if (shouldSucceed) {
-            if (modelResetSpy.size() == 0 &&  modelLayoutChangedSpy.size() == 0) {
+            if (modelResetSpy.count() == 0 &&  modelLayoutChangedSpy.count() == 0) {
                 QCOMPARE(afterAboutToInsertColumnCount, beforeInsertColumnCount);
                 QCOMPARE(afterInsertColumnCount, beforeInsertColumnCount+count+(numberOfColumnsInsertedSignals-1));
             }
-            if (modelResetSpy.size() == 0)
+            if (modelResetSpy.count() == 0)
                 QCOMPARE(currentModel->columnCount(parentOfInserted), beforeInsertColumnCount+count+(numberOfColumnsInsertedSignals-1));
         }
         else
@@ -1295,7 +1320,7 @@ void tst_QItemModel::insert()
     disconnect(currentModel, SIGNAL(columnsInserted(QModelIndex,int,int)),
             this, SLOT(slot_columnsInserted(QModelIndex)));
 
-    if (columnsAboutToBeInsertedSpy.size() > 0){
+    if (columnsAboutToBeInsertedSpy.count() > 0){
         QList<QVariant> arguments = columnsAboutToBeInsertedSpy.at(0);
         QModelIndex parent = (qvariant_cast<QModelIndex>(arguments.at(0)));
         int first = arguments.at(1).toInt();
@@ -1305,7 +1330,7 @@ void tst_QItemModel::insert()
         QVERIFY(parentOfInserted == parent);
     }
 
-    if (columnsInsertedSpy.size() > 0){
+    if (columnsInsertedSpy.count() > 0){
         QList<QVariant> arguments = columnsInsertedSpy.at(0);
         QModelIndex parent = (qvariant_cast<QModelIndex>(arguments.at(0)));
         int first = arguments.at(1).toInt();

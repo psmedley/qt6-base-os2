@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QSignalSpy>
@@ -41,8 +66,6 @@ private slots:
     void propertyMetaType();
 
     void cleanupTestCase();
-
-    void ownMetaTypeNoProperties();
 
 private:
     static bool checkForSideEffects
@@ -1458,7 +1481,9 @@ int TestObject::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
         if (_id < ownMethodCount)
             qt_static_metacall(this, _c, _id, _a);
         _id -= ownMethodCount;
-    } else if (_c == QMetaObject::ReadProperty) {
+    }
+#ifndef QT_NO_PROPERTIES
+      else if (_c == QMetaObject::ReadProperty) {
         void *_v = _a[0];
         switch (_id) {
         case 0: *reinterpret_cast< int*>(_v) = intProp(); break;
@@ -1481,6 +1506,7 @@ int TestObject::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     } else if (_c == QMetaObject::ResetProperty) {
         _id -= ownPropertyCount;
     }
+#endif // QT_NO_PROPERTIES
     return _id;
 }
 
@@ -1498,8 +1524,8 @@ void tst_QMetaObjectBuilder::usage_signal()
 
     QSignalSpy propChangedSpy(testObject.data(), &TestObject::intPropChanged);
     testObject->emitIntPropChanged();
-    QCOMPARE(propChangedSpy.size(), 1);
-    QCOMPARE(propChangedSpy.at(0).size(), 1);
+    QCOMPARE(propChangedSpy.count(), 1);
+    QCOMPARE(propChangedSpy.at(0).count(), 1);
     QCOMPARE(propChangedSpy.at(0).at(0).toInt(), testObject->intProp());
 }
 
@@ -1514,7 +1540,7 @@ void tst_QMetaObjectBuilder::usage_property()
     QSignalSpy propChangedSpy(testObject.data(), &TestObject::intPropChanged);
     QVERIFY(testObject->intProp() != 123);
     testObject->setProperty("intProp", 123);
-    QCOMPARE(propChangedSpy.size(), 1);
+    QCOMPARE(propChangedSpy.count(), 1);
     prop = testObject->property("intProp");
     QCOMPARE(prop.metaType(), QMetaType(QMetaType::Int));
     QCOMPARE(prop.toInt(), 123);
@@ -1632,16 +1658,6 @@ void tst_QMetaObjectBuilder::propertyMetaType()
     QCOMPARE(metaProp.typeId(), metaId);
     QCOMPARE(metaProp.metaType(), meta);
     free(mo);
-}
-
-void tst_QMetaObjectBuilder::ownMetaTypeNoProperties()
-{
-    QMetaObjectBuilder builder;
-    builder.setClassName("NoProperties");
-    auto mo = builder.toMetaObject();
-    auto cleanup = qScopeGuard([&](){ free(mo); });
-    // own metatype should be invalid, as the dynamic metaobject has not been registered
-    QVERIFY(!mo->metaType().isValid());// should not crash
 }
 
 void tst_QMetaObjectBuilder::cleanupTestCase()

@@ -1,13 +1,37 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "tst_qcoreapplication.h"
 
 #include <QtCore/QtCore>
 #include <QTest>
 
-#include <private/qabstracteventdispatcher_p.h> // for qGlobalPostedEventsCount()
 #include <private/qcoreapplication_p.h>
 #include <private/qeventloop_p.h>
 #include <private/qthread_p.h>
@@ -175,7 +199,7 @@ void tst_QCoreApplication::argc()
         char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
         TestApplication app(argc, argv);
         QCOMPARE(argc, 1);
-        QCOMPARE(app.arguments().size(), 1);
+        QCOMPARE(app.arguments().count(), 1);
     }
 
     {
@@ -186,7 +210,7 @@ void tst_QCoreApplication::argc()
                          const_cast<char*>("arg3") };
         TestApplication app(argc, argv);
         QCOMPARE(argc, 4);
-        QCOMPARE(app.arguments().size(), 4);
+        QCOMPARE(app.arguments().count(), 4);
     }
 
     {
@@ -194,7 +218,7 @@ void tst_QCoreApplication::argc()
         char **argv = 0;
         TestApplication app(argc, argv);
         QCOMPARE(argc, 0);
-        QCOMPARE(app.arguments().size(), 0);
+        QCOMPARE(app.arguments().count(), 0);
     }
 
     {
@@ -203,7 +227,7 @@ void tst_QCoreApplication::argc()
                          const_cast<char*>("-qmljsdebugger=port:3768,block") };
         TestApplication app(argc, argv);
         QCOMPARE(argc, 1);
-        QCOMPARE(app.arguments().size(), 1);
+        QCOMPARE(app.arguments().count(), 1);
     }
 }
 
@@ -514,13 +538,16 @@ void tst_QCoreApplication::applicationPid()
     QVERIFY(QCoreApplication::applicationPid() > 0);
 }
 
-#ifdef QT_BUILD_INTERNAL
+QT_BEGIN_NAMESPACE
+Q_CORE_EXPORT uint qGlobalPostedEventsCount();
+QT_END_NAMESPACE
+
 class GlobalPostedEventsCountObject : public QObject
 {
     Q_OBJECT
 
 public:
-    QList<qsizetype> globalPostedEventsCount;
+    QList<int> globalPostedEventsCount;
 
     bool event(QEvent *event) override
     {
@@ -537,7 +564,7 @@ void tst_QCoreApplication::globalPostedEventsCount()
     TestApplication app(argc, argv);
 
     QCoreApplication::sendPostedEvents();
-    QCOMPARE(qGlobalPostedEventsCount(), qsizetype(0));
+    QCOMPARE(qGlobalPostedEventsCount(), 0u);
 
     GlobalPostedEventsCountObject x;
     QCoreApplication::postEvent(&x, new QEvent(QEvent::User));
@@ -545,15 +572,19 @@ void tst_QCoreApplication::globalPostedEventsCount()
     QCoreApplication::postEvent(&x, new QEvent(QEvent::User));
     QCoreApplication::postEvent(&x, new QEvent(QEvent::User));
     QCoreApplication::postEvent(&x, new QEvent(QEvent::User));
-    QCOMPARE(qGlobalPostedEventsCount(), qsizetype(5));
+    QCOMPARE(qGlobalPostedEventsCount(), 5u);
 
     QCoreApplication::sendPostedEvents();
-    QCOMPARE(qGlobalPostedEventsCount(), qsizetype(0));
+    QCOMPARE(qGlobalPostedEventsCount(), 0u);
 
-    const QList<qsizetype> expected = {4, 3, 2, 1, 0};
+    QList<int> expected = QList<int>()
+                          << 4
+                          << 3
+                          << 2
+                          << 1
+                          << 0;
     QCOMPARE(x.globalPostedEventsCount, expected);
 }
-#endif // QT_BUILD_INTERNAL
 
 class ProcessEventsAlwaysSendsPostedEventsObject : public QObject
 {
@@ -1021,7 +1052,7 @@ void tst_QCoreApplication::addRemoveLibPaths()
     TestApplication app(argc, argv);
 
     // If libraryPaths only contains currentDir, neither will be in libraryPaths now.
-    if (paths.size() != 1 && currentDir != paths[0]) {
+    if (paths.length() != 1 && currentDir != paths[0]) {
         // Check that modifications stay alive across the creation of an application.
         QVERIFY(QCoreApplication::libraryPaths().contains(currentDir));
         QVERIFY(!QCoreApplication::libraryPaths().contains(paths[0]));

@@ -30,7 +30,6 @@
 #include "hb-ot-cff-common.hh"
 #include "hb-subset-cff2.hh"
 #include "hb-draw.hh"
-#include "hb-paint.hh"
 
 namespace CFF {
 
@@ -57,7 +56,7 @@ struct CFF2FDSelect
     unsigned int size = src.get_size (num_glyphs);
     CFF2FDSelect *dest = c->allocate_size<CFF2FDSelect> (size);
     if (unlikely (!dest)) return_trace (false);
-    hb_memcpy (dest, &src, size);
+    memcpy (dest, &src, size);
     return_trace (true);
   }
 
@@ -125,7 +124,7 @@ struct CFF2VariationStore
     unsigned int size_ = varStore->get_size ();
     CFF2VariationStore *dest = c->allocate_size<CFF2VariationStore> (size_);
     if (unlikely (!dest)) return_trace (false);
-    hb_memcpy (dest, varStore, size_);
+    memcpy (dest, varStore, size_);
     return_trace (true);
   }
 
@@ -248,8 +247,12 @@ typedef cff2_private_dict_values_base_t<num_dict_val_t> cff2_private_dict_values
 
 struct cff2_priv_dict_interp_env_t : num_interp_env_t
 {
-  cff2_priv_dict_interp_env_t (const hb_ubytes_t &str) :
-    num_interp_env_t (str) {}
+  void init (const byte_str_t &str)
+  {
+    num_interp_env_t::init (str);
+    ivs = 0;
+    seen_vsindex = false;
+  }
 
   void process_vsindex ()
   {
@@ -264,8 +267,8 @@ struct cff2_priv_dict_interp_env_t : num_interp_env_t
   void	 set_ivs (unsigned int ivs_) { ivs = ivs_; }
 
   protected:
-  unsigned int  ivs = 0;
-  bool	  seen_vsindex = false;
+  unsigned int  ivs;
+  bool	  seen_vsindex;
 };
 
 struct cff2_private_dict_opset_t : dict_opset_t
@@ -283,6 +286,9 @@ struct cff2_private_dict_opset_t : dict_opset_t
       case OpCode_BlueFuzz:
       case OpCode_ExpansionFactor:
       case OpCode_LanguageGroup:
+	val.single_val = env.argStack.pop_num ();
+	env.clear_args ();
+	break;
       case OpCode_BlueValues:
       case OpCode_OtherBlues:
       case OpCode_FamilyBlues:
@@ -391,7 +397,7 @@ struct cff2
   template <typename PRIVOPSET, typename PRIVDICTVAL>
   struct accelerator_templ_t
   {
-    accelerator_templ_t (hb_face_t *face)
+    void init (hb_face_t *face)
     {
       topDict.init ();
       fontDicts.init ();
@@ -406,15 +412,15 @@ struct cff2
       const OT::cff2 *cff2 = this->blob->template as<OT::cff2> ();
 
       if (cff2 == &Null (OT::cff2))
-        goto fail;
+      { fini (); return; }
 
       { /* parse top dict */
-	hb_ubytes_t topDictStr = (cff2 + cff2->topDict).as_ubytes (cff2->topDictSize);
-	if (unlikely (!topDictStr.sanitize (&sc))) goto fail;
-	num_interp_env_t env (topDictStr);
-	cff2_top_dict_interpreter_t top_interp (env);
+	byte_str_t topDictStr (cff2 + cff2->topDict, cff2->topDictSize);
+	if (unlikely (!topDictStr.sanitize (&sc))) { fini (); return; }
+	cff2_top_dict_interpreter_t top_interp;
+	top_interp.env.init (topDictStr);
 	topDict.init ();
-	if (unlikely (!top_interp.interpret (topDict))) goto fail;
+	if (unlikely (!top_interp.interpret (topDict))) { fini (); return; }
       }
 
       globalSubrs = &StructAtOffset<CFF2Subrs> (cff2, cff2->topDict + cff2->topDictSize);
@@ -428,94 +434,82 @@ struct cff2
 	  (globalSubrs == &Null (CFF2Subrs)) || unlikely (!globalSubrs->sanitize (&sc)) ||
 	  (fdArray == &Null (CFF2FDArray)) || unlikely (!fdArray->sanitize (&sc)) ||
 	  (((fdSelect != &Null (CFF2FDSelect)) && unlikely (!fdSelect->sanitize (&sc, fdArray->count)))))
-        goto fail;
+      { fini (); return; }
 
       num_glyphs = charStrings->count;
       if (num_glyphs != sc.get_num_glyphs ())
-        goto fail;
+      { fini (); return; }
 
       fdCount = fdArray->count;
       if (!privateDicts.resize (fdCount))
-        goto fail;
+      { fini (); return; }
 
       /* parse font dicts and gather private dicts */
       for (unsigned int i = 0; i < fdCount; i++)
       {
-	const hb_ubytes_t fontDictStr = (*fdArray)[i];
-	if (unlikely (!fontDictStr.sanitize (&sc))) goto fail;
+	const byte_str_t fontDictStr = (*fdArray)[i];
+	if (unlikely (!fontDictStr.sanitize (&sc))) { fini (); return; }
 	cff2_font_dict_values_t  *font;
-	num_interp_env_t env (fontDictStr);
-	cff2_font_dict_interpreter_t font_interp (env);
+	cff2_font_dict_interpreter_t font_interp;
+	font_interp.env.init (fontDictStr);
 	font = fontDicts.push ();
-	if (unlikely (font == &Crap (cff2_font_dict_values_t))) goto fail;
+	if (unlikely (font == &Crap (cff2_font_dict_values_t))) { fini (); return; }
 	font->init ();
-	if (unlikely (!font_interp.interpret (*font))) goto fail;
+	if (unlikely (!font_interp.interpret (*font))) { fini (); return; }
 
-	const hb_ubytes_t privDictStr = StructAtOffsetOrNull<UnsizedByteStr> (cff2, font->privateDictInfo.offset).as_ubytes (font->privateDictInfo.size);
-	if (unlikely (!privDictStr.sanitize (&sc))) goto fail;
-	cff2_priv_dict_interp_env_t env2 (privDictStr);
-	dict_interpreter_t<PRIVOPSET, PRIVDICTVAL, cff2_priv_dict_interp_env_t> priv_interp (env2);
+	const byte_str_t privDictStr (StructAtOffsetOrNull<UnsizedByteStr> (cff2, font->privateDictInfo.offset), font->privateDictInfo.size);
+	if (unlikely (!privDictStr.sanitize (&sc))) { fini (); return; }
+	dict_interpreter_t<PRIVOPSET, PRIVDICTVAL, cff2_priv_dict_interp_env_t>  priv_interp;
+	priv_interp.env.init(privDictStr);
 	privateDicts[i].init ();
-	if (unlikely (!priv_interp.interpret (privateDicts[i]))) goto fail;
+	if (unlikely (!priv_interp.interpret (privateDicts[i]))) { fini (); return; }
 
 	privateDicts[i].localSubrs = &StructAtOffsetOrNull<CFF2Subrs> (&privDictStr[0], privateDicts[i].subrsOffset);
 	if (privateDicts[i].localSubrs != &Null (CFF2Subrs) &&
 	  unlikely (!privateDicts[i].localSubrs->sanitize (&sc)))
-	  goto fail;
+	{ fini (); return; }
       }
-
-
-      return;
-
-      fail:
-        _fini ();
     }
-    ~accelerator_templ_t () { _fini (); }
-    void _fini ()
+
+    void fini ()
     {
       sc.end_processing ();
       topDict.fini ();
-      fontDicts.fini ();
-      privateDicts.fini ();
+      fontDicts.fini_deep ();
+      privateDicts.fini_deep ();
       hb_blob_destroy (blob);
       blob = nullptr;
-    }
-
-    hb_map_t *create_glyph_to_sid_map () const
-    {
-      return nullptr;
     }
 
     bool is_valid () const { return blob; }
 
     protected:
+    hb_blob_t			*blob;
     hb_sanitize_context_t	sc;
 
     public:
-    hb_blob_t			*blob = nullptr;
     cff2_top_dict_values_t	topDict;
-    const CFF2Subrs		*globalSubrs = nullptr;
-    const CFF2VariationStore	*varStore = nullptr;
-    const CFF2CharStrings	*charStrings = nullptr;
-    const CFF2FDArray		*fdArray = nullptr;
-    const CFF2FDSelect		*fdSelect = nullptr;
-    unsigned int		fdCount = 0;
+    const CFF2Subrs		*globalSubrs;
+    const CFF2VariationStore	*varStore;
+    const CFF2CharStrings	*charStrings;
+    const CFF2FDArray		*fdArray;
+    const CFF2FDSelect		*fdSelect;
+    unsigned int		fdCount;
 
     hb_vector_t<cff2_font_dict_values_t>     fontDicts;
     hb_vector_t<PRIVDICTVAL>  privateDicts;
 
-    unsigned int	      num_glyphs = 0;
+    unsigned int	      num_glyphs;
   };
 
   struct accelerator_t : accelerator_templ_t<cff2_private_dict_opset_t, cff2_private_dict_values_t>
   {
-    accelerator_t (hb_face_t *face) : accelerator_templ_t (face) {}
-
     HB_INTERNAL bool get_extents (hb_font_t *font,
 				  hb_codepoint_t glyph,
 				  hb_glyph_extents_t *extents) const;
-    HB_INTERNAL bool paint_glyph (hb_font_t *font, hb_codepoint_t glyph, hb_paint_funcs_t *funcs, void *data, hb_color_t foreground) const;
-    HB_INTERNAL bool get_path (hb_font_t *font, hb_codepoint_t glyph, hb_draw_session_t &draw_session) const;
+#ifdef HB_EXPERIMENTAL_API
+    HB_INTERNAL bool get_path (hb_font_t *font, hb_codepoint_t glyph, draw_helper_t &draw_helper) const;
+#endif
   };
 
   typedef accelerator_templ_t<cff2_private_dict_opset_subset_t, cff2_private_dict_values_subset_t> accelerator_subset_t;
@@ -531,10 +525,7 @@ struct cff2
   DEFINE_SIZE_STATIC (5);
 };
 
-struct cff2_accelerator_t : cff2::accelerator_t {
-  cff2_accelerator_t (hb_face_t *face) : cff2::accelerator_t (face) {}
-};
-
+struct cff2_accelerator_t : cff2::accelerator_t {};
 } /* namespace OT */
 
 #endif /* HB_OT_CFF2_TABLE_HH */

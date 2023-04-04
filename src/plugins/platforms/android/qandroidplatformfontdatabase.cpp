@@ -1,5 +1,41 @@
-// Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QDir>
 
@@ -7,16 +43,9 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 QString QAndroidPlatformFontDatabase::fontDir() const
 {
-    return "/system/fonts"_L1;
-}
-
-QFont QAndroidPlatformFontDatabase::defaultFont() const
-{
-    return QFont("Roboto"_L1);
+    return QLatin1String("/system/fonts");
 }
 
 void QAndroidPlatformFontDatabase::populateFontDatabase()
@@ -30,9 +59,9 @@ void QAndroidPlatformFontDatabase::populateFontDatabase()
     }
 
     QStringList nameFilters;
-    nameFilters << "*.ttf"_L1
-                << "*.otf"_L1
-                << "*.ttc"_L1;
+    nameFilters << QLatin1String("*.ttf")
+                << QLatin1String("*.otf")
+                << QLatin1String("*.ttc");
 
     const auto entries = dir.entryInfoList(nameFilters, QDir::Files);
     for (const QFileInfo &fi : entries) {
@@ -48,11 +77,11 @@ QStringList QAndroidPlatformFontDatabase::fallbacksForFamily(const QString &fami
 {
     QStringList result;
     if (styleHint == QFont::Monospace || styleHint == QFont::Courier)
-        result.append(QString(qgetenv("QT_ANDROID_FONTS_MONOSPACE")).split(u';'));
+        result.append(QString(qgetenv("QT_ANDROID_FONTS_MONOSPACE")).split(QLatin1Char(';')));
     else if (styleHint == QFont::Serif)
-        result.append(QString(qgetenv("QT_ANDROID_FONTS_SERIF")).split(u';'));
+        result.append(QString(qgetenv("QT_ANDROID_FONTS_SERIF")).split(QLatin1Char(';')));
     else
-        result.append(QString(qgetenv("QT_ANDROID_FONTS")).split(u';'));
+        result.append(QString(qgetenv("QT_ANDROID_FONTS")).split(QLatin1Char(';')));
     result.append(QFreeTypeFontDatabase::fallbacksForFamily(family, style, styleHint, script));
 
     return result;

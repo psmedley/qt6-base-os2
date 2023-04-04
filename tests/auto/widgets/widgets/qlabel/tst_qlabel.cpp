@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -13,7 +38,6 @@
 #include <qmovie.h>
 #include <qpicture.h>
 #include <qmessagebox.h>
-#include <qsizepolicy.h>
 #include <qfontmetrics.h>
 #include <qmath.h>
 #include <private/qlabel_p.h>
@@ -51,7 +75,6 @@ private Q_SLOTS:
 #endif
     void setNum();
     void clear();
-    void wordWrap_data();
     void wordWrap();
     void eventPropagation_data();
     void eventPropagation();
@@ -81,8 +104,6 @@ private Q_SLOTS:
     void taskQTBUG_48157_dprMovie();
 
     void resourceProvider();
-    void mouseEventPropagation_data();
-    void mouseEventPropagation();
 
 private:
     QLabel *testWidget;
@@ -94,12 +115,16 @@ private:
 void tst_QLabel::getSetCheck()
 {
     QLabel obj1;
+    // bool QLabel::wordWrap()
+    // void QLabel::setWordWrap(bool)
     obj1.setWordWrap(false);
-    QVERIFY(!obj1.wordWrap());
+    QCOMPARE(false, obj1.wordWrap());
     obj1.setWordWrap(true);
-    QVERIFY(obj1.wordWrap());
+    QCOMPARE(true, obj1.wordWrap());
 
 #if QT_CONFIG(shortcut)
+    // QWidget * QLabel::buddy()
+    // void QLabel::setBuddy(QWidget *)
     QWidget *var2 = new QWidget();
     obj1.setBuddy(var2);
     QCOMPARE(var2, obj1.buddy());
@@ -108,6 +133,8 @@ void tst_QLabel::getSetCheck()
     delete var2;
 #endif // QT_CONFIG(shortcut)
 
+    // QMovie * QLabel::movie()
+    // void QLabel::setMovie(QMovie *)
     QMovie *var3 = new QMovie;
     obj1.setMovie(var3);
     QCOMPARE(var3, obj1.movie());
@@ -247,36 +274,21 @@ void tst_QLabel::clear()
     QVERIFY(testWidget->text().isEmpty());
 }
 
-void tst_QLabel::wordWrap_data()
-{
-    QTest::addColumn<QString>("text");
-
-    QTest::newRow("Plain text") << "Plain text1";
-    QTest::newRow("Rich text") << "<b>Rich text</b>";
-    QTest::newRow("Long text")
-                  << "This is a very long text to check that QLabel "
-                     "does not wrap, even if the text would require wrapping to be fully displayed";
-}
-
 void tst_QLabel::wordWrap()
 {
-    QFETCH(QString, text);
-
     QLabel label;
-    label.setText(text);
+
     QVERIFY(!label.wordWrap());
-    QVERIFY(!label.sizePolicy().hasHeightForWidth());
 
-    const QSize unWrappedSizeHint = label.sizeHint();
+    label.setText("Plain Text");
+    QVERIFY(!label.wordWrap());
 
-    label.setWordWrap(true);
-    QVERIFY(label.sizePolicy().hasHeightForWidth());
+    label.setText("<b>rich text</b>");
+    QVERIFY(!label.wordWrap());
 
-    if (text.size() > 1 && text.contains(" ")) {
-        const int wrappedHeight = label.heightForWidth(unWrappedSizeHint.width() / 2);
-        QVERIFY(wrappedHeight > unWrappedSizeHint.height());
-    }
-
+    label.setWordWrap(false);
+    label.setText("<b>rich text</b>");
+    QVERIFY(!label.wordWrap());
 }
 
 void tst_QLabel::eventPropagation_data()
@@ -427,6 +439,7 @@ void tst_QLabel::emptyPixmap()
 void tst_QLabel::unicodeText_data()
 {
     QTest::addColumn<QString>("text");
+    QTest::addColumn<QString>("languageName");
 
     /*
     The "glass" phrase in Thai was the initial report for bug QTBUG-4848, was
@@ -443,21 +456,25 @@ void tst_QLabel::unicodeText_data()
     speech, also translated using http://translate.google.com.
     */
 
-    QTest::newRow("english") << QString::fromUtf8("I can eat glass and it doesn't hurt me.");
-    QTest::newRow("thai") << QString::fromUtf8("ฉันจะกินแก้วและไม่เจ็บฉัน");
-    QTest::newRow("chinese") << QString::fromUtf8("我可以吃玻璃，并没有伤害我。");
-    QTest::newRow("arabic") << QString::fromUtf8("أستطيع أكل الزجاج ، وأنه لا يؤذيني.");
-    QTest::newRow("russian") << QString::fromUtf8("Я могу есть стекло, и не больно.");
-    QTest::newRow("korean") << QString::fromUtf8("유리를 먹을 수있는, 그리고 그게 날 다치게하지 않습니다.");
-    QTest::newRow("greek") << QString::fromUtf8("Μπορώ να φάτε γυαλί και δεν μου κάνει κακό.");
-    QTest::newRow("german") << QString::fromUtf8("Ich kann Glas essen und es macht mich nicht heiß.");
+    QTest::newRow("english") << QString::fromUtf8("I can eat glass and it doesn't hurt me.") << QString("english");
+    QTest::newRow("thai") << QString::fromUtf8("ฉันจะกินแก้วและไม่เจ็บฉัน") << QString("thai");
+    QTest::newRow("chinese") << QString::fromUtf8("我可以吃玻璃，并没有伤害我。") << QString("chinese");
+    QTest::newRow("arabic") << QString::fromUtf8("أستطيع أكل الزجاج ، وأنه لا يؤذيني.") << QString("arabic");
+    QTest::newRow("russian") << QString::fromUtf8("Я могу есть стекло, и не больно.") << QString("russian");
+    QTest::newRow("korean") << QString::fromUtf8("유리를 먹을 수있는, 그리고 그게 날 다치게하지 않습니다.") << QString("korean");
+    QTest::newRow("greek") << QString::fromUtf8("Μπορώ να φάτε γυαλί και δεν μου κάνει κακό.") << QString("greek");
+    QTest::newRow("german") << QString::fromUtf8("Ich kann Glas essen und es macht mich nicht heiß.") << QString("german");
+
     QTest::newRow("thai_long") << QString::fromUtf8("เราจะต่อสู้ในทะเลและมหาสมุทร. เราจะต่อสู้ด้วยความมั่นใจเติบโตและความเจริญเติบโตในอากาศเราจะปกป้องเกาะของเราค่าใช้จ่ายใดๆอาจ."
-                                                    "เราจะต่อสู้บนชายหาดเราจะต่อสู้ในบริเวณเชื่อมโยงไปถึงเราจะต่อสู้ในช่องและในถนนที่เราจะต่อสู้ในภูเขานั้นเราจะไม่ยอม.");
+                                                    "เราจะต่อสู้บนชายหาดเราจะต่อสู้ในบริเวณเชื่อมโยงไปถึงเราจะต่อสู้ในช่องและในถนนที่เราจะต่อสู้ในภูเขานั้นเราจะไม่ยอม.")
+            << QString("thai_long");
 }
 
 void tst_QLabel::unicodeText()
 {
+    const QString testDataPath("testdata/unicodeText");
     QFETCH(QString, text);
+    QFETCH(QString, languageName);
     QFrame frame;
     QVBoxLayout *layout = new QVBoxLayout();
     QLabel *label = new QLabel(text, &frame);
@@ -552,8 +569,7 @@ void tst_QLabel::taskQTBUG_7902_contextMenuCrash()
     w->connect(&ti, SIGNAL(timeout()), w, SLOT(deleteLater()));
     ti.start(300);
 
-    QContextMenuEvent *cme = new QContextMenuEvent(QContextMenuEvent::Mouse, w->rect().center(),
-                                                   w->mapToGlobal(w->rect().center()));
+    QContextMenuEvent *cme = new QContextMenuEvent(QContextMenuEvent::Mouse, w->rect().center());
     qApp->postEvent(w, cme);
 
     QTest::qWait(350);
@@ -568,7 +584,7 @@ void tst_QLabel::taskQTBUG_48157_dprPixmap()
     pixmap.load(QFINDTESTDATA(QStringLiteral("red@2x.png")));
     QCOMPARE(pixmap.devicePixelRatio(), 2.0);
     label.setPixmap(pixmap);
-    QCOMPARE(label.sizeHint(), pixmap.deviceIndependentSize().toSize());
+    QCOMPARE(label.sizeHint(), pixmap.rect().size() / pixmap.devicePixelRatio());
 }
 
 void tst_QLabel::taskQTBUG_48157_dprMovie()
@@ -579,7 +595,7 @@ void tst_QLabel::taskQTBUG_48157_dprMovie()
     movie.start();
     QCOMPARE(movie.currentPixmap().devicePixelRatio(), 2.0);
     label.setMovie(&movie);
-    QCOMPARE(label.sizeHint(), movie.currentPixmap().deviceIndependentSize().toSize());
+    QCOMPARE(label.sizeHint(), movie.currentPixmap().size() / movie.currentPixmap().devicePixelRatio());
 }
 
 void tst_QLabel::resourceProvider()
@@ -598,95 +614,6 @@ void tst_QLabel::resourceProvider()
     label.show();
     QCOMPARE(providerUrl, url);
     QVERIFY(providerCalled > 0);
-}
-
-// Test if mouse events are correctly propagated to the parent widget,
-// even if a label contains rich text (QTBUG-110055)
-void tst_QLabel::mouseEventPropagation_data()
-{
-    QTest::addColumn<const QString>("text");
-    QTest::addColumn<const Qt::TextInteractionFlag>("interaction");
-    QTest::addColumn<const QList<Qt::MouseButton>>("buttons");
-    QTest::addColumn<const bool>("expectPropagation");
-
-
-    QTest::newRow("RichText")
-            << QString("<b>This is a rich text propagating mouse events</b>")
-            << Qt::LinksAccessibleByMouse
-            << QList<Qt::MouseButton>{Qt::LeftButton, Qt::RightButton, Qt::MiddleButton}
-            << true;
-    QTest::newRow("PlainText")
-            << QString("This is a plain text propagating mouse events")
-            << Qt::LinksAccessibleByMouse
-            << QList<Qt::MouseButton>{Qt::LeftButton, Qt::RightButton, Qt::MiddleButton}
-            << true;
-    QTest::newRow("PlainTextConsume")
-            << QString("This is a plain text consuming mouse events")
-            << Qt::TextSelectableByMouse
-            << QList<Qt::MouseButton>{Qt::LeftButton}
-            << false;
-    QTest::newRow("RichTextConsume")
-            << QString("<b>This is a rich text consuming mouse events</b>")
-            << Qt::TextSelectableByMouse
-            << QList<Qt::MouseButton>{Qt::LeftButton}
-            << false;
-    QTest::newRow("PlainTextNoInteraction")
-            << QString("This is a text not interacting with mouse")
-            << Qt::NoTextInteraction
-            << QList<Qt::MouseButton>{Qt::LeftButton, Qt::RightButton, Qt::MiddleButton}
-            << true;
-    QTest::newRow("RichTextNoInteraction")
-            << QString("<b>This is a rich text not interacting with mouse</b>")
-            << Qt::NoTextInteraction
-            << QList<Qt::MouseButton>{Qt::LeftButton, Qt::RightButton, Qt::MiddleButton}
-            << true;
-}
-
-void tst_QLabel::mouseEventPropagation()
-{
-    class MouseEventWidget : public QWidget
-    {
-    public:
-        uint pressed() const { return m_pressed; }
-        uint released() const { return m_released; }
-
-    private:
-        uint m_pressed = 0;
-        uint m_released = 0;
-        void mousePressEvent(QMouseEvent *event) override
-        {
-            ++m_pressed;
-            return QWidget::mousePressEvent(event);
-        }
-
-        void mouseReleaseEvent(QMouseEvent *event) override
-        {
-            ++m_released;
-            return QWidget::mouseReleaseEvent(event);
-        }
-    };
-
-    QFETCH(const QString, text);
-    QFETCH(const Qt::TextInteractionFlag, interaction);
-    QFETCH(const QList<Qt::MouseButton>, buttons);
-    QFETCH(const bool, expectPropagation);
-
-    MouseEventWidget widget;
-    auto *layout = new QVBoxLayout(&widget);
-    auto *label = new QLabel(text);
-    label->setTextInteractionFlags(interaction);
-
-    layout->addWidget(label);
-    widget.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&widget));
-
-    const QPoint labelCenter = label->rect().center();
-    for (Qt::MouseButton mouseButton : buttons)
-        QTest::mouseClick(label, mouseButton, Qt::KeyboardModifiers(), labelCenter);
-
-    const uint count = expectPropagation ? buttons.count() : 0;
-    QTRY_COMPARE(widget.pressed(), count);
-    QTRY_COMPARE(widget.released(), count);
 }
 
 QTEST_MAIN(tst_QLabel)

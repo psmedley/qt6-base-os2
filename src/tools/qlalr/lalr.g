@@ -1,5 +1,30 @@
+-----------------------------------------------------------------------------
+--
 -- Copyright (C) 2016 The Qt Company Ltd.
--- SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+-- Contact: https://www.qt.io/licensing/
+--
+-- This file is part of the QLALR project on Qt Labs.
+--
+-- $QT_BEGIN_LICENSE:GPL-EXCEPT$
+-- Commercial License Usage
+-- Licensees holding valid commercial Qt licenses may use this file in
+-- accordance with the commercial license agreement provided with the
+-- Software or, alternatively, in accordance with the terms contained in
+-- a written agreement between you and The Qt Company. For licensing terms
+-- and conditions see https://www.qt.io/terms-conditions. For further
+-- information use the contact form at https://www.qt.io/contact-us.
+--
+-- GNU General Public License Usage
+-- Alternatively, this file may be used under the terms of the GNU
+-- General Public License version 3 as published by the Free Software
+-- Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+-- included in the packaging of this file. Please review the following
+-- information to ensure the GNU General Public License requirements will
+-- be met: https://www.gnu.org/licenses/gpl-3.0.html.
+--
+-- $QT_END_LICENSE$
+--
+-----------------------------------------------------------------------------
 
 
 %parser grammar
@@ -36,8 +61,33 @@
 %start Specification
 
 
-/:// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/:/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QLALR project on Qt Labs.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "$header"
 
@@ -76,7 +126,7 @@ protected: // scanner
       {
         ch = *_M_currentChar++;
 
-        if (ch == u'\n')
+        if (ch == QLatin1Char('\n'))
           ++_M_line;
       }
     else
@@ -112,8 +162,33 @@ protected:
 };
 :/
 
-/.// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/./****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QLALR project on Qt Labs.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "recognizer.h"
 
@@ -122,8 +197,6 @@ protected:
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
-
-using namespace Qt::StringLiterals;
 
 Recognizer::Recognizer (Grammar *grammar, bool no_lines):
   tos(0),
@@ -174,9 +247,9 @@ int Recognizer::nextToken()
     {
       inp(); // skip "
       text.clear ();
-      while (! ch.isNull () && ch != u'"')
+      while (! ch.isNull () && ch != QLatin1Char ('"'))
         {
-          if (ch == u'\\')
+          if (ch == QLatin1Char ('\\'))
             {
               text += ch;
               inp();
@@ -185,7 +258,7 @@ int Recognizer::nextToken()
           inp ();
         }
 
-      if (ch == u'"')
+      if (ch == QLatin1Char ('"'))
         inp ();
       else
         qerr() << _M_input_file << ":" << _M_line << ": Warning. Expected `\"'" << Qt::endl;
@@ -194,11 +267,11 @@ int Recognizer::nextToken()
       return (token = STRING_LITERAL);
     }
 
-  else if (ch.isLetterOrNumber () || ch == u'_')
+  else if (ch.isLetterOrNumber () || ch == QLatin1Char ('_'))
     {
       text.clear ();
       do { text += ch; inp (); }
-      while (ch.isLetterOrNumber () || ch == u'_' || ch == u'.');
+      while (ch.isLetterOrNumber () || ch == QLatin1Char ('_') || ch == QLatin1Char ('.'));
       _M_current_value = text;
       return (token = ID);
     }
@@ -211,33 +284,33 @@ int Recognizer::nextToken()
       while (ch.isSpace ());
 
       do { text += ch; inp (); }
-      while (ch.isLetterOrNumber () || ch == u'_' || ch == u'-');
+      while (ch.isLetterOrNumber () || ch == QLatin1Char ('_') || ch == QLatin1Char ('-'));
 
-      if (text == "token_prefix"_L1)
+      if (text == QLatin1String("token_prefix"))
         return (token = TOKEN_PREFIX);
-      else if (text == "merged_output"_L1)
+      else if (text == QLatin1String("merged_output"))
         return (token = MERGED_OUTPUT);
-      else if (text == "token"_L1)
+      else if (text == QLatin1String("token"))
         return (token = TOKEN);
-      else if (text == "start"_L1)
+      else if (text == QLatin1String("start"))
         return (token = START);
-      else if (text == "parser"_L1)
+      else if (text == QLatin1String("parser"))
         return (token = PARSER);
-      else if (text == "decl"_L1)
+      else if (text == QLatin1String("decl"))
         return (token = DECL_FILE);
-      else if (text == "impl"_L1)
+      else if (text == QLatin1String("impl"))
         return (token = IMPL_FILE);
-      else if (text == "expect"_L1)
+      else if (text == QLatin1String("expect"))
         return (token = EXPECT);
-      else if (text == "expect-rr"_L1)
+      else if (text == QLatin1String("expect-rr"))
         return (token = EXPECT_RR);
-      else if (text == "left"_L1)
+      else if (text == QLatin1String("left"))
         return (token = LEFT);
-      else if (text == "right"_L1)
+      else if (text == QLatin1String("right"))
         return (token = RIGHT);
-      else if (text == "nonassoc"_L1)
+      else if (text == QLatin1String("nonassoc"))
         return (token = NONASSOC);
-      else if (text == "prec"_L1)
+      else if (text == QLatin1String("prec"))
         return (token = PREC);
       else
         {
@@ -249,30 +322,30 @@ int Recognizer::nextToken()
 
   inp ();
 
-  if (token == '-' && ch == u'-')
+  if (token == '-' && ch == QLatin1Char ('-'))
     {
       do { inp (); }
-      while (! ch.isNull () && ch != u'\n');
+      while (! ch.isNull () && ch != QLatin1Char ('\n'));
       goto Lagain;
     }
 
-  else if (token == ':' && ch == u':')
+  else if (token == ':' && ch == QLatin1Char (':'))
     {
       inp ();
-      if (ch != u'=')
+      if (ch != QLatin1Char ('='))
         return (token = ERROR);
       inp ();
       return (token = COLON);
     }
 
-  else if (token == '/' && ch == u':')
+  else if (token == '/' && ch == QLatin1Char (':'))
     {
       _M_action_line = _M_line;
 
       text.clear ();
       if (! _M_no_lines)
-        text += "\n#line "_L1 + QString::number(_M_action_line) +
-                " \""_L1 + QDir::fromNativeSeparators(_M_input_file) + "\"\n"_L1;
+        text += QLatin1String("\n#line ") + QString::number(_M_action_line) +
+                QLatin1String(" \"") + QDir::fromNativeSeparators(_M_input_file) + QLatin1String("\"\n");
       inp (); // skip ':'
 
       forever
@@ -282,13 +355,13 @@ int Recognizer::nextToken()
               token = ch.unicode ();
               inp ();
 
-              if (token == ':' && ch == u'/')
+              if (token == ':' && ch == QLatin1Char ('/'))
                 break;
 
               text += QLatin1Char (token);
             }
 
-          if (ch != u'/')
+          if (ch != QLatin1Char ('/'))
             return (token = ERROR);
 
           inp ();
@@ -299,18 +372,18 @@ int Recognizer::nextToken()
               return (token = DECL);
             }
           else
-            text += ":/"_L1;
+            text += QLatin1String (":/");
         }
     }
 
-  else if (token == '/' && ch == u'.')
+  else if (token == '/' && ch == QLatin1Char ('.'))
     {
       _M_action_line = _M_line;
 
       text.clear ();
       if (! _M_no_lines)
-        text += "\n#line "_L1 + QString::number(_M_action_line) +
-                " \""_L1 + QDir::fromNativeSeparators(_M_input_file) + "\"\n"_L1;
+        text += QLatin1String("\n#line ") + QString::number(_M_action_line) +
+                QLatin1String(" \"") + QDir::fromNativeSeparators(_M_input_file) + QLatin1String("\"\n");
 
       inp (); // skip ':'
 
@@ -321,13 +394,13 @@ int Recognizer::nextToken()
               token = ch.unicode ();
               inp ();
 
-              if (token == '.' && ch == u'/')
+              if (token == '.' && ch == QLatin1Char ('/'))
                 break;
 
               text += QLatin1Char (token);
             }
 
-          if (ch != u'/')
+          if (ch != QLatin1Char ('/'))
             return (token = ERROR);
 
           inp ();
@@ -338,7 +411,7 @@ int Recognizer::nextToken()
               return (token = IMPL);
             }
           else
-            text += "./"_L1;
+            text += QLatin1String ("./");
         }
     }
 

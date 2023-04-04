@@ -9,15 +9,7 @@ https://wiki.qt.io/Building_Qt_6_from_Git
 * You need CMake 3.16.0 or later for most platforms (due to new AUTOMOC json feature).
 * You need CMake 3.17.0 to build Qt for iOS with the simulator_and_device feature.
 * You need CMake 3.17.0 + Ninja to build Qt in debug_and_release mode on Windows / Linux.
-* You need CMake 3.18.0 + Ninja to build Qt on macOS in debug_and_release mode when using
-    frameworks.
-* You need CMake 3.18.0 in user projects that use a static Qt together with QML
-    (cmake_language EVAL is required for running the qmlimportscanner deferred finalizer)
-* You need CMake 3.19.0 in user projects to use automatic deferred finalizers
-    (automatic calling of qt_finalize_target)
-* You need CMake 3.21.0 in user projects that create user libraries that link against a static Qt
-    with a linker that is not capable to resolve circular dependencies between libraries
-    (GNU ld, MinGW ld)
+* You need CMake 3.18.0 + Ninja to build Qt on macOS in debug_and_release mode when using frameworks.
 
 # Changes to Qt 5
 
@@ -132,7 +124,7 @@ Compiling for a target architecture that's different than the host requires one 
 host. This "host build" is needed because the process of building Qt involves the compilation of
 intermediate code generator tools, that in turn are called to produce source code that needs to be
 compiled into the final libraries. These tools are built using Qt itself and they need to run on the
-machine you're building on, regardless of the architecture you are targeting.
+machine you're building on, regardless of the architecure you are targeting.
 
 Build Qt regularly for your host system and install it into a directory of your choice using the
 ``CMAKE_INSTALL_PREFIX`` variable. You are free to disable the build of tests and examples by
@@ -184,7 +176,7 @@ If you don't supply the configuration argument ``-DANDROID_ABI=...``, it will de
   * x86_64: ``-DANDROID_ABI=x86_64``
 
 By default we set the android API level to 23. Should you need to change this supply the following
-configuration argument to the above CMake call: ``-DANDROID_PLATFORM=android-${API_LEVEL}``.
+configuration argument to the above CMake call: ``-DANDROID_NATIVE_API_LEVEL=${API_LEVEL}``
 
 ### Cross compiling for iOS
 

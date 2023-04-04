@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -206,7 +231,7 @@ void tst_QFiledialog::currentChangedSignal()
     QVERIFY(listView->model()->hasChildren(folder));
     listView->setCurrentIndex(folder);
 
-    QCOMPARE(spyCurrentChanged.size(), 1);
+    QCOMPARE(spyCurrentChanged.count(), 1);
 }
 
 // only emitted from the views, sidebar, or lookin combo
@@ -228,7 +253,7 @@ void tst_QFiledialog::directoryEnteredSignal()
     QVERIFY(secondItem.isValid());
     sidebar->setCurrentIndex(secondItem);
     QTest::keyPress(sidebar->viewport(), Qt::Key_Return);
-    QCOMPARE(spyDirectoryEntered.size(), 1);
+    QCOMPARE(spyDirectoryEntered.count(), 1);
     spyDirectoryEntered.clear();
 
     // lookInCombo
@@ -237,7 +262,7 @@ void tst_QFiledialog::directoryEnteredSignal()
     QVERIFY(comboBox->view()->model()->index(1, 0).isValid());
     comboBox->view()->setCurrentIndex(comboBox->view()->model()->index(1, 0));
     QTest::keyPress(comboBox->view()->viewport(), Qt::Key_Return);
-    QCOMPARE(spyDirectoryEntered.size(), 1);
+    QCOMPARE(spyDirectoryEntered.count(), 1);
     spyDirectoryEntered.clear();
 
     // view
@@ -314,7 +339,7 @@ void tst_QFiledialog::filesSelectedSignal()
     QVERIFY(button->isEnabled());
     button->animateClick();
     QTRY_COMPARE(fd.isVisible(), false);
-    QCOMPARE(spyFilesSelected.size(), 1);
+    QCOMPARE(spyFilesSelected.count(), 1);
 }
 
 // only emitted when the combo box is activated
@@ -339,7 +364,7 @@ void tst_QFiledialog::filterSelectedSignal()
 
     QTest::keyPress(filters, Qt::Key_Down);
 
-    QCOMPARE(spyFilterSelected.size(), 1);
+    QCOMPARE(spyFilterSelected.count(), 1);
 }
 
 void tst_QFiledialog::args()
@@ -380,14 +405,14 @@ void tst_QFiledialog::directory()
 #ifndef Q_OS_WIN
     QCOMPARE(tempPath, fd.directory().absolutePath());
 #endif
-    QCOMPARE(spyCurrentChanged.size(), 0);
-    QCOMPARE(spyDirectoryEntered.size(), 0);
-    QCOMPARE(spyFilesSelected.size(), 0);
-    QCOMPARE(spyFilterSelected.size(), 0);
+    QCOMPARE(spyCurrentChanged.count(), 0);
+    QCOMPARE(spyDirectoryEntered.count(), 0);
+    QCOMPARE(spyFilesSelected.count(), 0);
+    QCOMPARE(spyFilterSelected.count(), 0);
 
     // Check my way
     QList<QListView*> list = fd.findChildren<QListView*>("listView");
-    QVERIFY(list.size() > 0);
+    QVERIFY(list.count() > 0);
 #ifdef Q_OS_WIN
     QCOMPARE(list.at(0)->rootIndex().data().toString().toLower(), temp.dirName().toLower());
 #else
@@ -418,18 +443,7 @@ void tst_QFiledialog::completer_data()
     QTest::newRow("goto root")     << QString()        << rootPath << -1;
     QTest::newRow("start at root") << rootPath << QString()        << -1;
 
-    QDir dir = QDir::root();
-#ifdef Q_OS_ANDROID
-    // Android 11 and above doesn't allow accessing root filesystem as before,
-    // so let's opt int for the app's home.
-    if (QNativeInterface::QAndroidApplication::sdkVersion() >= 30) {
-        const auto homePaths = QStandardPaths::standardLocations(QStandardPaths::HomeLocation);
-        QVERIFY(!homePaths.isEmpty());
-        dir = QDir(homePaths.first());
-    }
-#endif
-
-    QFileInfoList list = dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    QFileInfoList list = QDir::root().entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
     QVERIFY(!list.isEmpty());
     const QString folder = list.first().absoluteFilePath();
     QTest::newRow("start at one below root r") << folder << "r" << -1;
@@ -516,7 +530,7 @@ void tst_QFiledialog::completer()
     }
 
     // press 'keys' for the input
-    for (int i = 0; i < input.size(); ++i)
+    for (int i = 0; i < input.count(); ++i)
         QTest::keyPress(lineEdit, input[i].toLatin1());
 
     QStringList expectedFiles;
@@ -572,16 +586,16 @@ void tst_QFiledialog::completer_up()
     fd.show();
     QLineEdit *lineEdit = fd.findChild<QLineEdit*>("fileNameEdit");
     QVERIFY(lineEdit);
-    QCOMPARE(spyFilesSelected.size(), 0);
-    int depth = QDir::currentPath().split('/').size();
+    QCOMPARE(spyFilesSelected.count(), 0);
+    int depth = QDir::currentPath().split('/').count();
     for (int i = 0; i <= depth * 3 + 1; ++i) {
         lineEdit->insert("../");
         qApp->processEvents();
     }
-    QCOMPARE(spyCurrentChanged.size(), 0);
-    QCOMPARE(spyDirectoryEntered.size(), 0);
-    QCOMPARE(spyFilesSelected.size(), 0);
-    QCOMPARE(spyFilterSelected.size(), 0);
+    QCOMPARE(spyCurrentChanged.count(), 0);
+    QCOMPARE(spyDirectoryEntered.count(), 0);
+    QCOMPARE(spyFilesSelected.count(), 0);
+    QCOMPARE(spyFilterSelected.count(), 0);
 }
 
 void tst_QFiledialog::acceptMode()
@@ -661,7 +675,7 @@ void tst_QFiledialog::filters()
 
     // effects
     QList<QComboBox*> views = fd.findChildren<QComboBox*>("fileTypeCombo");
-    QCOMPARE(views.size(), 1);
+    QCOMPARE(views.count(), 1);
     QCOMPARE(views.at(0)->isVisible(), false);
 
     QStringList filters;
@@ -676,15 +690,15 @@ void tst_QFiledialog::filters()
     QCOMPARE(fd.nameFilters(), filters);
     fd.setNameFilter("Image files (*.png *.xpm *.jpg);;Text files (*.txt);;Any files (*.*)");
     QCOMPARE(fd.nameFilters(), filters);
-    QCOMPARE(spyCurrentChanged.size(), 0);
-    QCOMPARE(spyDirectoryEntered.size(), 0);
-    QCOMPARE(spyFilesSelected.size(), 0);
-    QCOMPARE(spyFilterSelected.size(), 0);
+    QCOMPARE(spyCurrentChanged.count(), 0);
+    QCOMPARE(spyDirectoryEntered.count(), 0);
+    QCOMPARE(spyFilesSelected.count(), 0);
+    QCOMPARE(spyFilterSelected.count(), 0);
 
     // setting shouldn't emit any signals
     for (int i = views.at(0)->currentIndex(); i < views.at(0)->count(); ++i)
         views.at(0)->setCurrentIndex(i);
-    QCOMPARE(spyFilterSelected.size(), 0);
+    QCOMPARE(spyFilterSelected.count(), 0);
 
     //Let check if filters with whitespaces
     QFileDialog fd2;
@@ -723,7 +737,7 @@ void tst_QFiledialog::selectFilter()
     QCOMPARE(fd.selectedNameFilter(), filters.at(2));
     fd.selectNameFilter("");
     QCOMPARE(fd.selectedNameFilter(), filters.at(2));
-    QCOMPARE(spyFilterSelected.size(), 0);
+    QCOMPARE(spyFilterSelected.count(), 0);
 }
 
 void tst_QFiledialog::history()
@@ -762,10 +776,10 @@ void tst_QFiledialog::history()
     badHistory << QDir::toNativeSeparators(QDir::current().absolutePath());
     QCOMPARE(fd.history(), badHistory);
 
-    QCOMPARE(spyCurrentChanged.size(), 0);
-    QCOMPARE(spyDirectoryEntered.size(), 0);
-    QCOMPARE(spyFilesSelected.size(), 0);
-    QCOMPARE(spyFilterSelected.size(), 0);
+    QCOMPARE(spyCurrentChanged.count(), 0);
+    QCOMPARE(spyDirectoryEntered.count(), 0);
+    QCOMPARE(spyFilesSelected.count(), 0);
+    QCOMPARE(spyFilterSelected.count(), 0);
 }
 
 void tst_QFiledialog::iconProvider()
@@ -868,7 +882,7 @@ void tst_QFiledialog::selectFile()
     QVERIFY(model);
     fd->setDirectory(QDir::currentPath());
     // default value
-    QCOMPARE(fd->selectedFiles().size(), 1);
+    QCOMPARE(fd->selectedFiles().count(), 1);
 
     QScopedPointer<QTemporaryFile> tempFile;
     if (file == QLatin1String("temp")) {
@@ -878,7 +892,7 @@ void tst_QFiledialog::selectFile()
     }
 
     fd->selectFile(file);
-    QCOMPARE(fd->selectedFiles().size(), count);
+    QCOMPARE(fd->selectedFiles().count(), count);
     if (tempFile.isNull()) {
         QCOMPARE(model->index(fd->directory().path()), model->index(QDir::currentPath()));
     } else {
@@ -935,29 +949,29 @@ void tst_QFiledialog::selectFiles()
     // Get a list of files in the view and then get the corresponding index's
     QStringList list = fd.directory().entryList(QDir::Files);
     QModelIndexList toSelect;
-    QVERIFY(list.size() > 1);
+    QVERIFY(list.count() > 1);
     QListView* listView = fd.findChild<QListView*>("listView");
     QVERIFY(listView);
-    for (int i = 0; i < list.size(); ++i) {
+    for (int i = 0; i < list.count(); ++i) {
         fd.selectFile(fd.directory().path() + QLatin1Char('/') + list.at(i));
         QTRY_VERIFY(!listView->selectionModel()->selectedRows().isEmpty());
         toSelect.append(listView->selectionModel()->selectedRows().last());
     }
-    QCOMPARE(spyFilesSelected.size(), 0);
+    QCOMPARE(spyFilesSelected.count(), 0);
 
     listView->selectionModel()->clear();
-    QCOMPARE(spyFilesSelected.size(), 0);
+    QCOMPARE(spyFilesSelected.count(), 0);
 
     // select the indexes
-    for (int i = 0; i < toSelect.size(); ++i) {
+    for (int i = 0; i < toSelect.count(); ++i) {
         listView->selectionModel()->select(toSelect.at(i),
                 QItemSelectionModel::Select | QItemSelectionModel::Rows);
     }
-    QCOMPARE(fd.selectedFiles().size(), toSelect.size());
-    QCOMPARE(spyCurrentChanged.size(), 0);
-    QCOMPARE(spyDirectoryEntered.size(), 0);
-    QCOMPARE(spyFilesSelected.size(), 0);
-    QCOMPARE(spyFilterSelected.size(), 0);
+    QCOMPARE(fd.selectedFiles().count(), toSelect.count());
+    QCOMPARE(spyCurrentChanged.count(), 0);
+    QCOMPARE(spyDirectoryEntered.count(), 0);
+    QCOMPARE(spyFilesSelected.count(), 0);
+    QCOMPARE(spyFilterSelected.count(), 0);
 
     }
 
@@ -983,13 +997,13 @@ void tst_QFiledialog::viewMode()
 
     // find widgets
     QList<QTreeView*> treeView = fd.findChildren<QTreeView*>("treeView");
-    QCOMPARE(treeView.size(), 1);
+    QCOMPARE(treeView.count(), 1);
     QList<QListView*> listView = fd.findChildren<QListView*>("listView");
-    QCOMPARE(listView.size(), 1);
+    QCOMPARE(listView.count(), 1);
     QList<QToolButton*> listButton = fd.findChildren<QToolButton*>("listModeButton");
-    QCOMPARE(listButton.size(), 1);
+    QCOMPARE(listButton.count(), 1);
     QList<QToolButton*> treeButton = fd.findChildren<QToolButton*>("detailModeButton");
-    QCOMPARE(treeButton.size(), 1);
+    QCOMPARE(treeButton.count(), 1);
 
     // default value
     QCOMPARE(fd.viewMode(), QFileDialog::List);
@@ -1128,7 +1142,7 @@ void tst_QFiledialog::focus()
     QCursor::setPos(fd.geometry().center());
 
     QList<QWidget*> treeView = fd.findChildren<QWidget*>("fileNameEdit");
-    QCOMPARE(treeView.size(), 1);
+    QCOMPARE(treeView.count(), 1);
     QVERIFY(treeView.at(0));
     QTRY_COMPARE(treeView.at(0)->hasFocus(), true);
     QCOMPARE(treeView.at(0)->hasFocus(), true);
@@ -1158,13 +1172,13 @@ void tst_QFiledialog::historyBack()
     QCOMPARE(backButton->isEnabled(), true);
     QCOMPARE(forwardButton->isEnabled(), false);
     fd.setDirectory(desktop);
-    QCOMPARE(spy.size(), 2);
+    QCOMPARE(spy.count(), 2);
 
     backButton->click();
     qApp->processEvents();
     QCOMPARE(backButton->isEnabled(), true);
     QCOMPARE(forwardButton->isEnabled(), true);
-    QCOMPARE(spy.size(), 3);
+    QCOMPARE(spy.count(), 3);
     QString currentPath = qvariant_cast<QString>(spy.last().first());
     QCOMPARE(model->index(currentPath), model->index(temp));
 
@@ -1173,11 +1187,11 @@ void tst_QFiledialog::historyBack()
     QCOMPARE(currentPath, home);
     QCOMPARE(backButton->isEnabled(), false);
     QCOMPARE(forwardButton->isEnabled(), true);
-    QCOMPARE(spy.size(), 4);
+    QCOMPARE(spy.count(), 4);
 
     // nothing should change at this point
     backButton->click();
-    QCOMPARE(spy.size(), 4);
+    QCOMPARE(spy.count(), 4);
     QCOMPARE(backButton->isEnabled(), false);
     QCOMPARE(forwardButton->isEnabled(), true);
 }
@@ -1211,7 +1225,7 @@ void tst_QFiledialog::historyForward()
     QCOMPARE(model->index(qvariant_cast<QString>(spy.last().first())), model->index(desktop));
     QCOMPARE(backButton->isEnabled(), true);
     QCOMPARE(forwardButton->isEnabled(), false);
-    QCOMPARE(spy.size(), 4);
+    QCOMPARE(spy.count(), 4);
 
     backButton->click();
     QCOMPARE(model->index(qvariant_cast<QString>(spy.last().first())), model->index(temp));
@@ -1221,13 +1235,13 @@ void tst_QFiledialog::historyForward()
     QCOMPARE(model->index(qvariant_cast<QString>(spy.last().first())), model->index(home));
     QCOMPARE(backButton->isEnabled(), false);
     QCOMPARE(forwardButton->isEnabled(), true);
-    QCOMPARE(spy.size(), 6);
+    QCOMPARE(spy.count(), 6);
 
     forwardButton->click();
     QCOMPARE(model->index(qvariant_cast<QString>(spy.last().first())), model->index(temp));
     backButton->click();
     QCOMPARE(model->index(qvariant_cast<QString>(spy.last().first())), model->index(home));
-    QCOMPARE(spy.size(), 8);
+    QCOMPARE(spy.count(), 8);
 
     forwardButton->click();
     QCOMPARE(model->index(qvariant_cast<QString>(spy.last().first())), model->index(temp));
@@ -1438,10 +1452,6 @@ void tst_QFiledialog::widgetlessNativeDialog()
 {
     if (!QGuiApplicationPrivate::platformTheme()->usePlatformNativeDialog(QPlatformTheme::FileDialog))
         QSKIP("This platform always uses widgets to realize its QFileDialog, instead of the native file dialog.");
-#ifdef Q_OS_ANDROID
-    // QTBUG-101194
-    QSKIP("Android: This keeeps the window open. Figure out why.");
-#endif
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs, false);
     QFileDialog fd;
     fd.setWindowModality(Qt::ApplicationModal);
@@ -1558,10 +1568,6 @@ void tst_QFiledialog::rejectModalDialogs()
 {
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This freezes. Figure out why.");
-#ifdef Q_OS_ANDROID
-    // QTBUG-101194
-    QSKIP("Android: This freezes. Figure out why.");
-#endif
 
     // QTBUG-38672 , static functions should return empty Urls
     DialogRejecter dr;
@@ -1593,12 +1599,6 @@ void tst_QFiledialog::QTBUG49600_nativeIconProviderCrash()
 {
     if (!QGuiApplicationPrivate::platformTheme()->usePlatformNativeDialog(QPlatformTheme::FileDialog))
         QSKIP("This platform always uses widgets to realize its QFileDialog, instead of the native file dialog.");
-
-#ifdef Q_OS_ANDROID
-    // QTBUG-101194
-    QSKIP("Android: This hangs. Figure out why.");
-#endif
-
     QFileDialog fd;
     fd.iconProvider();
 }
@@ -1630,10 +1630,6 @@ void tst_QFiledialog::focusObjectDuringDestruction()
 {
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This freezes. Figure out why.");
-#ifdef Q_OS_ANDROID
-    // QTBUG-101194
-    QSKIP("Android: This freezes. Figure out why.");
-#endif
 
     QTRY_VERIFY(QGuiApplication::topLevelWindows().isEmpty());
 

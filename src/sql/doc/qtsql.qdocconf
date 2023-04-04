@@ -15,6 +15,10 @@ qhp.QtSql.virtualFolder       = qtsql
 qhp.QtSql.indexTitle          = Qt SQL
 qhp.QtSql.indexRoot           =
 
+qhp.QtSql.filterAttributes    = qtsql $QT_VERSION qtrefdoc
+qhp.QtSql.customFilters.Qt.name = QtSql $QT_VERSION
+qhp.QtSql.customFilters.Qt.filterAttributes = qtsql $QT_VERSION
+
 qhp.QtSql.subprojects         = classes
 qhp.QtSql.subprojects.classes.title = C++ Classes
 qhp.QtSql.subprojects.classes.indexTitle = Qt SQL C++ Classes
@@ -39,6 +43,3 @@ imagedirs   += images \
 
 navigation.landingpage = "Qt SQL"
 navigation.cppclassespage = "Qt SQL C++ Classes"
-
-# Fail the documentation build if there are more warnings than the limit
-warninglimit = 0

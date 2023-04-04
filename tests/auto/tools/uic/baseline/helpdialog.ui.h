@@ -1,8 +1,31 @@
 /*
-
-* Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
-
+*********************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the autotests of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+*********************************************************************
 */
 
 /********************************************************************************
@@ -75,26 +98,26 @@ public:
     void setupUi(QWidget *HelpDialog)
     {
         if (HelpDialog->objectName().isEmpty())
-            HelpDialog->setObjectName("HelpDialog");
+            HelpDialog->setObjectName(QString::fromUtf8("HelpDialog"));
         HelpDialog->resize(274, 417);
         vboxLayout = new QVBoxLayout(HelpDialog);
 #ifndef Q_OS_MAC
         vboxLayout->setSpacing(6);
 #endif
         vboxLayout->setContentsMargins(0, 0, 0, 0);
-        vboxLayout->setObjectName("vboxLayout");
+        vboxLayout->setObjectName(QString::fromUtf8("vboxLayout"));
         tabWidget = new QTabWidget(HelpDialog);
-        tabWidget->setObjectName("tabWidget");
+        tabWidget->setObjectName(QString::fromUtf8("tabWidget"));
         contentPage = new QWidget();
-        contentPage->setObjectName("contentPage");
+        contentPage->setObjectName(QString::fromUtf8("contentPage"));
         vboxLayout1 = new QVBoxLayout(contentPage);
 #ifndef Q_OS_MAC
         vboxLayout1->setSpacing(6);
 #endif
         vboxLayout1->setContentsMargins(5, 5, 5, 5);
-        vboxLayout1->setObjectName("vboxLayout1");
+        vboxLayout1->setObjectName(QString::fromUtf8("vboxLayout1"));
         listContents = new QTreeWidget(contentPage);
-        listContents->setObjectName("listContents");
+        listContents->setObjectName(QString::fromUtf8("listContents"));
         listContents->setContextMenuPolicy(Qt::CustomContextMenu);
         listContents->setRootIsDecorated(true);
         listContents->setUniformRowHeights(true);
@@ -104,40 +127,40 @@ public:
         QIcon icon(QIcon::fromTheme(QString::fromUtf8("edit-copy")));
         tabWidget->addTab(contentPage, icon, QString());
         indexPage = new QWidget();
-        indexPage->setObjectName("indexPage");
+        indexPage->setObjectName(QString::fromUtf8("indexPage"));
         vboxLayout2 = new QVBoxLayout(indexPage);
 #ifndef Q_OS_MAC
         vboxLayout2->setSpacing(6);
 #endif
         vboxLayout2->setContentsMargins(5, 5, 5, 5);
-        vboxLayout2->setObjectName("vboxLayout2");
+        vboxLayout2->setObjectName(QString::fromUtf8("vboxLayout2"));
         TextLabel1 = new QLabel(indexPage);
-        TextLabel1->setObjectName("TextLabel1");
+        TextLabel1->setObjectName(QString::fromUtf8("TextLabel1"));
 
         vboxLayout2->addWidget(TextLabel1);
 
         editIndex = new QLineEdit(indexPage);
-        editIndex->setObjectName("editIndex");
+        editIndex->setObjectName(QString::fromUtf8("editIndex"));
 
         vboxLayout2->addWidget(editIndex);
 
         listIndex = new QListView(indexPage);
-        listIndex->setObjectName("listIndex");
+        listIndex->setObjectName(QString::fromUtf8("listIndex"));
         listIndex->setContextMenuPolicy(Qt::CustomContextMenu);
 
         vboxLayout2->addWidget(listIndex);
 
         tabWidget->addTab(indexPage, QString());
         bookmarkPage = new QWidget();
-        bookmarkPage->setObjectName("bookmarkPage");
+        bookmarkPage->setObjectName(QString::fromUtf8("bookmarkPage"));
         vboxLayout3 = new QVBoxLayout(bookmarkPage);
 #ifndef Q_OS_MAC
         vboxLayout3->setSpacing(6);
 #endif
         vboxLayout3->setContentsMargins(5, 5, 5, 5);
-        vboxLayout3->setObjectName("vboxLayout3");
+        vboxLayout3->setObjectName(QString::fromUtf8("vboxLayout3"));
         listBookmarks = new QTreeWidget(bookmarkPage);
-        listBookmarks->setObjectName("listBookmarks");
+        listBookmarks->setObjectName(QString::fromUtf8("listBookmarks"));
         listBookmarks->setContextMenuPolicy(Qt::CustomContextMenu);
         listBookmarks->setUniformRowHeights(true);
 
@@ -148,18 +171,18 @@ public:
         hboxLayout->setSpacing(6);
 #endif
         hboxLayout->setContentsMargins(0, 0, 0, 0);
-        hboxLayout->setObjectName("hboxLayout");
+        hboxLayout->setObjectName(QString::fromUtf8("hboxLayout"));
         spacerItem = new QSpacerItem(20, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
 
         hboxLayout->addItem(spacerItem);
 
         buttonAdd = new QPushButton(bookmarkPage);
-        buttonAdd->setObjectName("buttonAdd");
+        buttonAdd->setObjectName(QString::fromUtf8("buttonAdd"));
 
         hboxLayout->addWidget(buttonAdd);
 
         buttonRemove = new QPushButton(bookmarkPage);
-        buttonRemove->setObjectName("buttonRemove");
+        buttonRemove->setObjectName(QString::fromUtf8("buttonRemove"));
 
         hboxLayout->addWidget(buttonRemove);
 
@@ -168,35 +191,35 @@ public:
 
         tabWidget->addTab(bookmarkPage, QString());
         searchPage = new QWidget();
-        searchPage->setObjectName("searchPage");
+        searchPage->setObjectName(QString::fromUtf8("searchPage"));
         gridLayout = new QGridLayout(searchPage);
 #ifndef Q_OS_MAC
         gridLayout->setSpacing(6);
 #endif
         gridLayout->setContentsMargins(5, 5, 5, 5);
-        gridLayout->setObjectName("gridLayout");
+        gridLayout->setObjectName(QString::fromUtf8("gridLayout"));
         spacerItem1 = new QSpacerItem(20, 20, QSizePolicy::Minimum, QSizePolicy::Fixed);
 
         gridLayout->addItem(spacerItem1, 3, 0, 1, 1);
 
         TextLabel1_2 = new QLabel(searchPage);
-        TextLabel1_2->setObjectName("TextLabel1_2");
+        TextLabel1_2->setObjectName(QString::fromUtf8("TextLabel1_2"));
 
         gridLayout->addWidget(TextLabel1_2, 0, 0, 1, 1);
 
         termsEdit = new QLineEdit(searchPage);
-        termsEdit->setObjectName("termsEdit");
+        termsEdit->setObjectName(QString::fromUtf8("termsEdit"));
 
         gridLayout->addWidget(termsEdit, 1, 0, 1, 1);
 
         resultBox = new QListWidget(searchPage);
-        resultBox->setObjectName("resultBox");
+        resultBox->setObjectName(QString::fromUtf8("resultBox"));
         resultBox->setContextMenuPolicy(Qt::CustomContextMenu);
 
         gridLayout->addWidget(resultBox, 5, 0, 1, 1);
 
         TextLabel2 = new QLabel(searchPage);
-        TextLabel2->setObjectName("TextLabel2");
+        TextLabel2->setObjectName(QString::fromUtf8("TextLabel2"));
 
         gridLayout->addWidget(TextLabel2, 4, 0, 1, 1);
 
@@ -205,9 +228,9 @@ public:
         hboxLayout1->setSpacing(6);
 #endif
         hboxLayout1->setContentsMargins(1, 1, 1, 1);
-        hboxLayout1->setObjectName("hboxLayout1");
+        hboxLayout1->setObjectName(QString::fromUtf8("hboxLayout1"));
         helpButton = new QPushButton(searchPage);
-        helpButton->setObjectName("helpButton");
+        helpButton->setObjectName(QString::fromUtf8("helpButton"));
 
         hboxLayout1->addWidget(helpButton);
 
@@ -216,7 +239,7 @@ public:
         hboxLayout1->addItem(spacerItem2);
 
         searchButton = new QPushButton(searchPage);
-        searchButton->setObjectName("searchButton");
+        searchButton->setObjectName(QString::fromUtf8("searchButton"));
         searchButton->setEnabled(false);
 
         hboxLayout1->addWidget(searchButton);
@@ -229,7 +252,7 @@ public:
         vboxLayout->addWidget(tabWidget);
 
         framePrepare = new QFrame(HelpDialog);
-        framePrepare->setObjectName("framePrepare");
+        framePrepare->setObjectName(QString::fromUtf8("framePrepare"));
         framePrepare->setFrameShape(QFrame::StyledPanel);
         framePrepare->setFrameShadow(QFrame::Raised);
         hboxLayout2 = new QHBoxLayout(framePrepare);
@@ -237,14 +260,14 @@ public:
         hboxLayout2->setSpacing(6);
 #endif
         hboxLayout2->setContentsMargins(3, 3, 3, 3);
-        hboxLayout2->setObjectName("hboxLayout2");
+        hboxLayout2->setObjectName(QString::fromUtf8("hboxLayout2"));
         labelPrepare = new QLabel(framePrepare);
-        labelPrepare->setObjectName("labelPrepare");
+        labelPrepare->setObjectName(QString::fromUtf8("labelPrepare"));
 
         hboxLayout2->addWidget(labelPrepare);
 
         progressPrepare = new QProgressBar(framePrepare);
-        progressPrepare->setObjectName("progressPrepare");
+        progressPrepare->setObjectName(QString::fromUtf8("progressPrepare"));
 
         hboxLayout2->addWidget(progressPrepare);
 

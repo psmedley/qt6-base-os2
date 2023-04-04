@@ -24,4 +24,3 @@ QIBusInputContextProxy::~QIBusInputContextProxy()
 {
 }
 
-#include "moc_qibusinputcontextproxy.cpp"

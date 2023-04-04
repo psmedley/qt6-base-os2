@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qcolordialog.h"
 
@@ -39,14 +75,9 @@
 
 #include "private/qdialog_p.h"
 
-#include <qpa/qplatformintegration.h>
-#include <private/qguiapplication_p.h>
-
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 namespace {
 class QColorLuminancePicker;
@@ -91,7 +122,6 @@ public:
     void showAlpha(bool b);
     bool isAlphaVisible() const;
     void retranslateStrings();
-    bool supportsColorPicking() const;
 
     void _q_addCustom();
     void _q_setCustom(int index, QRgb color);
@@ -1370,8 +1400,9 @@ void QColorShower::hsvEd()
 
 void QColorShower::htmlEd()
 {
+    QColor c;
     QString t = htEd->text();
-    QColor c = QColor::fromString(t);
+    c.setNamedColor(t);
     if (!c.isValid())
         return;
     curCol = qRgba(c.red(), c.green(), c.blue(), currentAlpha());
@@ -1535,9 +1566,7 @@ QColor QColorDialogPrivate::grabScreenColor(const QPoint &p)
     QScreen *screen = QGuiApplication::screenAt(p);
     if (!screen)
         screen = QGuiApplication::primaryScreen();
-    const QRect screenRect = screen->geometry();
-    const QPixmap pixmap =
-            screen->grabWindow(0, p.x() - screenRect.x(), p.y() - screenRect.y(), 1, 1);
+    const QPixmap pixmap = screen->grabWindow(0, p.x(), p.y(), 1, 1);
     const QImage i = pixmap.toImage();
     return i.pixel(0, 0);
 }
@@ -1604,18 +1633,16 @@ void QColorDialogPrivate::_q_pickScreenColor()
 
     addCusBt->setDisabled(true);
     buttons->setDisabled(true);
-    if (screenColorPickerButton) {
-        screenColorPickerButton->setDisabled(true);
-        const QPoint globalPos = QCursor::pos();
-        q->setCurrentColor(grabScreenColor(globalPos));
-        updateColorLabelText(globalPos);
-    }
+    screenColorPickerButton->setDisabled(true);
+
+    const QPoint globalPos = QCursor::pos();
+    q->setCurrentColor(grabScreenColor(globalPos));
+    updateColorLabelText(globalPos);
 }
 
 void QColorDialogPrivate::updateColorLabelText(const QPoint &globalPos)
 {
-    if (lblScreenColorInfo)
-        lblScreenColorInfo->setText(QColorDialog::tr("Cursor at %1, %2\nPress ESC to cancel")
+    lblScreenColorInfo->setText(QColorDialog::tr("Cursor at %1, %2\nPress ESC to cancel")
                                 .arg(globalPos.x())
                                 .arg(globalPos.y()));
 }
@@ -1632,7 +1659,7 @@ void QColorDialogPrivate::releaseColorPicking()
 #endif
     q->releaseKeyboard();
     q->setMouseTracking(false);
-    lblScreenColorInfo->setText("\n"_L1);
+    lblScreenColorInfo->setText(QLatin1String("\n"));
     addCusBt->setDisabled(false);
     buttons->setDisabled(false);
     screenColorPickerButton->setDisabled(false);
@@ -1697,16 +1724,12 @@ void QColorDialogPrivate::initWidgets()
         leftLay->addWidget(standard);
 
 #if !defined(QT_SMALL_COLORDIALOG)
-        if (supportsColorPicking()) {
-            screenColorPickerButton = new QPushButton();
-            leftLay->addWidget(screenColorPickerButton);
-            lblScreenColorInfo = new QLabel("\n"_L1);
-            leftLay->addWidget(lblScreenColorInfo);
-            q->connect(screenColorPickerButton, SIGNAL(clicked()), SLOT(_q_pickScreenColor()));
-        } else {
-            screenColorPickerButton = nullptr;
-            lblScreenColorInfo = nullptr;
-        }
+        // The screen color picker button
+        screenColorPickerButton = new QPushButton();
+        leftLay->addWidget(screenColorPickerButton);
+        lblScreenColorInfo = new QLabel(QLatin1String("\n"));
+        leftLay->addWidget(lblScreenColorInfo);
+        q->connect(screenColorPickerButton, SIGNAL(clicked()), SLOT(_q_pickScreenColor()));
 #endif
 
         leftLay->addStretch();
@@ -1759,7 +1782,7 @@ void QColorDialogPrivate::initWidgets()
     pickLay->addLayout(cLay);
     cp = new QColorPicker(q);
 
-    cp->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+    cp->setFrameStyle(QFrame::Panel + QFrame::Sunken);
 
 #if defined(QT_SMALL_COLORDIALOG)
     cp->hide();
@@ -1843,18 +1866,10 @@ void QColorDialogPrivate::retranslateStrings()
         lblBasicColors->setText(QColorDialog::tr("&Basic colors"));
         lblCustomColors->setText(QColorDialog::tr("&Custom colors"));
         addCusBt->setText(QColorDialog::tr("&Add to Custom Colors"));
-#if !defined(QT_SMALL_COLORDIALOG)
-        if (screenColorPickerButton)
-            screenColorPickerButton->setText(QColorDialog::tr("&Pick Screen Color"));
-#endif
+        screenColorPickerButton->setText(QColorDialog::tr("&Pick Screen Color"));
     }
 
     cs->retranslateStrings();
-}
-
-bool QColorDialogPrivate::supportsColorPicking() const
-{
-    return QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::ScreenWindowGrabbing);
 }
 
 bool QColorDialogPrivate::canBeNativeDialog() const
@@ -1870,8 +1885,8 @@ bool QColorDialogPrivate::canBeNativeDialog() const
         return false;
     }
 
-    QLatin1StringView staticName(QColorDialog::staticMetaObject.className());
-    QLatin1StringView dynamicName(q->metaObject()->className());
+    QLatin1String staticName(QColorDialog::staticMetaObject.className());
+    QLatin1String dynamicName(q->metaObject()->className());
     return (staticName == dynamicName);
 }
 
@@ -2198,6 +2213,7 @@ void QColorDialogPrivate::updateColorPicking(const QPoint &globalPos)
     // otherwise it is not possible to pre-select a custom cell for assignment.
     setCurrentColor(color, ShowColor);
     updateColorLabelText(globalPos);
+
 }
 
 bool QColorDialogPrivate::handleColorPickingMouseMove(QMouseEvent *e)

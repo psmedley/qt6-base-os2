@@ -1,35 +1,39 @@
+# Generated from notepad.pro.
+
 cmake_minimum_required(VERSION 3.16)
 project(notepad LANGUAGES CXX)
 
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-    set(INSTALL_EXAMPLESDIR "examples")
+  set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/widgets/tutorials/notepad")
 
-find_package(Qt6
-    REQUIRED COMPONENTS Core Gui Widgets
-    OPTIONAL_COMPONENTS PrintSupport
-)
+find_package(Qt6 COMPONENTS Core)
+find_package(Qt6 COMPONENTS Gui)
+find_package(Qt6 COMPONENTS Widgets)
+find_package(Qt6 COMPONENTS PrintSupport) # special case: add
 
 qt_add_executable(notepad
     main.cpp
     notepad.cpp notepad.h notepad.ui
 )
-
 set_target_properties(notepad PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
-
 target_link_libraries(notepad PUBLIC
     Qt::Core
     Qt::Gui
     Qt::Widgets
 )
+
 
 # Resources:
 set(notepad_resource_files
@@ -53,7 +57,7 @@ set(notepad_resource_files
     "images/underline.png"
 )
 
-qt_add_resources(notepad "notepad"
+qt6_add_resources(notepad "notepad"
     PREFIX
         "/"
     FILES

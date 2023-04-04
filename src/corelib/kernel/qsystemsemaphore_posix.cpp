@@ -1,7 +1,43 @@
-// Copyright (C) 2015 Konstantin Ritt <ritt.ks@gmail.com>
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Tobias Koenig <tobias.koenig@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2015 Konstantin Ritt <ritt.ks@gmail.com>
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Tobias Koenig <tobias.koenig@kdab.com>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qsystemsemaphore.h"
 #include "qsystemsemaphore_p.h"
@@ -28,15 +64,13 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 bool QSystemSemaphorePrivate::handle(QSystemSemaphore::AccessMode mode)
 {
     if (semaphore != SEM_FAILED)
         return true;  // we already have a semaphore
 
     if (fileName.isEmpty()) {
-        errorString = QSystemSemaphore::tr("%1: key is empty").arg("QSystemSemaphore::handle"_L1);
+        errorString = QSystemSemaphore::tr("%1: key is empty").arg(QLatin1String("QSystemSemaphore::handle"));
         error = QSystemSemaphore::KeyError;
         return false;
     }
@@ -52,7 +86,7 @@ bool QSystemSemaphorePrivate::handle(QSystemSemaphore::AccessMode mode)
         if (semaphore == SEM_FAILED && errno == EEXIST) {
             if (mode == QSystemSemaphore::Create) {
                 if (::sem_unlink(semName.constData()) == -1 && errno != ENOENT) {
-                    setErrorString("QSystemSemaphore::handle (sem_unlink)"_L1);
+                    setErrorString(QLatin1String("QSystemSemaphore::handle (sem_unlink)"));
                     return false;
                 }
                 // Race condition: the semaphore might be recreated before
@@ -70,7 +104,7 @@ bool QSystemSemaphorePrivate::handle(QSystemSemaphore::AccessMode mode)
     }
 
     if (semaphore == SEM_FAILED) {
-        setErrorString("QSystemSemaphore::handle"_L1);
+        setErrorString(QLatin1String("QSystemSemaphore::handle"));
         return false;
     }
 
@@ -83,7 +117,7 @@ void QSystemSemaphorePrivate::cleanHandle()
 {
     if (semaphore != SEM_FAILED) {
         if (::sem_close(semaphore) == -1) {
-            setErrorString("QSystemSemaphore::cleanHandle (sem_close)"_L1);
+            setErrorString(QLatin1String("QSystemSemaphore::cleanHandle (sem_close)"));
 #if defined QSYSTEMSEMAPHORE_DEBUG
             qDebug("QSystemSemaphore::cleanHandle sem_close failed.");
 #endif
@@ -93,7 +127,7 @@ void QSystemSemaphorePrivate::cleanHandle()
 
     if (createdSemaphore) {
         if (::sem_unlink(QFile::encodeName(fileName).constData()) == -1 && errno != ENOENT) {
-            setErrorString("QSystemSemaphore::cleanHandle (sem_unlink)"_L1);
+            setErrorString(QLatin1String("QSystemSemaphore::cleanHandle (sem_unlink)"));
 #if defined QSYSTEMSEMAPHORE_DEBUG
             qDebug("QSystemSemaphore::cleanHandle sem_unlink failed.");
 #endif
@@ -111,7 +145,7 @@ bool QSystemSemaphorePrivate::modifySemaphore(int count)
         int cnt = count;
         do {
             if (::sem_post(semaphore) == -1) {
-                setErrorString("QSystemSemaphore::modifySemaphore (sem_post)"_L1);
+                setErrorString(QLatin1String("QSystemSemaphore::modifySemaphore (sem_post)"));
 #if defined QSYSTEMSEMAPHORE_DEBUG
                 qDebug("QSystemSemaphore::modify sem_post failed %d %d", count, errno);
 #endif
@@ -133,7 +167,7 @@ bool QSystemSemaphorePrivate::modifySemaphore(int count)
                 semaphore = SEM_FAILED;
                 return modifySemaphore(count);
             }
-            setErrorString("QSystemSemaphore::modifySemaphore (sem_wait)"_L1);
+            setErrorString(QLatin1String("QSystemSemaphore::modifySemaphore (sem_wait)"));
 #if defined QSYSTEMSEMAPHORE_DEBUG
             qDebug("QSystemSemaphore::modify sem_wait failed %d %d", count, errno);
 #endif

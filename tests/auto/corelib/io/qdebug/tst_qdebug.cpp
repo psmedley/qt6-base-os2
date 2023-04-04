@@ -1,6 +1,31 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QtCore/QCoreApplication>
@@ -27,10 +52,6 @@ struct ConvertsToQVariant {
 };
 static_assert(!QTypeTraits::has_ostream_operator_v<QDebug, ConvertsToQVariant>);
 
-#if defined(Q_OS_DARWIN)
-#include <objc/runtime.h>
-#include <Foundation/Foundation.h>
-#endif
 
 class tst_QDebug: public QObject
 {
@@ -67,12 +88,6 @@ private slots:
     void threadSafety() const;
     void toString() const;
     void noQVariantEndlessRecursion() const;
-#if defined(Q_OS_DARWIN)
-    void objcInCppMode_data() const;
-    void objcInCppMode() const;
-    void objcInObjcMode_data() const;
-    void objcInObjcMode() const;
-#endif
 };
 
 void tst_QDebug::assignment() const
@@ -857,69 +872,6 @@ void tst_QDebug::noQVariantEndlessRecursion() const
     QTest::ignoreMessage(QtDebugMsg, "QVariant(ConvertsToQVariant, )");
     qDebug() << var;
 }
-
-#if defined(Q_OS_DARWIN)
-
-@interface MyObjcClass : NSObject
-@end
-
-@implementation MyObjcClass : NSObject
-- (NSString *)description
-{
-    return @"MyObjcClass is the best";
-}
-@end
-
-void tst_QDebug::objcInCppMode_data() const
-{
-    QTest::addColumn<objc_object *>("object");
-    QTest::addColumn<QString>("message");
-
-    QTest::newRow("nil") << static_cast<objc_object*>(nullptr) << QString::fromLatin1("(null)");
-
-    // Not an NSObject subclass
-    auto *nsproxy = reinterpret_cast<objc_object *>(class_createInstance(objc_getClass("NSProxy"), 0));
-    QTest::newRow("NSProxy") << nsproxy << QString::fromLatin1("<NSProxy: 0x%1>").arg(uintptr_t(nsproxy), 1, 16);
-
-    // Plain NSObject
-    auto *nsobject = reinterpret_cast<objc_object *>(class_createInstance(objc_getClass("NSObject"), 0));
-    QTest::newRow("NSObject") << nsobject << QString::fromLatin1("<NSObject: 0x%1>").arg(uintptr_t(nsobject), 1, 16);
-
-    auto str = QString::fromLatin1("foo");
-    QTest::newRow("NSString") << reinterpret_cast<objc_object*>(str.toNSString()) << str;
-
-    // Custom debug description
-    QTest::newRow("MyObjcClass") << reinterpret_cast<objc_object*>([[MyObjcClass alloc] init])
-                                 << QString::fromLatin1("MyObjcClass is the best");
-}
-
-void tst_QDebug::objcInCppMode() const
-{
-    QFETCH(objc_object *, object);
-    QFETCH(QString, message);
-
-    MessageHandlerSetter mhs(myMessageHandler);
-    { qDebug() << object; }
-
-    QCOMPARE(s_msg, message);
-}
-
-void tst_QDebug::objcInObjcMode_data() const
-{
-    objcInCppMode_data();
-}
-
-void tst_QDebug::objcInObjcMode() const
-{
-    QFETCH(objc_object *, object);
-    QFETCH(QString, message);
-
-    MessageHandlerSetter mhs(myMessageHandler);
-    { qDebug() << static_cast<id>(object); }
-
-    QCOMPARE(s_msg, message);
-}
-#endif
 
 // Should compile: instentiation of unrelated operator<< should not cause cause compilation
 // error in QDebug operators (QTBUG-47375)

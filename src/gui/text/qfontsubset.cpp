@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qfontsubset_p.h"
 #include <qdebug.h>
@@ -12,8 +48,6 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 #ifndef QT_NO_PDF
 
@@ -78,6 +112,24 @@ QByteArray QFontSubset::glyphName(unsigned short unicode, bool symbol)
     return buffer;
 }
 
+QByteArray QFontSubset::glyphName(unsigned int glyph, const QList<int> &reverseMap) const
+{
+    uint glyphIndex = glyph_indices[glyph];
+
+    if (glyphIndex == 0)
+        return "/.notdef";
+
+    QByteArray ba;
+    QPdf::ByteStream s(&ba);
+    if (reverseMap[glyphIndex] && reverseMap[glyphIndex] < 0x10000) {
+        s << '/' << glyphName(reverseMap[glyphIndex], false);
+    } else {
+        s << "/gl" << (int)glyphIndex;
+    }
+    return ba;
+}
+
+
 QByteArray QFontSubset::widthArray() const
 {
     Q_ASSERT(!widths.isEmpty());
@@ -90,7 +142,7 @@ QByteArray QFontSubset::widthArray() const
 
     QFixed defWidth = widths[0];
     //qDebug("defWidth=%d, scale=%f", defWidth.toInt(), scale.toReal());
-    for (qsizetype i = 0; i < nGlyphs(); ++i) {
+    for (int i = 0; i < nGlyphs(); ++i) {
         if (defWidth != widths[i])
             defWidth = 0;
     }
@@ -98,10 +150,10 @@ QByteArray QFontSubset::widthArray() const
         s << "/DW " << qRound(defWidth.toInt() * scale);
     } else {
         s << "/W [";
-        for (qsizetype g = 0; g < nGlyphs();) {
+        for (int g = 0; g < nGlyphs();) {
             QFixed w = widths[g];
-            qsizetype start = g;
-            qsizetype startLinear = 0;
+            int start = g;
+            int startLinear = 0;
             ++g;
             while (g < nGlyphs()) {
                 QFixed nw = widths[g];
@@ -119,11 +171,11 @@ QByteArray QFontSubset::widthArray() const
             // qDebug("start=%x startLinear=%x g-1=%x",start,startLinear,g-1);
             if (g - startLinear < 10)
                 startLinear = 0;
-            qsizetype endnonlinear = startLinear ? startLinear : g;
+            int endnonlinear = startLinear ? startLinear : g;
             // qDebug("    startLinear=%x endnonlinear=%x", startLinear,endnonlinear);
             if (endnonlinear > start) {
                 s << start << '[';
-                for (qsizetype i = start; i < endnonlinear; ++i)
+                for (int i = start; i < endnonlinear; ++i)
                     s << qRound(widths[i].toInt() * scale);
                 s << "]\n";
             }
@@ -177,14 +229,14 @@ QByteArray QFontSubset::createToUnicodeMap() const
     QPdf::ByteStream s(&ranges);
 
     char buf[5];
-    for (qsizetype g = 1; g < nGlyphs(); ) {
+    for (int g = 1; g < nGlyphs(); ) {
         int uc0 = reverseMap.at(g);
         if (!uc0) {
             ++g;
             continue;
         }
-        qsizetype start = g;
-        qsizetype startLinear = 0;
+        int start = g;
+        int startLinear = 0;
         ++g;
         while (g < nGlyphs()) {
             int uc = reverseMap[g];
@@ -205,7 +257,7 @@ QByteArray QFontSubset::createToUnicodeMap() const
         // qDebug("start=%x startLinear=%x g-1=%x",start,startLinear,g-1);
         if (g - startLinear < 10)
             startLinear = 0;
-        qsizetype endnonlinear = startLinear ? startLinear : g;
+        int endnonlinear = startLinear ? startLinear : g;
         // qDebug("    startLinear=%x endnonlinear=%x", startLinear,endnonlinear);
         if (endnonlinear > start) {
             s << '<' << QPdf::toHex((ushort)start, buf) << "> <";
@@ -214,7 +266,7 @@ QByteArray QFontSubset::createToUnicodeMap() const
                 s << '<' << QPdf::toHex((ushort)reverseMap[start], buf) << ">\n";
             } else {
                 s << '[';
-                for (qsizetype i = start; i < endnonlinear; ++i) {
+                for (int i = start; i < endnonlinear; ++i) {
                     s << '<' << QPdf::toHex((ushort)reverseMap[i], buf) << "> ";
                 }
                 s << "]\n";
@@ -223,9 +275,9 @@ QByteArray QFontSubset::createToUnicodeMap() const
         }
         if (startLinear) {
             while (startLinear < g) {
-                qsizetype len = g - startLinear;
-                qsizetype uc_start = reverseMap[startLinear];
-                qsizetype uc_end = uc_start + len - 1;
+                int len = g - startLinear;
+                int uc_start = reverseMap[startLinear];
+                int uc_end = uc_start + len - 1;
                 if ((uc_end >> 8) != (uc_start >> 8))
                     len = 256 - (uc_start & 0xff);
                 s << '<' << QPdf::toHex((ushort)startLinear, buf) << "> <";
@@ -248,14 +300,14 @@ QByteArray QFontSubset::createToUnicodeMap() const
     return touc;
 }
 
-qsizetype QFontSubset::addGlyph(uint index)
+int QFontSubset::addGlyph(uint index)
 {
     qsizetype idx = glyph_indices.indexOf(index);
     if (idx < 0) {
         idx = glyph_indices.size();
         glyph_indices.append(index);
     }
-    return idx;
+    return (int)idx;
 }
 
 #endif // QT_NO_PDF
@@ -587,8 +639,8 @@ static QTtfTable generateName(const qttf_name_table &name)
     list.append(rec);
     rec.nameId = 4;
     rec.value = name.family;
-    if (name.subfamily != "Regular"_L1)
-        rec.value += u' ' + name.subfamily;
+    if (name.subfamily != QLatin1String("Regular"))
+        rec.value += QLatin1Char(' ') + name.subfamily;
     list.append(rec);
     rec.nameId = 6;
     rec.value = name.postscript_name;
@@ -608,7 +660,7 @@ static QTtfTable generateName(const QList<QTtfNameRecord> &name)
     const int name_size = 6 + 12*name.size();
     int string_size = 0;
     for (int i = 0; i < name.size(); ++i) {
-        string_size += name.at(i).value.size()*char_size;
+        string_size += name.at(i).value.length()*char_size;
     }
     t.data.resize(name_size + string_size);
 
@@ -624,7 +676,7 @@ static QTtfTable generateName(const QList<QTtfNameRecord> &name)
 
     int off = 0;
     for (int i = 0; i < name.size(); ++i) {
-        int len = name.at(i).value.size()*char_size;
+        int len = name.at(i).value.length()*char_size;
 // quint16  platformID  Platform ID.
 // quint16  encodingID  Platform-specific encoding ID.
 // quint16  languageID  Language ID.
@@ -640,8 +692,12 @@ static QTtfTable generateName(const QList<QTtfNameRecord> &name)
         off += len;
     }
     for (int i = 0; i < name.size(); ++i) {
-        for (QChar ch : name.at(i).value)
-            s << quint16(ch.unicode());
+        const QString &n = name.at(i).value;
+        const ushort *uc = n.utf16();
+        for (int i = 0; i < n.length(); ++i) {
+            s << quint16(*uc);
+            ++uc;
+        }
     }
     return t;
 }
@@ -1147,12 +1203,13 @@ QByteArray QFontSubset::toTruetype() const
     font.maxp.maxCompositeContours = 0;
     font.maxp.maxComponentElements = 0;
     font.maxp.maxComponentDepth = 0;
-    const qsizetype numGlyphs = nGlyphs();
-    font.maxp.numGlyphs = quint16(numGlyphs);
+    const int numGlyphs = nGlyphs();
+    font.maxp.numGlyphs = numGlyphs;
     QList<QTtfGlyph> glyphs;
     glyphs.reserve(numGlyphs);
 
-    for (qsizetype i = 0; i < numGlyphs; ++i) {
+    uint sumAdvances = 0;
+    for (int i = 0; i < numGlyphs; ++i) {
         glyph_t g = glyph_indices.at(i);
         QPainterPath path;
         glyph_metrics_t metric;
@@ -1174,6 +1231,9 @@ QByteArray QFontSubset::toTruetype() const
         font.maxp.maxPoints = qMax(font.maxp.maxPoints, glyph.numPoints);
         font.maxp.maxContours = qMax(font.maxp.maxContours, glyph.numContours);
 
+        if (glyph.xMax > glyph.xMin)
+            sumAdvances += glyph.xMax - glyph.xMin;
+
 //         qDebug("adding glyph %d size=%d", glyph.index, glyph.data.size());
         glyphs.append(glyph);
         widths[i] = glyph.advanceWidth;
@@ -1192,12 +1252,12 @@ QByteArray QFontSubset::toTruetype() const
     if (name_table.data.isEmpty()) {
         qttf_name_table name;
         if (noEmbed)
-            name.copyright = "Fake font"_L1;
+            name.copyright = QLatin1String("Fake font");
         else
-            name.copyright = QLatin1StringView(properties.copyright);
+            name.copyright = QLatin1String(properties.copyright);
         name.family = fontEngine->fontDef.families.first();
-        name.subfamily = "Regular"_L1; // ######
-        name.postscript_name = QLatin1StringView(properties.postscriptName);
+        name.subfamily = QLatin1String("Regular"); // ######
+        name.postscript_name = QLatin1String(properties.postscriptName);
         name_table = generateName(name);
     }
     tables.append(name_table);

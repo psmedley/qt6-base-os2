@@ -42,7 +42,7 @@
 # This is a small script to copy the required files from a harfbuzz tarball
 # into 3rdparty/harfbuzz-ng/ . Documentation, tests, demos etc. are not imported.
 # Steps:
-# 1. rm $QTDIR/src/3rdparty/harfbuzz-ng/src/* && rm $QTDIR/src/3rdparty/harfbuzz-ng/src/OT/Layout/GSUB
+# 1. rm $QTDIR/src/3rdparty/harfbuzz-ng/src/*
 # 2. source import_from_tarball.sh harfbuzz_tarball_dir/ $QTDIR/src/3rdparty/harfbuzz-ng/
 # 3. Check that CMakeLists contains everything
 
@@ -84,10 +84,17 @@ FILES=(AUTHORS
        NEWS
        README.md
        THANKS
+       TODO
        )
 
 for i in ${FILES[*]}; do
     copy_file_or_dir "$i"
 done
 
-cp -R $HB_DIR/src $TARGET_DIR
+CODEFILES=($HB_DIR/src/*.cc
+           $HB_DIR/src/*.hh
+           $HB_DIR/src/*.h)
+
+for i in ${CODEFILES[*]}; do
+    cp $i $TARGET_DIR/src/
+done

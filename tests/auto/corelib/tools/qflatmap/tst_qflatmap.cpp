@@ -1,8 +1,32 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #define QT_USE_QSTRINGBUILDER
-#define QFLATMAP_ENABLE_STL_COMPATIBLE_INSERT
 
 #include <QTest>
 
@@ -16,20 +40,6 @@
 #include <list>
 #include <tuple>
 
-static constexpr bool is_even(int n) { return n % 2 == 0; }
-static constexpr bool is_empty(QAnyStringView v) { return v.isEmpty(); }
-
-namespace {
-template <typename P>
-constexpr inline bool is_pair_impl_v = false;
-template <typename T, typename S>
-constexpr inline bool is_pair_impl_v<std::pair<T,S>> = true;
-template <typename P>
-constexpr inline bool is_pair_v = is_pair_impl_v<std::decay_t<P>>;
-template <typename P>
-using if_pair = std::enable_if_t<is_pair_v<P>, bool>;
-}
-
 class tst_QFlatMap : public QObject
 {
     Q_OBJECT
@@ -41,21 +51,11 @@ private slots:
     void removal();
     void extraction();
     void iterators();
-    void remove_if_pair() { remove_if_impl([](const auto &p) -> if_pair<decltype(p)> { return is_even(p.first) && is_empty(p.second); }); }
-    void remove_if_key_value() { remove_if_impl([](const auto &k, const auto &v) { return is_even(k) && is_empty(v); }); }
-    void remove_if_key() { remove_if_impl([](int k) { return is_even(k); }, true); }
     void statefulComparator();
-    void transparency_using();
-    void transparency_struct();
+    void transparency();
     void try_emplace_and_insert_or_assign();
     void viewIterators();
     void varLengthArray();
-
-private:
-    template <typename Compare>
-    void transparency_impl();
-    template <typename Predicate>
-    void remove_if_impl(Predicate p, bool removeNonEmptyValues = false);
 };
 
 void tst_QFlatMap::constructing()
@@ -142,7 +142,7 @@ void tst_QFlatMap::insertion()
     QCOMPARE(m.value("foo").data(), "FOO");
     QCOMPARE(m.value("bar").data(), "BAR");
     QCOMPARE(m.value("baz").data(), "BAZ");
-    QCOMPARE(m.value("oof").data(), "eek");
+    QCOMPARE(m.value("oof").data(), "OOF");
     QCOMPARE(m.value("bla").data(), "BLA");
     QCOMPARE(m.value("blubb").data(), "BLUBB");
 
@@ -156,7 +156,7 @@ void tst_QFlatMap::insertion()
     m.insert(std::begin(a1), std::end(a1));
     m.insert(Qt::OrderedUniqueRange, std::begin(a2), std::end(a2));
     QCOMPARE(m.size(), 10);
-    QCOMPARE(m.value("narf").data(), "NARF");
+    QCOMPARE(m.value("narf").data(), "NARFFFFFF");
     QCOMPARE(m.value("gnampf").data(), "GNAMPF");
 }
 
@@ -201,7 +201,7 @@ void tst_QFlatMap::extraction()
     using Map = QFlatMap<int, QByteArray>;
     Map::key_container_type expectedKeys = { 1, 2, 3 };
     Map::mapped_container_type expectedValues = { "een", "twee", "dree" };
-    Map m(Qt::OrderedUniqueRange, expectedKeys, expectedValues);
+    Map m(expectedKeys, expectedValues);
     auto keys = m.keys();
     auto values = m.values();
     QCOMPARE(keys, expectedKeys);
@@ -214,7 +214,7 @@ void tst_QFlatMap::extraction()
 void tst_QFlatMap::iterators()
 {
     using Map = QFlatMap<int, QByteArray>;
-    auto m = Map{ Qt::OrderedUniqueRange, { { 1, "foo" }, { 2, "bar" }, { 3, "baz" } } };
+    auto m = Map{ { 1, "foo" }, { 2, "bar" }, { 3, "baz" } };
     {
         // forward / backward
         Map::iterator a = m.begin();
@@ -358,74 +358,6 @@ void tst_QFlatMap::iterators()
     }
 }
 
-template <typename Pred>
-void tst_QFlatMap::remove_if_impl(Pred p, bool removeNonEmptyValues)
-{
-    // empty stays empty:
-    {
-        QFlatMap<int, QString> m;
-        QCOMPARE(m.remove_if(p), 0);
-        QVERIFY(m.isEmpty());
-    }
-    // a matching element is removed:
-    {
-        {
-            QFlatMap<int, QString> m;
-            m.insert_or_assign(0, "");
-            QCOMPARE(m.remove_if(p), 1);
-            QVERIFY(m.isEmpty());
-        }
-        if (removeNonEmptyValues) {
-            QFlatMap<int, QString> m;
-            m.insert_or_assign(0, "x");
-            QCOMPARE(m.remove_if(p), 1);
-            QVERIFY(m.isEmpty());
-        }
-    }
-    // a non-matching element is not removed:
-    {
-        {
-            QFlatMap<int, QString> m;
-            m.insert_or_assign(1, "");
-            QCOMPARE(m.remove_if(p), 0);
-            QVERIFY(m.contains(1));
-            QVERIFY(m[1].isEmpty());
-        }
-        if (removeNonEmptyValues) {
-            QFlatMap<int, QString> m;
-            m.insert_or_assign(1, "x");
-            QCOMPARE(m.remove_if(p), 0);
-            QVERIFY(m.contains(1));
-            QCOMPARE(m[1], "x");
-        }
-    }
-    // of matching and non-matching elements, only matching ones are removed:
-    {
-        {
-            QFlatMap<int, QString> m;
-            m.insert_or_assign(0, "");
-            m.insert_or_assign(1, "");
-            const auto copy = m;
-            QCOMPARE(m.remove_if(p), 1);
-            QCOMPARE(copy.size(), 2);
-            QCOMPARE(copy[0], "");
-            QCOMPARE(copy[1], "");
-            QCOMPARE(m.size(), 1);
-            QVERIFY(m.contains(1));
-            QVERIFY(m[1].isEmpty());
-        }
-        {
-            QFlatMap<int, QString> m;
-            m.insert_or_assign(1, "");
-            m.insert_or_assign(2, "");
-            QCOMPARE(m.remove_if(p), 1);
-            QCOMPARE(m.size(), 1);
-            QVERIFY(m.contains(1));
-            QVERIFY(m[1].isEmpty());
-        }
-    }
-}
-
 void tst_QFlatMap::removal()
 {
     using Map = QFlatMap<int, QByteArray>;
@@ -473,35 +405,17 @@ void tst_QFlatMap::statefulComparator()
     QVERIFY(m2.key_comp().count > m1.key_comp().count);
 }
 
-void tst_QFlatMap::transparency_using()
+void tst_QFlatMap::transparency()
 {
     struct StringViewCompare
     {
-        using is_transparent [[maybe_unused]] = void;
-        bool operator()(QAnyStringView lhs, QAnyStringView rhs) const
+        using is_transparent = void;
+        bool operator()(const QStringView &lhs, const QStringView &rhs) const
         {
             return lhs < rhs;
         }
     };
-    transparency_impl<StringViewCompare>();
-}
 
-void tst_QFlatMap::transparency_struct()
-{
-    struct StringViewCompare
-    {
-        struct is_transparent {};
-        bool operator()(QAnyStringView lhs, QAnyStringView rhs) const
-        {
-            return lhs < rhs;
-        }
-    };
-    transparency_impl<StringViewCompare>();
-}
-
-template <typename StringViewCompare>
-void tst_QFlatMap::transparency_impl()
-{
     using Map = QFlatMap<QString, QString, StringViewCompare>;
     auto m = Map{ { "one", "een" }, { "two", "twee" }, { "three", "dree" } };
 
@@ -510,21 +424,8 @@ void tst_QFlatMap::transparency_impl()
     const QStringView sv2{numbers.constData() + 4, 3};
     const QStringView sv3{numbers.constData() + 8, 5};
     QCOMPARE(m.lower_bound(sv1).value(), "een");
-    QCOMPARE(m.value(sv1), "een");
     QCOMPARE(m.lower_bound(sv2).value(), "twee");
-    QCOMPARE(m.value(sv2), "twee");
     QCOMPARE(m.lower_bound(sv3).value(), "dree");
-    QCOMPARE(m.value(sv3), "dree");
-
-    QVERIFY(m.contains(sv2));
-    auto twee = m.take(sv2);
-    static_assert(std::is_same_v<decltype(twee), QString>);
-    QCOMPARE(twee, "twee");
-    QVERIFY(!m.contains(sv2));
-
-    QVERIFY(m.contains(QLatin1String("one")));
-    QVERIFY(m.remove(QAnyStringView(u8"one")));
-    QVERIFY(!m.contains(QLatin1String("one")));
 }
 
 void tst_QFlatMap::try_emplace_and_insert_or_assign()
@@ -682,7 +583,7 @@ void tst_QFlatMap::viewIterators()
                        });
         auto it = keys.begin();
         QCOMPARE(*it, "kaksi");
-        QCOMPARE(it->size(), 5);
+        QCOMPARE(it->length(), 5);
         ++it;
         QCOMPARE(*it, "kolme");
         it++;
@@ -703,7 +604,7 @@ void tst_QFlatMap::viewIterators()
                        });
         auto it = values.begin();
         QCOMPARE(*it, "twee");
-        QCOMPARE(it->size(), 4);
+        QCOMPARE(it->length(), 4);
         ++it;
         QCOMPARE(*it, "dree");
         it++;
@@ -720,8 +621,8 @@ void tst_QFlatMap::viewIterators()
 void tst_QFlatMap::varLengthArray()
 {
     using Map = QVarLengthFlatMap<int, QByteArray, 1024>;
-    Map m(Qt::OrderedUniqueRange, { { 2, "twee" } });
-    m.insert_or_assign(1, "een");
+    Map m{ { 2, "twee" } };
+    m.insert(1, "een");
     m.remove(1);
     QVERIFY(!m.isEmpty());
     m.remove(2);

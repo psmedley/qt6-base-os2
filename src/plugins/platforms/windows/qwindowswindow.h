@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QWINDOWSWINDOW_H
 #define QWINDOWSWINDOW_H
@@ -26,11 +62,10 @@ class QDebug;
 
 struct QWindowsGeometryHint
 {
-    static QMargins frameOnPrimaryScreen(const QWindow *w, DWORD style, DWORD exStyle);
-    static QMargins frameOnPrimaryScreen(const QWindow *w, HWND hwnd);
-    static QMargins frame(const QWindow *w, DWORD style, DWORD exStyle, qreal dpi);
-    static QMargins frame(const QWindow *w, HWND hwnd, DWORD style, DWORD exStyle);
-    static QMargins frame(const QWindow *w, HWND hwnd);
+    static QMargins frameOnPrimaryScreen(DWORD style, DWORD exStyle);
+    static QMargins frameOnPrimaryScreen(HWND hwnd);
+    static QMargins frame(DWORD style, DWORD exStyle, qreal dpi);
+    static QMargins frame(HWND hwnd, DWORD style, DWORD exStyle);
     static QMargins frame(const QWindow *w, const QRect &geometry,
                           DWORD style, DWORD exStyle);
     static bool handleCalculateSize(const QMargins &customMargins, const MSG &msg, LRESULT *result);
@@ -272,7 +307,7 @@ public:
     QWindowsMenuBar *menuBar() const;
     void setMenuBar(QWindowsMenuBar *mb);
 
-    QMargins customMargins() const override;
+    QMargins customMargins() const override { return m_data.customMargins; }
     void setCustomMargins(const QMargins &m) override;
 
     void setStyle(unsigned s) const;
@@ -286,7 +321,6 @@ public:
     void handleCompositionSettingsChanged();
     void handleDpiScaledSize(WPARAM wParam, LPARAM lParam, LRESULT *result);
     void handleDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam);
-    void handleDpiChangedAfterParent(HWND hwnd);
 
     static void displayChanged();
     static void settingsChanged();
@@ -377,7 +411,6 @@ private:
     HICON m_iconBig = nullptr;
     void *m_surface = nullptr;
     int m_savedDpi = 96;
-    bool m_firstBgDraw = false;
 
     static bool m_screenForGLInitialized;
 

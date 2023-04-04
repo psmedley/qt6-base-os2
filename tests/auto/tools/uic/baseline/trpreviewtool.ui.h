@@ -1,8 +1,31 @@
 /*
-
-* Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
-
+*********************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the autotests of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+*********************************************************************
 */
 
 /********************************************************************************
@@ -56,58 +79,58 @@ public:
     void setupUi(QMainWindow *TrPreviewToolClass)
     {
         if (TrPreviewToolClass->objectName().isEmpty())
-            TrPreviewToolClass->setObjectName("TrPreviewToolClass");
+            TrPreviewToolClass->setObjectName(QString::fromUtf8("TrPreviewToolClass"));
         TrPreviewToolClass->resize(593, 466);
         actionOpenForm = new QAction(TrPreviewToolClass);
-        actionOpenForm->setObjectName("actionOpenForm");
+        actionOpenForm->setObjectName(QString::fromUtf8("actionOpenForm"));
         const QIcon icon = QIcon(QString::fromUtf8(":/images/open_form.png"));
         actionOpenForm->setIcon(icon);
         actionLoadTranslation = new QAction(TrPreviewToolClass);
-        actionLoadTranslation->setObjectName("actionLoadTranslation");
+        actionLoadTranslation->setObjectName(QString::fromUtf8("actionLoadTranslation"));
         const QIcon icon1 = QIcon(QString::fromUtf8(":/images/load_translation.png"));
         actionLoadTranslation->setIcon(icon1);
         actionReloadTranslations = new QAction(TrPreviewToolClass);
-        actionReloadTranslations->setObjectName("actionReloadTranslations");
+        actionReloadTranslations->setObjectName(QString::fromUtf8("actionReloadTranslations"));
         const QIcon icon2 = QIcon(QString::fromUtf8(":/images/reload_translations.png"));
         actionReloadTranslations->setIcon(icon2);
         actionClose = new QAction(TrPreviewToolClass);
-        actionClose->setObjectName("actionClose");
+        actionClose->setObjectName(QString::fromUtf8("actionClose"));
         actionAbout = new QAction(TrPreviewToolClass);
-        actionAbout->setObjectName("actionAbout");
+        actionAbout->setObjectName(QString::fromUtf8("actionAbout"));
         actionAbout_Qt = new QAction(TrPreviewToolClass);
-        actionAbout_Qt->setObjectName("actionAbout_Qt");
+        actionAbout_Qt->setObjectName(QString::fromUtf8("actionAbout_Qt"));
         centralWidget = new QWidget(TrPreviewToolClass);
-        centralWidget->setObjectName("centralWidget");
+        centralWidget->setObjectName(QString::fromUtf8("centralWidget"));
         TrPreviewToolClass->setCentralWidget(centralWidget);
         menuBar = new QMenuBar(TrPreviewToolClass);
-        menuBar->setObjectName("menuBar");
+        menuBar->setObjectName(QString::fromUtf8("menuBar"));
         menuBar->setGeometry(QRect(0, 0, 593, 21));
         menuView = new QMenu(menuBar);
-        menuView->setObjectName("menuView");
+        menuView->setObjectName(QString::fromUtf8("menuView"));
         menuViewViews = new QMenu(menuView);
-        menuViewViews->setObjectName("menuViewViews");
+        menuViewViews->setObjectName(QString::fromUtf8("menuViewViews"));
         menuHelp = new QMenu(menuBar);
-        menuHelp->setObjectName("menuHelp");
+        menuHelp->setObjectName(QString::fromUtf8("menuHelp"));
         menuFile = new QMenu(menuBar);
-        menuFile->setObjectName("menuFile");
+        menuFile->setObjectName(QString::fromUtf8("menuFile"));
         TrPreviewToolClass->setMenuBar(menuBar);
         mainToolBar = new QToolBar(TrPreviewToolClass);
-        mainToolBar->setObjectName("mainToolBar");
+        mainToolBar->setObjectName(QString::fromUtf8("mainToolBar"));
         mainToolBar->setOrientation(Qt::Horizontal);
         TrPreviewToolClass->addToolBar(Qt::TopToolBarArea, mainToolBar);
         statusBar = new QStatusBar(TrPreviewToolClass);
-        statusBar->setObjectName("statusBar");
+        statusBar->setObjectName(QString::fromUtf8("statusBar"));
         TrPreviewToolClass->setStatusBar(statusBar);
         dwForms = new QDockWidget(TrPreviewToolClass);
-        dwForms->setObjectName("dwForms");
+        dwForms->setObjectName(QString::fromUtf8("dwForms"));
         dockWidgetContents = new QWidget();
-        dockWidgetContents->setObjectName("dockWidgetContents");
+        dockWidgetContents->setObjectName(QString::fromUtf8("dockWidgetContents"));
         vboxLayout = new QVBoxLayout(dockWidgetContents);
         vboxLayout->setSpacing(0);
         vboxLayout->setContentsMargins(0, 0, 0, 0);
-        vboxLayout->setObjectName("vboxLayout");
+        vboxLayout->setObjectName(QString::fromUtf8("vboxLayout"));
         viewForms = new QListView(dockWidgetContents);
-        viewForms->setObjectName("viewForms");
+        viewForms->setObjectName(QString::fromUtf8("viewForms"));
         viewForms->setEditTriggers(QAbstractItemView::NoEditTriggers);
         viewForms->setAlternatingRowColors(true);
         viewForms->setUniformItemSizes(true);

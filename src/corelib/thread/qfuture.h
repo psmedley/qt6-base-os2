@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QFUTURE_H
 #define QFUTURE_H
@@ -7,7 +43,6 @@
 #include <QtCore/qglobal.h>
 
 #include <QtCore/qfutureinterface.h>
-#include <QtCore/qmetatype.h>
 #include <QtCore/qstring.h>
 
 #include <QtCore/qfuture_impl.h>
@@ -155,14 +190,6 @@ QT_WARNING_POP
     template<class Function, typename = std::enable_if_t<std::is_invocable_r_v<T, Function>>>
     QFuture<T> onCanceled(QObject *context, Function &&handler);
 
-#if !defined(Q_CLANG_QDOC)
-    template<class U = T, typename = std::enable_if_t<QtPrivate::isQFutureV<U>>>
-    auto unwrap();
-#else
-    template<class U>
-    QFuture<U> unwrap();
-#endif
-
     class const_iterator
     {
     public:
@@ -273,8 +300,6 @@ private:
     template<class U>
     friend class QFuture;
 
-    friend class QFutureInterfaceBase;
-
     template<class Function, class ResultType, class ParentResultType>
     friend class QtPrivate::Continuation;
 
@@ -285,11 +310,6 @@ private:
     template<class Function, class ResultType>
     friend class QtPrivate::FailureHandler;
 #endif
-
-    template<typename ResultType>
-    friend struct QtPrivate::WhenAnyContext;
-
-    friend struct QtPrivate::UnwrapHandler;
 
     using QFuturePrivate =
             std::conditional_t<std::is_same_v<T, void>, QFutureInterfaceBase, QFutureInterface<T>>;
@@ -405,129 +425,13 @@ QFuture<T> QFuture<T>::onCanceled(QObject *context, Function &&handler)
     return promise.future();
 }
 
-template<class T>
-template<class U, typename>
-auto QFuture<T>::unwrap()
-{
-    if constexpr (QtPrivate::isQFutureV<typename QtPrivate::Future<T>::type>)
-        return QtPrivate::UnwrapHandler::unwrapImpl(this).unwrap();
-    else
-        return QtPrivate::UnwrapHandler::unwrapImpl(this);
-}
-
 inline QFuture<void> QFutureInterface<void>::future()
 {
     return QFuture<void>(this);
 }
 
-template<typename T>
-QFutureInterfaceBase QFutureInterfaceBase::get(const QFuture<T> &future)
-{
-    return future.d;
-}
-
-namespace QtPrivate
-{
-
-template<typename T>
-struct MetaTypeQFutureHelper<QFuture<T>>
-{
-    static bool registerConverter() {
-        if constexpr (std::is_same_v<T, void>)
-            return false;
-
-        return QMetaType::registerConverter<QFuture<T>, QFuture<void>>(
-                [](const QFuture<T> &future) { return QFuture<void>(future); });
-    }
-};
-
-}  // namespace QtPrivate
-
-namespace QtFuture {
-
-#ifndef Q_CLANG_QDOC
-
-template<typename OutputSequence, typename InputIt,
-         typename ValueType = typename std::iterator_traits<InputIt>::value_type,
-         std::enable_if_t<std::conjunction_v<QtPrivate::IsForwardIterable<InputIt>,
-                                             QtPrivate::IsRandomAccessible<OutputSequence>,
-                                             QtPrivate::isQFuture<ValueType>>,
-                          int> = 0>
-QFuture<OutputSequence> whenAll(InputIt first, InputIt last)
-{
-    return QtPrivate::whenAllImpl<OutputSequence, InputIt, ValueType>(first, last);
-}
-
-template<typename InputIt, typename ValueType = typename std::iterator_traits<InputIt>::value_type,
-         std::enable_if_t<std::conjunction_v<QtPrivate::IsForwardIterable<InputIt>,
-                                             QtPrivate::isQFuture<ValueType>>,
-                          int> = 0>
-QFuture<QList<ValueType>> whenAll(InputIt first, InputIt last)
-{
-    return QtPrivate::whenAllImpl<QList<ValueType>, InputIt, ValueType>(first, last);
-}
-
-template<typename OutputSequence, typename... Futures,
-         std::enable_if_t<std::conjunction_v<QtPrivate::IsRandomAccessible<OutputSequence>,
-                                             QtPrivate::NotEmpty<Futures...>,
-                                             QtPrivate::isQFuture<std::decay_t<Futures>>...>,
-                          int> = 0>
-QFuture<OutputSequence> whenAll(Futures &&... futures)
-{
-    return QtPrivate::whenAllImpl<OutputSequence, Futures...>(std::forward<Futures>(futures)...);
-}
-
-template<typename... Futures,
-         std::enable_if_t<std::conjunction_v<QtPrivate::NotEmpty<Futures...>,
-                                             QtPrivate::isQFuture<std::decay_t<Futures>>...>,
-                          int> = 0>
-QFuture<QList<std::variant<std::decay_t<Futures>...>>> whenAll(Futures &&... futures)
-{
-    return QtPrivate::whenAllImpl<QList<std::variant<std::decay_t<Futures>...>>, Futures...>(
-            std::forward<Futures>(futures)...);
-}
-
-template<typename InputIt, typename ValueType = typename std::iterator_traits<InputIt>::value_type,
-         std::enable_if_t<std::conjunction_v<QtPrivate::IsForwardIterable<InputIt>,
-                                             QtPrivate::isQFuture<ValueType>>,
-                          int> = 0>
-QFuture<WhenAnyResult<typename QtPrivate::Future<ValueType>::type>> whenAny(InputIt first,
-                                                                            InputIt last)
-{
-    return QtPrivate::whenAnyImpl<InputIt, ValueType>(first, last);
-}
-
-template<typename... Futures,
-         std::enable_if_t<std::conjunction_v<QtPrivate::NotEmpty<Futures...>,
-                                             QtPrivate::isQFuture<std::decay_t<Futures>>...>,
-                          int> = 0>
-QFuture<std::variant<std::decay_t<Futures>...>> whenAny(Futures &&... futures)
-{
-    return QtPrivate::whenAnyImpl(std::forward<Futures>(futures)...);
-}
-
-#else
-
-template<typename OutputSequence, typename InputIt>
-QFuture<OutputSequence> whenAll(InputIt first, InputIt last);
-
-template<typename OutputSequence, typename... Futures>
-QFuture<OutputSequence> whenAll(Futures &&... futures);
-
-template<typename T, typename InputIt>
-QFuture<QtFuture::WhenAnyResult<T>> whenAny(InputIt first, InputIt last);
-
-template<typename... Futures>
-QFuture<std::variant<std::decay_t<Futures>...>> whenAny(Futures &&... futures);
-
-#endif // Q_CLANG_QDOC
-
-} // namespace QtFuture
-
 Q_DECLARE_SEQUENTIAL_ITERATOR(Future)
 
 QT_END_NAMESPACE
-
-Q_DECLARE_METATYPE_TEMPLATE_1ARG(QFuture)
 
 #endif // QFUTURE_H

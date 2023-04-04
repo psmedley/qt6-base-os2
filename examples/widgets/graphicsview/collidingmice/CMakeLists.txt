@@ -1,38 +1,45 @@
+# Generated from collidingmice.pro.
+
 cmake_minimum_required(VERSION 3.16)
 project(collidingmice LANGUAGES CXX)
 
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-    set(INSTALL_EXAMPLESDIR "examples")
+  set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/widgets/graphicsview/collidingmice")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 COMPONENTS Core)
+find_package(Qt6 COMPONENTS Gui)
+find_package(Qt6 COMPONENTS Widgets)
 
 qt_add_executable(collidingmice
     main.cpp
     mouse.cpp mouse.h
 )
-
 set_target_properties(collidingmice PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
-
 target_link_libraries(collidingmice PUBLIC
     Qt::Core
     Qt::Gui
     Qt::Widgets
 )
 
+
 # Resources:
 set(mice_resource_files
     "images/cheese.jpg"
 )
 
-qt_add_resources(collidingmice "mice"
+qt6_add_resources(collidingmice "mice"
     PREFIX
         "/"
     FILES

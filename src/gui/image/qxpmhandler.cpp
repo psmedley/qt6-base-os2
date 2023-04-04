@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "private/qxpmhandler_p.h"
 
@@ -14,7 +50,6 @@
 #include <qvariant.h>
 
 #include <private/qcolor_p.h>
-#include <private/qduplicatetracker_p.h> // for easier std::pmr detection
 
 #include <algorithm>
 #include <array>
@@ -718,12 +753,15 @@ inline bool operator<(const char *name, const XPMRGBData &data)
 inline bool operator<(const XPMRGBData &data, const char *name)
 { return qstrcmp(data.name, name) < 0; }
 
-static inline std::optional<QRgb> qt_get_named_xpm_rgb(const char *name_no_space)
+static inline bool qt_get_named_xpm_rgb(const char *name_no_space, QRgb *rgb)
 {
     const XPMRGBData *r = std::lower_bound(xpmRgbTbl, xpmRgbTbl + xpmRgbTblSize, name_no_space);
-    if ((r != xpmRgbTbl + xpmRgbTblSize) && !(name_no_space < *r))
-        return r->value;
-    return {};
+    if ((r != xpmRgbTbl + xpmRgbTblSize) && !(name_no_space < *r)) {
+        *rgb = r->value;
+        return true;
+    } else {
+        return false;
+    }
 }
 
 /*****************************************************************************
@@ -733,7 +771,7 @@ static QString fbname(const QString &fileName) // get file basename (sort of)
 {
     QString s = fileName;
     if (!s.isEmpty()) {
-        int i = qMax(s.lastIndexOf(u'/'), s.lastIndexOf(u'\\'));
+        int i = qMax(s.lastIndexOf(QLatin1Char('/')), s.lastIndexOf(QLatin1Char('\\')));
         if (i < 0)
             i = 0;
         auto isAsciiLetterOrNumber = [](QChar ch) -> bool {
@@ -743,7 +781,7 @@ static QString fbname(const QString &fileName) // get file basename (sort of)
                     ch.unicode() == '_';
         };
         int start = -1;
-        for (; i < s.size(); ++i) {
+        for (; i < s.length(); ++i) {
             if (isAsciiLetterOrNumber(s.at(i))) {
                 start = i;
             } else if (start > 0)
@@ -892,25 +930,25 @@ static bool read_xpm_body(
             int transparentColor = currentColor;
             if (ncols <= 256) {
                 image.setColor(transparentColor, 0);
-                colorMap.insert(xpmHash(QLatin1StringView(index.constData())), transparentColor);
+                colorMap.insert(xpmHash(QLatin1String(index.constData())), transparentColor);
             } else {
-                colorMap.insert(xpmHash(QLatin1StringView(index.constData())), 0);
+                colorMap.insert(xpmHash(QLatin1String(index.constData())), 0);
             }
         } else {
             QRgb c_rgb = 0;
-            if (((buf.size()-1) % 3) && (buf[0] == '#')) {
-                buf.truncate(((buf.size()-1) / 4 * 3) + 1); // remove alpha channel left by imagemagick
+            if (((buf.length()-1) % 3) && (buf[0] == '#')) {
+                buf.truncate(((buf.length()-1) / 4 * 3) + 1); // remove alpha channel left by imagemagick
             }
             if (buf[0] == '#') {
-                c_rgb = qt_get_hex_rgb(buf).value_or(0);
+                qt_get_hex_rgb(buf, &c_rgb);
             } else {
-                c_rgb = qt_get_named_xpm_rgb(buf).value_or(0);
+                qt_get_named_xpm_rgb(buf, &c_rgb);
             }
             if (ncols <= 256) {
                 image.setColor(currentColor, 0xff000000 | c_rgb);
-                colorMap.insert(xpmHash(QLatin1StringView(index.constData())), currentColor);
+                colorMap.insert(xpmHash(QLatin1String(index.constData())), currentColor);
             } else {
-                colorMap.insert(xpmHash(QLatin1StringView(index.constData())), 0xff000000 | c_rgb);
+                colorMap.insert(xpmHash(QLatin1String(index.constData())), 0xff000000 | c_rgb);
             }
         }
     }
@@ -932,7 +970,7 @@ static bool read_xpm_body(
         if (image.depth() == 8) {
             uchar *p = image.scanLine(y);
             uchar *d = (uchar *)buf.data();
-            uchar *end = d + buf.size();
+            uchar *end = d + buf.length();
             int x;
             if (cpp == 1) {
                 char b[2];
@@ -958,7 +996,7 @@ static bool read_xpm_body(
         } else {
             QRgb *p = (QRgb*)image.scanLine(y);
             uchar *d = (uchar *)buf.data();
-            uchar *end = d + buf.size();
+            uchar *end = d + buf.length();
             int x;
             char b[16];
             b[cpp] = '\0';
@@ -1078,25 +1116,18 @@ static bool write_xpm_image(const QImage &sourceImage, QIODevice *device, const 
     else
         image = sourceImage;
 
-#ifdef __cpp_lib_memory_resource
-    char buffer[1024];
-    std::pmr::monotonic_buffer_resource res{&buffer, sizeof buffer};
-    std::pmr::map<QRgb, int> colorMap(&res);
-#else
-    std::map<QRgb, int> colorMap;
-#endif
+    QMap<QRgb, int> colorMap;
 
-    const int w = image.width();
-    const int h = image.height();
-    int ncolors = 0;
+    int w = image.width(), h = image.height(), ncolors = 0;
+    int x, y;
 
     // build color table
-    for (int y = 0; y < h; ++y) {
+    for(y=0; y<h; y++) {
         const QRgb *yp = reinterpret_cast<const QRgb *>(image.constScanLine(y));
-        for (int x = 0; x < w; ++x) {
-            const auto [it, inserted] = colorMap.try_emplace(yp[x], ncolors);
-            if (inserted)
-                ++ncolors;
+        for(x=0; x<w; x++) {
+            QRgb color = *(yp + x);
+            if (!colorMap.contains(color))
+                colorMap.insert(color, ncolors++);
         }
     }
 
@@ -1120,21 +1151,27 @@ static bool write_xpm_image(const QImage &sourceImage, QIODevice *device, const 
       << '\"' << w << ' ' << h << ' ' << ncolors << ' ' << cpp << '\"';
 
     // write palette
-    for (const auto &[color, index] : colorMap) {
+    QMap<QRgb, int>::Iterator c = colorMap.begin();
+    while (c != colorMap.end()) {
+        QRgb color = c.key();
         const QString line = image.format() != QImage::Format_RGB32 && !qAlpha(color)
-            ? QString::asprintf("\"%s c None\"", xpm_color_name(cpp, index))
-            : QString::asprintf("\"%s c #%02x%02x%02x\"", xpm_color_name(cpp, index),
+            ? QString::asprintf("\"%s c None\"", xpm_color_name(cpp, *c))
+            : QString::asprintf("\"%s c #%02x%02x%02x\"", xpm_color_name(cpp, *c),
                                 qRed(color), qGreen(color), qBlue(color));
+        ++c;
         s << ',' << Qt::endl << line;
     }
 
     // write pixels, limit to 4 characters per pixel
-    for (int y = 0; y < h; ++y) {
-        s << ',' << Qt::endl << '\"';
+    QByteArray line;
+    for(y=0; y<h; y++) {
+        line.clear();
         const QRgb *yp = reinterpret_cast<const QRgb *>(image.constScanLine(y));
-        for (int x = 0; x < w; ++x)
-            s << xpm_color_name(cpp, colorMap[yp[x]]);
-        s << '\"';
+        for(x=0; x<w; x++) {
+            int color = (int)(*(yp + x));
+            line.append(xpm_color_name(cpp, colorMap[color]));
+        }
+        s << ',' << Qt::endl << '\"' << line << '\"';
     }
     s << "};" << Qt::endl;
     return (s.status() == QTextStream::Ok);

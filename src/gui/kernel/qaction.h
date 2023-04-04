@@ -1,5 +1,41 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QACTION_H
 #define QACTION_H
@@ -11,7 +47,6 @@
 #include <QtGui/qicon.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qvariant.h>
-#include <QtCore/qobject.h>
 
 QT_REQUIRE_CONFIG(action);
 
@@ -20,10 +55,10 @@ QT_BEGIN_NAMESPACE
 class QActionEvent;
 class QActionGroup;
 class QActionPrivate;
-class QMenu;
 #if QT_DEPRECATED_SINCE(6,0)
 class QWidget;
 class QGraphicsWidget;
+class QMenu;
 #endif
 
 class Q_GUI_EXPORT QAction : public QObject
@@ -54,7 +89,7 @@ class Q_GUI_EXPORT QAction : public QObject
                NOTIFY changed)
     Q_PROPERTY(bool shortcutVisibleInContextMenu READ isShortcutVisibleInContextMenu
                WRITE setShortcutVisibleInContextMenu NOTIFY changed)
-    Q_PROPERTY(Priority priority READ priority WRITE setPriority NOTIFY changed)
+    Q_PROPERTY(Priority priority READ priority WRITE setPriority)
 
 public:
     // note this is copied into qplatformmenu.h, which must stay in sync
@@ -84,7 +119,6 @@ public:
         QWidget, QMenu, and QGraphicsWidget can be expected to be fully defined.
     */
     template<typename T = QWidget*>
-    QT_DEPRECATED_VERSION_X_6_0("Use parent() with qobject_cast() instead")
     T parentWidget() const
     {
         auto result = parent();
@@ -94,7 +128,6 @@ public:
     }
 
     template<typename T = QWidget*>
-    QT_DEPRECATED_VERSION_X_6_0("Use associatedObjects() with qobject_cast() instead")
     QList<T> associatedWidgets() const
     {
         QList<T> result;
@@ -104,7 +137,6 @@ public:
         return result;
     }
     template<typename T = QGraphicsWidget*>
-    QT_DEPRECATED_VERSION_X_6_0("Use associatedObjects() with qobject_cast() instead")
     QList<T> associatedGraphicsWidgets() const
     {
         QList<T> result;
@@ -178,6 +210,7 @@ public:
     void setMenuRole(MenuRole menuRole);
     MenuRole menuRole() const;
 
+#if QT_DEPRECATED_SINCE(6,0)
 #ifdef Q_CLANG_QDOC
     QMenu *menu() const;
     void setMenu(QMenu *menu);
@@ -192,6 +225,7 @@ public:
     {
         setMenuObject(m);
     }
+#endif
 #endif
 
     void setIconVisibleInMenu(bool visible);

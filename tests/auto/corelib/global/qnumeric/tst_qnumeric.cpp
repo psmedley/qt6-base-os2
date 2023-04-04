@@ -1,6 +1,31 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -154,15 +179,6 @@ void tst_QNumeric::fuzzyIsNull()
     QCOMPARE(::qFuzzyIsNull(-value), isNull);
 }
 
-static void clearFpExceptions()
-{
-    // Call after any functions that exercise floating-point exceptions, such as
-    // sqrt(-1) or log(0).
-#ifdef Q_OS_WIN
-    _clearfp();
-#endif
-}
-
 #if defined __FAST_MATH__ && (__GNUC__ * 100 + __GNUC_MINOR__ >= 404)
    // turn -ffast-math off
 #  pragma GCC optimize "no-fast-math"
@@ -171,7 +187,6 @@ static void clearFpExceptions()
 template<typename F>
 void tst_QNumeric::checkNaN(F nan)
 {
-    const auto cleanup = qScopeGuard([]() { clearFpExceptions(); });
 #define CHECKNAN(value) \
     do { \
         const F v = (value); \
@@ -180,23 +195,21 @@ void tst_QNumeric::checkNaN(F nan)
         QVERIFY(!qIsFinite(v)); \
         QVERIFY(!qIsInf(v)); \
     } while (0)
-    const F zero(0), one(1), two(2);
 
-    QVERIFY(!(zero > nan));
-    QVERIFY(!(zero < nan));
-    QVERIFY(!(zero == nan));
+    QVERIFY(!(0 > nan));
+    QVERIFY(!(0 < nan));
+    QVERIFY(!(0 == nan));
     QVERIFY(!(nan == nan));
 
     CHECKNAN(nan);
-    CHECKNAN(nan + one);
-    CHECKNAN(nan - one);
+    CHECKNAN(nan + 1);
+    CHECKNAN(nan - 1);
     CHECKNAN(-nan);
-    CHECKNAN(nan * two);
-    CHECKNAN(nan / two);
-    CHECKNAN(one / nan);
-    CHECKNAN(zero / nan);
-    CHECKNAN(zero * nan);
-    CHECKNAN(sqrt(-one));
+    CHECKNAN(nan * 2.0);
+    CHECKNAN(nan / 2.0);
+    CHECKNAN(1.0 / nan);
+    CHECKNAN(0.0 / nan);
+    CHECKNAN(0.0 * nan);
 
     // When any NaN is expected, any NaN will do:
     QCOMPARE(nan, nan);
@@ -284,7 +297,6 @@ void tst_QNumeric::generalNaN()
 template<typename F>
 void tst_QNumeric::infinity()
 {
-    const auto cleanup = qScopeGuard([]() { clearFpExceptions(); });
     const F inf = qInf();
     const F zero(0), one(1), two(2);
     QVERIFY(inf > zero);
@@ -307,7 +319,6 @@ void tst_QNumeric::infinity()
     QCOMPARE(one / -inf, zero);
     QVERIFY(qIsNaN(zero * inf));
     QVERIFY(qIsNaN(zero * -inf));
-    QCOMPARE(log(zero), -inf);
 }
 
 template<typename F>
@@ -391,11 +402,6 @@ void tst_QNumeric::distance()
     QFETCH(F, from);
     QFETCH(F, stop);
     QFETCH(Count, expectedDistance);
-    if constexpr (std::numeric_limits<F>::has_denorm != std::denorm_present) {
-        if (qstrcmp(QTest::currentDataTag(), "denormal") == 0) {
-            QSKIP("Skipping 'denorm' as this type lacks denormals on this system");
-        }
-    }
     QCOMPARE(qFloatDistance(from, stop), expectedDistance);
     QCOMPARE(qFloatDistance(stop, from), expectedDistance);
 }

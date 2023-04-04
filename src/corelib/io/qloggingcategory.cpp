@@ -1,5 +1,41 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qloggingcategory.h"
 #include "qloggingregistry_p.h"
@@ -7,7 +43,21 @@
 QT_BEGIN_NAMESPACE
 
 const char qtDefaultCategoryName[] = "default";
-Q_GLOBAL_STATIC(QLoggingCategory, qtDefaultCategory, qtDefaultCategoryName)
+
+Q_GLOBAL_STATIC_WITH_ARGS(QLoggingCategory, qtDefaultCategory,
+                          (qtDefaultCategoryName))
+
+#ifndef Q_ATOMIC_INT8_IS_SUPPORTED
+static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
+{
+    const int bit = 1 << shift;
+
+    if (enable)
+        atomic->fetchAndOrRelaxed(bit);
+    else
+        atomic->fetchAndAndRelaxed(~bit);
+}
+#endif
 
 /*!
     \class QLoggingCategory
@@ -276,10 +326,17 @@ bool QLoggingCategory::isEnabled(QtMsgType msgtype) const
 void QLoggingCategory::setEnabled(QtMsgType type, bool enable)
 {
     switch (type) {
+#ifdef Q_ATOMIC_INT8_IS_SUPPORTED
     case QtDebugMsg: bools.enabledDebug.storeRelaxed(enable); break;
     case QtInfoMsg: bools.enabledInfo.storeRelaxed(enable); break;
     case QtWarningMsg: bools.enabledWarning.storeRelaxed(enable); break;
     case QtCriticalMsg: bools.enabledCritical.storeRelaxed(enable); break;
+#else
+    case QtDebugMsg: setBoolLane(&enabled, enable, DebugShift); break;
+    case QtInfoMsg: setBoolLane(&enabled, enable, InfoShift); break;
+    case QtWarningMsg: setBoolLane(&enabled, enable, WarningShift); break;
+    case QtCriticalMsg: setBoolLane(&enabled, enable, CriticalShift); break;
+#endif
     case QtFatalMsg: break;
     }
 }
@@ -324,37 +381,19 @@ QLoggingCategory *QLoggingCategory::defaultCategory()
 */
 
 /*!
-    \brief Take control of how logging categories are configured.
+    Installs a function \a filter that is used to determine which categories
+    and message types should be enabled. Returns a pointer to the previous
+    installed filter.
 
-    Installs a function \a filter that is used to determine which categories and
-    message types should be enabled. If \a filter is \nullptr, the default
-    message filter is reinstated. Returns a pointer to the previously-installed
-    filter.
-
-    Every QLoggingCategory object that already exists is passed to the filter
-    before \c installFilter() returns, and the filter is free to change each
-    category's configuration with \l setEnabled(). Any category it doesn't
-    change will retain the configuration it was given by the prior filter, so
-    the new filter does not need to delegate to the prior filter during this
-    initial pass over existing categories.
-
-    Any new categories added later will be passed to the new filter; a filter
-    that only aims to tweak the configuration of a select few categories, rather
-    than completely overriding the logging policy, can first pass the new
-    category to the prior filter, to give it its standard configuration, and
-    then tweak that as desired, if it is one of the categories of specific
-    interest to the filter. The code that installs the new filter can record the
-    return from \c installFilter() for the filter to use in such later calls.
+    Every QLoggingCategory object created is passed to the filter, and the
+    filter is free to change the respective category configuration with
+    \l setEnabled().
 
     When you define your filter, note that it can be called from different threads; but never
     concurrently. This filter cannot call any static functions from QLoggingCategory.
 
     Example:
     \snippet qloggingcategory/main.cpp 21
-
-    installed (in \c{main()}, for example) by
-
-    \snippet qloggingcategory/main.cpp 22
 
     Alternatively, you can configure the default filter via \l setFilterRules().
  */
@@ -595,7 +634,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     with a specific name. The implicitly-defined QLoggingCategory object is
     created on first use, in a thread-safe manner.
 
-    This macro must be used outside of a class or method.
+    This macro must be used outside of a class or method. It is only defined
+    if variadic macros are supported.
 */
 
 QT_END_NAMESPACE

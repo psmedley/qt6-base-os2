@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the FOO module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QtCore/QString>
@@ -72,7 +97,7 @@ void tst_QAuthenticator::basicAuth()
 
     QCOMPARE(priv->phase, QAuthenticatorPrivate::Start);
 
-    QCOMPARE(priv->calculateResponse("GET", "/", u"").constData(), QByteArray("Basic " + expectedReply).constData());
+    QCOMPARE(priv->calculateResponse("GET", "/", "").constData(), QByteArray("Basic " + expectedReply).constData());
 }
 
 void tst_QAuthenticator::ntlmAuth_data()
@@ -112,9 +137,9 @@ void tst_QAuthenticator::ntlmAuth()
     headers << qMakePair(QByteArrayLiteral("WWW-Authenticate"), QByteArrayLiteral("NTLM"));
     priv->parseHttpResponse(headers, /*isProxy = */ false, {});
     if (sso)
-        QVERIFY(priv->calculateResponse("GET", "/", u"").startsWith("NTLM "));
+        QVERIFY(priv->calculateResponse("GET", "/", "").startsWith("NTLM "));
     else
-        QCOMPARE(priv->calculateResponse("GET", "/", u"").constData(), "NTLM TlRMTVNTUAABAAAABYIIAAAAAAAAAAAAAAAAAAAAAAA=");
+        QCOMPARE(priv->calculateResponse("GET", "/", "").constData(), "NTLM TlRMTVNTUAABAAAABYIIAAAAAAAAAAAAAAAAAAAAAAA=");
 
     // NTLM phase 2: challenge
     headers.clear();
@@ -125,7 +150,7 @@ void tst_QAuthenticator::ntlmAuth()
     QEXPECT_FAIL("with-realm-sso", "NTLM authentication code doesn't extract the realm", Continue);
     QCOMPARE(auth.realm(), realm);
 
-    QVERIFY(priv->calculateResponse("GET", "/", u"").startsWith("NTLM "));
+    QVERIFY(priv->calculateResponse("GET", "/", "").startsWith("NTLM "));
 }
 
 // We don't (currently) support SHA256. So, when presented with the option of MD5 or SHA256,

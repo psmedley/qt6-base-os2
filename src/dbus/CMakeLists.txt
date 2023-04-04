@@ -24,8 +24,8 @@ qt_internal_add_module(DBus
         qdbusintrospection.cpp qdbusintrospection_p.h
         qdbusmarshaller.cpp
         qdbusmessage.cpp qdbusmessage.h qdbusmessage_p.h
-        qdbusmetaobject.cpp qdbusmetaobject_p.h
-        qdbusmetatype.cpp qdbusmetatype.h qdbusmetatype_p.h
+        qdbusmetaobject.cpp
+        qdbusmetatype.cpp qdbusmetatype.h
         qdbusmisc.cpp
         qdbuspendingcall.cpp qdbuspendingcall.h qdbuspendingcall_p.h
         qdbuspendingreply.cpp qdbuspendingreply.h
@@ -48,7 +48,6 @@ qt_internal_add_module(DBus
         Qt::Core
     PRIVATE_MODULE_INTERFACE
         Qt::CorePrivate
-    GENERATE_CPP_EXPORTS
 )
 
 set_source_files_properties(qdbusmarshaller.cpp

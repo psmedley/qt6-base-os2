@@ -1,5 +1,41 @@
-// Copyright (C) 2017 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2017 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 // All of our supported compilers support <immintrin.h>
 #include <immintrin.h>
@@ -125,6 +161,9 @@ attribute_target("sha") void test_shani()
 #endif
 
 #if T(AVX)
+#  if defined(__WIN64__) && defined(__GNUC__) && !defined(__clang__)
+#    error "AVX support is broken in 64-bit MinGW - https://gcc.gnu.org/bugzilla/show_bug.cgi?id=49001"
+#  endif
 attribute_target("avx") void test_avx()
 {
     __m256d a = _mm256_setzero_pd();
@@ -225,26 +264,6 @@ attribute_target("avx512ifma") void test_avx512ifma()
     /* AVX512 Integer Fused Multiply-Add */
     __m512i i;
     i = _mm512_madd52lo_epu64(i, i, i);
-}
-#endif
-
-#if T(AVX512VBMI2)
-attribute_target("avx512vl,avx512vbmi2") void test_avx512vbmi2()
-{
-    /* AVX512 Vector Byte Manipulation Instructions 2 */
-    __m128i a = _mm_maskz_compress_epi16(-1, _mm_set1_epi16(1));
-    __m128i b = _mm_shrdi_epi32(a, a, 7);
-}
-#endif
-
-#if T(VAES)
-// VAES does not require AVX512 and works on Alder Lake
-attribute_target("avx2,vaes") void test_vaes()
-{
-    /* 256- and 512-bit AES */
-    __m256i a = _mm256_set1_epi32(-1);
-    __m256i b = _mm256_aesenc_epi128(a, a);
-    __m256i c = _mm256_aesdec_epi128(b, a);
 }
 #endif
 

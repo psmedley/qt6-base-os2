@@ -1,5 +1,41 @@
-// Copyright (C) 2020 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QRANDOM_H
 #define QRANDOM_H
@@ -167,8 +203,8 @@ public:
     void seed(quint32 s = 1) { *this = { s }; }
     void seed(std::seed_seq &sseq) noexcept { *this = { sseq }; }
     Q_CORE_EXPORT void discard(unsigned long long z);
-    static constexpr result_type min() { return (std::numeric_limits<result_type>::min)(); }
-    static constexpr result_type max() { return (std::numeric_limits<result_type>::max)(); }
+    static constexpr result_type min() { return std::numeric_limits<result_type>::min(); }
+    static constexpr result_type max() { return std::numeric_limits<result_type>::max(); }
 
     static inline Q_DECL_CONST_FUNCTION QRandomGenerator *system();
     static inline Q_DECL_CONST_FUNCTION QRandomGenerator *global();
@@ -193,9 +229,15 @@ private:
 
     union Storage {
         uint dummy;
+#ifdef Q_COMPILER_UNRESTRICTED_UNIONS
         RandomEngine twister;
         RandomEngine &engine() { return twister; }
         const RandomEngine &engine() const { return twister; }
+#else
+        std::aligned_storage<sizeof(RandomEngine), alignof(RandomEngine)>::type buffer;
+        RandomEngine &engine() { return reinterpret_cast<RandomEngine &>(buffer); }
+        const RandomEngine &engine() const { return reinterpret_cast<const RandomEngine &>(buffer); }
+#endif
 
         static_assert(std::is_trivially_destructible<RandomEngine>::value,
                           "std::mersenne_twister not trivially destructible as expected");
@@ -241,8 +283,8 @@ public:
         QRandomGenerator::discard(z * 2);
     }
 
-    static constexpr result_type min() { return (std::numeric_limits<result_type>::min)(); }
-    static constexpr result_type max() { return (std::numeric_limits<result_type>::max)(); }
+    static constexpr result_type min() { return std::numeric_limits<result_type>::min(); }
+    static constexpr result_type max() { return std::numeric_limits<result_type>::max(); }
     static Q_DECL_CONST_FUNCTION Q_CORE_EXPORT QRandomGenerator64 *system();
     static Q_DECL_CONST_FUNCTION Q_CORE_EXPORT QRandomGenerator64 *global();
     static Q_CORE_EXPORT QRandomGenerator64 securelySeeded();

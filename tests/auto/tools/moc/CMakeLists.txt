@@ -85,11 +85,11 @@ qt_internal_extend_target(tst_moc CONDITION CMAKE_CROSSCOMPILING
         MOC_CROSS_COMPILED
 )
 
-if (UNIX AND (CLANG OR GCC OR QCC))
+if (UNIX AND (CLANG OR GCC OR ICC OR QCC))
     qt_wrap_cpp(os9_moc os9-newlines.h)
 endif()
 
-qt_internal_extend_target(tst_moc CONDITION UNIX AND (CLANG OR GCC OR QCC)
+qt_internal_extend_target(tst_moc CONDITION UNIX AND (CLANG OR GCC OR ICC OR QCC)
     SOURCES
         os9-newlines.h
         win-newlines.h
@@ -142,7 +142,6 @@ add_custom_command(TARGET tst_moc
         -o "allmocs.json"
         --collect-json  "@${moc_json_out}"
     COMMENT "Running moc with --collect-json"
-    VERBATIM
 )
 
 # Add dependencies that are implicitly used inside the test

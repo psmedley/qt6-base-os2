@@ -1,5 +1,41 @@
-// Copyright (C) 2018 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2018 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qnetworkreplywasmimpl_p.h"
 #include "qnetworkrequest.h"
@@ -9,7 +45,6 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qthread.h>
-#include <QtCore/private/qtools_p.h>
 
 #include <private/qnetworkaccessmanager_p.h>
 #include <private/qnetworkfile_p.h>
@@ -69,37 +104,22 @@ QByteArray QNetworkReplyWasmImpl::methodName() const
 
 void QNetworkReplyWasmImpl::close()
 {
-    Q_D(QNetworkReplyWasmImpl);
-
-    if (d->state != QNetworkReplyPrivate::Aborted &&
-        d->state != QNetworkReplyPrivate::Finished &&
-        d->state != QNetworkReplyPrivate::Idle) {
-            d->state = QNetworkReplyPrivate::Finished;
-            d->setCanceled();
-    }
-
     QNetworkReply::close();
+    setFinished(true);
+    emit finished();
 }
 
 void QNetworkReplyWasmImpl::abort()
 {
     Q_D(QNetworkReplyWasmImpl);
-
     if (d->state == QNetworkReplyPrivate::Finished || d->state == QNetworkReplyPrivate::Aborted)
         return;
 
     d->state = QNetworkReplyPrivate::Aborted;
-    d->setCanceled();
-}
+    d->m_fetch->userData = nullptr;
 
-void QNetworkReplyWasmImplPrivate::setCanceled()
-{
-    Q_Q(QNetworkReplyWasmImpl);
-    m_fetch->userData = nullptr;
-
-    emitReplyError(QNetworkReply::OperationCanceledError, QStringLiteral("Operation canceled"));
-    q->setFinished(true);
-    emit q->finished();
+    d->emitReplyError(QNetworkReply::OperationCanceledError, QStringLiteral("Operation canceled"));
+    close();
 }
 
 qint64 QNetworkReplyWasmImpl::bytesAvailable() const
@@ -214,13 +234,10 @@ void QNetworkReplyWasmImplPrivate::doSendRequest()
         }
     }
 
-    QByteArray userName, password;
     // username & password
     if (!request.url().userInfo().isEmpty()) {
-        userName = request.url().userName().toUtf8();
-        password = request.url().password().toUtf8();
-        attr.userName = userName.constData();
-        attr.password = password.constData();
+        attr.userName = request.url().userName().toUtf8();
+        attr.password = request.url().password().toUtf8();
     }
 
     attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
@@ -248,11 +265,9 @@ void QNetworkReplyWasmImplPrivate::doSendRequest()
     attr.userData = reinterpret_cast<void *>(this);
 
     QString dPath = QStringLiteral("/home/web_user/") + request.url().fileName();
-    QByteArray destinationPath = dPath.toUtf8();
-    attr.destinationPath = destinationPath.constData();
+    attr.destinationPath = dPath.toUtf8();
 
     m_fetch = emscripten_fetch(&attr, request.url().toString().toUtf8());
-    state = Working;
 }
 
 void QNetworkReplyWasmImplPrivate::emitReplyError(QNetworkReply::NetworkError errorCode, const QString &errorString)
@@ -301,36 +316,32 @@ static int parseHeaderName(const QByteArray &headerName)
     if (headerName.isEmpty())
         return -1;
 
-    auto is = [&](const char *what) {
-        return qstrnicmp(headerName.data(), headerName.size(), what) == 0;
-    };
-
-    switch (QtMiscUtils::toAsciiLower(headerName.front())) {
+    switch (tolower(headerName.at(0))) {
     case 'c':
-        if (is("content-type"))
+        if (qstricmp(headerName.constData(), "content-type") == 0)
             return QNetworkRequest::ContentTypeHeader;
-        else if (is("content-length"))
+        else if (qstricmp(headerName.constData(), "content-length") == 0)
             return QNetworkRequest::ContentLengthHeader;
-        else if (is("cookie"))
+        else if (qstricmp(headerName.constData(), "cookie") == 0)
             return QNetworkRequest::CookieHeader;
         break;
 
     case 'l':
-        if (is("location"))
+        if (qstricmp(headerName.constData(), "location") == 0)
             return QNetworkRequest::LocationHeader;
-        else if (is("last-modified"))
+        else if (qstricmp(headerName.constData(), "last-modified") == 0)
             return QNetworkRequest::LastModifiedHeader;
         break;
 
     case 's':
-        if (is("set-cookie"))
+        if (qstricmp(headerName.constData(), "set-cookie") == 0)
             return QNetworkRequest::SetCookieHeader;
-        else if (is("server"))
+        else if (qstricmp(headerName.constData(), "server") == 0)
             return QNetworkRequest::ServerHeader;
         break;
 
     case 'u':
-        if (is("user-agent"))
+        if (qstricmp(headerName.constData(), "user-agent") == 0)
             return QNetworkRequest::UserAgentHeader;
         break;
     }
@@ -389,7 +400,7 @@ void QNetworkReplyWasmImplPrivate::_q_bufferOutgoingData()
 
     if (!outgoingDataBuffer) {
         // first call, create our buffer
-        outgoingDataBuffer = std::make_shared<QRingBuffer>();
+        outgoingDataBuffer = QSharedPointer<QRingBuffer>::create();
 
         QObject::connect(outgoingData, SIGNAL(readyRead()), q, SLOT(_q_bufferOutgoingData()));
         QObject::connect(outgoingData, SIGNAL(readChannelFinished()), q, SLOT(_q_bufferOutgoingDataFinished()));
@@ -497,7 +508,6 @@ void QNetworkReplyWasmImplPrivate::downloadFailed(emscripten_fetch_t *fetch)
             QByteArray statusText(fetch->statusText);
             reply->setStatusCode(fetch->status, statusText);
             reply->emitReplyError(reply->statusCodeFromHttp(fetch->status, reply->request.url()), reasonStr);
-            reply->setReplyFinished();
         }
         reply->m_fetch = nullptr;
     }
@@ -579,5 +589,3 @@ QNetworkReply::NetworkError QNetworkReplyWasmImplPrivate::statusCodeFromHttp(int
 }
 
 QT_END_NAMESPACE
-
-#include "moc_qnetworkreplywasmimpl_p.cpp"

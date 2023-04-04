@@ -1,6 +1,31 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2014 Keith Gardner <kreios4004@gmail.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2014 Keith Gardner <kreios4004@gmail.com>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QtCore/qversionnumber.h>
@@ -48,7 +73,6 @@ private slots:
     void assignment();
     void fromString_data();
     void fromString();
-    void fromString_extra();
     void toString_data();
     void toString();
     void isNull_data();
@@ -487,7 +511,7 @@ void tst_QVersionNumber::fromString()
     QFETCH(QVersionNumber, expectedVersion);
     QFETCH(int, suffixIndex);
 
-    qsizetype index;
+    int index;
     QCOMPARE(QVersionNumber::fromString(constructionString), expectedVersion);
     QCOMPARE(QVersionNumber::fromString(constructionString, &index), expectedVersion);
     QCOMPARE(index, suffixIndex);
@@ -499,46 +523,6 @@ void tst_QVersionNumber::fromString()
     QCOMPARE(QVersionNumber::fromString(QLatin1String(constructionString.toLatin1())), expectedVersion);
     QCOMPARE(QVersionNumber::fromString(QLatin1String(constructionString.toLatin1()), &index), expectedVersion);
     QCOMPARE(index, suffixIndex);
-
-#if QT_DEPRECATED_SINCE(6, 4)
-    QT_WARNING_PUSH
-    QT_WARNING_DISABLE_DEPRECATED
-    // check deprecated `int *suffixIndex` overload, too
-    {
-        int i;
-        QCOMPARE(QVersionNumber::fromString(constructionString, &i), expectedVersion);
-        QCOMPARE(i, suffixIndex);
-
-        QCOMPARE(QVersionNumber::fromString(QStringView(constructionString), &i), expectedVersion);
-        QCOMPARE(i, suffixIndex);
-
-        QCOMPARE(QVersionNumber::fromString(QLatin1String(constructionString.toLatin1()), &i), expectedVersion);
-        QCOMPARE(i, suffixIndex);
-    }
-    QT_WARNING_POP
-#endif
-}
-
-void tst_QVersionNumber::fromString_extra()
-{
-    // check the overloaded fromString() functions aren't ambiguous
-    // when passing explicit nullptr:
-    {
-        auto v = QVersionNumber::fromString("1.2.3-rc1", nullptr);
-        QCOMPARE(v, QVersionNumber({1, 2, 3}));
-    }
-    {
-        auto v = QVersionNumber::fromString("1.2.3-rc1", 0);
-        QCOMPARE(v, QVersionNumber({1, 2, 3}));
-    }
-
-    // check the UTF16->L1 conversion isn't doing something weird
-    {
-        qsizetype i = -1;
-        auto v = QVersionNumber::fromString(u"1.0ı", &i); // LATIN SMALL LETTER DOTLESS I
-        QCOMPARE(v, QVersionNumber(1, 0));
-        QCOMPARE(i, 3);
-    }
 }
 
 void tst_QVersionNumber::toString_data()

@@ -1,5 +1,29 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the documentation of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:FDL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Free Documentation License Usage
+** Alternatively, this file may be used under the terms of the GNU Free
+** Documentation License version 1.3 as published by the Free Software
+** Foundation and appearing in the file included in the packaging of
+** this file. Please review the following information to ensure
+** the GNU Free Documentation License version 1.3 requirements
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /*!
    \namespace QTest
@@ -22,10 +46,8 @@
    You can use \l QVERIFY2() when it is practical and valuable to put additional
    information into the test failure report.
 
-//! [macro-usage-limitation]
    \note This macro can only be used in a test function that is invoked
    by the test framework.
-//! [macro-usage-limitation]
 
    For example, the following code shows this macro being used to verify that a
    \l QSignalSpy object is valid:
@@ -36,8 +58,7 @@
    \c QVERIFY(x == y), because it reports both the expected and actual value
    when the comparison fails.
 
-   \sa QCOMPARE(), QTRY_VERIFY(), QSignalSpy, QEXPECT_FAIL(), QCOMPARE_EQ(),
-       QCOMPARE_NE(), QCOMPARE_LT(), QCOMPARE_LE(), QCOMPARE_GT(), QCOMPARE_GE()
+   \sa QCOMPARE(), QTRY_VERIFY(), QSignalSpy, QEXPECT_FAIL()
 */
 
 /*! \macro QVERIFY2(condition, message)
@@ -76,8 +97,7 @@
     \c {FAIL! : tst_QFile::open_write() 'opened' returned FALSE.
         (open /tmp/qt.a3B42Cd: No space left on device)}
 
-    \sa QVERIFY(), QCOMPARE(), QEXPECT_FAIL(), QCOMPARE_EQ(), QCOMPARE_NE(),
-        QCOMPARE_LT(), QCOMPARE_LE(), QCOMPARE_GT(), QCOMPARE_GE()
+    \sa QVERIFY(), QCOMPARE(), QEXPECT_FAIL()
 */
 
 /*! \macro QCOMPARE(actual, expected)
@@ -118,12 +138,11 @@
    delimiters:
    \snippet code/src_qtestlib_qtestcase.cpp 35
 
-   \include qtestcase.qdoc macro-usage-limitation
+   \note QCOMPARE() can only be used in a test function that is invoked
+   by the test framework.
 
-//! [to-string-overload-desc]
-   For your own classes, you can overload \l QTest::toString() to format values
-   for output into the test log.
-//! [to-string-overload-desc]
+   For your own classes, you can use \l QTest::toString() to format values for
+   outputting into the test log.
 
    Example:
    \snippet code/src_qtestlib_qtestcase_snippet.cpp 34
@@ -132,165 +151,24 @@
    be released with \c delete[] (rather than \c free() or plain \c delete) once
    the calling code is done with it.
 
-   \sa QVERIFY(), QTRY_COMPARE(), QTest::toString(), QEXPECT_FAIL(),
-       QCOMPARE_EQ(), QCOMPARE_NE(), QCOMPARE_LT(), QCOMPARE_LE(),
-       QCOMPARE_GT(), QCOMPARE_GE()
-*/
-
-/*! \macro QCOMPARE_EQ(left, right)
-    \since 6.4
-
-    \relates QTest
-
-    The QCOMPARE_EQ() macro checks that \a left is equal to \a right using
-    the equality operator. If that is true, execution continues. If not, a
-    failure is recorded in the test log and the test function returns without
-    attempting any later checks.
-
-    It is generally similar to calling \c {QVERIFY(left == right);}
-    but prints a formatted error message reporting \a left and \a right argument
-    expressions and values in case of failure.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \include qtestcase.qdoc to-string-overload-desc
-
-    \note Unlike QCOMPARE(), this macro does not provide overloads for custom
-    types and pointers. So passing e.g. two \c {const char *} values as
-    parameters will compare \e pointers, while QCOMPARE() does a comparison of
-    C-style strings.
-
-    \sa QCOMPARE(), QCOMPARE_NE(), QCOMPARE_LT(), QCOMPARE_LE(), QCOMPARE_GT(),
-        QCOMPARE_GE()
-*/
-
-/*! \macro QCOMPARE_NE(left, right)
-    \since 6.4
-
-    \relates QTest
-
-    The QCOMPARE_NE() macro checks that \a left is not equal to \a right using
-    the inequality operator. If that is true, execution continues. If not, a
-    failure is recorded in the test log and the test function returns without
-    attempting any later checks.
-
-    It is generally similar to calling \c {QVERIFY(left != right);}
-    but prints a formatted error message reporting \a left and \a right argument
-    expressions and values in case of failure.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \include qtestcase.qdoc to-string-overload-desc
-
-    \sa QCOMPARE_EQ(), QCOMPARE_LT(), QCOMPARE_LE(), QCOMPARE_GT(), QCOMPARE_GE()
-*/
-
-/*! \macro QCOMPARE_LT(left, right)
-    \since 6.4
-
-    \relates QTest
-
-    The QCOMPARE_LT() macro checks that \a left is less than \a right using the
-    less-than operator. If that is true, execution continues. If not, a failure
-    is recorded in the test log and the test function returns without attempting
-    any later checks.
-
-    It is generally similar to calling \c {QVERIFY(left < right);}
-    but prints a formatted error message reporting \a left and \a right argument
-    expressions and values in case of failure.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \include qtestcase.qdoc to-string-overload-desc
-
-    \sa QCOMPARE_EQ(), QCOMPARE_NE(), QCOMPARE_LE(), QCOMPARE_GT(), QCOMPARE_GE()
-*/
-
-/*! \macro QCOMPARE_LE(left, right)
-    \since 6.4
-
-    \relates QTest
-
-    The QCOMPARE_LE() macro checks that \a left is at most \a right using the
-    less-than-or-equal-to operator. If that is true, execution continues. If
-    not, a failure is recorded in the test log and the test function returns
-    without attempting any later checks.
-
-    It is generally similar to calling \c {QVERIFY(left <= right);}
-    but prints a formatted error message reporting \a left and \a right argument
-    expressions and values in case of failure.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \include qtestcase.qdoc to-string-overload-desc
-
-    \sa QCOMPARE_EQ(), QCOMPARE_NE(), QCOMPARE_LT(), QCOMPARE_GT(), QCOMPARE_GE()
-*/
-
-/*! \macro QCOMPARE_GT(left, right)
-    \since 6.4
-
-    \relates QTest
-
-    The QCOMPARE_GT() macro checks that \a left is greater than \a right using
-    the greater-than operator. If that is true, execution continues. If not, a
-    failure is recorded in the test log and the test function returns without
-    attempting any later checks.
-
-    It is generally similar to calling \c {QVERIFY(left > right);}
-    but prints a formatted error message reporting \a left and \a right argument
-    expressions and values in case of failure.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \include qtestcase.qdoc to-string-overload-desc
-
-    \sa QCOMPARE_EQ(), QCOMPARE_NE(), QCOMPARE_LT(), QCOMPARE_LE(), QCOMPARE_GE()
-*/
-
-/*! \macro QCOMPARE_GE(left, right)
-    \since 6.4
-
-    \relates QTest
-
-    The QCOMPARE_GE() macro checks that \a left is at least \a right using the
-    greater-than-or-equal-to operator. If that is true, execution continues. If
-    not, a failure is recorded in the test log and the test function returns
-    without attempting any later checks.
-
-    It is generally similar to calling \c {QVERIFY(left >= right);}
-    but prints a formatted error message reporting \a left and \a right argument
-    expressions and values in case of failure.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \include qtestcase.qdoc to-string-overload-desc
-
-    \sa QCOMPARE_EQ(), QCOMPARE_NE(), QCOMPARE_LT(), QCOMPARE_LE(), QCOMPARE_GT()
+   \sa QVERIFY(), QTRY_COMPARE(), QTest::toString(), QEXPECT_FAIL()
 */
 
 /*! \macro QVERIFY_EXCEPTION_THROWN(expression, exceptiontype)
    \since 5.3
 
    \relates QTest
-   \deprecated [6.3] Use \c{QVERIFY_THROWS_EXCEPTION(exceptiontype, expression)} instead.
-*/
 
-/*!
-   \macro QVERIFY_THROWS_EXCEPTION(exceptiontype, ...)
-   \relates QTest
-   \since 6.3
-
-   The QVERIFY_THROWS_EXCEPTION macro executes the expression given in the variadic
-   argument and expects to catch an exception thrown from the expression.
+   The QVERIFY_EXCEPTION_THROWN macro executes \a expression
+   and tries to catch an exception thrown from \a expression.
 
    There are several possible outcomes:
 
    \list
-   \li If the expression throws an exception that is either the same as
+   \li If \a expression throws an exception that is either the same as
    \a exceptiontype or derived from \a exceptiontype, then execution will continue.
 
-   \li Otherwise, if the expression throws no exception, or the
+   \li Otherwise, if \a expression throws no exception, or the
    exception thrown derives from \c{std::exception}, then a failure
    will be recorded in the test log and the macro returns early
    (from enclosing function).
@@ -299,50 +177,6 @@
    \a exceptiontype, a failure will be recorded in the test log, and the exception is
    re-thrown. This avoids problems with e.g. pthread cancellation exceptions.
    \endlist
-
-   The macro uses variadic arguments so the expression can contain commas that the
-   preprocessor considers argument separators, e.g. as in
-   \code
-   QVERIFY_THROWS_EXCEPTION(std::bad_alloc,
-   // macro arguments:      ^ exceptiontype
-                            std::vector<std::pair<int, long>>{42'000'000'000, {42, 42L}});
-   // macro arguments:      \---------- 1 ----------/  \-------- 2 --------/  \3/  \ 4 /
-   //                       \----------------------- expression -----------------------/
-   \endcode
-
-   \note This macro can only be used in a test function that is invoked
-   by the test framework.
-*/
-
-/*!
-   \macro QVERIFY_THROWS_NO_EXCEPTION(...)
-   \since 6.3
-
-   \relates QTest
-
-   The QVERIFY_THROWS_NO_EXCEPTION macro executes the expression given in its
-   variadic argument and tries to catch any exception thrown from the expression.
-
-   There are several different outcomes:
-
-   \list
-   \li If the expression does not throw an exception, then execution will continue.
-
-   \li Otherwise, if an exception derived from \c{std::exception} is caught, a failure
-   will be recorded in the test log and the macro returns early (implicit return from
-   enclosing function).
-
-   \li If an exception not derived from \c{std::exception} is caught, a failure will be
-   recorded in the test log and the exception will be re-thrown. This avoids problems
-   with e.g. pthread cancellation exceptions.
-   \endlist
-
-   The macro uses variadic arguments so the expression can contain commas that the
-   preprocessor considers argument separators, e.g. as in
-   \code
-   QVERIFY_THROWS_NO_EXCEPTION(std::pair<int, long>{42, 42L});
-   // macro arguments:         \---- 1 ----/  \-- 2 -/  \3 /
-   \endcode
 
    \note This macro can only be used in a test function that is invoked
    by the test framework.
@@ -453,168 +287,6 @@
 
    \sa QTRY_COMPARE_WITH_TIMEOUT(), QCOMPARE(), QVERIFY(), QTRY_VERIFY(),
    QEXPECT_FAIL()
-*/
-
-/*! \macro QTRY_COMPARE_EQ_WITH_TIMEOUT(left, right, timeout)
-    \since 6.4
-    \relates QTest
-
-    This macro is similar to QCOMPARE_EQ(), but performs the comparison of the
-    \a left and \a right values repeatedly, until either the comparison returns
-    \c true or the \a timeout (in milliseconds) is reached. Between each
-    comparison, events will be processed. If the timeout is reached, a failure
-    is recorded in the test log and the test won't be executed further.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_EQ(), QTRY_COMPARE_EQ()
-*/
-
-/*! \macro QTRY_COMPARE_EQ(left, right)
-    \since 6.4
-    \relates QTest
-
-    Performs comparison of \a left and \a right values by invoking
-    QTRY_COMPARE_EQ_WITH_TIMEOUT with a timeout of five seconds.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_EQ(), QTRY_COMPARE_EQ_WITH_TIMEOUT()
-*/
-
-/*! \macro QTRY_COMPARE_NE_WITH_TIMEOUT(left, right, timeout)
-    \since 6.4
-    \relates QTest
-
-    This macro is similar to QCOMPARE_NE(), but performs the comparison of the
-    \a left and \a right values repeatedly, until either the comparison returns
-    \c true or the \a timeout (in milliseconds) is reached. Between each
-    comparison, events will be processed. If the timeout is reached, a failure
-    is recorded in the test log and the test won't be executed further.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_NE(), QTRY_COMPARE_NE()
-*/
-
-/*! \macro QTRY_COMPARE_NE(left, right)
-    \since 6.4
-    \relates QTest
-
-    Performs comparison of \a left and \a right values by invoking
-    QTRY_COMPARE_NE_WITH_TIMEOUT with a timeout of five seconds.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_NE(), QTRY_COMPARE_NE_WITH_TIMEOUT()
-*/
-
-/*! \macro QTRY_COMPARE_LT_WITH_TIMEOUT(left, right, timeout)
-    \since 6.4
-    \relates QTest
-
-    This macro is similar to QCOMPARE_LT(), but performs the comparison of the
-    \a left and \a right values repeatedly, until either the comparison returns
-    \c true or the \a timeout (in milliseconds) is reached. Between each
-    comparison, events will be processed. If the timeout is reached, a failure
-    is recorded in the test log and the test won't be executed further.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_LT(), QTRY_COMPARE_LT()
-*/
-
-/*! \macro QTRY_COMPARE_LT(left, right)
-    \since 6.4
-    \relates QTest
-
-    Performs comparison of \a left and \a right values by invoking
-    QTRY_COMPARE_LT_WITH_TIMEOUT with a timeout of five seconds.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_LT(), QTRY_COMPARE_LT_WITH_TIMEOUT()
-*/
-
-/*! \macro QTRY_COMPARE_LE_WITH_TIMEOUT(left, right, timeout)
-    \since 6.4
-    \relates QTest
-
-    This macro is similar to QCOMPARE_LE(), but performs the comparison of the
-    \a left and \a right values repeatedly, until either the comparison returns
-    \c true or the \a timeout (in milliseconds) is reached. Between each
-    comparison, events will be processed. If the timeout is reached, a failure
-    is recorded in the test log and the test won't be executed further.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_LE(), QTRY_COMPARE_LE()
-*/
-
-/*! \macro QTRY_COMPARE_LE(left, right)
-    \since 6.4
-    \relates QTest
-
-    Performs comparison of \a left and \a right values by invoking
-    QTRY_COMPARE_LE_WITH_TIMEOUT with a timeout of five seconds.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_LE(), QTRY_COMPARE_LE_WITH_TIMEOUT()
-*/
-
-/*! \macro QTRY_COMPARE_GT_WITH_TIMEOUT(left, right, timeout)
-    \since 6.4
-    \relates QTest
-
-    This macro is similar to QCOMPARE_GT(), but performs the comparison of the
-    \a left and \a right values repeatedly, until either the comparison returns
-    \c true or the \a timeout (in milliseconds) is reached. Between each
-    comparison, events will be processed. If the timeout is reached, a failure
-    is recorded in the test log and the test won't be executed further.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_GT(), QTRY_COMPARE_GT()
-*/
-
-/*! \macro QTRY_COMPARE_GT(left, right)
-    \since 6.4
-    \relates QTest
-
-    Performs comparison of \a left and \a right values by invoking
-    QTRY_COMPARE_GT_WITH_TIMEOUT with a timeout of five seconds.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_GT(), QTRY_COMPARE_GT_WITH_TIMEOUT()
-*/
-
-/*! \macro QTRY_COMPARE_GE_WITH_TIMEOUT(left, right, timeout)
-    \since 6.4
-    \relates QTest
-
-    This macro is similar to QCOMPARE_GE(), but performs the comparison of the
-    \a left and \a right values repeatedly, until either the comparison returns
-    \c true or the \a timeout (in milliseconds) is reached. Between each
-    comparison, events will be processed. If the timeout is reached, a failure
-    is recorded in the test log and the test won't be executed further.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_GE(), QTRY_COMPARE_GE()
-*/
-
-/*! \macro QTRY_COMPARE_GE(left, right)
-    \since 6.4
-    \relates QTest
-
-    Performs comparison of \a left and \a right values by invoking
-    QTRY_COMPARE_GE_WITH_TIMEOUT with a timeout of five seconds.
-
-    \include qtestcase.qdoc macro-usage-limitation
-
-    \sa QCOMPARE_GE(), QTRY_COMPARE_GE_WITH_TIMEOUT()
 */
 
 /*! \macro QFETCH(type, name)
@@ -791,8 +463,7 @@
    \a comment will be appended to the test log for the expected failure.
 
    \a mode is a \l QTest::TestFailMode and sets whether the test should
-   continue to execute or not. The \a mode is applied regardless of
-   whether the expected test failure occurs.
+   continue to execute or not.
 
    \note This macro can only be used in a test function that is invoked
    by the test framework.
@@ -809,7 +480,7 @@
    \snippet code/src_qtestlib_qtestcase.cpp 10
 
    The above testfunction will not continue executing for the test data
-   entry \c{data27} (regardless of the value of \c i).
+   entry \c{data27}.
 
    \sa QTest::TestFailMode, QVERIFY(), QCOMPARE()
 */
@@ -970,16 +641,14 @@
 
 /*! \enum QTest::TestFailMode
 
-    This enum describes the modes for handling a check, such as by \l
-    QVERIFY() or \l QCOMPARE() macros, that is known to fail. The mode
-    applies regardless of whether the check fails or succeeds.
+    This enum describes the modes for handling an expected failure of the
+    \l QVERIFY() or \l QCOMPARE() macros.
 
-    \value Abort Aborts the execution of the test. Use this mode when
-           it doesn't make sense to execute the test any further after
-           the problematic check.
+    \value Abort Aborts the execution of the test. Use this mode when it
+           doesn't make sense to execute the test any further after the
+           expected failure.
 
-    \value Continue Continues execution of the test after the
-           problematic check.
+    \value Continue Continues execution of the test after the expected failure.
 
     \sa QEXPECT_FAIL()
 */
@@ -1416,7 +1085,7 @@
 */
 
 /*!
-    \fn char *QTest::toString(const QLatin1StringView &string)
+    \fn char *QTest::toString(const QLatin1String &string)
     \overload
 
     Returns a textual representation of the given \a string.
@@ -1640,21 +1309,15 @@
 */
 
 /*!
-    \fn bool QTest::QTouchEventSequence::commit(bool processEvents)
+  \fn void QTest::QTouchEventSequence::commit(bool processEvents)
 
-    Commits this touch event to the event system, and returns whether it was
-    accepted after delivery.
+   Commits this sequence of touch events to the event system. Normally there is no need to call this
+   function because it is called from the destructor. However, if autoCommit is disabled, the events
+   only get committed upon explicitly calling this function.
 
-    Normally there is no need to call this function because it is called from
-    the destructor. However, if autoCommit is disabled, the events only get
-    committed upon explicitly calling this function. Another reason to call it
-    explicitly is to check the return value.
-
-    In special cases, tests may want to disable the processing of the event.
-    This can be achieved by setting \a processEvents to false. This results in
-    merely queuing the event: the event loop will not be forced to process it.
-
-    Returns whether the event was accepted after delivery.
+   In special cases tests may want to disable the processing of the events. This can be achieved by
+   setting \a processEvents to false. This results in merely queuing the events, the event loop will
+   not be forced to process them.
 */
 
 /*!

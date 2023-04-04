@@ -56,9 +56,6 @@
 #if QT_CONFIG(ssl)
 #include "qsslpresharedkeyauthenticator.h"
 #endif
-#if QT_CONFIG(ssl)
-#include "qsslserver.h"
-#endif
 #include "qsslsocket.h"
 #include "qtcpserver.h"
 #include "qtcpsocket.h"

@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -77,7 +102,7 @@ void tst_QFontComboBox::currentFont_data()
     if (!QFontDatabase::isPrivateFamily(defaultFont.family()))
         QTest::newRow("default2") << defaultFont;
     QStringList list = QFontDatabase::families();
-    for (int i = 0; i < list.size(); ++i) {
+    for (int i = 0; i < list.count(); ++i) {
         QFont f = QFont(QStringList{QFontInfo(QFont(list.at(i))).family()});
         if (!QFontDatabase::isPrivateFamily(f.families().first()))
             QTest::newRow(qPrintable(list.at(i))) << f;
@@ -105,7 +130,7 @@ void tst_QFontComboBox::currentFont()
 
     if (oldCurrentFont != box.currentFont()) {
         //the signal may be emit twice if there is a foundry into brackets
-        QCOMPARE(spy0.size(),1);
+        QCOMPARE(spy0.count(),1);
     }
 }
 
@@ -155,7 +180,7 @@ void tst_QFontComboBox::fontFilters()
     if((fontFilters & spacingMask) == spacingMask)
         fontFilters &= ~spacingMask;
 
-    for (int i = 0; i < list.size(); ++i) {
+    for (int i = 0; i < list.count(); ++i) {
         if (QFontDatabase::isPrivateFamily(list[i]))
             continue;
         if (fontFilters & QFontComboBox::ScalableFonts) {
@@ -180,7 +205,7 @@ void tst_QFontComboBox::fontFilters()
     if (c == 0)
         QCOMPARE(box.currentFont(), QFont());
 
-    QCOMPARE(spy0.size(), (currentFont != box.currentFont()) ? 1 : 0);
+    QCOMPARE(spy0.count(), (currentFont != box.currentFont()) ? 1 : 0);
 }
 
 // public QSize sizeHint() const
@@ -221,17 +246,17 @@ void tst_QFontComboBox::writingSystem()
     QCOMPARE(box.writingSystem(), writingSystem);
 
     QStringList list = QFontDatabase::families(writingSystem);
-    int c = list.size();
-    for (int i = 0; i < list.size(); ++i) {
+    int c = list.count();
+    for (int i = 0; i < list.count(); ++i) {
         if (QFontDatabase::isPrivateFamily(list[i]))
             c--;
     }
     QCOMPARE(box.model()->rowCount(), c);
 
-    if (list.size() == 0)
+    if (list.count() == 0)
         QCOMPARE(box.currentFont(), QFont());
 
-    QCOMPARE(spy0.size(), (currentFont != box.currentFont()) ? 1 : 0);
+    QCOMPARE(spy0.count(), (currentFont != box.currentFont()) ? 1 : 0);
 }
 
 // protected void currentFontChanged(QFont const& f)
@@ -245,11 +270,11 @@ void tst_QFontComboBox::currentFontChanged()
 
     if (box->model()->rowCount() > 2) {
         QTest::keyPress(box, Qt::Key_Down);
-        QCOMPARE(spy0.size(), 1);
+        QCOMPARE(spy0.count(), 1);
 
         QFont f( "Sans Serif" );
         box->setCurrentFont(f);
-        QCOMPARE(spy0.size(), 2);
+        QCOMPARE(spy0.count(), 2);
     } else
         qWarning("Not enough fonts installed on test system. Consider adding some");
 }

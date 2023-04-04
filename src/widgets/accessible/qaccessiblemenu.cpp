@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qaccessiblemenu_p.h"
 
@@ -12,7 +48,7 @@
 #include <qstyle.h>
 #include <private/qwidget_p.h>
 
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
 
 QT_BEGIN_NAMESPACE
 
@@ -44,7 +80,7 @@ QMenu *QAccessibleMenu::menu() const
 
 int QAccessibleMenu::childCount() const
 {
-    return menu()->actions().size();
+    return menu()->actions().count();
 }
 
 QAccessibleInterface *QAccessibleMenu::childAt(int x, int y) const
@@ -85,7 +121,7 @@ QAccessibleInterface *QAccessibleMenu::parent() const
         const QList<QObject *> associatedObjects = menuAction->associatedObjects();
         parentCandidates.reserve(associatedObjects.size() + 1);
         parentCandidates << menu()->parentWidget() << associatedObjects;
-        for (QObject *object : std::as_const(parentCandidates)) {
+        for (QObject *object : qAsConst(parentCandidates)) {
             if (qobject_cast<QMenu*>(object)
 #if QT_CONFIG(menubar)
                 || qobject_cast<QMenuBar*>(object)
@@ -123,7 +159,7 @@ QMenuBar *QAccessibleMenuBar::menuBar() const
 
 int QAccessibleMenuBar::childCount() const
 {
-    return menuBar()->actions().size();
+    return menuBar()->actions().count();
 }
 
 QAccessibleInterface *QAccessibleMenuBar::child(int index) const
@@ -357,5 +393,5 @@ QWidget *QAccessibleMenuItem::owner() const
 
 QT_END_NAMESPACE
 
-#endif // QT_CONFIG(accessibility)
+#endif // QT_NO_ACCESSIBILITY
 

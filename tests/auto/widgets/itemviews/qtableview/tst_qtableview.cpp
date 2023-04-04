@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QIdentityProxyModel>
 #include <QLabel>
@@ -503,7 +528,7 @@ void tst_QTableView::emptyModel()
     QSignalSpy spy(&model, &QtTestTableModel::invalidIndexEncountered);
     view.setModel(&model);
     view.show();
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
 }
 
 void tst_QTableView::removeRows_data()
@@ -528,10 +553,10 @@ void tst_QTableView::removeRows()
     view.show();
 
     model.removeLastRow();
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
 
     model.removeAllRows();
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
 }
 
 void tst_QTableView::removeColumns_data()
@@ -556,10 +581,10 @@ void tst_QTableView::removeColumns()
     view.show();
 
     model.removeLastColumn();
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
 
     model.removeAllColumns();
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
 }
 
 void tst_QTableView::keyboardNavigation_data()
@@ -1597,7 +1622,7 @@ void tst_QTableView::selection()
 
     view.setSelection(QRect(x, y, width, height), command);
 
-    QCOMPARE(view.selectedIndexes().size(), selectedCount);
+    QCOMPARE(view.selectedIndexes().count(), selectedCount);
 }
 
 void tst_QTableView::selectRow_data()
@@ -1710,12 +1735,12 @@ void tst_QTableView::selectRow()
     view.setSelectionMode(mode);
     view.setSelectionBehavior(behavior);
 
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), 0);
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), 0);
 
     view.selectRow(row);
 
     //test we have 10 items selected
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), selectedItems);
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), selectedItems);
     //test that all 10 items are in the same row
     for (int i = 0; selectedItems > 0 && i < rowCount; ++i)
         QCOMPARE(view.selectionModel()->selectedIndexes().at(i).row(), row);
@@ -1831,11 +1856,11 @@ void tst_QTableView::selectColumn()
     view.setSelectionMode(mode);
     view.setSelectionBehavior(behavior);
 
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), 0);
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), 0);
 
     view.selectColumn(column);
 
-    QCOMPARE(view.selectionModel()->selectedIndexes().size(), selectedItems);
+    QCOMPARE(view.selectionModel()->selectedIndexes().count(), selectedItems);
     for (int i = 0; selectedItems > 0 && i < columnCount; ++i)
         QCOMPARE(view.selectionModel()->selectedIndexes().at(i).column(), column);
 }
@@ -1980,22 +2005,22 @@ void tst_QTableView::selectall()
 
     // try slot first
     view.clearSelection();
-    QCOMPARE(view.selectedIndexes().size(), 0);
+    QCOMPARE(view.selectedIndexes().count(), 0);
     view.selectAll();
-    QCOMPARE(view.selectedIndexes().size(), selectedCount);
+    QCOMPARE(view.selectedIndexes().count(), selectedCount);
 
     // try by key sequence
     view.clearSelection();
-    QCOMPARE(view.selectedIndexes().size(), 0);
+    QCOMPARE(view.selectedIndexes().count(), 0);
     QTest__keySequence(&view, QKeySequence(QKeySequence::SelectAll));
-    QCOMPARE(view.selectedIndexes().size(), selectedCount);
+    QCOMPARE(view.selectedIndexes().count(), selectedCount);
 
     // check again with no selection mode
     view.clearSelection();
     view.setSelectionMode(QAbstractItemView::NoSelection);
-    QCOMPARE(view.selectedIndexes().size(), 0);
+    QCOMPARE(view.selectedIndexes().count(), 0);
     QTest__keySequence(&view, QKeySequence(QKeySequence::SelectAll));
-    QCOMPARE(view.selectedIndexes().size(), 0);
+    QCOMPARE(view.selectedIndexes().count(), 0);
 }
 
 #endif // QT_CONFIG(shortcut)
@@ -2188,7 +2213,7 @@ void tst_QTableView::resizeRowsToContents()
     QSignalSpy resizedSpy(view.verticalHeader(), &QHeaderView::sectionResized);
     view.resizeRowsToContents();
 
-    QCOMPARE(resizedSpy.size(), model.rowCount());
+    QCOMPARE(resizedSpy.count(), model.rowCount());
     for (int r = 0; r < model.rowCount(); ++r)
         QCOMPARE(view.rowHeight(r), rowHeight);
 }
@@ -2234,7 +2259,7 @@ void tst_QTableView::resizeColumnsToContents()
     QSignalSpy resizedSpy(view.horizontalHeader(), &QHeaderView::sectionResized);
     view.resizeColumnsToContents();
 
-    QCOMPARE(resizedSpy.size(), model.columnCount());
+    QCOMPARE(resizedSpy.count(), model.columnCount());
     for (int c = 0; c < model.columnCount(); ++c)
         QCOMPARE(view.columnWidth(c), columnWidth);
 }
@@ -2249,46 +2274,46 @@ void tst_QTableView::rowViewportPosition_data()
     QTest::addColumn<int>("rowViewportPosition");
 
     QTest::newRow("row 0, scroll per item 0")
-        << 100 << 40 << 0 << QAbstractItemView::ScrollPerItem << 0 << 0;
+        << 10 << 40 << 0 << QAbstractItemView::ScrollPerItem << 0 << 0;
 
     QTest::newRow("row 1, scroll per item, 0")
-        << 100 << 40 << 1 << QAbstractItemView::ScrollPerItem << 0 << 1 * 40;
+        << 10 << 40 << 1 << QAbstractItemView::ScrollPerItem << 0 << 1 * 40;
 
     QTest::newRow("row 1, scroll per item, 1")
-        << 100 << 40 << 1 << QAbstractItemView::ScrollPerItem << 1 << 0;
+        << 10 << 40 << 1 << QAbstractItemView::ScrollPerItem << 1 << 0;
 
     QTest::newRow("row 5, scroll per item, 0")
-        << 100 << 40 << 5 << QAbstractItemView::ScrollPerItem << 0 << 5 * 40;
+        << 10 << 40 << 5 << QAbstractItemView::ScrollPerItem << 0 << 5 * 40;
 
     QTest::newRow("row 5, scroll per item, 5")
-        << 100 << 40 << 5 << QAbstractItemView::ScrollPerItem << 5 << 0;
+        << 10 << 40 << 5 << QAbstractItemView::ScrollPerItem << 5 << 0;
 
     QTest::newRow("row 9, scroll per item, 0")
-        << 100 << 40 << 9 << QAbstractItemView::ScrollPerItem << 0 << 9 * 40;
+        << 10 << 40 << 9 << QAbstractItemView::ScrollPerItem << 0 << 9 * 40;
 
     QTest::newRow("row 9, scroll per item, 5")
-        << 100 << 40 << 9 << QAbstractItemView::ScrollPerItem << 5 << 4 * 40;
+        << 10 << 40 << 9 << QAbstractItemView::ScrollPerItem << 5 << 4 * 40;
 
     QTest::newRow("row 0, scroll per pixel 0")
-        << 100 << 40 << 0 << QAbstractItemView::ScrollPerPixel << 0 << 0;
+        << 10 << 40 << 0 << QAbstractItemView::ScrollPerPixel << 0 << 0;
 
     QTest::newRow("row 1, scroll per pixel, 0")
-        << 100 << 40 << 1 << QAbstractItemView::ScrollPerPixel << 0 << 1 * 40;
+        << 10 << 40 << 1 << QAbstractItemView::ScrollPerPixel << 0 << 1 * 40;
 
     QTest::newRow("row 1, scroll per pixel, 1")
-        << 100 << 40 << 1 << QAbstractItemView::ScrollPerPixel << 1 * 40 << 0;
+        << 10 << 40 << 1 << QAbstractItemView::ScrollPerPixel << 1 * 40 << 0;
 
     QTest::newRow("row 5, scroll per pixel, 0")
-        << 100 << 40 << 5 << QAbstractItemView::ScrollPerPixel << 0 << 5 * 40;
+        << 10 << 40 << 5 << QAbstractItemView::ScrollPerPixel << 0 << 5 * 40;
 
     QTest::newRow("row 5, scroll per pixel, 5")
-        << 100 << 40 << 5 << QAbstractItemView::ScrollPerPixel << 5 * 40 << 0;
+        << 10 << 40 << 5 << QAbstractItemView::ScrollPerPixel << 5 * 40 << 0;
 
     QTest::newRow("row 9, scroll per pixel, 0")
-        << 100 << 40 << 9 << QAbstractItemView::ScrollPerPixel << 0 << 9 * 40;
+        << 10 << 40 << 9 << QAbstractItemView::ScrollPerPixel << 0 << 9 * 40;
 
     QTest::newRow("row 9, scroll per pixel, 5")
-        << 100 << 40 << 9 << QAbstractItemView::ScrollPerPixel << 5 * 40 << 4 * 40;
+        << 10 << 40 << 9 << QAbstractItemView::ScrollPerPixel << 5 * 40 << 4 * 40;
 }
 
 void tst_QTableView::rowViewportPosition()
@@ -2348,7 +2373,7 @@ void tst_QTableView::rowAt()
     for (int r = 0; r < rowCount; ++r)
         view.setRowHeight(r, rowHeight);
 
-    for (int i = 0; i < hiddenRows.size(); ++i)
+    for (int i = 0; i < hiddenRows.count(); ++i)
         view.hideRow(hiddenRows.at(i));
 
     QCOMPARE(view.rowAt(coordinate), row);
@@ -2412,46 +2437,46 @@ void tst_QTableView::columnViewportPosition_data()
     QTest::addColumn<int>("columnViewportPosition");
 
     QTest::newRow("column 0, scroll per item 0")
-        << 100 << 40 << 0 << QAbstractItemView::ScrollPerItem << 0 << 0;
+        << 10 << 40 << 0 << QAbstractItemView::ScrollPerItem << 0 << 0;
 
     QTest::newRow("column 1, scroll per item, 0")
-        << 100 << 40 << 1 << QAbstractItemView::ScrollPerItem << 0 << 1 * 40;
+        << 10 << 40 << 1 << QAbstractItemView::ScrollPerItem << 0 << 1 * 40;
 
     QTest::newRow("column 1, scroll per item, 1")
-        << 100 << 40 << 1 << QAbstractItemView::ScrollPerItem << 1 << 0;
+        << 10 << 40 << 1 << QAbstractItemView::ScrollPerItem << 1 << 0;
 
     QTest::newRow("column 5, scroll per item, 0")
-        << 100 << 40 << 5 << QAbstractItemView::ScrollPerItem << 0 << 5 * 40;
+        << 10 << 40 << 5 << QAbstractItemView::ScrollPerItem << 0 << 5 * 40;
 
     QTest::newRow("column 5, scroll per item, 5")
-        << 100 << 40 << 5 << QAbstractItemView::ScrollPerItem << 5 << 0;
+        << 10 << 40 << 5 << QAbstractItemView::ScrollPerItem << 5 << 0;
 
     QTest::newRow("column 9, scroll per item, 0")
-        << 100 << 40 << 9 << QAbstractItemView::ScrollPerItem << 0 << 9 * 40;
+        << 10 << 40 << 9 << QAbstractItemView::ScrollPerItem << 0 << 9 * 40;
 
     QTest::newRow("column 9, scroll per item, 5")
-        << 100 << 40 << 9 << QAbstractItemView::ScrollPerItem << 5 << 4 * 40;
+        << 10 << 40 << 9 << QAbstractItemView::ScrollPerItem << 5 << 4 * 40;
 
     QTest::newRow("column 0, scroll per pixel 0")
-        << 100 << 40 << 0 << QAbstractItemView::ScrollPerPixel << 0 << 0;
+        << 10 << 40 << 0 << QAbstractItemView::ScrollPerPixel << 0 << 0;
 
     QTest::newRow("column 1, scroll per pixel 0")
-        << 100 << 40 << 1 << QAbstractItemView::ScrollPerPixel << 0 << 1 * 40;
+        << 10 << 40 << 1 << QAbstractItemView::ScrollPerPixel << 0 << 1 * 40;
 
     QTest::newRow("column 1, scroll per pixel 1")
-        << 100 << 40 << 1 << QAbstractItemView::ScrollPerPixel << 1 * 40 << 0;
+        << 10 << 40 << 1 << QAbstractItemView::ScrollPerPixel << 1 * 40 << 0;
 
     QTest::newRow("column 5, scroll per pixel 0")
-        << 100 << 40 << 5 << QAbstractItemView::ScrollPerPixel << 0 << 5 * 40;
+        << 10 << 40 << 5 << QAbstractItemView::ScrollPerPixel << 0 << 5 * 40;
 
     QTest::newRow("column 5, scroll per pixel 5")
-        << 100 << 40 << 5 << QAbstractItemView::ScrollPerPixel << 5 * 40 << 0;
+        << 10 << 40 << 5 << QAbstractItemView::ScrollPerPixel << 5 * 40 << 0;
 
     QTest::newRow("column 9, scroll per pixel 0")
-        << 100 << 40 << 9 << QAbstractItemView::ScrollPerPixel << 0 << 9 * 40;
+        << 10 << 40 << 9 << QAbstractItemView::ScrollPerPixel << 0 << 9 * 40;
 
     QTest::newRow("column 9, scroll per pixel 5")
-        << 100 << 40 << 9 << QAbstractItemView::ScrollPerPixel << 5 * 40 << 4 * 40;
+        << 10 << 40 << 9 << QAbstractItemView::ScrollPerPixel << 5 * 40 << 4 * 40;
 }
 
 void tst_QTableView::columnViewportPosition()
@@ -2511,7 +2536,7 @@ void tst_QTableView::columnAt()
     for (int c = 0; c < columnCount; ++c)
         view.setColumnWidth(c, columnWidth);
 
-    for (int i = 0; i < hiddenColumns.size(); ++i)
+    for (int i = 0; i < hiddenColumns.count(); ++i)
         view.hideColumn(hiddenColumns.at(i));
 
     QCOMPARE(view.columnAt(coordinate), column);
@@ -4330,18 +4355,15 @@ void tst_QTableView::task191545_dragSelectRows()
         QHeaderView *vHeader = table.verticalHeader();
         QWidget *vHeaderVp = vHeader->viewport();
         QPoint rowPos(cellRect.center());
-        QMouseEvent rowPressEvent(QEvent::MouseButtonPress, rowPos, rowPos, vHeaderVp->mapToGlobal(rowPos),
-                                  Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
+        QMouseEvent rowPressEvent(QEvent::MouseButtonPress, rowPos, Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
         QCoreApplication::sendEvent(vHeaderVp, &rowPressEvent);
 
         for (int i = 0; i < 4; ++i) {
             rowPos.setY(rowPos.y() + cellRect.height());
-            QMouseEvent moveEvent(QEvent::MouseMove, rowPos, rowPos, vHeaderVp->mapToGlobal(rowPos),
-                                  Qt::NoButton, Qt::LeftButton, Qt::ControlModifier);
+            QMouseEvent moveEvent(QEvent::MouseMove, rowPos, Qt::NoButton, Qt::LeftButton, Qt::ControlModifier);
             QCoreApplication::sendEvent(vHeaderVp, &moveEvent);
         }
-        QMouseEvent rowReleaseEvent(QEvent::MouseButtonRelease, rowPos, vHeaderVp->mapToGlobal(rowPos),
-                                    Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
+        QMouseEvent rowReleaseEvent(QEvent::MouseButtonRelease, rowPos, Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
         QCoreApplication::sendEvent(vHeaderVp, &rowReleaseEvent);
 
         for (int i = 0; i < 4; ++i) {
@@ -4355,18 +4377,15 @@ void tst_QTableView::task191545_dragSelectRows()
         QHeaderView *hHeader = table.horizontalHeader();
         QWidget *hHeaderVp = hHeader->viewport();
         QPoint colPos((cellRect.left() + cellRect.right()) / 2, 5);
-        QMouseEvent colPressEvent(QEvent::MouseButtonPress, colPos, hHeaderVp->mapToGlobal(colPos),
-                                  Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
+        QMouseEvent colPressEvent(QEvent::MouseButtonPress, colPos, Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
         QCoreApplication::sendEvent(hHeaderVp, &colPressEvent);
 
         for (int i = 0; i < 4; ++i) {
             colPos.setX(colPos.x() + cellRect.width());
-            QMouseEvent moveEvent(QEvent::MouseMove, colPos, hHeaderVp->mapToGlobal(colPos),
-                                  Qt::NoButton, Qt::LeftButton, Qt::ControlModifier);
+            QMouseEvent moveEvent(QEvent::MouseMove, colPos, Qt::NoButton, Qt::LeftButton, Qt::ControlModifier);
             QCoreApplication::sendEvent(hHeaderVp, &moveEvent);
         }
-        QMouseEvent colReleaseEvent(QEvent::MouseButtonRelease, colPos, hHeaderVp->mapToGlobal(colPos),
-                                    Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
+        QMouseEvent colReleaseEvent(QEvent::MouseButtonRelease, colPos, Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
         QCoreApplication::sendEvent(hHeaderVp, &colReleaseEvent);
 
         for (int i = 0; i < 4; ++i) {
@@ -4379,19 +4398,16 @@ void tst_QTableView::task191545_dragSelectRows()
         QRect cellRect = table.visualRect(model.index(2, 2));
         QWidget *tableVp = table.viewport();
         QPoint cellPos = cellRect.center();
-        QMouseEvent cellPressEvent(QEvent::MouseButtonPress, cellPos, tableVp->mapToGlobal(cellPos),
-                                   Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
+        QMouseEvent cellPressEvent(QEvent::MouseButtonPress, cellPos, Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
         QCoreApplication::sendEvent(tableVp, &cellPressEvent);
 
         for (int i = 0; i < 6; ++i) {
             cellPos.setX(cellPos.x() + cellRect.width());
             cellPos.setY(cellPos.y() + cellRect.height());
-            QMouseEvent moveEvent(QEvent::MouseMove, cellPos, tableVp->mapToGlobal(cellPos),
-                                  Qt::NoButton, Qt::LeftButton, Qt::ControlModifier);
+            QMouseEvent moveEvent(QEvent::MouseMove, cellPos, Qt::NoButton, Qt::LeftButton, Qt::ControlModifier);
             QCoreApplication::sendEvent(tableVp, &moveEvent);
         }
-        QMouseEvent cellReleaseEvent(QEvent::MouseButtonRelease, cellPos, tableVp->mapToGlobal(cellPos),
-                                     Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
+        QMouseEvent cellReleaseEvent(QEvent::MouseButtonRelease, cellPos, Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
         QCoreApplication::sendEvent(tableVp, &cellReleaseEvent);
 
         for (int i = 0; i < 6; ++i) {
@@ -4406,21 +4422,16 @@ void tst_QTableView::task191545_dragSelectRows()
         QRect cellRect = table.visualRect(model.index(3, 3));
         QWidget *tableVp = table.viewport();
         QPoint cellPos = cellRect.center();
-        QMouseEvent cellPressEvent(QEvent::MouseButtonPress, cellPos, tableVp->mapToGlobal(cellPos),
-                                   Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
+        QMouseEvent cellPressEvent(QEvent::MouseButtonPress, cellPos, Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
         QCoreApplication::sendEvent(tableVp, &cellPressEvent);
 
         for (int i = 0; i < 6; ++i) {
-            // cellPos might have been updated by scrolling, so refresh
-            cellPos = table.visualRect(model.index(3+i, 3+i)).center();
             cellPos.setX(cellPos.x() + cellRect.width());
             cellPos.setY(cellPos.y() + cellRect.height());
-            QMouseEvent moveEvent(QEvent::MouseMove, cellPos, tableVp->mapToGlobal(cellPos),
-                                  Qt::NoButton, Qt::LeftButton, Qt::ControlModifier);
+            QMouseEvent moveEvent(QEvent::MouseMove, cellPos, Qt::NoButton, Qt::LeftButton, Qt::ControlModifier);
             QCoreApplication::sendEvent(tableVp, &moveEvent);
         }
-        QMouseEvent cellReleaseEvent(QEvent::MouseButtonRelease, cellPos, tableVp->mapToGlobal(cellPos),
-                                     Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
+        QMouseEvent cellReleaseEvent(QEvent::MouseButtonRelease, cellPos, Qt::LeftButton, Qt::NoButton, Qt::ControlModifier);
         QCoreApplication::sendEvent(tableVp, &cellReleaseEvent);
 
         QTest::qWait(200);
@@ -4784,8 +4795,7 @@ public:
     {
         return QTableView::selectionCommand(index, shiftPressed ? &mouseEvent : nullptr);
     }
-    QMouseEvent mouseEvent = QMouseEvent(QEvent::MouseButtonPress, QPointF(), QPointF(),
-                                         Qt::LeftButton, Qt::LeftButton, Qt::ShiftModifier);
+    QMouseEvent mouseEvent = QMouseEvent(QEvent::MouseButtonPress, QPointF(), Qt::LeftButton, Qt::LeftButton, Qt::ShiftModifier);
     bool shiftPressed = false;
 };
 

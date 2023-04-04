@@ -75,15 +75,6 @@ define_property(TARGET
         "Qt Module android feature list."
 )
 
-define_property(TARGET
-    PROPERTY
-        QT_ANDROID_ABIS
-    BRIEF_DOCS
-        "List of ABIs that the target packages are built with."
-    FULL_DOCS
-        "List of ABIs that the target packages are built with."
-)
-
 function(qt_internal_android_dependencies_content target file_content_out)
     get_target_property(arg_JAR_DEPENDENCIES ${target} QT_ANDROID_JAR_DEPENDENCIES)
     get_target_property(arg_BUNDLED_JAR_DEPENDENCIES ${target} QT_ANDROID_BUNDLED_JAR_DEPENDENCIES)
@@ -127,9 +118,8 @@ function(qt_internal_android_dependencies_content target file_content_out)
             if (init_class)
                 set(init_class "initClass=\"${init_class}\"")
             endif()
-            # Use unix path to allow using files on any host platform.
-            file(TO_CMAKE_PATH ${jar_file} jar_file_unix_path)
-            string(APPEND file_contents "<jar file=\"${jar_file_unix_path}\" ${init_class} />\n")
+            file(TO_NATIVE_PATH ${jar_file} jar_file_native)
+            string(APPEND file_contents "<jar file=\"${jar_file_native}\" ${init_class} />\n")
         endforeach()
     endif()
 
@@ -140,10 +130,8 @@ function(qt_internal_android_dependencies_content target file_content_out)
             if (init_class)
                 set(init_class "initClass=\"${init_class}\"")
             endif()
-            # Use unix path to allow using files on any host platform.
-            file(TO_CMAKE_PATH ${bundle_file} jar_bundle_unix_path)
-            string(APPEND file_contents
-                   "<jar bundling=\"1\" file=\"${jar_bundle_unix_path}\" ${init_class} />\n")
+            file(TO_NATIVE_PATH ${bundle_file} jar_bundle_native)
+            string(APPEND file_contents "<jar bundling=\"1\" file=\"${jar_bundle_native}\" ${init_class} />\n")
         endforeach()
     endif()
 
@@ -155,9 +143,8 @@ function(qt_internal_android_dependencies_content target file_content_out)
             if (lib_extends)
                 set(lib_extends "extends=\"${lib_extends}\"")
             endif()
-            # Use unix path to allow using files on any host platform.
-            file(TO_CMAKE_PATH ${lib_file} lib_file_unix_path)
-            string(APPEND file_contents "<lib file=\"${lib_file_unix_path}\" ${lib_extends} />\n")
+            file(TO_NATIVE_PATH ${lib_file} lib_file_native)
+            string(APPEND file_contents "<lib file=\"${lib_file_native}\" ${lib_extends} />\n")
         endforeach()
     endif()
 
@@ -167,23 +154,19 @@ function(qt_internal_android_dependencies_content target file_content_out)
             string(REPLACE ".so" "_${CMAKE_ANDROID_ARCH_ABI}.so" lib ${lib})
             section(${lib} ":" lib_file lib_replacement)
             if (lib_replacement)
-                # Use unix path to allow using files on any host platform.
-                file(TO_CMAKE_PATH ${lib_replacement} lib_replacement_unix_path)
-                set(lib_replacement "replaces=\"${lib_replacement_unix_path}\"")
+                file(TO_NATIVE_PATH ${lib_replacement} lib_replacement_native)
+                set(lib_replacement "replaces=\"${lib_replacement_native}\"")
             endif()
-            # Use unix path to allow using files on any host platform.
-            file(TO_CMAKE_PATH ${lib_file} lib_file_unix_path)
-            string(APPEND file_contents
-                   "<lib file=\"${lib_file_unix_path}\" ${lib_replacement} />\n")
+            file(TO_NATIVE_PATH ${lib_file} lib_file_native)
+            string(APPEND file_contents "<lib file=\"${lib_file_native}\" ${lib_replacement} />\n")
         endforeach()
     endif()
 
     # Bundled files
     if(arg_BUNDLED_FILES)
         foreach(bundled_file IN LISTS arg_BUNDLED_FILES)
-            # Use unix path to allow using files on any host platform.
-            file(TO_CMAKE_PATH ${bundled_file} file_unix_path)
-            string(APPEND file_contents "<bundled file=\"${file_unix_path}\" />\n")
+            file(TO_NATIVE_PATH ${bundled_file} file_native)
+            string(APPEND file_contents "<bundled file=\"${file_native}\" />\n")
         endforeach()
     endif()
 

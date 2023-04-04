@@ -24,4 +24,3 @@ QIBusProxyPortal::~QIBusProxyPortal()
 {
 }
 
-#include "moc_qibusproxyportal.cpp"

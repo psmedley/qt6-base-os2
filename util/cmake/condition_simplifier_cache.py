@@ -1,6 +1,31 @@
 #!/usr/bin/env python3
-# Copyright (C) 2018 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+#############################################################################
+##
+## Copyright (C) 2018 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is part of the plugins of the Qt Toolkit.
+##
+## $QT_BEGIN_LICENSE:GPL-EXCEPT$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 3 as published by the Free Software
+## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
 
 
 import atexit
@@ -80,7 +105,11 @@ def open_file_safe(file_path: str, mode: str = "r+"):
     try:
         import portalocker  # type: ignore
 
-        return portalocker.Lock(file_path, mode=mode, flags=portalocker.LOCK_EX)
+        file_open_func = portalocker.Lock
+        file_open_args = [file_path]
+        file_open_kwargs = {"mode": mode, "flags": portalocker.LOCK_EX}
+        file_handle = file_open_func(*file_open_args, **file_open_kwargs)
+        return file_handle
     except ImportError:
         print(
             "The conversion script is missing a required package: portalocker. Please run "

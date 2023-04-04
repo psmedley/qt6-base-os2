@@ -1,5 +1,30 @@
-// Copyright (C) 2019 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2019 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the tools applications of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "pythonwriteimports.h"
 
@@ -15,8 +40,6 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 // Generate imports for Python. Note some things differ from C++:
 // - qItemView->header()->setFoo() does not require QHeaderView to be imported
@@ -56,17 +79,14 @@ static WriteImports::ClassesPerModule defaultClasses()
 
 // Change the name of a qrc file "dir/foo.qrc" file to the Python
 // module name "foo_rc" according to project conventions.
-static QString pythonResource(QString resource, bool prefix)
+static QString pythonResource(QString resource)
 {
-    const qsizetype lastSlash = resource.lastIndexOf(u'/');
+    const int lastSlash = resource.lastIndexOf(QLatin1Char('/'));
     if (lastSlash != -1)
         resource.remove(0, lastSlash + 1);
-    if (resource.endsWith(".qrc"_L1)) {
+    if (resource.endsWith(QLatin1String(".qrc"))) {
         resource.chop(4);
-        if (prefix)
-            resource.prepend("rc_"_L1);
-        else
-            resource.append("_rc"_L1);
+        resource.append(QLatin1String("_rc"));
     }
     return resource;
 }
@@ -117,7 +137,7 @@ WriteImports::WriteImports(Uic *uic) : WriteIncludesBase(uic),
     m_qtClasses(defaultClasses())
 {
     for (const auto &e : classInfoEntries())
-        m_classToModule.insert(QLatin1StringView(e.klass), QLatin1StringView(e.module));
+        m_classToModule.insert(QLatin1String(e.klass), QLatin1String(e.module));
 }
 
 void WriteImports::acceptUI(DomUI *node)
@@ -143,8 +163,7 @@ void WriteImports::acceptUI(DomUI *node)
         const auto includes = resources->elementInclude();
         for (auto include : includes) {
             if (include->hasAttributeLocation())
-                writeImport(pythonResource(include->attributeLocation(),
-                            uic()->option().rcPrefix));
+                writeImport(pythonResource(include->attributeLocation()));
         }
         output << '\n';
     }
@@ -191,7 +210,7 @@ bool WriteImports::addQtClass(const QString &className)
 
 void WriteImports::addPythonCustomWidget(const QString &className, const DomCustomWidget *node)
 {
-    if (className.contains("::"_L1))
+    if (className.contains(QLatin1String("::")))
         return; // Exclude namespaced names (just to make tests pass).
 
     if (addQtClass(className))  // Qt custom widgets like QQuickWidget, QAxWidget, etc
@@ -204,9 +223,9 @@ void WriteImports::addPythonCustomWidget(const QString &className, const DomCust
     } else { // When we do have elementHeader, we know it's a relative import.
         QString modulePath = node->elementHeader()->text();
         // Replace the '/' by '.'
-        modulePath.replace(u'/', u'.');
+        modulePath.replace(QLatin1Char('/'), QLatin1Char('.'));
         // '.h' is added by default on headers for <customwidget>
-        if (modulePath.endsWith(".h"_L1))
+        if (modulePath.endsWith(QLatin1String(".h")))
             modulePath.chop(2);
         insertClass(modulePath, className, &m_customWidgets);
     }

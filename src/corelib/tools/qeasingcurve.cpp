@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /*
 
@@ -447,7 +483,7 @@ struct BezierEase : public QEasingCurveFunction
     {
         if (_bezierCurves.constLast() == QPointF(1.0, 1.0)) {
             _init = true;
-            _curveCount = _bezierCurves.size() / 3;
+            _curveCount = _bezierCurves.count() / 3;
 
             for (int i=0; i < _curveCount; i++) {
                 _intervals[i] = _bezierCurves.at(i * 3 + 2).x();
@@ -466,17 +502,17 @@ struct BezierEase : public QEasingCurveFunction
                     _curves[0].p3y = _bezierCurves.at(2).y();
 
                 } else if (i == (_curveCount - 1)) {
-                    _curves[i].p0x = _bezierCurves.at(_bezierCurves.size() - 4).x();
-                    _curves[i].p0y = _bezierCurves.at(_bezierCurves.size() - 4).y();
+                    _curves[i].p0x = _bezierCurves.at(_bezierCurves.count() - 4).x();
+                    _curves[i].p0y = _bezierCurves.at(_bezierCurves.count() - 4).y();
 
-                    _curves[i].p1x = _bezierCurves.at(_bezierCurves.size() - 3).x();
-                    _curves[i].p1y = _bezierCurves.at(_bezierCurves.size() - 3).y();
+                    _curves[i].p1x = _bezierCurves.at(_bezierCurves.count() - 3).x();
+                    _curves[i].p1y = _bezierCurves.at(_bezierCurves.count() - 3).y();
 
-                    _curves[i].p2x = _bezierCurves.at(_bezierCurves.size() - 2).x();
-                    _curves[i].p2y = _bezierCurves.at(_bezierCurves.size() - 2).y();
+                    _curves[i].p2x = _bezierCurves.at(_bezierCurves.count() - 2).x();
+                    _curves[i].p2y = _bezierCurves.at(_bezierCurves.count() - 2).y();
 
-                    _curves[i].p3x = _bezierCurves.at(_bezierCurves.size() - 1).x();
-                    _curves[i].p3y = _bezierCurves.at(_bezierCurves.size() - 1).y();
+                    _curves[i].p3x = _bezierCurves.at(_bezierCurves.count() - 1).x();
+                    _curves[i].p3y = _bezierCurves.at(_bezierCurves.count() - 1).y();
                 } else {
                     _curves[i].p0x = _bezierCurves.at(i * 3 - 1).x();
                     _curves[i].p0y = _bezierCurves.at(i * 3 - 1).y();
@@ -535,7 +571,7 @@ struct BezierEase : public QEasingCurveFunction
 
     qreal value(qreal x) override
     {
-        Q_ASSERT(_bezierCurves.size() % 3 == 0);
+        Q_ASSERT(_bezierCurves.count() % 3 == 0);
 
         if (_bezierCurves.isEmpty()) {
             return x;
@@ -869,7 +905,7 @@ struct TCBEase : public BezierEase
 
     qreal value(qreal x) override
     {
-        Q_ASSERT(_bezierCurves.size() % 3 == 0);
+        Q_ASSERT(_bezierCurves.count() % 3 == 0);
 
         if (_bezierCurves.isEmpty()) {
             qWarning("QEasingCurve: Invalid tcb curve");
@@ -1274,7 +1310,7 @@ void QEasingCurve::addCubicBezierSegment(const QPointF & c1, const QPointF & c2,
 
 QList<QPointF> static inline tcbToBezier(const TCBPoints &tcbPoints)
 {
-    const int count = tcbPoints.size();
+    const int count = tcbPoints.count();
     QList<QPointF> bezierPoints;
     bezierPoints.reserve(3 * (count - 1));
 

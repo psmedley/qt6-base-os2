@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -17,8 +42,6 @@
 #include <qstylefactory.h>
 #include <qscreen.h>
 #include <qsignalspy.h>
-#include <private/qguiapplication_p.h>
-#include <qpa/qplatformintegration.h>
 
 typedef QList<QGraphicsItem *> QGraphicsItemList;
 
@@ -146,15 +169,7 @@ private slots:
     void QT_BUG_6544_tabFocusFirstUnsetWhenRemovingItems();
     void QT_BUG_12056_tabFocusFirstUnsetWhenRemovingItems();
     void QTBUG_45867_send_itemChildAddedChange_to_parent();
-
-private:
-    static bool hasWindowActivation();
 };
-
-bool tst_QGraphicsWidget::hasWindowActivation()
-{
-    return (QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation));
-}
 
 // Subclass that exposes the protected functions.
 class SubQGraphicsWidget : public QGraphicsWidget {
@@ -950,9 +965,9 @@ void tst_QGraphicsWidget::geometry()
     widget.setPos(pos);
     widget.resize(size);
     if (!size.isNull() && !pos.isNull())
-        QCOMPARE(spy.size(), 2);
+        QCOMPARE(spy.count(), 2);
     if (!size.isNull() && pos.isNull())
-        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy.count(), 1);
     QCOMPARE(widget.geometry(), QRectF(pos, size));
 }
 
@@ -963,10 +978,10 @@ void tst_QGraphicsWidget::geometryChanged()
     QCOMPARE(w.geometry(), QRectF(0, 0, 200, 200));
     QSignalSpy spy(&w, SIGNAL(geometryChanged()));
     w.setGeometry(0, 0, 100, 100);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     QCOMPARE(w.geometry(), QRectF(0, 0, 100, 100));
     w.setPos(10, 10);
-    QCOMPARE(spy.size(), 2);
+    QCOMPARE(spy.count(), 2);
     QCOMPARE(w.geometry(), QRectF(10, 10, 100, 100));
 
 }
@@ -978,10 +993,10 @@ void tst_QGraphicsWidget::width()
     QSignalSpy spy(&w, SIGNAL(widthChanged()));
     w.setProperty("width", qreal(50));
     QCOMPARE(w.property("width").toReal(), qreal(50));
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     //calling old school setGeometry should work too
     w.setGeometry(0, 0, 200, 200);
-    QCOMPARE(spy.size(), 2);
+    QCOMPARE(spy.count(), 2);
 }
 
 void tst_QGraphicsWidget::height()
@@ -991,10 +1006,10 @@ void tst_QGraphicsWidget::height()
     QSignalSpy spy(&w, SIGNAL(heightChanged()));
     w.setProperty("height", qreal(50));
     QCOMPARE(w.property("height").toReal(), qreal(50));
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     //calling old school setGeometry should work too
     w.setGeometry(0, 0, 200, 200);
-    QCOMPARE(spy.size(), 2);
+    QCOMPARE(spy.count(), 2);
 }
 
 void tst_QGraphicsWidget::getContentsMargins_data()
@@ -1059,10 +1074,7 @@ void tst_QGraphicsWidget::initStyleOption()
     QGraphicsView view(&scene);
     view.resize(300, 300);
     view.show();
-    if (hasWindowActivation())
-        QVERIFY(QTest::qWaitForWindowActive(&view));
-    else
-        QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(QTest::qWaitForWindowActive(&view));
 
     view.setAlignment(Qt::AlignTop | Qt::AlignLeft);
     SubQGraphicsWidget *widget = new SubQGraphicsWidget;
@@ -1076,12 +1088,10 @@ void tst_QGraphicsWidget::initStyleOption()
     QFETCH(bool, enabled);
     widget->setEnabled(enabled);
     QFETCH(bool, focus);
-    if (hasWindowActivation()) {
-        if (focus) {
-            widget->setFlag(QGraphicsItem::ItemIsFocusable, true);
-            widget->setFocus();
-            QVERIFY(widget->hasFocus());
-        }
+    if (focus) {
+        widget->setFlag(QGraphicsItem::ItemIsFocusable, true);
+        widget->setFocus();
+        QVERIFY(widget->hasFocus());
     }
     QFETCH(bool, underMouse);
     if (underMouse) {
@@ -1100,10 +1110,8 @@ void tst_QGraphicsWidget::initStyleOption()
 
     bool isEnabled = option.state & QStyle::State_Enabled;
     QCOMPARE(isEnabled, enabled);
-    if (hasWindowActivation()) {
-        bool hasFocus = option.state & QStyle::State_HasFocus;
-        QCOMPARE(hasFocus, focus);
-    }
+    bool hasFocus = option.state & QStyle::State_HasFocus;
+    QCOMPARE(hasFocus, focus);
     bool isUnderMouse = option.state & QStyle::State_MouseOver;
     QCOMPARE(isUnderMouse, underMouse);
     // if (layoutDirection != Qt::LeftToRight)
@@ -1140,12 +1148,12 @@ void tst_QGraphicsWidget::layout()
     widget.setLayout(layout);
 
     QTRY_COMPARE(widget.layout(), static_cast<QGraphicsLayout*>(layout));
-    for (int i = 0; i < children.size(); ++i) {
+    for (int i = 0; i < children.count(); ++i) {
         SubQGraphicsWidget *item = children[i];
         QCOMPARE(item->parentWidget(), (QGraphicsWidget *)&widget);
         QVERIFY(item->geometry() != QRectF(0, 0, -1, -1));
     }
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     // don't crash
     widget.setLayout(0);
 }
@@ -1178,7 +1186,7 @@ void tst_QGraphicsWidget::layoutDirection()
     QCOMPARE(widget.testAttribute(Qt::WA_SetLayoutDirection), true);
     view->show();
     QVERIFY(QTest::qWaitForWindowExposed(view.data()));
-    for (int i = 0; i < children.size(); ++i) {
+    for (int i = 0; i < children.count(); ++i) {
         QTRY_COMPARE(children[i]->layoutDirection(), layoutDirection);
         QTRY_COMPARE(children[i]->testAttribute(Qt::WA_SetLayoutDirection), false);
         view->update();
@@ -1416,7 +1424,7 @@ void tst_QGraphicsWidget::setTabOrder()
         QVERIFY(view.viewport()->hasFocus());
 
         int currentItem = 0;
-        while (currentItem < children.size() - 1) {
+        while (currentItem < children.count() - 1) {
             QTest::keyPress(view.viewport(), Qt::Key_Tab);
             ++currentItem;
             QVERIFY(children[currentItem % children.size()]->hasFocus());
@@ -1565,7 +1573,7 @@ void tst_QGraphicsWidget::unsetLayoutDirection()
     widget.setLayoutDirection(layoutDirection);
     widget.unsetLayoutDirection();
     QCOMPARE(widget.testAttribute(Qt::WA_SetLayoutDirection), false);
-    for (int i = 0; i < children.size(); ++i) {
+    for (int i = 0; i < children.count(); ++i) {
         QCOMPARE(children[i]->layoutDirection(), Qt::LeftToRight);
     }
 }
@@ -1730,16 +1738,13 @@ void tst_QGraphicsWidget::verifyFocusChain()
 
 void tst_QGraphicsWidget::updateFocusChainWhenChildDie()
 {
-    if (!hasWindowActivation())
-        QSKIP("Window activation is not supported");
-
     const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.resize(200, 150);
     view.move(availableGeometry.topLeft() + QPoint(50, 50));
     view.show();
-    view.activateWindow();
+    QApplication::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     // delete item in focus chain with no focus and verify chain
@@ -1768,8 +1773,13 @@ void tst_QGraphicsWidget::updateFocusChainWhenChildDie()
     w->setParentItem(parent);
     //We don't crash perfect
     QVERIFY(w);
-    view.activateWindow();
-    QVERIFY(QTest::qWaitForWindowActive(&view));
+    const QPoint center(view.viewport()->width() / 2, view.viewport()->height() / 2);
+    QTest::mouseMove(view.viewport(), center);
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, {}, center);
+#ifdef Q_OS_MAC
+    QEXPECT_FAIL("", "QTBUG-23699", Continue);
+#endif
+    QTRY_COMPARE(qApp->activeWindow(), static_cast<QWidget *>(&view));
     QTRY_COMPARE(scene.focusItem(), static_cast<QGraphicsItem *>(w));
 }
 
@@ -1855,7 +1865,7 @@ enum WhichSize {
     MinimumSizeHint,
     PreferredSizeHint,
     MaximumSizeHint,
-    WidgetSize,
+    Size,
     None,
 };
 
@@ -1870,48 +1880,48 @@ void tst_QGraphicsWidget::setSizes_data()
     QTest::addColumn<QList<Inst>>("compareInstructions");
 
     QTest::newRow("minSize1") << (QList<Inst>()
-                                  << Inst(WidgetSize, QSize(25, 25)) << Inst(MinimumSize, QSize(10, 10)))
-                              << (QList<Inst>() << Inst(WidgetSize, QSize(25, 25)));
-    QTest::newRow("minSize2") << (QList<Inst>() << Inst(WidgetSize, QSizeF(20, 20))
+                                  << Inst(Size, QSize(25, 25)) << Inst(MinimumSize, QSize(10, 10)))
+                              << (QList<Inst>() << Inst(Size, QSize(25, 25)));
+    QTest::newRow("minSize2") << (QList<Inst>() << Inst(Size, QSizeF(20, 20))
                                                 << Inst(MinimumSize, QSizeF(25, 25)))
-                              << (QList<Inst>() << Inst(WidgetSize, QSizeF(25, 25)));
+                              << (QList<Inst>() << Inst(Size, QSizeF(25, 25)));
     QTest::newRow("minWidth1") << (QList<Inst>()
-                                   << Inst(WidgetSize, QSizeF(20, 20)) << Inst(MinimumWidth, 5.0))
-                               << (QList<Inst>() << Inst(WidgetSize, QSizeF(20, 20)));
+                                   << Inst(Size, QSizeF(20, 20)) << Inst(MinimumWidth, 5.0))
+                               << (QList<Inst>() << Inst(Size, QSizeF(20, 20)));
     QTest::newRow("minWidth2") << (QList<Inst>()
-                                   << Inst(WidgetSize, QSizeF(20, 20)) << Inst(MinimumWidth, 25.0))
-                               << (QList<Inst>() << Inst(WidgetSize, QSizeF(25, 20)));
+                                   << Inst(Size, QSizeF(20, 20)) << Inst(MinimumWidth, 25.0))
+                               << (QList<Inst>() << Inst(Size, QSizeF(25, 20)));
     QTest::newRow("minHeight1") << (QList<Inst>()
-                                    << Inst(WidgetSize, QSizeF(20, 20)) << Inst(MinimumHeight, 5.0))
-                                << (QList<Inst>() << Inst(WidgetSize, QSizeF(20, 20)));
+                                    << Inst(Size, QSizeF(20, 20)) << Inst(MinimumHeight, 5.0))
+                                << (QList<Inst>() << Inst(Size, QSizeF(20, 20)));
     QTest::newRow("minHeight2") << (QList<Inst>()
-                                    << Inst(WidgetSize, QSizeF(20, 20)) << Inst(MinimumHeight, 25.0))
-                                << (QList<Inst>() << Inst(WidgetSize, QSizeF(20, 25)));
-    QTest::newRow("maxSize1") << (QList<Inst>() << Inst(WidgetSize, QSizeF(40, 40))
+                                    << Inst(Size, QSizeF(20, 20)) << Inst(MinimumHeight, 25.0))
+                                << (QList<Inst>() << Inst(Size, QSizeF(20, 25)));
+    QTest::newRow("maxSize1") << (QList<Inst>() << Inst(Size, QSizeF(40, 40))
                                                 << Inst(MaximumSize, QSizeF(30, 30)))
-                              << (QList<Inst>() << Inst(WidgetSize, QSizeF(30, 30)));
-    QTest::newRow("maxSize2") << (QList<Inst>() << Inst(WidgetSize, QSizeF(40, 40))
+                              << (QList<Inst>() << Inst(Size, QSizeF(30, 30)));
+    QTest::newRow("maxSize2") << (QList<Inst>() << Inst(Size, QSizeF(40, 40))
                                                 << Inst(MaximumSize, QSizeF(30, -1)))
-                              << (QList<Inst>() << Inst(WidgetSize, QSizeF(30, 40)));
-    QTest::newRow("maxSize3") << (QList<Inst>() << Inst(WidgetSize, QSizeF(40, 40))
+                              << (QList<Inst>() << Inst(Size, QSizeF(30, 40)));
+    QTest::newRow("maxSize3") << (QList<Inst>() << Inst(Size, QSizeF(40, 40))
                                                 << Inst(MaximumSize, QSizeF(-1, 30)))
-                              << (QList<Inst>() << Inst(WidgetSize, QSizeF(40, 30)));
+                              << (QList<Inst>() << Inst(Size, QSizeF(40, 30)));
     QTest::newRow("maxWidth1") << (QList<Inst>()
-                                   << Inst(WidgetSize, QSizeF(40, 40)) << Inst(MaximumWidth, 30))
-                               << (QList<Inst>() << Inst(WidgetSize, QSizeF(30, 40)));
+                                   << Inst(Size, QSizeF(40, 40)) << Inst(MaximumWidth, 30))
+                               << (QList<Inst>() << Inst(Size, QSizeF(30, 40)));
     QTest::newRow("maxHeight") << (QList<Inst>()
-                                   << Inst(WidgetSize, QSizeF(40, 40)) << Inst(MaximumHeight, 20))
-                               << (QList<Inst>() << Inst(WidgetSize, QSizeF(40, 20)));
-    QTest::newRow("unsetMinSize") << (QList<Inst>() << Inst(WidgetSize, QSizeF(40, 40))
+                                   << Inst(Size, QSizeF(40, 40)) << Inst(MaximumHeight, 20))
+                               << (QList<Inst>() << Inst(Size, QSizeF(40, 20)));
+    QTest::newRow("unsetMinSize") << (QList<Inst>() << Inst(Size, QSizeF(40, 40))
                                                     << Inst(MinimumSize, QSizeF(-1, -1)))
                                   << (QList<Inst>() << Inst(MinimumSize, QSizeF(5, 5)));
-    QTest::newRow("unsetMaxSize") << (QList<Inst>() << Inst(WidgetSize, QSizeF(40, 40))
+    QTest::newRow("unsetMaxSize") << (QList<Inst>() << Inst(Size, QSizeF(40, 40))
                                                     << Inst(MaximumSize, QSizeF(-1, -1)))
                                   << (QList<Inst>() << Inst(MaximumSize, QSizeF(500, 500)));
     QTest::newRow("unsetMinSize, expand size to minimumSizeHint")
-            << (QList<Inst>() << Inst(MinimumSize, QSize(0, 0)) << Inst(WidgetSize, QSize(1, 1))
+            << (QList<Inst>() << Inst(MinimumSize, QSize(0, 0)) << Inst(Size, QSize(1, 1))
                               << Inst(MinimumSize, QSize(-1.0, -1.0)))
-            << (QList<Inst>() << Inst(WidgetSize, QSize(5, 5)) << Inst(MinimumSize, QSize(5, 5)));
+            << (QList<Inst>() << Inst(Size, QSize(5, 5)) << Inst(MinimumSize, QSize(5, 5)));
 }
 
 void tst_QGraphicsWidget::setSizes()
@@ -1927,7 +1937,7 @@ void tst_QGraphicsWidget::setSizes()
     QSizeF max = QSizeF(50, 50);
 
     int i;
-    for (i = 0; i < inputInstructions.size(); ++i) {
+    for (i = 0; i < inputInstructions.count(); ++i) {
         Inst input = inputInstructions.at(i);
 
         // defaults
@@ -1941,7 +1951,7 @@ void tst_QGraphicsWidget::setSizes()
             case MaximumSize:
                 max = input.second.toSizeF();
                 break;
-            case WidgetSize :
+            case Size:
                 widget->resize(input.second.toSizeF());
                 break;
             case MinimumWidth:
@@ -1981,7 +1991,7 @@ void tst_QGraphicsWidget::setSizes()
     widget->setPreferredSize(pref);
     widget->setMaximumSize(max);
 
-    for (i = 0; i < compareInstructions.size(); ++i) {
+    for (i = 0; i < compareInstructions.count(); ++i) {
         Inst input = compareInstructions.at(i);
         switch (input.first) {
             case MinimumSize:
@@ -1993,7 +2003,7 @@ void tst_QGraphicsWidget::setSizes()
             case MaximumSize:
                 QTRY_COMPARE(widget->maximumSize(), input.second.toSizeF());
                 break;
-            case WidgetSize:
+            case Size:
                 QTRY_COMPARE(widget->size(), input.second.toSizeF());
                 break;
             case MinimumWidth:
@@ -2731,11 +2741,11 @@ void tst_QGraphicsWidget::task250119_shortcutContext()
 
     w_signal.setFocus();
     QTest::keyPress(&view, Qt::Key_B);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 
     w_signal.clearFocus();
     QTest::keyPress(&view, Qt::Key_B);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
 
     scene.removeItem(&w_signal);
 }
@@ -2952,9 +2962,11 @@ void tst_QGraphicsWidget::respectHFW()
         view->grabMouse();
         // move both mouse cursor and set correct event in order to emulate resize
         QTest::mouseMove(view->viewport(), view->mapFromScene(60, 30), 200);
-        auto pos = view->mapFromScene(60, 20);
-        QMouseEvent e(QEvent::MouseMove, pos, view->mapToGlobal(pos),
-                      Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QMouseEvent e = QMouseEvent(QEvent::MouseMove,
+                      view->mapFromScene(60, 20),
+                      Qt::NoButton,
+                      Qt::LeftButton,
+                      Qt::NoModifier);
         QApplication::sendEvent(view->viewport(), &e);
         view->releaseMouse();
     }
@@ -3114,8 +3126,7 @@ void tst_QGraphicsWidget::initialShow()
     EventSpy paintSpy(dummyView->viewport(), QEvent::Paint);
     dummyView->show();
     qApp->setActiveWindow(dummyView.data());
-    if (!QTest::qWaitForWindowActive(dummyView.data()))
-        QSKIP("Graphics view failed to show (possibly due to Qt::X11BypassWindowManagerHint");
+    QVERIFY(QTest::qWaitForWindowActive(dummyView.data()));
     const int expectedRepaintCount = paintSpy.count();
     dummyView.reset();
 

@@ -1,11 +1,48 @@
 #!/bin/bash
-# Copyright (C) 2017 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+
+#############################################################################
+##
+## Copyright (C) 2017 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is the build configuration utility of the Qt Toolkit.
+##
+## $QT_BEGIN_LICENSE:LGPL$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU Lesser General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU Lesser
+## General Public License version 3 as published by the Free Software
+## Foundation and appearing in the file LICENSE.LGPL3 included in the
+## packaging of this file. Please review the following information to
+## ensure the GNU Lesser General Public License version 3 requirements
+## will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 2.0 or (at your option) the GNU General
+## Public license version 3 or any later version approved by the KDE Free
+## Qt Foundation. The licenses are as published by the Free Software
+## Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-2.0.html and
+## https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
 
 script_argument_prefix="-Wobjc_namespace,--"
 
 required_arguments="target suffix original_ld"
-optional_arguments="exclude_list exclude_regex silent"
+optional_arguments="exclude_list exclude_regex slient"
 
 for argument in $required_arguments $optional_arguments; do
     declare "$argument="
@@ -63,13 +100,11 @@ sanitize_address() {
     echo "0x$address"
 }
 
-arch_offset=0
 read_binary() {
     local address=$1
     local length=$2
 
-    seek=$(($address + $arch_offset))
-    dd if="$target" bs=1 iseek=$seek count=$length 2>|/dev/null
+    dd if="$target" bs=1 iseek=$address count=$length 2>|/dev/null
 }
 
 read_32bit_value() {
@@ -77,23 +112,23 @@ read_32bit_value() {
     read_binary $address 4 | xxd -p | dd conv=swab 2>/dev/null | rev
 }
 
-otool_args=
-otool() {
-    command otool $otool_args "$@"
-}
-
-declare -a extra_classnames_files
-
 inspect_binary() {
     inspect_mode="$1"
 
-    classnames_section="__objc_classname"
-    classnames=$(otool -v -s __TEXT $classnames_section "$target" | tail -n +3)
-    if [ -z "$classnames" ]; then
-        echo " ℹ️  No Objective-C classes found in binary"
-        return 1
+    echo -n "🔎  Inspecting binary '$target', "
+    if [ ! -f "$target" ]; then
+        echo "target does not exist!"
+        exit 1
     fi
 
+    read -a mach_header <<< "$(otool -h "$target" -v | tail -n 1)"
+    if [ "${mach_header[1]}" != "X86_64" ]; then
+        echo "binary is not 64-bit, only 64-bit binaries are supported!"
+        exit 1
+    fi
+
+    classnames_section="__objc_classname"
+    classnames=$(otool -v -s __TEXT $classnames_section "$target" | tail -n +3)
     while read -a classname; do
         address=$(sanitize_address ${classname[0]})
         name=${classname[1]}
@@ -103,26 +138,21 @@ inspect_binary() {
     done <<< "$classnames"
 
     extra_classnames_file="$(mktemp -t ${classnames_section}_additions).S"
-    extra_classnames_files+=("$extra_classnames_file")
 
     if [ "$inspect_mode" == "inject_classnames" ]; then
-        echo " ℹ️  Class names have not been namespaced, adding suffix '$suffix'..."
+        echo "class names have not been namespaced, adding suffix '$suffix'..."
         printf ".section __TEXT,$classnames_section,cstring_literals,no_dead_strip\n" > $extra_classnames_file
     elif [ "$inspect_mode" == "patch_classes" ]; then
-        echo " ℹ️  Found namespaced class names, updating class entries..."
+        echo "found namespaced class names, updating class entries..."
     fi
 
-    classes=$(otool -o -v "$target" | grep "OBJC_CLASS_RO\|OBJC_METACLASS_RO")
-    if [ -z "$classes" ]; then
-        echo " 💥  Failed to read class entries from binary"
-        exit 1
-    fi
-
+    classes=$(otool -o -v "$target" | grep class_ro_t)
     while read -a class; do
         address="$(sanitize_address ${class[1]})"
+
         class_flags="0x$(read_32bit_value $address)"
         if [ -z "$class_flags" ]; then
-            echo " 💥  Failed to read class flags for class at $address"
+            echo " 💥  failed to read class flags for class at $address"
             continue
         fi
 
@@ -131,13 +161,13 @@ inspect_binary() {
         name_offset=$(($address + 24))
         classname_address="0x$(read_32bit_value $name_offset)"
         if [ -z "$classname_address" ]; then
-            echo " 💥  Failed to read class name address for class at $address"
+            echo " 💥  failed to read class name address for class at $address"
             continue
         fi
 
         classname=$(get_entry address_to_classname $classname_address)
         if [ -z "$classname" ]; then
-            echo " 💥  Failed to resolve class name for address '$classname_address'"
+            echo " 💥  failed to resolve class name for address '$classname_address'"
             continue
         fi
 
@@ -147,7 +177,7 @@ inspect_binary() {
             else
                 class_type="class"
             fi
-            echo " 🚽  Skipping excluded $class_type '$classname'"
+            echo " 🚽  skipping excluded $class_type '$classname'"
             continue
         fi
 
@@ -158,13 +188,13 @@ inspect_binary() {
                 continue
             fi
 
-            echo " 💉  Injecting $classnames_section entry '$newclassname' for '$classname'"
+            echo " 💉  injecting $classnames_section entry '$newclassname' for '$classname'"
             printf ".asciz \"$newclassname\"\n" >> $extra_classnames_file
 
         elif [ "$inspect_mode" == "patch_classes" ]; then
             newclassname_address=$(get_entry classname_to_address ${newclassname})
             if [ -z "$newclassname_address" ]; then
-                echo " 💥  Failed to resolve class name address for class '$newclassname'"
+                echo " 💥  failed to resolve class name address for class '$newclassname'"
                 continue
             fi
 
@@ -174,9 +204,7 @@ inspect_binary() {
                 class_type="class"
             fi
 
-            name_offset=$(($name_offset + $arch_offset))
-
-            echo " 🔨  Patching class_ro_t at $address ($class_type) from $classname_address ($classname) to $newclassname_address ($newclassname)"
+            echo " 🔨  patching class_ro_t at $address ($class_type) from $classname_address ($classname) to $newclassname_address ($newclassname)"
             echo ${newclassname_address: -8} | rev | dd conv=swab 2>/dev/null | xxd -p -r -seek $name_offset -l 4 - "$target"
         fi
     done <<< "$classes"
@@ -185,43 +213,10 @@ inspect_binary() {
 echo "🔩  Linking binary using '$original_ld'..."
 link_binary
 
-echo "🔎  Inspecting binary '$target'..."
-if [ ! -f "$target" ]; then
-    echo " 💥  Target does not exist!"
-    exit 1
-fi
+inspect_binary inject_classnames
 
-read -a mach_header <<< "$(otool -h "$target" -v | tail -n 1)"
-if [ "${mach_header[0]}" != "MH_MAGIC_64" ]; then
-    echo " 💥  Binary is not 64-bit, only 64-bit binaries are supported!"
-    exit 1
-fi
+echo "🔩  Re-linking binary with extra __objc_classname section..."
+link_binary $extra_classnames_file
 
-architectures=$(otool -f -v "$target" | grep architecture)
+inspect_binary patch_classes
 
-setup_arch() {
-    arch="$1"
-    if [ ! -z "$arch" ]; then
-        otool_args="-arch $arch"
-        offset=$(otool -f -v "$target" | grep -A 6 "architecture $arch" | grep offset)
-        offset="${offset##*( )}"
-        arch_offset="$(echo $offset | cut -d ' ' -f 2)"
-        echo "🤖 Processing architecture '$arch' at offset $arch_offset..."
-    fi
-}
-
-while read -a arch; do
-    setup_arch "${arch[1]}"
-    inspect_binary inject_classnames
-    if [ $? -ne 0 ]; then
-        exit
-    fi
-done <<< "$architectures"
-
-echo "🔩  Re-linking binary with extra __objc_classname section(s)..."
-link_binary "${extra_classnames_files[@]}"
-
-while read -a arch; do
-    setup_arch "${arch[1]}"
-    inspect_binary patch_classes
-done <<< "$architectures"

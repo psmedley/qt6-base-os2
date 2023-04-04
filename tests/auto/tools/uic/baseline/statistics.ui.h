@@ -1,8 +1,31 @@
 /*
-
-* Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
-
+*********************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the autotests of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+*********************************************************************
 */
 
 /********************************************************************************
@@ -53,24 +76,24 @@ public:
     void setupUi(QDialog *Statistics)
     {
         if (Statistics->objectName().isEmpty())
-            Statistics->setObjectName("Statistics");
+            Statistics->setObjectName(QString::fromUtf8("Statistics"));
         Statistics->setObjectName(QString::fromUtf8("linguist_stats"));
         Statistics->resize(336, 164);
         gridLayout = new QGridLayout(Statistics);
         gridLayout->setSpacing(6);
         gridLayout->setContentsMargins(11, 11, 11, 11);
-        gridLayout->setObjectName("gridLayout");
+        gridLayout->setObjectName(QString::fromUtf8("gridLayout"));
         gridLayout->setObjectName(QString::fromUtf8("unnamed"));
         hboxLayout = new QHBoxLayout();
         hboxLayout->setSpacing(6);
-        hboxLayout->setObjectName("hboxLayout");
+        hboxLayout->setObjectName(QString::fromUtf8("hboxLayout"));
         hboxLayout->setObjectName(QString::fromUtf8("unnamed"));
         spacer4_2 = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
 
         hboxLayout->addItem(spacer4_2);
 
         closeBtn = new QPushButton(Statistics);
-        closeBtn->setObjectName("closeBtn");
+        closeBtn->setObjectName(QString::fromUtf8("closeBtn"));
 
         hboxLayout->addWidget(closeBtn);
 
@@ -82,66 +105,66 @@ public:
         gridLayout->addLayout(hboxLayout, 1, 0, 1, 1);
 
         frame4 = new QFrame(Statistics);
-        frame4->setObjectName("frame4");
+        frame4->setObjectName(QString::fromUtf8("frame4"));
         frame4->setFrameShape(QFrame::StyledPanel);
         frame4->setFrameShadow(QFrame::Raised);
         gridLayout1 = new QGridLayout(frame4);
         gridLayout1->setSpacing(6);
         gridLayout1->setContentsMargins(11, 11, 11, 11);
-        gridLayout1->setObjectName("gridLayout1");
+        gridLayout1->setObjectName(QString::fromUtf8("gridLayout1"));
         gridLayout1->setObjectName(QString::fromUtf8("unnamed"));
         textLabel4 = new QLabel(frame4);
-        textLabel4->setObjectName("textLabel4");
+        textLabel4->setObjectName(QString::fromUtf8("textLabel4"));
 
         gridLayout1->addWidget(textLabel4, 0, 2, 1, 1);
 
         textLabel5 = new QLabel(frame4);
-        textLabel5->setObjectName("textLabel5");
+        textLabel5->setObjectName(QString::fromUtf8("textLabel5"));
 
         gridLayout1->addWidget(textLabel5, 0, 1, 1, 1);
 
         untrWords = new QLabel(frame4);
-        untrWords->setObjectName("untrWords");
+        untrWords->setObjectName(QString::fromUtf8("untrWords"));
 
         gridLayout1->addWidget(untrWords, 1, 1, 1, 1);
 
         trWords = new QLabel(frame4);
-        trWords->setObjectName("trWords");
+        trWords->setObjectName(QString::fromUtf8("trWords"));
 
         gridLayout1->addWidget(trWords, 1, 2, 1, 1);
 
         textLabel1 = new QLabel(frame4);
-        textLabel1->setObjectName("textLabel1");
+        textLabel1->setObjectName(QString::fromUtf8("textLabel1"));
 
         gridLayout1->addWidget(textLabel1, 1, 0, 1, 1);
 
         trChars = new QLabel(frame4);
-        trChars->setObjectName("trChars");
+        trChars->setObjectName(QString::fromUtf8("trChars"));
 
         gridLayout1->addWidget(trChars, 2, 2, 1, 1);
 
         untrChars = new QLabel(frame4);
-        untrChars->setObjectName("untrChars");
+        untrChars->setObjectName(QString::fromUtf8("untrChars"));
 
         gridLayout1->addWidget(untrChars, 2, 1, 1, 1);
 
         textLabel3 = new QLabel(frame4);
-        textLabel3->setObjectName("textLabel3");
+        textLabel3->setObjectName(QString::fromUtf8("textLabel3"));
 
         gridLayout1->addWidget(textLabel3, 2, 0, 1, 1);
 
         textLabel6 = new QLabel(frame4);
-        textLabel6->setObjectName("textLabel6");
+        textLabel6->setObjectName(QString::fromUtf8("textLabel6"));
 
         gridLayout1->addWidget(textLabel6, 3, 0, 1, 1);
 
         trCharsSpc = new QLabel(frame4);
-        trCharsSpc->setObjectName("trCharsSpc");
+        trCharsSpc->setObjectName(QString::fromUtf8("trCharsSpc"));
 
         gridLayout1->addWidget(trCharsSpc, 3, 2, 1, 1);
 
         untrCharsSpc = new QLabel(frame4);
-        untrCharsSpc->setObjectName("untrCharsSpc");
+        untrCharsSpc->setObjectName(QString::fromUtf8("untrCharsSpc"));
 
         gridLayout1->addWidget(untrCharsSpc, 3, 1, 1, 1);
 

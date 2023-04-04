@@ -1,11 +1,35 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 
 #include <qhash.h>
 #include <qmap.h>
-#include <qset.h>
 
 #include <algorithm>
 #include <vector>
@@ -13,8 +37,6 @@
 #include <string>
 
 #include <qsemaphore.h>
-
-using namespace Qt::StringLiterals;
 
 class tst_QHash : public QObject
 {
@@ -75,16 +97,12 @@ private slots:
     void fineTuningInEmptyHash();
 
     void reserveShared();
-    void reserveLessThanCurrentAmount();
 
     void QTBUG98265();
 
     void detachAndReferences();
 
     void lookupUsingKeyIterator();
-
-    void squeeze();
-    void squeezeShared();
 };
 
 struct IdentityTracker {
@@ -168,13 +186,13 @@ void tst_QHash::count()
     {
         MyMap map;
         MyMap map2( map );
-        QCOMPARE( map.size(), 0 );
-        QCOMPARE( map2.size(), 0 );
+        QCOMPARE( map.count(), 0 );
+        QCOMPARE( map2.count(), 0 );
         QCOMPARE( MyClass::count, 0 );
         // detach
         map2["Hallo"] = MyClass( "Fritz" );
-        QCOMPARE( map.size(), 0 );
-        QCOMPARE( map2.size(), 1 );
+        QCOMPARE( map.count(), 0 );
+        QCOMPARE( map2.count(), 1 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 1 );
 #endif
@@ -184,11 +202,11 @@ void tst_QHash::count()
     {
         typedef QHash<QString, MyClass> Map;
         Map map;
-        QCOMPARE( map.size(), 0);
+        QCOMPARE( map.count(), 0);
         map.insert( "Torben", MyClass("Weis") );
-        QCOMPARE( map.size(), 1 );
+        QCOMPARE( map.count(), 1 );
         map.insert( "Claudia", MyClass("Sorg") );
-        QCOMPARE( map.size(), 2 );
+        QCOMPARE( map.count(), 2 );
         map.insert( "Lars", MyClass("Linzbach") );
         map.insert( "Matthias", MyClass("Ettrich") );
         map.insert( "Sue", MyClass("Paludo") );
@@ -196,7 +214,7 @@ void tst_QHash::count()
         map.insert( "Haavard", MyClass("Nord") );
         map.insert( "Arnt", MyClass("Gulbrandsen") );
         map.insert( "Paul", MyClass("Tvete") );
-        QCOMPARE( map.size(), 9 );
+        QCOMPARE( map.count(), 9 );
         map.insert( "Paul", MyClass("Tvete 1") );
         map.insert( "Paul", MyClass("Tvete 2") );
         map.insert( "Paul", MyClass("Tvete 3") );
@@ -204,68 +222,68 @@ void tst_QHash::count()
         map.insert( "Paul", MyClass("Tvete 5") );
         map.insert( "Paul", MyClass("Tvete 6") );
 
-        QCOMPARE( map.size(), 9 );
+        QCOMPARE( map.count(), 9 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         Map map2( map );
-        QVERIFY( map2.size() == 9 );
+        QVERIFY( map2.count() == 9 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         map2.insert( "Kay", MyClass("Roemer") );
-        QVERIFY( map2.size() == 10 );
-        QVERIFY( map.size() == 9 );
+        QVERIFY( map2.count() == 10 );
+        QVERIFY( map.count() == 9 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 19 );
 #endif
 
         map2 = map;
-        QVERIFY( map.size() == 9 );
-        QVERIFY( map2.size() == 9 );
+        QVERIFY( map.count() == 9 );
+        QVERIFY( map2.count() == 9 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         map2.insert( "Kay", MyClass("Roemer") );
-        QVERIFY( map2.size() == 10 );
+        QVERIFY( map2.count() == 10 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 19 );
 #endif
 
         map2.clear();
-        QVERIFY( map.size() == 9 );
-        QVERIFY( map2.size() == 0 );
+        QVERIFY( map.count() == 9 );
+        QVERIFY( map2.count() == 0 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         map2 = map;
-        QVERIFY( map.size() == 9 );
-        QVERIFY( map2.size() == 9 );
+        QVERIFY( map.count() == 9 );
+        QVERIFY( map2.count() == 9 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         map2.clear();
-        QVERIFY( map.size() == 9 );
-        QVERIFY( map2.size() == 0 );
+        QVERIFY( map.count() == 9 );
+        QVERIFY( map2.count() == 0 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 9 );
 #endif
 
         map.remove( "Lars" );
-        QVERIFY( map.size() == 8 );
-        QVERIFY( map2.size() == 0 );
+        QVERIFY( map.count() == 8 );
+        QVERIFY( map2.count() == 0 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 8 );
 #endif
 
         map.remove( "Mist" );
-        QVERIFY( map.size() == 8 );
-        QVERIFY( map2.size() == 0 );
+        QVERIFY( map.count() == 8 );
+        QVERIFY( map2.count() == 0 );
 #ifndef Q_CC_SUN
         QCOMPARE( MyClass::count, 8 );
 #endif
@@ -279,22 +297,22 @@ void tst_QHash::count()
 #ifndef Q_CC_SUN
          QVERIFY( MyClass::count == 1 );
 #endif
-         QVERIFY( map.size() == 1 );
+         QVERIFY( map.count() == 1 );
 
          (void)map["Torben"].str;
          (void)map["Lars"].str;
 #ifndef Q_CC_SUN
          QVERIFY( MyClass::count == 2 );
 #endif
-         QVERIFY( map.size() == 2 );
+         QVERIFY( map.count() == 2 );
 
          const Map& cmap = map;
          (void)cmap["Depp"].str;
 #ifndef Q_CC_SUN
          QVERIFY( MyClass::count == 2 );
 #endif
-         QVERIFY( map.size() == 2 );
-         QVERIFY( cmap.size() == 2 );
+         QVERIFY( map.count() == 2 );
+         QVERIFY( cmap.count() == 2 );
     }
     QCOMPARE( MyClass::count, 0 );
     {
@@ -559,40 +577,14 @@ void tst_QHash::erase()
 */
 void tst_QHash::erase_edge_case()
 {
-    QHashSeed::setDeterministicGlobalSeed();
-    auto resetSeed = qScopeGuard([&]() {
-        QHashSeed::resetRandomGlobalSeed();
-    });
-
     QHash<int, int> h1;
     h1.reserve(2);
-    qsizetype capacity = h1.capacity();
-    // Beholden to QHash internals:
-    qsizetype numBuckets = capacity << 1;
-
-    // Find some keys which will both be slotted into the last bucket:
-    int keys[2];
-    int index = 0;
-    for (qsizetype i = 0; i < numBuckets * 4 && index < 2; ++i) {
-        const size_t hash = qHash(i, QHashSeed::globalSeed());
-        const size_t bucketForHash = QHashPrivate::GrowthPolicy::bucketForHash(numBuckets, hash);
-        if (qsizetype(bucketForHash) == numBuckets - 1)
-            keys[index++] = i;
-    }
-    QCOMPARE(index, 2); // Sanity check. If this fails then the test needs an update!
-
-    // As mentioned earlier these are both calculated to be in the last bucket:
-    h1.insert(keys[0], 4);
-    h1.insert(keys[1], 6);
-    // As a sanity-check, make sure that the key we inserted last is the first one (because its
-    // allocation to the last bucket would make it wrap around):
-    // NOTE: If this fails this then this test may need an update!!!
-    QCOMPARE(h1.constBegin().key(), keys[1]);
-    // Then we delete the last entry:
+    h1.d->seed = 10230148258692185509ull;
+    h1.insert(3, 4);
+    h1.insert(5, 6);
     QHash<int, int>::iterator it1 = h1.begin();
     ++it1;
     it1 = h1.erase(it1);
-    // Now, since we deleted the last entry, the iterator should be at the end():
     QVERIFY(it1 == h1.end());
 }
 
@@ -1629,9 +1621,9 @@ void tst_QHash::rehash_isnt_quadratic()
 {
     // this test should be incredibly slow if rehash() is quadratic
     for (int j = 0; j < 5; ++j) {
-        QHash<int, int> testHash;
+        QMultiHash<int, int> testHash;
         for (int i = 0; i < 500000; ++i)
-            testHash.insert(i, 1);
+            testHash.insert(1, 1);
     }
 }
 
@@ -1688,26 +1680,26 @@ void tst_QHash::qmultihash_specific()
     }
 
     QVERIFY(hash1.contains(9, 99));
-    QCOMPARE(hash1.size(), 45);
+    QCOMPARE(hash1.count(), 45);
     hash1.remove(9, 99);
     QVERIFY(!hash1.contains(9, 99));
-    QCOMPARE(hash1.size(), 44);
+    QCOMPARE(hash1.count(), 44);
 
     hash1.remove(9, 99);
     QVERIFY(!hash1.contains(9, 99));
-    QCOMPARE(hash1.size(), 44);
+    QCOMPARE(hash1.count(), 44);
 
     hash1.remove(1, 99);
-    QCOMPARE(hash1.size(), 44);
+    QCOMPARE(hash1.count(), 44);
 
     hash1.insert(1, 99);
     hash1.insert(1, 99);
 
-    QCOMPARE(hash1.size(), 46);
+    QCOMPARE(hash1.count(), 46);
     hash1.remove(1, 99);
-    QCOMPARE(hash1.size(), 44);
+    QCOMPARE(hash1.count(), 44);
     hash1.remove(1, 99);
-    QCOMPARE(hash1.size(), 44);
+    QCOMPARE(hash1.count(), 44);
 
     {
     QMultiHash<int, int>::const_iterator i = hash1.constFind(1, 11);
@@ -1753,10 +1745,10 @@ void tst_QHash::qmultihash_specific()
     }
 
     QCOMPARE(hash1.count(9), 8);
-    QCOMPARE(hash1.size(), 44);
+    QCOMPARE(hash1.count(), 44);
     hash1.remove(9);
     QCOMPARE(hash1.count(9), 0);
-    QCOMPARE(hash1.size(), 36);
+    QCOMPARE(hash1.count(), 36);
 
     {
     QMultiHash<int, int> map1;
@@ -1772,7 +1764,7 @@ void tst_QHash::qmultihash_specific()
     map2.insert(42, 1);
     map2.insert(10, 2);
     map2.insert(48, 3);
-    QCOMPARE(map1.size(), map2.size());
+    QCOMPARE(map1.count(), map2.count());
     QVERIFY(map1.remove(42,5));
     QVERIFY(map1 != map2);
     QVERIFY(map2.remove(42,5));
@@ -1781,7 +1773,7 @@ void tst_QHash::qmultihash_specific()
     QHash<int, int> hash;
     hash.insert(-1, -1);
     map2.unite(hash);
-    QCOMPARE(map2.size(), 6);
+    QCOMPARE(map2.count(), 6);
     QCOMPARE(map2[-1], -1);
     }
 }
@@ -2168,7 +2160,7 @@ void tst_QHash::twoArguments_qHash()
 void tst_QHash::initializerList()
 {
     QHash<int, QString> hash = {{1, "bar"}, {1, "hello"}, {2, "initializer_list"}};
-    QCOMPARE(hash.size(), 2);
+    QCOMPARE(hash.count(), 2);
     QCOMPARE(hash[1], QString("hello"));
     QCOMPARE(hash[2], QString("initializer_list"));
 
@@ -2178,9 +2170,9 @@ void tst_QHash::initializerList()
     // QCOMPARE(stdh[1], QString("bar"));
 
     QMultiHash<QString, int> multiHash{{"il", 1}, {"il", 2}, {"il", 3}};
-    QCOMPARE(multiHash.size(), 3);
+    QCOMPARE(multiHash.count(), 3);
     QList<int> values = multiHash.values("il");
-    QCOMPARE(values.size(), 3);
+    QCOMPARE(values.count(), 3);
 
     QHash<int, int> emptyHash{};
     QVERIFY(emptyHash.isEmpty());
@@ -2352,7 +2344,7 @@ void tst_QHash::insert_hash()
 
         hash.insert(hash2);
 
-        QCOMPARE(hash.size(), 5);
+        QCOMPARE(hash.count(), 5);
         for (int i = 0; i < 5; ++i)
             QCOMPARE(hash[i], i);
     }
@@ -2364,7 +2356,7 @@ void tst_QHash::insert_hash()
 
         hash.insert(hash2);
 
-        QCOMPARE(hash.size(), 1);
+        QCOMPARE(hash.count(), 1);
         QCOMPARE(hash[0], 5);
     }
     {
@@ -2374,7 +2366,7 @@ void tst_QHash::insert_hash()
 
         hash.insert(hash2);
 
-        QCOMPARE(hash.size(), 1);
+        QCOMPARE(hash.count(), 1);
         QCOMPARE(hash[0], 5);
         QCOMPARE(hash, hash2);
     }
@@ -2387,7 +2379,7 @@ void tst_QHash::insert_hash()
         // insert into ourself, nothing should happen
         hash.insert(hash);
 
-        QCOMPARE(hash.size(), 3);
+        QCOMPARE(hash.count(), 3);
         QCOMPARE(hash[0], 7);
         QCOMPARE(hash[2], 5);
         QCOMPARE(hash[7], 55);
@@ -2561,13 +2553,13 @@ void tst_QHash::countInEmptyHash()
 {
     {
         QHash<int, int> hash;
-        QCOMPARE(hash.size(), 0);
+        QCOMPARE(hash.count(), 0);
         QCOMPARE(hash.count(42), 0);
     }
 
     {
         QMultiHash<int, int> hash;
-        QCOMPARE(hash.size(), 0);
+        QCOMPARE(hash.count(), 0);
         QCOMPARE(hash.count(42), 0);
         QCOMPARE(hash.count(42, 1), 0);
     }
@@ -2648,36 +2640,6 @@ void tst_QHash::reserveShared()
     QCOMPARE(hash.capacity(), oldCap);
 }
 
-void tst_QHash::reserveLessThanCurrentAmount()
-{
-    {
-        QHash<int, int> hash;
-        for (int i = 0; i < 1000; ++i)
-            hash.insert(i, i * 10);
-
-        // This used to hang in an infinite loop: QTBUG-102067
-        hash.reserve(1);
-
-        // Make sure that hash still has all elements
-        for (int i = 0; i < 1000; ++i)
-            QCOMPARE(hash.value(i), i * 10);
-    }
-    {
-        QMultiHash<int, int> hash;
-        for (int i = 0; i < 1000; ++i) {
-            hash.insert(i, i * 10);
-            hash.insert(i, i * 10 + 1);
-        }
-
-        // This used to hang in infinite loop: QTBUG-102067
-        hash.reserve(1);
-
-        // Make sure that hash still has all elements
-        for (int i = 0; i < 1000; ++i)
-            QCOMPARE(hash.values(i), QList<int>({ i * 10 + 1, i * 10 }));
-    }
-}
-
 void tst_QHash::QTBUG98265()
 {
     QMultiHash<QUuid, QByteArray> a;
@@ -2748,100 +2710,10 @@ void tst_QHash::lookupUsingKeyIterator()
     qsizetype rehashLimit = minCapacity == 64 ? 63 : 8;
 
     for (char16_t c = u'a'; c <= u'a' + rehashLimit; ++c)
-        hash.insert(QString(QChar(c)), u"h"_s);
+        hash.insert(QString(QChar(c)), u"h"_qs);
 
     for (auto it = hash.keyBegin(), end = hash.keyEnd(); it != end; ++it)
         QVERIFY(!hash[*it].isEmpty());
-}
-
-void tst_QHash::squeeze()
-{
-    {
-        QHash<int, int> hash;
-        hash.reserve(1000);
-        for (int i = 0; i < 10; ++i)
-            hash.insert(i, i * 10);
-        QVERIFY(hash.isDetached());
-        const size_t buckets = hash.bucket_count();
-        const qsizetype size = hash.size();
-
-        hash.squeeze();
-
-        QVERIFY(hash.bucket_count() < buckets);
-        QCOMPARE(hash.size(), size);
-        for (int i = 0; i < size; ++i)
-            QCOMPARE(hash.value(i), i * 10);
-    }
-    {
-        QMultiHash<int, int> hash;
-        hash.reserve(1000);
-        for (int i = 0; i < 10; ++i) {
-            hash.insert(i, i * 10);
-            hash.insert(i, i * 10 + 1);
-        }
-        QVERIFY(hash.isDetached());
-        const size_t buckets = hash.bucket_count();
-        const qsizetype size = hash.size();
-
-        hash.squeeze();
-
-        QVERIFY(hash.bucket_count() < buckets);
-        QCOMPARE(hash.size(), size);
-        for (int i = 0; i < (size / 2); ++i)
-            QCOMPARE(hash.values(i), QList<int>({ i * 10 + 1, i * 10 }));
-    }
-}
-
-void tst_QHash::squeezeShared()
-{
-    {
-        QHash<int, int> hash;
-        hash.reserve(1000);
-        for (int i = 0; i < 10; ++i)
-            hash.insert(i, i * 10);
-
-        QHash<int, int> other = hash;
-
-        // Check that when squeezing a hash with shared d_ptr, the number of
-        // buckets actually decreases.
-        QVERIFY(!other.isDetached());
-        const size_t buckets = other.bucket_count();
-        const qsizetype size = other.size();
-
-        other.squeeze();
-
-        QCOMPARE(hash.bucket_count(), buckets);
-        QVERIFY(other.bucket_count() < buckets);
-
-        QCOMPARE(other.size(), size);
-        for (int i = 0; i < size; ++i)
-            QCOMPARE(other.value(i), i * 10);
-    }
-    {
-        QMultiHash<int, int> hash;
-        hash.reserve(1000);
-        for (int i = 0; i < 10; ++i) {
-            hash.insert(i, i * 10);
-            hash.insert(i, i * 10 + 1);
-        }
-
-        QMultiHash<int, int> other = hash;
-
-        // Check that when squeezing a hash with shared d_ptr, the number of
-        // buckets actually decreases.
-        QVERIFY(!other.isDetached());
-        const size_t buckets = other.bucket_count();
-        const qsizetype size = other.size();
-
-        other.squeeze();
-
-        QCOMPARE(hash.bucket_count(), buckets);
-        QVERIFY(other.bucket_count() < buckets);
-
-        QCOMPARE(other.size(), size);
-        for (int i = 0; i < (size / 2); ++i)
-            QCOMPARE(other.values(i), QList<int>({ i * 10 + 1, i * 10 }));
-    }
 }
 
 QTEST_APPLESS_MAIN(tst_QHash)

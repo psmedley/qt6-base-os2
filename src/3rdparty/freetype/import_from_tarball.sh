@@ -78,7 +78,6 @@ copy_file_or_dir() {
 FILES="
     README
     builds/unix/ftsystem.c
-    builds/windows/ftdebug.c
     docs/CHANGES
     docs/CUSTOMIZE
     docs/DEBUG
@@ -86,6 +85,7 @@ FILES="
     docs/TODO
     docs/FTL.TXT
     docs/GPLv2.TXT
+    docs/LICENSE.TXT
     include/
     src/
 "

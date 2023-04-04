@@ -1,10 +1,12 @@
+# Generated from qhash.pro.
+
 #####################################################################
-## tst_bench_qhash Binary:
+## tst_hash Binary:
 #####################################################################
 
-qt_internal_add_benchmark(tst_bench_qhash
+qt_internal_add_benchmark(tst_hash
     SOURCES
-        tst_bench_qhash.cpp
+        main.cpp
         outofline.cpp
     INCLUDE_DIRECTORIES
         .

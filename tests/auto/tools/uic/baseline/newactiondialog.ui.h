@@ -1,8 +1,31 @@
 /*
-
-* Copyright (C) 2016 The Qt Company Ltd.
-* SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
-
+*********************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the autotests of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+*********************************************************************
 */
 
 /********************************************************************************
@@ -54,42 +77,42 @@ public:
     void setupUi(QDialog *qdesigner_internal__NewActionDialog)
     {
         if (qdesigner_internal__NewActionDialog->objectName().isEmpty())
-            qdesigner_internal__NewActionDialog->setObjectName("qdesigner_internal__NewActionDialog");
+            qdesigner_internal__NewActionDialog->setObjectName(QString::fromUtf8("qdesigner_internal__NewActionDialog"));
         qdesigner_internal__NewActionDialog->resize(363, 156);
         verticalLayout = new QVBoxLayout(qdesigner_internal__NewActionDialog);
-        verticalLayout->setObjectName("verticalLayout");
+        verticalLayout->setObjectName(QString::fromUtf8("verticalLayout"));
         formLayout = new QFormLayout();
-        formLayout->setObjectName("formLayout");
+        formLayout->setObjectName(QString::fromUtf8("formLayout"));
         label = new QLabel(qdesigner_internal__NewActionDialog);
-        label->setObjectName("label");
+        label->setObjectName(QString::fromUtf8("label"));
 
         formLayout->setWidget(0, QFormLayout::LabelRole, label);
 
         editActionText = new QLineEdit(qdesigner_internal__NewActionDialog);
-        editActionText->setObjectName("editActionText");
+        editActionText->setObjectName(QString::fromUtf8("editActionText"));
         editActionText->setMinimumSize(QSize(255, 0));
 
         formLayout->setWidget(0, QFormLayout::FieldRole, editActionText);
 
         label_3 = new QLabel(qdesigner_internal__NewActionDialog);
-        label_3->setObjectName("label_3");
+        label_3->setObjectName(QString::fromUtf8("label_3"));
 
         formLayout->setWidget(1, QFormLayout::LabelRole, label_3);
 
         editObjectName = new QLineEdit(qdesigner_internal__NewActionDialog);
-        editObjectName->setObjectName("editObjectName");
+        editObjectName->setObjectName(QString::fromUtf8("editObjectName"));
 
         formLayout->setWidget(1, QFormLayout::FieldRole, editObjectName);
 
         label_2 = new QLabel(qdesigner_internal__NewActionDialog);
-        label_2->setObjectName("label_2");
+        label_2->setObjectName(QString::fromUtf8("label_2"));
 
         formLayout->setWidget(2, QFormLayout::LabelRole, label_2);
 
         horizontalLayout = new QHBoxLayout();
-        horizontalLayout->setObjectName("horizontalLayout");
+        horizontalLayout->setObjectName(QString::fromUtf8("horizontalLayout"));
         iconSelector = new qdesigner_internal::IconSelector(qdesigner_internal__NewActionDialog);
-        iconSelector->setObjectName("iconSelector");
+        iconSelector->setObjectName(QString::fromUtf8("iconSelector"));
 
         horizontalLayout->addWidget(iconSelector);
 
@@ -108,14 +131,14 @@ public:
         verticalLayout->addItem(verticalSpacer);
 
         line = new QFrame(qdesigner_internal__NewActionDialog);
-        line->setObjectName("line");
+        line->setObjectName(QString::fromUtf8("line"));
         line->setFrameShape(QFrame::HLine);
         line->setFrameShadow(QFrame::Sunken);
 
         verticalLayout->addWidget(line);
 
         buttonBox = new QDialogButtonBox(qdesigner_internal__NewActionDialog);
-        buttonBox->setObjectName("buttonBox");
+        buttonBox->setObjectName(QString::fromUtf8("buttonBox"));
         buttonBox->setOrientation(Qt::Horizontal);
         buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
 

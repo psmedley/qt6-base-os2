@@ -233,7 +233,9 @@ hb_icu_unicode_decompose (hb_unicode_funcs_t *ufuncs HB_UNUSED,
 }
 
 
-static inline void free_static_icu_funcs ();
+#if HB_USE_ATEXIT
+static void free_static_icu_funcs ();
+#endif
 
 static struct hb_icu_unicode_funcs_lazy_loader_t : hb_unicode_funcs_lazy_loader_t<hb_icu_unicode_funcs_lazy_loader_t>
 {
@@ -255,17 +257,21 @@ static struct hb_icu_unicode_funcs_lazy_loader_t : hb_unicode_funcs_lazy_loader_
 
     hb_unicode_funcs_make_immutable (funcs);
 
-    hb_atexit (free_static_icu_funcs);
+#if HB_USE_ATEXIT
+    atexit (free_static_icu_funcs);
+#endif
 
     return funcs;
   }
 } static_icu_funcs;
 
-static inline
+#if HB_USE_ATEXIT
+static
 void free_static_icu_funcs ()
 {
   static_icu_funcs.free_instance ();
 }
+#endif
 
 /**
  * hb_icu_get_unicode_funcs:

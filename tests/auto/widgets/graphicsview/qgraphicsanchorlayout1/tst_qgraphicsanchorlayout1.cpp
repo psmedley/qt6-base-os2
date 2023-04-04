@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtGui>
 #include <QTest>
@@ -1663,7 +1688,7 @@ void tst_QGraphicsAnchorLayout1::testBasicLayout()
 
     // Determine amount of widgets to add.
     int widgetCount = -1;
-    for (int i = 0; i < data.size(); ++i) {
+    for (int i = 0; i < data.count(); ++i) {
         const BasicLayoutTestData item = data[i];
         widgetCount = qMax(widgetCount, item.firstIndex);
         widgetCount = qMax(widgetCount, item.secondIndex);
@@ -1678,7 +1703,7 @@ void tst_QGraphicsAnchorLayout1::testBasicLayout()
     // Setup anchor layout
     TheAnchorLayout *layout = new TheAnchorLayout;
 
-    for (int i = 0; i < data.size(); ++i) {
+    for (int i = 0; i < data.count(); ++i) {
         const BasicLayoutTestData item = data[i];
         layout->setAnchor(
             getItem(item.firstIndex, widgets, layout),
@@ -1695,7 +1720,7 @@ void tst_QGraphicsAnchorLayout1::testBasicLayout()
     QCOMPARE(widget->size(), size);
 
     // Validate
-    for (int i = 0; i < result.size(); ++i) {
+    for (int i = 0; i < result.count(); ++i) {
         const BasicLayoutTestResult item = result[i];
         QRectF expected = item.rect;
         QRectF actual = widgets[item.index]->geometry();
@@ -1707,7 +1732,7 @@ void tst_QGraphicsAnchorLayout1::testBasicLayout()
     widget->setLayoutDirection(Qt::RightToLeft);
     layout->activate();
     // Validate
-    for (int j = 0; j < result.size(); ++j) {
+    for (int j = 0; j < result.count(); ++j) {
         const BasicLayoutTestResult item = result[j];
         QRectF mirroredRect(item.rect);
         // only valid cases are mirrored
@@ -2168,7 +2193,7 @@ void tst_QGraphicsAnchorLayout1::testRemoveCenterAnchor()
 
     // Determine amount of widgets to add.
     int widgetCount = -1;
-    for (int i = 0; i < data.size(); ++i) {
+    for (int i = 0; i < data.count(); ++i) {
         const BasicLayoutTestData item = data[i];
         widgetCount = qMax(widgetCount, item.firstIndex);
         widgetCount = qMax(widgetCount, item.secondIndex);
@@ -2185,7 +2210,7 @@ void tst_QGraphicsAnchorLayout1::testRemoveCenterAnchor()
     // Setup anchor layout
     TheAnchorLayout *layout = new TheAnchorLayout;
 
-    for (int i = 0; i < data.size(); ++i) {
+    for (int i = 0; i < data.count(); ++i) {
         const BasicLayoutTestData item = data[i];
         layout->setAnchor(
             getItem(item.firstIndex, widgets, layout),
@@ -2195,7 +2220,7 @@ void tst_QGraphicsAnchorLayout1::testRemoveCenterAnchor()
             item.spacing );
     }
 
-    for (int i = 0; i < removeData.size(); ++i) {
+    for (int i = 0; i < removeData.count(); ++i) {
         const BasicLayoutTestData item = removeData[i];
         layout->removeAnchor(
             getItem(item.firstIndex, widgets, layout),
@@ -2211,7 +2236,7 @@ void tst_QGraphicsAnchorLayout1::testRemoveCenterAnchor()
     QCOMPARE(widget->size(), size);
 
     // Validate
-    for (int i = 0; i < result.size(); ++i) {
+    for (int i = 0; i < result.count(); ++i) {
         const BasicLayoutTestResult item = result[i];
 
         QCOMPARE(widgets[item.index]->geometry(), item.rect);
@@ -2999,7 +3024,7 @@ void tst_QGraphicsAnchorLayout1::testComplexCases()
 
     // Determine amount of widgets to add.
     int widgetCount = -1;
-    for (int i = 0; i < data.size(); ++i) {
+    for (int i = 0; i < data.count(); ++i) {
         const BasicLayoutTestData item = data[i];
         widgetCount = qMax(widgetCount, item.firstIndex);
         widgetCount = qMax(widgetCount, item.secondIndex);
@@ -3025,7 +3050,7 @@ void tst_QGraphicsAnchorLayout1::testComplexCases()
     // Setup anchor layout
     TheAnchorLayout *layout = new TheAnchorLayout;
 
-    for (int i = 0; i < data.size(); ++i) {
+    for (int i = 0; i < data.count(); ++i) {
         const BasicLayoutTestData item = data[i];
         layout->setAnchor(
             getItem(item.firstIndex, widgets, layout),
@@ -3042,7 +3067,7 @@ void tst_QGraphicsAnchorLayout1::testComplexCases()
     QCOMPARE(widget->size(), size);
 
     // Validate
-    for (int i = 0; i < result.size(); ++i) {
+    for (int i = 0; i < result.count(); ++i) {
         const BasicLayoutTestResult item = result[i];
         QCOMPARE(widgets[item.index]->geometry(), item.rect);
     }
@@ -3051,7 +3076,7 @@ void tst_QGraphicsAnchorLayout1::testComplexCases()
     widget->setLayoutDirection(Qt::RightToLeft);
     layout->activate();
     // Validate
-    for (int j = 0; j < result.size(); ++j) {
+    for (int j = 0; j < result.count(); ++j) {
         const BasicLayoutTestResult item = result[j];
         QRectF mirroredRect(item.rect);
         // only valid cases are mirrored

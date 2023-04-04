@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qapplication.h"
 #include "qcursor.h"
@@ -8,13 +44,12 @@
 #include "qscrollbar.h"
 #include "qstyle.h"
 #include "qstyleoption.h"
-#include "qstylepainter.h"
 #if QT_CONFIG(menu)
 #include "qmenu.h"
 #endif
 #include <QtCore/qelapsedtimer.h>
 
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
 #endif
 #include <limits.h>
@@ -152,7 +187,7 @@ QT_BEGIN_NAMESPACE
     Most GUI styles use the pageStep() value to calculate the size of the
     slider.
 
-    \sa QScrollArea, QSlider, QDial, QSpinBox, {Sliders Example}
+    \sa QScrollArea, QSlider, QDial, QSpinBox, {fowler}{GUI Design Handbook: Scroll Bar}, {Sliders Example}
 */
 
 bool QScrollBarPrivate::updateHoverControl(const QPoint &pos)
@@ -490,7 +525,7 @@ void QScrollBar::wheelEvent(QWheelEvent *event)
 void QScrollBar::paintEvent(QPaintEvent *)
 {
     Q_D(QScrollBar);
-    QStylePainter p(this);
+    QPainter p(this);
     QStyleOptionSlider opt;
     initStyleOption(&opt);
     opt.subControls = QStyle::SC_All;
@@ -501,7 +536,7 @@ void QScrollBar::paintEvent(QPaintEvent *)
     } else {
         opt.activeSubControls = (QStyle::SubControl)d->hoverControl;
     }
-    p.drawComplexControl(QStyle::CC_ScrollBar, opt);
+    style()->drawComplexControl(QStyle::CC_ScrollBar, &opt, &p, this);
 }
 
 /*!

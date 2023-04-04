@@ -1,12 +1,12 @@
 # Generated from qvector.pro.
 
 #####################################################################
-## tst_bench_qvector Binary:
+## tst_bench_vector Binary:
 #####################################################################
 
-qt_internal_add_benchmark(tst_bench_qvector
+qt_internal_add_benchmark(tst_bench_vector
     SOURCES
-        tst_bench_qvector.cpp
+        main.cpp
         outofline.cpp
     INCLUDE_DIRECTORIES
         .

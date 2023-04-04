@@ -1,7 +1,42 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
-#include "androiddeadlockprotector.h"
 #include "androidjniaccessibility.h"
 #include "androidjnimain.h"
 #include "qandroidplatformintegration.h"
@@ -16,14 +51,11 @@
 #include <QtCore/QJniObject>
 #include <QtGui/private/qhighdpiscaling_p.h>
 #include <QtCore/QObject>
-#include <QtCore/qvarlengtharray.h>
 
 static const char m_qtTag[] = "Qt A11Y";
 static const char m_classErrorMsg[] = "Can't find class \"%s\"";
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 namespace QtAndroidAccessibility
 {
@@ -36,7 +68,6 @@ namespace QtAndroidAccessibility
     static jmethodID m_setEnabledMethodID = 0;
     static jmethodID m_setFocusableMethodID = 0;
     static jmethodID m_setFocusedMethodID = 0;
-    static jmethodID m_setHeadingMethodID = 0;
     static jmethodID m_setScrollableMethodID = 0;
     static jmethodID m_setTextSelectionMethodID = 0;
     static jmethodID m_setVisibleToUserMethodID = 0;
@@ -48,7 +79,7 @@ namespace QtAndroidAccessibility
     // Because of that almost every method here is split into two parts.
     // The _helper part is executed in the context of m_accessibilityContext
     // on the main thread. The other part is executed in Java thread.
-    static QPointer<QObject> m_accessibilityContext = nullptr;
+    static QObject *m_accessibilityContext = nullptr;
 
     // This method is called from the Qt main thread, and normally a
     // QGuiApplication instance will be used as a parent.
@@ -62,21 +93,7 @@ namespace QtAndroidAccessibility
     template <typename Func, typename Ret>
     void runInObjectContext(QObject *context, Func &&func, Ret *retVal)
     {
-        AndroidDeadlockProtector protector;
-        if (!protector.acquire()) {
-            __android_log_print(ANDROID_LOG_WARN, m_qtTag,
-                                "Could not run accessibility call in object context, accessing "
-                                "main thread could lead to deadlock");
-            return;
-        }
-
-        if (!QtAndroid::blockEventLoopsWhenSuspended()
-            || QGuiApplication::applicationState() != Qt::ApplicationSuspended) {
-            QMetaObject::invokeMethod(context, func, Qt::BlockingQueuedConnection, retVal);
-        } else {
-            __android_log_print(ANDROID_LOG_WARN, m_qtTag,
-                                "Could not run accessibility call in object context, event loop suspended.");
-        }
+        QMetaObject::invokeMethod(context, func, Qt::BlockingQueuedConnection, retVal);
     }
 
     void initialize()
@@ -114,9 +131,9 @@ namespace QtAndroidAccessibility
         return iface;
     }
 
-    void notifyLocationChange(uint accessibilityObjectId)
+    void notifyLocationChange()
     {
-        QtAndroid::notifyAccessibilityLocationChange(accessibilityObjectId);
+        QtAndroid::notifyAccessibilityLocationChange();
     }
 
     static int parentId_helper(int objectId); // forward declaration
@@ -138,11 +155,6 @@ namespace QtAndroidAccessibility
     {
         jstring value = jvalueForAccessibleObject(accessibilityObjectId);
         QtAndroid::notifyValueChanged(accessibilityObjectId, value);
-    }
-
-    void notifyScrolledEvent(uint accessiblityObjectId)
-    {
-        QtAndroid::notifyScrolledEvent(accessiblityObjectId);
     }
 
     static QVarLengthArray<int, 8> childIdListForAccessibleObject_helper(int objectId)
@@ -202,7 +214,7 @@ namespace QtAndroidAccessibility
         return result;
     }
 
-    static QRect screenRect_helper(int objectId, bool clip = true)
+    static QRect screenRect_helper(int objectId)
     {
         QRect rect;
         QAccessibleInterface *iface = interfaceFromId(objectId);
@@ -210,7 +222,7 @@ namespace QtAndroidAccessibility
             rect = QHighDpi::toNativePixels(iface->rect(), iface->window());
         }
         // If the widget is not fully in-bound in its parent then we have to clip the rectangle to draw
-        if (clip && iface && iface->parent() && iface->parent()->isValid()) {
+        if (iface && iface->parent() && iface->parent()->isValid()) {
             const auto parentRect = QHighDpi::toNativePixels(iface->parent()->rect(), iface->parent()->window());
             rect = rect.intersected(parentRect);
         }
@@ -312,43 +324,23 @@ namespace QtAndroidAccessibility
     static jboolean scrollForward(JNIEnv */*env*/, jobject /*thiz*/, jint objectId)
     {
         bool result = false;
-
-        const auto& ids = childIdListForAccessibleObject_helper(objectId);
-        if (ids.isEmpty())
-            return false;
-
-        const int firstChildId = ids.first();
-        const QRect oldPosition = screenRect_helper(firstChildId, false);
-
         if (m_accessibilityContext) {
             runInObjectContext(m_accessibilityContext, [objectId]() {
                 return scroll_helper(objectId, QAccessibleActionInterface::increaseAction());
             }, &result);
         }
-
-        // Don't check for position change if the call was not successful
-        return result && oldPosition != screenRect_helper(firstChildId, false);
+        return result;
     }
 
     static jboolean scrollBackward(JNIEnv */*env*/, jobject /*thiz*/, jint objectId)
     {
         bool result = false;
-
-        const auto& ids = childIdListForAccessibleObject_helper(objectId);
-        if (ids.isEmpty())
-            return false;
-
-        const int firstChildId = ids.first();
-        const QRect oldPosition = screenRect_helper(firstChildId, false);
-
         if (m_accessibilityContext) {
             runInObjectContext(m_accessibilityContext, [objectId]() {
                 return scroll_helper(objectId, QAccessibleActionInterface::decreaseAction());
             }, &result);
         }
-
-        // Don't check for position change if the call was not successful
-        return result && oldPosition != screenRect_helper(firstChildId, false);
+        return result;
     }
 
 
@@ -380,7 +372,7 @@ if (!clazz) { \
                 const double step = qAbs(valueIface->minimumStepSize().toDouble(&stepIsValid));
                 if (!stepIsValid || qFuzzyIsNull(step)) {
                     // Ignore step, use default precision
-                    valueStr = qFuzzyIsNull(val) ? u"0"_s : QString::number(val, 'f');
+                    valueStr = qFuzzyIsNull(val) ? u"0"_qs : QString::number(val, 'f');
                 } else {
                     const int precision = [](double s) {
                         int count = 0;
@@ -404,7 +396,7 @@ if (!clazz) { \
                         }
                         return count;
                     }(step);
-                    valueStr = qFuzzyIsNull(val / step) ? u"0"_s
+                    valueStr = qFuzzyIsNull(val / step) ? u"0"_qs
                                                         : QString::number(val, 'f', precision);
                 }
             } else {
@@ -437,13 +429,10 @@ if (!clazz) { \
                 desc = iface->text(QAccessible::Value);
                 hasValue = !desc.isEmpty();
             }
-            if (!hasValue && iface->valueInterface()) {
-                const QString valueStr = textFromValue(iface);
-                if (!valueStr.isEmpty()) {
-                    if (!desc.isEmpty())
-                        desc.append(QChar(QChar::Space));
-                    desc.append(valueStr);
-                }
+            if (!hasValue) {
+                if (!desc.isEmpty())
+                    desc.append(QChar(QChar::Space));
+                desc.append(textFromValue(iface));
             }
         }
         return desc;
@@ -471,7 +460,6 @@ if (!clazz) { \
     {
         bool valid = false;
         QAccessible::State state;
-        QAccessible::Role role;
         QStringList actions;
         QString description;
         bool hasTextSelection = false;
@@ -486,7 +474,6 @@ if (!clazz) { \
         if (iface && iface->isValid()) {
             info.valid = true;
             info.state = iface->state();
-            info.role = iface->role();
             info.actions = QAccessibleBridgeUtils::effectiveActionNames(iface);
             info.description = descriptionForInterface(iface);
             QAccessibleTextInterface *textIface = iface->textInterface();
@@ -530,11 +517,9 @@ if (!clazz) { \
         env->CallVoidMethod(node, m_setEnabledMethodID, !info.state.disabled);
         env->CallVoidMethod(node, m_setFocusableMethodID, (bool)info.state.focusable);
         env->CallVoidMethod(node, m_setFocusedMethodID, (bool)info.state.focused);
-        if (m_setHeadingMethodID)
-            env->CallVoidMethod(node, m_setHeadingMethodID, info.role == QAccessible::Heading);
         env->CallVoidMethod(node, m_setVisibleToUserMethodID, !info.state.invisible);
         env->CallVoidMethod(node, m_setScrollableMethodID, hasIncreaseAction || hasDecreaseAction);
-        env->CallVoidMethod(node, m_setClickableMethodID, hasClickableAction || info.role == QAccessible::Link);
+        env->CallVoidMethod(node, m_setClickableMethodID, hasClickableAction);
 
         // Add ACTION_CLICK
         if (hasClickableAction)
@@ -598,9 +583,6 @@ if (!clazz) { \
         GET_AND_CHECK_STATIC_METHOD(m_setEnabledMethodID, nodeInfoClass, "setEnabled", "(Z)V");
         GET_AND_CHECK_STATIC_METHOD(m_setFocusableMethodID, nodeInfoClass, "setFocusable", "(Z)V");
         GET_AND_CHECK_STATIC_METHOD(m_setFocusedMethodID, nodeInfoClass, "setFocused", "(Z)V");
-        if (QtAndroidPrivate::androidSdkVersion() >= 28) {
-            GET_AND_CHECK_STATIC_METHOD(m_setHeadingMethodID, nodeInfoClass, "setHeading", "(Z)V");
-        }
         GET_AND_CHECK_STATIC_METHOD(m_setScrollableMethodID, nodeInfoClass, "setScrollable", "(Z)V");
         GET_AND_CHECK_STATIC_METHOD(m_setVisibleToUserMethodID, nodeInfoClass, "setVisibleToUser", "(Z)V");
         GET_AND_CHECK_STATIC_METHOD(m_setTextSelectionMethodID, nodeInfoClass, "setTextSelection", "(II)V");

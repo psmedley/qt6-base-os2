@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qcommandlinkbutton.h"
 #include "qstylepainter.h"
@@ -171,7 +207,7 @@ bool QCommandLinkButtonPrivate::usingVistaStyle() const
     Q_Q(const QCommandLinkButton);
     //### This is a hack to detect if we are indeed running Vista style themed and not in classic
     // When we add api to query for this, we should change this implementation to use it.
-    return q->property("_qt_usingVistaStyle").toBool()
+    return q->style()->inherits("QWindowsVistaStyle")
         && q->style()->pixelMetric(QStyle::PM_ButtonShiftHorizontal, nullptr) == 0;
 }
 
@@ -339,9 +375,9 @@ void QCommandLinkButton::paintEvent(QPaintEvent *)
     //Draw title
     QColor textColor = palette().buttonText().color();
     if (isEnabled() && d->usingVistaStyle()) {
-        textColor = option.palette.buttonText().color();
+        textColor = QColor(21, 28, 85);
         if (underMouse() && !isDown())
-            textColor = option.palette.brightText().color();
+            textColor = QColor(7, 64, 229);
         //A simple text color transition
         d->currentColor = d->mergedColors(textColor, d->currentColor, 60);
         option.palette.setColor(QPalette::ButtonText, d->currentColor);

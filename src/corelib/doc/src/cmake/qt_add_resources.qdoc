@@ -1,8 +1,32 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the documentation of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:FDL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Free Documentation License Usage
+** Alternatively, this file may be used under the terms of the GNU Free
+** Documentation License version 1.3 as published by the Free Software
+** Foundation and appearing in the file included in the packaging of
+** this file. Please review the following information to ensure
+** the GNU Free Documentation License version 1.3 requirements
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /*!
-\page qt-add-resources.html
+\page qt_add_resources.html
 \ingroup cmake-commands-qtcore
 
 \title qt_add_resources
@@ -28,7 +52,6 @@ qt_add_resources(<TARGET> <RESOURCE_NAME>
                   [PREFIX <PATH>]
                   [LANG <LANGUAGE>]
                   [BASE <PATH>]
-                  [OUTPUT_TARGETS <VARIABLE_NAME>]
                   [FILES ...] [OPTIONS ...])
 \endcode
 
@@ -68,11 +91,6 @@ example, if \c BASE is \c{"assets"} and \c FILES is
 
 Alias settings for files need to be set via the \c QT_RESOURCE_ALIAS source file
 property.
-
-When using this command with static libraries, one or more special targets will
-be generated. Should you wish to perform additional processing on these targets,
-pass a variable name to the \c OUTPUT_TARGETS parameter. The \c qt_add_resources
-function stores the names of the special targets in the specified variable.
 
 \section1 Arguments of both variants
 

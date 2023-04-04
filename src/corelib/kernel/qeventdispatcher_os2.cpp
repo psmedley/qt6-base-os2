@@ -71,7 +71,7 @@ static const bool lcCoreEventsDebug = lcCoreEvents().isDebugEnabled();
 #define TRACE(m) do { if (Q_UNLIKELY(lcCoreEventsDebug)) qCDebug(lcCoreEvents) << m; } while(0)
 #define V(v) #v << v
 
-extern qsizetype qGlobalPostedEventsCount();
+extern uint qGlobalPostedEventsCount();
 
 // NOTE: Socket and timer handling is largely borrowed from qeventdispatcher_unix*.
 

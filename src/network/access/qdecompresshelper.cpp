@@ -1,11 +1,46 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qdecompresshelper_p.h"
 
 #include <QtCore/private/qbytearray_p.h>
 #include <QtCore/qiodevice.h>
-#include <QtCore/qcoreapplication.h>
 
 #include <limits>
 #include <zlib.h>
@@ -96,16 +131,13 @@ bool QDecompressHelper::setEncoding(const QByteArray &encoding)
     Q_ASSERT(contentEncoding == QDecompressHelper::None);
     if (contentEncoding != QDecompressHelper::None) {
         qWarning("Encoding is already set.");
-        // This isn't an error, so it doesn't set errorStr, it's just wrong usage.
         return false;
     }
     ContentEncoding ce = encodingFromByteArray(encoding);
     if (ce == None) {
-        errorStr = QCoreApplication::translate("QHttp", "Unsupported content encoding: %1")
-                           .arg(QLatin1String(encoding));
+        qWarning("An unsupported content encoding was selected: %s", encoding.data());
         return false;
     }
-    errorStr = QString(); // clear error
     return setEncoding(ce);
 }
 
@@ -147,8 +179,7 @@ bool QDecompressHelper::setEncoding(ContentEncoding ce)
         break;
     }
     if (!decoderPointer) {
-        errorStr = QCoreApplication::translate("QHttp",
-                                               "Failed to initialize the compression decoder.");
+        qWarning("Failed to initialize the decoder.");
         contentEncoding = QDecompressHelper::None;
         return false;
     }
@@ -206,13 +237,7 @@ void QDecompressHelper::setCountingBytesEnabled(bool shouldCount)
 qint64 QDecompressHelper::uncompressedSize() const
 {
     Q_ASSERT(countDecompressed);
-    // Use the 'totalUncompressedBytes' from the countHelper if it exceeds the amount of bytes
-    // that we know about.
-    auto totalUncompressed =
-            countHelper && countHelper->totalUncompressedBytes > totalUncompressedBytes
-            ? countHelper->totalUncompressedBytes
-            : totalUncompressedBytes;
-    return totalUncompressed - totalBytesRead;
+    return uncompressedBytes;
 }
 
 /*!
@@ -237,9 +262,10 @@ void QDecompressHelper::feed(QByteArray &&data)
 {
     Q_ASSERT(contentEncoding != None);
     totalCompressedBytes += data.size();
-    compressedDataBuffer.append(std::move(data));
-    if (!countInternal(compressedDataBuffer[compressedDataBuffer.bufferCount() - 1]))
+    if (!countInternal(data))
         clear(); // If our counting brother failed then so will we :|
+    else
+        compressedDataBuffer.append(std::move(data));
 }
 
 /*!
@@ -250,9 +276,10 @@ void QDecompressHelper::feed(const QByteDataBuffer &buffer)
 {
     Q_ASSERT(contentEncoding != None);
     totalCompressedBytes += buffer.byteAmount();
-    compressedDataBuffer.append(buffer);
     if (!countInternal(buffer))
         clear(); // If our counting brother failed then so will we :|
+    else
+        compressedDataBuffer.append(buffer);
 }
 
 /*!
@@ -263,10 +290,10 @@ void QDecompressHelper::feed(QByteDataBuffer &&buffer)
 {
     Q_ASSERT(contentEncoding != None);
     totalCompressedBytes += buffer.byteAmount();
-    const QByteDataBuffer copy(buffer);
-    compressedDataBuffer.append(std::move(buffer));
-    if (!countInternal(copy))
+    if (!countInternal(buffer))
         clear(); // If our counting brother failed then so will we :|
+    else
+        compressedDataBuffer.append(std::move(buffer));
 }
 
 /*!
@@ -276,34 +303,19 @@ void QDecompressHelper::feed(QByteDataBuffer &&buffer)
     This lets us know the final size, unfortunately at the cost of
     increased computation.
 
-    To save on some of the computation we will store the data until
-    we reach \c MaxDecompressedDataBufferSize stored. In this case the
-    "penalty" is completely removed from users who read the data on
-    readyRead rather than waiting for it all to be received. And
-    any file smaller than \c MaxDecompressedDataBufferSize will
-    avoid this issue as well.
+    Potential @future improvement:
+    Decompress XX MiB/KiB before starting the count.
+        For smaller files the extra decompression can then be avoided.
 */
 bool QDecompressHelper::countInternal()
 {
     Q_ASSERT(countDecompressed);
-    while (hasDataInternal()
-           && decompressedDataBuffer.byteAmount() < MaxDecompressedDataBufferSize) {
-        const qsizetype toRead = 256 * 1024;
-        QByteArray buffer(toRead, Qt::Uninitialized);
-        qsizetype bytesRead = readInternal(buffer.data(), buffer.size());
-        if (bytesRead == -1)
-            return false;
-        buffer.truncate(bytesRead);
-        decompressedDataBuffer.append(std::move(buffer));
-    }
-    if (!hasDataInternal())
-        return true; // handled all the data so far, just return
-
     while (countHelper->hasData()) {
         std::array<char, 1024> temp;
         qsizetype bytesRead = countHelper->read(temp.data(), temp.size());
         if (bytesRead == -1)
             return false;
+        uncompressedBytes += bytesRead;
     }
     return true;
 }
@@ -346,45 +358,13 @@ bool QDecompressHelper::countInternal(const QByteDataBuffer &buffer)
 
 qsizetype QDecompressHelper::read(char *data, qsizetype maxSize)
 {
-    if (maxSize <= 0)
-        return 0;
-
     if (!isValid())
         return -1;
 
+    qsizetype bytesRead = -1;
     if (!hasData())
         return 0;
 
-    qsizetype cachedRead = 0;
-    if (!decompressedDataBuffer.isEmpty()) {
-        cachedRead = decompressedDataBuffer.read(data, maxSize);
-        data += cachedRead;
-        maxSize -= cachedRead;
-    }
-
-    qsizetype bytesRead = readInternal(data, maxSize);
-    if (bytesRead == -1)
-        return -1;
-    totalBytesRead += bytesRead + cachedRead;
-    return bytesRead + cachedRead;
-}
-
-/*!
-    \internal
-    Like read() but without attempting to read the
-    cached/already-decompressed data.
-*/
-qsizetype QDecompressHelper::readInternal(char *data, qsizetype maxSize)
-{
-    Q_ASSERT(isValid());
-
-    if (maxSize <= 0)
-        return 0;
-
-    if (!hasDataInternal())
-        return 0;
-
-    qsizetype bytesRead = -1;
     switch (contentEncoding) {
     case None:
         Q_UNREACHABLE();
@@ -402,15 +382,12 @@ qsizetype QDecompressHelper::readInternal(char *data, qsizetype maxSize)
     }
     if (bytesRead == -1)
         clear();
+    else if (countDecompressed)
+        uncompressedBytes -= bytesRead;
 
     totalUncompressedBytes += bytesRead;
-    if (isPotentialArchiveBomb()) {
-        errorStr = QCoreApplication::translate(
-                "QHttp",
-                "The decompressed output exceeds the limits specified by "
-                "QNetworkRequest::decompressedSafetyCheckThreshold()");
+    if (isPotentialArchiveBomb())
         return -1;
-    }
 
     return bytesRead;
 }
@@ -473,16 +450,6 @@ bool QDecompressHelper::isPotentialArchiveBomb() const
 */
 bool QDecompressHelper::hasData() const
 {
-    return hasDataInternal() || !decompressedDataBuffer.isEmpty();
-}
-
-/*!
-    \internal
-    Like hasData() but internally the buffer of decompressed data is
-    not interesting.
-*/
-bool QDecompressHelper::hasDataInternal() const
-{
     return encodedBytesAvailable() || decoderHasData;
 }
 
@@ -491,27 +458,9 @@ qint64 QDecompressHelper::encodedBytesAvailable() const
     return compressedDataBuffer.byteAmount();
 }
 
-/*!
-    \internal
-    Returns whether or not the object is valid.
-    If it becomes invalid after an operation has been performed
-    then an error has occurred.
-    \sa errorString()
-*/
 bool QDecompressHelper::isValid() const
 {
     return contentEncoding != None;
-}
-
-/*!
-    \internal
-    Returns a string describing the error that occurred or an empty
-    string if no error occurred.
-    \sa isValid()
-*/
-QString QDecompressHelper::errorString() const
-{
-    return errorStr;
 }
 
 void QDecompressHelper::clear()
@@ -548,16 +497,13 @@ void QDecompressHelper::clear()
     contentEncoding = None;
 
     compressedDataBuffer.clear();
-    decompressedDataBuffer.clear();
     decoderHasData = false;
 
     countDecompressed = false;
     countHelper.reset();
-    totalBytesRead = 0;
+    uncompressedBytes = 0;
     totalUncompressedBytes = 0;
     totalCompressedBytes = 0;
-
-    errorStr.clear();
 }
 
 qsizetype QDecompressHelper::readZLib(char *data, const qsizetype maxSize)
@@ -713,9 +659,8 @@ qsizetype QDecompressHelper::readBrotli(char *data, const qsizetype maxSize)
 
         switch (result) {
         case BROTLI_DECODER_RESULT_ERROR:
-            errorStr = QLatin1String("Brotli error: %1")
-                               .arg(QString::fromUtf8(BrotliDecoderErrorString(
-                                       BrotliDecoderGetErrorCode(brotliDecoderState))));
+            qWarning("Brotli error: %s",
+                     BrotliDecoderErrorString(BrotliDecoderGetErrorCode(brotliDecoderState)));
             return -1;
         case BROTLI_DECODER_RESULT_SUCCESS:
             BrotliDecoderDestroyInstance(brotliDecoderState);
@@ -761,8 +706,7 @@ qsizetype QDecompressHelper::readZstandard(char *data, const qsizetype maxSize)
     while (outBuf.pos < outBuf.size && (inBuf.pos < inBuf.size || decoderHasData)) {
         size_t retValue = ZSTD_decompressStream(zstdStream, &outBuf, &inBuf);
         if (ZSTD_isError(retValue)) {
-            errorStr = QLatin1String("ZStandard error: %1")
-                               .arg(QString::fromUtf8(ZSTD_getErrorName(retValue)));
+            qWarning("ZStandard error: %s", ZSTD_getErrorName(retValue));
             return -1;
         } else {
             decoderHasData = false;

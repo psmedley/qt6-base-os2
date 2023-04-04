@@ -1,7 +1,43 @@
-// Copyright (C) 2017 The Qt Company Ltd.
-// Copyright (C) 2014 BlackBerry Limited. All rights reserved.
-// Copyright (C) 2016 Richard J. Moore <rich@kde.org>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
+** Copyright (C) 2016 Richard J. Moore <rich@kde.org>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /****************************************************************************
 **
@@ -44,8 +80,6 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*
     Note to maintainer:
@@ -123,7 +157,7 @@ DEFINEFUNC2(void, OPENSSL_sk_push, OPENSSL_STACK *a, a, void *b, b, return, DUMM
 DEFINEFUNC(void, OPENSSL_sk_free, OPENSSL_STACK *a, a, return, DUMMYARG)
 DEFINEFUNC2(void *, OPENSSL_sk_value, OPENSSL_STACK *a, a, int b, b, return nullptr, return)
 DEFINEFUNC(int, SSL_session_reused, SSL *a, a, return 0, return)
-DEFINEFUNC2(qssloptions, SSL_CTX_set_options, SSL_CTX *ctx, ctx, qssloptions op, op, return 0, return)
+DEFINEFUNC2(unsigned long, SSL_CTX_set_options, SSL_CTX *ctx, ctx, unsigned long op, op, return 0, return)
 using info_callback = void (*) (const SSL *ssl, int type, int val);
 DEFINEFUNC2(void, SSL_set_info_callback, SSL *ssl, ssl, info_callback cb, cb, return, return)
 DEFINEFUNC(const char *, SSL_alert_type_string, int value, value, return nullptr, return)
@@ -556,9 +590,9 @@ struct LibGreaterThan
     typedef bool result_type;
     result_type operator()(QStringView lhs, QStringView rhs) const
     {
-        const auto lhsparts = lhs.split(u'.');
-        const auto rhsparts = rhs.split(u'.');
-        Q_ASSERT(lhsparts.size() > 1 && rhsparts.size() > 1);
+        const auto lhsparts = lhs.split(QLatin1Char('.'));
+        const auto rhsparts = rhs.split(QLatin1Char('.'));
+        Q_ASSERT(lhsparts.count() > 1 && rhsparts.count() > 1);
 
         // note: checking rhs < lhs, the same as lhs > rhs
         return std::lexicographical_compare(rhsparts.begin() + 1, rhsparts.end(),
@@ -588,7 +622,8 @@ static QStringList libraryPathList()
 {
     QStringList paths;
 #  ifdef Q_OS_DARWIN
-    paths = QString::fromLatin1(qgetenv("DYLD_LIBRARY_PATH")).split(u':', Qt::SkipEmptyParts);
+    paths = QString::fromLatin1(qgetenv("DYLD_LIBRARY_PATH"))
+            .split(QLatin1Char(':'), Qt::SkipEmptyParts);
 
     // search in .app/Contents/Frameworks
     UInt32 packageType;
@@ -599,21 +634,22 @@ static QStringList libraryPathList()
         paths << bundleUrl.resolved(frameworksUrl).path();
     }
 #  else
-    paths = QString::fromLatin1(qgetenv("LD_LIBRARY_PATH")).split(u':', Qt::SkipEmptyParts);
+    paths = QString::fromLatin1(qgetenv("LD_LIBRARY_PATH"))
+            .split(QLatin1Char(':'), Qt::SkipEmptyParts);
 #  endif
 #  ifdef Q_OS_OS2
     // local/lib should be checked before lib/. We might also support LIBPATH similarly to LD_LIBRARY_PATH
     // later - but since it not exposed via getenv, parsing CONFIG.SYS is needed. Once it's done,
     // the below line is not needed as LIBPATH contains both.
-    paths << "/@unixroot/usr/local/lib"_L1 << "/@unixroot/usr/lib"_L1;
+    paths << QLatin1String("/@unixroot/usr/local/lib") << QLatin1String("/@unixroot/usr/lib");
 #  else
-    paths << "/lib"_L1 << "/usr/lib"_L1 << "/usr/local/lib"_L1;
-    paths << "/lib64"_L1 << "/usr/lib64"_L1 << "/usr/local/lib64"_L1;
-    paths << "/lib32"_L1 << "/usr/lib32"_L1 << "/usr/local/lib32"_L1;
+    paths << QLatin1String("/lib") << QLatin1String("/usr/lib") << QLatin1String("/usr/local/lib");
+    paths << QLatin1String("/lib64") << QLatin1String("/usr/lib64") << QLatin1String("/usr/local/lib64");
+    paths << QLatin1String("/lib32") << QLatin1String("/usr/lib32") << QLatin1String("/usr/local/lib32");
 #  endif
 
 #if defined(Q_OS_ANDROID)
-    paths << "/system/lib"_L1;
+    paths << QLatin1String("/system/lib");
 #elif defined(Q_OS_LINUX)
     // discover paths of already loaded libraries
     QDuplicateTracker<QString> loadedPaths;
@@ -625,7 +661,7 @@ static QStringList libraryPathList()
 }
 
 Q_NEVER_INLINE
-static QStringList findAllLibs(QLatin1StringView filter)
+static QStringList findAllLibs(QLatin1String filter)
 {
     const QStringList paths = libraryPathList();
     QStringList found;
@@ -636,8 +672,8 @@ static QStringList findAllLibs(QLatin1StringView filter)
         QStringList entryList = dir.entryList(filters, QDir::Files);
 
         std::sort(entryList.begin(), entryList.end(), LibGreaterThan());
-        for (const QString &entry : std::as_const(entryList))
-            found << path + u'/' + entry;
+        for (const QString &entry : qAsConst(entryList))
+            found << path + QLatin1Char('/') + entry;
     }
 
     return found;
@@ -646,27 +682,21 @@ static QStringList findAllLibs(QLatin1StringView filter)
 static QStringList findAllLibSsl()
 {
 #ifdef Q_OS_OS2
-    return findAllLibs("ssl*.dll"_L1);
+    return findAllLibs(QLatin1String("ssl*.dll"));
 #else
-    return findAllLibs("libssl.*"_L1);
+    return findAllLibs(QLatin1String("libssl.*"));
 #endif
 }
 
 static QStringList findAllLibCrypto()
 {
 #ifdef Q_OS_OS2
-    return findAllLibs(("crypto*.dll"_L1);
+    return findAllLibs(QLatin1String("crypto*.dll"));
 #else
-    return findAllLibs("libcrypto.*"_L1);
+    return findAllLibs(QLatin1String("libcrypto.*"));
 #endif
 }
 # endif
-
-#if (OPENSSL_VERSION_NUMBER >> 28) < 3
-#define QT_OPENSSL_VERSION "1_1"
-#elif OPENSSL_VERSION_MAJOR == 3 // Starting with 3.0 this define is available
-#define QT_OPENSSL_VERSION "3"
-#endif // > 3 intentionally left undefined
 
 #ifdef Q_OS_WIN
 
@@ -674,7 +704,7 @@ struct LoadedOpenSsl {
     std::unique_ptr<QSystemLibrary> ssl, crypto;
 };
 
-static bool tryToLoadOpenSslWin32Library(QLatin1StringView ssleay32LibName, QLatin1StringView libeay32LibName, LoadedOpenSsl &result)
+static bool tryToLoadOpenSslWin32Library(QLatin1String ssleay32LibName, QLatin1String libeay32LibName, LoadedOpenSsl &result)
 {
     auto ssleay32 = std::make_unique<QSystemLibrary>(ssleay32LibName);
     if (!ssleay32->load(false)) {
@@ -699,6 +729,12 @@ static LoadedOpenSsl loadOpenSsl()
     // MSVC and GCC. For 3.0 the version suffix changed again, to just '3'.
     // For non-x86 builds, an architecture suffix is also appended.
 
+#if (OPENSSL_VERSION_NUMBER >> 28) < 3
+#define QT_OPENSSL_VERSION "1_1"
+#elif OPENSSL_VERSION_MAJOR == 3 // Starting with 3.0 this define is available
+#define QT_OPENSSL_VERSION "3"
+#endif // > 3 intentionally left undefined
+
 #if defined(Q_PROCESSOR_X86_64)
 #define QT_SSL_SUFFIX "-x64"
 #elif defined(Q_PROCESSOR_ARM_64)
@@ -709,13 +745,13 @@ static LoadedOpenSsl loadOpenSsl()
 #define QT_SSL_SUFFIX
 #endif
 
-    tryToLoadOpenSslWin32Library("libssl-" QT_OPENSSL_VERSION QT_SSL_SUFFIX ""_L1,
-                                 "libcrypto-" QT_OPENSSL_VERSION QT_SSL_SUFFIX ""_L1, result);
+    tryToLoadOpenSslWin32Library(QLatin1String("libssl-" QT_OPENSSL_VERSION QT_SSL_SUFFIX),
+                                 QLatin1String("libcrypto-" QT_OPENSSL_VERSION QT_SSL_SUFFIX), result);
 
 #undef QT_SSL_SUFFIX
     return result;
 }
-#else // !Q_OS_WIN:
+#else
 
 struct LoadedOpenSsl {
     std::unique_ptr<QLibrary> ssl, crypto;
@@ -767,8 +803,8 @@ static LoadedOpenSsl loadOpenSsl()
 #endif
 #if defined(SHLIB_VERSION_NUMBER) && !defined(Q_OS_QNX) // on QNX, the libs are always libssl.so and libcrypto.so
     // first attempt: the canonical name is libssl.so.<SHLIB_VERSION_NUMBER>
-    libssl->setFileNameAndVersion("ssl"_L1, SHLIB_VERSION_NUMBER ""_L1);
-    libcrypto->setFileNameAndVersion("crypto"_L1, SHLIB_VERSION_NUMBER ""_L1);
+    libssl->setFileNameAndVersion(QLatin1String("ssl"), QLatin1String(SHLIB_VERSION_NUMBER));
+    libcrypto->setFileNameAndVersion(QLatin1String("crypto"), QLatin1String(SHLIB_VERSION_NUMBER));
     if (libcrypto->load() && libssl->load()) {
         // libssl.so.<SHLIB_VERSION_NUMBER> and libcrypto.so.<SHLIB_VERSION_NUMBER> found
         return result;
@@ -794,13 +830,13 @@ static LoadedOpenSsl loadOpenSsl()
         return suffix;
     };
 
-    static QString suffix = QString::fromLatin1(openSSLSuffix("_" QT_OPENSSL_VERSION));
+    static QString suffix = QString::fromLatin1(openSSLSuffix("_1_1"));
 
-    libssl->setFileNameAndVersion("ssl"_L1 + suffix, -1);
-    libcrypto->setFileNameAndVersion("crypto"_L1 + suffix, -1);
+    libssl->setFileNameAndVersion(QLatin1String("ssl") + suffix, -1);
+    libcrypto->setFileNameAndVersion(QLatin1String("crypto") + suffix, -1);
 # else
-    libssl->setFileNameAndVersion("ssl"_L1, -1);
-    libcrypto->setFileNameAndVersion("crypto"_L1, -1);
+    libssl->setFileNameAndVersion(QLatin1String("ssl"), -1);
+    libcrypto->setFileNameAndVersion(QLatin1String("crypto"), -1);
 # endif
     if (libcrypto->load() && libssl->load()) {
         // libssl.so.0 and libcrypto.so.0 found
@@ -854,9 +890,9 @@ static LoadedOpenSsl loadOpenSsl()
 }
 #endif
 
-Q_CONSTINIT static QBasicMutex symbolResolveMutex;
-Q_CONSTINIT static QBasicAtomicInt symbolsResolved = Q_BASIC_ATOMIC_INITIALIZER(false);
-Q_CONSTINIT static bool triedToResolveSymbols = false;
+static QBasicMutex symbolResolveMutex;
+static QBasicAtomicInt symbolsResolved = Q_BASIC_ATOMIC_INITIALIZER(false);
+static bool triedToResolveSymbols = false;
 
 bool q_resolveOpenSslSymbols()
 {
@@ -870,10 +906,9 @@ bool q_resolveOpenSslSymbols()
     triedToResolveSymbols = true;
 
     LoadedOpenSsl libs = loadOpenSsl();
-    if (!libs.ssl || !libs.crypto) {
-        qCWarning(lcTlsBackend, "Failed to load libssl/libcrypto.");
+    if (!libs.ssl || !libs.crypto)
+        // failed to load them
         return false;
-    }
 
     RESOLVEFUNC(OPENSSL_init_ssl)
     RESOLVEFUNC(OPENSSL_init_crypto)

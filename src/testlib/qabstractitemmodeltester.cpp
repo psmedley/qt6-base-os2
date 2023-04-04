@@ -1,11 +1,46 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2017 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtTest module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qabstractitemmodeltester.h"
 
 #include <private/qobject_p.h>
-#include <private/qabstractitemmodel_p.h>
 #include <QtCore/QPointer>
 #include <QtCore/QAbstractItemModel>
 #include <QtCore/QStack>
@@ -42,28 +77,10 @@ public:
     void data();
 
     void runAllTests();
-
     void layoutAboutToBeChanged();
     void layoutChanged();
-
-    void modelAboutToBeReset();
-    void modelReset();
-
-    void columnsAboutToBeInserted(const QModelIndex &parent, int first, int last);
-    void columnsInserted(const QModelIndex &parent, int first, int last);
-    void columnsAboutToBeMoved(const QModelIndex &sourceParent, int sourceStart, int sourceEnd,
-                               const QModelIndex &destinationParent, int destinationColumn);
-    void columnsMoved(const QModelIndex &parent, int start, int end, const QModelIndex &destination,
-                      int column);
-    void columnsAboutToBeRemoved(const QModelIndex &parent, int first, int last);
-    void columnsRemoved(const QModelIndex &parent, int first, int last);
-
     void rowsAboutToBeInserted(const QModelIndex &parent, int start, int end);
     void rowsInserted(const QModelIndex &parent, int start, int end);
-    void rowsAboutToBeMoved(const QModelIndex &sourceParent, int sourceStart, int sourceEnd,
-                            const QModelIndex &destinationParent, int destinationRow);
-    void rowsMoved(const QModelIndex &parent, int start, int end, const QModelIndex &destination,
-                   int row);
     void rowsAboutToBeRemoved(const QModelIndex &parent, int start, int end);
     void rowsRemoved(const QModelIndex &parent, int start, int end);
     void dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);
@@ -91,21 +108,7 @@ private:
     QStack<Changing> insert;
     QStack<Changing> remove;
 
-    bool useFetchMore = true;
     bool fetchingMore;
-
-    enum class ChangeInFlight {
-        None,
-        ColumnsInserted,
-        ColumnsMoved,
-        ColumnsRemoved,
-        LayoutChanged,
-        ModelReset,
-        RowsInserted,
-        RowsMoved,
-        RowsRemoved
-    };
-    ChangeInFlight changeInFlight = ChangeInFlight::None;
 
     QList<QPersistentModelIndex> changing;
 };
@@ -249,45 +252,14 @@ QAbstractItemModelTester::QAbstractItemModelTester(QAbstractItemModel *model, Fa
     connect(model, &QAbstractItemModel::layoutChanged,
             this, [d]{ d->layoutChanged(); });
 
-    // column operations
-    connect(model, &QAbstractItemModel::columnsAboutToBeInserted,
-            this, [d](const QModelIndex &parent, int start, int end) { d->columnsAboutToBeInserted(parent, start, end); });
-    connect(model, &QAbstractItemModel::columnsAboutToBeMoved,
-            this, [d](const QModelIndex &sourceParent, int sourceStart, int sourceEnd, const QModelIndex &destinationParent, int destinationColumn) {
-                d->columnsAboutToBeMoved(sourceParent, sourceStart, sourceEnd, destinationParent, destinationColumn); });
-    connect(model, &QAbstractItemModel::columnsAboutToBeRemoved,
-            this, [d](const QModelIndex &parent, int start, int end) { d->columnsAboutToBeRemoved(parent, start, end); });
-    connect(model, &QAbstractItemModel::columnsInserted,
-            this, [d](const QModelIndex &parent, int start, int end) { d->columnsInserted(parent, start, end); });
-    connect(model, &QAbstractItemModel::columnsMoved,
-            this, [d](const QModelIndex &parent, int start, int end, const QModelIndex &destination, int col) {
-                d->columnsMoved(parent, start, end, destination, col); });
-    connect(model, &QAbstractItemModel::columnsRemoved,
-            this, [d](const QModelIndex &parent, int start, int end) { d->columnsRemoved(parent, start, end); });
-
-    // row operations
     connect(model, &QAbstractItemModel::rowsAboutToBeInserted,
             this, [d](const QModelIndex &parent, int start, int end) { d->rowsAboutToBeInserted(parent, start, end); });
-    connect(model, &QAbstractItemModel::rowsAboutToBeMoved,
-            this, [d](const QModelIndex &sourceParent, int sourceStart, int sourceEnd, const QModelIndex &destinationParent, int destinationRow) {
-        d->rowsAboutToBeMoved(sourceParent, sourceStart, sourceEnd, destinationParent, destinationRow); });
     connect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
             this, [d](const QModelIndex &parent, int start, int end) { d->rowsAboutToBeRemoved(parent, start, end); });
     connect(model, &QAbstractItemModel::rowsInserted,
             this, [d](const QModelIndex &parent, int start, int end) { d->rowsInserted(parent, start, end); });
-    connect(model, &QAbstractItemModel::rowsMoved,
-            this, [d](const QModelIndex &parent, int start, int end, const QModelIndex &destination, int row) {
-        d->rowsMoved(parent, start, end, destination, row); });
     connect(model, &QAbstractItemModel::rowsRemoved,
             this, [d](const QModelIndex &parent, int start, int end) { d->rowsRemoved(parent, start, end); });
-
-    // reset
-    connect(model, &QAbstractItemModel::modelAboutToBeReset,
-            this, [d]() { d->modelAboutToBeReset(); });
-    connect(model, &QAbstractItemModel::modelReset,
-            this, [d]() { d->modelReset(); });
-
-    // data
     connect(model, &QAbstractItemModel::dataChanged,
             this, [d](const QModelIndex &topLeft, const QModelIndex &bottomRight) { d->dataChanged(topLeft, bottomRight); });
     connect(model, &QAbstractItemModel::headerDataChanged,
@@ -314,20 +286,6 @@ QAbstractItemModelTester::FailureReportingMode QAbstractItemModelTester::failure
 {
     Q_D(const QAbstractItemModelTester);
     return d->failureReportingMode;
-}
-
-/*!
-    If \a value is true, enables dynamic population of the
-    tested model, which is the default.
-    If \a value is false, it disables it.
-
-    \since 6.4
-    \sa QAbstractItemModel::fetchMore()
-*/
-void QAbstractItemModelTester::setUseFetchMore(bool value)
-{
-    Q_D(QAbstractItemModelTester);
-    d->useFetchMore = value;
 }
 
 bool QAbstractItemModelTester::verify(bool statement, const char *statementStr, const char *description, const char *file, int line)
@@ -364,11 +322,9 @@ void QAbstractItemModelTesterPrivate::nonDestructiveBasicTest()
     MODELTESTER_VERIFY(!model->buddy(QModelIndex()).isValid());
     model->canFetchMore(QModelIndex());
     MODELTESTER_VERIFY(model->columnCount(QModelIndex()) >= 0);
-    if (useFetchMore) {
-        fetchingMore = true;
-        model->fetchMore(QModelIndex());
-        fetchingMore = false;
-    }
+    fetchingMore = true;
+    model->fetchMore(QModelIndex());
+    fetchingMore = false;
     Qt::ItemFlags flags = model->flags(QModelIndex());
     MODELTESTER_VERIFY(flags == Qt::ItemIsDropEnabled || flags == 0);
     model->hasChildren(QModelIndex());
@@ -546,7 +502,7 @@ void QAbstractItemModelTesterPrivate::checkChildren(const QModelIndex &parent, i
         p = p.parent();
 
     // For models that are dynamically populated
-    if (model->canFetchMore(parent) && useFetchMore) {
+    if (model->canFetchMore(parent)) {
         fetchingMore = true;
         model->fetchMore(parent);
         fetchingMore = false;
@@ -656,14 +612,14 @@ void QAbstractItemModelTesterPrivate::data()
     // Check that the alignment is one we know about
     QVariant textAlignmentVariant = model->data(model->index(0, 0), Qt::TextAlignmentRole);
     if (textAlignmentVariant.isValid()) {
-        Qt::Alignment alignment = QtPrivate::legacyFlagValueFromModelData<Qt::Alignment>(textAlignmentVariant);
+        Qt::Alignment alignment = qvariant_cast<Qt::Alignment>(textAlignmentVariant);
         MODELTESTER_COMPARE(alignment, (alignment & (Qt::AlignHorizontal_Mask | Qt::AlignVertical_Mask)));
     }
 
     // Check that the "check state" is one we know about.
     QVariant checkStateVariant = model->data(model->index(0, 0), Qt::CheckStateRole);
     if (checkStateVariant.isValid()) {
-        Qt::CheckState state = QtPrivate::legacyEnumValueFromModelData<Qt::CheckState>(checkStateVariant);
+        int state = checkStateVariant.toInt();
         MODELTESTER_VERIFY(state == Qt::Unchecked
                 || state == Qt::PartiallyChecked
                 || state == Qt::Checked);
@@ -675,89 +631,6 @@ void QAbstractItemModelTesterPrivate::data()
         return;
 }
 
-void QAbstractItemModelTesterPrivate::columnsAboutToBeInserted(const QModelIndex &parent, int start,
-                                                               int end)
-{
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::None);
-    changeInFlight = ChangeInFlight::ColumnsInserted;
-
-    qCDebug(lcModelTest) << "columnsAboutToBeInserted"
-                         << "start=" << start << "end=" << end << "parent=" << parent
-                         << "parent data=" << model->data(parent).toString()
-                         << "current count of parent=" << model->rowCount(parent)
-                         << "last before insertion=" << model->index(start - 1, 0, parent)
-                         << model->data(model->index(start - 1, 0, parent));
-}
-
-void QAbstractItemModelTesterPrivate::columnsInserted(const QModelIndex &parent, int first,
-                                                      int last)
-{
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::ColumnsInserted);
-    changeInFlight = ChangeInFlight::None;
-
-    qCDebug(lcModelTest) << "columnsInserted"
-                         << "start=" << first << "end=" << last << "parent=" << parent
-                         << "parent data=" << model->data(parent).toString()
-                         << "current count of parent=" << model->rowCount(parent);
-}
-
-void QAbstractItemModelTesterPrivate::columnsAboutToBeMoved(const QModelIndex &sourceParent,
-                                                            int sourceStart, int sourceEnd,
-                                                            const QModelIndex &destinationParent,
-                                                            int destinationColumn)
-{
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::None);
-    changeInFlight = ChangeInFlight::ColumnsMoved;
-
-    qCDebug(lcModelTest) << "columnsAboutToBeMoved"
-                         << "sourceStart=" << sourceStart << "sourceEnd=" << sourceEnd
-                         << "sourceParent=" << sourceParent
-                         << "sourceParent data=" << model->data(sourceParent).toString()
-                         << "destinationParent=" << destinationParent
-                         << "destinationColumn=" << destinationColumn;
-}
-
-void QAbstractItemModelTesterPrivate::columnsMoved(const QModelIndex &sourceParent, int sourceStart,
-                                                   int sourceEnd,
-                                                   const QModelIndex &destinationParent,
-                                                   int destinationColumn)
-{
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::ColumnsMoved);
-    changeInFlight = ChangeInFlight::None;
-
-    qCDebug(lcModelTest) << "columnsMoved"
-                         << "sourceStart=" << sourceStart << "sourceEnd=" << sourceEnd
-                         << "sourceParent=" << sourceParent
-                         << "sourceParent data=" << model->data(sourceParent).toString()
-                         << "destinationParent=" << destinationParent
-                         << "destinationColumn=" << destinationColumn;
-}
-
-void QAbstractItemModelTesterPrivate::columnsAboutToBeRemoved(const QModelIndex &parent, int first,
-                                                              int last)
-{
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::None);
-    changeInFlight = ChangeInFlight::ColumnsRemoved;
-
-    qCDebug(lcModelTest) << "columnsAboutToBeRemoved"
-                         << "start=" << first << "end=" << last << "parent=" << parent
-                         << "parent data=" << model->data(parent).toString()
-                         << "current count of parent=" << model->rowCount(parent)
-                         << "last before removal=" << model->index(first - 1, 0, parent)
-                         << model->data(model->index(first - 1, 0, parent));
-}
-
-void QAbstractItemModelTesterPrivate::columnsRemoved(const QModelIndex &parent, int first, int last)
-{
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::ColumnsRemoved);
-    changeInFlight = ChangeInFlight::None;
-
-    qCDebug(lcModelTest) << "columnsRemoved"
-                         << "start=" << first << "end=" << last << "parent=" << parent
-                         << "parent data=" << model->data(parent).toString()
-                         << "current count of parent=" << model->rowCount(parent);
-}
-
 /*
     Store what is about to be inserted to make sure it actually happens
 
@@ -765,9 +638,6 @@ void QAbstractItemModelTesterPrivate::columnsRemoved(const QModelIndex &parent, 
  */
 void QAbstractItemModelTesterPrivate::rowsAboutToBeInserted(const QModelIndex &parent, int start, int end)
 {
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::None);
-    changeInFlight = ChangeInFlight::RowsInserted;
-
     qCDebug(lcModelTest) << "rowsAboutToBeInserted"
                          << "start=" << start << "end=" << end << "parent=" << parent
                          << "parent data=" << model->data(parent).toString()
@@ -789,9 +659,6 @@ void QAbstractItemModelTesterPrivate::rowsAboutToBeInserted(const QModelIndex &p
  */
 void QAbstractItemModelTesterPrivate::rowsInserted(const QModelIndex &parent, int start, int end)
 {
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::RowsInserted);
-    changeInFlight = ChangeInFlight::None;
-
     qCDebug(lcModelTest) << "rowsInserted"
                          << "start=" << start << "end=" << end << "parent=" << parent
                          << "parent data=" << model->data(parent).toString()
@@ -822,68 +689,19 @@ void QAbstractItemModelTesterPrivate::rowsInserted(const QModelIndex &parent, in
     }
 }
 
-void QAbstractItemModelTesterPrivate::rowsAboutToBeMoved(const QModelIndex &sourceParent,
-                                                         int sourceStart, int sourceEnd,
-                                                         const QModelIndex &destinationParent,
-                                                         int destinationRow)
-{
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::None);
-    changeInFlight = ChangeInFlight::RowsMoved;
-
-    qCDebug(lcModelTest) << "rowsAboutToBeMoved"
-                         << "sourceStart=" << sourceStart << "sourceEnd=" << sourceEnd
-                         << "sourceParent=" << sourceParent
-                         << "sourceParent data=" << model->data(sourceParent).toString()
-                         << "destinationParent=" << destinationParent
-                         << "destinationRow=" << destinationRow;
-}
-
-void QAbstractItemModelTesterPrivate::rowsMoved(const QModelIndex &sourceParent, int sourceStart,
-                                                int sourceEnd, const QModelIndex &destinationParent,
-                                                int destinationRow)
-{
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::RowsMoved);
-    changeInFlight = ChangeInFlight::None;
-
-    qCDebug(lcModelTest) << "rowsMoved"
-                         << "sourceStart=" << sourceStart << "sourceEnd=" << sourceEnd
-                         << "sourceParent=" << sourceParent
-                         << "sourceParent data=" << model->data(sourceParent).toString()
-                         << "destinationParent=" << destinationParent
-                         << "destinationRow=" << destinationRow;
-}
-
 void QAbstractItemModelTesterPrivate::layoutAboutToBeChanged()
 {
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::None);
-    changeInFlight = ChangeInFlight::LayoutChanged;
-
     for (int i = 0; i < qBound(0, model->rowCount(), 100); ++i)
         changing.append(QPersistentModelIndex(model->index(i, 0)));
 }
 
 void QAbstractItemModelTesterPrivate::layoutChanged()
 {
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::LayoutChanged);
-    changeInFlight = ChangeInFlight::None;
-
-    for (int i = 0; i < changing.size(); ++i) {
+    for (int i = 0; i < changing.count(); ++i) {
         QPersistentModelIndex p = changing[i];
         MODELTESTER_COMPARE(model->index(p.row(), p.column(), p.parent()), QModelIndex(p));
     }
     changing.clear();
-}
-
-void QAbstractItemModelTesterPrivate::modelAboutToBeReset()
-{
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::None);
-    changeInFlight = ChangeInFlight::ModelReset;
-}
-
-void QAbstractItemModelTesterPrivate::modelReset()
-{
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::ModelReset);
-    changeInFlight = ChangeInFlight::None;
 }
 
 /*
@@ -893,9 +711,6 @@ void QAbstractItemModelTesterPrivate::modelReset()
  */
 void QAbstractItemModelTesterPrivate::rowsAboutToBeRemoved(const QModelIndex &parent, int start, int end)
 {
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::None);
-    changeInFlight = ChangeInFlight::RowsRemoved;
-
     qCDebug(lcModelTest) << "rowsAboutToBeRemoved"
                          << "start=" << start << "end=" << end << "parent=" << parent
                          << "parent data=" << model->data(parent).toString()
@@ -926,9 +741,6 @@ void QAbstractItemModelTesterPrivate::rowsAboutToBeRemoved(const QModelIndex &pa
  */
 void QAbstractItemModelTesterPrivate::rowsRemoved(const QModelIndex &parent, int start, int end)
 {
-    MODELTESTER_COMPARE(changeInFlight, ChangeInFlight::RowsRemoved);
-    changeInFlight = ChangeInFlight::None;
-
     qCDebug(lcModelTest) << "rowsRemoved"
                          << "start=" << start << "end=" << end << "parent=" << parent
                          << "parent data=" << model->data(parent).toString()
@@ -1037,5 +849,3 @@ bool QAbstractItemModelTesterPrivate::compare(const T1 &t1, const T2 &t2,
 
 
 QT_END_NAMESPACE
-
-#include "moc_qabstractitemmodeltester.cpp"

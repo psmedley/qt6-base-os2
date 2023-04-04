@@ -1,8 +1,0 @@
-RCC_OBJECTS = 
-QMAKE_PRL_BUILD_DIR = /home/psmedley/qt6-base-os2/build/src/plugins/platforms/eglfs/deviceintegration/eglfs_kms
-QMAKE_PRL_TARGET = libQt6EglFsKmsGbmSupport.so
-QMAKE_PRL_TARGET_PATH_FOR_CMAKE = /home/psmedley/qt6-base-os2/build/lib/libQt6EglFsKmsGbmSupport.so
-QMAKE_PRL_CONFIG = shared
-QMAKE_PRL_VERSION = 6.4.2
-QMAKE_PRL_LIBS_FOR_CMAKE = /home/psmedley/qt6-base-os2/build/lib/libQt6EglFsKmsSupport.so;/home/psmedley/qt6-base-os2/build/lib/libQt6EglFSDeviceIntegration.so;/home/psmedley/qt6-base-os2/build/lib/libQt6FbSupport.a;/usr/lib/x86_64-linux-gnu/libEGL.so;/home/psmedley/qt6-base-os2/build/lib/libQt6InputSupport.a;/home/psmedley/qt6-base-os2/build/lib/libQt6DeviceDiscoverySupport.a;/usr/lib/x86_64-linux-gnu/libmtdev.so;/usr/lib/x86_64-linux-gnu/libinput.so;/usr/lib/x86_64-linux-gnu/libudev.so;/home/psmedley/qt6-base-os2/build/lib/libQt6OpenGL.so;/home/psmedley/qt6-base-os2/build/lib/libQt6Gui.so;/home/psmedley/qt6-base-os2/build/lib/libQt6KmsSupport.a;/usr/lib/x86_64-linux-gnu/libdrm.so;/home/psmedley/qt6-base-os2/build/lib/libQt6Core.so;/home/psmedley/qt6-base-os2/build/lib/libQt6Gui.so;/home/psmedley/qt6-base-os2/build/lib/libQt6Core.so;/usr/lib/x86_64-linux-gnu/libGLX.so;/usr/lib/x86_64-linux-gnu/libOpenGL.so;/usr/lib/x86_64-linux-gnu/libxkbcommon.so;/usr/lib/x86_64-linux-gnu/libgbm.so
-

@@ -1,11 +1,46 @@
-// Copyright (C) 2017 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qbasicvulkanplatforminstance_p.h"
 #include <QCoreApplication>
 #include <QList>
 #include <QLoggingCategory>
-#include <QVarLengthArray>
 
 QT_BEGIN_NAMESPACE
 
@@ -46,45 +81,19 @@ QBasicPlatformVulkanInstance::~QBasicPlatformVulkanInstance()
         m_vkDestroyInstance(m_vkInst, nullptr);
 }
 
-void QBasicPlatformVulkanInstance::loadVulkanLibrary(const QString &defaultLibraryName, int defaultLibraryVersion)
+void QBasicPlatformVulkanInstance::loadVulkanLibrary(const QString &defaultLibraryName)
 {
-    QVarLengthArray<std::pair<QString, int>, 3> loadList;
-
-    // First in the list of libraries to try is the manual override, relevant on
-    // embedded systems without a Vulkan loader and possibly with custom vendor
-    // library names.
     if (qEnvironmentVariableIsSet("QT_VULKAN_LIB"))
-        loadList.append({ QString::fromUtf8(qgetenv("QT_VULKAN_LIB")), -1 });
+        m_vulkanLib.setFileName(QString::fromUtf8(qgetenv("QT_VULKAN_LIB")));
+    else
+        m_vulkanLib.setFileName(defaultLibraryName);
 
-    // Then what the platform specified. On Linux the version is likely 1, thus
-    // preferring libvulkan.so.1 over libvulkan.so.
-    loadList.append({ defaultLibraryName, defaultLibraryVersion });
-
-    // If there was a version given, we must still try without it if the first
-    // attempt fails, so that libvulkan.so is picked up if the .so.1 is not
-    // present on the system (so loaderless embedded systems still work).
-    if (defaultLibraryVersion >= 0)
-        loadList.append({ defaultLibraryName, -1 });
-
-    bool ok = false;
-    for (const auto &lib : loadList) {
-        m_vulkanLib.reset(new QLibrary);
-        if (lib.second >= 0)
-            m_vulkanLib->setFileNameAndVersion(lib.first, lib.second);
-        else
-            m_vulkanLib->setFileName(lib.first);
-        if (m_vulkanLib->load()) {
-            ok = true;
-            break;
-        }
-    }
-
-    if (!ok) {
-        qWarning("Failed to load %s: %s", qPrintable(m_vulkanLib->fileName()), qPrintable(m_vulkanLib->errorString()));
+    if (!m_vulkanLib.load()) {
+        qWarning("Failed to load %s: %s", qPrintable(m_vulkanLib.fileName()), qPrintable(m_vulkanLib.errorString()));
         return;
     }
 
-    init(m_vulkanLib.get());
+    init(&m_vulkanLib);
 }
 
 void QBasicPlatformVulkanInstance::init(QLibrary *lib)
@@ -150,7 +159,7 @@ void QBasicPlatformVulkanInstance::init(QLibrary *lib)
         QList<VkLayerProperties> layerProps(layerCount);
         m_vkEnumerateInstanceLayerProperties(&layerCount, layerProps.data());
         m_supportedLayers.reserve(layerCount);
-        for (const VkLayerProperties &p : std::as_const(layerProps)) {
+        for (const VkLayerProperties &p : qAsConst(layerProps)) {
             QVulkanLayer layer;
             layer.name = p.layerName;
             layer.version = p.implementationVersion;
@@ -169,7 +178,7 @@ void QBasicPlatformVulkanInstance::init(QLibrary *lib)
         QList<VkExtensionProperties> extProps(extCount);
         m_vkEnumerateInstanceExtensionProperties(nullptr, &extCount, extProps.data());
         m_supportedExtensions.reserve(extCount);
-        for (const VkExtensionProperties &p : std::as_const(extProps)) {
+        for (const VkExtensionProperties &p : qAsConst(extProps)) {
             QVulkanExtension ext;
             ext.name = p.extensionName;
             ext.version = p.specVersion;
@@ -220,10 +229,10 @@ void QBasicPlatformVulkanInstance::initInstance(QVulkanInstance *instance, const
                                                  apiVersion.microVersion());
         }
 
-        m_enabledExtensions.append("VK_KHR_surface");
-        m_enabledExtensions.append("VK_KHR_portability_enumeration");
         if (!flags.testFlag(QVulkanInstance::NoDebugOutputRedirect))
             m_enabledExtensions.append("VK_EXT_debug_report");
+
+        m_enabledExtensions.append("VK_KHR_surface");
 
         for (const QByteArray &ext : extraExts)
             m_enabledExtensions.append(ext);
@@ -246,13 +255,13 @@ void QBasicPlatformVulkanInstance::initInstance(QVulkanInstance *instance, const
 
         // No clever stuff with QSet and friends: the order for layers matters
         // and the user-provided order must be kept.
-        for (int i = 0; i < m_enabledLayers.size(); ++i) {
+        for (int i = 0; i < m_enabledLayers.count(); ++i) {
             const QByteArray &layerName(m_enabledLayers[i]);
             if (!m_supportedLayers.contains(layerName))
                 m_enabledLayers.removeAt(i--);
         }
         qDebug(lcPlatVk) << "Enabling Vulkan instance layers:" << m_enabledLayers;
-        for (int i = 0; i < m_enabledExtensions.size(); ++i) {
+        for (int i = 0; i < m_enabledExtensions.count(); ++i) {
             const QByteArray &extName(m_enabledExtensions[i]);
             if (!m_supportedExtensions.contains(extName))
                 m_enabledExtensions.removeAt(i--);
@@ -263,21 +272,20 @@ void QBasicPlatformVulkanInstance::initInstance(QVulkanInstance *instance, const
         memset(&instInfo, 0, sizeof(instInfo));
         instInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         instInfo.pApplicationInfo = &appInfo;
-        instInfo.flags = 0x00000001; // VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR
 
         QList<const char *> layerNameVec;
-        for (const QByteArray &ba : std::as_const(m_enabledLayers))
+        for (const QByteArray &ba : qAsConst(m_enabledLayers))
             layerNameVec.append(ba.constData());
         if (!layerNameVec.isEmpty()) {
-            instInfo.enabledLayerCount = layerNameVec.size();
+            instInfo.enabledLayerCount = layerNameVec.count();
             instInfo.ppEnabledLayerNames = layerNameVec.constData();
         }
 
         QList<const char *> extNameVec;
-        for (const QByteArray &ba : std::as_const(m_enabledExtensions))
+        for (const QByteArray &ba : qAsConst(m_enabledExtensions))
             extNameVec.append(ba.constData());
         if (!extNameVec.isEmpty()) {
-            instInfo.enabledExtensionCount = extNameVec.size();
+            instInfo.enabledExtensionCount = extNameVec.count();
             instInfo.ppEnabledExtensionNames = extNameVec.constData();
         }
 

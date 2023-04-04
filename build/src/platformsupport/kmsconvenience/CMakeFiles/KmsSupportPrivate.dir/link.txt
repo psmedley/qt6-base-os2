@@ -1,2 +1,0 @@
-/usr/bin/ar qc ../../../lib/libQt6KmsSupport.a CMakeFiles/KmsSupportPrivate.dir/KmsSupportPrivate_autogen/mocs_compilation.cpp.o CMakeFiles/KmsSupportPrivate.dir/qkmsdevice.cpp.o
-/usr/bin/ranlib ../../../lib/libQt6KmsSupport.a

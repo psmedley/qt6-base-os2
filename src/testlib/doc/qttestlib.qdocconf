@@ -16,6 +16,10 @@ qhp.QtTestLib.virtualFolder       = qttest
 qhp.QtTestLib.indexTitle          = Qt Test
 qhp.QtTestLib.indexRoot           =
 
+qhp.QtTestLib.filterAttributes    = qttest $QT_VERSION qtrefdoc
+qhp.QtTestLib.customFilters.Qt.name = QtTest $QT_VERSION
+qhp.QtTestLib.customFilters.Qt.filterAttributes = qttest $QT_VERSION
+
 qhp.QtTestLib.subprojects         = classes
 qhp.QtTestLib.subprojects.classes.title = C++ Classes
 qhp.QtTestLib.subprojects.classes.indexTitle = Qt Test C++ Classes
@@ -41,8 +45,7 @@ sources     += ../../corelib/kernel/qtestsupport_core.cpp \
 exampledirs += ../../../examples/qtestlib \
                .. \
                . \
-               snippets \
-               includes
+               snippets
 
 excludedirs += ../../../examples/widgets/doc
 
@@ -53,6 +56,3 @@ manifestmeta.thumbnail.names = "QtTestLib/Chapter *"
 
 navigation.landingpage = "Qt Test"
 navigation.cppclassespage = "Qt Test C++ Classes"
-
-# Fail the documentation build if there are more warnings than the limit
-warninglimit = 0

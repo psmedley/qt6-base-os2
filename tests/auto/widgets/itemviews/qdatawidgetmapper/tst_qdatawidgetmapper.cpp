@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QComboBox>
 #include <QDataWidgetMapper>
@@ -252,22 +277,22 @@ void tst_QDataWidgetMapper::currentIndexChanged()
     QSignalSpy spy(&mapper, &QDataWidgetMapper::currentIndexChanged);
 
     mapper.toFirst();
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.takeFirst().at(0).toInt(), 0);
 
     mapper.toNext();
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.takeFirst().at(0).toInt(), 1);
 
     mapper.setCurrentIndex(7);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.takeFirst().at(0).toInt(), 7);
 
     mapper.setCurrentIndex(-1);
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
 
     mapper.setCurrentIndex(42);
-    QCOMPARE(spy.size(), 0);
+    QCOMPARE(spy.count(), 0);
 }
 
 void tst_QDataWidgetMapper::changingValues()
@@ -424,21 +449,21 @@ void tst_QDataWidgetMapper::textEditDoesntChangeFocusOnTab_qtbug3305()
     int closeEditorSpyCount = 0;
     const QString textEditContents = textEdit->toPlainText();
 
-    QCOMPARE(closeEditorSpy.size(), closeEditorSpyCount);
+    QCOMPARE(closeEditorSpy.count(), closeEditorSpyCount);
     QVERIFY(lineEdit->hasFocus());
     QVERIFY(!textEdit->hasFocus());
 
     // this will generate a closeEditor for the tab key, and another for the focus out
     QTest::keyClick(QApplication::focusWidget(), Qt::Key_Tab);
     closeEditorSpyCount += 2;
-    QTRY_COMPARE(closeEditorSpy.size(), closeEditorSpyCount);
+    QTRY_COMPARE(closeEditorSpy.count(), closeEditorSpyCount);
 
     QTRY_VERIFY(textEdit->hasFocus());
     QVERIFY(!lineEdit->hasFocus());
 
     // now that the text edit is focused, a tab keypress will insert a tab, not change focus
     QTest::keyClick(QApplication::focusWidget(), Qt::Key_Tab);
-    QTRY_COMPARE(closeEditorSpy.size(), closeEditorSpyCount);
+    QTRY_COMPARE(closeEditorSpy.count(), closeEditorSpyCount);
 
     QVERIFY(!lineEdit->hasFocus());
     QVERIFY(textEdit->hasFocus());
@@ -449,7 +474,7 @@ void tst_QDataWidgetMapper::textEditDoesntChangeFocusOnTab_qtbug3305()
     QTRY_VERIFY(lineEdit->hasFocus());
     QVERIFY(!textEdit->hasFocus());
     ++closeEditorSpyCount;
-    QCOMPARE(closeEditorSpy.size(), closeEditorSpyCount);
+    QCOMPARE(closeEditorSpy.count(), closeEditorSpyCount);
 }
 
 QTEST_MAIN(tst_QDataWidgetMapper)

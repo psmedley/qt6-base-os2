@@ -1,6 +1,42 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2015 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2015 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QMIMEPROVIDER_P_H
 #define QMIMEPROVIDER_P_H
@@ -23,7 +59,6 @@ QT_REQUIRE_CONFIG(mimetype);
 #include "qmimeglobpattern_p.h"
 #include <QtCore/qdatetime.h>
 #include <QtCore/qset.h>
-#include <QtCore/qmap.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -44,7 +79,6 @@ public:
     virtual void addAliases(const QString &name, QStringList &result) = 0;
     virtual void findByMagic(const QByteArray &data, int *accuracyPtr, QMimeType &candidate) = 0;
     virtual void addAllMimeTypes(QList<QMimeType> &result) = 0;
-    virtual bool loadMimeTypePrivate(QMimeTypePrivate &) { return false; }
     virtual void loadIcon(QMimeTypePrivate &) {}
     virtual void loadGenericIcon(QMimeTypePrivate &) {}
     virtual void ensureLoaded() {}
@@ -58,7 +92,7 @@ public:
 /*
    Parses the files 'mime.cache' and 'types' on demand
  */
-class QMimeBinaryProvider final : public QMimeProviderBase
+class QMimeBinaryProvider : public QMimeProviderBase
 {
 public:
     QMimeBinaryProvider(QMimeDatabasePrivate *db, const QString &directory);
@@ -73,7 +107,7 @@ public:
     void addAliases(const QString &name, QStringList &result) override;
     void findByMagic(const QByteArray &data, int *accuracyPtr, QMimeType &candidate) override;
     void addAllMimeTypes(QList<QMimeType> &result) override;
-    bool loadMimeTypePrivate(QMimeTypePrivate &) override;
+    static void loadMimeTypePrivate(QMimeTypePrivate &);
     void loadIcon(QMimeTypePrivate &) override;
     void loadGenericIcon(QMimeTypePrivate &) override;
     void ensureLoaded() override;
@@ -84,7 +118,7 @@ private:
     void matchGlobList(QMimeGlobMatchResult &result, CacheFile *cacheFile, int offset, const QString &fileName);
     bool matchSuffixTree(QMimeGlobMatchResult &result, CacheFile *cacheFile, int numEntries, int firstOffset, const QString &fileName, int charPos, bool caseSensitiveCheck);
     bool matchMagicRule(CacheFile *cacheFile, int numMatchlets, int firstOffset, const QByteArray &data);
-    QLatin1StringView iconForMime(CacheFile *cacheFile, int posListOffset, const QByteArray &inputMime);
+    QLatin1String iconForMime(CacheFile *cacheFile, int posListOffset, const QByteArray &inputMime);
     void loadMimeTypeList();
     bool checkCacheChanged();
 
@@ -92,18 +126,12 @@ private:
     QStringList m_cacheFileNames;
     QSet<QString> m_mimetypeNames;
     bool m_mimetypeListLoaded;
-    struct MimeTypeExtra
-    {
-        QHash<QString, QString> localeComments;
-        QStringList globPatterns;
-    };
-    QMap<QString, MimeTypeExtra> m_mimetypeExtra;
 };
 
 /*
    Parses the raw XML files (slower)
  */
-class QMimeXMLProvider final : public QMimeProviderBase
+class QMimeXMLProvider : public QMimeProviderBase
 {
 public:
     enum InternalDatabaseEnum { InternalDatabase };

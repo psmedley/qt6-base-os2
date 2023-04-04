@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QHeaderView>
 #include <QLineEdit>
@@ -24,7 +49,6 @@ private slots:
     void initTestCase();
     void init();
     void getSetCheck();
-    void selectionRange();
     void clear();
     void clearContents();
     void rowCount();
@@ -133,19 +157,6 @@ void tst_QTableWidget::getSetCheck()
     QCOMPARE(obj1.itemPrototype(), nullptr);
 }
 
-void tst_QTableWidget::selectionRange()
-{
-    QTableWidgetSelectionRange defaultSelection;
-    QTableWidgetSelectionRange selection(1, 2, 3, 4);
-
-    QTableWidgetSelectionRange copy(selection);
-    QCOMPARE(copy, selection);
-    QVERIFY(copy != defaultSelection);
-
-    defaultSelection = copy;
-    QCOMPARE(defaultSelection, copy);
-}
-
 void tst_QTableWidget::initTestCase()
 {
     testWidget.reset(new QTableWidget);
@@ -192,8 +203,8 @@ void tst_QTableWidget::clear()
     QVERIFY(bla.isNull());
 
     QVERIFY(!testWidget->item(0,0));
-    QVERIFY(!testWidget->selectedRanges().size());
-    QVERIFY(!testWidget->selectedItems().size());
+    QVERIFY(!testWidget->selectedRanges().count());
+    QVERIFY(!testWidget->selectedItems().count());
 }
 
 void tst_QTableWidget::rowCount()
@@ -360,7 +371,7 @@ void tst_QTableWidget::takeItem()
         QCOMPARE(item->text(), QString::number(row * column + column));
         delete item;
 
-        QTRY_COMPARE(spy.size(), 1);
+        QTRY_COMPARE(spy.count(), 1);
         const QList<QVariant> arguments = spy.takeFirst();
         QCOMPARE(arguments.size(), 2);
         QCOMPARE(arguments.at(0).toInt(), row);
@@ -525,24 +536,24 @@ void tst_QTableWidget::selectedItems()
         testWidget->setColumnHidden(column, true);
 
     // make sure we don't have any previous selections hanging around
-    QVERIFY(!testWidget->selectedRanges().size());
-    QVERIFY(!testWidget->selectedItems().size());
+    QVERIFY(!testWidget->selectedRanges().count());
+    QVERIFY(!testWidget->selectedItems().count());
 
     // select range and check that it is set correctly
     testWidget->setRangeSelected(selectionRange, true);
     if (selectionRange.topRow() >= 0) {
-        QCOMPARE(testWidget->selectedRanges().size(), 1);
+        QCOMPARE(testWidget->selectedRanges().count(), 1);
         QCOMPARE(testWidget->selectedRanges().at(0).topRow(), selectionRange.topRow());
         QCOMPARE(testWidget->selectedRanges().at(0).bottomRow(), selectionRange.bottomRow());
         QCOMPARE(testWidget->selectedRanges().at(0).leftColumn(), selectionRange.leftColumn());
         QCOMPARE(testWidget->selectedRanges().at(0).rightColumn(), selectionRange.rightColumn());
     } else {
-        QCOMPARE(testWidget->selectedRanges().size(), 0);
+        QCOMPARE(testWidget->selectedRanges().count(), 0);
     }
 
     // check that the correct number of items and the expected items are there
     const QList<QTableWidgetItem *> selectedItems = testWidget->selectedItems();
-    QCOMPARE(selectedItems.size(), expectedItems.size());
+    QCOMPARE(selectedItems.count(), expectedItems.count());
     for (const auto &intPair : expectedItems)
         QVERIFY(selectedItems.contains(testWidget->item(intPair.first, intPair.second)));
 
@@ -627,8 +638,12 @@ void tst_QTableWidget::selectedSpannedCells() // QTBUG-255
                       testWidget.visualRect(testWidget.model()->index(selectionEndCell.y(), selectionEndCell.x())).center());
 
     auto ranges = testWidget.selectedRanges();
-    QCOMPARE(ranges.size(), expectedSelectionRangeCount);
-    QCOMPARE(ranges.first(), expectedFirstSelectionRange);
+    QCOMPARE(ranges.count(), expectedSelectionRangeCount);
+    // QTableWidgetSelectionRange::operator== is added in 6.3; but for now, check it the hard way
+    QCOMPARE(ranges.first().leftColumn(), expectedFirstSelectionRange.leftColumn());
+    QCOMPARE(ranges.first().rightColumn(), expectedFirstSelectionRange.rightColumn());
+    QCOMPARE(ranges.first().topRow(), expectedFirstSelectionRange.topRow());
+    QCOMPARE(ranges.first().bottomRow(), expectedFirstSelectionRange.bottomRow());
 }
 
 void tst_QTableWidget::removeRow_data()
@@ -1194,15 +1209,15 @@ void tst_QTableWidget::sortItems()
             persistent << model->index(r, sortColumn, QModelIndex());
     }
 
-    for (int h = 0; h < initialHidden.size(); ++h)
+    for (int h = 0; h < initialHidden.count(); ++h)
         testWidget->hideRow(initialHidden.at(h));
 
-    QCOMPARE(testWidget->verticalHeader()->hiddenSectionCount(), initialHidden.size());
+    QCOMPARE(testWidget->verticalHeader()->hiddenSectionCount(), initialHidden.count());
 
     testWidget->sortItems(sortColumn, sortOrder);
 
     int te = 0;
-    for (int i = 0; i < rows.size(); ++i) {
+    for (int i = 0; i < rows.count(); ++i) {
         for (int j = 0; j < columnCount; ++j) {
             QString value;
             QTableWidgetItem *itm = testWidget->item(i, j);
@@ -1216,7 +1231,7 @@ void tst_QTableWidget::sortItems()
         //         << "expected" << rows.at(i);
     }
 
-    for (int k = 0; k < expectedHidden.size(); ++k)
+    for (int k = 0; k < expectedHidden.count(); ++k)
         QVERIFY(testWidget->isRowHidden(expectedHidden.at(k)));
 }
 
@@ -1397,18 +1412,18 @@ void tst_QTableWidget::setItemWithSorting()
             }
         }
 
-        for (int k = 0; k < persistent.size(); ++k) {
+        for (int k = 0; k < persistent.count(); ++k) {
             QCOMPARE(persistent.at(k).row(), expectedRows.at(k));
             int i = (persistent.at(k).row() * columnCount) + sortColumn;
             QCOMPARE(persistent.at(k).data().toString(), expectedValues.at(i));
         }
 
         if (i == 0)
-            QCOMPARE(dataChangedSpy.size(), reorderingExpected ? 0 : 1);
+            QCOMPARE(dataChangedSpy.count(), reorderingExpected ? 0 : 1);
         else
-            QCOMPARE(dataChangedSpy.size(), 1);
+            QCOMPARE(dataChangedSpy.count(), 1);
 
-        QCOMPARE(layoutChangedSpy.size(), reorderingExpected ? 1 : 0);
+        QCOMPARE(layoutChangedSpy.count(), reorderingExpected ? 1 : 0);
     }
 }
 
@@ -1444,7 +1459,7 @@ void tst_QTableWidget::itemData()
         QCOMPARE(widget.currentRoles, QList<int> { Qt::UserRole + i });
     }
     QMap<int, QVariant> flags = widget.model()->itemData(widget.model()->index(0, 0));
-    QCOMPARE(flags.size(), 6);
+    QCOMPARE(flags.count(), 6);
     for (int i = 0; i < 4; ++i)
         QCOMPARE(flags[Qt::UserRole + i].toString(), QString::number(i + 1));
 }
@@ -1457,7 +1472,7 @@ void tst_QTableWidget::setItemData()
 
     QTableWidgetItem *item = new QTableWidgetItem;
     table.setItem(0, 0, item);
-    QCOMPARE(dataChangedSpy.size(), 1);
+    QCOMPARE(dataChangedSpy.count(), 1);
     QModelIndex idx = qvariant_cast<QModelIndex>(dataChangedSpy.takeFirst().at(0));
 
     QMap<int, QVariant> data;
@@ -1469,7 +1484,7 @@ void tst_QTableWidget::setItemData()
     QCOMPARE(table.model()->data(idx, Qt::DisplayRole).toString(), QLatin1String("Display"));
     QCOMPARE(table.model()->data(idx, Qt::EditRole).toString(), QLatin1String("Display"));
     QCOMPARE(table.model()->data(idx, Qt::ToolTipRole).toString(), QLatin1String("ToolTip"));
-    QCOMPARE(dataChangedSpy.size(), 1);
+    QCOMPARE(dataChangedSpy.count(), 1);
     QCOMPARE(idx, qvariant_cast<QModelIndex>(dataChangedSpy.first().at(0)));
     QCOMPARE(idx, qvariant_cast<QModelIndex>(dataChangedSpy.first().at(1)));
     const auto roles = qvariant_cast<QList<int>>(dataChangedSpy.first().at(2));
@@ -1480,13 +1495,13 @@ void tst_QTableWidget::setItemData()
     dataChangedSpy.clear();
 
     table.model()->setItemData(idx, data);
-    QCOMPARE(dataChangedSpy.size(), 0);
+    QCOMPARE(dataChangedSpy.count(), 0);
 
     data.clear();
     data.insert(Qt::DisplayRole, QLatin1String("dizplaye"));
     table.model()->setItemData(idx, data);
     QCOMPARE(table.model()->data(idx, Qt::DisplayRole).toString(), QLatin1String("dizplaye"));
-    QCOMPARE(dataChangedSpy.size(), 1);
+    QCOMPARE(dataChangedSpy.count(), 1);
     QCOMPARE(QList<int>({ Qt::DisplayRole, Qt::EditRole }),
              qvariant_cast<QList<int>>(dataChangedSpy.first().at(2)));
 
@@ -1649,7 +1664,7 @@ void tst_QTableWidget::task262056_sortDuplicate()
     QSignalSpy layoutChangedSpy(testWidget->model(), &QAbstractItemModel::layoutChanged);
     testWidget->item(3,0)->setBackground(Qt::red);
 
-    QCOMPARE(layoutChangedSpy.size(),0);
+    QCOMPARE(layoutChangedSpy.count(),0);
 
 }
 
@@ -1746,7 +1761,7 @@ void tst_QTableWidget::selectedRowAfterSorting()
     table.setProperty("sortingEnabled",true);
     table.selectRow(1);
     table.item(1,1)->setText("9");
-    QCOMPARE(table.selectedItems().size(),3);
+    QCOMPARE(table.selectedItems().count(),3);
     const auto selectedItems = table.selectedItems();
     for (QTableWidgetItem *item : selectedItems)
         QCOMPARE(item->row(), 0);

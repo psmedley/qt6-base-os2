@@ -6,7 +6,7 @@
 
 qt_internal_add_benchmark(tst_bench_qmap
     SOURCES
-        tst_bench_qmap.cpp
+        main.cpp
     INCLUDE_DIRECTORIES
         .
     PUBLIC_LIBRARIES

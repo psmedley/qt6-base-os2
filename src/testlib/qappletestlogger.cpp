@@ -1,5 +1,41 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2018 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtTest module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qappletestlogger_p.h"
 
@@ -10,14 +46,6 @@ QT_BEGIN_NAMESPACE
 #if defined(QT_USE_APPLE_UNIFIED_LOGGING)
 
 using namespace QTestPrivate;
-
-/*! \internal
-    \class QAppleTestLogger
-    \inmodule QtTest
-
-    QAppleTestLogger reports test results through Apple's unified system logging.
-    Results can be viewed in the Console app.
-*/
 
 bool QAppleTestLogger::debugLoggingEnabled()
 {
@@ -75,8 +103,6 @@ void QAppleTestLogger::addIncident(IncidentTypes type, const char *description,
 {
     MessageData messageData = [=]() {
         switch (type) {
-        case QAbstractTestLogger::Skip:
-            return MessageData{QtInfoMsg, "skip"};
         case QAbstractTestLogger::Pass:
             return MessageData{QtInfoMsg, "pass"};
         case QAbstractTestLogger::XFail:
@@ -104,7 +130,7 @@ void QAppleTestLogger::addIncident(IncidentTypes type, const char *description,
 
     QString message = testIdentifier();
     if (qstrlen(description))
-        message += u'\n' % QString::fromLatin1(description);
+        message += QLatin1Char('\n') % QString::fromLatin1(description);
 
     AppleUnifiedLogger::messageHandler(messageData.messageType, context, message, subsystem());
 }
@@ -127,6 +153,8 @@ void QAppleTestLogger::addMessage(MessageTypes type, const QString &message, con
             return MessageData{QtWarningMsg, "critical"};
         case QAbstractTestLogger::QFatal:
             return MessageData{QtFatalMsg, nullptr};
+        case QAbstractTestLogger::Skip:
+            return MessageData{QtInfoMsg, "skip"};
         case QAbstractTestLogger::Info:
         case QAbstractTestLogger::QInfo:
             return MessageData{QtInfoMsg, nullptr};
@@ -138,8 +166,16 @@ void QAppleTestLogger::addMessage(MessageTypes type, const QString &message, con
     messageData.generateCategory(&category);
 
     QMessageLogContext context(file, line, /* function = */ nullptr, category.data());
+    QString msg = message;
 
-    AppleUnifiedLogger::messageHandler(messageData.messageType, context, message, subsystem());
+    if (type == Skip) {
+        if (!message.isNull())
+            msg.prepend(testIdentifier() + QLatin1Char('\n'));
+        else
+            msg = testIdentifier();
+    }
+
+    AppleUnifiedLogger::messageHandler(messageData.messageType, context, msg, subsystem());
 }
 
 QString QAppleTestLogger::subsystem() const

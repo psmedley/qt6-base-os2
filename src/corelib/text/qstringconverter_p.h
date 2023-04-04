@@ -1,6 +1,42 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// Copyright (C) 2020 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2020 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QSTRINGCONVERTER_P_H
 #define QSTRINGCONVERTER_P_H
@@ -19,14 +55,11 @@
 #include <QtCore/qstring.h>
 #include <QtCore/qendian.h>
 #include <QtCore/qstringconverter.h>
-#include <QtCore/private/qglobal_p.h>
 
 QT_BEGIN_NAMESPACE
 
 #ifndef __cpp_char8_t
-enum qchar8_t : uchar {};
-#else
-using qchar8_t = char8_t;
+enum char8_t : uchar {};
 #endif
 
 struct QUtf8BaseTraits
@@ -37,32 +70,44 @@ struct QUtf8BaseTraits
     static const int Error = -1;
     static const int EndOfString = -2;
 
+    static bool isValidCharacter(uint u)
+    { return int(u) >= 0; }
+
     static void appendByte(uchar *&ptr, uchar b)
     { *ptr++ = b; }
 
-    static void appendByte(qchar8_t *&ptr, qchar8_t b)
+    static void appendByte(char8_t *&ptr, char8_t b)
     { *ptr++ = b; }
 
     static uchar peekByte(const uchar *ptr, qsizetype n = 0)
     { return ptr[n]; }
 
-    static uchar peekByte(const qchar8_t *ptr, qsizetype n = 0)
+    static uchar peekByte(const char8_t *ptr, int n = 0)
     { return ptr[n]; }
 
     static qptrdiff availableBytes(const uchar *ptr, const uchar *end)
     { return end - ptr; }
 
-    static qptrdiff availableBytes(const qchar8_t *ptr, const qchar8_t *end)
+    static qptrdiff availableBytes(const char8_t *ptr, const char8_t *end)
     { return end - ptr; }
 
     static void advanceByte(const uchar *&ptr, qsizetype n = 1)
     { ptr += n; }
 
-    static void advanceByte(const qchar8_t *&ptr, qsizetype n = 1)
+    static void advanceByte(const char8_t *&ptr, int n = 1)
     { ptr += n; }
 
-    static void appendUtf16(char16_t *&ptr, char16_t uc)
+    static void appendUtf16(ushort *&ptr, ushort uc)
+    { *ptr++ = uc; }
+
+    static void appendUtf16(char16_t *&ptr, ushort uc)
     { *ptr++ = char16_t(uc); }
+
+    static void appendUcs4(ushort *&ptr, uint uc)
+    {
+        appendUtf16(ptr, QChar::highSurrogate(uc));
+        appendUtf16(ptr, QChar::lowSurrogate(uc));
+    }
 
     static void appendUcs4(char16_t *&ptr, char32_t uc)
     {
@@ -70,18 +115,36 @@ struct QUtf8BaseTraits
         appendUtf16(ptr, QChar::lowSurrogate(uc));
     }
 
-    static char16_t peekUtf16(const char16_t *ptr, qsizetype n = 0) { return ptr[n]; }
+    static ushort peekUtf16(const ushort *ptr, qsizetype n = 0)
+    { return ptr[n]; }
+
+    static ushort peekUtf16(const char16_t *ptr, int n = 0)
+    { return ptr[n]; }
+
+    static qptrdiff availableUtf16(const ushort *ptr, const ushort *end)
+    { return end - ptr; }
 
     static qptrdiff availableUtf16(const char16_t *ptr, const char16_t *end)
     { return end - ptr; }
 
-    static void advanceUtf16(const char16_t *&ptr, qsizetype n = 1) { ptr += n; }
+    static void advanceUtf16(const ushort *&ptr, qsizetype n = 1)
+    { ptr += n; }
 
-    static void appendUtf16(char32_t *&ptr, char16_t uc)
+    static void advanceUtf16(const char16_t *&ptr, int n = 1)
+    { ptr += n; }
+
+    // it's possible to output to UCS-4 too
+    static void appendUtf16(uint *&ptr, ushort uc)
+    { *ptr++ = uc; }
+
+    static void appendUtf16(char32_t *&ptr, ushort uc)
     { *ptr++ = char32_t(uc); }
 
-    static void appendUcs4(char32_t *&ptr, char32_t uc)
+    static void appendUcs4(uint *&ptr, uint uc)
     { *ptr++ = uc; }
+
+    static void appendUcs4(char32_t *&ptr, uint uc)
+    { *ptr++ = char32_t(uc); }
 };
 
 struct QUtf8BaseTraitsNoAscii : public QUtf8BaseTraits
@@ -96,7 +159,7 @@ namespace QUtf8Functions
     /// if \a u is a high surrogate, Error if the next isn't a low one,
     /// EndOfString if we run into the end of the string.
     template <typename Traits, typename OutputPtr, typename InputPtr> inline
-    int toUtf8(char16_t u, OutputPtr &dst, InputPtr &src, InputPtr end)
+    int toUtf8(ushort u, OutputPtr &dst, InputPtr &src, InputPtr end)
     {
         if (!Traits::skipAsciiHandling && u < 0x80) {
             // U+0000 to U+007F (US-ASCII) - one byte
@@ -120,14 +183,14 @@ namespace QUtf8Functions
                 if (Traits::availableUtf16(src, end) == 0)
                     return Traits::EndOfString;
 
-                char16_t low = Traits::peekUtf16(src);
+                ushort low = Traits::peekUtf16(src);
                 if (!QChar::isHighSurrogate(u))
                     return Traits::Error;
                 if (!QChar::isLowSurrogate(low))
                     return Traits::Error;
 
                 Traits::advanceUtf16(src);
-                char32_t ucs4 = QChar::surrogateToUcs4(u, low);
+                uint ucs4 = QChar::surrogateToUcs4(u, low);
 
                 if (!Traits::allowNonCharacters && QChar::isNonCharacter(ucs4))
                     return Traits::Error;
@@ -139,7 +202,7 @@ namespace QUtf8Functions
                 Traits::appendByte(dst, 0x80 | (uchar(ucs4 >> 12) & 0x3f));
 
                 // for the rest of the bytes
-                u = char16_t(ucs4);
+                u = ushort(ucs4);
             }
 
             // second to last byte
@@ -162,8 +225,8 @@ namespace QUtf8Functions
     qsizetype fromUtf8(uchar b, OutputPtr &dst, InputPtr &src, InputPtr end)
     {
         qsizetype charsNeeded;
-        char32_t min_uc;
-        char32_t uc;
+        uint min_uc;
+        uint uc;
 
         if (!Traits::skipAsciiHandling && b < 0x80) {
             // US-ASCII
@@ -243,7 +306,7 @@ namespace QUtf8Functions
         if (!QChar::requiresSurrogates(uc)) {
             // UTF-8 decoded and no surrogates are required
             // detach if necessary
-            Traits::appendUtf16(dst, char16_t(uc));
+            Traits::appendUtf16(dst, ushort(uc));
         } else {
             // UTF-8 decoded to something that requires a surrogate pair
             Traits::appendUcs4(dst, uc);
@@ -276,7 +339,7 @@ struct QUtf8
     };
     static ValidUtf8Result isValidUtf8(QByteArrayView in);
     static int compareUtf8(QByteArrayView utf8, QStringView utf16) noexcept;
-    static int compareUtf8(QByteArrayView utf8, QLatin1StringView s);
+    static int compareUtf8(QByteArrayView utf8, QLatin1String s);
 };
 
 struct QUtf16
@@ -303,32 +366,8 @@ struct Q_CORE_EXPORT QLocal8Bit
     static QByteArray convertFromUnicode(QStringView in, QStringConverter::State *state)
     { return QUtf8::convertFromUnicode(in, state); }
 #else
-    static int checkUtf8();
-    static bool isUtf8()
-    {
-        Q_CONSTINIT
-        static QBasicAtomicInteger<qint8> result = { 0 };
-        int r = result.loadRelaxed();
-        if (r == 0) {
-            r = checkUtf8();
-            result.storeRelaxed(r);
-        }
-        return r > 0;
-    }
-    static QString convertToUnicode_sys(QByteArrayView, QStringConverter::State *);
-    static QString convertToUnicode(QByteArrayView in, QStringConverter::State *state)
-    {
-        if (isUtf8())
-            return QUtf8::convertToUnicode(in, state);
-        return convertToUnicode_sys(in, state);
-    }
-    static QByteArray convertFromUnicode_sys(QStringView, QStringConverter::State *);
-    static QByteArray convertFromUnicode(QStringView in, QStringConverter::State *state)
-    {
-        if (isUtf8())
-            return QUtf8::convertFromUnicode(in, state);
-        return convertFromUnicode_sys(in, state);
-    }
+    static QString convertToUnicode(QByteArrayView, QStringConverter::State *);
+    static QByteArray convertFromUnicode(QStringView, QStringConverter::State *);
 #endif
 };
 

@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qgregoriancalendar_p.h"
 #include "qcalendarmath_p.h"
@@ -101,59 +137,6 @@ bool QGregorianCalendar::julianFromParts(int year, int month, int day, qint64 *j
     *jd = day + qDiv(153 * m + 2, 5) - 32045
         + 365 * y + qDiv(y, 4) - qDiv(y, 100) + qDiv(y, 400);
     return true;
-}
-
-int QGregorianCalendar::yearStartWeekDay(int year)
-{
-    // Equivalent to weekDayOfJulian(julianForParts({year, 1, 1})
-    const int y = year - (year < 0 ? 800 : 801);
-    return qMod(y + qDiv(y, 4) - qDiv(y, 100) + qDiv(y, 400), 7) + 1;
-}
-
-int QGregorianCalendar::yearSharingWeekDays(QDate date)
-{
-    // Returns a post-epoch year, no later than 2400, that has the same pattern
-    // of week-days (in the proleptic Gregorian calendar) as the year in which
-    // the given date falls. This will be the year in question if it's in the
-    // given range. Otherwise, the returned year's last two (decimal) digits
-    // won't coincide with the month number or day-of-month of the given date.
-    // For positive years, except when necessary to avoid such a clash, the
-    // returned year's last two digits shall coincide with those of the original
-    // year.
-
-    // Needed when formatting dates using system APIs with limited year ranges
-    // and possibly only a two-digit year. (The need to be able to safely
-    // replace the two-digit form of the returned year with a suitable form of
-    // the true year, when they don't coincide, is why the last two digits are
-    // treated specially.)
-
-    static_assert((400 * 365 + 97) % 7 == 0);
-    // A full 400-year cycle of the Gregorian calendar has 97 + 400 * 365 days;
-    // as 365 is one more than a multiple of seven and 497 is a multiple of
-    // seven, that full cycle is a whole number of weeks. So adding a multiple
-    // of four hundred years should get us a result that meets our needs.
-
-    const int year = date.year();
-    int res = (year < 1970
-               ? 2400 - (2000 - (year < 0 ? year + 1 : year)) % 400
-               : year > 2399 ? 2000 + (year - 2000) % 400 : year);
-    Q_ASSERT(res > 0);
-    if (res != year) {
-        const int lastTwo = res % 100;
-        if (lastTwo == date.month() || lastTwo == date.day()) {
-            Q_ASSERT(lastTwo && !(lastTwo & ~31));
-            // Last two digits of these years are all > 31:
-            static constexpr int usual[] = { 2198, 2199, 2098, 2099, 2399, 2298, 2299 };
-            static constexpr int leaps[] = { 2396, 2284, 2296, 2184, 2196, 2084, 2096 };
-            // Indexing is: first day of year's day-of-week, Monday = 0, one less
-            // than Qt's, as it's simpler to subtract one than to s/7/0/.
-            res = (leapTest(year) ? leaps : usual)[yearStartWeekDay(year) - 1];
-        }
-        Q_ASSERT(QDate(res, 1, 1).dayOfWeek() == QDate(year, 1, 1).dayOfWeek());
-        Q_ASSERT(QDate(res, 12, 31).dayOfWeek() == QDate(year, 12, 31).dayOfWeek());
-    }
-    Q_ASSERT(res >= 1970 && res <= 2400);
-    return res;
 }
 
 QCalendar::YearMonthDay QGregorianCalendar::julianDayToDate(qint64 jd) const

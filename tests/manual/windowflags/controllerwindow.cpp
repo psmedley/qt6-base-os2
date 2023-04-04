@@ -1,5 +1,30 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "controllerwindow.h"
 #include "controls.h"
@@ -7,19 +32,23 @@
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
-#include <QDebug>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QLibraryInfo>
-#include <qlogging.h>
 #include <QMainWindow>
 #include <QMenu>
-#include <QMoveEvent>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QTabWidget>
-#include <QWindow>
+
+#include <QMoveEvent>
+
+#if QT_VERSION >= 0x050000
+#  include <QWindow>
+#  include <qlogging.h>
+#  include <QLibraryInfo>
+#endif
+#include <QDebug>
 
 ControllerWidget::ControllerWidget(QWidget *parent)
     : QWidget(parent)
@@ -195,8 +224,10 @@ static bool isTopLevel(const QObject *o)
 {
     if (o->isWidgetType())
         return static_cast<const QWidget *>(o)->isWindow();
+#if QT_VERSION >= 0x050000
     if (o->isWindowType())
         return static_cast<const QWindow *>(o)->isTopLevel();
+#endif
     return false;
 }
 
@@ -207,8 +238,10 @@ static Qt::WindowStates windowState(const QObject *o)
         states &= ~Qt::WindowActive;
         return states;
     }
+#if QT_VERSION >= 0x050000
     if (o->isWindowType())
-        return static_cast<const QWindow *>(o)->windowStates();
+        return static_cast<const QWindow *>(o)->windowState();
+#endif
     return Qt::WindowNoState;
 }
 
@@ -224,7 +257,9 @@ public:
         case QEvent::WindowStateChange:
         case QEvent::ApplicationActivate:
         case QEvent::ApplicationDeactivate:
+#if QT_VERSION >= 0x050000
         case QEvent::ApplicationStateChange:
+#endif
             if (isTopLevel(o))
                 formatEvent(o, e);
             break;
@@ -239,7 +274,9 @@ private:
     {
         static int n = 0;
         QDebug debug = qDebug().nospace();
+#if QT_VERSION >= 0x050000
         debug.noquote();
+#endif
         debug << '#' << n++ << ' ' << o->metaObject()->className();
         const QString name = o->objectName();
         if (!name.isEmpty())
@@ -283,9 +320,15 @@ void LogWidget::install()
 QString LogWidget::startupMessage()
 {
     QString result;
+#if QT_VERSION >= 0x050300
     result += QLatin1String(QLibraryInfo::build());
+#else
+    result += QLatin1String("Qt ") + QLatin1String(QT_VERSION_STR);
+#endif
+#if QT_VERSION >= 0x050000
     result += QLatin1Char(' ');
     result += QGuiApplication::platformName();
+#endif
     return result;
 }
 
@@ -299,7 +342,11 @@ ControllerWindow::ControllerWindow()
 {
     setWindowTitle(tr("Window Flags (Qt version %1, %2)")
                    .arg(QLatin1String(qVersion()),
+#if QT_VERSION >= 0x050000
                         qApp->platformName()));
+#else
+                        QLatin1String("<unknown>")));
+#endif
 
     QVBoxLayout *layout = new QVBoxLayout(this);
     QTabWidget *tabWidget = new QTabWidget(this);

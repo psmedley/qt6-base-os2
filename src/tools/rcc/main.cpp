@@ -1,6 +1,31 @@
-// Copyright (C) 2018 The Qt Company Ltd.
-// Copyright (C) 2018 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2018 The Qt Company Ltd.
+** Copyright (C) 2018 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the tools applications of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <rcc.h>
 
@@ -29,8 +54,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 void dumpRecursive(const QDir &dir, QTextStream &out)
 {
     const QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot
@@ -39,9 +62,9 @@ void dumpRecursive(const QDir &dir, QTextStream &out)
         if (entry.isDir()) {
             dumpRecursive(entry.filePath(), out);
         } else {
-            out << "<file>"_L1
+            out << QLatin1String("<file>")
                 << entry.filePath()
-                << "</file>\n"_L1;
+                << QLatin1String("</file>\n");
         }
     }
 }
@@ -51,7 +74,7 @@ int createProject(const QString &outFileName)
     QDir currentDir = QDir::current();
     QString currentDirName = currentDir.dirName();
     if (currentDirName.isEmpty())
-        currentDirName = "root"_L1;
+        currentDirName = QLatin1String("root");
 
     QFile file;
     bool isOk = false;
@@ -69,14 +92,14 @@ int createProject(const QString &outFileName)
     }
 
     QTextStream out(&file);
-    out << "<!DOCTYPE RCC><RCC version=\"1.0\">\n"
-           "<qresource>\n"_L1;
+    out << QLatin1String("<!DOCTYPE RCC><RCC version=\"1.0\">\n"
+                         "<qresource>\n");
 
-    // use "." as dir to get relative file paths
-    dumpRecursive(QDir("."_L1), out);
+    // use "." as dir to get relative file pathes
+    dumpRecursive(QDir(QLatin1String(".")), out);
 
-    out << "</qresource>\n"
-           "</RCC>\n"_L1;
+    out << QLatin1String("</qresource>\n"
+                         "</RCC>\n");
 
     return 0;
 }
@@ -87,11 +110,11 @@ QString makefileEscape(const QString &filepath)
     // Always use forward slashes
     QString result = QDir::cleanPath(filepath);
     // Spaces are escaped with a backslash
-    result.replace(u' ', "\\ "_L1);
+    result.replace(QLatin1Char(' '), QLatin1String("\\ "));
     // Pipes are escaped with a backslash
-    result.replace(u'|', "\\|"_L1);
+    result.replace(QLatin1Char('|'), QLatin1String("\\|"));
     // Dollars are escaped with a dollar
-    result.replace(u'$', "$$"_L1);
+    result.replace(QLatin1Char('$'), QLatin1String("$$"));
 
     return result;
 }
@@ -100,16 +123,16 @@ void writeDepFile(QIODevice &iodev, const QStringList &depsList, const QString &
 {
     QTextStream out(&iodev);
     out << qPrintable(makefileEscape(targetName));
-    out << QChar(u':');
+    out << QLatin1Char(':');
 
     // Write depfile
     for (int i = 0; i < depsList.size(); ++i) {
-        out << QChar(u' ');
+        out << QLatin1Char(' ');
 
         out << qPrintable(makefileEscape(depsList.at(i)));
     }
 
-    out << QChar(u'\n');
+    out << QLatin1Char('\n');
 }
 
 int runRcc(int argc, char *argv[])
@@ -121,7 +144,7 @@ int runRcc(int argc, char *argv[])
     // If you use this code as an example for a translated app, make sure to translate the strings.
     QCommandLineParser parser;
     parser.setSingleDashWordOptionMode(QCommandLineParser::ParseAsLongOptions);
-    parser.setApplicationDescription("Qt Resource Compiler version " QT_VERSION_STR ""_L1);
+    parser.setApplicationDescription(QLatin1String("Qt Resource Compiler version " QT_VERSION_STR));
     parser.addHelpOption();
     parser.addVersionOption();
 
@@ -215,9 +238,9 @@ int runRcc(int argc, char *argv[])
         bool ok = false;
         formatVersion = parser.value(formatVersionOption).toUInt(&ok);
         if (!ok) {
-            errorMsg = "Invalid format version specified"_L1;
+            errorMsg = QLatin1String("Invalid format version specified");
         } else if (formatVersion < 1 || formatVersion > 3) {
-            errorMsg = "Unsupported format version specified"_L1;
+            errorMsg = QLatin1String("Unsupported format version specified");
         }
     }
 
@@ -226,22 +249,19 @@ int runRcc(int argc, char *argv[])
         library.setInitName(parser.value(nameOption));
     if (parser.isSet(rootOption)) {
         library.setResourceRoot(QDir::cleanPath(parser.value(rootOption)));
-        if (library.resourceRoot().isEmpty() || library.resourceRoot().at(0) != u'/')
-            errorMsg = "Root must start with a /"_L1;
+        if (library.resourceRoot().isEmpty()
+                || library.resourceRoot().at(0) != QLatin1Char('/'))
+            errorMsg = QLatin1String("Root must start with a /");
     }
 
     if (parser.isSet(compressionAlgoOption))
         library.setCompressionAlgorithm(RCCResourceLibrary::parseCompressionAlgorithm(parser.value(compressionAlgoOption), &errorMsg));
-    if (parser.isSet(noZstdOption))
-        library.setNoZstd(true);
-    if (library.compressionAlgorithm() == RCCResourceLibrary::CompressionAlgorithm::Zstd) {
-        if (formatVersion < 3)
-            errorMsg = "Zstandard compression requires format version 3 or higher"_L1;
-        if (library.noZstd())
-            errorMsg = "--compression-algo=zstd and --no-zstd both specified."_L1;
-    }
+    if (formatVersion < 3 && library.compressionAlgorithm() == RCCResourceLibrary::CompressionAlgorithm::Zstd)
+        errorMsg = QLatin1String("Zstandard compression requires format version 3 or higher");
     if (parser.isSet(nocompressOption))
         library.setCompressionAlgorithm(RCCResourceLibrary::CompressionAlgorithm::None);
+    if (parser.isSet(noZstdOption))
+        library.setNoZstd(true);
     if (parser.isSet(compressOption) && errorMsg.isEmpty()) {
         int level = library.parseCompressionLevel(library.compressionAlgorithm(), parser.value(compressOption), &errorMsg);
         library.setCompressLevel(level);
@@ -252,25 +272,25 @@ int runRcc(int argc, char *argv[])
         library.setFormat(RCCResourceLibrary::Binary);
     if (parser.isSet(generatorOption)) {
         auto value = parser.value(generatorOption);
-        if (value == "cpp"_L1) {
+        if (value == QLatin1String("cpp")) {
             library.setFormat(RCCResourceLibrary::C_Code);
-        } else if (value == "python"_L1) {
+        } else if (value == QLatin1String("python")) {
             library.setFormat(RCCResourceLibrary::Python_Code);
-        } else if (value == "python2"_L1) { // ### fixme Qt 7: remove
+        } else if (value == QLatin1String("python2")) { // ### fixme Qt 7: remove
             qWarning("Format python2 is no longer supported, defaulting to python.");
             library.setFormat(RCCResourceLibrary::Python_Code);
         } else {
-            errorMsg = "Invalid generator: "_L1 + value;
+            errorMsg = QLatin1String("Invalid generator: ") + value;
         }
     }
 
     if (parser.isSet(passOption)) {
-        if (parser.value(passOption) == "1"_L1)
+        if (parser.value(passOption) == QLatin1String("1"))
             library.setFormat(RCCResourceLibrary::Pass1);
-        else if (parser.value(passOption) == "2"_L1)
+        else if (parser.value(passOption) == QLatin1String("2"))
             library.setFormat(RCCResourceLibrary::Pass2);
         else
-            errorMsg = "Pass number must be 1 or 2"_L1;
+            errorMsg = QLatin1String("Pass number must be 1 or 2");
     }
     if (parser.isSet(namespaceOption))
         library.setUseNameSpace(!library.useNameSpace());
@@ -283,7 +303,7 @@ int runRcc(int argc, char *argv[])
     const QStringList filenamesIn = parser.positionalArguments();
 
     for (const QString &file : filenamesIn) {
-        if (file == "-"_L1)
+        if (file == QLatin1String("-"))
             continue;
         else if (!QFile::exists(file)) {
             qWarning("%s: File does not exist '%s'", argv[0], qPrintable(file));
@@ -335,7 +355,7 @@ int runRcc(int argc, char *argv[])
     }
 
 
-    if (outFilename.isEmpty() || outFilename == "-"_L1) {
+    if (outFilename.isEmpty() || outFilename == QLatin1String("-")) {
 #ifdef Q_OS_DOSLIKE
         // Make sure fwrite to stdout doesn't do LF->CRLF
         if (library.format() == RCCResourceLibrary::Binary)
@@ -383,7 +403,7 @@ int runRcc(int argc, char *argv[])
         QFile depout;
         depout.setFileName(depFilename);
 
-        if (outFilename.isEmpty() || outFilename == "-"_L1) {
+        if (outFilename.isEmpty() || outFilename == QLatin1String("-")) {
             const QString msg = QString::fromUtf8("Unable to write depfile when outputting to stdout!\n");
             errorDevice.write(msg.toUtf8());
             return 1;

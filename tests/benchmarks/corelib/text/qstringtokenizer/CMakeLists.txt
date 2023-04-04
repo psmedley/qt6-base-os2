@@ -4,7 +4,7 @@
 
 qt_internal_add_benchmark(tst_bench_qstringtokenizer
     SOURCES
-        tst_bench_qstringtokenizer.cpp
+        main.cpp
     PUBLIC_LIBRARIES
         Qt::Test
 )

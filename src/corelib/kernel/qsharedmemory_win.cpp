@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qsharedmemory.h"
 #include "qsharedmemory_p.h"
@@ -8,8 +44,6 @@
 #include <qt_windows.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 #ifndef QT_NO_SHAREDMEMORY
 
@@ -22,7 +56,7 @@ QSharedMemoryPrivate::QSharedMemoryPrivate() :
 {
 }
 
-void QSharedMemoryPrivate::setErrorString(QLatin1StringView function)
+void QSharedMemoryPrivate::setErrorString(QLatin1String function)
 {
     DWORD windowsError = GetLastError();
     if (windowsError == 0)
@@ -61,7 +95,7 @@ void QSharedMemoryPrivate::setErrorString(QLatin1StringView function)
 HANDLE QSharedMemoryPrivate::handle()
 {
     if (!hand) {
-        const auto function = "QSharedMemory::handle"_L1;
+        const QLatin1String function("QSharedMemory::handle");
         if (nativeKey.isEmpty()) {
             error = QSharedMemory::KeyError;
             errorString = QSharedMemory::tr("%1: unable to make key").arg(function);
@@ -81,7 +115,7 @@ bool QSharedMemoryPrivate::cleanHandle()
 {
     if (hand != 0 && !CloseHandle(hand)) {
         hand = 0;
-        setErrorString("QSharedMemory::cleanHandle"_L1);
+        setErrorString(QLatin1String("QSharedMemory::cleanHandle"));
         return false;
     }
     hand = 0;
@@ -90,7 +124,7 @@ bool QSharedMemoryPrivate::cleanHandle()
 
 bool QSharedMemoryPrivate::create(qsizetype size)
 {
-    const auto function = "QSharedMemory::create"_L1;
+    const QLatin1String function("QSharedMemory::create");
     if (nativeKey.isEmpty()) {
         error = QSharedMemory::KeyError;
         errorString = QSharedMemory::tr("%1: key error").arg(function);
@@ -118,7 +152,7 @@ bool QSharedMemoryPrivate::attach(QSharedMemory::AccessMode mode)
     int permissions = (mode == QSharedMemory::ReadOnly ? FILE_MAP_READ : FILE_MAP_ALL_ACCESS);
     memory = (void *)MapViewOfFile(handle(), permissions, 0, 0, 0);
     if (0 == memory) {
-        setErrorString("QSharedMemory::attach"_L1);
+        setErrorString(QLatin1String("QSharedMemory::attach"));
         cleanHandle();
         return false;
     }
@@ -129,7 +163,7 @@ bool QSharedMemoryPrivate::attach(QSharedMemory::AccessMode mode)
         // Windows doesn't set an error code on this one,
         // it should only be a kernel memory error.
         error = QSharedMemory::UnknownError;
-        errorString = QSharedMemory::tr("%1: size query failed").arg("QSharedMemory::attach: "_L1);
+        errorString = QSharedMemory::tr("%1: size query failed").arg(QLatin1String("QSharedMemory::attach: "));
         return false;
     }
     size = qsizetype(info.RegionSize);
@@ -141,7 +175,7 @@ bool QSharedMemoryPrivate::detach()
 {
     // umap memory
     if (!UnmapViewOfFile(memory)) {
-        setErrorString("QSharedMemory::detach"_L1);
+        setErrorString(QLatin1String("QSharedMemory::detach"));
         return false;
     }
     memory = 0;

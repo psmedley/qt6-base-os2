@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QRINGBUFFER_P_H
 #define QRINGBUFFER_P_H
@@ -29,19 +65,36 @@ class QRingChunk
 {
 public:
     // initialization and cleanup
-    QRingChunk() noexcept = default;
-    explicit inline QRingChunk(qsizetype alloc) :
-        chunk(alloc, Qt::Uninitialized), tailOffset(0)
+    inline QRingChunk() noexcept :
+        headOffset(0), tailOffset(0)
+    {
+    }
+    inline QRingChunk(const QRingChunk &other) noexcept :
+        chunk(other.chunk), headOffset(other.headOffset), tailOffset(other.tailOffset)
+    {
+    }
+    explicit inline QRingChunk(int alloc) :
+        chunk(alloc, Qt::Uninitialized), headOffset(0), tailOffset(0)
     {
     }
     explicit inline QRingChunk(const QByteArray &qba) noexcept :
-        chunk(qba), tailOffset(qba.size())
+        chunk(qba), headOffset(0), tailOffset(qba.size())
     {
     }
-    explicit QRingChunk(QByteArray &&qba) noexcept :
-        chunk(std::move(qba)), tailOffset(chunk.size())
+
+    inline QRingChunk &operator=(const QRingChunk &other) noexcept
     {
+        chunk = other.chunk;
+        headOffset = other.headOffset;
+        tailOffset = other.tailOffset;
+        return *this;
     }
+    inline QRingChunk(QRingChunk &&other) noexcept :
+        chunk(other.chunk), headOffset(other.headOffset), tailOffset(other.tailOffset)
+    {
+        other.headOffset = other.tailOffset = 0;
+    }
+    QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QRingChunk)
 
     inline void swap(QRingChunk &other) noexcept
     {
@@ -51,28 +104,28 @@ public:
     }
 
     // allocating and sharing
-    void allocate(qsizetype alloc);
+    void allocate(int alloc);
     inline bool isShared() const
     {
         return !chunk.isDetached();
     }
     Q_CORE_EXPORT void detach();
-    QByteArray toByteArray() &&;
+    QByteArray toByteArray();
 
     // getters
-    inline qsizetype head() const
+    inline int head() const
     {
         return headOffset;
     }
-    inline qsizetype size() const
+    inline int size() const
     {
         return tailOffset - headOffset;
     }
-    inline qsizetype capacity() const
+    inline int capacity() const
     {
         return chunk.size();
     }
-    inline qsizetype available() const
+    inline int available() const
     {
         return chunk.size() - tailOffset;
     }
@@ -88,14 +141,14 @@ public:
     }
 
     // array management
-    inline void advance(qsizetype offset)
+    inline void advance(int offset)
     {
         Q_ASSERT(headOffset + offset >= 0);
         Q_ASSERT(size() - offset > 0);
 
         headOffset += offset;
     }
-    inline void grow(qsizetype offset)
+    inline void grow(int offset)
     {
         Q_ASSERT(size() + offset > 0);
         Q_ASSERT(head() + size() + offset <= capacity());
@@ -108,37 +161,26 @@ public:
         headOffset = 0;
         tailOffset = qba.size();
     }
-    void assign(QByteArray &&qba)
-    {
-        chunk = std::move(qba);
-        headOffset = 0;
-        tailOffset = chunk.size();
-    }
     inline void reset()
     {
         headOffset = tailOffset = 0;
     }
     inline void clear()
     {
-        *this = {};
+        assign(QByteArray());
     }
 
 private:
     QByteArray chunk;
-    qsizetype headOffset = 0;
-    qsizetype tailOffset = 0;
+    int headOffset, tailOffset;
 };
 Q_DECLARE_SHARED(QRingChunk)
 
 class QRingBuffer
 {
-    Q_DISABLE_COPY(QRingBuffer)
 public:
     explicit inline QRingBuffer(int growth = QRINGBUFFER_CHUNKSIZE) :
         bufferSize(0), basicBlockSize(growth) { }
-
-    QRingBuffer(QRingBuffer &&) noexcept = default;
-    QRingBuffer &operator=(QRingBuffer &&) noexcept = default;
 
     inline void setChunkSize(int size) {
         basicBlockSize = size;
@@ -205,7 +247,6 @@ public:
     Q_CORE_EXPORT qint64 peek(char *data, qint64 maxLength, qint64 pos = 0) const;
     Q_CORE_EXPORT void append(const char *data, qint64 size);
     Q_CORE_EXPORT void append(const QByteArray &qba);
-    Q_CORE_EXPORT void append(QByteArray &&qba);
 
     inline qint64 skip(qint64 length) {
         qint64 bytesToSkip = qMin(length, bufferSize);

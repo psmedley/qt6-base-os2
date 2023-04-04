@@ -4,7 +4,7 @@
  *
  *   FreeType PFR glyph loader (body).
  *
- * Copyright (C) 2002-2023 by
+ * Copyright (C) 2002-2020 by
  * David Turner, Robert Wilhelm, and Werner Lemberg.
  *
  * This file is part of the FreeType project, and may only be used,
@@ -42,7 +42,8 @@
   {
     FT_ZERO( glyph );
 
-    glyph->loader = loader;
+    glyph->loader     = loader;
+    glyph->path_begun = 0;
 
     FT_GlyphLoader_Rewind( loader );
   }
@@ -408,7 +409,7 @@
           break;
 
         case 6:                            /* horizontal to vertical curve */
-          FT_TRACE6(( "- hv curve" ));
+          FT_TRACE6(( "- hv curve " ));
           args_format = 0xB8E;
           args_count  = 3;
           break;

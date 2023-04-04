@@ -1,5 +1,41 @@
-// Copyright (C) 2017 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qvulkanwindow_p.h"
 #include "qvulkanfunctions.h"
@@ -11,7 +47,7 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_DECLARE_LOGGING_CATEGORY(lcGuiVk)
+Q_LOGGING_CATEGORY(lcGuiVk, "qt.vulkan")
 
 /*!
   \class QVulkanWindow
@@ -175,15 +211,6 @@ Q_DECLARE_LOGGING_CATEGORY(lcGuiVk)
 
   When it comes to device features, QVulkanWindow enables all Vulkan 1.0
   features that are reported as supported from vkGetPhysicalDeviceFeatures().
-  As an exception to this rule, \c robustBufferAccess is never enabled. Use the
-  callback mechanism described below, if enabling that feature is desired.
-
-  Just enabling the 1.0 core features is not always sufficient, and therefore
-  full control over the VkPhysicalDeviceFeatures used for device creation is
-  possible too by registering a callback function with
-  setEnabledFeaturesModifier(). When set, the callback function is invoked,
-  letting it alter the VkPhysicalDeviceFeatures, instead of enabling only the
-  1.0 core features.
 
   \sa QVulkanInstance, QWindow
  */
@@ -335,7 +362,7 @@ void QVulkanWindow::setPhysicalDeviceIndex(int idx)
         qWarning("QVulkanWindow: Attempted to set physical device when already initialized");
         return;
     }
-    const int count = availablePhysicalDevices().size();
+    const int count = availablePhysicalDevices().count();
     if (idx < 0 || idx >= count) {
         qWarning("QVulkanWindow: Invalid physical device index %d (total physical devices: %d)", idx, count);
         return;
@@ -581,7 +608,7 @@ void QVulkanWindowPrivate::init()
         return;
     }
 
-    if (physDevIndex < 0 || physDevIndex >= physDevs.size()) {
+    if (physDevIndex < 0 || physDevIndex >= physDevs.count()) {
         qWarning("QVulkanWindow: Invalid physical device index; defaulting to 0");
         physDevIndex = 0;
     }
@@ -600,7 +627,7 @@ void QVulkanWindowPrivate::init()
     f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, queueFamilyProps.data());
     gfxQueueFamilyIdx = uint32_t(-1);
     presQueueFamilyIdx = uint32_t(-1);
-    for (int i = 0; i < queueFamilyProps.size(); ++i) {
+    for (int i = 0; i < queueFamilyProps.count(); ++i) {
         const bool supportsPresent = inst->supportsPresent(physDev, i, q);
         qCDebug(lcGuiVk, "queue family %d: flags=0x%x count=%d supportsPresent=%d", i,
                 queueFamilyProps[i].queueFlags, queueFamilyProps[i].queueCount, supportsPresent);
@@ -613,7 +640,7 @@ void QVulkanWindowPrivate::init()
         presQueueFamilyIdx = gfxQueueFamilyIdx;
     } else {
         qCDebug(lcGuiVk, "No queue with graphics+present; trying separate queues");
-        for (int i = 0; i < queueFamilyProps.size(); ++i) {
+        for (int i = 0; i < queueFamilyProps.count(); ++i) {
             if (gfxQueueFamilyIdx == uint32_t(-1) && (queueFamilyProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
                 gfxQueueFamilyIdx = i;
             if (presQueueFamilyIdx == uint32_t(-1) && inst->supportsPresent(physDev, i, q))
@@ -657,7 +684,7 @@ void QVulkanWindowPrivate::init()
         queueCreateInfoModifier(queueFamilyProps.constData(), queueCount, queueInfo);
         bool foundGfxQueue = false;
         bool foundPresQueue = false;
-        for (const VkDeviceQueueCreateInfo& createInfo : std::as_const(queueInfo)) {
+        for (const VkDeviceQueueCreateInfo& createInfo : qAsConst(queueInfo)) {
             foundGfxQueue |= createInfo.queueFamilyIndex == gfxQueueFamilyIdx;
             foundPresQueue |= createInfo.queueFamilyIndex == presQueueFamilyIdx;
         }
@@ -699,19 +726,13 @@ void QVulkanWindowPrivate::init()
     devInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     devInfo.queueCreateInfoCount = queueInfo.size();
     devInfo.pQueueCreateInfos = queueInfo.constData();
-    devInfo.enabledExtensionCount = devExts.size();
+    devInfo.enabledExtensionCount = devExts.count();
     devInfo.ppEnabledExtensionNames = devExts.constData();
 
+    // Enable all 1.0 features.
     VkPhysicalDeviceFeatures features;
     memset(&features, 0, sizeof(features));
-    if (enabledFeaturesModifier) {
-        enabledFeaturesModifier(features);
-    } else {
-        // Enable all supported 1.0 core features, except ones that likely
-        // involve a performance penalty.
-        f->vkGetPhysicalDeviceFeatures(physDev, &features);
-        features.robustBufferAccess = VK_FALSE;
-    }
+    f->vkGetPhysicalDeviceFeatures(physDev, &features);
     devInfo.pEnabledFeatures = &features;
 
     // Device layers are not supported by QVulkanWindow since that's an already deprecated
@@ -734,7 +755,7 @@ void QVulkanWindowPrivate::init()
                 err = f->vkEnumerateDeviceLayerProperties(physDev, &count, layerProps.data());
                 if (err == VK_SUCCESS) {
                     for (const VkLayerProperties &prop : layerProps) {
-                        if (!strncmp(prop.layerName, stdValNamePtr, stdValName.size())) {
+                        if (!strncmp(prop.layerName, stdValNamePtr, stdValName.count())) {
                             devInfo.enabledLayerCount = 1;
                             devInfo.ppEnabledLayerNames = &stdValNamePtr;
                             break;
@@ -857,7 +878,7 @@ void QVulkanWindowPrivate::init()
 
     // Try to honor the user request.
     if (!formats.isEmpty() && !requestedColorFormats.isEmpty()) {
-        for (VkFormat reqFmt : std::as_const(requestedColorFormats)) {
+        for (VkFormat reqFmt : qAsConst(requestedColorFormats)) {
             auto r = std::find_if(formats.cbegin(), formats.cend(),
                                   [reqFmt](const VkSurfaceFormatKHR &sfmt) { return sfmt.format == reqFmt; });
             if (r != formats.cend()) {
@@ -1332,7 +1353,6 @@ bool QVulkanWindowPrivate::createTransientImage(VkFormat format,
     VkMemoryRequirements memReq;
     VkResult err;
 
-    Q_ASSERT(count > 0);
     for (int i = 0; i < count; ++i) {
         VkImageCreateInfo imgInfo;
         memset(&imgInfo, 0, sizeof(imgInfo));
@@ -1613,44 +1633,6 @@ void QVulkanWindow::setQueueCreateInfoModifier(const QueueCreateInfoModifier &mo
     d->queueCreateInfoModifier = modifier;
 }
 
-/*!
-    \typedef QVulkanWindow::EnabledFeaturesModifier
-
-    A function that is called during graphics initialization to alter the
-    VkPhysicalDeviceFeatures that is passed in when creating a Vulkan device
-    object.
-
-    By default QVulkanWindow enables all Vulkan 1.0 core features that the
-    physical device reports as supported, with certain exceptions. In
-    praticular, \c robustBufferAccess is always disabled in order to avoid
-    unexpected performance hits.
-
-    This however is not always sufficient when working with Vulkan 1.1 or 1.2
-    features and extensions. Hence this callback mechanism.
-
-    The VkPhysicalDeviceFeatures reference passed in is all zeroed out at the
-    point when the function is invoked. It is up to the function to change
-    members to true, or set up \c pNext chains as it sees fit.
-
-    \note When setting up \c pNext chains, make sure the referenced objects
-    have a long enough lifetime, for example by storing them as member
-    variables in the QVulkanWindow subclass.
-
-    \sa setEnabledFeaturesModifier()
- */
-
-/*!
-    Sets the enabled device features modification function \a modifier.
-
-    \sa EnabledFeaturesModifier
-
-    \since 6.4
- */
-void QVulkanWindow::setEnabledFeaturesModifier(const EnabledFeaturesModifier &modifier)
-{
-    Q_D(QVulkanWindow);
-    d->enabledFeaturesModifier = modifier;
-}
 
 /*!
     Returns true if this window has successfully initialized all Vulkan
@@ -2273,7 +2255,7 @@ void QVulkanWindowPrivate::finishBlockingReadback()
 VkPhysicalDevice QVulkanWindow::physicalDevice() const
 {
     Q_D(const QVulkanWindow);
-    if (d->physDevIndex < d->physDevs.size())
+    if (d->physDevIndex < d->physDevs.count())
         return d->physDevs[d->physDevIndex];
     qWarning("QVulkanWindow: Physical device not available");
     return VK_NULL_HANDLE;
@@ -2289,7 +2271,7 @@ VkPhysicalDevice QVulkanWindow::physicalDevice() const
 const VkPhysicalDeviceProperties *QVulkanWindow::physicalDeviceProperties() const
 {
     Q_D(const QVulkanWindow);
-    if (d->physDevIndex < d->physDevProps.size())
+    if (d->physDevIndex < d->physDevProps.count())
         return &d->physDevProps[d->physDevIndex];
     qWarning("QVulkanWindow: Physical device properties not available");
     return nullptr;
@@ -2770,5 +2752,3 @@ QMatrix4x4 QVulkanWindow::clipCorrectionMatrix()
 }
 
 QT_END_NAMESPACE
-
-#include "moc_qvulkanwindow.cpp"

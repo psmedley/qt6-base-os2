@@ -1,6 +1,42 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2015 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2015 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QMIMEDATABASE_P_H
 #define QMIMEDATABASE_P_H
@@ -16,7 +52,6 @@
 // We mean it.
 //
 
-#include "qmimedatabase.h"
 #include "qmimetype.h"
 
 QT_REQUIRE_CONFIG(mimetype);
@@ -33,7 +68,6 @@ QT_REQUIRE_CONFIG(mimetype);
 
 QT_BEGIN_NAMESPACE
 
-class QFileInfo;
 class QIODevice;
 class QMimeDatabase;
 class QMimeProviderBase;
@@ -48,7 +82,7 @@ public:
 
     static QMimeDatabasePrivate *instance();
 
-    const QString &defaultMimeType() const { return m_defaultMimeType; }
+    inline QString defaultMimeType() const { return m_defaultMimeType; }
 
     bool inherits(const QString &mime, const QString &parent);
 
@@ -57,10 +91,7 @@ public:
     QString resolveAlias(const QString &nameOrAlias);
     QStringList parents(const QString &mimeName);
     QMimeType mimeTypeForName(const QString &nameOrAlias);
-    QMimeType mimeTypeForFileNameAndData(const QString &fileName, QIODevice *device);
-    QMimeType mimeTypeForFileExtension(const QString &fileName);
-    QMimeType mimeTypeForData(QIODevice *device);
-    QMimeType mimeTypeForFile(const QString &fileName, const QFileInfo &fileInfo, QMimeDatabase::MatchMode mode);
+    QMimeType mimeTypeForFileNameAndData(const QString &fileName, QIODevice *device, int *priorityPtr);
     QMimeType findByData(const QByteArray &data, int *priorityPtr);
     QStringList mimeTypeForFileName(const QString &fileName);
     QMimeGlobMatchResult findByFileName(const QString &fileName);
@@ -78,13 +109,12 @@ private:
     const Providers &providers();
     bool shouldCheck();
     void loadProviders();
-    QString fallbackParent(const QString &mimeTypeName) const;
 
-    const QString m_defaultMimeType;
     mutable Providers m_providers;
     QElapsedTimer m_lastCheck;
 
 public:
+    const QString m_defaultMimeType;
     QMutex mutex;
 };
 

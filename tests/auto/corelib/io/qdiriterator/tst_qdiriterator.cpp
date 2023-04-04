@@ -1,5 +1,30 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -9,8 +34,6 @@
 #include <qdiriterator.h>
 #include <qfileinfo.h>
 #include <qstringlist.h>
-#include <QSet>
-#include <QString>
 
 #include <QtCore/private/qfsfileengine_p.h>
 
@@ -18,9 +41,11 @@
 #define Q_NO_SYMLINKS
 #endif
 
-#include "../../../../shared/filesystem.h"
+#if defined(Q_OS_DOSLIKE)
+#  include "../../../network-settings.h"
+#endif
 
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
 #include <QStandardPaths>
 #endif
 
@@ -97,16 +122,17 @@ private:
 
 void tst_QDirIterator::initTestCase()
 {
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
     QString testdata_dir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     QString resourceSourcePath = QStringLiteral(":/testdata");
     QDirIterator it(resourceSourcePath, QDirIterator::Subdirectories);
     while (it.hasNext()) {
-        QFileInfo fileInfo = it.nextFileInfo();
+        it.next();
+
+        QFileInfo fileInfo = it.fileInfo();
 
         if (!fileInfo.isDir()) {
-            QString destination = testdata_dir + QLatin1Char('/')
-                                  + fileInfo.filePath().mid(resourceSourcePath.length());
+            QString destination = testdata_dir + QLatin1Char('/') + fileInfo.filePath().mid(resourceSourcePath.length());
             QFileInfo destinationFileInfo(destination);
             if (!destinationFileInfo.exists()) {
                 QDir().mkpath(destinationFileInfo.path());
@@ -441,7 +467,7 @@ void tst_QDirIterator::stopLinkLoop()
     QStringList list;
     int max = 200;
     while (--max && it.hasNext())
-        it.nextFileInfo();
+        it.next();
     QVERIFY(max);
 
     // The goal of this test is only to ensure that the test above don't malfunction
@@ -482,8 +508,10 @@ void tst_QDirIterator::engineWithNoIterator()
 void tst_QDirIterator::absoluteFilePathsFromRelativeIteratorPath()
 {
     QDirIterator it("entrylist/", QDir::NoDotAndDotDot);
-    while (it.hasNext())
-        QVERIFY(it.nextFileInfo().absoluteFilePath().contains("entrylist"));
+    while (it.hasNext()) {
+        it.next();
+        QVERIFY(QFileInfo(it.filePath()).absoluteFilePath().contains("entrylist"));
+    }
 }
 
 void tst_QDirIterator::recurseWithFilters() const
@@ -500,9 +528,11 @@ void tst_QDirIterator::recurseWithFilters() const
     expectedEntries.insert(QString::fromLatin1("recursiveDirs/textFileA.txt"));
 
     QVERIFY(it.hasNext());
-    actualEntries.insert(it.next());
+    it.next();
+    actualEntries.insert(it.fileInfo().filePath());
     QVERIFY(it.hasNext());
-    actualEntries.insert(it.next());
+    it.next();
+    actualEntries.insert(it.fileInfo().filePath());
     QCOMPARE(actualEntries, expectedEntries);
 
     QVERIFY(!it.hasNext());
@@ -525,13 +555,13 @@ void tst_QDirIterator::longPath()
     int m = 0;
     while (it.hasNext()) {
         ++m;
-        it.nextFileInfo();
+        it.next();
     }
 
     QCOMPARE(n, m);
 
     dirName.chop(1);
-    while (dirName.size() > 0 && dir.exists(dirName) && dir.rmdir(dirName)) {
+    while (dirName.length() > 0 && dir.exists(dirName) && dir.rmdir(dirName)) {
         dirName.chop(1);
     }
     dir.cdUp();
@@ -561,11 +591,11 @@ void tst_QDirIterator::uncPaths_data()
 {
     QTest::addColumn<QString>("dirName");
     QTest::newRow("uncserver")
-            <<QString("//" + QTest::uncServerName());
+            <<QString("//" + QtNetworkSettings::winServerName());
     QTest::newRow("uncserver/testshare")
-            <<QString("//" + QTest::uncServerName() + "/testshare");
+            <<QString("//" + QtNetworkSettings::winServerName() + "/testshare");
     QTest::newRow("uncserver/testshare/tmp")
-            <<QString("//" + QTest::uncServerName() + "/testshare/tmp");
+            <<QString("//" + QtNetworkSettings::winServerName() + "/testshare/tmp");
 }
 void tst_QDirIterator::uncPaths()
 {
@@ -592,7 +622,8 @@ void tst_QDirIterator::hiddenDirs_hiddenFiles()
         QDirIterator di("hiddenDirs_hiddenFiles", QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
         while (di.hasNext()) {
             ++matches;
-            if (di.nextFileInfo().isDir())
+            QString filename = di.next();
+            if (QFileInfo(filename).isDir())
                 ++failures;    // search was only supposed to find files
         }
         QCOMPARE(matches, 6);
@@ -605,7 +636,8 @@ void tst_QDirIterator::hiddenDirs_hiddenFiles()
         QDirIterator di("hiddenDirs_hiddenFiles", QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
         while (di.hasNext()) {
             ++matches;
-            if (!di.nextFileInfo().isDir())
+            QString filename = di.next();
+            if (!QFileInfo(filename).isDir())
                 ++failures;    // search was only supposed to find files
         }
         QCOMPARE(matches, 6);

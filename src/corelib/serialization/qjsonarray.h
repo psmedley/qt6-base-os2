@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QJSONARRAY_H
 #define QJSONARRAY_H
@@ -84,31 +120,32 @@ public:
         constexpr iterator(const iterator &other) = default;
         iterator &operator=(const iterator &other)
         {
-            item.rebind(other.item);
+            item.a = other.item.a;
+            item.index = other.item.index;
             return *this;
         }
 
         inline QJsonValueRef operator*() const { return item; }
-        inline const QJsonValueConstRef *operator->() const { return &item; }
-        inline QJsonValueRef *operator->() { return &item; }
-        inline QJsonValueRef operator[](qsizetype j) const { return *(*this + j); }
+        inline QJsonValueRef *operator->() const { return &item; }
+        inline QJsonValueRef operator[](qsizetype j) const
+        { return { item.a, qsizetype(item.index) + j }; }
 
         inline bool operator==(const iterator &o) const
-        { return item.d == o.item.d && item.index == o.item.index; }
+        { return item.a == o.item.a && item.index == o.item.index; }
         inline bool operator!=(const iterator &o) const { return !(*this == o); }
         inline bool operator<(const iterator &other) const
-        { Q_ASSERT(item.d == other.item.d); return item.index < other.item.index; }
+        { Q_ASSERT(item.a == other.item.a); return item.index < other.item.index; }
         inline bool operator<=(const iterator &other) const
-        { Q_ASSERT(item.d == other.item.d); return item.index <= other.item.index; }
+        { Q_ASSERT(item.a == other.item.a); return item.index <= other.item.index; }
         inline bool operator>(const iterator &other) const { return !(*this <= other); }
         inline bool operator>=(const iterator &other) const { return !(*this < other); }
         inline bool operator==(const const_iterator &o) const
-        { return item.d == o.item.d && item.index == o.item.index; }
+        { return item.a == o.item.a && item.index == o.item.index; }
         inline bool operator!=(const const_iterator &o) const { return !(*this == o); }
         inline bool operator<(const const_iterator &other) const
-        { Q_ASSERT(item.d == other.item.d); return item.index < other.item.index; }
+        { Q_ASSERT(item.a == other.item.a); return item.index < other.item.index; }
         inline bool operator<=(const const_iterator &other) const
-        { Q_ASSERT(item.d == other.item.d); return item.index <= other.item.index; }
+        { Q_ASSERT(item.a == other.item.a); return item.index <= other.item.index; }
         inline bool operator>(const const_iterator &other) const { return !(*this <= other); }
         inline bool operator>=(const const_iterator &other) const { return !(*this < other); }
         inline iterator &operator++() { ++item.index; return *this; }
@@ -117,12 +154,14 @@ public:
         inline iterator operator--(int) { iterator n = *this; item.index--; return n; }
         inline iterator &operator+=(qsizetype j) { item.index += quint64(j); return *this; }
         inline iterator &operator-=(qsizetype j) { item.index -= quint64(j); return *this; }
-        inline iterator operator+(qsizetype j) const { iterator r = *this; return r += j; }
-        inline iterator operator-(qsizetype j) const { return operator+(-j); }
+        inline iterator operator+(qsizetype j) const
+        { return iterator(item.a, qsizetype(item.index) + j); }
+        inline iterator operator-(qsizetype j) const
+        { return iterator(item.a, qsizetype(item.index) - j); }
         inline qsizetype operator-(iterator j) const { return item.index - j.item.index; }
 
     private:
-        QJsonValueRef item;
+        mutable QJsonValueRef item;
         friend class QJsonArray;
     };
     friend class iterator;
@@ -143,21 +182,23 @@ public:
         constexpr const_iterator(const const_iterator &other) = default;
         const_iterator &operator=(const const_iterator &other)
         {
-            item.rebind(other.item);
+            item.a = other.item.a;
+            item.index = other.item.index;
             return *this;
         }
 
-        inline const QJsonValueConstRef operator*() const { return item; }
-        inline const QJsonValueConstRef *operator->() const { return &item; }
+        inline const QJsonValueRef operator*() const { return item; }
+        inline const QJsonValueRef *operator->() const { return &item; }
 
-        inline QJsonValueConstRef operator[](qsizetype j) const { return *(*this + j); }
+        inline QJsonValueRef operator[](qsizetype j) const
+        { return { item.a, qsizetype(item.index) + j }; }
         inline bool operator==(const const_iterator &o) const
-        { return item.d == o.item.d && item.index == o.item.index; }
+        { return item.a == o.item.a && item.index == o.item.index; }
         inline bool operator!=(const const_iterator &o) const { return !(*this == o); }
         inline bool operator<(const const_iterator &other) const
-        { Q_ASSERT(item.d == other.item.d); return item.index < other.item.index; }
+        { Q_ASSERT(item.a == other.item.a); return item.index < other.item.index; }
         inline bool operator<=(const const_iterator &other) const
-        { Q_ASSERT(item.d == other.item.d); return item.index <= other.item.index; }
+        { Q_ASSERT(item.a == other.item.a); return item.index <= other.item.index; }
         inline bool operator>(const const_iterator &other) const { return !(*this <= other); }
         inline bool operator>=(const const_iterator &other) const { return !(*this < other); }
         inline const_iterator &operator++() { ++item.index; return *this; }
@@ -166,12 +207,14 @@ public:
         inline const_iterator operator--(int) { const_iterator n = *this; item.index--; return n; }
         inline const_iterator &operator+=(qsizetype j) { item.index += quint64(j); return *this; }
         inline const_iterator &operator-=(qsizetype j) { item.index -= quint64(j); return *this; }
-        inline const_iterator operator+(qsizetype j) const { const_iterator r = *this; return r += j; }
-        inline const_iterator operator-(qsizetype j) const { return operator+(-j); }
+        inline const_iterator operator+(qsizetype j) const
+        { return const_iterator(item.a, qsizetype(item.index) + j); }
+        inline const_iterator operator-(qsizetype j) const
+        { return const_iterator(item.a, qsizetype(item.index) - j); }
         inline qsizetype operator-(const_iterator j) const { return item.index - j.item.index; }
 
     private:
-        QJsonValueConstRef item;
+        QJsonValueRef item;
         friend class QJsonArray;
     };
     friend class const_iterator;
@@ -218,9 +261,6 @@ public:
 
 private:
     friend class QJsonValue;
-    friend class QJsonValueConstRef;
-    friend class QJsonValueRef;
-    friend class QJsonPrivate::Value;
     friend class QJsonDocument;
     friend class QCborArray;
     friend Q_CORE_EXPORT QDebug operator<<(QDebug, const QJsonArray &);
@@ -232,12 +272,6 @@ private:
 };
 
 Q_DECLARE_SHARED(QJsonArray)
-
-#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0) || defined(QT_BOOTSTRAPPED)
-inline QJsonValueConstRef::QJsonValueConstRef(QJsonArray *a, qsizetype idx)
-    : d(a ? a->a.data() : nullptr), is_object(false), index(idx)
-{}
-#endif
 
 Q_CORE_EXPORT size_t qHash(const QJsonArray &array, size_t seed = 0);
 

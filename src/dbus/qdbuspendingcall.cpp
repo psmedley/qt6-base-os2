@@ -1,6 +1,42 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtDBus module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qdbuspendingcall.h"
 #include "qdbuspendingcall_p.h"
@@ -16,8 +52,6 @@
 #ifndef QT_NO_DBUS
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*!
     \class QDBusPendingCall
@@ -138,7 +172,7 @@ bool QDBusPendingCallPrivate::setReplyCallback(QObject *target, const char *memb
 
     // success
     // construct the expected signature
-    int count = metaTypes.size() - 1;
+    int count = metaTypes.count() - 1;
     if (count == 1 && metaTypes.at(1) == QDBusMetaTypeId::message()) {
         // wildcard slot, can receive anything, so don't set the signature
         return true;
@@ -154,7 +188,7 @@ bool QDBusPendingCallPrivate::setReplyCallback(QObject *target, const char *memb
 void QDBusPendingCallPrivate::setMetaTypes(int count, const QMetaType *types)
 {
     if (count == 0) {
-        expectedReplySignature = ""_L1; // not null
+        expectedReplySignature = QLatin1String(""); // not null
         return;
     }
 
@@ -185,7 +219,8 @@ void QDBusPendingCallPrivate::checkReceivedSignature()
 
     // can't use startsWith here because a null string doesn't start or end with an empty string
     if (replyMessage.signature().indexOf(expectedReplySignature) != 0) {
-        const auto errorMsg = "Unexpected reply signature: got \"%1\", expected \"%2\""_L1;
+        const auto errorMsg = QLatin1String("Unexpected reply signature: got \"%1\", "
+                                            "expected \"%2\"");
         replyMessage = QDBusMessage::createError(
             QDBusError::InvalidSignature,
             errorMsg.arg(replyMessage.signature(), expectedReplySignature));
@@ -509,8 +544,6 @@ void QDBusPendingCallWatcher::waitForFinished()
     }
 }
 QT_END_NAMESPACE
-
-#include "moc_qdbuspendingcall_p.cpp"
 
 #endif // QT_NO_DBUS
 

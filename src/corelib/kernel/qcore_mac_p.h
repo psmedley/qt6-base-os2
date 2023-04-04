@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QCORE_MAC_P_H
 #define QCORE_MAC_P_H
@@ -76,9 +112,6 @@ kern_return_t IOObjectRelease(io_object_t object);
 
 Q_FORWARD_DECLARE_OBJC_CLASS(NSObject);
 Q_FORWARD_DECLARE_OBJC_CLASS(NSString);
-
-// @compatibility_alias doesn't work with categories or their methods
-#define QtExtras QT_MANGLE_NAMESPACE(QtExtras)
 
 QT_BEGIN_NAMESPACE
 template <typename T, typename U, auto RetainFunction, auto ReleaseFunction>
@@ -175,7 +208,6 @@ private:
 Q_CORE_EXPORT bool qt_mac_applicationIsInDarkMode();
 Q_CORE_EXPORT bool qt_mac_runningUnderRosetta();
 Q_CORE_EXPORT std::optional<uint32_t> qt_mac_sipConfiguration();
-Q_CORE_EXPORT void qt_mac_ensureResponsible();
 #endif
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -275,8 +307,8 @@ public:
 
     void swap(QAppleLogActivity &other)
     {
-        activity.swap(other.activity);
-        std::swap(state, other.state);
+        qSwap(activity, other.activity);
+        qSwap(state, other.state);
     }
 
 private:
@@ -333,7 +365,7 @@ public:
 
     void swap(QMacNotificationObserver &other) noexcept
     {
-        qt_ptr_swap(observer, other.observer);
+        qSwap(observer, other.observer);
     }
 
     void remove();
@@ -383,9 +415,9 @@ public:
 
     void swap(QMacKeyValueObserver &other) noexcept
     {
-        qt_ptr_swap(object, other.object);
-        qt_ptr_swap(keyPath, other.keyPath);
-        callback.swap(other.callback);
+        qSwap(object, other.object);
+        qSwap(keyPath, other.keyPath);
+        qSwap(callback, other.callback);
     }
 
 private:

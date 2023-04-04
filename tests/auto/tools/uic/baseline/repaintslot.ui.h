@@ -26,12 +26,12 @@ public:
     void setupUi(QWidget *Widget)
     {
         if (Widget->objectName().isEmpty())
-            Widget->setObjectName("Widget");
+            Widget->setObjectName(QString::fromUtf8("Widget"));
         Widget->resize(800, 600);
         verticalLayout = new QVBoxLayout(Widget);
-        verticalLayout->setObjectName("verticalLayout");
+        verticalLayout->setObjectName(QString::fromUtf8("verticalLayout"));
         verticalSlider = new QSlider(Widget);
-        verticalSlider->setObjectName("verticalSlider");
+        verticalSlider->setObjectName(QString::fromUtf8("verticalSlider"));
         verticalSlider->setOrientation(Qt::Vertical);
 
         verticalLayout->addWidget(verticalSlider);

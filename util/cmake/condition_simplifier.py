@@ -1,6 +1,31 @@
 #!/usr/bin/env python3
-# Copyright (C) 2021 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+#############################################################################
+##
+## Copyright (C) 2019 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is part of the plugins of the Qt Toolkit.
+##
+## $QT_BEGIN_LICENSE:GPL-EXCEPT$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 3 as published by the Free Software
+## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
 
 
 import re
@@ -83,7 +108,7 @@ def _recursive_simplify(expr):
     # windowses = ('WIN32', 'WINRT')
     apples = ("MACOS", "UIKIT", "IOS", "TVOS", "WATCHOS")
     bsds = ("FREEBSD", "OPENBSD", "NETBSD")
-    androids = ("ANDROID",)
+    androids = ("ANDROID", "ANDROID_EMBEDDED")
     unixes = (
         "APPLE",
         *apples,
@@ -115,6 +140,7 @@ def _recursive_simplify(expr):
     expr = _simplify_flavors_in_condition("APPLE", apples, expr)
     expr = _simplify_flavors_in_condition("BSD", bsds, expr)
     expr = _simplify_flavors_in_condition("UNIX", unixes, expr)
+    expr = _simplify_flavors_in_condition("ANDROID", ("ANDROID_EMBEDDED",), expr)
 
     # Simplify families of OSes against other families:
     expr = _simplify_os_families(expr, ("WIN32", "WINRT"), unixes)

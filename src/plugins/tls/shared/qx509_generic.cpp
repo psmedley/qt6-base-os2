@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtNetwork/private/qsslcertificate_p.h>
 #include <QtNetwork/private/qssl_p.h>
@@ -15,8 +51,6 @@
 #include <memory>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 namespace QTlsPrivate {
 
@@ -188,7 +222,7 @@ bool X509CertificateGeneric::parse(const QByteArray &data)
     if (!elem.read(certStream) || elem.type() != QAsn1Element::SequenceType)
         return false;
 
-    QByteArray issuerDer = data.mid(dataStream.device()->pos() - elem.value().size(), elem.value().size());
+    QByteArray issuerDer = data.mid(dataStream.device()->pos() - elem.value().length(), elem.value().length());
     issuerInfoEntries = elem.toInfo();
 
     // validity period
@@ -215,7 +249,7 @@ bool X509CertificateGeneric::parse(const QByteArray &data)
     if (!elem.read(certStream) || elem.type() != QAsn1Element::SequenceType)
         return false;
 
-    QByteArray subjectDer = data.mid(dataStream.device()->pos() - elem.value().size(), elem.value().size());
+    QByteArray subjectDer = data.mid(dataStream.device()->pos() - elem.value().length(), elem.value().length());
     subjectInfoEntries = elem.toInfo();
     subjectMatchesIssuer = issuerDer == subjectDer;
 
@@ -257,11 +291,11 @@ bool X509CertificateGeneric::parse(const QByteArray &data)
                     if (!parseExtension(elem.value(), extension))
                         return false;
 
-                    if (extension.oid == "2.5.29.17"_L1) {
+                    if (extension.oid == QLatin1String("2.5.29.17")) {
                         // subjectAltName
 
                         // Note, parseExtension() returns true for this extensions,
-                        // but considers it to be unsupported and assigns a useless
+                        // but considers it to be unsupported and assignes a useless
                         // value. OpenSSL also treats this extension as unsupported,
                         // but properly creates a map with 'name' and 'value' taken
                         // from the extension. We only support 'email', 'IP' and 'DNS',
@@ -285,7 +319,7 @@ bool X509CertificateGeneric::parse(const QByteArray &data)
                                 case QAsn1Element::IpAddressType: {
                                     QHostAddress ipAddress;
                                     QByteArray ipAddrValue = nameElem.value();
-                                    switch (ipAddrValue.size()) {
+                                    switch (ipAddrValue.length()) {
                                     case 4: // IPv4
                                         ipAddress = QHostAddress(qFromBigEndian(*reinterpret_cast<quint32 *>(ipAddrValue.data())));
                                         break;

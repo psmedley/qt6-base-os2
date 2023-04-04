@@ -12,6 +12,7 @@ qt_internal_add_plugin(QIOSIntegrationPlugin
         plugin.mm
         qiosapplicationdelegate.h qiosapplicationdelegate.mm
         qiosapplicationstate.h qiosapplicationstate.mm
+        qiosbackingstore.h qiosbackingstore.mm
         qioscontext.h qioscontext.mm
         qioseventdispatcher.h qioseventdispatcher.mm
         qiosglobal.h qiosglobal.mm

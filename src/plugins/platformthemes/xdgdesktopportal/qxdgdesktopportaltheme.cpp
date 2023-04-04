@@ -1,5 +1,41 @@
-// Copyright (C) 2017 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qxdgdesktopportaltheme.h"
 #include "qxdgdesktopportalfiledialog_p.h"
@@ -14,21 +50,12 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDBusReply>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 class QXdgDesktopPortalThemePrivate : public QPlatformThemePrivate
 {
 public:
-    enum XdgColorschemePref {
-        None,
-        PreferDark,
-        PreferLight
-    };
-
     QXdgDesktopPortalThemePrivate()
         : QPlatformThemePrivate()
     { }
@@ -38,33 +65,8 @@ public:
         delete baseTheme;
     }
 
-    /*! \internal
-
-        Converts the given Freedesktop color scheme setting \a colorschemePref to a QPlatformTheme::Appearance value.
-        Specification: https://github.com/flatpak/xdg-desktop-portal/blob/d7a304a00697d7d608821253cd013f3b97ac0fb6/data/org.freedesktop.impl.portal.Settings.xml#L33-L45
-
-        Unfortunately the enum numerical values are not defined identically, so we have to convert them.
-
-        The mapping is as follows:
-
-        Enum Index: Freedesktop definition  | Qt definition
-        ----------------------------------- | -------------
-        0: No preference                    | 0: Unknown
-        1: Prefer dark appearance           | 2: Dark
-        2: Prefer light appearance          | 1: Light
-    */
-    static QPlatformTheme::Appearance appearanceFromXdgPref(const XdgColorschemePref colorschemePref)
-    {
-        switch (colorschemePref) {
-            case PreferDark: return QPlatformTheme::Appearance::Dark;
-            case PreferLight: return QPlatformTheme::Appearance::Light;
-            default: return QPlatformTheme::Appearance::Unknown;
-        }
-    }
-
     QPlatformTheme *baseTheme = nullptr;
     uint fileChooserPortalVersion = 0;
-    QPlatformTheme::Appearance appearance = QPlatformTheme::Appearance::Unknown;
 };
 
 QXdgDesktopPortalTheme::QXdgDesktopPortalTheme()
@@ -75,7 +77,7 @@ QXdgDesktopPortalTheme::QXdgDesktopPortalTheme()
     QStringList themeNames;
     themeNames += QGuiApplicationPrivate::platform_integration->themeNames();
     // 1) Look for a theme plugin.
-    for (const QString &themeName : std::as_const(themeNames)) {
+    for (const QString &themeName : qAsConst(themeNames)) {
         d->baseTheme = QPlatformThemeFactory::create(themeName, nullptr);
         if (d->baseTheme)
             break;
@@ -84,7 +86,7 @@ QXdgDesktopPortalTheme::QXdgDesktopPortalTheme()
     // 2) If no theme plugin was found ask the platform integration to
     // create a theme
     if (!d->baseTheme) {
-        for (const QString &themeName : std::as_const(themeNames)) {
+        for (const QString &themeName : qAsConst(themeNames)) {
             d->baseTheme = QGuiApplicationPrivate::platform_integration->createPlatformTheme(themeName);
             if (d->baseTheme)
                 break;
@@ -97,11 +99,11 @@ QXdgDesktopPortalTheme::QXdgDesktopPortalTheme()
         d->baseTheme = new QPlatformTheme;
 
     // Get information about portal version
-    QDBusMessage message = QDBusMessage::createMethodCall("org.freedesktop.portal.Desktop"_L1,
-                                                          "/org/freedesktop/portal/desktop"_L1,
-                                                          "org.freedesktop.DBus.Properties"_L1,
-                                                          "Get"_L1);
-    message << "org.freedesktop.portal.FileChooser"_L1 << "version"_L1;
+    QDBusMessage message = QDBusMessage::createMethodCall(QLatin1String("org.freedesktop.portal.Desktop"),
+                                                          QLatin1String("/org/freedesktop/portal/desktop"),
+                                                          QLatin1String("org.freedesktop.DBus.Properties"),
+                                                          QLatin1String("Get"));
+    message << QLatin1String("org.freedesktop.portal.FileChooser") << QLatin1String("version");
     QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(message);
     QDBusPendingCallWatcher *watcher = new QDBusPendingCallWatcher(pendingCall);
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, [d] (QDBusPendingCallWatcher *watcher) {
@@ -111,21 +113,6 @@ QXdgDesktopPortalTheme::QXdgDesktopPortalTheme()
         }
         watcher->deleteLater();
     });
-
-    // Get information about system theme preference
-    message = QDBusMessage::createMethodCall("org.freedesktop.portal.Desktop"_L1,
-                                             "/org/freedesktop/portal/desktop"_L1,
-                                             "org.freedesktop.portal.Settings"_L1,
-                                             "Read"_L1);
-    message << "org.freedesktop.appearance"_L1 << "color-scheme"_L1;
-
-    // this must not be asyncCall() because we have to set appearance now
-    QDBusReply<QVariant> reply = QDBusConnection::sessionBus().call(message);
-    if (reply.isValid()) {
-        const QDBusVariant dbusVariant = qvariant_cast<QDBusVariant>(reply.value());
-        const QXdgDesktopPortalThemePrivate::XdgColorschemePref xdgPref = static_cast<QXdgDesktopPortalThemePrivate::XdgColorschemePref>(dbusVariant.variant().toUInt());
-        d->appearance = QXdgDesktopPortalThemePrivate::appearanceFromXdgPref(xdgPref);
-    }
 }
 
 QPlatformMenuItem* QXdgDesktopPortalTheme::createPlatformMenuItem() const
@@ -166,12 +153,11 @@ QPlatformDialogHelper* QXdgDesktopPortalTheme::createPlatformDialogHelper(Dialog
 {
     Q_D(const QXdgDesktopPortalTheme);
 
-    if (type == FileDialog && d->fileChooserPortalVersion) {
+    if (type == FileDialog) {
         // Older versions of FileChooser portal don't support opening directories, therefore we fallback
         // to native file dialog opened inside the sandbox to open a directory.
-        if (d->baseTheme->usePlatformNativeDialog(type))
-            return new QXdgDesktopPortalFileDialog(static_cast<QPlatformFileDialogHelper*>(d->baseTheme->createPlatformDialogHelper(type)),
-                                                   d->fileChooserPortalVersion);
+        if (d->fileChooserPortalVersion < 3 && d->baseTheme->usePlatformNativeDialog(type))
+            return new QXdgDesktopPortalFileDialog(static_cast<QPlatformFileDialogHelper*>(d->baseTheme->createPlatformDialogHelper(type)));
 
         return new QXdgDesktopPortalFileDialog;
     }
@@ -203,12 +189,6 @@ QVariant QXdgDesktopPortalTheme::themeHint(ThemeHint hint) const
 {
     Q_D(const QXdgDesktopPortalTheme);
     return d->baseTheme->themeHint(hint);
-}
-
-QPlatformTheme::Appearance QXdgDesktopPortalTheme::appearance() const
-{
-    Q_D(const QXdgDesktopPortalTheme);
-    return d->appearance;
 }
 
 QPixmap QXdgDesktopPortalTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) const

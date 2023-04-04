@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtSql module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qsql_psql_p.h"
 
@@ -64,8 +100,6 @@ Q_DECLARE_OPAQUE_POINTER(PGresult*)
 Q_DECLARE_METATYPE(PGresult*)
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 inline void qPQfreemem(void *buffer)
 {
@@ -157,10 +191,10 @@ void QPSQLDriverPrivate::appendTables(QStringList &tl, QSqlQuery &t, QChar type)
     t.exec(query);
     while (t.next()) {
         QString schema = t.value(1).toString();
-        if (schema.isEmpty() || schema == "public"_L1)
+        if (schema.isEmpty() || schema == QLatin1String("public"))
             tl.append(t.value(0).toString());
         else
-            tl.append(t.value(0).toString().prepend(u'.').prepend(schema));
+            tl.append(t.value(0).toString().prepend(QLatin1Char('.')).prepend(schema));
     }
 }
 
@@ -256,7 +290,7 @@ public:
     Q_DECLARE_SQLDRIVER_PRIVATE(QPSQLDriver)
     using QSqlResultPrivate::QSqlResultPrivate;
 
-    QString fieldSerial(int i) const override { return u'$' + QString::number(i + 1); }
+    QString fieldSerial(int i) const override { return QLatin1Char('$') + QString::number(i + 1); }
     void deallocatePreparedStmt();
 
     std::queue<PGresult*> nextResultSets;
@@ -280,7 +314,7 @@ static QSqlError qMakeError(const QString &err, QSqlError::ErrorType type,
         errorCode = QString::fromLatin1(PQresultErrorField(result, PG_DIAG_SQLSTATE));
         msg += QString::fromLatin1("(%1)").arg(errorCode);
     }
-    return QSqlError("QPSQL: "_L1 + err, msg, type, errorCode);
+    return QSqlError(QLatin1String("QPSQL: ") + err, msg, type, errorCode);
 }
 
 bool QPSQLResultPrivate::processResults()
@@ -827,7 +861,7 @@ static QString qCreateParamString(const QList<QVariant> &boundValues, const QSql
         else
             f.setValue(val);
         if (!params.isNull())
-            params.append(", "_L1);
+            params.append(QLatin1String(", "));
         params.append(driver->formatValue(f));
     }
     return params;
@@ -947,7 +981,7 @@ void QPSQLDriverPrivate::detectBackslashEscape()
         PGresult *result = exec(QStringLiteral("SELECT '\\\\' x"));
         int status = PQresultStatus(result);
         if (status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK)
-            if (QString::fromLatin1(PQgetvalue(result, 0, 0)) == "\\"_L1)
+            if (QString::fromLatin1(PQgetvalue(result, 0, 0)) == QLatin1String("\\"))
                 hasBackslashEscape = true;
         PQclear(result);
     }
@@ -1059,9 +1093,9 @@ QPSQLDriver::Protocol QPSQLDriverPrivate::getPSQLVersion()
 
     QPSQLDriver::Protocol clientVersion =
 #if defined(PG_MAJORVERSION)
-        qFindPSQLVersion(PG_MAJORVERSION ""_L1);
+        qFindPSQLVersion(QLatin1String(PG_MAJORVERSION));
 #elif defined(PG_VERSION)
-        qFindPSQLVersion(PG_VERSION ""_L1);
+        qFindPSQLVersion(QLatin1String(PG_VERSION));
 #else
         QPSQLDriver::VersionUnknown;
 #endif
@@ -1149,9 +1183,9 @@ bool QPSQLDriver::hasFeature(DriverFeature f) const
  */
 static QString qQuote(QString s)
 {
-    s.replace(u'\\', "\\\\"_L1);
-    s.replace(u'\'', "\\'"_L1);
-    s.append(u'\'').prepend(u'\'');
+    s.replace(QLatin1Char('\\'), QLatin1String("\\\\"));
+    s.replace(QLatin1Char('\''), QLatin1String("\\'"));
+    s.append(QLatin1Char('\'')).prepend(QLatin1Char('\''));
     return s;
 }
 
@@ -1166,21 +1200,21 @@ bool QPSQLDriver::open(const QString &db,
     close();
     QString connectString;
     if (!host.isEmpty())
-        connectString.append("host="_L1).append(qQuote(host));
+        connectString.append(QLatin1String("host=")).append(qQuote(host));
     if (!db.isEmpty())
-        connectString.append(" dbname="_L1).append(qQuote(db));
+        connectString.append(QLatin1String(" dbname=")).append(qQuote(db));
     if (!user.isEmpty())
-        connectString.append(" user="_L1).append(qQuote(user));
+        connectString.append(QLatin1String(" user=")).append(qQuote(user));
     if (!password.isEmpty())
-        connectString.append(" password="_L1).append(qQuote(password));
+        connectString.append(QLatin1String(" password=")).append(qQuote(password));
     if (port != -1)
-        connectString.append(" port="_L1).append(qQuote(QString::number(port)));
+        connectString.append(QLatin1String(" port=")).append(qQuote(QString::number(port)));
 
     // add any connect options - the server will handle error detection
     if (!connOpts.isEmpty()) {
         QString opt = connOpts;
-        opt.replace(';'_L1, ' '_L1, Qt::CaseInsensitive);
-        connectString.append(u' ').append(opt);
+        opt.replace(QLatin1Char(';'), QLatin1Char(' '), Qt::CaseInsensitive);
+        connectString.append(QLatin1Char(' ')).append(opt);
     }
 
     d->connection = PQconnectdb(std::move(connectString).toLocal8Bit().constData());
@@ -1258,7 +1292,7 @@ bool QPSQLDriver::commitTransaction()
     // XXX
     // This hack is used to tell if the transaction has succeeded for the protocol versions of
     // PostgreSQL below. For 7.x and other protocol versions we are left in the dark.
-    // This hack can disappear once there is an API to query this sort of information.
+    // This hack can dissapear once there is an API to query this sort of information.
     if (d->pro >= QPSQLDriver::Version8) {
         transaction_failed = qstrcmp(PQcmdStatus(res), "ROLLBACK") == 0;
     }
@@ -1301,9 +1335,9 @@ QStringList QPSQLDriver::tables(QSql::TableType type) const
     t.setForwardOnly(true);
 
     if (type & QSql::Tables)
-        const_cast<QPSQLDriverPrivate*>(d)->appendTables(tl, t, u'r');
+        const_cast<QPSQLDriverPrivate*>(d)->appendTables(tl, t, QLatin1Char('r'));
     if (type & QSql::Views)
-        const_cast<QPSQLDriverPrivate*>(d)->appendTables(tl, t, u'v');
+        const_cast<QPSQLDriverPrivate*>(d)->appendTables(tl, t, QLatin1Char('v'));
     if (type & QSql::SystemTables) {
         t.exec(QStringLiteral("SELECT relname FROM pg_class WHERE (relkind = 'r') "
                               "AND (relname LIKE 'pg_%') "));
@@ -1316,7 +1350,7 @@ QStringList QPSQLDriver::tables(QSql::TableType type) const
 
 static void qSplitTableName(QString &tablename, QString &schema)
 {
-    qsizetype dot = tablename.indexOf(u'.');
+    int dot = tablename.indexOf(QLatin1Char('.'));
     if (dot == -1)
         return;
     schema = tablename.left(dot);
@@ -1404,8 +1438,8 @@ QSqlRecord QPSQLDriver::record(const QString &tablename) const
             precision = -1;
         }
         QString defVal = query.value(5).toString();
-        if (!defVal.isEmpty() && defVal.at(0) == u'\'') {
-            const qsizetype end = defVal.lastIndexOf(u'\'');
+        if (!defVal.isEmpty() && defVal.at(0) == QLatin1Char('\'')) {
+            const int end = defVal.lastIndexOf(QLatin1Char('\''));
             if (end > 0)
                 defVal = defVal.mid(1, end - 1);
         }
@@ -1445,9 +1479,9 @@ QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
                 // we force the value to be considered with a timezone information, and we force it to be UTC
                 // this is safe since postgresql stores only the UTC value and not the timezone offset (only used
                 // while parsing), so we have correct behavior in both case of with timezone and without tz
-                r = QStringLiteral("TIMESTAMP WITH TIME ZONE ") + u'\'' +
+                r = QStringLiteral("TIMESTAMP WITH TIME ZONE ") + QLatin1Char('\'') +
                         QLocale::c().toString(field.value().toDateTime().toUTC(), u"yyyy-MM-ddThh:mm:ss.zzz") +
-                        u'Z' + u'\'';
+                        QLatin1Char('Z') + QLatin1Char('\'');
             } else {
                 r = nullStr();
             }
@@ -1458,7 +1492,7 @@ QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
         case QMetaType::QTime:
 #if QT_CONFIG(datestring)
             if (field.value().toTime().isValid()) {
-                r = u'\'' + field.value().toTime().toString(u"hh:mm:ss.zzz") + u'\'';
+                r = QLatin1Char('\'') + field.value().toTime().toString(u"hh:mm:ss.zzz") + QLatin1Char('\'');
             } else
 #endif
             {
@@ -1468,7 +1502,7 @@ QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
         case QMetaType::QString:
             r = QSqlDriver::formatValue(field, trimStrings);
             if (d->hasBackslashEscape)
-                r.replace(u'\\', "\\\\"_L1);
+                r.replace(QLatin1Char('\\'), QLatin1String("\\\\"));
             break;
         case QMetaType::Bool:
             if (field.value().toBool())
@@ -1484,9 +1518,9 @@ QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
 #else
             unsigned char *data = PQescapeBytea((const unsigned char*)ba.constData(), ba.size(), &len);
 #endif
-            r += u'\'';
-            r += QLatin1StringView((const char*)data);
-            r += u'\'';
+            r += QLatin1Char('\'');
+            r += QLatin1String((const char*)data);
+            r += QLatin1Char('\'');
             qPQfreemem(data);
             break;
         }
@@ -1501,7 +1535,7 @@ QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
                 r = QSqlDriver::formatValue(field, trimStrings);
             break;
         case QMetaType::QUuid:
-            r = u'\'' + field.value().toString() + u'\'';
+            r = QLatin1Char('\'') + field.value().toString() + QLatin1Char('\'');
             break;
         default:
             r = QSqlDriver::formatValue(field, trimStrings);
@@ -1514,10 +1548,10 @@ QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
 QString QPSQLDriver::escapeIdentifier(const QString &identifier, IdentifierType) const
 {
     QString res = identifier;
-    if (!identifier.isEmpty() && !identifier.startsWith(u'"') && !identifier.endsWith(u'"') ) {
-        res.replace(u'"', "\"\""_L1);
-        res.prepend(u'"').append(u'"');
-        res.replace(u'.', "\".\""_L1);
+    if (!identifier.isEmpty() && !identifier.startsWith(QLatin1Char('"')) && !identifier.endsWith(QLatin1Char('"')) ) {
+        res.replace(QLatin1Char('"'), QLatin1String("\"\""));
+        res.prepend(QLatin1Char('"')).append(QLatin1Char('"'));
+        res.replace(QLatin1Char('.'), QLatin1String("\".\""));
     }
     return res;
 }
@@ -1622,7 +1656,7 @@ void QPSQLDriver::_q_handleNotification()
 
     PGnotify *notify = nullptr;
     while ((notify = PQnotifies(d->connection)) != nullptr) {
-        QString name(QLatin1StringView(notify->relname));
+        QString name(QLatin1String(notify->relname));
         if (d->seid.contains(name)) {
             QString payload;
 #if defined PG_VERSION_NUM && PG_VERSION_NUM-0 >= 70400

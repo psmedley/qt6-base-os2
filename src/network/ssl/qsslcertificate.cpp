@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 /*!
@@ -114,10 +150,6 @@
 #include <QtCore/qfile.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
-
-QT_IMPL_METATYPE_EXTERN(QSslCertificate)
 
 QSslCertificatePrivate::QSslCertificatePrivate()
 {
@@ -624,16 +656,16 @@ QList<QSslCertificate> QSslCertificate::fromPath(const QString &path,
     QString sourcePath = QDir::fromNativeSeparators(path);
 
     // Find the path without the filename
-    QString pathPrefix = sourcePath.left(sourcePath.lastIndexOf(u'/'));
+    QString pathPrefix = sourcePath.left(sourcePath.lastIndexOf(QLatin1Char('/')));
 
     // Check if the path contains any special chars
     int pos = -1;
 
 #if QT_CONFIG(regularexpression)
     if (syntax == PatternSyntax::Wildcard)
-        pos = pathPrefix.indexOf(QRegularExpression("[*?[]"_L1));
+        pos = pathPrefix.indexOf(QRegularExpression(QLatin1String("[*?[]")));
     else if (syntax == PatternSyntax::RegularExpression)
-        pos = sourcePath.indexOf(QRegularExpression("[\\$\\(\\)\\*\\+\\.\\?\\[\\]\\^\\{\\}\\|]"_L1));
+        pos = sourcePath.indexOf(QRegularExpression(QLatin1String("[\\$\\(\\)\\*\\+\\.\\?\\[\\]\\^\\{\\}\\|]")));
 #else
     if (syntax == PatternSyntax::Wildcard || syntax == PatternSyntax::RegExp)
         qWarning("Regular expression support is disabled in this build. Only fixed string can be searched");
@@ -643,7 +675,7 @@ QList<QSslCertificate> QSslCertificate::fromPath(const QString &path,
     if (pos != -1) {
         // there was a special char in the path so cut of the part containing that char.
         pathPrefix = pathPrefix.left(pos);
-        const qsizetype lastIndexOfSlash = pathPrefix.lastIndexOf(u'/');
+        const int lastIndexOfSlash = pathPrefix.lastIndexOf(QLatin1Char('/'));
         if (lastIndexOfSlash != -1)
             pathPrefix = pathPrefix.left(lastIndexOfSlash);
         else
@@ -664,7 +696,7 @@ QList<QSslCertificate> QSslCertificate::fromPath(const QString &path,
     // Special case - if the prefix ends up being nothing, use "." instead.
     int startIndex = 0;
     if (pathPrefix.isEmpty()) {
-        pathPrefix = "."_L1;
+        pathPrefix = QLatin1String(".");
         startIndex = 2;
     }
 
@@ -955,6 +987,8 @@ QString QSslCertificate::subjectDisplayName() const
 }
 
 /*!
+    \fn size_t qHash(const QSslCertificate &key, size_t seed)
+
     Returns the hash value for the \a key, using \a seed to seed the calculation.
     \since 5.4
     \relates QHash

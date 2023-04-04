@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qlocalsocket.h"
 #include "qlocalsocket_p.h"
@@ -10,8 +46,6 @@
 #include <qdebug.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 QLocalSocketPrivate::QLocalSocketPrivate() : QIODevicePrivate(),
         tcpSocket(0),
@@ -51,7 +85,7 @@ void QLocalSocketPrivate::setSocket(QLocalUnixSocket* socket)
 void QLocalSocketPrivate::_q_errorOccurred(QAbstractSocket::SocketError socketError)
 {
     Q_Q(QLocalSocket);
-    QString function = "QLocalSocket"_L1;
+    QString function = QLatin1String("QLocalSocket");
     QLocalSocket::LocalSocketError error = (QLocalSocket::LocalSocketError)socketError;
     QString errorString = generateErrorString(error, function);
     q->setErrorString(errorString);
@@ -191,21 +225,23 @@ void QLocalSocket::connectToServer(OpenMode openMode)
     emit stateChanged(d->state);
 
     if (d->serverName.isEmpty()) {
-        d->setErrorAndEmit(ServerNotFoundError, "QLocalSocket::connectToServer"_L1);
+        d->setErrorAndEmit(ServerNotFoundError,
+                           QLatin1String("QLocalSocket::connectToServer"));
         return;
     }
 
-    const auto prefix = "QLocalServer/"_L1;
+    const QLatin1String prefix("QLocalServer/");
     if (d->serverName.startsWith(prefix))
         d->fullServerName = d->serverName;
     else
         d->fullServerName = prefix + d->serverName;
 
-    QSettings settings("QtProject"_L1, "Qt"_L1);
+    QSettings settings(QLatin1String("QtProject"), QLatin1String("Qt"));
     bool ok;
     const quint16 port = settings.value(d->fullServerName).toUInt(&ok);
     if (!ok) {
-        d->setErrorAndEmit(ServerNotFoundError, "QLocalSocket::connectToServer"_L1);
+        d->setErrorAndEmit(ServerNotFoundError,
+                           QLatin1String("QLocalSocket::connectToServer"));
         return;
     }
     QIODevice::open(openMode);
@@ -262,16 +298,6 @@ qint64 QLocalSocket::readData(char *data, qint64 c)
 {
     Q_D(QLocalSocket);
     return d->tcpSocket->read(data, c);
-}
-
-qint64 QLocalSocket::readLineData(char *data, qint64 maxSize)
-{
-    if (!maxSize)
-        return 0;
-
-    // QIODevice::readLine() reserves space for the trailing '\0' byte,
-    // so we must read 'maxSize + 1' bytes.
-    return d_func()->tcpSocket->readLine(data, maxSize + 1);
 }
 
 qint64 QLocalSocket::skipData(qint64 maxSize)

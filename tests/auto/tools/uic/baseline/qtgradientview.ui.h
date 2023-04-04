@@ -35,15 +35,15 @@ public:
     void setupUi(QWidget *QtGradientView)
     {
         if (QtGradientView->objectName().isEmpty())
-            QtGradientView->setObjectName("QtGradientView");
+            QtGradientView->setObjectName(QString::fromUtf8("QtGradientView"));
         QtGradientView->resize(484, 228);
         vboxLayout = new QVBoxLayout(QtGradientView);
-        vboxLayout->setObjectName("vboxLayout");
+        vboxLayout->setObjectName(QString::fromUtf8("vboxLayout"));
         vboxLayout->setContentsMargins(0, 0, 0, 0);
         hboxLayout = new QHBoxLayout();
-        hboxLayout->setObjectName("hboxLayout");
+        hboxLayout->setObjectName(QString::fromUtf8("hboxLayout"));
         newButton = new QToolButton(QtGradientView);
-        newButton->setObjectName("newButton");
+        newButton->setObjectName(QString::fromUtf8("newButton"));
         QSizePolicy sizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
         sizePolicy.setHorizontalStretch(0);
         sizePolicy.setVerticalStretch(0);
@@ -55,7 +55,7 @@ public:
         hboxLayout->addWidget(newButton);
 
         editButton = new QToolButton(QtGradientView);
-        editButton->setObjectName("editButton");
+        editButton->setObjectName(QString::fromUtf8("editButton"));
         sizePolicy.setHeightForWidth(editButton->sizePolicy().hasHeightForWidth());
         editButton->setSizePolicy(sizePolicy);
         editButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
@@ -64,7 +64,7 @@ public:
         hboxLayout->addWidget(editButton);
 
         renameButton = new QToolButton(QtGradientView);
-        renameButton->setObjectName("renameButton");
+        renameButton->setObjectName(QString::fromUtf8("renameButton"));
         sizePolicy.setHeightForWidth(renameButton->sizePolicy().hasHeightForWidth());
         renameButton->setSizePolicy(sizePolicy);
         renameButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
@@ -73,7 +73,7 @@ public:
         hboxLayout->addWidget(renameButton);
 
         removeButton = new QToolButton(QtGradientView);
-        removeButton->setObjectName("removeButton");
+        removeButton->setObjectName(QString::fromUtf8("removeButton"));
         sizePolicy.setHeightForWidth(removeButton->sizePolicy().hasHeightForWidth());
         removeButton->setSizePolicy(sizePolicy);
         removeButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
@@ -89,7 +89,7 @@ public:
         vboxLayout->addLayout(hboxLayout);
 
         listWidget = new QListWidget(QtGradientView);
-        listWidget->setObjectName("listWidget");
+        listWidget->setObjectName(QString::fromUtf8("listWidget"));
 
         vboxLayout->addWidget(listWidget);
 

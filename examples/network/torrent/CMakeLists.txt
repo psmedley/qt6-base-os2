@@ -1,16 +1,24 @@
+# Generated from torrent.pro.
+
 cmake_minimum_required(VERSION 3.16)
 project(torrent LANGUAGES CXX)
 
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-    set(INSTALL_EXAMPLESDIR "examples")
+  set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/network/torrent")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Widgets)
+find_package(Qt6 COMPONENTS Core)
+find_package(Qt6 COMPONENTS Gui)
+find_package(Qt6 COMPONENTS Network)
+find_package(Qt6 COMPONENTS Widgets)
 
 qt_add_executable(torrent
     addtorrentdialog.cpp addtorrentdialog.h
@@ -27,18 +35,17 @@ qt_add_executable(torrent
     torrentserver.cpp torrentserver.h
     trackerclient.cpp trackerclient.h
 )
-
 set_target_properties(torrent PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
-
 target_link_libraries(torrent PUBLIC
     Qt::Core
     Qt::Gui
     Qt::Network
     Qt::Widgets
 )
+
 
 # Resources:
 set(icons_resource_files
@@ -52,7 +59,7 @@ set(icons_resource_files
     "icons/player_stop.png"
 )
 
-qt_add_resources(torrent "icons"
+qt6_add_resources(torrent "icons"
     PREFIX
         "/"
     FILES

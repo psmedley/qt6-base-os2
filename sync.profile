@@ -1,8 +1,4 @@
-%modules = (
-    # path to module name map
-    # "module_name" => "path to look for headers"
-    # ! - for non qt module
-    # > - points to directory where module was defined in cmake file
+%modules = ( # path to module name map
     "QtGui" => "$basedir/src/gui",
     "QtWidgets" => "$basedir/src/widgets",
     "QtPrintSupport" => "$basedir/src/printsupport",
@@ -19,11 +15,7 @@
     "QtInputSupport" => "$basedir/src/platformsupport/input",
     "QtFbSupport" => "$basedir/src/platformsupport/fbconvenience",
     "QtKmsSupport" => "$basedir/src/platformsupport/kmsconvenience",
-    "QtZlib" => "!>$basedir/src/corelib;$basedir/src/3rdparty/zlib/src",
-    "QtPng" => "!>$basedir/src/3rdparty/libpng;$basedir/src/3rdparty/libpng",
-    "QtJpeg" => "!>$basedir/src/3rdparty/libjpeg;$basedir/src/3rdparty/libjpeg/src",
-    "QtHarfbuzz" => "!>$basedir/src/3rdparty/harfbuzz-ng;$basedir/src/3rdparty/harfbuzz-ng/include",
-    "QtFreetype" => "!>$basedir/src/3rdparty/freetype;$basedir/src/3rdparty/freetype/include",
+    "QtZlib" => "!>$basedir/src/corelib;$basedir/src/3rdparty/zlib",
     "QtEglFSDeviceIntegration" => "$basedir/src/plugins/platforms/eglfs",
     "QtEglFsKmsSupport" => "$basedir/src/plugins/platforms/eglfs/deviceintegration/eglfs_kms_support",
     "QtEglFsKmsGbmSupport" => "$basedir/src/plugins/platforms/eglfs/deviceintegration/eglfs_kms",
@@ -31,8 +23,6 @@
     "QtMockPlugins2" => "$basedir/tests/auto/cmake/mockplugins/mockplugins2",
     "QtMockPlugins3" => "$basedir/tests/auto/cmake/mockplugins/mockplugins3",
     "QtMockStaticResources1" => "$basedir/tests/auto/cmake/test_static_resources/mock_static_resources1",
-    "QtTestAutogeneratingCppExports" => "$basedir/tests/auto/cmake/test_generating_cpp_exports/test_autogenerating_cpp_exports",
-    "QtTestAutogeneratingCppExportsCustomName" => "$basedir/tests/auto/cmake/test_generating_cpp_exports/test_autogenerating_cpp_exports_custom_name",
 );
 %moduleheaders = ( # restrict the module headers to those found in relative path
     "QtEglFSDeviceIntegration" => "api",
@@ -45,11 +35,13 @@
     "qconfig.h" => "QtConfig",
     "qplugin.h" => "QtPlugin",
     "qalgorithms.h" => "QtAlgorithms",
+    "qvector.h" => "QVector",
     "qcontainerfwd.h" => "QtContainerFwd",
     "qdebug.h" => "QtDebug",
     "qevent.h" => "QtEvents",
     "qnamespace.h" => "Qt",
     "qnumeric.h" => "QtNumeric",
+    "qvariant.h" => "QVariantHash,QVariantList,QVariantMap",
     "qvulkanfunctions.h" => "QVulkanFunctions,QVulkanDeviceFunctions",
     "qgl.h" => "QGL",
     "qtsqlglobal.h" => "QSql",
@@ -62,6 +54,10 @@
     "qutf8stringview.h" => "QUtf8StringView",
 );
 %deprecatedheaders = (
+    "QtGui" =>  {
+        "QGenericPlugin" => "QtGui/QGenericPlugin",
+        "QGenericPluginFactory" => "QtGui/QGenericPluginFactory"
+    },
     "QtSql" => {
         "qsql.h" => "QtSql/qtsqlglobal.h"
     },
@@ -76,8 +72,7 @@
 @qpa_headers = ( qr/^qplatform/, qr/^qwindowsystem/ );
 my @internal_zlib_headers = ( "crc32.h", "deflate.h", "gzguts.h", "inffast.h", "inffixed.h", "inflate.h", "inftrees.h", "trees.h", "zutil.h" );
 my @zlib_headers = ( "zconf.h", "zlib.h" );
-my @internal_qtnetwork_headers = ( "qurltlds_p.h" );
-@ignore_headers = ( @internal_zlib_headers, @internal_qtnetwork_headers );
+@ignore_headers = ( @internal_zlib_headers );
 @ignore_for_include_check = ( "qsystemdetection.h", "qcompilerdetection.h", "qprocessordetection.h", @zlib_headers);
 @ignore_for_qt_begin_namespace_check = ( "qt_windows.h", "qt_os2.h", @zlib_headers);
 %inject_headers = (

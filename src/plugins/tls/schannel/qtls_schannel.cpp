@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 // #define QSSLSOCKET_DEBUG
 
@@ -125,8 +161,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 Q_LOGGING_CATEGORY(lcTlsBackendSchannel, "qt.tlsbackend.schannel");
 
 // Defined in qsslsocket_qt.cpp.
@@ -142,11 +176,8 @@ QList<QSslCipher> defaultCiphers()
     // @temp (I hope), stolen from qsslsocket_winrt.cpp
     const QString protocolStrings[] = { QStringLiteral("TLSv1"), QStringLiteral("TLSv1.1"),
                                         QStringLiteral("TLSv1.2"), QStringLiteral("TLSv1.3") };
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
     const QSsl::SslProtocol protocols[] = { QSsl::TlsV1_0, QSsl::TlsV1_1,
                                             QSsl::TlsV1_2, QSsl::TlsV1_3 };
-QT_WARNING_POP
     const int size = ARRAYSIZE(protocols);
     static_assert(size == ARRAYSIZE(protocolStrings));
     ciphers.reserve(size);
@@ -179,7 +210,7 @@ long QSchannelBackend::tlsLibraryVersionNumber() const
 QString QSchannelBackend::tlsLibraryVersionString() const
 {
     const auto os = QOperatingSystemVersion::current();
-    return "Secure Channel, %1 %2.%3.%4"_L1
+    return QLatin1String("Secure Channel, %1 %2.%3.%4")
             .arg(os.name(),
                  QString::number(os.majorVersion()),
                  QString::number(os.minorVersion()),
@@ -193,7 +224,7 @@ long QSchannelBackend::tlsLibraryBuildVersionNumber() const
 
 QString QSchannelBackend::tlsLibraryBuildVersionString() const
 {
-    return "Secure Channel (NTDDI: 0x%1)"_L1
+    return QLatin1String("Secure Channel (NTDDI: 0x%1)")
             .arg(QString::number(NTDDI_VERSION, 16).toUpper());
 }
 
@@ -233,13 +264,10 @@ QList<QSsl::SslProtocol> QSchannelBackend::supportedProtocols() const
 
     protocols << QSsl::AnyProtocol;
     protocols << QSsl::SecureProtocols;
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
     protocols << QSsl::TlsV1_0;
     protocols << QSsl::TlsV1_0OrLater;
     protocols << QSsl::TlsV1_1;
     protocols << QSsl::TlsV1_1OrLater;
-QT_WARNING_POP
     protocols << QSsl::TlsV1_2;
     protocols << QSsl::TlsV1_2OrLater;
 
@@ -404,12 +432,9 @@ DWORD toSchannelProtocol(QSsl::SslProtocol protocol)
     switch (protocol) {
     case QSsl::UnknownProtocol:
         return DWORD(-1);
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
     case QSsl::DtlsV1_0:
-    case QSsl::DtlsV1_0OrLater:
-QT_WARNING_POP
     case QSsl::DtlsV1_2:
+    case QSsl::DtlsV1_0OrLater:
     case QSsl::DtlsV1_2OrLater:
         return DWORD(-1); // Not supported at the moment (@future)
     case QSsl::AnyProtocol:
@@ -417,15 +442,12 @@ QT_WARNING_POP
         if (supportsTls13())
             protocols |= SP_PROT_TLS1_3;
         break;
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
     case QSsl::TlsV1_0:
         protocols = SP_PROT_TLS1_0;
         break;
     case QSsl::TlsV1_1:
         protocols = SP_PROT_TLS1_1;
         break;
-QT_WARNING_POP
     case QSsl::TlsV1_2:
         protocols = SP_PROT_TLS1_2;
         break;
@@ -435,8 +457,7 @@ QT_WARNING_POP
         else
             protocols = DWORD(-1);
         break;
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
+    case QSsl::SecureProtocols: // TLS v1.0 and later is currently considered secure
     case QSsl::TlsV1_0OrLater:
         // For the "OrLater" protocols we fall through from one to the next, adding all of them
         // in ascending order
@@ -445,8 +466,6 @@ QT_WARNING_DISABLE_DEPRECATED
     case QSsl::TlsV1_1OrLater:
         protocols |= SP_PROT_TLS1_1;
         Q_FALLTHROUGH();
-QT_WARNING_POP
-    case QSsl::SecureProtocols: // TLS v1.2 and later is currently considered secure
     case QSsl::TlsV1_2OrLater:
         protocols |= SP_PROT_TLS1_2;
         Q_FALLTHROUGH();
@@ -487,11 +506,8 @@ QSsl::SslProtocol toQtSslProtocol(DWORD protocol)
         return q_protocol;                    \
     }
 
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
     MAP_PROTOCOL(SP_PROT_TLS1_0, QSsl::TlsV1_0)
     MAP_PROTOCOL(SP_PROT_TLS1_1, QSsl::TlsV1_1)
-QT_WARNING_POP
     MAP_PROTOCOL(SP_PROT_TLS1_2, QSsl::TlsV1_2)
     MAP_PROTOCOL(SP_PROT_TLS1_3, QSsl::TlsV1_3)
 #undef MAP_PROTOCOL
@@ -537,11 +553,11 @@ bool isCertificateAuthority(const QList<QSslCertificateExtension> &extensions)
 {
     auto it = std::find_if(extensions.cbegin(), extensions.cend(),
                            [](const QSslCertificateExtension &extension) {
-                               return extension.name() == "basicConstraints"_L1;
+                               return extension.name() == QLatin1String("basicConstraints");
                            });
     if (it != extensions.cend()) {
         QVariantMap basicConstraints = it->value().toMap();
-        return basicConstraints.value("ca"_L1, false).toBool();
+        return basicConstraints.value(QLatin1String("ca"), false).toBool();
     }
     return false;
 }
@@ -1659,6 +1675,8 @@ void TlsCryptographSchannel::transmit()
             } else if (status == SEC_I_CONTEXT_EXPIRED) {
                 // 'remote' has initiated a shutdown
                 disconnectFromHost();
+                setErrorAndEmit(d, QAbstractSocket::RemoteHostClosedError,
+                                schannelErrorToString(status));
                 break;
             } else if (status == SEC_I_RENEGOTIATE) {
                 // 'remote' wants to renegotiate
@@ -2209,7 +2227,7 @@ bool TlsCryptographSchannel::verifyCertContext(CERT_CONTEXT *certContext)
         if (element->TrustStatus.dwErrorStatus & CERT_TRUST_INVALID_BASIC_CONSTRAINTS) {
             auto it = std::find_if(extensions.cbegin(), extensions.cend(),
                                    [](const QSslCertificateExtension &extension) {
-                                       return extension.name() == "basicConstraints"_L1;
+                                       return extension.name() == QLatin1String("basicConstraints");
                                    });
             if (it != extensions.cend()) {
                 // @Note: This is actually one of two errors:
@@ -2217,7 +2235,7 @@ bool TlsCryptographSchannel::verifyCertContext(CERT_CONTEXT *certContext)
                 // or the chain path length has been exceeded."
                 QVariantMap basicConstraints = it->value().toMap();
                 QSslError error;
-                if (i > 0 && !basicConstraints.value("ca"_L1, false).toBool())
+                if (i > 0 && !basicConstraints.value(QLatin1String("ca"), false).toBool())
                     error = QSslError(QSslError::InvalidPurpose, certificate);
                 else
                     error = QSslError(QSslError::PathLengthExceeded, certificate);

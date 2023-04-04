@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the tools applications of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "uic.h"
 #include "ui4.h"
@@ -21,8 +46,6 @@
 #include <qtextstream.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 Uic::Uic(Driver *d)
      : drv(d),
@@ -104,7 +127,7 @@ void Uic::writeCopyrightHeaderCpp(const DomUI *ui) const
 
 static inline bool isCppCommentChar(QChar c)
 {
-    return  c == u'/' || c == u'*';
+    return  c == QLatin1Char('/') || c == QLatin1Char('*');
 }
 
 static int leadingCppCommentCharCount(QStringView s)
@@ -119,13 +142,13 @@ void Uic::writeCopyrightHeaderPython(const DomUI *ui) const
 {
     QString comment = ui->elementComment();
     if (!comment.isEmpty()) {
-        const auto lines = QStringView{comment}.split(u'\n');
+        const auto lines = QStringView{comment}.split(QLatin1Char('\n'));
         for (const auto &line : lines) {
             if (const int leadingCommentChars = leadingCppCommentCharCount(line)) {
                  out << language::repeat(leadingCommentChars, '#')
                      << line.right(line.size() - leadingCommentChars);
             } else {
-                if (!line.startsWith(u'#'))
+                if (!line.startsWith(QLatin1Char('#')))
                     out << "# ";
                 out << line;
             }
@@ -146,7 +169,7 @@ void Uic::writeCopyrightHeaderPython(const DomUI *ui) const
 static double versionFromUiAttribute(QXmlStreamReader &reader)
 {
     const QXmlStreamAttributes attributes = reader.attributes();
-    const QString versionAttribute = "version"_L1;
+    const QString versionAttribute = QLatin1String("version");
     if (!attributes.hasAttribute(versionAttribute))
         return 4.0;
     const QStringView version = attributes.value(versionAttribute);
@@ -157,7 +180,7 @@ DomUI *Uic::parseUiFile(QXmlStreamReader &reader)
 {
     DomUI *ui = nullptr;
 
-    const QString uiElement = "ui"_L1;
+    const QString uiElement = QLatin1String("ui");
     while (!reader.atEnd()) {
         if (reader.readNext() == QXmlStreamReader::StartElement) {
             if (reader.name().compare(uiElement, Qt::CaseInsensitive) == 0
@@ -172,7 +195,7 @@ DomUI *Uic::parseUiFile(QXmlStreamReader &reader)
                 ui = new DomUI();
                 ui->read(reader);
             } else {
-                reader.raiseError("Unexpected element "_L1 + reader.name().toString());
+                reader.raiseError(QLatin1String("Unexpected element ") + reader.name().toString());
             }
         }
     }
@@ -208,7 +231,7 @@ bool Uic::write(QIODevice *in)
     const QString &language = ui->attributeLanguage();
     driver()->setUseIdBasedTranslations(ui->attributeIdbasedtr());
 
-    if (!language.isEmpty() && language.compare("c++"_L1, Qt::CaseInsensitive) != 0) {
+    if (!language.isEmpty() && language.compare(QLatin1String("c++"), Qt::CaseInsensitive) != 0) {
         fprintf(stderr, "uic: File is not a \"c++\" ui file, language=%s\n", qPrintable(language));
         return false;
     }
@@ -243,7 +266,8 @@ bool Uic::write(DomUI *ui)
     }
 
     pixFunction = ui->elementPixmapFunction();
-    if (pixFunction == "QPixmap::fromMimeSource"_L1 || pixFunction == "qPixmapFromMimeSource"_L1) {
+    if (pixFunction == QLatin1String("QPixmap::fromMimeSource")
+        || pixFunction == QLatin1String("qPixmapFromMimeSource")) {
         fprintf(stderr, "%s: Warning: Obsolete pixmap function '%s' specified in the UI file.\n",
                 qPrintable(opt.messagePrefix()), qPrintable(pixFunction));
         pixFunction.clear();
@@ -291,9 +315,9 @@ void Uic::writeHeaderProtectionEnd()
 bool Uic::isButton(const QString &className) const
 {
     static const QStringList buttons = {
-        "QRadioButton"_L1, "QToolButton"_L1,
-        "QCheckBox"_L1, "QPushButton"_L1,
-        "QCommandLinkButton"_L1
+        QLatin1String("QRadioButton"), QLatin1String("QToolButton"),
+        QLatin1String("QCheckBox"), QLatin1String("QPushButton"),
+        QLatin1String("QCommandLinkButton")
     };
     return customWidgetsInfo()->extendsOneOf(className, buttons);
 }
@@ -301,10 +325,10 @@ bool Uic::isButton(const QString &className) const
 bool Uic::isContainer(const QString &className) const
 {
     static const QStringList containers = {
-        "QStackedWidget"_L1, "QToolBox"_L1,
-        "QTabWidget"_L1, "QScrollArea"_L1,
-        "QMdiArea"_L1, "QWizard"_L1,
-        "QDockWidget"_L1
+        QLatin1String("QStackedWidget"), QLatin1String("QToolBox"),
+        QLatin1String("QTabWidget"), QLatin1String("QScrollArea"),
+        QLatin1String("QMdiArea"), QLatin1String("QWizard"),
+        QLatin1String("QDockWidget")
     };
 
     return customWidgetsInfo()->extendsOneOf(className, containers);
@@ -313,7 +337,7 @@ bool Uic::isContainer(const QString &className) const
 bool Uic::isMenu(const QString &className) const
 {
     static const QStringList menus = {
-        "QMenu"_L1, "QPopupMenu"_L1
+        QLatin1String("QMenu"), QLatin1String("QPopupMenu")
     };
     return customWidgetsInfo()->extendsOneOf(className, menus);
 }

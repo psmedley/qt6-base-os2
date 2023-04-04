@@ -480,7 +480,7 @@ endif()
 
         # INTERFACE libraries don't have IMPORTED_LOCATION-like properties.
         # OBJECT libraries have properties like IMPORTED_OBJECTS instead.
-        # Skip the rest of the processing for those.
+        # Skip the rest of the procesing for those.
         if(target_type STREQUAL "INTERFACE_LIBRARY" OR target_type STREQUAL "OBJECT_LIBRARY")
             continue()
         endif()
@@ -650,12 +650,8 @@ function(qt_internal_set_compile_pdb_names target)
     if(MSVC)
         get_target_property(target_type ${target} TYPE)
         if(target_type STREQUAL "STATIC_LIBRARY" OR target_type STREQUAL "OBJECT_LIBRARY")
-            get_target_property(output_name ${target} OUTPUT_NAME)
-            if(NOT output_name)
-                set(output_name "${INSTALL_CMAKE_NAMESPACE}${target}")
-            endif()
-            set_target_properties(${target} PROPERTIES COMPILE_PDB_NAME "${output_name}")
-            set_target_properties(${target} PROPERTIES COMPILE_PDB_NAME_DEBUG "${output_name}d")
+            set_target_properties(${target} PROPERTIES COMPILE_PDB_NAME "${INSTALL_CMAKE_NAMESPACE}${target}")
+            set_target_properties(${target} PROPERTIES COMPILE_PDB_NAME_DEBUG "${INSTALL_CMAKE_NAMESPACE}${target}d")
         endif()
     endif()
 endfunction()
@@ -664,12 +660,12 @@ endfunction()
 #
 # MSVC generates 2 types of pdb files:
 #  - compile-time generated pdb files (compile flag /Zi + /Fd<pdb_name>)
-#  - link-time generated pdb files (link flag /debug + /PDB:<pdb_name>)
+#  - link-time genereated pdb files (link flag /debug + /PDB:<pdb_name>)
 #
 # CMake allows changing the names of each of those pdb file types by setting
 # the COMPILE_PDB_NAME_<CONFIG> and PDB_NAME_<CONFIG> properties. If they are
 # left empty, CMake will compute the default names itself (or rather in certain cases
-# leave it up to the compiler), without actually setting the property values.
+# leave it up to te compiler), without actually setting the property values.
 #
 # For installation purposes, CMake only provides a generator expression to the
 # link time pdb file path, not the compile path one, which means we have to compute the
@@ -716,9 +712,8 @@ function(qt_internal_install_pdb_files target install_dir_path)
                         "Can't install pdb file for static library ${target}. "
                         "The ARCHIVE_OUTPUT_DIRECTORY path is not known.")
             endif()
-            get_target_property(pdb_name "${target}" COMPILE_PDB_NAME)
-            qt_path_join(compile_time_pdb_file_path
-                         "${lib_dir}" "${pdb_name}$<$<CONFIG:Debug>:d>.pdb")
+            set(pdb_name "${INSTALL_CMAKE_NAMESPACE}${target}$<$<CONFIG:Debug>:d>.pdb")
+            qt_path_join(compile_time_pdb_file_path "${lib_dir}" "${pdb_name}")
 
             qt_install(FILES "${compile_time_pdb_file_path}"
                        DESTINATION "${install_dir_path}" OPTIONAL)
@@ -730,9 +725,8 @@ function(qt_internal_install_pdb_files target install_dir_path)
                     qt_path_join(pdb_dir "${pdb_dir}" "$<CONFIG>")
                 endif()
             endif()
-            get_target_property(pdb_name "${target}" COMPILE_PDB_NAME)
-            qt_path_join(compile_time_pdb_file_path
-                         "${pdb_dir}" "${pdb_name}$<$<CONFIG:Debug>:d>.pdb")
+            set(pdb_name "${INSTALL_CMAKE_NAMESPACE}${target}$<$<CONFIG:Debug>:d>.pdb")
+            qt_path_join(compile_time_pdb_file_path "${pdb_dir}" "${pdb_name}")
 
             qt_install(FILES "${compile_time_pdb_file_path}"
                 DESTINATION "${install_dir_path}" OPTIONAL)
@@ -850,7 +844,7 @@ endfunction()
 # To achieve that, consumers of ${target} will only get the include directories of ${dep_target}
 # if the latter package and target exists.
 #
-# A find_package(dep_target) dependency is added to ${target}'s *Dependencies.cmake file.
+# A find_package(dep_target) dependency is added to ${target}'s ModuleDependencies.cmake file.
 #
 # We use target_include_directories(PRIVATE) instead of target_link_libraries(PRIVATE) because the
 # latter would propagate a mandatory LINK_ONLY dependency on the ${dep_target} in a static Qt build.
@@ -879,20 +873,4 @@ function(qt_internal_undefine_global_definition target)
         set(undef_property_name "QT_INTERNAL_UNDEF_${definition}")
         set_target_properties(${target} PROPERTIES "${undef_property_name}" TRUE)
     endforeach()
-endfunction()
-
-# This function adds any defines which are local to the current repository (e.g. qtbase,
-# qtmultimedia). Those can be defined in the corresponding .cmake.conf file via
-# QT_EXTRA_INTERNAL_TARGET_DEFINES. QT_EXTRA_INTERNAL_TARGET_DEFINES accepts a list of definitions.
-# The definitions are passed to target_compile_definitions, which means that values can be provided
-# via the FOO=Bar syntax
-# This does nothing for interface targets
-function(qt_internal_add_repo_local_defines target)
-    get_target_property(type "${target}" TYPE)
-    if (${type} STREQUAL "INTERFACE_LIBRARY")
-        return()
-    endif()
-    if(DEFINED QT_EXTRA_INTERNAL_TARGET_DEFINES)
-        target_compile_definitions("${target}" PRIVATE ${QT_EXTRA_INTERNAL_TARGET_DEFINES})
-    endif()
 endfunction()

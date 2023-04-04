@@ -1,11 +1,36 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QAtomicInt>
 #include <QThread>
 #include <QSemaphore>
-#include <private/qatomicscopedvaluerollback_p.h>
+#include <QScopedValueRollback>
 #include <qlist.h>
 
 
@@ -1078,20 +1103,20 @@ void tst_QList::count() const
     {
         // zero size
         QList<T> myvec;
-        QVERIFY(myvec.size() == 0);
+        QVERIFY(myvec.count() == 0);
         QVERIFY(!myvec.isDetached());
 
         // grow
         myvec.append(SimpleValue<T>::at(0));
-        QVERIFY(myvec.size() == 1);
+        QVERIFY(myvec.count() == 1);
         myvec.append(SimpleValue<T>::at(1));
-        QVERIFY(myvec.size() == 2);
+        QVERIFY(myvec.count() == 2);
 
         // shrink
         myvec.remove(0);
-        QVERIFY(myvec.size() == 1);
+        QVERIFY(myvec.count() == 1);
         myvec.remove(0);
-        QVERIFY(myvec.size() == 0);
+        QVERIFY(myvec.count() == 0);
     }
 
     // count of items
@@ -1118,6 +1143,7 @@ void tst_QList::count() const
 
 void tst_QList::cpp17ctad() const
 {
+#ifdef __cpp_deduction_guides
 #define QVERIFY_IS_VECTOR_OF(obj, Type) \
     QVERIFY2((std::is_same<decltype(obj), QList<Type>>::value), \
              QMetaType::fromType<decltype(obj)::value_type>().name())
@@ -1137,6 +1163,9 @@ void tst_QList::cpp17ctad() const
     CHECK(QString, QStringLiteral("one"), QStringLiteral("two"), QStringLiteral("three"));
 #undef QVERIFY_IS_VECTOR_OF
 #undef CHECK
+#else
+    QSKIP("This test requires C++17 Constructor Template Argument Deduction support enabled in the compiler.");
+#endif
 }
 
 void tst_QList::data() const
@@ -1905,11 +1934,11 @@ void tst_QList::move() const
     list << T_FOO << T_BAR << T_BAZ;
 
     // move an item
-    list.move(0, list.size() - 1);
+    list.move(0, list.count() - 1);
     QCOMPARE(list, QList<T>() << T_BAR << T_BAZ << T_FOO);
 
     // move it back
-    list.move(list.size() - 1, 0);
+    list.move(list.count() - 1, 0);
     QCOMPARE(list, QList<T>() << T_FOO << T_BAR << T_BAZ);
 
     // move an item in the middle
@@ -2673,24 +2702,24 @@ void tst_QList::size() const
     // zero size
     QList<T> myvec;
     QVERIFY(myvec.size() == 0);
-    QCOMPARE(myvec.size(), myvec.size());
+    QCOMPARE(myvec.length(), myvec.size());
     QVERIFY(!myvec.isDetached());
 
     // grow
     myvec.append(SimpleValue<T>::at(0));
     QVERIFY(myvec.size() == 1);
-    QCOMPARE(myvec.size(), myvec.size());
+    QCOMPARE(myvec.length(), myvec.size());
     myvec.append(SimpleValue<T>::at(1));
     QVERIFY(myvec.size() == 2);
-    QCOMPARE(myvec.size(), myvec.size());
+    QCOMPARE(myvec.length(), myvec.size());
 
     // shrink
     myvec.remove(0);
     QVERIFY(myvec.size() == 1);
-    QCOMPARE(myvec.size(), myvec.size());
+    QCOMPARE(myvec.length(), myvec.size());
     myvec.remove(0);
     QVERIFY(myvec.size() == 0);
-    QCOMPARE(myvec.size(), myvec.size());
+    QCOMPARE(myvec.length(), myvec.size());
 }
 
 // ::squeeze() is tested in ::capacity().
@@ -3181,7 +3210,7 @@ void tst_QList::emplaceReturnsIterator()
 
 void tst_QList::emplaceFront() const
 {
-    QAtomicScopedValueRollback rollback(Movable::counter, 0);
+    QScopedValueRollback<QAtomicInt> rollback(Movable::counter, 0);
 
     QList<Movable> vec;
     vec.emplaceFront('b');
@@ -3206,7 +3235,7 @@ void tst_QList::emplaceFrontReturnsRef() const
 
 void tst_QList::emplaceBack()
 {
-    QAtomicScopedValueRollback rollback(Movable::counter, 0);
+    QScopedValueRollback<QAtomicInt> rollback(Movable::counter, 0);
 
     QList<Movable> vec;
 
@@ -3414,7 +3443,7 @@ void tst_QList::fromReadOnlyData() const
         QCOMPARE(v.size(), qsizetype(11));
         // v.capacity() is unspecified, for now
 
-        QCOMPARE((void*)(v.constBegin() + v.size()).operator->(), (void*)v.constEnd().operator->());
+        QCOMPARE((void*)(const char*)(v.constBegin() + v.size()), (void*)(const char*)v.constEnd());
 
         for (int i = 0; i < 10; ++i)
             QCOMPARE(v[i], char('A' + i));

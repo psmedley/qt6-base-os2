@@ -1,6 +1,42 @@
-// Copyright (C) 2016 BogDan Vatra <bogdan@kde.org>
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 BogDan Vatra <bogdan@kde.org>
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the Android port of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 package org.qtproject.qt.android;
 
@@ -65,6 +101,7 @@ public class QtServiceDelegate
 
     private String m_mainLib = null;
     private Service m_service = null;
+    private static String m_environmentVariables = null;
     private static String m_applicationParameters = null;
 
     public boolean loadApplication(Service service, ClassLoader classLoader, Bundle loaderParams)
@@ -114,19 +151,20 @@ public class QtServiceDelegate
         String nativeLibsDir = QtNativeLibrariesDir.nativeLibrariesDir(m_service);
         QtNative.loadBundledLibraries(libraries, nativeLibsDir);
         m_mainLib = loaderParams.getString(MAIN_LIBRARY_KEY);
-
-        QtNative.setEnvironmentVariables(loaderParams.getString(ENVIRONMENT_VARIABLES_KEY));
-        QtNative.setEnvironmentVariable("QT_ANDROID_FONTS_MONOSPACE",
-                                        "Droid Sans Mono;Droid Sans;Droid Sans Fallback");
-        QtNative.setEnvironmentVariable("QT_ANDROID_FONTS_SERIF", "Droid Serif");
-        QtNative.setEnvironmentVariable("HOME", m_service.getFilesDir().getAbsolutePath());
-        QtNative.setEnvironmentVariable("TMPDIR", m_service.getFilesDir().getAbsolutePath());
-
+        m_environmentVariables = loaderParams.getString(ENVIRONMENT_VARIABLES_KEY);
+        String additionalEnvironmentVariables = "QT_ANDROID_FONTS_MONOSPACE=Droid Sans Mono;Droid Sans;Droid Sans Fallback"
+                                              + "\tQT_ANDROID_FONTS_SERIF=Droid Serif"
+                                              + "\tHOME=" + m_service.getFilesDir().getAbsolutePath()
+                                              + "\tTMPDIR=" + m_service.getFilesDir().getAbsolutePath();
         if (Build.VERSION.SDK_INT < 14)
-            QtNative.setEnvironmentVariable("QT_ANDROID_FONTS", "Droid Sans;Droid Sans Fallback");
+            additionalEnvironmentVariables += "\tQT_ANDROID_FONTS=Droid Sans;Droid Sans Fallback";
         else
-            QtNative.setEnvironmentVariable("QT_ANDROID_FONTS",
-                                            "Roboto;Droid Sans;Droid Sans Fallback");
+            additionalEnvironmentVariables += "\tQT_ANDROID_FONTS=Roboto;Droid Sans;Droid Sans Fallback";
+
+        if (m_environmentVariables != null && m_environmentVariables.length() > 0)
+            m_environmentVariables = additionalEnvironmentVariables + "\t" + m_environmentVariables;
+        else
+            m_environmentVariables = additionalEnvironmentVariables;
 
         if (loaderParams.containsKey(APPLICATION_PARAMETERS_KEY))
             m_applicationParameters = loaderParams.getString(APPLICATION_PARAMETERS_KEY);
@@ -142,7 +180,7 @@ public class QtServiceDelegate
         // start application
         try {
             String nativeLibraryDir = QtNativeLibrariesDir.nativeLibrariesDir(m_service);
-            QtNative.startApplication(m_applicationParameters, m_mainLib);
+            QtNative.startApplication(m_applicationParameters, m_environmentVariables, m_mainLib);
             return true;
         } catch (Exception e) {
             e.printStackTrace();

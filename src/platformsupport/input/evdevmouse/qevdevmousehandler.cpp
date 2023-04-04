@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qevdevmousehandler_p.h"
 
@@ -28,8 +64,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 Q_LOGGING_CATEGORY(qLcEvdevMouse, "qt.qpa.input")
 
 std::unique_ptr<QEvdevMouseHandler> QEvdevMouseHandler::create(const QString &device, const QString &specification)
@@ -41,15 +75,15 @@ std::unique_ptr<QEvdevMouseHandler> QEvdevMouseHandler::create(const QString &de
     int grab = 0;
     bool abs = false;
 
-    const auto args = QStringView{specification}.split(u':');
+    const auto args = QStringView{specification}.split(QLatin1Char(':'));
     for (const auto &arg : args) {
-        if (arg == "nocompress"_L1)
+        if (arg == QLatin1String("nocompress"))
             compression = false;
-        else if (arg.startsWith("dejitter="_L1))
+        else if (arg.startsWith(QLatin1String("dejitter=")))
             jitterLimit = arg.mid(9).toInt();
-        else if (arg.startsWith("grab="_L1))
+        else if (arg.startsWith(QLatin1String("grab=")))
             grab = arg.mid(5).toInt();
-        else if (arg == "abs"_L1)
+        else if (arg == QLatin1String("abs"))
             abs = true;
     }
 
@@ -67,7 +101,7 @@ std::unique_ptr<QEvdevMouseHandler> QEvdevMouseHandler::create(const QString &de
 QEvdevMouseHandler::QEvdevMouseHandler(const QString &device, int fd, bool abs, bool compression, int jitterLimit)
     : m_device(device), m_fd(fd), m_abs(abs), m_compression(compression)
 {
-    setObjectName("Evdev Mouse Handler"_L1);
+    setObjectName(QLatin1String("Evdev Mouse Handler"));
 
     m_jitterLimitSquared = jitterLimit * jitterLimit;
 
@@ -185,6 +219,7 @@ void QEvdevMouseHandler::readMouseData()
     int n = 0;
     bool posChanged = false, btnChanged = false;
     bool pendingMouseEvent = false;
+    int eventCompressCount = 0;
     forever {
         int result = QT_READ(m_fd, reinterpret_cast<char *>(buffer) + n, sizeof(buffer) - n);
 
@@ -291,6 +326,7 @@ void QEvdevMouseHandler::readMouseData()
                 posChanged = false;
                 if (m_compression) {
                     pendingMouseEvent = true;
+                    eventCompressCount++;
                 } else {
                     sendMouseEvent();
                 }
@@ -308,5 +344,3 @@ void QEvdevMouseHandler::readMouseData()
 }
 
 QT_END_NAMESPACE
-
-#include "moc_qevdevmousehandler_p.cpp"

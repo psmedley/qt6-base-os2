@@ -1,5 +1,30 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QtTest/private/qpropertytesthelper_p.h>
@@ -19,7 +44,6 @@ private slots:
     void flags();
     void headerData_data();
     void headerData();
-    void headerDataInBounds();
     void itemData_data();
     void itemData();
     void mapFromSource_data();
@@ -150,133 +174,6 @@ void tst_QAbstractProxyModel::headerData()
     QCOMPARE(model.headerData(section, orientation, role), headerData);
 }
 
-class SimpleTableReverseColumnsProxy : public QAbstractProxyModel
-{
-public:
-    QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const override
-    {
-        if (parent.isValid())
-            return {};
-
-        if (row < 0 || row >= rowCount() || column < 0 || column >= columnCount())
-            qFatal("error"); // cannot QFAIL here
-
-        return createIndex(row, column);
-    }
-
-    int rowCount(const QModelIndex &parent = QModelIndex()) const override
-    {
-        if (parent.isValid())
-            return 0;
-        return sourceModel()->rowCount();
-    }
-
-    int columnCount(const QModelIndex &parent = QModelIndex()) const override
-    {
-        if (parent.isValid())
-            return 0;
-        return sourceModel()->columnCount();
-    }
-
-    QModelIndex parent(const QModelIndex &) const override
-    {
-        return QModelIndex();
-    }
-
-    QModelIndex mapToSource(const QModelIndex &idx) const override
-    {
-        if (!idx.isValid())
-            return QModelIndex();
-        return sourceModel()->index(idx.row(), columnCount() - 1 - idx.column());
-    }
-
-    QModelIndex mapFromSource(const QModelIndex &idx) const override
-    {
-       if (idx.parent().isValid())
-           return QModelIndex();
-       return createIndex(idx.row(), columnCount() - 1 - idx.column());
-    }
-};
-
-void tst_QAbstractProxyModel::headerDataInBounds()
-{
-    QStandardItemModel qsim(0, 5);
-    qsim.setHorizontalHeaderLabels({"Col1", "Col2", "Col3", "Col4", "Col5"});
-
-    SimpleTableReverseColumnsProxy proxy;
-    QSignalSpy headerDataChangedSpy(&proxy, &QAbstractItemModel::headerDataChanged);
-    QVERIFY(headerDataChangedSpy.isValid());
-    proxy.setSourceModel(&qsim);
-    QCOMPARE(proxy.rowCount(), 0);
-    QCOMPARE(proxy.columnCount(), 5);
-
-    for (int i = 0; i < proxy.columnCount(); ++i) {
-        QString expected = QString("Col%1").arg(i + 1);
-        QCOMPARE(proxy.headerData(i, Qt::Horizontal).toString(), expected);
-    }
-
-    qsim.appendRow({
-                       new QStandardItem("A"),
-                       new QStandardItem("B"),
-                       new QStandardItem("C"),
-                       new QStandardItem("D"),
-                       new QStandardItem("E")
-                   });
-
-    QCOMPARE(proxy.rowCount(), 1);
-    QCOMPARE(proxy.columnCount(), 5);
-    QCOMPARE(headerDataChangedSpy.size(), 1);
-    QCOMPARE(headerDataChangedSpy[0][0].value<Qt::Orientation>(), Qt::Horizontal);
-    QCOMPARE(headerDataChangedSpy[0][1].value<int>(), 0);
-    QCOMPARE(headerDataChangedSpy[0][2].value<int>(), 4);
-
-    for (int i = 0; i < proxy.columnCount(); ++i) {
-        QString expected = QString("Col%1").arg(proxy.columnCount() - i);
-        QCOMPARE(proxy.headerData(i, Qt::Horizontal).toString(), expected);
-    }
-
-    qsim.appendRow({
-                       new QStandardItem("A"),
-                       new QStandardItem("B"),
-                       new QStandardItem("C"),
-                       new QStandardItem("D"),
-                       new QStandardItem("E")
-                   });
-    QCOMPARE(proxy.rowCount(), 2);
-    QCOMPARE(proxy.columnCount(), 5);
-    QCOMPARE(headerDataChangedSpy.size(), 1);
-
-    for (int i = 0; i < proxy.columnCount(); ++i) {
-        QString expected = QString("Col%1").arg(proxy.columnCount() - i);
-        QCOMPARE(proxy.headerData(i, Qt::Horizontal).toString(), expected);
-    }
-
-    QVERIFY(qsim.removeRows(0, 1));
-
-    QCOMPARE(proxy.rowCount(), 1);
-    QCOMPARE(proxy.columnCount(), 5);
-    QCOMPARE(headerDataChangedSpy.size(), 1);
-
-    for (int i = 0; i < proxy.columnCount(); ++i) {
-        QString expected = QString("Col%1").arg(proxy.columnCount() - i);
-        QCOMPARE(proxy.headerData(i, Qt::Horizontal).toString(), expected);
-    }
-
-    QVERIFY(qsim.removeRows(0, 1));
-
-    QCOMPARE(proxy.rowCount(), 0);
-    QCOMPARE(proxy.columnCount(), 5);
-    QCOMPARE(headerDataChangedSpy.size(), 2);
-    QCOMPARE(headerDataChangedSpy[1][0].value<Qt::Orientation>(), Qt::Horizontal);
-    QCOMPARE(headerDataChangedSpy[1][1].value<int>(), 0);
-    QCOMPARE(headerDataChangedSpy[1][2].value<int>(), 4);
-
-    for (int i = 0; i < proxy.columnCount(); ++i) {
-        QString expected = QString("Col%1").arg(i + 1);
-        QCOMPARE(proxy.headerData(i, Qt::Horizontal).toString(), expected);
-    }
-}
-
 void tst_QAbstractProxyModel::itemData_data()
 {
     QTest::addColumn<QModelIndex>("index");
@@ -291,7 +188,7 @@ void tst_QAbstractProxyModel::itemData()
     QFETCH(QModelIndex, index);
     QFETCH(int, count);
     SubQAbstractProxyModel model;
-    QCOMPARE(model.itemData(index).size(), count);
+    QCOMPARE(model.itemData(index).count(), count);
 }
 
 void tst_QAbstractProxyModel::mapFromSource_data()

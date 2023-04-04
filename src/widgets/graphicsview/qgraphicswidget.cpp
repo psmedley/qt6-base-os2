@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qglobal.h"
 
@@ -19,7 +55,6 @@
 #include <private/qshortcutmap_p.h>
 #endif
 #include <QtCore/qmutex.h>
-#include <QtCore/QScopeGuard>
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qgraphicsview.h>
 #include <QtWidgets/qgraphicsproxywidget.h>
@@ -30,8 +65,6 @@
 #include <qdebug.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*!
     \class QGraphicsWidget
@@ -199,7 +232,7 @@ QGraphicsWidget::~QGraphicsWidget()
     Q_D(QGraphicsWidget);
 #ifndef QT_NO_ACTION
     // Remove all actions from this widget
-    for (auto action : std::as_const(d->actions)) {
+    for (auto action : qAsConst(d->actions)) {
         QActionPrivate *apriv = action->d_func();
         apriv->associatedObjects.removeAll(this);
     }
@@ -319,19 +352,6 @@ void QGraphicsWidget::resize(const QSizeF &size)
 void QGraphicsWidget::setGeometry(const QRectF &rect)
 {
     QGraphicsWidgetPrivate *wd = QGraphicsWidget::d_func();
-    // Package relayout of children in a scope guard so we can just return early
-    // when this widget's geometry is sorted out.
-    const auto relayoutChildren = qScopeGuard([this, wd]() {
-        if (QGraphicsLayout::instantInvalidatePropagation()) {
-            if (QGraphicsLayout *lay = wd->layout) {
-                if (!lay->isActivated()) {
-                    QEvent layoutRequest(QEvent::LayoutRequest);
-                    QCoreApplication::sendEvent(this, &layoutRequest);
-                }
-            }
-        }
-    });
-
     QGraphicsLayoutItemPrivate *d = QGraphicsLayoutItem::d_ptr.data();
     QRectF newGeom;
     QPointF oldPos = d->geom.topLeft();
@@ -341,8 +361,9 @@ void QGraphicsWidget::setGeometry(const QRectF &rect)
         newGeom.setSize(rect.size().expandedTo(effectiveSizeHint(Qt::MinimumSize))
                                    .boundedTo(effectiveSizeHint(Qt::MaximumSize)));
 
-        if (newGeom == d->geom)
-            return;
+        if (newGeom == d->geom) {
+            goto relayoutChildrenAndReturn;
+        }
 
         // setPos triggers ItemPositionChange, which can adjust position
         wd->inSetGeometry = 1;
@@ -350,48 +371,67 @@ void QGraphicsWidget::setGeometry(const QRectF &rect)
         wd->inSetGeometry = 0;
         newGeom.moveTopLeft(pos());
 
-        if (newGeom == d->geom)
-            return;
+        if (newGeom == d->geom) {
+            goto relayoutChildrenAndReturn;
+        }
 
-        // Update and prepare to change the geometry (remove from index) if
-        // the size has changed.
-        if (wd->scene && rect.topLeft() == d->geom.topLeft())
-            prepareGeometryChange();
-    }
-
-    // Update the layout item geometry
-    if (oldPos != pos()) {
-        // Send move event.
-        QGraphicsSceneMoveEvent event;
-        event.setOldPos(oldPos);
-        event.setNewPos(pos());
-        QCoreApplication::sendEvent(this, &event);
-        if (wd->inSetPos) {
-            // Set the new position:
-            d->geom.moveTopLeft(pos());
-            emit geometryChanged();
-            return;
+         // Update and prepare to change the geometry (remove from index) if the size has changed.
+        if (wd->scene) {
+            if (rect.topLeft() == d->geom.topLeft()) {
+                prepareGeometryChange();
+            }
         }
     }
 
-    QSizeF oldSize = size();
-    QGraphicsLayoutItem::setGeometry(newGeom);
-    // Send resize event, if appropriate:
-    if (newGeom.size() != oldSize) {
-        if (oldSize.width() != newGeom.size().width())
-            emit widthChanged();
-        if (oldSize.height() != newGeom.size().height())
-            emit heightChanged();
-        QGraphicsLayout *lay = wd->layout;
-        if (!QGraphicsLayout::instantInvalidatePropagation() || !lay || lay->isActivated()) {
+    // Update the layout item geometry
+    {
+        bool moved = oldPos != pos();
+        if (moved) {
+            // Send move event.
+            QGraphicsSceneMoveEvent event;
+            event.setOldPos(oldPos);
+            event.setNewPos(pos());
+            QCoreApplication::sendEvent(this, &event);
+            if (wd->inSetPos) {
+                //set the new pos
+                d->geom.moveTopLeft(pos());
+                emit geometryChanged();
+                goto relayoutChildrenAndReturn;
+            }
+        }
+        QSizeF oldSize = size();
+        QGraphicsLayoutItem::setGeometry(newGeom);
+        // Send resize event
+        bool resized = newGeom.size() != oldSize;
+        if (resized) {
             QGraphicsSceneResizeEvent re;
             re.setOldSize(oldSize);
             re.setNewSize(newGeom.size());
-            QCoreApplication::sendEvent(this, &re);
+            if (oldSize.width() != newGeom.size().width())
+                emit widthChanged();
+            if (oldSize.height() != newGeom.size().height())
+                emit heightChanged();
+            QGraphicsLayout *lay = wd->layout;
+            if (QGraphicsLayout::instantInvalidatePropagation()) {
+                if (!lay || lay->isActivated()) {
+                    QCoreApplication::sendEvent(this, &re);
+                }
+            } else {
+                QCoreApplication::sendEvent(this, &re);
+            }
         }
     }
 
     emit geometryChanged();
+relayoutChildrenAndReturn:
+    if (QGraphicsLayout::instantInvalidatePropagation()) {
+        if (QGraphicsLayout *lay = wd->layout) {
+            if (!lay->isActivated()) {
+                QEvent layoutRequest(QEvent::LayoutRequest);
+                QCoreApplication::sendEvent(this, &layoutRequest);
+            }
+        }
+    }
 }
 
 /*!
@@ -1968,7 +2008,7 @@ void QGraphicsWidget::addAction(QAction *action)
 */
 void QGraphicsWidget::addActions(const QList<QAction *> &actions)
 {
-    for (int i = 0; i < actions.size(); ++i)
+    for (int i = 0; i < actions.count(); ++i)
         insertAction(nullptr, actions.at(i));
 }
 
@@ -2025,7 +2065,7 @@ void QGraphicsWidget::insertAction(QAction *before, QAction *action)
 */
 void QGraphicsWidget::insertActions(QAction *before, const QList<QAction *> &actions)
 {
-    for (int i = 0; i < actions.size(); ++i)
+    for (int i = 0; i < actions.count(); ++i)
         insertAction(before, actions.at(i));
 }
 
@@ -2367,7 +2407,7 @@ void QGraphicsWidget::dumpFocusChain()
             qWarning("Found a focus chain that is not circular, (next == 0)");
             break;
         }
-        qDebug() << i++ << QString::number(uint(next), 16) << next->className() << next->data(0) << QString::fromLatin1("focusItem:%1").arg(next->hasFocus() ? '1' : '0') << "next:"_L1 << next->d_func()->focusNext->data(0) << "prev:"_L1 << next->d_func()->focusPrev->data(0);
+        qDebug() << i++ << QString::number(uint(next), 16) << next->className() << next->data(0) << QString::fromLatin1("focusItem:%1").arg(next->hasFocus() ? '1' : '0') << QLatin1String("next:") << next->d_func()->focusNext->data(0) << QLatin1String("prev:") << next->d_func()->focusPrev->data(0);
         if (visited.contains(next)) {
             qWarning("Already visited this node. However, I expected to dump until I found myself.");
             break;

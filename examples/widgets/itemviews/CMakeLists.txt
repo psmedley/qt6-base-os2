@@ -1,3 +1,5 @@
+# Generated from itemviews.pro.
+
 qt_internal_add_example(addressbook)
 qt_internal_add_example(basicsortfiltermodel)
 qt_internal_add_example(chart)

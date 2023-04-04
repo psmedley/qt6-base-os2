@@ -32,26 +32,13 @@ function(qt_internal_add_linker_version_script target)
 
         qt_ensure_perl()
 
-        set(generator_command "${HOST_PERL}"
-            "${QT_MKSPECS_DIR}/features/data/unix/findclasslist.pl"
-            "<" "${infile}" ">" "${outfile}"
-        )
-        set(generator_dependencies
-            "${infile}"
-            "${QT_MKSPECS_DIR}/features/data/unix/findclasslist.pl"
-        )
-
-        add_custom_command(
-            OUTPUT "${outfile}"
-            COMMAND ${generator_command}
-            DEPENDS ${generator_dependencies}
+        add_custom_command(TARGET "${target}" PRE_LINK
+            COMMAND "${HOST_PERL}" "${QT_MKSPECS_DIR}/features/data/unix/findclasslist.pl" < "${infile}" > "${outfile}"
+            BYPRODUCTS "${outfile}" DEPENDS "${infile}"
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            COMMENT "Generating version linker script for target ${target}"
-            VERBATIM
-        )
-        add_custom_target(${target}_version_script DEPENDS ${outfile})
-        add_dependencies(${target} ${target}_version_script)
-        target_link_options(${target} PRIVATE "-Wl,--version-script,${outfile}")
+            COMMENT "Generating version linker script"
+            )
+        target_link_options("${target}" PRIVATE "-Wl,--version-script,${outfile}")
     endif()
 endfunction()
 
@@ -114,7 +101,7 @@ function(qt_internal_apply_gc_binaries target visibility)
         target_link_options("${target}" ${visibility} "${gc_sections_flag}")
     endif()
 
-    if((GCC OR CLANG) AND NOT WASM AND NOT UIKIT AND NOT MSVC AND NOT OS2)
+    if((GCC OR CLANG OR ICC) AND NOT WASM AND NOT UIKIT AND NOT MSVC AND NOT OS2)
         set(split_sections_flags "-ffunction-sections" "-fdata-sections")
     endif()
     if(split_sections_flags)
@@ -142,9 +129,6 @@ function(qt_internal_apply_intel_cet target visibility)
 endfunction()
 
 function(qt_internal_library_deprecation_level result)
-    # QT_DISABLE_DEPPRECATED_BEFORE controls which version we use as a cut-off
-    # compiling in to the library. E.g. if it is set to QT_VERSION then no
-    # code which was deprecated before QT_VERSION will be compiled in.
     if(WIN32)
         # On Windows, due to the way DLLs work, we need to export all functions,
         # including the inlines
@@ -153,10 +137,7 @@ function(qt_internal_library_deprecation_level result)
         # On other platforms, Qt's own compilation goes needs to compile the Qt 5.0 API
         list(APPEND deprecations "QT_DISABLE_DEPRECATED_BEFORE=0x050000")
     endif()
-    # QT_DEPRECATED_WARNINGS_SINCE controls the upper-bound of deprecation
-    # warnings that are emitted. E.g. if it is set to 7.0 then all deprecations
-    # during the 6.* lifetime will be warned about in Qt builds.
-    list(APPEND deprecations "QT_DEPRECATED_WARNINGS_SINCE=0x070000")
+    list(APPEND deprecations "QT_DEPRECATED_WARNINGS_SINCE=0x060000")
     set("${result}" "${deprecations}" PARENT_SCOPE)
 endfunction()
 
@@ -167,22 +148,23 @@ function(qt_internal_set_exceptions_flags target exceptions_on)
     if(exceptions_on)
         if(MSVC)
             set(_flag "/EHsc")
-            if((MSVC_VERSION GREATER_EQUAL 1929) AND NOT CLANG)
-                set(_flag ${_flag} "/d2FH4")
-            endif()
         endif()
     else()
         set(_defs "QT_NO_EXCEPTIONS")
         if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-            set(_flag "/EHs-c-" "/wd4530" "/wd4577")
-        elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU|AppleClang|InteLLLVM")
+            set(_flag "/wd4530" "/wd4577")
+        elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+            set(_flag "-fno-exceptions")
+        elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
             set(_flag "-fno-exceptions")
         elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
             if (MSVC)
-                set(_flag "/EHs-c-" "/wd4530" "/wd4577")
+                set(_flag "/wd4530" "/wd4577")
             else()
                 set(_flag "-fno-exceptions")
             endif()
+        elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
+            set(_flag "-fno-exceptions")
         endif()
     endif()
 
@@ -236,8 +218,11 @@ function(qt_set_language_standards)
         set(CMAKE_CXX_STANDARD 17 PARENT_SCOPE)
     endif()
 
-    set(CMAKE_C_STANDARD 11 PARENT_SCOPE)
-    set(CMAKE_C_STANDARD_REQUIRED ON PARENT_SCOPE)
+    if (c_std_11 IN_LIST CMAKE_C_COMPILE_FEATURES)
+        set(CMAKE_C_STANDARD 11 PARENT_SCOPE)
+    elseif (c_std_99 IN_LIST CMAKE_C_COMPILE_FEATURES)
+        set(CMAKE_C_STANDARD 99 PARENT_SCOPE)
+    endif()
 endfunction()
 
 function(qt_set_language_standards_interface_compile_features target)
@@ -251,8 +236,7 @@ function(qt_set_msvc_cplusplus_options target visibility)
     # For MSVC we need to explicitly pass -Zc:__cplusplus to get correct __cplusplus.
     # Check qt_config_compile_test for more info.
     if(MSVC AND MSVC_VERSION GREATER_EQUAL 1913)
-        set(flags "-Zc:__cplusplus" "-permissive-")
-        target_compile_options("${target}" ${visibility} "$<$<COMPILE_LANGUAGE:CXX>:${flags}>")
+        target_compile_options("${target}" ${visibility} "-Zc:__cplusplus" "-permissive-")
     endif()
 endfunction()
 
@@ -260,15 +244,13 @@ function(qt_enable_utf8_sources target)
     set(utf8_flags "")
     if(MSVC)
         list(APPEND utf8_flags "-utf-8")
+    elseif(WIN32 AND ICC)
+        list(APPEND utf8_flags "-Qoption,cpp,--unicode_source_kind,UTF-8")
     endif()
 
     if(utf8_flags)
         # Allow opting out by specifying the QT_NO_UTF8_SOURCE target property.
-        set(opt_out_condition "$<NOT:$<BOOL:$<TARGET_PROPERTY:QT_NO_UTF8_SOURCE>>>")
-        # Only set the compiler option for C and C++.
-        set(language_condition "$<COMPILE_LANGUAGE:C,CXX>")
-        # Compose the full condition.
-        set(genex_condition "$<AND:${opt_out_condition},${language_condition}>")
+        set(genex_condition "$<NOT:$<BOOL:$<TARGET_PROPERTY:QT_NO_UTF8_SOURCE>>>")
         set(utf8_flags "$<${genex_condition}:${utf8_flags}>")
         target_compile_options("${target}" INTERFACE "${utf8_flags}")
     endif()

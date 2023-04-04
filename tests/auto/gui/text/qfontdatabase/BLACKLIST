@@ -1,4 +1,2 @@
-[systemFixedFont]
+[systemFixedFont] # QTBUG-54623
 b2qt
-# QTBUG-100948
-qnx

@@ -1,9 +1,0 @@
-qt_internal_add_manual_test(localfiles
-    GUI
-    SOURCES
-        main.cpp
-    PUBLIC_LIBRARIES
-        Qt::Core
-        Qt::Gui
-        Qt::Widgets
-)

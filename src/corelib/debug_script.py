@@ -1,5 +1,30 @@
-# Copyright (C) 2017 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+#############################################################################
+##
+## Copyright (C) 2017 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is part of the QtCore module of the Qt Toolkit.
+##
+## $QT_BEGIN_LICENSE:GPL-EXCEPT$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 3 as published by the Free Software
+## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
 
 import os
 import sys
@@ -9,7 +34,7 @@ from distutils.version import LooseVersion
 
 MODULE_NAME = 'qt'
 
-def import_bridge(path, debugger, session_dict, reload_module=False):
+def import_bridge(path, debugger, session_dict, reload_module = False):
     if not reload_module and MODULE_NAME in sys.modules:
         del sys.modules[MODULE_NAME]
 
@@ -35,8 +60,8 @@ def import_bridge(path, debugger, session_dict, reload_module=False):
     return bridge
 
 def report_success(bridge):
-    print("Using Qt summary providers from Creator {} in '{}'".format(
-          bridge.CREATOR_VERSION, bridge.CREATOR_PATH))
+    print "Using Qt summary providers from Creator %s in '%s'" \
+        % (bridge.CREATOR_VERSION, bridge.CREATOR_PATH)
 
 def __lldb_init_module(debugger, session_dict):
     # Check if the module has already been imported globally. This ensures
@@ -64,7 +89,7 @@ def __lldb_init_module(debugger, session_dict):
     for version in sorted(versions, key=LooseVersion, reverse=True):
         path = versions[version]
 
-        bridge_path = '{}/Contents/Resources/debugger/lldbbridge.py'.format(path)
+        bridge_path = path + '/Contents/Resources/debugger/lldbbridge.py'
         bridge = import_bridge(bridge_path, debugger, session_dict)
         if bridge:
             bridge.CREATOR_VERSION = version
@@ -72,4 +97,4 @@ def __lldb_init_module(debugger, session_dict):
             report_success(bridge)
             return
 
-    print("Could not find Qt Creator installation, no Qt summary providers installed")
+    print "Could not find Qt Creator installation, no Qt summary providers installed"

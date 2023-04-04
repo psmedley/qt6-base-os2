@@ -8,7 +8,6 @@ macro(qt_internal_set_pkg_config_cpp_flags var options flag)
     set(tmpopts "${options}")
     list(FILTER tmpopts EXCLUDE REGEX "\\$<BUILD_INTERFACE:[^,>]+>")
     list(FILTER tmpopts EXCLUDE REGEX "\\$<TARGET_PROPERTY:[^,>]+>")
-    list(TRANSFORM tmpopts REPLACE "\\$<\\$<LINK_LANGUAGE:[^,>]+>:([^,>]+)>" "\\1")
     list(TRANSFORM tmpopts REPLACE "\\$<INSTALL_INTERFACE:([^,>]+)>" "\\1")
     list(TRANSFORM tmpopts REPLACE ">" "$<ANGLE-R>")
     list(TRANSFORM tmpopts REPLACE "," "$<COMMA>")
@@ -19,8 +18,7 @@ endmacro()
 # Create a Qt6*.pc file intended for pkg-config consumption.
 function(qt_internal_generate_pkg_config_file module)
     # TODO: PkgConfig is supported under MSVC with pkgconf (github.com/pkgconf/pkgconf)
-    if((NOT UNIX OR QT_FEATURE_framework)
-        AND NOT MINGW OR CMAKE_VERSION VERSION_LESS "3.20" OR ANDROID)
+    if((NOT UNIX OR QT_FEATURE_framework) AND NOT MINGW AND NOT OS2 OR CMAKE_VERSION VERSION_LESS "3.20")
         return()
     endif()
     if(NOT BUILD_SHARED_LIBS)
@@ -120,12 +118,6 @@ function(qt_internal_generate_pkg_config_file module)
         else()
             set(postfix "")
         endif()
-
-        set(extra_args "")
-        if(NOT postfix STREQUAL "")
-            list(APPEND extra_args "-DPOSTFIX=${postfix}")
-        endif()
-
         qt_path_join(pc_step2_path "${build_dir}" ${step_prefix}_${config}_step2.pc)
         qt_path_join(final_pc_path "${build_dir}" ${pkgconfig_file}${postfix}.pc)
 
@@ -136,7 +128,7 @@ function(qt_internal_generate_pkg_config_file module)
             COMMAND ${CMAKE_COMMAND}
                     "-DIN_FILE=${pc_step2_path}"
                     "-DOUT_FILE=${final_pc_path}"
-                    ${extra_args}
+                    "$<$<BOOL:${postfix}>:-DPOSTFIX=${postfix}>"
                     -P "${QT_CMAKE_DIR}/QtFinishPkgConfigFile.cmake"
             VERBATIM
             COMMENT "Generating pc file for target ${target}"

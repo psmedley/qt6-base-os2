@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qprintpreviewwidget.h"
 #include "private/qwidget_p.h"
@@ -182,7 +218,7 @@ void QPrintPreviewWidgetPrivate::_q_fit(bool doFitting)
 {
     Q_Q(QPrintPreviewWidget);
 
-    if (curPage < 1 || curPage > pages.size())
+    if (curPage < 1 || curPage > pages.count())
         return;
 
     if (!doFitting && !fitting)
@@ -296,7 +332,7 @@ void QPrintPreviewWidgetPrivate::init()
 void QPrintPreviewWidgetPrivate::populateScene()
 {
     // remove old pages
-    for (auto *page : std::as_const(pages))
+    for (auto *page : qAsConst(pages))
         scene->removeItem(page);
     qDeleteAll(pages);
     pages.clear();
@@ -305,7 +341,7 @@ void QPrintPreviewWidgetPrivate::populateScene()
     QRect pageRect = printer->pageLayout().paintRectPixels(printer->resolution());
 
     int page = 1;
-    for (auto *picture : std::as_const(pictures)) {
+    for (auto *picture : qAsConst(pictures)) {
         PageItem* item = new PageItem(page++, picture, paperSize, pageRect);
         scene->addItem(item);
         pages.append(item);
@@ -314,7 +350,7 @@ void QPrintPreviewWidgetPrivate::populateScene()
 
 void QPrintPreviewWidgetPrivate::layoutPages()
 {
-    int numPages = pages.size();
+    int numPages = pages.count();
     if (numPages < 1)
         return;
 
@@ -365,7 +401,7 @@ void QPrintPreviewWidgetPrivate::generatePreview()
     pictures = printer->d_func()->previewPages();
     populateScene(); // i.e. setPreviewPrintedPictures() e.l.
     layoutPages();
-    curPage = pages.size() > 0 ? qBound(1, curPage, pages.size()) : 1;
+    curPage = qBound(1, curPage, pages.count());
     if (fitting)
         _q_fit();
     emit q->previewChanged();
@@ -373,13 +409,13 @@ void QPrintPreviewWidgetPrivate::generatePreview()
 
 void QPrintPreviewWidgetPrivate::setCurrentPage(int pageNumber)
 {
-    if (pageNumber < 1 || pageNumber > pages.size())
+    if (pageNumber < 1 || pageNumber > pages.count())
         return;
 
     int lastPage = curPage;
     curPage = pageNumber;
 
-    if (lastPage != curPage && lastPage > 0 && lastPage <= pages.size()) {
+    if (lastPage != curPage && lastPage > 0 && lastPage <= pages.count()) {
         if (zoomMode != QPrintPreviewWidget::FitInView) {
             QScrollBar *hsc = graphicsView->horizontalScrollBar();
             QScrollBar *vsc = graphicsView->verticalScrollBar();

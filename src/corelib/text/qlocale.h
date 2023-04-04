@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QLOCALE_H
 #define QLOCALE_H
@@ -367,8 +403,6 @@ public:
         Zarma = 325,
         Zhuang = 326,
         Zulu = 327,
-        Kaingang = 328,
-        Nheengatu = 329,
 
         Afan = Oromo,
         Bengali = Bangla,
@@ -390,7 +424,7 @@ public:
         Uigur = Uyghur,
         Walamo = Wolaytta,
 
-        LastLanguage = Nheengatu
+        LastLanguage = Zulu
     };
 
     enum Script : ushort {
@@ -891,9 +925,7 @@ public:
     Q_FLAG(DataSizeFormats)
 
     QLocale();
-    QT_CORE_INLINE_SINCE(6, 4)
     explicit QLocale(const QString &name);
-    explicit QLocale(QStringView name);
     QLocale(Language language, Territory territory);
     QLocale(Language language, Script script = AnyScript, Territory territory = AnyTerritory);
     QLocale(const QLocale &other);
@@ -920,6 +952,7 @@ public:
     QString nativeCountryName() const;
 #endif
 
+#if QT_STRINGVIEW_LEVEL < 2
     short toShort(const QString &s, bool *ok = nullptr) const
     { return toShort(qToStringViewIgnoringNull(s), ok); }
     ushort toUShort(const QString &s, bool *ok = nullptr) const
@@ -940,6 +973,7 @@ public:
     { return toFloat(qToStringViewIgnoringNull(s), ok); }
     double toDouble(const QString &s, bool *ok = nullptr) const
     { return toDouble(qToStringViewIgnoringNull(s), ok); }
+#endif
 
     short toShort(QStringView s, bool *ok = nullptr) const;
     ushort toUShort(QStringView s, bool *ok = nullptr) const;
@@ -964,11 +998,13 @@ public:
     QString toString(float f, char format = 'g', int precision = 6) const
     { return toString(double(f), format, precision); }
 
+#if QT_STRINGVIEW_LEVEL < 2
     // (Can't inline first two: passing by value doesn't work when only forward-declared.)
     QString toString(QDate date, const QString &format) const;
     QString toString(QTime time, const QString &format) const;
     QString toString(const QDateTime &dateTime, const QString &format) const
     { return toString(dateTime, qToStringViewIgnoringNull(format)); }
+#endif
     QString toString(QDate date, QStringView format) const;
     QString toString(QTime time, QStringView format) const;
     QString toString(const QDateTime &dateTime, QStringView format) const;
@@ -1047,29 +1083,8 @@ public:
 
     QStringList uiLanguages() const;
 
-    enum LanguageCodeType {
-        ISO639Part1 = 1 << 0,
-        ISO639Part2B = 1 << 1,
-        ISO639Part2T = 1 << 2,
-        ISO639Part3 = 1 << 3,
-        LegacyLanguageCode = 1 << 15,
-
-        ISO639Part2 = ISO639Part2B | ISO639Part2T,
-        ISO639Alpha2 = ISO639Part1,
-        ISO639Alpha3 = ISO639Part2 | ISO639Part3,
-        ISO639 = ISO639Alpha2 | ISO639Alpha3,
-
-        AnyLanguageCode = -1
-    };
-    Q_DECLARE_FLAGS(LanguageCodeTypes, LanguageCodeType)
-
-#if QT_CORE_REMOVED_SINCE(6, 3)
     static QString languageToCode(Language language);
     static Language codeToLanguage(QStringView languageCode) noexcept;
-#endif
-    static QString languageToCode(Language language, LanguageCodeTypes codeTypes = AnyLanguageCode);
-    static Language codeToLanguage(QStringView languageCode,
-                                   LanguageCodeTypes codeTypes = AnyLanguageCode) noexcept;
     static QString territoryToCode(Territory territory);
     static Territory codeToTerritory(QStringView territoryCode) noexcept;
 #if QT_DEPRECATED_SINCE(6, 6)
@@ -1126,12 +1141,6 @@ private:
 };
 Q_DECLARE_SHARED(QLocale)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QLocale::NumberOptions)
-Q_DECLARE_OPERATORS_FOR_FLAGS(QLocale::LanguageCodeTypes)
-
-#if QT_CORE_INLINE_IMPL_SINCE(6, 4)
-QLocale::QLocale(const QString &name)
-    : QLocale(qToStringViewIgnoringNull(name)) {}
-#endif
 
 #ifndef QT_NO_DATASTREAM
 Q_CORE_EXPORT QDataStream &operator<<(QDataStream &, const QLocale &);

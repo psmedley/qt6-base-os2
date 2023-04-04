@@ -1,3 +1,5 @@
+# Generated from qlockfile.pro.
+
 #####################################################################
 ## tst_qlockfile Test:
 #####################################################################
@@ -18,7 +20,3 @@ qt_internal_extend_target(tst_qlockfile CONDITION WIN32
         advapi32
 )
 add_subdirectory(qlockfiletesthelper)
-
-if(QT_FEATURE_process AND NOT ANDROID)
-    add_dependencies(tst_qlockfile qlockfile_test_helper)
-endif()

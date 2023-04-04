@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <private/qtools_p.h>
 #include <qdebug.h>
@@ -151,8 +187,7 @@ QTextDocumentPrivate::QTextDocumentPrivate()
     framesDirty(true),
     rtFrame(nullptr),
     initialBlockCharFormatIndex(-1), // set correctly later in init()
-    resourceProvider(nullptr),
-    cssMedia(QStringLiteral("screen"))
+    resourceProvider(nullptr)
 {
     editBlock = 0;
     editBlockCursorPosition = -1;
@@ -202,7 +237,7 @@ void QTextDocumentPrivate::clear()
 {
     Q_Q(QTextDocument);
 
-    for (QTextCursorPrivate *curs : std::as_const(cursors)) {
+    for (QTextCursorPrivate *curs : qAsConst(cursors)) {
         curs->setPosition(0);
         curs->currentCharFormat = -1;
         curs->anchor = 0;
@@ -255,7 +290,7 @@ void QTextDocumentPrivate::clear()
 
 QTextDocumentPrivate::~QTextDocumentPrivate()
 {
-    for (QTextCursorPrivate *curs : std::as_const(cursors))
+    for (QTextCursorPrivate *curs : qAsConst(cursors))
         curs->priv = nullptr;
     cursors.clear();
     undoState = 0;
@@ -373,7 +408,7 @@ int QTextDocumentPrivate::insertBlock(QChar blockSeparator,
 
     beginEditBlock();
 
-    int strPos = text.size();
+    int strPos = text.length();
     text.append(blockSeparator);
 
     int ob = blocks.findNode(pos);
@@ -450,9 +485,9 @@ void QTextDocumentPrivate::insert(int pos, const QString &str, int format)
 
     Q_ASSERT(noBlockInString(str));
 
-    int strPos = text.size();
+    int strPos = text.length();
     text.append(str);
-    insert(pos, strPos, str.size(), format);
+    insert(pos, strPos, str.length(), format);
 }
 
 int QTextDocumentPrivate::remove_string(int pos, uint length, QTextUndoCommand::Operation op)
@@ -646,7 +681,7 @@ void QTextDocumentPrivate::remove(int pos, int length, QTextUndoCommand::Operati
     blockCursorAdjustment = true;
     move(pos, -1, length, op);
     blockCursorAdjustment = false;
-    for (QTextCursorPrivate *curs : std::as_const(cursors)) {
+    for (QTextCursorPrivate *curs : qAsConst(cursors)) {
         if (curs->adjustPosition(pos, -length, op) == QTextCursorPrivate::CursorMoved) {
             curs->changed = true;
         }
@@ -1204,13 +1239,13 @@ void QTextDocumentPrivate::finishEdit()
     }
 
     QList<QTextCursor> changedCursors;
-    for (QTextCursorPrivate *curs : std::as_const(cursors)) {
+    for (QTextCursorPrivate *curs : qAsConst(cursors)) {
         if (curs->changed) {
             curs->changed = false;
             changedCursors.append(QTextCursor(curs));
         }
     }
-    for (const QTextCursor &cursor : std::as_const(changedCursors))
+    for (const QTextCursor &cursor : qAsConst(changedCursors))
         emit q->cursorPositionChanged(cursor);
 
     contentsChanged();
@@ -1256,7 +1291,7 @@ void QTextDocumentPrivate::adjustDocumentChangesAndCursors(int from, int addedOr
     if (blockCursorAdjustment)  {
         ; // postpone, will be called again from QTextDocumentPrivate::remove()
     } else {
-        for (QTextCursorPrivate *curs : std::as_const(cursors)) {
+        for (QTextCursorPrivate *curs : qAsConst(cursors)) {
             if (curs->adjustPosition(from, addedOrRemoved, op) == QTextCursorPrivate::CursorMoved) {
                 curs->changed = true;
             }
@@ -1433,7 +1468,7 @@ QTextFrame *QTextDocumentPrivate::frameAt(int pos) const
 
 void QTextDocumentPrivate::clearFrame(QTextFrame *f)
 {
-    for (int i = 0; i < f->d_func()->childFrames.size(); ++i)
+    for (int i = 0; i < f->d_func()->childFrames.count(); ++i)
         clearFrame(f->d_func()->childFrames.at(i));
     f->d_func()->childFrames.clear();
     f->d_func()->parentFrame = nullptr;
@@ -1703,7 +1738,7 @@ bool QTextDocumentPrivate::ensureMaximumBlockCount()
 void QTextDocumentPrivate::aboutToRemoveCell(int from, int to)
 {
     Q_ASSERT(from <= to);
-    for (QTextCursorPrivate *curs : std::as_const(cursors))
+    for (QTextCursorPrivate *curs : qAsConst(cursors))
         curs->aboutToRemoveCell(from, to);
 }
 

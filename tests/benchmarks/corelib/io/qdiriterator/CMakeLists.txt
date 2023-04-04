@@ -1,10 +1,12 @@
+# Generated from qdiriterator.pro.
+
 #####################################################################
 ## tst_bench_qdiriterator Binary:
 #####################################################################
 
 qt_internal_add_benchmark(tst_bench_qdiriterator
     SOURCES
-        tst_bench_qdiriterator.cpp
+        main.cpp
         qfilesystemiterator.cpp qfilesystemiterator.h
     PUBLIC_LIBRARIES
         Qt::Test

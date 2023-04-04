@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qlineedit.h"
 #include "qlineedit_p.h"
@@ -35,7 +71,7 @@
 #endif
 #include <private/qwidgettextcontrol_p.h>
 
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
 #endif
 #if QT_CONFIG(itemviews)
@@ -49,7 +85,7 @@
 #include "qkeysequence.h"
 #define ACCEL_KEY(k) (!QCoreApplication::testAttribute(Qt::AA_DontShowShortcutsInContextMenus) \
                       && !QGuiApplicationPrivate::instance()->shortcutMap.hasShortcutForKeySequence(k) ? \
-                      u'\t' + QKeySequence(k).toString(QKeySequence::NativeText) : QString())
+                      QLatin1Char('\t') + QKeySequence(k).toString(QKeySequence::NativeText) : QString())
 #else
 #define ACCEL_KEY(k) QString()
 #endif
@@ -60,8 +96,6 @@
 #endif
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*!
     Initialize \a option with the values from this QLineEdit. This method
@@ -174,7 +208,7 @@ void QLineEdit::initStyleOption(QStyleOptionFrame *option) const
     Any other key sequence that represents a valid character, will
     cause the character to be inserted into the line edit.
 
-    \sa QTextEdit, QLabel, QComboBox, {Line Edits Example}
+    \sa QTextEdit, QLabel, QComboBox, {fowler}{GUI Design Handbook: Field, Entry}, {Line Edits Example}
 */
 
 
@@ -454,13 +488,13 @@ void QLineEdit::setClearButtonEnabled(bool enable)
     if (enable) {
         QAction *clearAction = new QAction(d->clearButtonIcon(), QString(), this);
         clearAction->setEnabled(!isReadOnly());
-        clearAction->setObjectName(QLatin1StringView(clearButtonActionNameC));
+        clearAction->setObjectName(QLatin1String(clearButtonActionNameC));
 
         int flags = QLineEditPrivate::SideWidgetClearButton | QLineEditPrivate::SideWidgetFadeInWithText;
         auto widgetAction = d->addAction(clearAction, nullptr, QLineEdit::TrailingPosition, flags);
         widgetAction->setVisible(!text().isEmpty());
     } else {
-        QAction *clearAction = findChild<QAction *>(QLatin1StringView(clearButtonActionNameC));
+        QAction *clearAction = findChild<QAction *>(QLatin1String(clearButtonActionNameC));
         Q_ASSERT(clearAction);
         d->removeAction(clearAction);
         delete clearAction;
@@ -473,7 +507,7 @@ void QLineEdit::setClearButtonEnabled(bool enable)
 bool QLineEdit::isClearButtonEnabled() const
 {
 #if QT_CONFIG(action)
-    return findChild<QAction *>(QLatin1StringView(clearButtonActionNameC));
+    return findChild<QAction *>(QLatin1String(clearButtonActionNameC));
 #else
     return false;
 #endif
@@ -663,7 +697,7 @@ QSize QLineEdit::sizeHint() const
     int h = qMax(fm.height(), qMax(14, iconSize - 2)) + 2 * QLineEditPrivate::verticalMargin
             + tm.top() + tm.bottom()
             + d->topmargin + d->bottommargin;
-    int w = fm.horizontalAdvance(u'x') * 17 + 2 * QLineEditPrivate::horizontalMargin
+    int w = fm.horizontalAdvance(QLatin1Char('x')) * 17 + 2 * QLineEditPrivate::horizontalMargin
             + tm.left() + tm.right()
             + d->leftmargin + d->rightmargin; // "some"
     QStyleOptionFrame opt;
@@ -1341,7 +1375,7 @@ void QLineEdit::setReadOnly(bool enable)
         QEvent event(QEvent::ReadOnlyChange);
         QCoreApplication::sendEvent(this, &event);
         update();
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
         QAccessible::State changedState;
         changedState.readOnly = true;
         QAccessibleStateChangeEvent ev(this, changedState);
@@ -1611,7 +1645,7 @@ void QLineEdit::mouseDoubleClickEvent(QMouseEvent* e)
         if (d->control->composeMode()) {
             int preeditPos = d->control->cursor();
             int posInPreedit = position - d->control->cursor();
-            int preeditLength = d->control->preeditAreaText().size();
+            int preeditLength = d->control->preeditAreaText().length();
             bool positionOnPreedit = false;
 
             if (posInPreedit >= 0 && posInPreedit <= preeditLength)
@@ -1771,6 +1805,10 @@ QRect QLineEdit::cursorRect() const
 void QLineEdit::inputMethodEvent(QInputMethodEvent *e)
 {
     Q_D(QLineEdit);
+    if (!d->shouldEnableInputMethod()) {
+        e->ignore();
+        return;
+    }
 
     if (echoMode() == PasswordEchoOnEdit && !d->control->passwordEchoEditing()) {
         // Clear the edit and reset to normal echo mode while entering input
@@ -1811,8 +1849,6 @@ QVariant QLineEdit::inputMethodQuery(Qt::InputMethodQuery property, QVariant arg
 {
     Q_D(const QLineEdit);
     switch(property) {
-    case Qt::ImEnabled:
-        return isEnabled();
     case Qt::ImCursorRectangle:
         return d->cursorRect();
     case Qt::ImAnchorRectangle:
@@ -2079,7 +2115,7 @@ void QLineEdit::paintEvent(QPaintEvent *)
 void QLineEdit::dragMoveEvent(QDragMoveEvent *e)
 {
     Q_D(QLineEdit);
-    if (!d->control->isReadOnly() && e->mimeData()->hasFormat("text/plain"_L1)) {
+    if (!d->control->isReadOnly() && e->mimeData()->hasFormat(QLatin1String("text/plain"))) {
         e->acceptProposedAction();
         d->control->moveCursor(d->xToPos(e->position().toPoint().x()), false);
         d->cursorVisible = true;
@@ -2123,13 +2159,13 @@ void QLineEdit::dropEvent(QDropEvent* e)
         if (e->source() == this) {
             if (e->dropAction() == Qt::MoveAction) {
                 if (selStart > oldSelStart && selStart <= oldSelEnd)
-                    setSelection(oldSelStart, str.size());
+                    setSelection(oldSelStart, str.length());
                 else if (selStart > oldSelEnd)
-                    setSelection(selStart - str.size(), str.size());
+                    setSelection(selStart - str.length(), str.length());
                 else
-                    setSelection(selStart, str.size());
+                    setSelection(selStart, str.length());
             } else {
-                setSelection(selStart, str.size());
+                setSelection(selStart, str.length());
             }
         }
     } else {
@@ -2183,7 +2219,7 @@ QMenu *QLineEdit::createStandardContextMenu()
 {
     Q_D(QLineEdit);
     QMenu *popup = new QMenu(this);
-    popup->setObjectName("qt_edit_menu"_L1);
+    popup->setObjectName(QLatin1String("qt_edit_menu"));
     QAction *action = nullptr;
 
     if (!isReadOnly()) {

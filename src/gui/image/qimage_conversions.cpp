@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <private/qguiapplication_p.h>
 #include <private/qcolortransform_p.h>
@@ -15,7 +51,6 @@
 #if QT_CONFIG(thread)
 #include <qsemaphore.h>
 #include <qthreadpool.h>
-#include <private/qthreadpool_p.h>
 #ifdef Q_OS_WASM
 // WebAssembly has threads; however we can't block the main thread.
 #else
@@ -204,7 +239,7 @@ void convert_generic(QImageData *dest, const QImageData *src, Qt::ImageConversio
     int segments = (qsizetype(src->width) * src->height) >> 16;
     segments = std::min(segments, src->height);
 
-    QThreadPool *threadPool = QThreadPoolPrivate::qtGuiInstance();
+    QThreadPool *threadPool = QThreadPool::globalInstance();
     if (segments <= 1 || !threadPool || threadPool->contains(QThread::currentThread()))
         return convertSegment(0, src->height);
 
@@ -259,7 +294,7 @@ void convert_generic_over_rgb64(QImageData *dest, const QImageData *src, Qt::Ima
     int segments = (qsizetype(src->width) * src->height) >> 16;
     segments = std::min(segments, src->height);
 
-    QThreadPool *threadPool = QThreadPoolPrivate::qtGuiInstance();
+    QThreadPool *threadPool = QThreadPool::globalInstance();
     if (segments <= 1 || !threadPool || threadPool->contains(QThread::currentThread()))
         return convertSegment(0, src->height);
 
@@ -313,7 +348,7 @@ void convert_generic_over_rgba32f(QImageData *dest, const QImageData *src, Qt::I
     int segments = (qsizetype(src->width) * src->height) >> 16;
     segments = std::min(segments, src->height);
 
-    QThreadPool *threadPool = QThreadPoolPrivate::qtGuiInstance();
+    QThreadPool *threadPool = QThreadPool::globalInstance();
     if (segments <= 1 || !threadPool || threadPool->contains(QThread::currentThread()))
         return convertSegment(0, src->height);
 
@@ -420,7 +455,7 @@ bool convert_generic_inplace(QImageData *data, QImage::Format dst_format, Qt::Im
 #ifdef QT_USE_THREAD_PARALLEL_IMAGE_CONVERSIONS
     int segments = (qsizetype(data->width) * data->height) >> 16;
     segments = std::min(segments, data->height);
-    QThreadPool *threadPool = QThreadPoolPrivate::qtGuiInstance();
+    QThreadPool *threadPool = QThreadPool::globalInstance();
     if (segments > 1 && threadPool && !threadPool->contains(QThread::currentThread())) {
         QSemaphore semaphore;
         int y = 0;
@@ -514,7 +549,7 @@ bool convert_generic_inplace_over_rgb64(QImageData *data, QImage::Format dst_for
 #ifdef QT_USE_THREAD_PARALLEL_IMAGE_CONVERSIONS
     int segments = (qsizetype(data->width) * data->height) >> 16;
     segments = std::min(segments, data->height);
-    QThreadPool *threadPool = QThreadPoolPrivate::qtGuiInstance();
+    QThreadPool *threadPool = QThreadPool::globalInstance();
     if (segments > 1 && threadPool && !threadPool->contains(QThread::currentThread())) {
         QSemaphore semaphore;
         int y = 0;
@@ -609,7 +644,7 @@ bool convert_generic_inplace_over_rgba32f(QImageData *data, QImage::Format dst_f
 #ifdef QT_USE_THREAD_PARALLEL_IMAGE_CONVERSIONS
     int segments = (qsizetype(data->width) * data->height) >> 16;
     segments = std::min(segments, data->height);
-    QThreadPool *threadPool = QThreadPoolPrivate::qtGuiInstance();
+    QThreadPool *threadPool = QThreadPool::globalInstance();
     if (segments > 1 && threadPool && !threadPool->contains(QThread::currentThread())) {
         QSemaphore semaphore;
         int y = 0;
@@ -1419,7 +1454,7 @@ static void convert_ARGB_to_gray8(QImageData *dest, const QImageData *src, Qt::I
 
     QColorSpace fromCS = src->colorSpace.isValid() ? src->colorSpace : QColorSpace::SRgb;
     QColorTransform tf = QColorSpacePrivate::get(fromCS)->transformationToXYZ();
-    const QColorTransformPrivate *tfd = QColorTransformPrivate::get(tf);
+    QColorTransformPrivate *tfd = QColorTransformPrivate::get(tf);
     QColorTransformPrivate::TransformFlags flags = Premultiplied
             ? QColorTransformPrivate::InputPremultiplied
             : QColorTransformPrivate::Unpremultiplied;
@@ -1449,7 +1484,7 @@ static void convert_ARGB_to_gray16(QImageData *dest, const QImageData *src, Qt::
 
     QColorSpace fromCS = src->colorSpace.isValid() ? src->colorSpace : QColorSpace::SRgb;
     QColorTransform tf = QColorSpacePrivate::get(fromCS)->transformationToXYZ();
-    const QColorTransformPrivate *tfd = QColorTransformPrivate::get(tf);
+    QColorTransformPrivate *tfd = QColorTransformPrivate::get(tf);
     QColorTransformPrivate::TransformFlags flags = Premultiplied
             ? QColorTransformPrivate::InputPremultiplied
             : QColorTransformPrivate::Unpremultiplied;
@@ -1488,7 +1523,7 @@ static void convert_RGBA64_to_gray8(QImageData *dest, const QImageData *src, Qt:
 
     QColorSpace fromCS = src->colorSpace.isValid() ? src->colorSpace : QColorSpace::SRgb;
     QColorTransform tf = QColorSpacePrivate::get(fromCS)->transformationToXYZ();
-    const QColorTransformPrivate *tfd = QColorTransformPrivate::get(tf);
+    QColorTransformPrivate *tfd = QColorTransformPrivate::get(tf);
     QColorTransformPrivate::TransformFlags flags = Premultiplied
             ? QColorTransformPrivate::InputPremultiplied
             : QColorTransformPrivate::Unpremultiplied;
@@ -1527,7 +1562,7 @@ static void convert_RGBA64_to_gray16(QImageData *dest, const QImageData *src, Qt
 
     QColorSpace fromCS = src->colorSpace.isValid() ? src->colorSpace : QColorSpace::SRgb;
     QColorTransform tf = QColorSpacePrivate::get(fromCS)->transformationToXYZ();
-    const QColorTransformPrivate *tfd = QColorTransformPrivate::get(tf);
+    QColorTransformPrivate *tfd = QColorTransformPrivate::get(tf);
     QColorTransformPrivate::TransformFlags flags = Premultiplied
             ? QColorTransformPrivate::InputPremultiplied
             : QColorTransformPrivate::Unpremultiplied;

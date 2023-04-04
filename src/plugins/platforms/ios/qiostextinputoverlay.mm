@@ -1,5 +1,41 @@
-// Copyright (C) 2017 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #import <UIKit/UIGestureRecognizerSubclass.h>
 #import <UIKit/UITextView.h>
@@ -51,7 +87,7 @@ static void executeBlockWithoutAnimation(Block block)
 // -------------------------------------------------------------------------
 /**
   QIOSEditMenu is just a wrapper class around UIMenuController to
-  ease showing and hiding it correctly.
+  ease showing and hiding it correcly.
   */
 @interface QIOSEditMenu : NSObject
 @property (nonatomic, assign) BOOL visible;
@@ -792,7 +828,7 @@ static void executeBlockWithoutAnimation(Block block)
     SelectionPair selection = querySelection();
     int touchTextPos = QPlatformInputContext::queryFocusObject(Qt::ImCursorPosition, touchPoint).toInt();
 
-    // Ensure that the handles cannot be dragged past each other
+    // Ensure that the handels cannot be dragged past each other
     if (_dragOnCursor)
         selection.second = (touchTextPos > selection.first) ? touchTextPos : selection.first + 1;
     else
@@ -920,7 +956,7 @@ static void executeBlockWithoutAnimation(Block block)
         // But note, we only want to hide the menu, and not clear the selection.
         // Only when the user taps inside the input area do we want to clear the
         // selection as well. This is different from native behavior, but done so
-        // deliberately for cross-platform consistency. This will let the user click on
+        // deliberatly for cross-platform consistency. This will let the user click on
         // e.g "Bold" and "Italic" buttons elsewhere in the UI to modify the selected text.
         return;
     }
@@ -933,7 +969,7 @@ static void executeBlockWithoutAnimation(Block block)
     }
 
     // When no menu is showing, and the touch is inside the input
-    // area, we check if we should show it. We want to do so if
+    // area, we check if we should show it. We wan't to do so if
     // the tap doesn't result in the cursor changing position.
     _cursorPosOnPress = QInputMethod::queryFocusObject(Qt::ImCursorPosition, QVariant()).toInt();
 }
@@ -1012,38 +1048,14 @@ void QIOSTextInputOverlay::updateFocusObject()
         s_editMenu = nullptr;
     }
 
-    const QVariant hintsVariant = QGuiApplication::inputMethod()->queryFocusObject(Qt::ImHints, QVariant());
-    const Qt::InputMethodHints hints = Qt::InputMethodHints(hintsVariant.toUInt());
-    if (hints & Qt::ImhNoTextHandles)
-        return;
-
-    // The focus object can emit selection updates (e.g from mouse drag), and
-    // accept modifying it through IM when dragging on the handles, even if it
-    // doesn't accept text input and IM in general (and hence return false from
-    // inputMethodAccepted()). This is the case for read-only text fields.
-    // Therefore, listen for selection changes also when the focus object
-    // reports that it's ImReadOnly (which we take as a hint that it's actually
-    // a text field, and that selections therefore might happen). But since
-    // we have no guarantee that the focus object can actually accept new selections
-    // through IM (and since we also need to respect if the input accepts selections
-    // in the first place), we only support selections started by the text field (e.g from
-    // mouse drag), even if we in theory could also start selections from a loupe.
-
-    const bool inputAccepted = platformInputContext()->inputMethodAccepted();
-    const bool readOnly = QGuiApplication::inputMethod()->queryFocusObject(Qt::ImReadOnly, QVariant()).toBool();
-
-    if (inputAccepted || readOnly) {
-        if (!(hints & Qt::ImhNoEditMenu))
-            s_editMenu = [QIOSEditMenu new];
+    if (platformInputContext()->inputMethodAccepted()) {
+        s_editMenu = [QIOSEditMenu new];
+        m_cursorRecognizer = [QIOSCursorRecognizer new];
         m_selectionRecognizer = [QIOSSelectionRecognizer new];
         m_openMenuOnTapRecognizer = [QIOSTapRecognizer new];
+        m_cursorRecognizer.enabled = YES;
         m_selectionRecognizer.enabled = YES;
         m_openMenuOnTapRecognizer.enabled = YES;
-    }
-
-    if (inputAccepted) {
-        m_cursorRecognizer = [QIOSCursorRecognizer new];
-        m_cursorRecognizer.enabled = YES;
     }
 }
 

@@ -37,7 +37,7 @@ public:
     void setupUi(QDialog *TopicChooser)
     {
         if (TopicChooser->objectName().isEmpty())
-            TopicChooser->setObjectName("TopicChooser");
+            TopicChooser->setObjectName(QString::fromUtf8("TopicChooser"));
         TopicChooser->resize(391, 223);
         TopicChooser->setSizeGripEnabled(true);
         vboxLayout = new QVBoxLayout(TopicChooser);
@@ -45,26 +45,26 @@ public:
         vboxLayout->setSpacing(6);
 #endif
         vboxLayout->setContentsMargins(11, 11, 11, 11);
-        vboxLayout->setObjectName("vboxLayout");
+        vboxLayout->setObjectName(QString::fromUtf8("vboxLayout"));
         vboxLayout->setObjectName(QString::fromUtf8("unnamed"));
         label = new QLabel(TopicChooser);
-        label->setObjectName("label");
+        label->setObjectName(QString::fromUtf8("label"));
 
         vboxLayout->addWidget(label);
 
         listWidget = new QListWidget(TopicChooser);
-        listWidget->setObjectName("listWidget");
+        listWidget->setObjectName(QString::fromUtf8("listWidget"));
 
         vboxLayout->addWidget(listWidget);
 
         Layout16 = new QWidget(TopicChooser);
-        Layout16->setObjectName("Layout16");
+        Layout16->setObjectName(QString::fromUtf8("Layout16"));
         hboxLayout = new QHBoxLayout(Layout16);
 #ifndef Q_OS_MAC
         hboxLayout->setSpacing(6);
 #endif
         hboxLayout->setContentsMargins(0, 0, 0, 0);
-        hboxLayout->setObjectName("hboxLayout");
+        hboxLayout->setObjectName(QString::fromUtf8("hboxLayout"));
         hboxLayout->setObjectName(QString::fromUtf8("unnamed"));
         hboxLayout->setContentsMargins(0, 0, 0, 0);
         Horizontal_Spacing2 = new QSpacerItem(20, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
@@ -72,13 +72,13 @@ public:
         hboxLayout->addItem(Horizontal_Spacing2);
 
         buttonDisplay = new QPushButton(Layout16);
-        buttonDisplay->setObjectName("buttonDisplay");
+        buttonDisplay->setObjectName(QString::fromUtf8("buttonDisplay"));
         buttonDisplay->setAutoDefault(true);
 
         hboxLayout->addWidget(buttonDisplay);
 
         buttonCancel = new QPushButton(Layout16);
-        buttonCancel->setObjectName("buttonCancel");
+        buttonCancel->setObjectName(QString::fromUtf8("buttonCancel"));
         buttonCancel->setAutoDefault(true);
 
         hboxLayout->addWidget(buttonCancel);

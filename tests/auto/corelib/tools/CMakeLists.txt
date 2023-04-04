@@ -1,5 +1,4 @@
 # Generated from tools.pro.
-add_subdirectory(qatomicscopedvaluerollback)
 if(NOT INTEGRITY)
     add_subdirectory(collections)
 endif()

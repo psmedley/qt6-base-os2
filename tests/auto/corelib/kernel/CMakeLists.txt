@@ -1,6 +1,5 @@
 # Generated from kernel.pro.
 
-add_subdirectory(qapplicationstatic)
 add_subdirectory(qcoreapplication)
 add_subdirectory(qdeadlinetimer)
 add_subdirectory(qelapsedtimer)
@@ -46,8 +45,7 @@ endif()
 if(QT_FEATURE_private_tests)
     add_subdirectory(qproperty)
 endif()
-if(ANDROID)
+if(ANDROID AND NOT ANDROID_EMBEDDED)
     add_subdirectory(qjnienvironment)
     add_subdirectory(qjniobject)
-    add_subdirectory(qjnitypes)
 endif()

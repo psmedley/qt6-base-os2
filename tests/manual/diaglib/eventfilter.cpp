@@ -1,16 +1,47 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "eventfilter.h"
 #include <QtGui/QMouseEvent>
 #include <QtCore/QDebug>
 #include <QtCore/QTextStream>
 
-#if defined(QT_WIDGETS_LIB)
-#  define HAVE_APPLICATION
-#endif
-#if defined(QT_GUI_LIB)
-#  define HAVE_GUI_APPLICATION
+#if QT_VERSION >= 0x050000
+#  if defined(QT_WIDGETS_LIB)
+#    define HAVE_APPLICATION
+#  endif
+#  if defined(QT_GUI_LIB)
+#    define HAVE_GUI_APPLICATION
+#  endif
+#else // Qt 5
+#  if defined(QT_GUI_LIB)
+#    define HAVE_APPLICATION
+#  endif
 #endif
 
 #ifdef HAVE_APPLICATION
@@ -51,7 +82,9 @@ void EventFilter::init(EventCategories eventCategories)
         m_eventTypes << QEvent::MouseMove << QEvent::NonClientAreaMouseMove;
     if (eventCategories & TouchEvents) {
         m_eventTypes << QEvent::TouchBegin << QEvent::TouchUpdate << QEvent::TouchEnd;
+#if QT_VERSION >= 0x050000
         m_eventTypes << QEvent::TouchCancel;
+#endif
     }
     if (eventCategories & TabletEvents) {
         m_eventTypes << QEvent::TabletEnterProximity << QEvent::TabletLeaveProximity
@@ -67,7 +100,9 @@ void EventFilter::init(EventCategories eventCategories)
     }
     if (eventCategories & FocusEvents) {
         m_eventTypes
+#if QT_VERSION >= 0x050000
             << QEvent::FocusAboutToChange
+#endif
             << QEvent::FocusIn << QEvent::FocusOut;
     }
     if (eventCategories & GeometryEvents)
@@ -75,13 +110,17 @@ void EventFilter::init(EventCategories eventCategories)
     if (eventCategories & PaintEvents) {
         m_eventTypes << QEvent::UpdateRequest << QEvent::Paint
             << QEvent::Show << QEvent::Hide;
+#if QT_VERSION >= 0x050000
         m_eventTypes << QEvent::Expose;
+#endif
     }
     if (eventCategories & StateChangeEvents) {
         m_eventTypes
             << QEvent::WindowStateChange
             << QEvent::WindowBlocked << QEvent::WindowUnblocked
+#if QT_VERSION >= 0x050000
             << QEvent::ApplicationStateChange
+#endif
             << QEvent::ApplicationActivate << QEvent::ApplicationDeactivate;
     }
     if (eventCategories & TimerEvents)
@@ -92,7 +131,9 @@ void EventFilter::init(EventCategories eventCategories)
     }
     if (eventCategories & InputMethodEvents) {
         m_eventTypes << QEvent::InputMethod;
+#if QT_VERSION >= 0x050000
         m_eventTypes << QEvent::InputMethodQuery;
+#endif
     }
 #ifndef QT_NO_GESTURES
     if (eventCategories & GestureEvents) {
@@ -106,8 +147,10 @@ static inline bool matchesType(const QObject *o, EventFilter::ObjectTypes types)
 {
     if (o->isWidgetType())
         return types & EventFilter::QWidgetType;
+#if QT_VERSION >= 0x050000
     if (o->isWindowType())
         return types & EventFilter::QWindowType;
+#endif
     return types & EventFilter::OtherType;
 }
 
@@ -172,7 +215,9 @@ bool EventFilter::eventFilter(QObject *o, QEvent *e)
         formatObject(o, debug);
         debug << ' ' << e;
         switch (e->type()) {
+#if QT_VERSION >= 0x050000
         case QEvent::FocusAboutToChange:
+#endif
         case QEvent::FocusIn:
             formatApplicationState(debug);
             break;
@@ -185,7 +230,9 @@ bool EventFilter::eventFilter(QObject *o, QEvent *e)
         case QEvent::NonClientAreaMouseButtonPress:
         case QEvent::NonClientAreaMouseButtonRelease:
         case QEvent::NonClientAreaMouseMove:
+#  if QT_VERSION >= 0x050000
         case QEvent::Enter:
+#  endif
         case QEvent::Leave:
             formatMouseState(o, debug);
             break;

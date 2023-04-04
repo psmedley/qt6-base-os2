@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /*!
     \class QMdiArea
@@ -140,7 +176,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
 using namespace QMdi;
 
 // Asserts in debug mode, gives warning otherwise.
@@ -242,7 +277,7 @@ static inline QString tabTextFor(QMdiSubWindow *subWindow)
 
     QString title = subWindow->windowTitle();
     if (subWindow->isWindowModified()) {
-        title.replace("[*]"_L1, "*"_L1);
+        title.replace(QLatin1String("[*]"), QLatin1String("*"));
     } else {
         extern QString qt_setWindowTitle_helperHelper(const QString&, const QWidget*);
         title = qt_setWindowTitle_helperHelper(title, subWindow);
@@ -434,8 +469,8 @@ QList<QRect> MinOverlapPlacer::getCandidatePlacements(const QSize &size, const Q
     ylist.erase(std::unique(ylist.begin(), ylist.end()), ylist.end());
 
     result.reserve(ylist.size() * xlist.size());
-    for (int y : std::as_const(ylist))
-        for (int x : std::as_const(xlist))
+    for (int y : qAsConst(ylist))
+        for (int x : qAsConst(xlist))
             result << QRect(QPoint(x, y), size);
     return result;
 }
@@ -750,7 +785,7 @@ void QMdiAreaPrivate::_q_currentTabChanged(int index)
 
     // If the previous active sub-window was hidden, disable the tab.
     if (indexToLastActiveTab >= 0 && indexToLastActiveTab < tabBar->count()
-        && indexToLastActiveTab < childWindows.size()) {
+        && indexToLastActiveTab < childWindows.count()) {
         QMdiSubWindow *lastActive = childWindows.at(indexToLastActiveTab);
         if (lastActive && lastActive->isHidden())
             tabBar->setTabEnabled(indexToLastActiveTab, false);
@@ -824,7 +859,7 @@ void QMdiAreaPrivate::appendChild(QMdiSubWindow *child)
     if (tabBar) {
         tabBar->addTab(child->windowIcon(), tabTextFor(child));
         updateTabBarGeometry();
-        if (childWindows.size() == 1 && !(options & QMdiArea::DontMaximizeSubWindowOnActivation))
+        if (childWindows.count() == 1 && !(options & QMdiArea::DontMaximizeSubWindowOnActivation))
             showActiveWindowMaximized = true;
     }
 #endif
@@ -919,7 +954,7 @@ void QMdiAreaPrivate::rearrange(Rearranger *rearranger)
 
     QRect domain = viewport->rect();
     if (rearranger->type() == Rearranger::RegularTiler && !widgets.isEmpty())
-        domain = resizeToMinimumTileSize(minSubWindowSize, widgets.size());
+        domain = resizeToMinimumTileSize(minSubWindowSize, widgets.count());
 
     rearranger->rearrange(widgets, domain);
 
@@ -1296,7 +1331,7 @@ bool QMdiAreaPrivate::scrollBarsEnabled() const
 */
 bool QMdiAreaPrivate::lastWindowAboutToBeDestroyed() const
 {
-    if (childWindows.size() != 1)
+    if (childWindows.count() != 1)
         return false;
 
     QMdiSubWindow *last = childWindows.at(0);
@@ -1372,7 +1407,7 @@ QMdiAreaPrivate::subWindowList(QMdiArea::WindowOrder order, bool reversed) const
         }
     } else { // ActivationHistoryOrder
         Q_ASSERT(indicesToActivatedChildren.size() == childWindows.size());
-        for (int i = indicesToActivatedChildren.size() - 1; i >= 0; --i) {
+        for (int i = indicesToActivatedChildren.count() - 1; i >= 0; --i) {
             QMdiSubWindow *child = childWindows.at(indicesToActivatedChildren.at(i));
             if (!child)
                 continue;
@@ -1480,7 +1515,7 @@ void QMdiAreaPrivate::highlightNextSubWindow(int increaseFactor)
     if (!rubberBand) {
         rubberBand = new QRubberBand(QRubberBand::Rectangle, q);
         // For accessibility to identify this special widget.
-        rubberBand->setObjectName("qt_rubberband"_L1);
+        rubberBand->setObjectName(QLatin1String("qt_rubberband"));
         rubberBand->setWindowFlags(rubberBand->windowFlags() | Qt::WindowStaysOnTopHint);
     }
 #endif
@@ -1761,7 +1796,7 @@ QMdiSubWindow *QMdiArea::currentSubWindow() const
     if (d->isActivated && !window()->isMinimized())
         return nullptr;
 
-    Q_ASSERT(d->indicesToActivatedChildren.size() > 0);
+    Q_ASSERT(d->indicesToActivatedChildren.count() > 0);
     int index = d->indicesToActivatedChildren.at(0);
     Q_ASSERT(index >= 0 && index < d->childWindows.size());
     QMdiSubWindow *current = d->childWindows.at(index);
@@ -2283,14 +2318,7 @@ void QMdiArea::resizeEvent(QResizeEvent *resizeEvent)
     foreach (QMdiSubWindow *child, d->childWindows) {
         if (sanityCheck(child, "QMdiArea::resizeEvent") && child->isMaximized()
                 && child->size() != resizeEvent->size()) {
-            auto realSize = resizeEvent->size();
-            const auto minSizeHint = child->minimumSizeHint();
-            // QMdiSubWindow is no tlw so minimumSize() is not set by the layout manager
-            // and therefore we have to take care by ourself that we're not getting smaller
-            // than allowed
-            if (minSizeHint.isValid())
-                realSize = realSize.expandedTo(minSizeHint);
-            child->resize(realSize);
+            child->resize(resizeEvent->size());
             if (!hasMaximizedSubWindow)
                 hasMaximizedSubWindow = true;
         }

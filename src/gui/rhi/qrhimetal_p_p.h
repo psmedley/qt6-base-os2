@@ -1,5 +1,41 @@
-// Copyright (C) 2019 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2019 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the Qt Gui module
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QRHIMETAL_P_H
 #define QRHIMETAL_P_H
@@ -67,7 +103,7 @@ struct QMetalTextureData;
 struct QMetalTexture : public QRhiTexture
 {
     QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, int depth,
-                  int arraySize, int sampleCount, Flags flags);
+                  int sampleCount, Flags flags);
     ~QMetalTexture();
     void destroy() override;
     bool create() override;
@@ -127,10 +163,10 @@ struct QMetalRenderPassDescriptor : public QRhiRenderPassDescriptor
 
 struct QMetalRenderTargetData;
 
-struct QMetalSwapChainRenderTarget : public QRhiSwapChainRenderTarget
+struct QMetalReferenceRenderTarget : public QRhiRenderTarget
 {
-    QMetalSwapChainRenderTarget(QRhiImplementation *rhi, QRhiSwapChain *swapchain);
-    ~QMetalSwapChainRenderTarget();
+    QMetalReferenceRenderTarget(QRhiImplementation *rhi);
+    ~QMetalReferenceRenderTarget();
     void destroy() override;
 
     QSize pixelSize() const override;
@@ -267,7 +303,6 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     quint32 currentIndexOffset;
     QRhiCommandBuffer::IndexFormat currentIndexFormat;
     int currentCullMode;
-    int currentTriangleFillMode;
     int currentFrontFaceWinding;
     QPair<float, float> currentDepthBiasValues;
 
@@ -288,13 +323,10 @@ struct QMetalSwapChain : public QRhiSwapChain
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
     QSize surfacePixelSize() override;
-    bool isFormatSupported(Format f) override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
 
     bool createOrResize() override;
-
-    virtual QRhiSwapChainHdrInfo hdrInfo() override;
 
     void chooseFormats();
 
@@ -303,7 +335,7 @@ struct QMetalSwapChain : public QRhiSwapChain
     int currentFrameSlot = 0; // 0..QMTL_FRAMES_IN_FLIGHT-1
     int frameCount = 0;
     int samples = 1;
-    QMetalSwapChainRenderTarget rtWrapper;
+    QMetalReferenceRenderTarget rtWrapper;
     QMetalCommandBuffer cbWrapper;
     QMetalRenderBuffer *ds = nullptr;
     QMetalSwapChainData *d = nullptr;
@@ -316,8 +348,6 @@ class QRhiMetal : public QRhiImplementation
 public:
     QRhiMetal(QRhiMetalInitParams *params, QRhiMetalNativeHandles *importDevice = nullptr);
     ~QRhiMetal();
-
-    static bool probe(QRhiMetalInitParams *params);
 
     bool create(QRhi::Flags flags) override;
     void destroy() override;
@@ -336,7 +366,6 @@ public:
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
                                int depth,
-                               int arraySize,
                                int sampleCount,
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter,
@@ -417,7 +446,7 @@ public:
     int resourceLimit(QRhi::ResourceLimit limit) const override;
     const QRhiNativeHandles *nativeHandles() override;
     QRhiDriverInfo driverInfo() const override;
-    QRhiMemAllocStats graphicsMemoryAllocationStatistics() override;
+    void sendVMemStatsToProfiler() override;
     bool makeThreadLocalNativeContextCurrent() override;
     void releaseCachedResources() override;
     bool isDeviceLost() const override;
@@ -454,8 +483,6 @@ public:
         int maxTextureSize = 4096;
         bool baseVertexAndInstance = true;
         QVector<int> supportedSampleCounts;
-        bool isAppleGPU = false;
-        int maxThreadGroupSize = 512;
     } caps;
 
     QRhiMetalData *d = nullptr;

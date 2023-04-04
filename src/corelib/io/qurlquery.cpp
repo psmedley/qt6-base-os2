@@ -1,5 +1,41 @@
-// Copyright (C) 2021 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qurlquery.h"
 #include "qurl_p.h"
@@ -52,19 +88,6 @@ QT_BEGIN_NAMESPACE
   which cannot be expressed in decoded form (like control characters, byte
   sequences not decodable to UTF-8). For that reason, the percent character is
   always represented by the string "%25".
-
-  All of the setter methods and the query methods like hasQueryItem() in
-  QUrlQuery take encoded forms only. Unlike in QUrl, there's no optional
-  parameter to specify that the strings being passed are decoded. If
-  improperly-encoded strings are passed to the setter or query methods,
-  QUrlQuery will attempt to recover instead of failing. That is to say, all
-  functions in this class parse their string arguments as if the
-  QUrl::TolerantMode decoding mode was specified.
-
-  Application code should strive to always ensure proper encoding and not rely
-  on TolerantMode parsing fixing the strings. Notably, all user input must be
-  first percent-encoded using QUrl::toPercentEncoding() or similar functions
-  before being passed to the functions in this class.
 
   \section2 Handling of spaces and plus ("+")
 
@@ -401,11 +424,7 @@ bool QUrlQuery::operator ==(const QUrlQuery &other) const
         return d->valueDelimiter == other.d->valueDelimiter &&
                 d->pairDelimiter == other.d->pairDelimiter &&
                 d->itemList == other.d->itemList;
-
-    const QUrlQueryPrivate *x = d ? d.data() : other.d.data();
-    return x->valueDelimiter == defaultQueryValueDelimiter() &&
-            x->pairDelimiter == defaultQueryPairDelimiter() &&
-            x->itemList.isEmpty();
+    return false;
 }
 
 /*!
@@ -519,7 +538,7 @@ QString QUrlQuery::query(QUrl::ComponentFormattingOptions encoding) const
     {
         int size = 0;
         for ( ; it != end; ++it)
-            size += it->first.size() + 1 + it->second.size() + 1;
+            size += it->first.length() + 1 + it->second.length() + 1;
         result.reserve(size + size / 4);
     }
 
@@ -599,8 +618,6 @@ QChar QUrlQuery::queryPairDelimiter() const
     as the same, like HTML forms do. If you need spaces to be represented as
     plus signs, use actual plus signs.
 
-    \note The keys and values are expected to be in percent-encoded form.
-
     \sa queryItems(), isEmpty()
 */
 void QUrlQuery::setQueryItems(const QList<QPair<QString, QString> > &query)
@@ -634,7 +651,7 @@ QList<QPair<QString, QString> > QUrlQuery::queryItems(QUrl::ComponentFormattingO
     QList<QPair<QString, QString> > result;
     Map::const_iterator it = d->itemList.constBegin();
     Map::const_iterator end = d->itemList.constEnd();
-    result.reserve(d->itemList.size());
+    result.reserve(d->itemList.count());
     for ( ; it != end; ++it)
         result << qMakePair(d->recodeToUser(it->first, encoding),
                             d->recodeToUser(it->second, encoding));
@@ -644,8 +661,6 @@ QList<QPair<QString, QString> > QUrlQuery::queryItems(QUrl::ComponentFormattingO
 /*!
     Returns \c true if there is a query string pair whose key is equal
     to \a key from the URL.
-
-    \note The key expected to be in percent-encoded form.
 
     \sa addQueryItem(), queryItemValue()
 */
@@ -665,8 +680,6 @@ bool QUrlQuery::hasQueryItem(const QString &key) const
     as the same, like HTML forms do. If you need spaces to be represented as
     plus signs, use actual plus signs.
 
-    \note The key and value strings are expected to be in percent-encoded form.
-
     \sa hasQueryItem(), queryItemValue()
 */
 void QUrlQuery::addQueryItem(const QString &key, const QString &value)
@@ -685,8 +698,6 @@ void QUrlQuery::addQueryItem(const QString &key, const QString &value)
     one found, in the order they were present in the query string or added
     using addQueryItem().
 
-    \note The key is expected to be in percent-encoded form.
-
     \sa addQueryItem(), allQueryItemValues(), {encoding}{Encoding}
 */
 QString QUrlQuery::queryItemValue(const QString &key, QUrl::ComponentFormattingOptions encoding) const
@@ -704,8 +715,6 @@ QString QUrlQuery::queryItemValue(const QString &key, QUrl::ComponentFormattingO
     Returns the a list of query string values whose key is equal to \a key from
     the URL, using the options specified in \a encoding to encode the return
     value. If the key \a key is not found, this function returns an empty list.
-
-    \note The key is expected to be in percent-encoded form.
 
     \sa queryItemValue(), addQueryItem()
 */
@@ -729,8 +738,6 @@ QStringList QUrlQuery::allQueryItemValues(const QString &key, QUrl::ComponentFor
     item in the order they were present in the query string or added with
     addQueryItem().
 
-    \note The key is expected to be in percent-encoded form.
-
     \sa removeAllQueryItems()
 */
 void QUrlQuery::removeQueryItem(const QString &key)
@@ -746,8 +753,6 @@ void QUrlQuery::removeQueryItem(const QString &key)
 /*!
     Removes all the query string pairs whose key is equal to \a key
     from the URL.
-
-    \note The key is expected to be in percent-encoded form.
 
     \sa removeQueryItem()
 */

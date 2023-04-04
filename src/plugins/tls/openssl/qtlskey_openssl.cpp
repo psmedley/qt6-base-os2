@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtNetwork module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qsslsocket_openssl_symbols_p.h"
 #include "qtlsbackend_openssl_p.h"
@@ -101,19 +137,19 @@ QByteArray TlsKeyOpenSSL::derFromPem(const QByteArray &pem, QMap<QByteArray, QBy
     QByteArray der(pem);
 
     int headerIndex = der.indexOf(header);
-    int footerIndex = der.indexOf(footer, headerIndex + header.size());
+    int footerIndex = der.indexOf(footer, headerIndex + header.length());
     if (type() != QSsl::PublicKey) {
         if (headerIndex == -1 || footerIndex == -1) {
             header = pkcs8Header(true);
             footer = pkcs8Footer(true);
             headerIndex = der.indexOf(header);
-            footerIndex = der.indexOf(footer, headerIndex + header.size());
+            footerIndex = der.indexOf(footer, headerIndex + header.length());
         }
         if (headerIndex == -1 || footerIndex == -1) {
             header = pkcs8Header(false);
             footer = pkcs8Footer(false);
             headerIndex = der.indexOf(header);
-            footerIndex = der.indexOf(footer, headerIndex + header.size());
+            footerIndex = der.indexOf(footer, headerIndex + header.length());
         }
     }
     if (headerIndex == -1 || footerIndex == -1)
@@ -124,7 +160,7 @@ QByteArray TlsKeyOpenSSL::derFromPem(const QByteArray &pem, QMap<QByteArray, QBy
     if (der.contains("Proc-Type:")) {
         // taken from QHttpNetworkReplyPrivate::parseHeader
         int i = 0;
-        while (i < der.size()) {
+        while (i < der.count()) {
             int j = der.indexOf(':', i); // field-name
             if (j == -1)
                 break;
@@ -143,7 +179,7 @@ QByteArray TlsKeyOpenSSL::derFromPem(const QByteArray &pem, QMap<QByteArray, QBy
                 int length = i -(hasCR ? 1: 0) - j;
                 value += der.mid(j, length).trimmed();
                 j = ++i;
-            } while (i < der.size() && (der.at(i) == ' ' || der.at(i) == '\t'));
+            } while (i < der.count() && (der.at(i) == ' ' || der.at(i) == '\t'));
             if (i == -1)
                 break; // something is wrong
 

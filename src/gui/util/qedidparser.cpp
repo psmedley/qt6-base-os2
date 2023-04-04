@@ -1,6 +1,42 @@
-// Copyright (C) 2017 Pier Luigi Fiorini <pierluigi.fiorini@gmail.com>
-// Copyright (C) 2021 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2017 Pier Luigi Fiorini <pierluigi.fiorini@gmail.com>
+** Copyright (C) 2021 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QtCore/QFile>
 #include <QtCore/QByteArrayView>
@@ -12,7 +48,6 @@
 #define EDID_DESCRIPTOR_PRODUCT_NAME 0xfc
 #define EDID_DESCRIPTOR_SERIAL_NUMBER 0xff
 
-#define EDID_DATA_BLOCK_COUNT 4
 #define EDID_OFFSET_DATA_BLOCKS 0x36
 #define EDID_OFFSET_LAST_BLOCK 0x6c
 #define EDID_OFFSET_PNP_ID 0x08
@@ -25,13 +60,11 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 static QString lookupVendorIdInSystemDatabase(QByteArrayView id)
 {
     QString result;
 
-    const QString fileName = "/usr/share/hwdata/pnp.ids"_L1;
+    const QString fileName = QLatin1String("/usr/share/hwdata/pnp.ids");
     QFile file(fileName);
     if (!file.open(QFile::ReadOnly))
         return result;
@@ -72,7 +105,7 @@ static QString lookupVendorIdInSystemDatabase(QByteArrayView id)
 bool QEdidParser::parse(const QByteArray &blob)
 {
     const quint8 *data = reinterpret_cast<const quint8 *>(blob.constData());
-    const size_t length = blob.size();
+    const size_t length = blob.length();
 
     // Verify header
     if (length < 128)
@@ -105,7 +138,7 @@ bool QEdidParser::parse(const QByteArray &blob)
         serialNumber = QString();
 
     // Parse EDID data
-    for (int i = 0; i < EDID_DATA_BLOCK_COUNT; ++i) {
+    for (int i = 0; i < 5; ++i) {
         const uint offset = EDID_OFFSET_DATA_BLOCKS + i * 18;
 
         if (data[offset] != 0 || data[offset + 1] != 0 || data[offset + 2] != 0)
@@ -239,7 +272,7 @@ QString QEdidParser::parseEdidString(const quint8 *data)
     buffer = buffer.replace('\r', '\0').replace('\n', '\0');
 
     // Replace non-printable characters with dash
-    for (int i = 0; i < buffer.size(); ++i) {
+    for (int i = 0; i < buffer.count(); ++i) {
         if (buffer[i] < '\040' || buffer[i] > '\176')
             buffer[i] = '-';
     }

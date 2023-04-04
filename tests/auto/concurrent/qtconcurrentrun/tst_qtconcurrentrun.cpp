@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 #include <qtconcurrentrun.h>
 #include <QFuture>
 #include <QMutex>
@@ -10,15 +35,12 @@
 #include <QTimer>
 #include <QFutureSynchronizer>
 
-#include <QtTest/private/qemulationdetector_p.h>
-
 using namespace QtConcurrent;
 
 class tst_QtConcurrentRun: public QObject
 {
     Q_OBJECT
 private slots:
-    void initTestCase();
     void runLightFunction();
     void runHeavyFunction();
     void returnValue();
@@ -84,13 +106,6 @@ void heavy()
     for (int i = 0; i < 1000000; ++i)
         str.append("a");
     qDebug("done function");
-}
-
-void tst_QtConcurrentRun::initTestCase()
-{
-    // proxy check for QEMU; catches slightly more though
-    if (QTestPrivate::isRunningArmOnX86())
-        QSKIP("Runs into spurious crashes on QEMU -- QTBUG-106906");
 }
 
 void tst_QtConcurrentRun::runLightFunction()
@@ -1393,7 +1408,7 @@ void tst_QtConcurrentRun::withPromiseAndThen()
         setFlag(syncEnd);
 
         future.waitForFinished();
-        QCOMPARE(future.results().size(), 0);
+        QCOMPARE(future.results().count(), 0);
         QVERIFY(runExecuted);
         QVERIFY(!cancelReceivedBeforeSync);
         QVERIFY(cancelReceivedAfterSync);
@@ -1413,7 +1428,7 @@ void tst_QtConcurrentRun::withPromiseAndThen()
         setFlag(syncEnd);
 
         resultFuture.waitForFinished();
-        QCOMPARE(future.results().size(), 1);
+        QCOMPARE(future.results().count(), 1);
         QCOMPARE(future.result(), 1);
         QVERIFY(runExecuted);
         QVERIFY(thenExecuted);
@@ -1436,7 +1451,7 @@ void tst_QtConcurrentRun::withPromiseAndThen()
         setFlag(syncEnd);
 
         resultFuture.waitForFinished();
-        QCOMPARE(future.results().size(), 0);
+        QCOMPARE(future.results().count(), 0);
         QVERIFY(runExecuted);
         QVERIFY(!thenExecuted);
         QVERIFY(cancelExecuted);

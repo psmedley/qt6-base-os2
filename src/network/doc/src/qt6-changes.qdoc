@@ -1,5 +1,29 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the documentation of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:FDL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Free Documentation License Usage
+** Alternatively, this file may be used under the terms of the GNU Free
+** Documentation License version 1.3 as published by the Free Software
+** Foundation and appearing in the file included in the packaging of
+** this file. Please review the following information to ensure
+** the GNU Free Documentation License version 1.3 requirements
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /*!
     \page network-changes-qt6.html
@@ -64,20 +88,8 @@
     void networkSessionConnected();
     \endcode
 
-    QNetworkInformation, initially introduced in Qt 6.1, aims to replace some
-    aspects of the bearer management API. It works by providing a unified API
-    which subscribes to changes to the network as notified by the operating
-    system.
-
-    QNetworkInformation::reachability(), introduced in Qt 6.1, replaces the
-    QNetworkAccessManager::networkAccessible() function, while adding more
-    detailed information about the reachability of the network. See its
-    documentation for more details.
-
-    In Qt 6.2 QNetworkInformation gained the ability to detect captive portals.
-
-    In Qt 6.3 QNetworkInformation gained QNetworkInformation::transportMedium()
-    and QNetworkInformation::isMetered().
+    \note Qt 6.0 does not provide replacements for these deleted
+    classes and functions.
 
     \section2 Deleted enumerators
 
@@ -172,14 +184,4 @@
     \code
     request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     \endcode
-
-    \section2 QNetworkAccessManager now guards against archive bombs
-
-    Starting with Qt 6.2 QNetworkAccessManager will guard against compressed
-    files that decompress to files which are much larger than their compressed
-    form by erroring out the reply if the decompression ratio exceeds a certain
-    threshold.
-    This check is only applied to files larger than a certain size, which can be
-    customized (or disabled by passing -1) by calling
-    \l{QNetworkRequest::setDecompressedSafetyCheckThreshold()}.
 */

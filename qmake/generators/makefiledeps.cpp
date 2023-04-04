@@ -1,10 +1,34 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the qmake application of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "makefiledeps.h"
 #include "option.h"
-#include <qfile.h>
 #include <qdir.h>
 #include <qdatetime.h>
 #include <qfileinfo.h>
@@ -16,8 +40,16 @@
 # include <io.h>
 #endif
 #include <qdebug.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <limits.h>
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+#include <share.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -164,7 +196,7 @@ void QMakeSourceFileInfo::setDependencyPaths(const QList<QMakeLocalFileName> &l)
 {
     // Ensure that depdirs does not contain the same paths several times, to minimize the stats
     QList<QMakeLocalFileName> ll;
-    for (int i = 0; i < l.size(); ++i) {
+    for (int i = 0; i < l.count(); ++i) {
         if (!ll.contains(l.at(i)))
             ll.append(l.at(i));
     }
@@ -483,17 +515,28 @@ bool QMakeSourceFileInfo::findDeps(SourceFile *file)
 
     const QMakeLocalFileName sourceFile = fixPathForFile(file->file, true);
 
+    struct stat fst;
     char *buffer = nullptr;
     int buffer_len = 0;
     {
-        QFile f(sourceFile.local());
-        if (!f.open(QIODevice::ReadOnly))
+        int fd;
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+        if (_sopen_s(&fd, sourceFile.local().toLatin1().constData(),
+            _O_RDONLY, _SH_DENYNO, _S_IREAD) != 0)
+            fd = -1;
+#else
+        fd = open(sourceFile.local().toLatin1().constData(), O_RDONLY);
+#endif
+        if (fd == -1 || fstat(fd, &fst) || S_ISDIR(fst.st_mode)) {
+            if (fd != -1)
+                QT_CLOSE(fd);
             return false;
-        const qint64 fs = f.size();
-        buffer = getBuffer(fs);
+        }
+        buffer = getBuffer(fst.st_size);
         for(int have_read = 0;
-            (have_read = f.read(buffer + buffer_len, fs - buffer_len));
+            (have_read = QT_READ(fd, buffer + buffer_len, fst.st_size - buffer_len));
             buffer_len += have_read) ;
+        QT_CLOSE(fd);
     }
     if(!buffer)
         return false;
@@ -788,7 +831,7 @@ bool QMakeSourceFileInfo::findDeps(SourceFile *file)
                         }
                     }
                     if(!exists) { //path lookup
-                        for (const QMakeLocalFileName &depdir : std::as_const(depdirs)) {
+                        for (const QMakeLocalFileName &depdir : qAsConst(depdirs)) {
                             QMakeLocalFileName f(depdir.real() + Option::dir_sep + lfn.real());
                             QFileInfo fi(findFileInfo(f));
                             if(fi.exists() && !fi.isDir()) {
@@ -858,37 +901,32 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
     int buffer_len = 0;
     char *buffer = nullptr;
     {
-        QFile f(fixPathForFile(file->file, true).local());
-        if (!f.open(QIODevice::ReadOnly))
+        struct stat fst;
+        int fd;
+#if defined(_MSC_VER) && _MSC_VER >= 1400
+        if (_sopen_s(&fd, fixPathForFile(file->file, true).local().toLocal8Bit().constData(),
+            _O_RDONLY, _SH_DENYNO, _S_IREAD) != 0)
+            fd = -1;
+#else
+        fd = open(fixPathForFile(file->file, true).local().toLocal8Bit().constData(), O_RDONLY);
+#endif
+        if (fd == -1 || fstat(fd, &fst) || S_ISDIR(fst.st_mode)) {
+            if (fd != -1)
+                QT_CLOSE(fd);
             return false; //shouldn't happen
-        const qint64 fs = f.size();
-        buffer = getBuffer(fs);
-        while (int have_read = f.read(buffer + buffer_len, fs - buffer_len))
+        }
+        buffer = getBuffer(fst.st_size);
+        while (int have_read = QT_READ(fd, buffer + buffer_len, fst.st_size - buffer_len))
             buffer_len += have_read;
+
+        QT_CLOSE(fd);
     }
 
     debug_msg(2, "findMocs: %s", file->file.local().toLatin1().constData());
     int line_count = 1;
-    enum Keywords {
-        Q_OBJECT_Keyword,
-        Q_GADGET_Keyword,
-        Q_GADGET_EXPORT_Keyword,
-        Q_NAMESPACE_Keyword,
-        Q_NAMESPACE_EXPORT_Keyword,
-
-        NumKeywords
-    };
-    static const char keywords[][19] = {
-        "Q_OBJECT",
-        "Q_GADGET",
-        "Q_GADGET_EXPORT",
-        "Q_NAMESPACE",
-        "Q_NAMESPACE_EXPORT",
-    };
-    static_assert(std::size(keywords) == NumKeywords);
-    bool ignore[NumKeywords] = {};
+    // [0] for Q_OBJECT, [1] for Q_GADGET, [2] for Q_NAMESPACE, [3] for Q_NAMESPACE_EXPORT
+    bool ignore[4] = { false, false, false, false };
  /* qmake ignore Q_GADGET */
- /* qmake ignore Q_GADGET_EXPORT */
  /* qmake ignore Q_OBJECT */
  /* qmake ignore Q_NAMESPACE */
  /* qmake ignore Q_NAMESPACE_EXPORT */
@@ -912,26 +950,30 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
                     x = SKIP_BSNL(y + 1);
                     for (; x < buffer_len; x = SKIP_BSNL(x + 1)) {
                         if (buffer[x] == 't' || buffer[x] == 'q') { // ignore
-                            const char tag[] = "make ignore ";
-                            const auto starts_with = [](const char *haystack, const char *needle) {
-                                return strncmp(haystack, needle, strlen(needle)) == 0;
-                            };
-                            const auto is_ignore = [&](const char *keyword) {
-                                return buffer_len >= int(x + strlen(tag) + strlen(keyword)) &&
-                                        starts_with(buffer + x + 1, tag) &&
-                                        starts_with(buffer + x + 1 + strlen(tag), keyword);
-                            };
-                            int interest = 0;
-                            for (const char *keyword : keywords) {
-                                if (is_ignore(keyword)){
-                                    debug_msg(2, "Mocgen: %s:%d Found \"q%s%s\"",
-                                              file->file.real().toLatin1().constData(), line_count,
-                                              tag, keyword);
-                                    x += static_cast<int>(strlen(tag));
-                                    x += static_cast<int>(strlen(keyword));
-                                    ignore[interest] = true;
-                                }
-                                ++interest;
+                            if(buffer_len >= (x + 20) &&
+                               !strncmp(buffer + x + 1, "make ignore Q_OBJECT", 20)) {
+                                debug_msg(2, "Mocgen: %s:%d Found \"qmake ignore Q_OBJECT\"",
+                                          file->file.real().toLatin1().constData(), line_count);
+                                x += 20;
+                                ignore[0] = true;
+                            } else if(buffer_len >= (x + 20) &&
+                                      !strncmp(buffer + x + 1, "make ignore Q_GADGET", 20)) {
+                                debug_msg(2, "Mocgen: %s:%d Found \"qmake ignore Q_GADGET\"",
+                                          file->file.real().toLatin1().constData(), line_count);
+                                x += 20;
+                                ignore[1] = true;
+                            } else if (buffer_len >= (x + 23) &&
+                                      !strncmp(buffer + x + 1, "make ignore Q_NAMESPACE", 23)) {
+                                debug_msg(2, "Mocgen: %s:%d Found \"qmake ignore Q_NAMESPACE\"",
+                                          file->file.real().toLatin1().constData(), line_count);
+                                x += 23;
+                                ignore[2] = true;
+                            } else if (buffer_len >= (x + 30) &&
+                                       !strncmp(buffer + x + 1, "make ignore Q_NAMESPACE_EXPORT", 30)) {
+                                 debug_msg(2, "Mocgen: %s:%d Found \"qmake ignore Q_NAMESPACE_EXPORT\"",
+                                           file->file.real().toLatin1().constData(), line_count);
+                                 x += 30;
+                                 ignore[3] = true;
                             }
                         } else if (buffer[x] == '*') {
                             extralines = 0;
@@ -959,15 +1001,16 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
             int morelines = 0;
             int y = skipEscapedLineEnds(buffer, buffer_len, x + 1, &morelines);
             if (buffer[y] == 'Q') {
-                for (int interest = 0; interest < NumKeywords; ++interest) {
+                static const char interesting[][19] = { "Q_OBJECT", "Q_GADGET", "Q_NAMESPACE", "Q_NAMESPACE_EXPORT" };
+                for (int interest = 0; interest < 4; ++interest) {
                     if (ignore[interest])
                         continue;
 
                     int matchlen = 0, extralines = 0;
-                    size_t needle_len = strlen(keywords[interest]);
+                    size_t needle_len = strlen(interesting[interest]);
                     Q_ASSERT(needle_len <= INT_MAX);
                     if (matchWhileUnsplitting(buffer, buffer_len, y,
-                                              keywords[interest],
+                                              interesting[interest],
                                               static_cast<int>(needle_len),
                                               &matchlen, &extralines)
                         && y + matchlen < buffer_len

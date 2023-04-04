@@ -1,6 +1,42 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QARRAYDATAOPS_H
 #define QARRAYDATAOPS_H
@@ -21,6 +57,11 @@ QT_BEGIN_NAMESPACE
 template <class T> struct QArrayDataPointer;
 
 namespace QtPrivate {
+
+QT_WARNING_PUSH
+#if defined(Q_CC_GNU) && Q_CC_GNU >= 700
+QT_WARNING_DISABLE_GCC("-Wstringop-overflow")
+#endif
 
 template <class T>
 struct QPodArrayOps
@@ -252,6 +293,7 @@ public:
         this->ptr = pair.second;
     }
 };
+QT_WARNING_POP
 
 template <class T>
 struct QGenericArrayOps
@@ -875,23 +917,10 @@ public:
         Q_ASSERT(distance >= 0 && distance <= this->allocatedCapacity() - this->size);
         Q_UNUSED(distance);
 
-#if __cplusplus >= 202002L && defined(__cpp_concepts) && defined(__cpp_lib_concepts)
-        constexpr bool canUseCopyAppend =
-                std::contiguous_iterator<It> &&
-                std::is_same_v<
-                    std::remove_cv_t<typename std::iterator_traits<It>::value_type>,
-                    T
-                >;
-        if constexpr (canUseCopyAppend) {
-            this->copyAppend(std::to_address(b), std::to_address(e));
-        } else
-#endif
-        {
-            T *iter = this->end();
-            for (; b != e; ++iter, ++b) {
-                new (iter) T(*b);
-                ++this->size;
-            }
+        T *iter = this->end();
+        for (; b != e; ++iter, ++b) {
+            new (iter) T(*b);
+            ++this->size;
         }
     }
 

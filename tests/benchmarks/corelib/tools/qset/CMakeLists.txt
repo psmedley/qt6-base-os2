@@ -1,10 +1,12 @@
+# Generated from qset.pro.
+
 #####################################################################
-## tst_bench_qset Binary:
+## tst_qset Binary:
 #####################################################################
 
-qt_internal_add_benchmark(tst_bench_qset
+qt_internal_add_benchmark(tst_qset
     SOURCES
-        tst_bench_qset.cpp
+        main.cpp
     PUBLIC_LIBRARIES
         Qt::Test
 )

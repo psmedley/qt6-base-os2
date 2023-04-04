@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qcfsocketnotifier_p.h"
 #include <QtCore/qcoreapplication.h>
@@ -12,7 +48,7 @@ QT_BEGIN_NAMESPACE
     Socket Notifiers
  *************************************************************************/
 void qt_mac_socket_callback(CFSocketRef s, CFSocketCallBackType callbackType, CFDataRef,
-                            const void *data, void *info)
+                            const void *, void *info)
 {
 
     QCFSocketNotifier *cfSocketNotifier = static_cast<QCFSocketNotifier *>(info);
@@ -25,15 +61,7 @@ void qt_mac_socket_callback(CFSocketRef s, CFSocketCallBackType callbackType, CF
     // notification after we've successfully disabled the CFSocket, but our Qt
     // notifier is now gone. The upshot is we have to check the notifier
     // every time.
-    if (callbackType == kCFSocketConnectCallBack) {
-        // The data pointer will be non-null on connection error
-        if (data) {
-            if (socketInfo->readNotifier)
-                QCoreApplication::sendEvent(socketInfo->readNotifier, &notifierEvent);
-            if (socketInfo->writeNotifier)
-                QCoreApplication::sendEvent(socketInfo->writeNotifier, &notifierEvent);
-        }
-    } else if (callbackType == kCFSocketReadCallBack) {
+    if (callbackType == kCFSocketReadCallBack) {
         if (socketInfo->readNotifier && socketInfo->readEnabled) {
             socketInfo->readEnabled = false;
             QCoreApplication::sendEvent(socketInfo->readNotifier, &notifierEvent);
@@ -124,7 +152,7 @@ void QCFSocketNotifier::registerSocketNotifier(QSocketNotifier *notifier)
 
         // Create CFSocket, specify that we want both read and write callbacks (the callbacks
         // are enabled/disabled later on).
-        const int callbackTypes = kCFSocketConnectCallBack | kCFSocketReadCallBack | kCFSocketWriteCallBack;
+        const int callbackTypes = kCFSocketReadCallBack | kCFSocketWriteCallBack;
         CFSocketContext context = {0, this, 0, 0, 0};
         socketInfo->socket = CFSocketCreateWithNative(kCFAllocatorDefault, nativeSocket, callbackTypes, qt_mac_socket_callback, &context);
         if (CFSocketIsValid(socketInfo->socket) == false) {
@@ -213,7 +241,7 @@ void QCFSocketNotifier::unregisterSocketNotifier(QSocketNotifier *notifier)
 void QCFSocketNotifier::removeSocketNotifiers()
 {
     // Remove CFSockets from the runloop.
-    for (MacSocketInfo *socketInfo : std::as_const(macSockets)) {
+    for (MacSocketInfo *socketInfo : qAsConst(macSockets)) {
         unregisterSocketInfo(socketInfo);
         delete socketInfo;
     }

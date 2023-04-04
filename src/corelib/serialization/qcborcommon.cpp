@@ -1,6 +1,42 @@
-// Copyright (C) 2018 Intel Corporation.
-// Copyright (C) 2019 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2018 Intel Corporation.
+** Copyright (C) 2019 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #define CBOR_NO_ENCODER_API
 #define CBOR_NO_PARSER_API
@@ -10,14 +46,11 @@
 
 QT_BEGIN_NAMESPACE
 
-QT_IMPL_METATYPE_EXTERN(QCborTag)
-
 #include <cborerrorstrings.c>
 
 /*!
    \headerfile <QtCborCommon>
-   \inmodule QtCore
-   \ingroup qtserialization
+
    \brief The <QtCborCommon> header contains definitions common to both the
    streaming classes (QCborStreamReader and QCborStreamWriter) and to
    QCborValue.
@@ -180,7 +213,6 @@ QDataStream &operator>>(QDataStream &ds, QCborSimpleType &st)
    validating a CBOR stream.
 
    \sa QCborStreamReader, QCborValue, QCborParserError
-   \sa {Cbordump Example}, {Convert Example}, {JSON Save Game Example}
  */
 
 /*!
@@ -199,7 +231,7 @@ QDataStream &operator>>(QDataStream &ds, QCborSimpleType &st)
    \value UnexpectedBreak   The CBOR stream contains a Break where it is not allowed (data is
                             corrupt and the error is not recoverable).
    \value UnknownType       The CBOR stream contains an unknown/unparsable Type (data is corrupt
-                            and the error is not recoverable).
+                            and the and the error is not recoverable).
    \value IllegalType       The CBOR stream contains a known type in a position it is not allowed
                             to exist (data is corrupt and the error is not recoverable).
    \value IllegalNumber     The CBOR stream appears to be encoding a number larger than 64-bit

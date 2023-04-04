@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 
@@ -12,7 +37,6 @@ public slots:
     void initTestCase();
     void cleanupTestCase();
 private slots:
-    void empty();
     void maxCost();
     void setMaxCost();
     void totalCost();
@@ -50,21 +74,6 @@ void tst_QCache::cleanupTestCase()
 {
     // always check for memory leaks
     QCOMPARE(Foo::count, 0);
-}
-
-void tst_QCache::empty()
-{
-    QCache<int, int> cache;
-    QCOMPARE(cache.size(), 0);
-    QCOMPARE(cache.count(), 0);
-    QVERIFY(cache.isEmpty());
-    QVERIFY(!cache.contains(1));
-    QCOMPARE(cache.keys().size(), 0);
-    QCOMPARE(cache.take(1), nullptr);
-    QVERIFY(!cache.remove(1));
-    QCOMPARE(cache.object(1), nullptr);
-    QCOMPARE(cache[1], nullptr);
-    QCOMPARE(cache.totalCost(), 0);
 }
 
 void tst_QCache::maxCost()
@@ -465,7 +474,6 @@ struct TrivialHashType {
 };
 quint64 qHash(TrivialHashType t, size_t seed = 0)
 {
-    Q_UNUSED(seed);
     return t.hash;
 }
 

@@ -1,6 +1,31 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QSemaphore>
@@ -64,7 +89,6 @@ private slots:
     void releaseThread_data();
     void releaseThread();
     void reserveAndStart();
-    void reserveAndStart2();
     void releaseAndBlock();
     void start();
     void tryStart();
@@ -713,64 +737,12 @@ void tst_QThreadPool::reserveAndStart() // QTBUG-21051
     // start() will wake up the waiting thread.
     threadpool->start(&task);
     QTRY_COMPARE(threadpool->activeThreadCount(), 2);
-    QTRY_COMPARE(task.count.loadRelaxed(), 2);
-    WaitingTask task2;
-    // startOnReservedThread() will try to take the reserved task, but end up waiting instead
-    threadpool->startOnReservedThread(&task2);
-    QTRY_COMPARE(threadpool->activeThreadCount(), 1);
     task.waitForStarted.acquire();
     task.waitBeforeDone.release();
+    QTRY_COMPARE(task.count.loadRelaxed(), 2);
     QTRY_COMPARE(threadpool->activeThreadCount(), 1);
-    task2.waitForStarted.acquire();
-    task2.waitBeforeDone.release();
 
-    QTRY_COMPARE(threadpool->activeThreadCount(), 0);
-}
-
-void tst_QThreadPool::reserveAndStart2()
-{
-    class WaitingTask : public QRunnable
-    {
-    public:
-        QSemaphore waitBeforeDone;
-
-        WaitingTask() { setAutoDelete(false); }
-
-        void run() override
-        {
-            waitBeforeDone.acquire();
-        }
-    };
-
-    // Set up
-    QThreadPool *threadpool = QThreadPool::globalInstance();
-    int savedLimit = threadpool->maxThreadCount();
-    auto restoreThreadCount = qScopeGuard([=]{
-        threadpool->setMaxThreadCount(savedLimit);
-    });
-    threadpool->setMaxThreadCount(2);
-
-    // reserve
-    threadpool->reserveThread();
-
-    // start two task, to get a running thread and one queued
-    WaitingTask task1, task2, task3;
-    threadpool->start(&task1);
-    // one running thread, one reserved:
-    QCOMPARE(threadpool->activeThreadCount(), 2);
-    // task2 starts queued
-    threadpool->start(&task2);
-    QCOMPARE(threadpool->activeThreadCount(), 2);
-    // startOnReservedThread() will take the reserved thread however, bypassing the queue
-    threadpool->startOnReservedThread(&task3);
-    // two running threads, none reserved:
-    QCOMPARE(threadpool->activeThreadCount(), 2);
-    task3.waitBeforeDone.release();
-    // task3 can finish even if all other tasks are blocking
-    // then task2 will use the previously reserved thread
-    task2.waitBeforeDone.release();
-    QTRY_COMPARE(threadpool->activeThreadCount(), 1);
-    task1.waitBeforeDone.release();
+    threadpool->releaseThread();
     QTRY_COMPARE(threadpool->activeThreadCount(), 0);
 }
 

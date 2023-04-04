@@ -1,5 +1,41 @@
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QDEADLINETIMER_H
 #define QDEADLINETIMER_H
@@ -16,7 +52,9 @@
 
 #include <limits>
 
-#include <chrono>
+#if __has_include(<chrono>)
+#  include <chrono>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -28,7 +66,7 @@ public:
     constexpr QDeadlineTimer(Qt::TimerType type_ = Qt::CoarseTimer) noexcept
         : t1(0), t2(0), type(type_) {}
     constexpr QDeadlineTimer(ForeverConstant, Qt::TimerType type_ = Qt::CoarseTimer) noexcept
-        : t1((std::numeric_limits<qint64>::max)()), t2(0), type(type_) {}
+        : t1(std::numeric_limits<qint64>::max()), t2(0), type(type_) {}
     explicit QDeadlineTimer(qint64 msecs, Qt::TimerType type = Qt::CoarseTimer) noexcept;
 
     void swap(QDeadlineTimer &other) noexcept
@@ -82,6 +120,7 @@ public:
     QDeadlineTimer &operator-=(qint64 msecs)
     { *this = *this + (-msecs); return *this; }
 
+#if __has_include(<chrono>) || defined(Q_CLANG_QDOC)
     template <class Clock, class Duration>
     QDeadlineTimer(std::chrono::time_point<Clock, Duration> deadline_,
                    Qt::TimerType type_ = Qt::CoarseTimer) : t2(0)
@@ -139,6 +178,7 @@ public:
     template <class Rep, class Period>
     friend QDeadlineTimer operator+=(QDeadlineTimer &dt, std::chrono::duration<Rep, Period> value)
     { return dt = dt + value; }
+#endif
 
 private:
     qint64 t1;
@@ -152,7 +192,7 @@ public:
     QPair<qint64, unsigned> _q_data() const { return qMakePair(t1, t2); }
 };
 
-#if defined(Q_OS_DARWIN) || defined(Q_OS_LINUX) || (defined(Q_CC_MSVC) && Q_CC_MSVC >= 1900)
+#if __has_include(<chrono>) && (defined(Q_OS_DARWIN) || defined(Q_OS_LINUX) || (defined(Q_CC_MSVC) && Q_CC_MSVC >= 1900))
 // We know for these OS/compilers that the std::chrono::steady_clock uses the same
 // reference time as QDeadlineTimer
 
@@ -184,6 +224,6 @@ Q_DECLARE_SHARED(QDeadlineTimer)
 
 QT_END_NAMESPACE
 
-QT_DECL_METATYPE_EXTERN(QDeadlineTimer, Q_CORE_EXPORT)
+Q_DECLARE_METATYPE(QDeadlineTimer)
 
 #endif // QDEADLINETIMER_H

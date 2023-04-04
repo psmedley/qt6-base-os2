@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -12,6 +37,7 @@
 #include <QtNetwork/QNetworkRequest>
 #if QT_CONFIG(topleveldomain)
 #include "private/qtldurl_p.h"
+#include "private/qurltlds_p.h"
 #endif
 
 class tst_QNetworkCookieJar: public QObject
@@ -19,8 +45,6 @@ class tst_QNetworkCookieJar: public QObject
     Q_OBJECT
 
 private slots:
-    void initTestCase();
-
     void getterSetter();
     void setCookiesFromUrl_data();
     void setCookiesFromUrl();
@@ -32,8 +56,6 @@ private slots:
 #endif
     void rfc6265_data();
     void rfc6265();
-private:
-    QSharedPointer<QTemporaryDir> m_dataDir;
 };
 
 class MyCookieJar: public QNetworkCookieJar
@@ -59,22 +81,6 @@ void tst_QNetworkCookieJar::getterSetter()
 
     jar.setAllCookies(list);
     QCOMPARE(jar.allCookies(), list);
-}
-
-void tst_QNetworkCookieJar::initTestCase()
-{
-#if QT_CONFIG(topleveldomain) && QT_CONFIG(publicsuffix_system)
-    QString testDataDir;
-#ifdef BUILTIN_TESTDATA
-    m_dataDir = QEXTRACTTESTDATA("/testdata");
-    QVERIFY(m_dataDir);
-    testDataDir = m_dataDir->path() + "/testdata";
-#else
-    testDataDir = QFINDTESTDATA("testdata");
-#endif
-    qDebug() << "Test data dir:" << testDataDir;
-    qputenv("XDG_DATA_DIRS", QFile::encodeName(testDataDir));
-#endif
 }
 
 void tst_QNetworkCookieJar::setCookiesFromUrl_data()
@@ -473,6 +479,28 @@ void tst_QNetworkCookieJar::effectiveTLDs_data()
     QTest::newRow("yes-wildcard5") << "foo.sch.uk" << true;
     QTest::newRow("yes-platform.sh") << "eu.platform.sh" << true;
     QTest::newRow("no-platform.sh") << "something.platform.sh" << false;
+
+    int inFirst = 0; // First group is guaranteed to be in first chunk.
+    while (tldIndices[inFirst] < tldChunks[0])
+        ++inFirst;
+    Q_ASSERT(inFirst < tldCount);
+    const char *lastGroupFromFirstChunk = &tldData[0][tldIndices[inFirst - 1]];
+    const char *cut = &tldData[0][tldChunks[0]];
+    for (const char *entry = lastGroupFromFirstChunk; entry < cut; entry += strlen(entry) + 1)
+        QTest::addRow("lastGroupFromFirstChunk: %s", entry) << entry << true;
+
+    Q_ASSERT(tldChunkCount > 1);    // There are enough TLDs to fill 64K bytes
+    // The tldCount + 1 entries in tldIndices are indexed by hash value and some
+    // hash cells may be empty: we need to find the last non-empty hash cell.
+    int tail = tldCount;
+    while (tldIndices[tail - 1] == tldIndices[tail])
+        --tail;
+    Q_ASSERT(tldIndices[tail] == tldChunks[tldChunkCount - 1]);
+    const char *lastGroupFromLastChunk =
+        &tldData[tldChunkCount-1][tldIndices[tail - 1] - tldChunks[tldChunkCount - 2]];
+    const char *end = &tldData[tldChunkCount-1][tldIndices[tail] - tldChunks[tldChunkCount - 2]];
+    for (const char *entry = lastGroupFromLastChunk; entry < end; entry += strlen(entry) + 1)
+        QTest::addRow("lastGroupFromLastChunk: %s", entry) << entry << true;
 }
 
 void tst_QNetworkCookieJar::effectiveTLDs()
@@ -546,9 +574,9 @@ void tst_QNetworkCookieJar::rfc6265()
     QList<QNetworkCookie> cookiesToSend = jar.cookiesForUrl(sentUrl);
 
     //compare cookies only using name/value, as the metadata isn't sent over the network
-    QCOMPARE(cookiesToSend.size(), sent.size());
+    QCOMPARE(cookiesToSend.count(), sent.count());
     bool ok = true;
-    for (int i = 0; i < cookiesToSend.size(); i++) {
+    for (int i = 0; i < cookiesToSend.count(); i++) {
         if (cookiesToSend.at(i).name() != sent.at(i).name()) {
             ok = false;
             break;

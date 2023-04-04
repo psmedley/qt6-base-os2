@@ -6,13 +6,13 @@
 
 qt_internal_add_manual_test(lance
     SOURCES
-        ../../baseline/shared/paintcommands.cpp ../../baseline/shared/paintcommands.h
+        ../../baseline/painting/paintcommands.cpp ../../baseline/painting/paintcommands.h
         interactivewidget.cpp interactivewidget.h
         main.cpp
         widgets.h
     INCLUDE_DIRECTORIES
         .
-        ../../baseline/shared
+        ../../baseline/painting
     PUBLIC_LIBRARIES
         Qt::CorePrivate
         Qt::Gui

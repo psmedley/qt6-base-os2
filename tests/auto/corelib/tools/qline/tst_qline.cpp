@@ -1,11 +1,34 @@
-// Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <qline.h>
 #include <qmath.h>
-
-#include <array>
 
 class tst_QLine : public QObject
 {
@@ -35,9 +58,6 @@ private slots:
     void testAngleTo_data();
 
     void testSet();
-
-    void toLineF_data();
-    void toLineF();
 };
 
 const qreal epsilon = sizeof(qreal) == sizeof(double) ? 1e-8 : 1e-4;
@@ -249,13 +269,6 @@ void tst_QLine::testLength()
     QCOMPARE(l.length(), qreal(length));
 
     l.setLength(lengthToSet);
-
-    if constexpr (std::numeric_limits<double>::has_denorm != std::denorm_present) {
-        if (qstrcmp(QTest::currentDataTag(), "[tiny,tiny]->|2| (-tiny/2,-tiny/2)") == 0
-            || qstrcmp(QTest::currentDataTag(), "[4e-323,5e-324]|1892|") == 0) {
-            QSKIP("Skipping 'denorm' as this type lacks denormals on this system");
-        }
-    }
     // Scaling tiny values up to big can be imprecise: don't try to test vx, vy
     if (length > 0 && qFuzzyIsNull(length)) {
         QVERIFY(l.length() > lengthToSet / 2 && l.length() < lengthToSet * 2);
@@ -481,36 +494,6 @@ void tst_QLine::testAngleTo_data()
             << qreal(i);
     }
 }
-
-void tst_QLine::toLineF_data()
-{
-    QTest::addColumn<QLine>("input");
-    QTest::addColumn<QLineF>("result");
-
-    auto row = [](int x1, int y1, int x2, int y2) {
-        QTest::addRow("((%d, %d)->(%d, %d))", x1, y1, x2, y2)
-                << QLine(x1, y1, x2, y2) << QLineF(x1, y1, x2, y2);
-    };
-    constexpr std::array samples = {-1, 0, 1};
-    for (int x1 : samples) {
-        for (int y1 : samples) {
-            for (int x2 : samples) {
-                for (int y2 : samples) {
-                    row(x1, y1, x2, y2);
-                }
-            }
-        }
-    }
-}
-
-void tst_QLine::toLineF()
-{
-    QFETCH(const QLine, input);
-    QFETCH(const QLineF, result);
-
-    QCOMPARE(input.toLineF(), result);
-}
-
 
 QTEST_MAIN(tst_QLine)
 #include "tst_qline.moc"

@@ -1,16 +1,48 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// Copyright (C) 2016 by Southwest Research Institute (R)
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2016 by Southwest Research Institute (R)
+** Contact: http://www.qt-project.org/legal
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qfloat16.h"
 #include "private/qsimd_p.h"
 #include <cmath> // for fpclassify()'s return values
 
-#include <QtCore/qdatastream.h>
-
 QT_BEGIN_NAMESPACE
-
-QT_IMPL_METATYPE_EXTERN(qfloat16)
 
 /*!
     \class qfloat16
@@ -157,128 +189,25 @@ int qfloat16::fpClassify() const noexcept
     exactness is stronger the smaller the numbers are.
  */
 
-#if QT_COMPILER_SUPPORTS_HERE(F16C)
+#if QT_COMPILER_SUPPORTS(F16C)
 static inline bool hasFastF16()
 {
-    // qsimd.cpp:detectProcessorFeatures() turns off this feature if AVX
-    // state-saving is not enabled by the OS
-    return qCpuHasFeature(F16C);
+    // All processors with F16C also support AVX, but YMM registers
+    // might not be supported by the OS, or they might be disabled.
+    return qCpuHasFeature(F16C) && qCpuHasFeature(AVX);
 }
 
-#if QT_COMPILER_SUPPORTS_HERE(AVX512VL) && QT_COMPILER_SUPPORTS_HERE(AVX512BW)
-static bool hasFastF16Avx256()
-{
-    // 256-bit AVX512 don't have a performance penalty (see qstring.cpp for more info)
-    return qCpuHasFeature(ArchSkylakeAvx512);
-}
-
-static QT_FUNCTION_TARGET(ARCH_SKYLAKE_AVX512)
-void qFloatToFloat16_tail_avx256(quint16 *out, const float *in, qsizetype len) noexcept
-{
-    __mmask16 mask = _bzhi_u32(-1, len);
-    __m256 f32 = _mm256_maskz_loadu_ps(mask, in );
-    __m128i f16 = _mm256_maskz_cvtps_ph(mask, f32, _MM_FROUND_TO_NEAREST_INT);
-    _mm_mask_storeu_epi16(out, mask, f16);
-};
-
-static QT_FUNCTION_TARGET(ARCH_SKYLAKE_AVX512)
-void qFloatFromFloat16_tail_avx256(float *out, const quint16 *in, qsizetype len) noexcept
-{
-    __mmask16 mask = _bzhi_u32(-1, len);
-    __m128i f16 = _mm_maskz_loadu_epi16(mask, in);
-    __m256 f32 = _mm256_cvtph_ps(f16);
-    _mm256_mask_storeu_ps(out, mask, f32);
-};
+extern "C" {
+#ifdef QFLOAT16_INCLUDE_FAST
+#  define f16cextern    static
+#else
+#  define f16cextern    extern
 #endif
 
-QT_FUNCTION_TARGET(F16C)
-static void qFloatToFloat16_fast(quint16 *out, const float *in, qsizetype len) noexcept
-{
-    constexpr qsizetype Step = sizeof(__m256i) / sizeof(float);
-    constexpr qsizetype HalfStep = sizeof(__m128i) / sizeof(float);
-    qsizetype i = 0;
+f16cextern void qFloatToFloat16_fast(quint16 *out, const float *in, qsizetype len) noexcept;
+f16cextern void qFloatFromFloat16_fast(float *out, const quint16 *in, qsizetype len) noexcept;
 
-    if (len >= Step) {
-        auto convertOneChunk = [=](qsizetype offset) QT_FUNCTION_TARGET(F16C) {
-            __m256 f32 = _mm256_loadu_ps(in + offset);
-            __m128i f16 = _mm256_cvtps_ph(f32, _MM_FROUND_TO_NEAREST_INT);
-            _mm_storeu_si128(reinterpret_cast<__m128i *>(out + offset), f16);
-        };
-
-        // main loop: convert Step (8) floats per iteration
-        for ( ; i + Step < len; i += Step)
-            convertOneChunk(i);
-
-        // epilogue: convert the last chunk, possibly overlapping with the last
-        // iteration of the loop
-        return convertOneChunk(len - Step);
-    }
-
-#if QT_COMPILER_SUPPORTS_HERE(AVX512VL) && QT_COMPILER_SUPPORTS_HERE(AVX512BW)
-    if (hasFastF16Avx256())
-        return qFloatToFloat16_tail_avx256(out, in, len);
-#endif
-
-    if (len >= HalfStep) {
-        auto convertOneChunk = [=](qsizetype offset) QT_FUNCTION_TARGET(F16C) {
-            __m128 f32 = _mm_loadu_ps(in + offset);
-            __m128i f16 = _mm_cvtps_ph(f32, _MM_FROUND_TO_NEAREST_INT);
-            _mm_storel_epi64(reinterpret_cast<__m128i *>(out + offset), f16);
-        };
-
-        // two conversions, possibly overlapping
-        convertOneChunk(0);
-        return convertOneChunk(len - HalfStep);
-    }
-
-    // Inlining "qfloat16::qfloat16(float f)":
-    for ( ; i < len; ++i)
-        out[i] = _mm_extract_epi16(_mm_cvtps_ph(_mm_set_ss(in[i]), 0), 0);
-}
-
-QT_FUNCTION_TARGET(F16C)
-static void qFloatFromFloat16_fast(float *out, const quint16 *in, qsizetype len) noexcept
-{
-    constexpr qsizetype Step = sizeof(__m256i) / sizeof(float);
-    constexpr qsizetype HalfStep = sizeof(__m128i) / sizeof(float);
-    qsizetype i = 0;
-
-    if (len >= Step) {
-        auto convertOneChunk = [=](qsizetype offset) QT_FUNCTION_TARGET(F16C) {
-            __m128i f16 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(in + offset));
-            __m256 f32 = _mm256_cvtph_ps(f16);
-            _mm256_storeu_ps(out + offset, f32);
-        };
-
-        // main loop: convert Step (8) floats per iteration
-        for ( ; i + Step < len; i += Step)
-            convertOneChunk(i);
-
-        // epilogue: convert the last chunk, possibly overlapping with the last
-        // iteration of the loop
-        return convertOneChunk(len - Step);
-    }
-
-#if QT_COMPILER_SUPPORTS_HERE(AVX512VL) && QT_COMPILER_SUPPORTS_HERE(AVX512BW)
-    if (hasFastF16Avx256())
-        return qFloatFromFloat16_tail_avx256(out, in, len);
-#endif
-
-    if (len >= HalfStep) {
-        auto convertOneChunk = [=](qsizetype offset) QT_FUNCTION_TARGET(F16C) {
-            __m128i f16 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(in + offset));
-            __m128 f32 = _mm_cvtph_ps(f16);
-            _mm_storeu_ps(out + offset, f32);
-        };
-
-        // two conversions, possibly overlapping
-        convertOneChunk(0);
-        return convertOneChunk(len - HalfStep);
-    }
-
-    // Inlining "qfloat16::operator float()":
-    for ( ; i < len; ++i)
-        out[i] = _mm_cvtss_f32(_mm_cvtph_ps(_mm_cvtsi32_si128(in[i])));
+#undef f16cextern
 }
 
 #elif defined(__ARM_FP16_FORMAT_IEEE) && defined(__ARM_NEON__) && (__ARM_FP & 2)
@@ -360,41 +289,9 @@ Q_CORE_EXPORT void qFloatFromFloat16(float *out, const qfloat16 *in, qsizetype l
         out[i] = float(in[i]);
 }
 
-#ifndef QT_NO_DATASTREAM
-/*!
-    \fn qfloat16::operator<<(QDataStream &ds, qfloat16 f)
-    \relates QDataStream
-    \since 5.9
-
-    Writes a floating point number, \a f, to the stream \a ds using
-    the standard IEEE 754 format. Returns a reference to the stream.
-
-    \note In Qt versions prior to 6.3, this was a member function on
-    QDataStream.
-*/
-QDataStream &operator<<(QDataStream &ds, qfloat16 f)
-{
-    return ds << f.b16;
-}
-
-/*!
-    \fn qfloat16::operator>>(QDataStream &ds, qfloat16 &f)
-    \relates QDataStream
-    \since 5.9
-
-    Reads a floating point number from the stream \a ds into \a f,
-    using the standard IEEE 754 format. Returns a reference to the
-    stream.
-
-    \note In Qt versions prior to 6.3, this was a member function on
-    QDataStream.
-*/
-QDataStream &operator>>(QDataStream &ds, qfloat16 &f)
-{
-    return ds >> f.b16;
-}
-#endif
-
 QT_END_NAMESPACE
 
 #include "qfloat16tables.cpp"
+#ifdef QFLOAT16_INCLUDE_FAST
+#  include "qfloat16_f16c.c"
+#endif

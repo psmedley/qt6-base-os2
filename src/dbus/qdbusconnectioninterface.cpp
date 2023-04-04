@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtDBus module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qdbusconnectioninterface.h"
 
@@ -17,8 +53,6 @@
 #ifndef QT_NO_DBUS
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 /*
  * Implementation of interface class QDBusConnectionInterface
@@ -150,7 +184,7 @@ QDBusConnectionInterface::~QDBusConnectionInterface()
 */
 QDBusReply<QString> QDBusConnectionInterface::serviceOwner(const QString &name) const
 {
-    return internalConstCall(QDBus::AutoDetect, "GetNameOwner"_L1, QList<QVariant>() << name);
+    return internalConstCall(QDBus::AutoDetect, QLatin1String("GetNameOwner"), QList<QVariant>() << name);
 }
 
 /*!
@@ -161,7 +195,7 @@ QDBusReply<QString> QDBusConnectionInterface::serviceOwner(const QString &name) 
 */
 QDBusReply<QStringList> QDBusConnectionInterface::registeredServiceNames() const
 {
-    return internalConstCall(QDBus::AutoDetect, "ListNames"_L1);
+    return internalConstCall(QDBus::AutoDetect, QLatin1String("ListNames"));
 }
 
 /*!
@@ -173,7 +207,7 @@ QDBusReply<QStringList> QDBusConnectionInterface::registeredServiceNames() const
 */
 QDBusReply<QStringList> QDBusConnectionInterface::activatableServiceNames() const
 {
-    return internalConstCall(QDBus::AutoDetect, "ListActivatableNames"_L1);
+    return internalConstCall(QDBus::AutoDetect, QLatin1String("ListActivatableNames"));
 }
 
 /*!
@@ -182,7 +216,7 @@ QDBusReply<QStringList> QDBusConnectionInterface::activatableServiceNames() cons
 */
 QDBusReply<bool> QDBusConnectionInterface::isServiceRegistered(const QString &serviceName) const
 {
-    return internalConstCall(QDBus::AutoDetect, "NameHasOwner"_L1,
+    return internalConstCall(QDBus::AutoDetect, QLatin1String("NameHasOwner"),
                              QList<QVariant>() << serviceName);
 }
 
@@ -192,7 +226,7 @@ QDBusReply<bool> QDBusConnectionInterface::isServiceRegistered(const QString &se
 */
 QDBusReply<uint> QDBusConnectionInterface::servicePid(const QString &serviceName) const
 {
-    return internalConstCall(QDBus::AutoDetect, "GetConnectionUnixProcessID"_L1,
+    return internalConstCall(QDBus::AutoDetect, QLatin1String("GetConnectionUnixProcessID"),
                              QList<QVariant>() << serviceName);
 }
 
@@ -202,7 +236,7 @@ QDBusReply<uint> QDBusConnectionInterface::servicePid(const QString &serviceName
 */
 QDBusReply<uint> QDBusConnectionInterface::serviceUid(const QString &serviceName) const
 {
-    return internalConstCall(QDBus::AutoDetect, "GetConnectionUnixUser"_L1,
+    return internalConstCall(QDBus::AutoDetect, QLatin1String("GetConnectionUnixUser"),
                              QList<QVariant>() << serviceName);
 }
 
@@ -211,7 +245,7 @@ QDBusReply<uint> QDBusConnectionInterface::serviceUid(const QString &serviceName
 */
 QDBusReply<void> QDBusConnectionInterface::startService(const QString &name)
 {
-    return call("StartServiceByName"_L1, name, uint(0));
+    return call(QLatin1String("StartServiceByName"), name, uint(0));
 }
 
 /*!
@@ -256,7 +290,7 @@ QDBusConnectionInterface::registerService(const QString &serviceName,
         break;
     }
 
-    QDBusMessage reply = call("RequestName"_L1, serviceName, flags);
+    QDBusMessage reply = call(QLatin1String("RequestName"), serviceName, flags);
 //    qDebug() << "QDBusConnectionInterface::registerService" << serviceName << "Reply:" << reply;
 
     // convert the low-level flags to something that we can use
@@ -294,7 +328,7 @@ QDBusConnectionInterface::registerService(const QString &serviceName,
 QDBusReply<bool>
 QDBusConnectionInterface::unregisterService(const QString &serviceName)
 {
-    QDBusMessage reply = call("ReleaseName"_L1, serviceName);
+    QDBusMessage reply = call(QLatin1String("ReleaseName"), serviceName);
     if (reply.type() == QDBusMessage::ReplyMessage) {
         bool success = reply.arguments().at(0).toUInt() == DBUS_RELEASE_NAME_REPLY_RELEASED;
         reply.setArguments(QVariantList() << success);
@@ -407,7 +441,5 @@ void QDBusConnectionInterface::disconnectNotify(const QMetaMethod &signal)
  */
 
 QT_END_NAMESPACE
-
-#include "moc_qdbusconnectioninterface.cpp"
 
 #endif // QT_NO_DBUS

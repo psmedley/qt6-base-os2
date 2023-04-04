@@ -4,7 +4,7 @@
 ## instancing Binary:
 #####################################################################
 
-qt_internal_add_manual_test(tst_manual_instancing
+qt_internal_add_manual_test(instancing
     GUI
     SOURCES
         instancing.cpp
@@ -19,7 +19,7 @@ set(instancing_resource_files
     "inst.vert.qsb"
 )
 
-qt_internal_add_resource(tst_manual_instancing "instancing"
+qt_internal_add_resource(instancing "instancing"
     PREFIX
         "/"
     FILES

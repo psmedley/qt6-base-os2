@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 
 #include <QTest>
@@ -23,7 +48,6 @@ private slots:
     void tempMessage();
     void insertWidget();
     void insertPermanentWidget();
-    void removeWidget();
     void setSizeGripEnabled();
     void task194017_hiddenWidget();
     void QTBUG4334_hiddenOnMaximizedWindow();
@@ -103,49 +127,6 @@ void tst_QStatusBar::insertPermanentWidget()
     QCOMPARE(sb.insertWidget(1, new QLabel("foo")), 1);
     QTest::ignoreMessage(QtWarningMsg, "QStatusBar::insertPermanentWidget: Index out of range (1), appending widget");
     QCOMPARE(sb.insertPermanentWidget(1, new QLabel("foo")), 6);
-}
-
-void tst_QStatusBar::removeWidget()
-{
-    QStatusBar sb;
-    std::vector<std::unique_ptr<QLabel>> widgets;
-    std::vector<bool> states;
-    for (int i = 0; i < 10; ++i) {
-        const QString text = i > 5 ? QString("p_%1").arg(i) : QString::number(i);
-        widgets.push_back(std::make_unique<QLabel>(text));
-        states.push_back(true);
-    }
-
-    for (auto &&widget : widgets) {
-        if (widget->text().startsWith("p_"))
-            sb.addPermanentWidget(widget.get());
-        else
-            sb.addWidget(widget.get());
-    }
-    sb.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&sb));
-
-    auto checkStates = [&]{
-        for (size_t index = 0; index < std::size(widgets); ++index) {
-            if (widgets.at(index)->isVisible() != states.at(index)) {
-                qCritical("Mismatch for widget at index %zu\n"
-                          "\tActual  : %s\n"
-                          "\tExpected: %s",
-                          index, widgets.at(index)->isVisible() ? "true" : "false",
-                          states.at(index) ? "true" : "false");
-                return false;
-            }
-        }
-        return true;
-    };
-
-    QVERIFY(checkStates());
-    // remove every widget except the first to trigger unstable reference
-    for (size_t i = 2; i < std::size(widgets); ++i) {
-        sb.removeWidget(widgets[i].get());
-        states[i] = false;
-        QVERIFY2(checkStates(), qPrintable(QString("Failure at index %1").arg(i)));
-    }
 }
 
 void tst_QStatusBar::setSizeGripEnabled()
@@ -316,18 +297,18 @@ void tst_QStatusBar::messageChangedSignal()
     testWidget->showMessage("Ready", 0);
     QCOMPARE(testWidget->currentMessage(), QString("Ready"));
     QCOMPARE(testWidget->currentMessage(), currentMessage);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.takeFirst().at(0).toString(), currentMessage);
     testWidget->clearMessage();
     QCOMPARE(testWidget->currentMessage(), QString());
     QCOMPARE(testWidget->currentMessage(), currentMessage);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.takeFirst().at(0).toString(), currentMessage);
     testWidget->showMessage("Ready", 0);
     testWidget->showMessage("Ready", 0);
     QCOMPARE(testWidget->currentMessage(), QString("Ready"));
     QCOMPARE(testWidget->currentMessage(), currentMessage);
-    QCOMPARE(spy.size(), 1);
+    QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.takeFirst().at(0).toString(), currentMessage);
 }
 

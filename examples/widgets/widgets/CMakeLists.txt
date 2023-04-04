@@ -1,3 +1,5 @@
+# Generated from widgets.pro.
+
 qt_internal_add_example(analogclock)
 qt_internal_add_example(calculator)
 qt_internal_add_example(calendarwidget)
@@ -9,9 +11,7 @@ qt_internal_add_example(groupbox)
 qt_internal_add_example(icons)
 qt_internal_add_example(imageviewer)
 qt_internal_add_example(lineedits)
-if(QT_FEATURE_movie)
-    qt_internal_add_example(movie)
-endif()
+qt_internal_add_example(movie)
 qt_internal_add_example(mousebuttons)
 qt_internal_add_example(scribble)
 qt_internal_add_example(shapedclock)

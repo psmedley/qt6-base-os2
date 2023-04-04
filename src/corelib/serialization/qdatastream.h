@@ -1,5 +1,41 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QDATASTREAM_H
 #define QDATASTREAM_H
@@ -15,9 +51,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#if QT_CORE_REMOVED_SINCE(6, 3)
 class qfloat16;
-#endif
 class QByteArray;
 class QIODevice;
 
@@ -65,10 +99,8 @@ public:
         Qt_6_0 = 20,
         Qt_6_1 = Qt_6_0,
         Qt_6_2 = Qt_6_0,
-        Qt_6_3 = Qt_6_0,
-        Qt_6_4 = Qt_6_0,
-        Qt_DefaultCompiledVersion = Qt_6_4
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+        Qt_DefaultCompiledVersion = Qt_6_2
+#if QT_VERSION >= 0x060300
 #error Add the datastream version for this Qt version and update Qt_DefaultCompiledVersion
 #endif
     };
@@ -126,9 +158,7 @@ public:
     QDataStream &operator>>(std::nullptr_t &ptr) { ptr = nullptr; return *this; }
 
     QDataStream &operator>>(bool &i);
-#if QT_CORE_REMOVED_SINCE(6, 3)
     QDataStream &operator>>(qfloat16 &f);
-#endif
     QDataStream &operator>>(float &f);
     QDataStream &operator>>(double &f);
     QDataStream &operator>>(char *&str);
@@ -146,9 +176,7 @@ public:
     QDataStream &operator<<(quint64 i);
     QDataStream &operator<<(std::nullptr_t) { return *this; }
     QDataStream &operator<<(bool i);
-#if QT_CORE_REMOVED_SINCE(6, 3)
     QDataStream &operator<<(qfloat16 f);
-#endif
     QDataStream &operator<<(float f);
     QDataStream &operator<<(double f);
     QDataStream &operator<<(const char *str);
@@ -478,6 +506,7 @@ inline QDataStreamIfHasOStreamOperatorsContainer<QMultiMap<Key, T>, Key, T> oper
     return QtPrivate::writeAssociativeMultiContainer(s, map);
 }
 
+#ifndef QT_NO_DATASTREAM
 template <class T1, class T2>
 inline QDataStreamIfHasIStreamOperators<T1, T2> operator>>(QDataStream& s, std::pair<T1, T2> &p)
 {
@@ -491,6 +520,7 @@ inline QDataStreamIfHasOStreamOperators<T1, T2> operator<<(QDataStream& s, const
     s << p.first << p.second;
     return s;
 }
+#endif
 
 #else
 

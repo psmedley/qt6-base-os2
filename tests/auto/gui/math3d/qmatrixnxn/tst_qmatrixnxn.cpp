@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <QTest>
 #include <QtCore/qmath.h>
@@ -2846,6 +2871,24 @@ void tst_QMatrixNxN::convertGeneric()
     QVERIFY(isSame(m10, conv4x4));
 }
 
+// Copy of "flagBits" in qmatrix4x4.h.
+enum {
+    Identity        = 0x0000, // Identity matrix
+    Translation     = 0x0001, // Contains a translation
+    Scale           = 0x0002, // Contains a scale
+    Rotation2D      = 0x0004, // Contains a rotation about the Z axis
+    Rotation        = 0x0008, // Contains an arbitrary rotation
+    Perspective     = 0x0010, // Last row is different from (0, 0, 0, 1)
+    General         = 0x001f  // General matrix, unknown contents
+};
+
+// Structure that allows direct access to "flagBits" for testing.
+struct Matrix4x4
+{
+    float m[4][4];
+    int flagBits;
+};
+
 // Test the inferring of special matrix types.
 void tst_QMatrixNxN::optimize_data()
 {
@@ -2853,11 +2896,11 @@ void tst_QMatrixNxN::optimize_data()
     QTest::addColumn<int>("flagBits");
 
     QTest::newRow("null")
-        << (void *)nullValues4 << int{QMatrix4x4::General};
+        << (void *)nullValues4 << (int)General;
     QTest::newRow("identity")
-        << (void *)identityValues4 << int{QMatrix4x4::Identity};
+        << (void *)identityValues4 << (int)Identity;
     QTest::newRow("unique")
-        << (void *)uniqueValues4 << int{QMatrix4x4::General};
+        << (void *)uniqueValues4 << (int)General;
 
     static float scaleValues[16] = {
         2.0f, 0.0f, 0.0f, 0.0f,
@@ -2866,7 +2909,7 @@ void tst_QMatrixNxN::optimize_data()
         0.0f, 0.0f, 0.0f, 1.0f
     };
     QTest::newRow("scale")
-        << (void *)scaleValues << int{QMatrix4x4::Scale};
+        << (void *)scaleValues << (int)Scale;
 
     static float translateValues[16] = {
         1.0f, 0.0f, 0.0f, 2.0f,
@@ -2875,7 +2918,7 @@ void tst_QMatrixNxN::optimize_data()
         0.0f, 0.0f, 0.0f, 1.0f
     };
     QTest::newRow("translate")
-        << (void *)translateValues << int{QMatrix4x4::Translation};
+        << (void *)translateValues << (int)Translation;
 
     static float scaleTranslateValues[16] = {
         1.0f, 0.0f, 0.0f, 2.0f,
@@ -2884,7 +2927,7 @@ void tst_QMatrixNxN::optimize_data()
         0.0f, 0.0f, 0.0f, 1.0f
     };
     QTest::newRow("scaleTranslate")
-        << (void *)scaleTranslateValues << int{QMatrix4x4::Scale | QMatrix4x4::Translation};
+        << (void *)scaleTranslateValues << (int)(Scale | Translation);
 
     static float rotateValues[16] = {
         0.0f, 1.0f, 0.0f, 0.0f,
@@ -2893,7 +2936,7 @@ void tst_QMatrixNxN::optimize_data()
         0.0f, 0.0f, 0.0f, 1.0f
     };
     QTest::newRow("rotate")
-        << (void *)rotateValues << int{QMatrix4x4::Rotation2D};
+        << (void *)rotateValues << (int)Rotation2D;
 
     // Left-handed system, not a simple rotation.
     static float scaleRotateValues[16] = {
@@ -2903,7 +2946,7 @@ void tst_QMatrixNxN::optimize_data()
         0.0f, 0.0f, 0.0f, 1.0f
     };
     QTest::newRow("scaleRotate")
-        << (void *)scaleRotateValues << int{QMatrix4x4::Scale | QMatrix4x4::Rotation2D};
+        << (void *)scaleRotateValues << (int)(Scale | Rotation2D);
 
     static float matrix2x2Values[16] = {
         1.0f, 2.0f, 0.0f, 0.0f,
@@ -2912,7 +2955,7 @@ void tst_QMatrixNxN::optimize_data()
         0.0f, 0.0f, 0.0f, 1.0f
     };
     QTest::newRow("matrix2x2")
-        << (void *)matrix2x2Values << int{QMatrix4x4::Scale | QMatrix4x4::Rotation2D};
+        << (void *)matrix2x2Values << (int)(Scale | Rotation2D);
 
     static float matrix3x3Values[16] = {
         1.0f, 2.0f, 4.0f, 0.0f,
@@ -2921,7 +2964,7 @@ void tst_QMatrixNxN::optimize_data()
         0.0f, 0.0f, 0.0f, 1.0f
     };
     QTest::newRow("matrix3x3")
-        << (void *)matrix3x3Values << int{QMatrix4x4::Scale | QMatrix4x4::Rotation2D | QMatrix4x4::Rotation};
+        << (void *)matrix3x3Values << (int)(Scale | Rotation2D | Rotation);
 
     static float rotateTranslateValues[16] = {
         0.0f, 1.0f, 0.0f, 1.0f,
@@ -2930,7 +2973,7 @@ void tst_QMatrixNxN::optimize_data()
         0.0f, 0.0f, 0.0f, 1.0f
     };
     QTest::newRow("rotateTranslate")
-        << (void *)rotateTranslateValues << int{QMatrix4x4::Translation | QMatrix4x4::Rotation2D};
+        << (void *)rotateTranslateValues << (int)(Translation | Rotation2D);
 
     // Left-handed system, not a simple rotation.
     static float scaleRotateTranslateValues[16] = {
@@ -2940,7 +2983,7 @@ void tst_QMatrixNxN::optimize_data()
         0.0f, 0.0f, 0.0f, 1.0f
     };
     QTest::newRow("scaleRotateTranslate")
-        << (void *)scaleRotateTranslateValues << int{QMatrix4x4::Translation | QMatrix4x4::Scale | QMatrix4x4::Rotation2D};
+        << (void *)scaleRotateTranslateValues << (int)(Translation | Scale | Rotation2D);
 
     static float belowValues[16] = {
         1.0f, 0.0f, 0.0f, 0.0f,
@@ -2949,7 +2992,7 @@ void tst_QMatrixNxN::optimize_data()
         4.0f, 0.0f, 0.0f, 1.0f
     };
     QTest::newRow("below")
-        << (void *)belowValues << int{QMatrix4x4::General};
+        << (void *)belowValues << (int)General;
 }
 void tst_QMatrixNxN::optimize()
 {
@@ -2959,7 +3002,7 @@ void tst_QMatrixNxN::optimize()
     QMatrix4x4 m((const float *)mValues);
     m.optimize();
 
-    QCOMPARE(m.flagBits, flagBits);
+    QCOMPARE(reinterpret_cast<Matrix4x4 *>(&m)->flagBits, flagBits);
 }
 
 void tst_QMatrixNxN::columnsAndRows()

@@ -1,6 +1,42 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QLOCALE_P_H
 #define QLOCALE_P_H
@@ -22,7 +58,6 @@
 #include "QtCore/qvariant.h"
 #include "QtCore/qnumeric.h"
 #include <QtCore/qcalendar.h>
-#include <QtCore/qcontainerfwd.h>
 
 #include "qlocale.h"
 
@@ -31,8 +66,8 @@
 
 QT_BEGIN_NAMESPACE
 
+#ifndef QT_NO_SYSTEMLOCALE
 struct QLocaleData;
-// Subclassed by Android platform plugin:
 class Q_CORE_EXPORT QSystemLocale
 {
 public:
@@ -100,13 +135,14 @@ public:
     virtual QVariant query(QueryType type, QVariant in = QVariant()) const;
 
     virtual QLocale fallbackLocale() const;
-    inline qsizetype fallbackLocaleIndex() const;
+    inline uint fallbackLocaleIndex() const;
 private:
     QSystemLocale(bool);
     friend class QSystemLocaleSingleton;
 };
 Q_DECLARE_TYPEINFO(QSystemLocale::QueryType, Q_PRIMITIVE_TYPE);
 Q_DECLARE_TYPEINFO(QSystemLocale::CurrencyToStringArgument, Q_RELOCATABLE_TYPE);
+#endif
 
 #if QT_CONFIG(icu)
 namespace QIcu {
@@ -118,37 +154,37 @@ namespace QIcu {
 
 struct QLocaleId
 {
-    [[nodiscard]] static QLocaleId fromName(QStringView name);
-    [[nodiscard]] inline bool operator==(QLocaleId other) const
+    Q_CORE_EXPORT static QLocaleId fromName(const QString &name);
+    inline bool operator==(QLocaleId other) const
     { return language_id == other.language_id && script_id == other.script_id && territory_id == other.territory_id; }
-    [[nodiscard]] inline bool operator!=(QLocaleId other) const
+    inline bool operator!=(QLocaleId other) const
     { return !operator==(other); }
-    [[nodiscard]] inline bool isValid() const
+    inline bool isValid() const
     {
         return language_id <= QLocale::LastLanguage && script_id <= QLocale::LastScript
                 && territory_id <= QLocale::LastTerritory;
     }
-    [[nodiscard]] inline bool matchesAll() const
+    inline bool matchesAll() const
     {
         return !language_id && !script_id && !territory_id;
     }
     // Use as: filter.accept...(candidate)
-    [[nodiscard]] inline bool acceptLanguage(quint16 lang) const
+    inline bool acceptLanguage(quint16 lang) const
     {
         // Always reject AnyLanguage (only used for last entry in locale_data array).
         // So, when searching for AnyLanguage, accept everything *but* AnyLanguage.
         return language_id ? lang == language_id : lang;
     }
-    [[nodiscard]] inline bool acceptScriptTerritory(QLocaleId other) const
+    inline bool acceptScriptTerritory(QLocaleId other) const
     {
         return (!territory_id || other.territory_id == territory_id)
                 && (!script_id || other.script_id == script_id);
     }
 
-    [[nodiscard]] QLocaleId withLikelySubtagsAdded() const;
-    [[nodiscard]] QLocaleId withLikelySubtagsRemoved() const;
+    QLocaleId withLikelySubtagsAdded() const;
+    QLocaleId withLikelySubtagsRemoved() const;
 
-    [[nodiscard]] QByteArray name(char separator = '-') const;
+    QByteArray name(char separator = '-') const;
 
     ushort language_id = 0, script_id = 0, territory_id = 0;
 };
@@ -159,8 +195,8 @@ struct QLocaleData
 public:
     // Having an index for each locale enables us to have diverse sources of
     // data, e.g. calendar locales, as well as the main CLDR-derived data.
-    [[nodiscard]] static qsizetype findLocaleIndex(QLocaleId localeId);
-    [[nodiscard]] static const QLocaleData *c();
+    static int findLocaleIndex(QLocaleId localeId);
+    static const QLocaleData *c();
 
     enum DoubleForm {
         DFExponent = 0,
@@ -196,37 +232,37 @@ private:
         PMChopTrailingZeros =   0x03
     };
 
-    [[nodiscard]] QString decimalForm(QString &&digits, int decpt, int precision,
-                                      PrecisionMode pm, bool mustMarkDecimal,
-                                      bool groupDigits) const;
-    [[nodiscard]] QString exponentForm(QString &&digits, int decpt, int precision,
-                                       PrecisionMode pm, bool mustMarkDecimal,
-                                       int minExponentDigits) const;
-    [[nodiscard]] QString signPrefix(bool negative, unsigned flags) const;
-    [[nodiscard]] QString applyIntegerFormatting(QString &&numStr, bool negative, int precision,
-                                                 int base, int width, unsigned flags) const;
+    QString decimalForm(QString &&digits, int decpt, int precision,
+                        PrecisionMode pm, bool mustMarkDecimal,
+                        bool groupDigits) const;
+    QString exponentForm(QString &&digits, int decpt, int precision,
+                         PrecisionMode pm, bool mustMarkDecimal,
+                         int minExponentDigits) const;
+    QString signPrefix(bool negative, unsigned flags) const;
+    QString applyIntegerFormatting(QString &&numStr, bool negative, int precision,
+                                   int base, int width, unsigned flags) const;
 
 public:
-    [[nodiscard]] QString doubleToString(double d,
-                                         int precision = -1,
-                                         DoubleForm form = DFSignificantDigits,
-                                         int width = -1,
-                                         unsigned flags = NoFlags) const;
-    [[nodiscard]] QString longLongToString(qint64 l, int precision = -1,
-                                           int base = 10,
-                                           int width = -1,
-                                           unsigned flags = NoFlags) const;
-    [[nodiscard]] QString unsLongLongToString(quint64 l, int precision = -1,
-                                              int base = 10,
-                                              int width = -1,
-                                              unsigned flags = NoFlags) const;
+    QString doubleToString(double d,
+                           int precision = -1,
+                           DoubleForm form = DFSignificantDigits,
+                           int width = -1,
+                           unsigned flags = NoFlags) const;
+    QString longLongToString(qint64 l, int precision = -1,
+                             int base = 10,
+                             int width = -1,
+                             unsigned flags = NoFlags) const;
+    QString unsLongLongToString(quint64 l, int precision = -1,
+                                int base = 10,
+                                int width = -1,
+                                unsigned flags = NoFlags) const;
 
     // this function is meant to be called with the result of stringToDouble or bytearrayToDouble
-    [[nodiscard]] static float convertDoubleToFloat(double d, bool *ok)
+    static float convertDoubleToFloat(double d, bool *ok)
     {
         if (qIsInf(d))
             return float(d);
-        if (std::fabs(d) > (std::numeric_limits<float>::max)()) {
+        if (std::fabs(d) > std::numeric_limits<float>::max()) {
             if (ok)
                 *ok = false;
             const float huge = std::numeric_limits<float>::infinity();
@@ -241,64 +277,58 @@ public:
         return float(d);
     }
 
-    [[nodiscard]] double stringToDouble(QStringView str, bool *ok,
-                                        QLocale::NumberOptions options) const;
-    [[nodiscard]] qint64 stringToLongLong(QStringView str, int base, bool *ok,
-                                          QLocale::NumberOptions options) const;
-    [[nodiscard]] quint64 stringToUnsLongLong(QStringView str, int base, bool *ok,
-                                              QLocale::NumberOptions options) const;
+    double stringToDouble(QStringView str, bool *ok, QLocale::NumberOptions options) const;
+    qint64 stringToLongLong(QStringView str, int base, bool *ok, QLocale::NumberOptions options) const;
+    quint64 stringToUnsLongLong(QStringView str, int base, bool *ok, QLocale::NumberOptions options) const;
 
     // this function is used in QIntValidator (QtGui)
-    [[nodiscard]] Q_CORE_EXPORT static qint64 bytearrayToLongLong(QByteArrayView num, int base,
-                                                                  bool *ok);
-    [[nodiscard]] static quint64 bytearrayToUnsLongLong(QByteArrayView num, int base, bool *ok);
+    Q_CORE_EXPORT static qint64 bytearrayToLongLong(const char *num, int base, bool *ok);
+    static quint64 bytearrayToUnsLongLong(const char *num, int base, bool *ok);
 
-    [[nodiscard]] bool numberToCLocale(QStringView s, QLocale::NumberOptions number_options,
-                                       CharBuff *result) const;
-    [[nodiscard]] inline char numericToCLocale(QStringView in) const;
+    bool numberToCLocale(QStringView s, QLocale::NumberOptions number_options,
+                         CharBuff *result) const;
+    inline char numericToCLocale(QStringView in) const;
 
     // this function is used in QIntValidator (QtGui)
-    [[nodiscard]] Q_CORE_EXPORT bool validateChars(
-            QStringView str, NumberMode numMode, QByteArray *buff, int decDigits = -1,
+    Q_CORE_EXPORT bool validateChars(QStringView str, NumberMode numMode, QByteArray *buff, int decDigits = -1,
             QLocale::NumberOptions number_options = QLocale::DefaultNumberOptions) const;
 
     // Access to assorted data members:
-    [[nodiscard]] QLocaleId id() const
-    { return QLocaleId { m_language_id, m_script_id, m_territory_id }; }
+    QLocaleId id() const { return QLocaleId { m_language_id, m_script_id, m_territory_id }; }
 
-    [[nodiscard]] QString decimalPoint() const;
-    [[nodiscard]] QString groupSeparator() const;
-    [[nodiscard]] QString listSeparator() const;
-    [[nodiscard]] QString percentSign() const;
-    [[nodiscard]] QString zeroDigit() const;
-    [[nodiscard]] char32_t zeroUcs() const;
-    [[nodiscard]] QString positiveSign() const;
-    [[nodiscard]] QString negativeSign() const;
-    [[nodiscard]] QString exponentSeparator() const;
+    QString decimalPoint() const;
+    QString groupSeparator() const;
+    QString listSeparator() const;
+    QString percentSign() const;
+    QString zeroDigit() const;
+    char32_t zeroUcs() const;
+    QString positiveSign() const;
+    QString negativeSign() const;
+    QString exponentSeparator() const;
 
     struct DataRange
     {
         quint16 offset;
         quint16 size;
-        [[nodiscard]] QString getData(const char16_t *table) const
+        QString getData(const char16_t *table) const
         {
             return size > 0
                 ? QString::fromRawData(reinterpret_cast<const QChar *>(table + offset), size)
                 : QString();
         }
-        [[nodiscard]] QStringView viewData(const char16_t *table) const
+        QStringView viewData(const char16_t *table) const
         {
             return { reinterpret_cast<const QChar *>(table + offset), size };
         }
-        [[nodiscard]] QString getListEntry(const char16_t *table, qsizetype index) const
+        QString getListEntry(const char16_t *table, int index) const
         {
             return listEntry(table, index).getData(table);
         }
-        [[nodiscard]] QStringView viewListEntry(const char16_t *table, qsizetype index) const
+        QStringView viewListEntry(const char16_t *table, int index) const
         {
             return listEntry(table, index).viewData(table);
         }
-        [[nodiscard]] char32_t ucsFirst(const char16_t *table) const
+        char32_t ucsFirst(const char16_t *table) const
         {
             if (size && !QChar::isSurrogate(table[offset]))
                 return table[offset];
@@ -307,7 +337,7 @@ public:
             return 0;
         }
     private:
-        [[nodiscard]] DataRange listEntry(const char16_t *table, qsizetype index) const
+        DataRange listEntry(const char16_t *table, int index) const
         {
             const char16_t separator = ';';
             quint16 i = 0;
@@ -338,7 +368,7 @@ public:
     X(endonymLanguage) X(endonymTerritory)
 
 #define rangeGetter(name) \
-    [[nodiscard]] DataRange name() const { return { m_ ## name ## _idx, m_ ## name ## _size }; }
+    DataRange name() const { return { m_ ## name ## _idx, m_ ## name ## _size }; }
     ForEachQLocaleRange(rangeGetter)
 #undef rangeGetter
 
@@ -367,55 +397,45 @@ public:
     quint8 m_grouping_least : 3; // Number of digits after last grouping separator (before decimal).
 };
 
-class QLocalePrivate
+class Q_CORE_EXPORT QLocalePrivate
 {
 public:
-    constexpr QLocalePrivate(const QLocaleData *data, qsizetype index,
+    constexpr QLocalePrivate(const QLocaleData *data, const uint index,
                              QLocale::NumberOptions numberOptions = QLocale::DefaultNumberOptions,
                              int refs = 0)
         : m_data(data), ref Q_BASIC_ATOMIC_INITIALIZER(refs),
           m_index(index), m_numberOptions(numberOptions) {}
 
-    [[nodiscard]] quint16 languageId() const { return m_data->m_language_id; }
-    [[nodiscard]] quint16 territoryId() const { return m_data->m_territory_id; }
+    quint16 languageId() const { return m_data->m_language_id; }
+    quint16 territoryId() const { return m_data->m_territory_id; }
 
-    [[nodiscard]] QByteArray bcp47Name(char separator = '-') const;
+    QByteArray bcp47Name(char separator = '-') const;
 
-    [[nodiscard]] inline QLatin1StringView
-    languageCode(QLocale::LanguageCodeTypes codeTypes = QLocale::AnyLanguageCode) const
-    {
-        return languageToCode(QLocale::Language(m_data->m_language_id), codeTypes);
-    }
-    [[nodiscard]] inline QLatin1StringView scriptCode() const
-    { return scriptToCode(QLocale::Script(m_data->m_script_id)); }
-    [[nodiscard]] inline QLatin1StringView territoryCode() const
-    { return territoryToCode(QLocale::Territory(m_data->m_territory_id)); }
+    inline QLatin1String languageCode() const { return languageToCode(QLocale::Language(m_data->m_language_id)); }
+    inline QLatin1String scriptCode() const { return scriptToCode(QLocale::Script(m_data->m_script_id)); }
+    inline QLatin1String territoryCode() const { return territoryToCode(QLocale::Territory(m_data->m_territory_id)); }
 
-    [[nodiscard]] static const QLocalePrivate *get(const QLocale &l) { return l.d; }
-    [[nodiscard]] static QLatin1StringView
-    languageToCode(QLocale::Language language,
-                   QLocale::LanguageCodeTypes codeTypes = QLocale::AnyLanguageCode);
-    [[nodiscard]] static QLatin1StringView scriptToCode(QLocale::Script script);
-    [[nodiscard]] static QLatin1StringView territoryToCode(QLocale::Territory territory);
-    [[nodiscard]] static QLocale::Language
-    codeToLanguage(QStringView code,
-                   QLocale::LanguageCodeTypes codeTypes = QLocale::AnyLanguageCode) noexcept;
-    [[nodiscard]] static QLocale::Script codeToScript(QStringView code) noexcept;
-    [[nodiscard]] static QLocale::Territory codeToTerritory(QStringView code) noexcept;
+    static const QLocalePrivate *get(const QLocale &l) { return l.d; }
+    static QLatin1String languageToCode(QLocale::Language language);
+    static QLatin1String scriptToCode(QLocale::Script script);
+    static QLatin1String territoryToCode(QLocale::Territory territory);
+    static QLocale::Language codeToLanguage(QStringView code) noexcept;
+    static QLocale::Script codeToScript(QStringView code) noexcept;
+    static QLocale::Territory codeToTerritory(QStringView code) noexcept;
 
-    [[nodiscard]] QLocale::MeasurementSystem measurementSystem() const;
+    QLocale::MeasurementSystem measurementSystem() const;
 
     // System locale has an m_data all its own; all others have m_data = locale_data + m_index
     const QLocaleData *const m_data;
     QBasicAtomicInt ref;
-    const qsizetype m_index;
+    const uint m_index;
     QLocale::NumberOptions m_numberOptions;
 
     static QBasicAtomicInt s_generation;
 };
 
 #ifndef QT_NO_SYSTEMLOCALE
-qsizetype QSystemLocale::fallbackLocaleIndex() const { return fallbackLocale().d->m_index; }
+uint QSystemLocale::fallbackLocaleIndex() const { return fallbackLocale().d->m_index; }
 #endif
 
 template <>
@@ -472,12 +492,10 @@ inline char QLocaleData::numericToCLocale(QStringView in) const
     return 0;
 }
 
-// Also used to merely skip over an escape in a format string, advancint idx to
-// point after it (so not [[nodiscard]]):
-QString qt_readEscapedFormatString(QStringView format, qsizetype *idx);
-[[nodiscard]] bool qt_splitLocaleName(QStringView name, QStringView *lang = nullptr,
-                                      QStringView *script = nullptr, QStringView *cntry = nullptr);
-[[nodiscard]] qsizetype qt_repeatCount(QStringView s);
+QString qt_readEscapedFormatString(QStringView format, int *idx);
+bool qt_splitLocaleName(QStringView name, QStringView *lang = nullptr,
+                        QStringView *script = nullptr, QStringView *cntry = nullptr);
+int qt_repeatCount(QStringView s);
 
 enum { AsciiSpaceMask = (1u << (' ' - 1)) |
                         (1u << ('\t' - 1)) |   // 9: HT - horizontal tab
@@ -485,18 +503,31 @@ enum { AsciiSpaceMask = (1u << (' ' - 1)) |
                         (1u << ('\v' - 1)) |   // 11: VT - vertical tab
                         (1u << ('\f' - 1)) |   // 12: FF - form feed
                         (1u << ('\r' - 1)) };  // 13: CR - carriage return
-[[nodiscard]] constexpr inline bool ascii_isspace(uchar c)
+constexpr inline bool ascii_isspace(uchar c)
 {
     return c >= 1u && c <= 32u && (AsciiSpaceMask >> uint(c - 1)) & 1u;
 }
 
+static_assert(ascii_isspace(' '));
+static_assert(ascii_isspace('\t'));
+static_assert(ascii_isspace('\n'));
+static_assert(ascii_isspace('\v'));
+static_assert(ascii_isspace('\f'));
+static_assert(ascii_isspace('\r'));
+static_assert(!ascii_isspace('\0'));
+static_assert(!ascii_isspace('\a'));
+static_assert(!ascii_isspace('a'));
+static_assert(!ascii_isspace('\177'));
+static_assert(!ascii_isspace(uchar('\200')));
+static_assert(!ascii_isspace(uchar('\xA0')));
+static_assert(!ascii_isspace(uchar('\377')));
+
 QT_END_NAMESPACE
 
-// ### move to qnamespace.h
-QT_DECL_METATYPE_EXTERN_TAGGED(QList<Qt::DayOfWeek>, QList_Qt__DayOfWeek, Q_CORE_EXPORT)
+Q_DECLARE_METATYPE(QStringView)
+Q_DECLARE_METATYPE(QList<Qt::DayOfWeek>)
 #ifndef QT_NO_SYSTEMLOCALE
-QT_DECL_METATYPE_EXTERN_TAGGED(QSystemLocale::CurrencyToStringArgument,
-                               QSystemLocale__CurrencyToStringArgument, Q_CORE_EXPORT)
+Q_DECLARE_METATYPE(QSystemLocale::CurrencyToStringArgument)
 #endif
 
 #endif // QLOCALE_P_H

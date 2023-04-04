@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qwindowsfontenginedirectwrite_p.h"
 #include "qwindowsfontdatabase_p.h"
@@ -65,7 +101,7 @@ namespace {
     };
 
     void GeometrySink::AddBeziers(const D2D1_BEZIER_SEGMENT *beziers,
-                                  UINT bezierCount) noexcept
+                                  UINT bezierCount)
     {
         for (uint i=0; i<bezierCount; ++i) {
             QPointF c1 = fromD2D1_POINT_2F(beziers[i].point1);
@@ -76,48 +112,48 @@ namespace {
         }
     }
 
-    void GeometrySink::AddLines(const D2D1_POINT_2F *points, UINT pointsCount) noexcept
+    void GeometrySink::AddLines(const D2D1_POINT_2F *points, UINT pointsCount)
     {
         for (uint i=0; i<pointsCount; ++i)
             m_path->lineTo(fromD2D1_POINT_2F(points[i]));
     }
 
     void GeometrySink::BeginFigure(D2D1_POINT_2F startPoint,
-                                   D2D1_FIGURE_BEGIN /*figureBegin*/) noexcept
+                                   D2D1_FIGURE_BEGIN /*figureBegin*/)
     {
         m_startPoint = fromD2D1_POINT_2F(startPoint);
         m_path->moveTo(m_startPoint);
     }
 
-    IFACEMETHODIMP GeometrySink::Close() noexcept
+    IFACEMETHODIMP GeometrySink::Close()
     {
         return E_NOTIMPL;
     }
 
-    void GeometrySink::EndFigure(D2D1_FIGURE_END figureEnd) noexcept
+    void GeometrySink::EndFigure(D2D1_FIGURE_END figureEnd)
     {
         if (figureEnd == D2D1_FIGURE_END_CLOSED)
             m_path->closeSubpath();
     }
 
-    void GeometrySink::SetFillMode(D2D1_FILL_MODE fillMode) noexcept
+    void GeometrySink::SetFillMode(D2D1_FILL_MODE fillMode)
     {
         m_path->setFillRule(fillMode == D2D1_FILL_MODE_ALTERNATE
                             ? Qt::OddEvenFill
                             : Qt::WindingFill);
     }
 
-    void GeometrySink::SetSegmentFlags(D2D1_PATH_SEGMENT /*vertexFlags*/) noexcept
+    void GeometrySink::SetSegmentFlags(D2D1_PATH_SEGMENT /*vertexFlags*/)
     {
         /* Not implemented */
     }
 
-    IFACEMETHODIMP_(unsigned long) GeometrySink::AddRef() noexcept
+    IFACEMETHODIMP_(unsigned long) GeometrySink::AddRef()
     {
         return InterlockedIncrement(&m_refCount);
     }
 
-    IFACEMETHODIMP_(unsigned long) GeometrySink::Release() noexcept
+    IFACEMETHODIMP_(unsigned long) GeometrySink::Release()
     {
         unsigned long newCount = InterlockedDecrement(&m_refCount);
         if (newCount == 0)
@@ -129,7 +165,7 @@ namespace {
         return newCount;
     }
 
-    IFACEMETHODIMP GeometrySink::QueryInterface(IID const &riid, void **ppvObject) noexcept
+    IFACEMETHODIMP GeometrySink::QueryInterface(IID const &riid, void **ppvObject)
     {
         if (__uuidof(IDWriteGeometrySink) == riid) {
             *ppvObject = this;
@@ -158,16 +194,10 @@ static DWRITE_MEASURING_MODE renderModeToMeasureMode(DWRITE_RENDERING_MODE rende
     }
 }
 
-static DWRITE_RENDERING_MODE hintingPreferenceToRenderingMode(const QFontDef &fontDef)
+static DWRITE_RENDERING_MODE hintingPreferenceToRenderingMode(QFont::HintingPreference hintingPreference)
 {
-    QFont::HintingPreference hintingPreference = QFont::HintingPreference(fontDef.hintingPreference);
-    if (QHighDpiScaling::isActive() && hintingPreference == QFont::PreferDefaultHinting) {
-        // Microsoft documentation recommends using asymmetric rendering for small fonts
-        // at pixel size 16 and less, and symmetric for larger fonts.
-        hintingPreference = fontDef.pixelSize > 16.0
-                ? QFont::PreferNoHinting
-                : QFont::PreferVerticalHinting;
-    }
+    if (QHighDpiScaling::isActive() && hintingPreference == QFont::PreferDefaultHinting)
+        hintingPreference = QFont::PreferVerticalHinting;
 
     switch (hintingPreference) {
     case QFont::PreferNoHinting:
@@ -477,7 +507,7 @@ void QWindowsFontEngineDirectWrite::recalcAdvances(QGlyphLayout *glyphs, QFontEn
     QVarLengthArray<DWRITE_GLYPH_METRICS> glyphMetrics(glyphIndices.size());
 
     HRESULT hr;
-    DWRITE_RENDERING_MODE renderMode = hintingPreferenceToRenderingMode(fontDef);
+    DWRITE_RENDERING_MODE renderMode = hintingPreferenceToRenderingMode(QFont::HintingPreference(fontDef.hintingPreference));
     if (renderMode == DWRITE_RENDERING_MODE_GDI_CLASSIC || renderMode == DWRITE_RENDERING_MODE_GDI_NATURAL) {
         hr = m_directWriteFontFace->GetGdiCompatibleGlyphMetrics(float(fontDef.pixelSize),
                                                                  1.0f,
@@ -498,53 +528,6 @@ void QWindowsFontEngineDirectWrite::recalcAdvances(QGlyphLayout *glyphs, QFontEn
     } else {
         qErrnoWarning("%s: GetDesignGlyphMetrics failed", __FUNCTION__);
     }
-}
-
-void QWindowsFontEngineDirectWrite::getUnscaledGlyph(glyph_t glyph,
-                                                     QPainterPath *path,
-                                                     glyph_metrics_t *metric)
-{
-    float advance = 0.0f;
-    UINT16 g = glyph;
-    DWRITE_GLYPH_OFFSET offset;
-    offset.advanceOffset = 0;
-    offset.ascenderOffset = 0;
-    GeometrySink geometrySink(path);
-    HRESULT hr = m_directWriteFontFace->GetGlyphRunOutline(m_unitsPerEm,
-                                                           &g,
-                                                           &advance,
-                                                           &offset,
-                                                           1,
-                                                           false,
-                                                           false,
-                                                           &geometrySink);
-    if (FAILED(hr)) {
-        qErrnoWarning("%s: GetGlyphRunOutline failed", __FUNCTION__);
-        return;
-    }
-
-    DWRITE_GLYPH_METRICS glyphMetrics;
-    hr = m_directWriteFontFace->GetDesignGlyphMetrics(&g, 1, &glyphMetrics);
-    if (FAILED(hr)) {
-        qErrnoWarning("%s: GetDesignGlyphMetrics failed", __FUNCTION__);
-        return;
-    }
-
-    QFixed advanceWidth = QFixed(int(glyphMetrics.advanceWidth));
-    QFixed leftSideBearing = QFixed(glyphMetrics.leftSideBearing);
-    QFixed rightSideBearing = QFixed(glyphMetrics.rightSideBearing);
-    QFixed advanceHeight = QFixed(int(glyphMetrics.advanceHeight));
-    QFixed verticalOriginY = QFixed(glyphMetrics.verticalOriginY);
-    QFixed topSideBearing = QFixed(glyphMetrics.topSideBearing);
-    QFixed bottomSideBearing = QFixed(glyphMetrics.bottomSideBearing);
-    QFixed width = advanceWidth - leftSideBearing - rightSideBearing;
-    QFixed height = advanceHeight - topSideBearing - bottomSideBearing;
-    *metric = glyph_metrics_t(leftSideBearing,
-                              -verticalOriginY + topSideBearing,
-                              width,
-                              height,
-                              advanceWidth,
-                              0);
 }
 
 void QWindowsFontEngineDirectWrite::addGlyphsToPath(glyph_t *glyphs, QFixedPoint *positions, int nglyphs,
@@ -668,33 +651,6 @@ bool QWindowsFontEngineDirectWrite::supportsHorizontalSubPixelPositions() const
     return true;
 }
 
-QFontEngine::Properties QWindowsFontEngineDirectWrite::properties() const
-{
-    IDWriteFontFace2 *directWriteFontFace2;
-    if (SUCCEEDED(m_directWriteFontFace->QueryInterface(__uuidof(IDWriteFontFace2),
-                                                        reinterpret_cast<void **>(&directWriteFontFace2)))) {
-        DWRITE_FONT_METRICS1 metrics;
-        directWriteFontFace2->GetMetrics(&metrics);
-
-        Properties p = QFontEngine::properties();
-        p.emSquare = metrics.designUnitsPerEm;
-        p.boundingBox = QRectF(metrics.glyphBoxLeft,
-                               -metrics.glyphBoxTop,
-                               metrics.glyphBoxRight - metrics.glyphBoxLeft,
-                               metrics.glyphBoxTop - metrics.glyphBoxBottom);
-        p.ascent = metrics.ascent;
-        p.descent = metrics.descent;
-        p.leading = metrics.lineGap;
-        p.capHeight = metrics.capHeight;
-        p.lineWidth = metrics.underlineThickness;
-
-        directWriteFontFace2->Release();
-        return p;
-    } else {
-        return QFontEngine::properties();
-    }
-}
-
 QImage QWindowsFontEngineDirectWrite::imageForGlyph(glyph_t t,
                                                     const QFixedPoint &subPixelPosition,
                                                     int margin,
@@ -730,41 +686,21 @@ QImage QWindowsFontEngineDirectWrite::imageForGlyph(glyph_t t,
     transform.m21 = xform.m21();
     transform.m22 = xform.m22();
 
-    DWRITE_RENDERING_MODE renderMode = hintingPreferenceToRenderingMode(fontDef);
+    DWRITE_RENDERING_MODE renderMode =
+            hintingPreferenceToRenderingMode(QFont::HintingPreference(fontDef.hintingPreference));
     DWRITE_MEASURING_MODE measureMode =
             renderModeToMeasureMode(renderMode);
 
-    DWRITE_GRID_FIT_MODE gridFitMode = fontDef.hintingPreference == QFont::PreferNoHinting
-            ? DWRITE_GRID_FIT_MODE_DISABLED
-            : DWRITE_GRID_FIT_MODE_DEFAULT;
-
-    IDWriteFactory2 *factory2 = nullptr;
-    HRESULT hr = m_fontEngineData->directWriteFactory->QueryInterface(__uuidof(IDWriteFactory2),
-                                                                      reinterpret_cast<void **>(&factory2));
     IDWriteGlyphRunAnalysis *glyphAnalysis = NULL;
-    if (!SUCCEEDED(hr)) {
-        qErrnoWarning(hr, "%s: Failed to query IDWriteFactory2 interface.", __FUNCTION__);
-        hr = m_fontEngineData->directWriteFactory->CreateGlyphRunAnalysis(
-                    &glyphRun,
-                    1.0f,
-                    &transform,
-                    renderMode,
-                    measureMode,
-                    0.0, 0.0,
-                    &glyphAnalysis
-                    );
-    } else {
-        hr = factory2->CreateGlyphRunAnalysis(
-                    &glyphRun,
-                    &transform,
-                    renderMode,
-                    measureMode,
-                    gridFitMode,
-                    DWRITE_TEXT_ANTIALIAS_MODE_CLEARTYPE,
-                    0.0, 0.0,
-                    &glyphAnalysis
-                    );
-    }
+    HRESULT hr = m_fontEngineData->directWriteFactory->CreateGlyphRunAnalysis(
+                &glyphRun,
+                1.0f,
+                &transform,
+                renderMode,
+                measureMode,
+                0.0, 0.0,
+                &glyphAnalysis
+                );
 
     if (SUCCEEDED(hr)) {
         RECT rect;
@@ -785,7 +721,10 @@ QImage QWindowsFontEngineDirectWrite::imageForGlyph(glyph_t t,
         QImage image;
         HRESULT hr = DWRITE_E_NOCOLOR;
         IDWriteColorGlyphRunEnumerator *enumerator = 0;
-        if (glyphFormat == QFontEngine::Format_ARGB && factory2 != nullptr) {
+        IDWriteFactory2 *factory2 = nullptr;
+        if (glyphFormat == QFontEngine::Format_ARGB
+                && SUCCEEDED(m_fontEngineData->directWriteFactory->QueryInterface(__uuidof(IDWriteFactory2),
+                                                                                  reinterpret_cast<void **>(&factory2)))) {
             hr = factory2->TranslateColorGlyphRun(0.0f,
                                                   0.0f,
                                                   &glyphRun,
@@ -813,17 +752,15 @@ QImage QWindowsFontEngineDirectWrite::imageForGlyph(glyph_t t,
                 }
 
                 IDWriteGlyphRunAnalysis *colorGlyphsAnalysis = NULL;
-                hr = factory2->CreateGlyphRunAnalysis(
+                hr = m_fontEngineData->directWriteFactory->CreateGlyphRunAnalysis(
                             &colorGlyphRun->glyphRun,
+                            1.0f,
                             &transform,
                             renderMode,
                             measureMode,
-                            gridFitMode,
-                            DWRITE_TEXT_ANTIALIAS_MODE_CLEARTYPE,
                             0.0, 0.0,
                             &colorGlyphsAnalysis
                             );
-
                 if (FAILED(hr)) {
                     qErrnoWarning(hr, "%s: CreateGlyphRunAnalysis failed for color run", __FUNCTION__);
                     break;
@@ -1056,39 +993,20 @@ glyph_metrics_t QWindowsFontEngineDirectWrite::alphaMapBoundingBox(glyph_t glyph
     transform.m21 = matrix.m21();
     transform.m22 = matrix.m22();
 
-    DWRITE_RENDERING_MODE renderMode = hintingPreferenceToRenderingMode(fontDef);
+    DWRITE_RENDERING_MODE renderMode =
+            hintingPreferenceToRenderingMode(QFont::HintingPreference(fontDef.hintingPreference));
     DWRITE_MEASURING_MODE measureMode = renderModeToMeasureMode(renderMode);
-    DWRITE_GRID_FIT_MODE gridFitMode = fontDef.hintingPreference == QFont::PreferNoHinting
-            ? DWRITE_GRID_FIT_MODE_DISABLED
-            : DWRITE_GRID_FIT_MODE_DEFAULT;
-
-    IDWriteFactory2 *factory2 = nullptr;
-    HRESULT hr = m_fontEngineData->directWriteFactory->QueryInterface(__uuidof(IDWriteFactory2),
-                                                                      reinterpret_cast<void **>(&factory2));
 
     IDWriteGlyphRunAnalysis *glyphAnalysis = NULL;
-    if (SUCCEEDED(hr)) {
-        hr = factory2->CreateGlyphRunAnalysis(
-                    &glyphRun,
-                    &transform,
-                    renderMode,
-                    measureMode,
-                    gridFitMode,
-                    DWRITE_TEXT_ANTIALIAS_MODE_CLEARTYPE,
-                    0.0, 0.0,
-                    &glyphAnalysis
-                    );
-    } else {
-        hr = m_fontEngineData->directWriteFactory->CreateGlyphRunAnalysis(
-                    &glyphRun,
-                    1.0f,
-                    &transform,
-                    renderMode,
-                    measureMode,
-                    0.0, 0.0,
-                    &glyphAnalysis
-                    );
-    }
+    HRESULT hr = m_fontEngineData->directWriteFactory->CreateGlyphRunAnalysis(
+                &glyphRun,
+                1.0f,
+                &transform,
+                renderMode,
+                measureMode,
+                0.0, 0.0,
+                &glyphAnalysis
+                );
 
     if (SUCCEEDED(hr)) {
         RECT rect;

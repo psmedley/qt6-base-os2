@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <AppKit/AppKit.h>
 
@@ -32,7 +68,7 @@
 
 #include <QtGui/private/qcoregraphics_p.h>
 #include <QtGui/private/qopenglcontext_p.h>
-#include <QtGui/private/qrhibackingstore_p.h>
+
 #include <QtGui/private/qfontengine_coretext_p.h>
 
 #include <IOKit/graphics/IOGraphicsLib.h>
@@ -44,9 +80,12 @@ static void initResources()
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 Q_LOGGING_CATEGORY(lcQpa, "qt.qpa", QtWarningMsg);
+
+// Lives here so that the linker is forced to include the QCocoaWindowManager
+// object file also in static builds.
+static void initializeWindowManager() { Q_UNUSED(QCocoaWindowManager::instance()); }
+Q_CONSTRUCTOR_FUNCTION(initializeWindowManager)
 
 static void logVersionInformation()
 {
@@ -80,7 +119,7 @@ static QCocoaIntegration::Options parseOptions(const QStringList &paramList)
     QCocoaIntegration::Options options;
     for (const QString &param : paramList) {
 #ifndef QT_NO_FREETYPE
-        if (param == "fontengine=freetype"_L1)
+        if (param == QLatin1String("fontengine=freetype"))
             options |= QCocoaIntegration::UseFreeTypeFontEngine;
         else
 #endif
@@ -94,7 +133,7 @@ QCocoaIntegration *QCocoaIntegration::mInstance = nullptr;
 QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
     : mOptions(parseOptions(paramList))
     , mFontDb(nullptr)
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
     , mAccessibility(new QCocoaAccessibility)
 #endif
 #ifndef QT_NO_CLIPBOARD
@@ -300,15 +339,7 @@ QPlatformBackingStore *QCocoaIntegration::createPlatformBackingStore(QWindow *wi
         return nullptr;
     }
 
-    switch (window->surfaceType()) {
-    case QSurface::RasterSurface:
-        return new QCALayerBackingStore(window);
-    case QSurface::MetalSurface:
-    case QSurface::OpenGLSurface:
-        return new QRhiBackingStore(window);
-    default:
-        return nullptr;
-    }
+    return new QCALayerBackingStore(window);
 }
 
 QAbstractEventDispatcher *QCocoaIntegration::createEventDispatcher() const
@@ -344,7 +375,7 @@ QPlatformInputContext *QCocoaIntegration::inputContext() const
     return mInputContext.data();
 }
 
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
 QCocoaAccessibility *QCocoaIntegration::accessibility() const
 {
     return mAccessibility.data();
@@ -365,12 +396,12 @@ QCocoaDrag *QCocoaIntegration::drag() const
 
 QStringList QCocoaIntegration::themeNames() const
 {
-    return QStringList(QLatin1StringView(QCocoaTheme::name));
+    return QStringList(QLatin1String(QCocoaTheme::name));
 }
 
 QPlatformTheme *QCocoaIntegration::createPlatformTheme(const QString &name) const
 {
-    if (name == QLatin1StringView(QCocoaTheme::name))
+    if (name == QLatin1String(QCocoaTheme::name))
         return new QCocoaTheme;
     return QPlatformIntegration::createPlatformTheme(name);
 }
@@ -386,8 +417,6 @@ QVariant QCocoaIntegration::styleHint(StyleHint hint) const
     case FontSmoothingGamma:
         return QCoreTextFontEngine::fontSmoothingGamma();
     case ShowShortcutsInContextMenus:
-        return QVariant(false);
-    case ReplayMousePressOutsidePopup:
         return QVariant(false);
     default: break;
     }
@@ -429,6 +458,30 @@ void QCocoaIntegration::clearToolbars()
     mToolbars.clear();
 }
 
+void QCocoaIntegration::pushPopupWindow(QCocoaWindow *window)
+{
+    m_popupWindowStack.append(window);
+}
+
+QCocoaWindow *QCocoaIntegration::popPopupWindow()
+{
+    if (m_popupWindowStack.isEmpty())
+        return nullptr;
+    return m_popupWindowStack.takeLast();
+}
+
+QCocoaWindow *QCocoaIntegration::activePopupWindow() const
+{
+    if (m_popupWindowStack.isEmpty())
+        return nullptr;
+    return m_popupWindowStack.front();
+}
+
+QList<QCocoaWindow *> *QCocoaIntegration::popupWindowStack()
+{
+    return &m_popupWindowStack;
+}
+
 void QCocoaIntegration::setApplicationIcon(const QIcon &icon) const
 {
     // Fall back to a size that looks good on the highest resolution screen available
@@ -445,6 +498,19 @@ void QCocoaIntegration::quit() const
 {
     qCDebug(lcQpaApplication) << "Terminating application";
     [NSApp terminate:nil];
+}
+
+void QCocoaIntegration::closePopups(QWindow *forWindow)
+{
+    for (auto it = m_popupWindowStack.begin(); it != m_popupWindowStack.end();) {
+        auto *popup = *it;
+        if (!forWindow || popup->window()->transientParent() == forWindow) {
+            it = m_popupWindowStack.erase(it);
+            QWindowSystemInterface::handleCloseEvent<QWindowSystemInterface::SynchronousDelivery>(popup->window());
+        } else {
+            ++it;
+        }
+    }
 }
 
 void QCocoaIntegration::focusWindowChanged(QWindow *focusWindow)

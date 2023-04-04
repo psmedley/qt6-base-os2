@@ -1,5 +1,41 @@
-// Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <qglobal.h>
 #include "qcolumnview.h"
@@ -98,7 +134,7 @@ void QColumnView::setResizeGripsVisible(bool visible)
     if (d->showResizeGrips == visible)
         return;
     d->showResizeGrips = visible;
-    for (int i = 0; i < d->columns.size(); ++i) {
+    for (int i = 0; i < d->columns.count(); ++i) {
         QAbstractItemView *view = d->columns[i];
         if (visible) {
             QColumnViewGrip *grip = new QColumnViewGrip(view);
@@ -140,7 +176,7 @@ void QColumnView::setRootIndex(const QModelIndex &index)
         return;
 
     d->closeColumns();
-    Q_ASSERT(d->columns.size() == 0);
+    Q_ASSERT(d->columns.count() == 0);
 
     QAbstractItemView *view = d->createColumn(index, true);
     if (view->selectionModel())
@@ -206,7 +242,7 @@ void QColumnView::scrollContentsBy(int dx, int dy)
         return;
 
     dx = isRightToLeft() ? -dx : dx;
-    for (int i = 0; i < d->columns.size(); ++i)
+    for (int i = 0; i < d->columns.count(); ++i)
         d->columns.at(i)->move(d->columns.at(i)->x() + dx, 0);
     d->offset += dx;
     QAbstractItemView::scrollContentsBy(dx, dy);
@@ -420,7 +456,7 @@ int QColumnView::verticalOffset() const
 */
 QRegion QColumnView::visualRegionForSelection(const QItemSelection &selection) const
 {
-    int ranges = selection.size();
+    int ranges = selection.count();
 
     if (ranges == 0)
         return QRect();
@@ -603,7 +639,7 @@ void QColumnViewPrivate::_q_clicked(const QModelIndex &index)
     Q_Q(QColumnView);
     QModelIndex parent = index.parent();
     QAbstractItemView *columnClicked = nullptr;
-    for (int column = 0; column < columns.size(); ++column) {
+    for (int column = 0; column < columns.count(); ++column) {
         if (columns.at(column)->rootIndex() == parent) {
             columnClicked = columns[column];
             break;
@@ -664,16 +700,16 @@ QAbstractItemView *QColumnViewPrivate::createColumn(const QModelIndex &index, bo
         q->connect(grip, SIGNAL(gripMoved(int)), q, SLOT(_q_gripMoved(int)));
     }
 
-    if (columnSizes.size() > columns.size()) {
-        view->setGeometry(0, 0, columnSizes.at(columns.size()), viewport->height());
+    if (columnSizes.count() > columns.count()) {
+        view->setGeometry(0, 0, columnSizes.at(columns.count()), viewport->height());
     } else {
         int initialWidth = view->sizeHint().width();
         if (q->isRightToLeft())
             view->setGeometry(viewport->width() - initialWidth, 0, initialWidth, viewport->height());
         else
             view->setGeometry(0, 0, initialWidth, viewport->height());
-        columnSizes.resize(qMax(columnSizes.size(), columns.size() + 1));
-        columnSizes[columns.size()] = initialWidth;
+        columnSizes.resize(qMax(columnSizes.count(), columns.count() + 1));
+        columnSizes[columns.count()] = initialWidth;
     }
     if (!columns.isEmpty() && columns.constLast()->isHidden())
         columns.constLast()->setVisible(true);
@@ -826,8 +862,8 @@ void QColumnView::setColumnWidths(const QList<int> &list)
 {
     Q_D(QColumnView);
     int i = 0;
-    const int listCount = list.size();
-    const int count = qMin(listCount, d->columns.size());
+    const int listCount = list.count();
+    const int count = qMin(listCount, d->columns.count());
     for (; i < count; ++i) {
         d->columns.at(i)->resize(list.at(i), d->columns.at(i)->height());
         d->columnSizes[i] = list.at(i);
@@ -847,7 +883,7 @@ QList<int> QColumnView::columnWidths() const
 {
     Q_D(const QColumnView);
     QList<int> list;
-    const int columnCount = d->columns.size();
+    const int columnCount = d->columns.count();
     list.reserve(columnCount);
     for (int i = 0; i < columnCount; ++i)
         list.append(d->columnSizes.at(i));
@@ -984,9 +1020,9 @@ void QColumnView::selectAll()
     QModelIndexList indexList = selectionModel()->selectedIndexes();
     QModelIndex parent = rootIndex();
     QItemSelection selection;
-    if (indexList.size() >= 1)
+    if (indexList.count() >= 1)
         parent = indexList.at(0).parent();
-    if (indexList.size() == 1) {
+    if (indexList.count() == 1) {
         parent = indexList.at(0);
         if (!model()->hasChildren(parent))
             parent = parent.parent();
@@ -1039,7 +1075,7 @@ void QColumnViewPrivate::checkColumnCreation(const QModelIndex &parent)
     if (parent == q_func()->currentIndex() && model->hasChildren(parent)) {
         //the parent has children and is the current
         //let's try to find out if there is already a mapping that is good
-        for (int i = 0; i < columns.size(); ++i) {
+        for (int i = 0; i < columns.count(); ++i) {
             QAbstractItemView *view = columns.at(i);
             if (view->rootIndex() == parent) {
                 if (view == previewColumn) {

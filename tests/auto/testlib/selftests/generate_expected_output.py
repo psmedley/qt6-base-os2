@@ -1,6 +1,31 @@
 #!/usr/bin/env python3
-# Copyright (C) 2022 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+#############################################################################
+##
+## Copyright (C) 2020 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is part of the release tools of the Qt Toolkit.
+##
+## $QT_BEGIN_LICENSE:GPL-EXCEPT$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 3 as published by the Free Software
+## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
 
 from argparse import ArgumentParser, RawTextHelpFormatter
 import os
@@ -24,23 +49,22 @@ the saved copies of the output.
 """
 
 
-DEFAULT_FORMATS = ['xml', 'txt', 'junitxml', 'lightxml', 'teamcity', 'tap', 'csv']
+DEFAULT_FORMATS = ['xml', 'txt', 'junitxml', 'lightxml', 'teamcity', 'tap']
 
 
 TESTS = ['assert', 'badxml', 'benchlibcallgrind', 'benchlibcounting',
          'benchlibeventcounter', 'benchliboptions', 'benchlibtickcounter',
          'benchlibwalltime', 'blacklisted', 'cmptest', 'commandlinedata',
          'counting', 'crashes', 'datatable', 'datetime', 'deleteLater',
-         'deleteLater_noApp', 'differentexec', 'eventloop', 'exceptionthrow',
-         'expectfail', "extendedcompare", 'failcleanup', 'failcleanuptestcase',
-         'faildatatype', 'failfetchtype', 'failinit', 'failinitdata',
-         'fetchbogus', 'findtestdata', 'float', 'globaldata', 'longstring',
-         'maxwarnings', 'mouse', 'multiexec', 'pairdiagnostics', 'pass',
+         'deleteLater_noApp', 'differentexec', 'exceptionthrow', 'expectfail',
+         'failcleanup', 'faildatatype', 'failfetchtype', 'failinit',
+         'failinitdata', 'fetchbogus', 'findtestdata', 'float', 'globaldata',
+         'longstring', 'maxwarnings', 'multiexec', 'pairdiagnostics', 'pass',
          'printdatatags', 'printdatatagswithglobaltags', 'qexecstringlist',
          'signaldumper', 'silent', 'singleskip', 'skip', 'skipcleanup',
-         'skipcleanuptestcase', 'skipinit', 'skipinitdata', 'sleep', 'strcmp',
-         'subtest', 'testlib', 'tuplediagnostics', 'verbose1', 'verbose2',
-         'verifyexceptionthrown', 'warnings', 'watchdog', 'junit', 'keyboard']
+         'skipinit', 'skipinitdata', 'sleep', 'strcmp', 'subtest', 'testlib',
+         'tuplediagnostics', 'verbose1', 'verbose2', 'verifyexceptionthrown',
+         'warnings', 'watchdog', 'junit', 'keyboard']
 
 
 class Fail (Exception): pass
@@ -75,12 +99,8 @@ class Cleaner (object):
     def _read_qt_version(qtbase_dir):
         cmake_conf_file = os.path.join(qtbase_dir, '.cmake.conf')
         with open(cmake_conf_file) as f:
-            for line in f:
-                # set(QT_REPO_MODULE_VERSION "6.1.0")
-                if 'set(QT_REPO_MODULE_VERSION' in line:
-                    return line.strip().split('"')[1]
-
-        raise RuntimeError("Someone broke .cmake.conf formatting again")
+            qtver = f.readline().strip()
+        return qtver.split('"')[1]   # set(QT_REPO_MODULE_VERSION "6.1.0")
 
     @staticmethod
     def __getPatterns(patterns = (
@@ -174,20 +194,18 @@ class Scanner (object):
     def __init__(self):
         pass
 
-    def subdirs(self, given, skip_callgrind=False):
+    def subdirs(self, given, skip_benchlib=False):
         if given:
             for d in given:
                 if not os.path.isdir(d):
                     print('No such directory:', d, '- skipped')
-                elif skip_callgrind and d == 'benchlibcallgrind':
-                    pass # Skip this test, as requeted.
                 elif d in TESTS:
                     yield d
                 else:
                     print(f'Directory {d} is not in the list of tests')
         else:
             tests = TESTS
-            if skip_callgrind:
+            if skip_benchlib:
                 tests.remove('benchlibcallgrind')
             missing = 0
             for d in tests:
@@ -205,7 +223,7 @@ del re
 def baseEnv(platname=None,
             keep=('PATH', 'QT_QPA_PLATFORM'),
             posix=('HOME', 'USER', 'QEMU_SET_ENV', 'QEMU_LD_PREFIX'),
-            nonapple=('DISPLAY', 'XAUTHORITY', 'XAUTHLOCALHOSTNAME'), # and XDG_*
+            nonapple=('DISPLAY', 'XAUTHLOCALHOSTNAME'), # and XDG_*
             # Don't actually know how to test for QNX, so this is ignored:
             qnx=('GRAPHICS_ROOT', 'TZ'),
             # Probably not actually relevant
@@ -263,38 +281,11 @@ def testEnv(testname,
         data.update(extraEnv[testname])
     return data
 
+# See TestLogger::shouldIgnoreTest() in tst_selftest.cpp
 def shouldIgnoreTest(testname, format):
-    """Test whether to exclude a test/format combination.
-
-    See TestLogger::shouldIgnoreTest() in tst_selftests.cpp; it starts
-    with various exclusions for opt-in tests, platform dependencies
-    and tool availability; we ignore those, as we need the test data
-    to be present when those exclusions aren't in effect.
-
-    In the remainder, exclude what it always excludes.
-    """
-    if format != 'txt':
-        if testname in ("differentexec",
-                        "multiexec",
-                        "qexecstringlist",
-                        "benchliboptions",
-                        "printdatatags",
-                        "printdatatagswithglobaltags",
-                        "silent",
-                        "crashes",
-                        "benchlibcallgrind",
-                        "float",
-                        "sleep"):
-            return True
-
-    if testname == "badxml" and not format.endswith('xml'):
+    if testname == "junit" and not format == "junitxml":
         return True
-
-    # Skip benchlib* for teamcity, and everything else for csv:
-    if format == ('teamcity' if testname.startswith('benchlib') else 'csv'):
-        return True
-
-    if testname == "junit" and format != "junitxml":
+    if testname in ["float", "silent"] and not format == "txt":
         return True
 
     return False
@@ -333,8 +324,8 @@ def main(argv):
     argument_parser = ArgumentParser(description=USAGE, formatter_class=RawTextHelpFormatter)
     argument_parser.add_argument('--formats', '-f',
                                  help='Comma-separated list of formats')
-    argument_parser.add_argument('--skip-callgrind', '-s', action='store_true',
-                                 help='Skip the (no longer expensive) benchlib callgrind test')
+    argument_parser.add_argument('--skip-benchlib', '-s', action='store_true',
+                                 help='Skip the expensive benchlib callgrind test')
     argument_parser.add_argument('subtests', help='subtests to regenerate',
                                  nargs='*', type=str)
 
@@ -344,16 +335,7 @@ def main(argv):
     cleaner = Cleaner()
     src_dir = cleaner.sourceDir
 
-    if not options.skip_callgrind:
-        # Skip it, even if not requested, when valgrind isn't available:
-        try:
-            probe = subprocess.Popen(['valgrind', '--version'], stdout=subprocess.PIPE,
-                                     env=testEnv('benchlibcallgrind'), universal_newlines=True)
-        except FileNotFoundError:
-            options.skip_callgrind = True
-            print("Failed to find valgrind, skipping benchlibcallgrind test")
-
-    tests = tuple(Scanner().subdirs(options.subtests, options.skip_callgrind))
+    tests = tuple(Scanner().subdirs(options.subtests, options.skip_benchlib))
     print("Generating", len(tests), "test results for", cleaner.version, "in:", src_dir)
     for path in tests:
         generateTestData(path, src_dir, cleaner.clean, formats)

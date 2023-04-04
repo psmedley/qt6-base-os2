@@ -1,5 +1,30 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the test suite of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 /* possible connection parameters */
 
 #ifndef TST_DATABASES_H
@@ -125,7 +150,7 @@ public:
         QTest::addColumn<QString>( "dbName" );
         int count = 0;
 
-        for ( int i = 0; i < dbNames.size(); ++i ) {
+        for ( int i = 0; i < dbNames.count(); ++i ) {
             QSqlDatabase db = QSqlDatabase::database( dbNames.at( i ) );
 
             if ( !db.isValid() )
@@ -146,7 +171,7 @@ public:
         QTest::addColumn<int>("submitpolicy_i");
         int count = 0;
 
-        for ( int i = 0; i < dbNames.size(); ++i ) {
+        for ( int i = 0; i < dbNames.count(); ++i ) {
             QSqlDatabase db = QSqlDatabase::database( dbNames.at( i ) );
 
             if ( !db.isValid() )
@@ -181,14 +206,6 @@ public:
 
         if ( port > 0 )
             cName += QLatin1Char(':') + QString::number( port );
-
-        if (driver == "QSQLITE") {
-            // Since the database for sqlite is generated at runtime it's always
-            // available, but we use QTempDir so it's always in a different
-            // location. Thus, let's ignore the path completely.
-            cName = "SQLite";
-            qInfo("SQLite will use the database located at %ls", qUtf16Printable(dbName));
-        }
 
         db = QSqlDatabase::addDatabase( driver, cName );
 
@@ -258,7 +275,7 @@ public:
         }
         QTemporaryDir *sqLiteDir = dbDir();
         if (sqLiteDir) {
-            addDb(QStringLiteral("QSQLITE"), QDir::toNativeSeparators(sqLiteDir->path() + QStringLiteral("/sqlite.db")));
+            addDb(QStringLiteral("QSQLITE"), QDir::toNativeSeparators(sqLiteDir->path() + QStringLiteral("/foo.db")));
             added = true;
         }
         return added;

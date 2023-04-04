@@ -1,12 +1,48 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <qmenubar.h>
 
 #include <qstyle.h>
 #include <qlayout.h>
 #include <qapplication.h>
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
 # include <qaccessible.h>
 #endif
 #include <qpainter.h>
@@ -35,8 +71,6 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace Qt::StringLiterals;
-
 class QMenuBarExtension : public QToolButton
 {
 public:
@@ -49,7 +83,7 @@ public:
 QMenuBarExtension::QMenuBarExtension(QWidget *parent)
     : QToolButton(parent)
 {
-    setObjectName("qt_menubar_ext_button"_L1);
+    setObjectName(QLatin1String("qt_menubar_ext_button"));
     setAutoRaise(true);
 #if QT_CONFIG(menu)
     setPopupMode(QToolButton::InstantPopup);
@@ -168,7 +202,7 @@ void QMenuBarPrivate::updateGeometries()
         for(int j = 0; j < shortcutIndexMap.size(); ++j)
             q->releaseShortcut(shortcutIndexMap.value(j));
         shortcutIndexMap.clear();
-        const int actionsCount = actions.size();
+        const int actionsCount = actions.count();
         shortcutIndexMap.reserve(actionsCount);
         for (int i = 0; i < actionsCount; i++)
             shortcutIndexMap.append(q->grabShortcut(QKeySequence::mnemonic(actions.at(i)->text())));
@@ -182,7 +216,7 @@ void QMenuBarPrivate::updateGeometries()
 
     //we try to see if the actions will fit there
     bool hasHiddenActions = false;
-    for (int i = 0; i < actions.size(); ++i) {
+    for (int i = 0; i < actions.count(); ++i) {
         const QRect &rect = actionRects.at(i);
         if (rect.isValid() && !menuRect.contains(rect)) {
             hasHiddenActions = true;
@@ -193,7 +227,7 @@ void QMenuBarPrivate::updateGeometries()
     //...and if not, determine the ones that fit on the menu with the extension visible
     if (hasHiddenActions) {
         menuRect = this->menuRect(true);
-        for (int i = 0; i < actions.size(); ++i) {
+        for (int i = 0; i < actions.count(); ++i) {
             const QRect &rect = actionRects.at(i);
             if (rect.isValid() && !menuRect.contains(rect)) {
                 hiddenActions.append(actions.at(i));
@@ -201,7 +235,7 @@ void QMenuBarPrivate::updateGeometries()
         }
     }
 
-    if (hiddenActions.size() > 0) {
+    if (hiddenActions.count() > 0) {
         QMenu *pop = extension->menu();
         if (!pop) {
             pop = new QMenu(q);
@@ -229,7 +263,7 @@ QRect QMenuBarPrivate::actionRect(QAction *act) const
     //makes sure the geometries are up-to-date
     const_cast<QMenuBarPrivate*>(this)->updateGeometries();
 
-    if (index < 0 || index >= actionRects.size())
+    if (index < 0 || index >= actionRects.count())
         return QRect(); // that can happen in case of native menubar
 
     return actionRects.at(index);
@@ -240,8 +274,8 @@ void QMenuBarPrivate::focusFirstAction()
     if (!currentAction) {
         updateGeometries();
         int index = 0;
-        while (index < actions.size() && actionRects.at(index).isNull()) ++index;
-        if (index < actions.size())
+        while (index < actions.count() && actionRects.at(index).isNull()) ++index;
+        if (index < actions.count())
             setCurrentAction(actions.at(index));
     }
 }
@@ -378,7 +412,7 @@ void QMenuBarPrivate::calcActionRects(int max_width, int start) const
         return;
 
     //let's reinitialize the buffer
-    actionRects.resize(actions.size());
+    actionRects.resize(actions.count());
     actionRects.fill(QRect());
 
     const QStyle *style = q->style();
@@ -391,7 +425,7 @@ void QMenuBarPrivate::calcActionRects(int max_width, int start) const
     const int hmargin = style->pixelMetric(QStyle::PM_MenuBarHMargin, nullptr, q),
               vmargin = style->pixelMetric(QStyle::PM_MenuBarVMargin, nullptr, q),
                 icone = style->pixelMetric(QStyle::PM_SmallIconSize, nullptr, q);
-    for(int i = 0; i < actions.size(); i++) {
+    for(int i = 0; i < actions.count(); i++) {
         QAction *action = actions.at(i);
         if (!action->isVisible())
             continue;
@@ -437,7 +471,7 @@ void QMenuBarPrivate::calcActionRects(int max_width, int start) const
     const int fw = q->style()->pixelMetric(QStyle::PM_MenuBarPanelWidth, nullptr, q);
     int x = fw + ((start == -1) ? hmargin : start) + itemSpacing;
     int y = fw + vmargin;
-    for(int i = 0; i < actions.size(); i++) {
+    for(int i = 0; i < actions.count(); i++) {
         QRect &rect = actionRects[i];
         if (rect.isNull())
             continue;
@@ -495,14 +529,14 @@ void QMenuBarPrivate::_q_actionHovered()
     Q_Q(QMenuBar);
     if (QAction *action = qobject_cast<QAction *>(q->sender())) {
         emit q->hovered(action);
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
         if (QAccessible::isActive()) {
             int actionIndex = actions.indexOf(action);
             QAccessibleEvent focusEvent(q, QAccessible::Focus);
             focusEvent.setChild(actionIndex);
             QAccessible::updateAccessibility(&focusEvent);
         }
-#endif // QT_CONFIG(accessibility)
+#endif //QT_NO_ACCESSIBILITY
     }
 }
 
@@ -650,7 +684,7 @@ void QMenuBar::initStyleOption(QStyleOptionMenuItem *option, const QAction *acti
 
     \sa QMenu, QShortcut, QAction,
         {http://developer.apple.com/documentation/UserExperience/Conceptual/AppleHIGuidelines/XHIGIntro/XHIGIntro.html}{Introduction to Apple Human Interface Guidelines},
-        {Menus Example}
+        {fowler}{GUI Design Handbook: Menu Bar}, {Menus Example}
 */
 
 
@@ -680,8 +714,8 @@ QAction *QMenuBarPrivate::getNextAction(const int _start, const int increment) c
     Q_Q(const QMenuBar);
     const_cast<QMenuBarPrivate*>(this)->updateGeometries();
     bool allowActiveAndDisabled = q->style()->styleHint(QStyle::SH_Menu_AllowActiveAndDisabled, nullptr, q);
-    const int start = (_start == -1 && increment == -1) ? actions.size() : _start;
-    const int end =  increment == -1 ? 0 : actions.size() - 1;
+    const int start = (_start == -1 && increment == -1) ? actions.count() : _start;
+    const int end =  increment == -1 ? 0 : actions.count() - 1;
 
     for (int i = start; i != end;) {
         i += increment;
@@ -715,6 +749,72 @@ QMenuBar::~QMenuBar()
     delete d->platformMenuBar;
     d->platformMenuBar = nullptr;
 }
+
+/*!
+    This convenience function creates a new action with \a text.
+    The function adds the newly created action to the menu's
+    list of actions, and returns it.
+
+    \sa QWidget::addAction(), QWidget::actions()
+*/
+QAction *QMenuBar::addAction(const QString &text)
+{
+    QAction *ret = new QAction(text, this);
+    addAction(ret);
+    return ret;
+}
+
+/*!
+    \overload
+
+    This convenience function creates a new action with the given \a
+    text. The action's triggered() signal is connected to the \a
+    receiver's \a member slot. The function adds the newly created
+    action to the menu's list of actions and returns it.
+
+    \sa QWidget::addAction(), QWidget::actions()
+*/
+QAction *QMenuBar::addAction(const QString &text, const QObject *receiver, const char* member)
+{
+    QAction *ret = new QAction(text, this);
+    QObject::connect(ret, SIGNAL(triggered(bool)), receiver, member);
+    addAction(ret);
+    return ret;
+}
+
+/*!
+    \fn template<typename Obj, typename PointerToMemberFunctionOrFunctor> QAction *QMenuBar::addAction(const QString &text, const Obj *receiver, PointerToMemberFunctionOrFunctor method)
+
+    \since 5.11
+
+    \overload
+
+    This convenience function creates a new action with the given \a
+    text. The action's triggered() signal is connected to the
+    \a method of the \a receiver. The function adds the newly created
+    action to the menu's list of actions and returns it.
+
+    QMenuBar takes ownership of the returned QAction.
+
+    \sa QWidget::addAction(), QWidget::actions()
+*/
+
+/*!
+    \fn template<typename Functor> QAction *QMenuBar::addAction(const QString &text, Functor functor)
+
+    \since 5.11
+
+    \overload
+
+    This convenience function creates a new action with the given \a
+    text. The action's triggered() signal is connected to the
+    \a functor. The function adds the newly created
+    action to the menu's list of actions and returns it.
+
+    QMenuBar takes ownership of the returned QAction.
+
+    \sa QWidget::addAction(), QWidget::actions()
+*/
 
 /*!
   Appends a new QMenu with \a title to the menu bar. The menu bar
@@ -884,7 +984,7 @@ void QMenuBar::paintEvent(QPaintEvent *e)
     QRegion emptyArea(rect());
 
     //draw the items
-    for (int i = 0; i < d->actions.size(); ++i) {
+    for (int i = 0; i < d->actions.count(); ++i) {
         QAction *action = d->actions.at(i);
         QRect adjustedActionRect = d->actionRect(action);
         if (adjustedActionRect.isEmpty() || !d->isVisible(action))
@@ -1060,7 +1160,7 @@ void QMenuBar::keyPressEvent(QKeyEvent *e)
 
     if (!key_consumed &&
        (!e->modifiers() ||
-        (e->modifiers()&(Qt::MetaModifier|Qt::AltModifier))) && e->text().size()==1 && !d->popupState) {
+        (e->modifiers()&(Qt::MetaModifier|Qt::AltModifier))) && e->text().length()==1 && !d->popupState) {
         int clashCount = 0;
         QAction *first = nullptr, *currentSelected = nullptr, *firstAfterCurrent = nullptr;
         {
@@ -1071,7 +1171,7 @@ void QMenuBar::keyPressEvent(QKeyEvent *e)
                 QAction *act = d->actions.at(i);
                 QString s = act->text();
                 if (!s.isEmpty()) {
-                    qsizetype ampersand = s.indexOf(u'&');
+                    int ampersand = s.indexOf(QLatin1Char('&'));
                     if (ampersand >= 0) {
                         if (s[ampersand+1].toUpper() == c) {
                             clashCount++;
@@ -1488,7 +1588,7 @@ bool QMenuBar::eventFilter(QObject *object, QEvent *event)
   Returns the QAction at \a pt. Returns \nullptr if there is no action at \a pt or if
 the location has a separator.
 
-    \sa QWidget::addAction(), addSeparator()
+    \sa addAction(), addSeparator()
 */
 QAction *QMenuBar::actionAt(const QPoint &pt) const
 {
@@ -1525,7 +1625,7 @@ QSize QMenuBar::minimumSizeHint() const
     if (as_gui_menubar) {
         int w = parentWidget() ? parentWidget()->width() : QGuiApplication::primaryScreen()->virtualGeometry().width();
         d->calcActionRects(w - (2 * fw), 0);
-        for (int i = 0; ret.isNull() && i < d->actions.size(); ++i)
+        for (int i = 0; ret.isNull() && i < d->actions.count(); ++i)
             ret = d->actionRects.at(i).size();
         if (!d->extension->isHidden())
             ret += QSize(d->extension->sizeHint().width(), 0);
@@ -1575,7 +1675,7 @@ QSize QMenuBar::sizeHint() const
     if (as_gui_menubar) {
         const int w = parentWidget() ? parentWidget()->width() : QGuiApplication::primaryScreen()->virtualGeometry().width();
         d->calcActionRects(w - (2 * fw), 0);
-        for (int i = 0; i < d->actionRects.size(); ++i) {
+        for (int i = 0; i < d->actionRects.count(); ++i) {
             const QRect &actionRect = d->actionRects.at(i);
             ret = ret.expandedTo(QSize(actionRect.x() + actionRect.width(), actionRect.y() + actionRect.height()));
         }
@@ -1622,7 +1722,7 @@ int QMenuBar::heightForWidth(int) const
     int fw = style()->pixelMetric(QStyle::PM_MenuBarPanelWidth, nullptr, this);
     int spaceBelowMenuBar = style()->styleHint(QStyle::SH_MainWindow_SpaceBelowMenuBar, nullptr, this);
     if (as_gui_menubar) {
-        for (int i = 0; i < d->actionRects.size(); ++i)
+        for (int i = 0; i < d->actionRects.count(); ++i)
             height = qMax(height, d->actionRects.at(i).height());
         if (height) //there is at least one non-null item
             height += spaceBelowMenuBar;

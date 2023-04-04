@@ -1,5 +1,41 @@
-// Copyright (C) 2018 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2018 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the plugins of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 /****************************************************************************
  **
@@ -39,7 +75,6 @@
 
 #include "qcocoaapplicationdelegate.h"
 #include "qcocoaintegration.h"
-#include "qcocoamenubar.h"
 #include "qcocoamenu.h"
 #include "qcocoamenuloader.h"
 #include "qcocoamenuitem.h"
@@ -195,8 +230,6 @@ QT_USE_NAMESPACE
         // (See the activateIgnoringOtherApps docs.)
         [[NSApplication sharedApplication] activateIgnoringOtherApps:YES];
     }
-
-    QCocoaMenuBar::insertWindowMenu();
 }
 
 - (void)application:(NSApplication *)sender openFiles:(NSArray *)filenames
@@ -232,25 +265,10 @@ QT_USE_NAMESPACE
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification
 {
-    if (QCocoaWindow::s_applicationActivationObserver) {
-        [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:QCocoaWindow::s_applicationActivationObserver];
-        QCocoaWindow::s_applicationActivationObserver = nil;
-    }
-
     if ([reflectionDelegate respondsToSelector:_cmd])
         [reflectionDelegate applicationDidBecomeActive:notification];
 
     QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationActive);
-
-    if (QCocoaWindow::s_windowUnderMouse) {
-        QPointF windowPoint;
-        QPointF screenPoint;
-        QNSView *view = qnsview_cast(QCocoaWindow::s_windowUnderMouse->m_view);
-        [view convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
-        QWindow *windowUnderMouse = QCocoaWindow::s_windowUnderMouse->window();
-        qCInfo(lcQpaMouse) << "Application activated with mouse at" << windowPoint << "; sending" << QEvent::Enter << "to" << windowUnderMouse;
-        QWindowSystemInterface::handleEnterEvent(windowUnderMouse, windowPoint, screenPoint);
-    }
 }
 
 - (void)applicationDidResignActive:(NSNotification *)notification
@@ -259,12 +277,6 @@ QT_USE_NAMESPACE
         [reflectionDelegate applicationDidResignActive:notification];
 
     QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationInactive);
-
-    if (QCocoaWindow::s_windowUnderMouse) {
-        QWindow *windowUnderMouse = QCocoaWindow::s_windowUnderMouse->window();
-        qCInfo(lcQpaMouse) << "Application deactivated; sending" << QEvent::Leave << "to" << windowUnderMouse;
-        QWindowSystemInterface::handleLeaveEvent(windowUnderMouse);
-    }
 }
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)theApplication hasVisibleWindows:(BOOL)flag

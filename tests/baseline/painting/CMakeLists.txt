@@ -12,7 +12,7 @@ qt_internal_add_test(tst_baseline_painting
     SOURCES
         ../shared/baselineprotocol.cpp ../shared/baselineprotocol.h ../shared/lookup3.cpp
         ../shared/qbaselinetest.cpp ../shared/qbaselinetest.h
-        ../shared/paintcommands.cpp ../shared/paintcommands.h
+        paintcommands.cpp paintcommands.h
         tst_baseline_painting.cpp
     INCLUDE_DIRECTORIES
         ../shared

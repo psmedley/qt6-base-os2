@@ -4,29 +4,36 @@
 ## tst_qsettings Test:
 #####################################################################
 
-# Test:
-set(qsettings_resource_files
-    "bom.ini"
-    "resourcefile.ini"
-    "resourcefile2.ini"
-    "resourcefile3.ini"
-    "resourcefile6.plist"
-    "withcomments.ini"
-    "float.ini"
-    "qt5settings.ini"
-    "utf8settings.ini"
-)
-
 qt_internal_add_test(tst_qsettings
     SOURCES
         tst_qsettings.cpp
+    DEFINES
+        QT_DISABLE_DEPRECATED_BEFORE=0
     INCLUDE_DIRECTORIES
         ../../kernel/qmetatype
     PUBLIC_LIBRARIES
         Qt::CorePrivate
         Qt::Gui
-    TESTDATA ${qsettings_resource_files}
-    BUILTIN_TESTDATA
+)
+
+# Resources:
+set(qsettings_resource_files
+    "bom.ini"
+    "resourcefile.ini"
+    "resourcefile2.ini"
+    "resourcefile3.ini"
+    "resourcefile4.ini"
+    "resourcefile5.ini"
+    "resourcefile6.plist"
+    "withcomments.ini"
+    "float.ini"
+)
+
+qt_internal_add_resource(tst_qsettings "qsettings"
+    PREFIX
+        "/"
+    FILES
+        ${qsettings_resource_files}
 )
 
 

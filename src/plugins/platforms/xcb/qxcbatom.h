@@ -1,5 +1,41 @@
-// Copyright (C) 2018 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2018 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 #ifndef QXCBATOM_H
 #define QXCBATOM_H
 
@@ -10,204 +46,201 @@ class QXcbAtom
 public:
     enum Atom {
         // window-manager <-> client protocols
-        AtomWM_PROTOCOLS,
-        AtomWM_DELETE_WINDOW,
-        AtomWM_TAKE_FOCUS,
-        Atom_NET_WM_PING,
-        Atom_NET_WM_CONTEXT_HELP,
-        Atom_NET_WM_SYNC_REQUEST,
-        Atom_NET_WM_SYNC_REQUEST_COUNTER,
-        AtomMANAGER, // System tray notification
-        Atom_NET_SYSTEM_TRAY_OPCODE, // System tray operation
+        WM_PROTOCOLS,
+        WM_DELETE_WINDOW,
+        WM_TAKE_FOCUS,
+        _NET_WM_PING,
+        _NET_WM_CONTEXT_HELP,
+        _NET_WM_SYNC_REQUEST,
+        _NET_WM_SYNC_REQUEST_COUNTER,
+        MANAGER, // System tray notification
+        _NET_SYSTEM_TRAY_OPCODE, // System tray operation
 
         // ICCCM window state
-        AtomWM_STATE,
-        AtomWM_CHANGE_STATE,
-        AtomWM_CLASS,
-        AtomWM_NAME,
+        WM_STATE,
+        WM_CHANGE_STATE,
+        WM_CLASS,
+        WM_NAME,
 
         // Session management
-        AtomWM_CLIENT_LEADER,
-        AtomWM_WINDOW_ROLE,
-        AtomSM_CLIENT_ID,
-        AtomWM_CLIENT_MACHINE,
+        WM_CLIENT_LEADER,
+        WM_WINDOW_ROLE,
+        SM_CLIENT_ID,
+        WM_CLIENT_MACHINE,
 
         // Clipboard
-        AtomCLIPBOARD,
-        AtomINCR,
-        AtomTARGETS,
-        AtomMULTIPLE,
-        AtomTIMESTAMP,
-        AtomSAVE_TARGETS,
-        AtomCLIP_TEMPORARY,
-        Atom_QT_SELECTION,
-        Atom_QT_CLIPBOARD_SENTINEL,
-        Atom_QT_SELECTION_SENTINEL,
-        AtomCLIPBOARD_MANAGER,
+        CLIPBOARD,
+        INCR,
+        TARGETS,
+        MULTIPLE,
+        TIMESTAMP,
+        SAVE_TARGETS,
+        CLIP_TEMPORARY,
+        _QT_SELECTION,
+        _QT_CLIPBOARD_SENTINEL,
+        _QT_SELECTION_SENTINEL,
+        CLIPBOARD_MANAGER,
 
-        AtomRESOURCE_MANAGER,
+        RESOURCE_MANAGER,
 
-        Atom_XSETROOT_ID,
+        _XSETROOT_ID,
 
-        Atom_QT_SCROLL_DONE,
-        Atom_QT_INPUT_ENCODING,
+        _QT_SCROLL_DONE,
+        _QT_INPUT_ENCODING,
 
         // Qt/XCB specific
-        Atom_QT_CLOSE_CONNECTION,
+        _QT_CLOSE_CONNECTION,
 
-        Atom_QT_GET_TIMESTAMP,
+        _MOTIF_WM_HINTS,
 
-        Atom_MOTIF_WM_HINTS,
-
-        AtomDTWM_IS_RUNNING,
-        AtomENLIGHTENMENT_DESKTOP,
-        Atom_DT_SAVE_MODE,
-        Atom_SGI_DESKS_MANAGER,
+        DTWM_IS_RUNNING,
+        ENLIGHTENMENT_DESKTOP,
+        _DT_SAVE_MODE,
+        _SGI_DESKS_MANAGER,
 
         // EWMH (aka NETWM)
-        Atom_NET_SUPPORTED,
-        Atom_NET_VIRTUAL_ROOTS,
-        Atom_NET_WORKAREA,
+        _NET_SUPPORTED,
+        _NET_VIRTUAL_ROOTS,
+        _NET_WORKAREA,
 
-        Atom_NET_MOVERESIZE_WINDOW,
-        Atom_NET_WM_MOVERESIZE,
+        _NET_MOVERESIZE_WINDOW,
+        _NET_WM_MOVERESIZE,
 
-        Atom_NET_WM_NAME,
-        Atom_NET_WM_ICON_NAME,
-        Atom_NET_WM_ICON,
+        _NET_WM_NAME,
+        _NET_WM_ICON_NAME,
+        _NET_WM_ICON,
 
-        Atom_NET_WM_PID,
+        _NET_WM_PID,
 
-        Atom_NET_WM_WINDOW_OPACITY,
+        _NET_WM_WINDOW_OPACITY,
 
-        Atom_NET_WM_STATE,
-        Atom_NET_WM_STATE_ABOVE,
-        Atom_NET_WM_STATE_BELOW,
-        Atom_NET_WM_STATE_FULLSCREEN,
-        Atom_NET_WM_STATE_MAXIMIZED_HORZ,
-        Atom_NET_WM_STATE_MAXIMIZED_VERT,
-        Atom_NET_WM_STATE_MODAL,
-        Atom_NET_WM_STATE_STAYS_ON_TOP,
-        Atom_NET_WM_STATE_DEMANDS_ATTENTION,
-        Atom_NET_WM_STATE_HIDDEN,
+        _NET_WM_STATE,
+        _NET_WM_STATE_ABOVE,
+        _NET_WM_STATE_BELOW,
+        _NET_WM_STATE_FULLSCREEN,
+        _NET_WM_STATE_MAXIMIZED_HORZ,
+        _NET_WM_STATE_MAXIMIZED_VERT,
+        _NET_WM_STATE_MODAL,
+        _NET_WM_STATE_STAYS_ON_TOP,
+        _NET_WM_STATE_DEMANDS_ATTENTION,
+        _NET_WM_STATE_HIDDEN,
 
-        Atom_NET_WM_USER_TIME,
-        Atom_NET_WM_USER_TIME_WINDOW,
-        Atom_NET_WM_FULL_PLACEMENT,
+        _NET_WM_USER_TIME,
+        _NET_WM_USER_TIME_WINDOW,
+        _NET_WM_FULL_PLACEMENT,
 
-        Atom_NET_WM_WINDOW_TYPE,
-        Atom_NET_WM_WINDOW_TYPE_DESKTOP,
-        Atom_NET_WM_WINDOW_TYPE_DOCK,
-        Atom_NET_WM_WINDOW_TYPE_TOOLBAR,
-        Atom_NET_WM_WINDOW_TYPE_MENU,
-        Atom_NET_WM_WINDOW_TYPE_UTILITY,
-        Atom_NET_WM_WINDOW_TYPE_SPLASH,
-        Atom_NET_WM_WINDOW_TYPE_DIALOG,
-        Atom_NET_WM_WINDOW_TYPE_DROPDOWN_MENU,
-        Atom_NET_WM_WINDOW_TYPE_POPUP_MENU,
-        Atom_NET_WM_WINDOW_TYPE_TOOLTIP,
-        Atom_NET_WM_WINDOW_TYPE_NOTIFICATION,
-        Atom_NET_WM_WINDOW_TYPE_COMBO,
-        Atom_NET_WM_WINDOW_TYPE_DND,
-        Atom_NET_WM_WINDOW_TYPE_NORMAL,
-        Atom_KDE_NET_WM_WINDOW_TYPE_OVERRIDE,
+        _NET_WM_WINDOW_TYPE,
+        _NET_WM_WINDOW_TYPE_DESKTOP,
+        _NET_WM_WINDOW_TYPE_DOCK,
+        _NET_WM_WINDOW_TYPE_TOOLBAR,
+        _NET_WM_WINDOW_TYPE_MENU,
+        _NET_WM_WINDOW_TYPE_UTILITY,
+        _NET_WM_WINDOW_TYPE_SPLASH,
+        _NET_WM_WINDOW_TYPE_DIALOG,
+        _NET_WM_WINDOW_TYPE_DROPDOWN_MENU,
+        _NET_WM_WINDOW_TYPE_POPUP_MENU,
+        _NET_WM_WINDOW_TYPE_TOOLTIP,
+        _NET_WM_WINDOW_TYPE_NOTIFICATION,
+        _NET_WM_WINDOW_TYPE_COMBO,
+        _NET_WM_WINDOW_TYPE_DND,
+        _NET_WM_WINDOW_TYPE_NORMAL,
+        _KDE_NET_WM_WINDOW_TYPE_OVERRIDE,
 
-        Atom_KDE_NET_WM_FRAME_STRUT,
-        Atom_NET_FRAME_EXTENTS,
+        _KDE_NET_WM_FRAME_STRUT,
+        _NET_FRAME_EXTENTS,
 
-        Atom_NET_STARTUP_INFO,
-        Atom_NET_STARTUP_INFO_BEGIN,
-        Atom_NET_STARTUP_ID,
+        _NET_STARTUP_INFO,
+        _NET_STARTUP_INFO_BEGIN,
 
-        Atom_NET_SUPPORTING_WM_CHECK,
+        _NET_SUPPORTING_WM_CHECK,
 
-        Atom_NET_WM_CM_S0,
+        _NET_WM_CM_S0,
 
-        Atom_NET_SYSTEM_TRAY_VISUAL,
+        _NET_SYSTEM_TRAY_VISUAL,
 
-        Atom_NET_ACTIVE_WINDOW,
+        _NET_ACTIVE_WINDOW,
 
         // Property formats
-        AtomTEXT,
-        AtomUTF8_STRING,
-        AtomCARDINAL,
+        TEXT,
+        UTF8_STRING,
+        CARDINAL,
 
         // Xdnd
-        AtomXdndEnter,
-        AtomXdndPosition,
-        AtomXdndStatus,
-        AtomXdndLeave,
-        AtomXdndDrop,
-        AtomXdndFinished,
-        AtomXdndTypelist,
-        AtomXdndActionList,
+        XdndEnter,
+        XdndPosition,
+        XdndStatus,
+        XdndLeave,
+        XdndDrop,
+        XdndFinished,
+        XdndTypelist,
+        XdndActionList,
 
-        AtomXdndSelection,
+        XdndSelection,
 
-        AtomXdndAware,
-        AtomXdndProxy,
+        XdndAware,
+        XdndProxy,
 
-        AtomXdndActionCopy,
-        AtomXdndActionLink,
-        AtomXdndActionMove,
-        AtomXdndActionAsk,
-        AtomXdndActionPrivate,
+        XdndActionCopy,
+        XdndActionLink,
+        XdndActionMove,
+        XdndActionAsk,
+        XdndActionPrivate,
 
         // Xkb
-        Atom_XKB_RULES_NAMES,
+        _XKB_RULES_NAMES,
 
         // XEMBED
-        Atom_XEMBED,
-        Atom_XEMBED_INFO,
+        _XEMBED,
+        _XEMBED_INFO,
 
         // XInput2
-        AtomButtonLeft,
-        AtomButtonMiddle,
-        AtomButtonRight,
-        AtomButtonWheelUp,
-        AtomButtonWheelDown,
-        AtomButtonHorizWheelLeft,
-        AtomButtonHorizWheelRight,
-        AtomAbsMTPositionX,
-        AtomAbsMTPositionY,
-        AtomAbsMTTouchMajor,
-        AtomAbsMTTouchMinor,
-        AtomAbsMTOrientation,
-        AtomAbsMTPressure,
-        AtomAbsMTTrackingID,
-        AtomMaxContacts,
-        AtomRelX,
-        AtomRelY,
+        ButtonLeft,
+        ButtonMiddle,
+        ButtonRight,
+        ButtonWheelUp,
+        ButtonWheelDown,
+        ButtonHorizWheelLeft,
+        ButtonHorizWheelRight,
+        AbsMTPositionX,
+        AbsMTPositionY,
+        AbsMTTouchMajor,
+        AbsMTTouchMinor,
+        AbsMTOrientation,
+        AbsMTPressure,
+        AbsMTTrackingID,
+        MaxContacts,
+        RelX,
+        RelY,
         // XInput2 tablet
-        AtomAbsX,
-        AtomAbsY,
-        AtomAbsPressure,
-        AtomAbsTiltX,
-        AtomAbsTiltY,
-        AtomAbsWheel,
-        AtomAbsDistance,
-        AtomWacomSerialIDs,
-        AtomINTEGER,
-        AtomRelHorizWheel,
-        AtomRelVertWheel,
-        AtomRelHorizScroll,
-        AtomRelVertScroll,
+        AbsX,
+        AbsY,
+        AbsPressure,
+        AbsTiltX,
+        AbsTiltY,
+        AbsWheel,
+        AbsDistance,
+        WacomSerialIDs,
+        INTEGER,
+        RelHorizWheel,
+        RelVertWheel,
+        RelHorizScroll,
+        RelVertScroll,
 
-        Atom_XSETTINGS_SETTINGS,
+        _XSETTINGS_SETTINGS,
 
-        Atom_COMPIZ_DECOR_PENDING,
-        Atom_COMPIZ_DECOR_REQUEST,
-        Atom_COMPIZ_DECOR_DELETE_PIXMAP,
-        Atom_COMPIZ_TOOLKIT_ACTION,
-        Atom_GTK_LOAD_ICONTHEMES,
+        _COMPIZ_DECOR_PENDING,
+        _COMPIZ_DECOR_REQUEST,
+        _COMPIZ_DECOR_DELETE_PIXMAP,
+        _COMPIZ_TOOLKIT_ACTION,
+        _GTK_LOAD_ICONTHEMES,
 
-        AtomAT_SPI_BUS,
+        AT_SPI_BUS,
 
-        AtomEDID,
-        AtomEDID_DATA,
-        AtomXFree86_DDC_EDID1_RAWDATA,
+        EDID,
+        EDID_DATA,
+        XFree86_DDC_EDID1_RAWDATA,
 
-        Atom_ICC_PROFILE,
+        _ICC_PROFILE,
 
         NAtoms
     };

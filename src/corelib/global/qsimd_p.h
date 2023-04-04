@@ -1,6 +1,42 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// Copyright (C) 2022 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2018 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #ifndef QSIMD_P_H
 #define QSIMD_P_H
@@ -18,20 +54,6 @@
 
 #include <QtCore/private/qglobal_p.h>
 #include <QtCore/qsimd.h>
-
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_CLANG("-Wundef")
-QT_WARNING_DISABLE_GCC("-Wundef")
-QT_WARNING_DISABLE_INTEL(103)
-
-#define ALIGNMENT_PROLOGUE_16BYTES(ptr, i, length) \
-    for (; i < static_cast<int>(qMin(static_cast<quintptr>(length), ((4 - ((reinterpret_cast<quintptr>(ptr) >> 2) & 0x3)) & 0x3))); ++i)
-
-#define ALIGNMENT_PROLOGUE_32BYTES(ptr, i, length) \
-    for (; i < static_cast<int>(qMin(static_cast<quintptr>(length), ((8 - ((reinterpret_cast<quintptr>(ptr) >> 2) & 0x7)) & 0x7))); ++i)
-
-#define SIMD_EPILOGUE(i, length, max) \
-    for (int _i = 0; _i < max && i < length; ++i, ++_i)
 
 /*
  * qt_module_config.prf defines the QT_COMPILER_SUPPORTS_XXX macros.
@@ -81,9 +103,6 @@ QT_WARNING_DISABLE_INTEL(103)
  *   sub-arch. Only inside such functions is the use of the intrisics
  *   guaranteed to work. This is useful with runtime detection (see below).
  *
- * The distinction between QT_COMPILER_SUPPORTS and QT_COMPILER_SUPPORTS_HERE is
- * historical: GCC 4.8 needed the distinction.
- *
  * Runtime detection of a CPU sub-architecture can be done with the
  * qCpuHasFeature(XXX) function. There are two strategies for generating
  * optimized code like that:
@@ -126,7 +145,7 @@ QT_WARNING_DISABLE_INTEL(103)
 
 #define QT_COMPILER_SUPPORTS(x)     (QT_COMPILER_SUPPORTS_ ## x - 0)
 
-#if defined(Q_PROCESSOR_ARM)
+#if defined(Q_PROCESSOR_ARM) && defined(QT_COMPILER_SUPPORTS_SIMD_ALWAYS)
 #  define QT_COMPILER_SUPPORTS_HERE(x)    ((__ARM_FEATURE_ ## x) || (__ ## x ## __) || QT_COMPILER_SUPPORTS(x))
 #  if defined(Q_CC_GNU)
      /* GCC requires attributes for a function */
@@ -143,18 +162,21 @@ QT_WARNING_DISABLE_INTEL(103)
 #  if !defined(__MIPS_DSPR2__) && defined(__mips_dspr2) && defined(Q_PROCESSOR_MIPS_32)
 #    define __MIPS_DSPR2__
 #  endif
-#elif defined(Q_PROCESSOR_X86)
+#elif defined(Q_PROCESSOR_X86) && defined(QT_COMPILER_SUPPORTS_SIMD_ALWAYS)
 #  if defined(Q_CC_CLANG) && defined(Q_CC_MSVC)
 #    define QT_COMPILER_SUPPORTS_HERE(x)    (__ ## x ## __)
 #  else
 #    define QT_COMPILER_SUPPORTS_HERE(x)    ((__ ## x ## __) || QT_COMPILER_SUPPORTS(x))
 #  endif
-#  if defined(Q_CC_GNU)
+#  if defined(Q_CC_GNU) && !defined(Q_CC_INTEL)
      /* GCC requires attributes for a function */
 #    define QT_FUNCTION_TARGET(x)  __attribute__((__target__(QT_FUNCTION_TARGET_STRING_ ## x)))
 #  else
 #    define QT_FUNCTION_TARGET(x)
 #  endif
+#elif defined(Q_PROCESSOR_ARM)
+#  define QT_COMPILER_SUPPORTS_HERE(x)    ((__ARM_FEATURE_ ## x) || (__ ## x ## __))
+#  define QT_FUNCTION_TARGET(x)
 #else
 #  define QT_COMPILER_SUPPORTS_HERE(x)    (__ ## x ## __)
 #  define QT_FUNCTION_TARGET(x)
@@ -168,30 +190,7 @@ QT_WARNING_DISABLE_INTEL(103)
 #    define __SSE__                         1
 #  endif
 
-#  if defined(Q_OS_WIN) && defined(Q_CC_GNU) && !defined(Q_CC_CLANG)
-// 64-bit GCC on Windows does not support AVX, so we hack around it by forcing
-// it to emit unaligned loads & stores
-// See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=49001
-asm(
-    ".macro vmovapd args:vararg\n"
-    "    vmovupd \\args\n"
-    ".endm\n"
-    ".macro vmovaps args:vararg\n"
-    "    vmovups \\args\n"
-    ".endm\n"
-    ".macro vmovdqa args:vararg\n"
-    "    vmovdqu \\args\n"
-    ".endm\n"
-    ".macro vmovdqa32 args:vararg\n"
-    "    vmovdqu32 \\args\n"
-    ".endm\n"
-    ".macro vmovdqa64 args:vararg\n"
-    "    vmovdqu64 \\args\n"
-    ".endm\n"
-);
-#  endif
-
-#  if defined(Q_CC_GNU) && !defined(Q_OS_WASM)
+#  if defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && !defined(Q_OS_WASM)
 // GCC 4.4 and Clang 2.8 added a few more intrinsics there
 #    include <x86intrin.h>
 #  endif
@@ -199,44 +198,71 @@ asm(
 #   include <immintrin.h>
 # endif
 
+#  if defined(__SSE4_2__) && defined(QT_COMPILER_SUPPORTS_SIMD_ALWAYS) && (defined(Q_CC_INTEL) || defined(Q_CC_MSVC))
+// POPCNT instructions:
+// All processors that support SSE4.2 support POPCNT
+// (but neither MSVC nor the Intel compiler define this macro)
+#    define __POPCNT__                      1
+#  endif
+
+// AVX intrinsics
+#  if defined(__AVX__) && defined(QT_COMPILER_SUPPORTS_SIMD_ALWAYS) && (defined(Q_CC_INTEL) || defined(Q_CC_MSVC))
+// PCLMULQDQ instructions:
+// All processors that support AVX support PCLMULQDQ
+// (but neither MSVC nor the Intel compiler define this macro)
+#    define __PCLMUL__                      1
+#  endif
+
+#  if defined(__AVX2__) && defined(QT_COMPILER_SUPPORTS_SIMD_ALWAYS) && (defined(Q_CC_INTEL) || defined(Q_CC_MSVC))
+// F16C instructions:
+// All processors that support AVX2 support F16C:
+// (but neither MSVC nor the Intel compiler define this macro)
+#    define __F16C__                        1
+#  endif
+
+#  if defined(__BMI__) && !defined(__BMI2__) && defined(Q_CC_INTEL)
+// BMI2 instructions:
+// All processors that support BMI support BMI2 (and AVX2)
+// (but neither MSVC nor the Intel compiler define this macro)
+#    define __BMI2__                        1
+#  endif
+
 #  include "qsimd_x86_p.h"
 
-// x86-64 sub-architecture version 3
+// Haswell sub-architecture
 //
 // The Intel Core 4th generation was codenamed "Haswell" and introduced AVX2,
 // BMI1, BMI2, FMA, LZCNT, MOVBE, which makes it a good divider for a
 // sub-target for us. The first AMD processor with AVX2 support (Zen) has the
-// same features, but had already introduced BMI1 in the previous generation.
-// This feature set was chosen as the version 3 of the x86-64 ISA (x86-64-v3)
-// and is supported by GCC and Clang.
+// same features.
 //
 // macOS's fat binaries support the "x86_64h" sub-architecture and the GNU libc
 // ELF loader also supports a "haswell/" subdir (e.g., /usr/lib/haswell).
-#  define ARCH_HASWELL_MACROS       (__AVX2__ + __FMA__)
-#  if ARCH_HASWELL_MACROS != 0
-#    if ARCH_HASWELL_MACROS != 2
-#      error "Please enable all x86-64-v3 extensions; you probably want to use -march=haswell or -march=x86-64-v3 instead of -mavx2"
-#    endif
-static_assert(ARCH_HASWELL_MACROS, "Undeclared identifiers indicate which features are missing.");
+#  define QT_FUNCTION_TARGET_STRING_ARCH_HASWELL    "arch=haswell"
+#  if defined(__AVX2__) && defined(__BMI__) && defined(__BMI2__) && defined(__F16C__) && \
+    defined(__FMA__) && defined(__LZCNT__) && defined(__RDRND__)
 #    define __haswell__       1
 #  endif
-#  undef ARCH_HASWELL_MACROS
 
-// x86-64 sub-architecture version 4
-//
-// Similar to the above, x86-64-v4 matches the AVX512 variant of the Intel Core
-// 6th generation (codename "Skylake"). AMD Zen4 is the their first processor
-// with AVX512 support and it includes all of these too.
-//
-#  define ARCH_SKX_MACROS           (__AVX512F__ + __AVX512BW__ + __AVX512CD__ + __AVX512DQ__ + __AVX512VL__)
-#  if ARCH_SKX_MACROS != 0
-#    if ARCH_SKX_MACROS != 5
-#      error "Please enable all x86-64-v4 extensions; you probably want to use -march=skylake-avx512 or -march=x86-64-v4 instead of -mavx512f"
-#    endif
-static_assert(ARCH_SKX_MACROS, "Undeclared identifiers indicate which features are missing.");
-#    define __skylake_avx512__  1
-#  endif
-#  undef ARCH_SKX_MACROS
+// This constant does not include all CPU features found in a Haswell, only
+// those that we'd have optimized code for.
+// Note: must use Q_CONSTEXPR here, as this file may be compiled in C mode.
+QT_BEGIN_NAMESPACE
+static const quint64 CpuFeatureArchHaswell    = 0
+        | CpuFeatureSSE2
+        | CpuFeatureSSE3
+        | CpuFeatureSSSE3
+        | CpuFeatureSSE4_1
+        | CpuFeatureSSE4_2
+        | CpuFeatureFMA
+        | CpuFeaturePOPCNT
+        | CpuFeatureAVX
+        | CpuFeatureF16C
+        | CpuFeatureAVX2
+        | CpuFeatureBMI
+        | CpuFeatureBMI2;
+QT_END_NAMESPACE
+
 #endif  /* Q_PROCESSOR_X86 */
 
 // NEON intrinsics
@@ -291,6 +317,12 @@ inline uint8_t vaddv_u8(uint8x8_t v8)
 #endif
 #endif
 
+
+#ifdef __cplusplus
+#include <qatomic.h>
+
+QT_BEGIN_NAMESPACE
+
 #ifndef Q_PROCESSOR_X86
 enum CPUFeatures {
 #if defined(Q_PROCESSOR_ARM)
@@ -303,9 +335,12 @@ enum CPUFeatures {
     CpuFeatureDSP           = 2,
     CpuFeatureDSPR2         = 4,
 #endif
+
+    // used only to indicate that the CPU detection was initialised
+    QSimdInitialized        = 1
 };
 
-static const uint64_t qCompilerCpuFeatures = 0
+static const quint64 qCompilerCpuFeatures = 0
 #if defined __ARM_NEON__
         | CpuFeatureNEON
 #endif
@@ -324,115 +359,58 @@ static const uint64_t qCompilerCpuFeatures = 0
         ;
 #endif
 
-#ifdef __cplusplus
-#  include <atomic>
-#  define Q_ATOMIC(T)   std::atomic<T>
-QT_BEGIN_NAMESPACE
-using std::atomic_load_explicit;
-static constexpr auto memory_order_relaxed = std::memory_order_relaxed;
-extern "C" {
+#ifdef Q_ATOMIC_INT64_IS_SUPPORTED
+extern Q_CORE_EXPORT QBasicAtomicInteger<quint64> qt_cpu_features[1];
 #else
-#  include <stdatomic.h>
-#  define Q_ATOMIC(T)   _Atomic(T)
+extern Q_CORE_EXPORT QBasicAtomicInteger<unsigned> qt_cpu_features[2];
 #endif
+Q_CORE_EXPORT quint64 qDetectCpuFeatures();
 
-#ifdef Q_PROCESSOR_X86
-typedef uint64_t QCpuFeatureType;
-static const QCpuFeatureType qCompilerCpuFeatures = _compilerCpuFeatures;
-static const QCpuFeatureType CpuFeatureArchHaswell = cpu_haswell;
-static const QCpuFeatureType CpuFeatureArchSkylakeAvx512 = cpu_skylake_avx512;
+#if defined(Q_PROCESSOR_X86) && QT_COMPILER_SUPPORTS_HERE(RDRND) && !defined(QT_BOOTSTRAPPED)
+Q_CORE_EXPORT qsizetype qRandomCpu(void *, qsizetype) noexcept;
 #else
-typedef unsigned QCpuFeatureType;
-#endif
-extern Q_CORE_EXPORT Q_ATOMIC(QCpuFeatureType) QT_MANGLE_NAMESPACE(qt_cpu_features)[1];
-Q_CORE_EXPORT uint64_t QT_MANGLE_NAMESPACE(qDetectCpuFeatures)();
-
-static inline uint64_t qCpuFeatures()
+static inline qsizetype qRandomCpu(void *, qsizetype) noexcept
 {
-#ifdef QT_BOOTSTRAPPED
-    return qCompilerCpuFeatures;    // no detection
-#else
-    quint64 features = atomic_load_explicit(QT_MANGLE_NAMESPACE(qt_cpu_features), memory_order_relaxed);
-    if (!QT_SUPPORTS_INIT_PRIORITY) {
-        if (Q_UNLIKELY(features == 0))
-            features = QT_MANGLE_NAMESPACE(qDetectCpuFeatures)();
+    return 0;
+}
+#endif
+
+static inline quint64 qCpuFeatures()
+{
+    quint64 features = qt_cpu_features[0].loadRelaxed();
+#ifndef Q_ATOMIC_INT64_IS_SUPPORTED
+    features |= quint64(qt_cpu_features[1].loadRelaxed()) << 32;
+#endif
+    if (Q_UNLIKELY(features == 0)) {
+        features = qDetectCpuFeatures();
+        Q_ASSUME(features != 0);
     }
     return features;
-#endif
 }
 
 #define qCpuHasFeature(feature)     (((qCompilerCpuFeatures & CpuFeature ## feature) == CpuFeature ## feature) \
                                      || ((qCpuFeatures() & CpuFeature ## feature) == CpuFeature ## feature))
 
-/*
-    Small wrapper around x86's PAUSE and ARM's YIELD instructions.
-
-    This is completely different from QThread::yieldCurrentThread(), which is
-    an OS-level operation that takes the whole thread off the CPU.
-
-    This is just preventing one SMT thread from filling a core's pipeline with
-    speculated further loop iterations (which need to be expensively flushed on
-    final success) when it could just give those pipeline slots to a second SMT
-    thread that can do something useful with the core, such as unblocking this
-    SMT thread :)
-
-    So, instead of
-
-        while (!condition)
-            ;
-
-    it's better to use
-
-        while (!condition)
-            qYieldCpu();
-*/
-static inline void qYieldCpu()
+inline bool qHasHwrng()
 {
-#if defined(Q_PROCESSOR_X86)
-    _mm_pause();
-#elif defined(Q_PROCESSOR_ARM) && Q_PROCESSOR_ARM >= 7 /* yield was added in ARMv7 */
-#  if __has_builtin(__builtin_arm_yield) /* e.g. Clang */
-    __builtin_arm_yield();
-#  elif defined(Q_OS_INTEGRITY) || \
-        (defined(Q_CC_GNU) && !defined(Q_CC_CLANG))
-    /*
-       - Integrity is missing the arm_acle.h header
-       - GCC doesn't have __yield() in arm_acle.h
-         https://stackoverflow.com/a/70076751/134841
-         https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105416
-    */
-    asm volatile("yield"); /* this works everywhere */
-#  else
-    __yield(); /* this is what should work everywhere */
-#  endif
+#if defined(Q_PROCESSOR_X86) && QT_COMPILER_SUPPORTS_HERE(RDRND)
+    return qCpuHasFeature(RDRND);
+#else
+    return false;
 #endif
 }
 
-#ifdef __cplusplus
-} // extern "C"
+#define ALIGNMENT_PROLOGUE_16BYTES(ptr, i, length) \
+    for (; i < static_cast<int>(qMin(static_cast<quintptr>(length), ((4 - ((reinterpret_cast<quintptr>(ptr) >> 2) & 0x3)) & 0x3))); ++i)
 
-#  if defined(Q_PROCESSOR_X86) && QT_COMPILER_SUPPORTS_HERE(RDRND) && !defined(QT_BOOTSTRAPPED)
-Q_CORE_EXPORT qsizetype qRandomCpu(void *, qsizetype) noexcept;
-
-static inline bool qHasHwrng()
-{
-    return qCpuHasFeature(RDRND);
-}
-#  else
-static inline qsizetype qRandomCpu(void *, qsizetype) noexcept
-{
-    return 0;
-}
-static inline bool qHasHwrng()
-{
-    return false;
-}
-#  endif
+#define ALIGNMENT_PROLOGUE_32BYTES(ptr, i, length) \
+    for (; i < static_cast<int>(qMin(static_cast<quintptr>(length), ((8 - ((reinterpret_cast<quintptr>(ptr) >> 2) & 0x7)) & 0x7))); ++i)
 
 QT_END_NAMESPACE
 
 #endif // __cplusplus
 
-QT_WARNING_POP
+#define SIMD_EPILOGUE(i, length, max) \
+    for (int _i = 0; _i < max && i < length; ++i, ++_i)
 
 #endif // QSIMD_P_H

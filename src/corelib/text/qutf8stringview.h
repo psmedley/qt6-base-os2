@@ -1,16 +1,54 @@
-// Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
+** Contact: http://www.qt.io/licensing/
+**
+** This file is part of the QtCore module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 #ifndef QUTF8STRINGVIEW_H
 #define QUTF8STRINGVIEW_H
 
 #include <QtCore/qstringalgorithms.h>
-#include <QtCore/qstringfwd.h>
 #include <QtCore/qarraydata.h> // for QContainerImplHelper
-#include <QtCore/qbytearrayview.h>
 
 #include <string>
 
 QT_BEGIN_NAMESPACE
+
+template <bool> class QBasicUtf8StringView;
+class QByteArray;
+class QLatin1String;
 
 namespace QtPrivate {
 template <typename Char>
@@ -60,7 +98,7 @@ struct IsContainerCompatibleWithQUtf8StringView<T, std::enable_if_t<std::conjunc
         std::negation<std::is_same<std::decay_t<T>, QByteArray>>,
 
         // This has a compatible value_type, but explicitly a different encoding
-        std::negation<std::is_same<std::decay_t<T>, QLatin1StringView>>,
+        std::negation<std::is_same<std::decay_t<T>, QLatin1String>>,
 
         // Don't make an accidental copy constructor
         std::negation<std::disjunction<
@@ -247,11 +285,6 @@ public:
     constexpr void chop(qsizetype n)
     { verify(n); m_size -= n; }
 
-    [[nodiscard]] inline bool isValidUtf8() const noexcept
-    {
-        return QByteArrayView(reinterpret_cast<const char *>(data()), size()).isValidUtf8();
-    }
-
     //
     // STL compatibility API:
     //
@@ -322,6 +355,15 @@ private:
 #else
 template <bool UseChar8T>
 Q_DECLARE_TYPEINFO_BODY(QBasicUtf8StringView<UseChar8T>, Q_PRIMITIVE_TYPE);
+
+// ### Qt 7: remove the non-char8_t version of QUtf8StringView
+QT_BEGIN_NO_CHAR8_T_NAMESPACE
+using QUtf8StringView = QBasicUtf8StringView<false>;
+QT_END_NO_CHAR8_T_NAMESPACE
+
+QT_BEGIN_HAS_CHAR8_T_NAMESPACE
+using QUtf8StringView = QBasicUtf8StringView<true>;
+QT_END_HAS_CHAR8_T_NAMESPACE
 #endif // Q_CLANG_QDOC
 
 template <typename QStringLike, std::enable_if_t<std::is_same_v<QStringLike, QByteArray>, bool> = true>

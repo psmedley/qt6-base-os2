@@ -1,5 +1,41 @@
-// Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtWidgets module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qprogressbar.h"
 
@@ -9,14 +45,12 @@
 #include <qstylepainter.h>
 #include <qstyleoption.h>
 #include <private/qwidget_p.h>
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
 #include <qaccessible.h>
 #endif
 #include <limits.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 class QProgressBarPrivate : public QWidgetPrivate
 {
@@ -55,7 +89,7 @@ QProgressBarPrivate::QProgressBarPrivate()
 void QProgressBarPrivate::initDefaultFormat()
 {
     if (defaultFormat)
-        format = "%p"_L1 + locale.percent();
+        format = QLatin1String("%p") + locale.percent();
 }
 
 void QProgressBarPrivate::init()
@@ -118,9 +152,10 @@ bool QProgressBarPrivate::repaintRequired() const
 
     const auto totalSteps = qint64(maximum) - minimum;
     if (textVisible) {
-        if (format.contains("%v"_L1))
+        if ((format.contains(QLatin1String("%v"))))
             return true;
-        if (format.contains("%p"_L1) && valueDifference >= qAbs(totalSteps / 100))
+        if ((format.contains(QLatin1String("%p"))
+             && valueDifference >= qAbs(totalSteps / 100)))
             return true;
     }
 
@@ -166,7 +201,7 @@ bool QProgressBarPrivate::repaintRequired() const
     example, when using QNetworkAccessManager to download items when
     they are unable to determine the size of the item being downloaded.
 
-    \sa QProgressDialog
+    \sa QProgressDialog, {fowler}{GUI Design Handbook: Progress Indicator}
 */
 
 /*!
@@ -283,7 +318,7 @@ void QProgressBar::setValue(int value)
         return;
     d->value = value;
     emit valueChanged(value);
-#if QT_CONFIG(accessibility)
+#ifndef QT_NO_ACCESSIBILITY
     if (isVisible()) {
         QAccessibleValueChangeEvent event(this, value);
         QAccessible::updateAccessibility(&event);
@@ -387,7 +422,7 @@ QSize QProgressBar::sizeHint() const
     QStyleOptionProgressBar opt;
     initStyleOption(&opt);
     int cw = style()->pixelMetric(QStyle::PM_ProgressBarChunkWidth, &opt, this);
-    QSize size = QSize(qMax(9, cw) * 7 + fm.horizontalAdvance(u'0') * 4, fm.height() + 8);
+    QSize size = QSize(qMax(9, cw) * 7 + fm.horizontalAdvance(QLatin1Char('0')) * 4, fm.height() + 8);
     if (!(opt.state & QStyle::State_Horizontal))
         size = size.transposed();
     return style()->sizeFromContents(QStyle::CT_ProgressBar, &opt, size, this);
@@ -433,19 +468,19 @@ QString QProgressBar::text() const
     QString result = d->format;
     QLocale locale = d->locale; // Omit group separators for compatibility with previous versions that were non-localized.
     locale.setNumberOptions(locale.numberOptions() | QLocale::OmitGroupSeparator);
-    result.replace("%m"_L1, locale.toString(totalSteps));
-    result.replace("%v"_L1, locale.toString(d->value));
+    result.replace(QLatin1String("%m"), locale.toString(totalSteps));
+    result.replace(QLatin1String("%v"), locale.toString(d->value));
 
     // If max and min are equal and we get this far, it means that the
     // progress bar has one step and that we are on that step. Return
     // 100% here in order to avoid division by zero further down.
     if (totalSteps == 0) {
-        result.replace("%p"_L1, locale.toString(100));
+        result.replace(QLatin1String("%p"), locale.toString(100));
         return result;
     }
 
     const auto progress = static_cast<int>((qint64(d->value) - d->minimum) * 100.0 / totalSteps);
-    result.replace("%p"_L1, locale.toString(progress));
+    result.replace(QLatin1String("%p"), locale.toString(progress));
     return result;
 }
 

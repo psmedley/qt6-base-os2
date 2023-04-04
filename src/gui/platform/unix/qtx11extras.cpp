@@ -1,7 +1,43 @@
-// Copyright (C) 2021 The Qt Company Ltd.
-// Copyright (C) 2016 Richard Moore <rich@kde.org>
-// Copyright (C) 2016 David Faure <david.faure@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+/****************************************************************************
+**
+** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2016 Richard Moore <rich@kde.org>
+** Copyright (C) 2016 David Faure <david.faure@kdab.com>
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the QtGui module of the Qt Toolkit.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "qtx11extras_p.h"
 
@@ -16,8 +52,6 @@
 #include <QtCore/qdebug.h>
 
 QT_BEGIN_NAMESPACE
-
-using namespace Qt::StringLiterals;
 
 static QScreen *findScreenForVirtualDesktop(int virtualDesktopNumber)
 {
@@ -44,7 +78,7 @@ static QScreen *findScreenForVirtualDesktop(int virtualDesktopNumber)
     application.
 
     \warning This class is only available on X11. For querying
-    per-screen information in a portable way, use QScreen.
+    per-screen information in a portable way, use QDesktopWidget.
 */
 
 /*!
@@ -61,7 +95,7 @@ QX11Info::QX11Info()
  */
 bool QX11Info::isPlatformX11()
 {
-    return QGuiApplication::platformName() == "xcb"_L1;
+    return QGuiApplication::platformName() == QLatin1String("xcb");
 }
 
 /*!
@@ -70,7 +104,7 @@ bool QX11Info::isPlatformX11()
 
     The \a screen argument is an X screen number. Be aware that if
     the user's system uses Xinerama (as opposed to traditional X11
-    multiscreen), there is only one X screen. Use QScreen to
+    multiscreen), there is only one X screen. Use QDesktopWidget to
     query for information about Xinerama screens.
 
     \sa appDpiY()
@@ -97,7 +131,7 @@ int QX11Info::appDpiX(int screen)
 
     The \a screen argument is an X screen number. Be aware that if
     the user's system uses Xinerama (as opposed to traditional X11
-    multiscreen), there is only one X screen. Use QScreen to
+    multiscreen), there is only one X screen. Use QDesktopWidget to
     query for information about Xinerama screens.
 
     \sa appDpiX()
@@ -123,7 +157,7 @@ int QX11Info::appDpiY(int screen)
 
     The \a screen argument is an X screen number. Be aware that if
     the user's system uses Xinerama (as opposed to traditional X11
-    multiscreen), there is only one X screen. Use QScreen to
+    multiscreen), there is only one X screen. Use QDesktopWidget to
     query for information about Xinerama screens.
 */
 quint32 QX11Info::appRootWindow(int screen)
@@ -152,7 +186,7 @@ quint32 QX11Info::appRootWindow(int screen)
     are combined in one X11 screen. This means this method returns the
     same number for each of the physical monitors. In such a setup you
     are interested in the monitor information as provided by the X11
-    RandR extension. This is available through QScreen.
+    RandR extension. This is available through QDesktopWidget and QScreen.
 
     \sa display()
 */
@@ -360,7 +394,7 @@ bool QX11Info::isCompositingManagerRunning(int screen)
 }
 
 /*!
-    Returns a new peeker id or -1 if some internal error has occurred.
+    Returns a new peeker id or -1 if some interal error has occurred.
     Each peeker id is associated with an index in the buffered native
     event queue.
 
@@ -391,7 +425,7 @@ qint32 QX11Info::generatePeekerId()
     Removes \a peekerId, which was earlier obtained via generatePeekerId().
 
     Returns \c true on success or \c false if unknown peeker id was
-    provided or some internal error has occurred.
+    provided or some interal error has occurred.
 
     \sa generatePeekerId()
 */
