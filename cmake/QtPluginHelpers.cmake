@@ -14,6 +14,7 @@ macro(qt_internal_get_internal_add_plugin_keywords option_args single_args multi
         OUTPUT_DIRECTORY
         INSTALL_DIRECTORY
         ARCHIVE_INSTALL_DIRECTORY
+        OS2_SHORT_NAME
         ${__default_target_info_args}
     )
     set(${multi_args}
@@ -162,6 +163,14 @@ function(qt_internal_add_plugin target)
         # Save the non-sanitized plugin type values for qmake consumption via .pri files.
         QT_QMAKE_PLUGIN_TYPE "${plugin_type}"
     )
+
+if (OS2)
+    if(arg_OS2_SHORT_NAME)
+       set_target_properties(${target} PROPERTIES
+            TARGET_SHORT ${arg_OS2_SHORT_NAME}
+       )
+    endif()
+endif()
 
     qt_handle_multi_config_output_dirs("${target}")
 
