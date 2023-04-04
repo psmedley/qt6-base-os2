@@ -216,6 +216,7 @@ qt_internal_extend_target(Network CONDITION OS2
         kernel/qhostinfo_unix.cpp
         kernel/qnetworkinterface_unix.cpp
         socket/qnativesocketengine_unix.cpp
+        socket/qnet_unix_p.h
         kernel/qnetworkproxy_generic.cpp
     DEFINES
         QT_NO_IPV6

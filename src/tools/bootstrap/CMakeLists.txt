@@ -144,8 +144,6 @@ qt_internal_extend_target(Bootstrap CONDITION OS2
     SOURCES
         ../../corelib/global/qoperatingsystemversion_os2.cpp
         ../../corelib/kernel/qcore_unix.cpp
-        ../../corelib/kernel/qsharedmemory_os2.cpp
-        ../../corelib/kernel/qsystemsemaphore_os2.cpp
         ../../corelib/io/qfilesystemengine_unix.cpp
         ../../corelib/io/qfilesystemiterator_unix.cpp
         ../../corelib/io/qfsfileengine_unix.cpp

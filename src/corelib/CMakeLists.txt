@@ -533,6 +533,7 @@ qt_internal_extend_target(Core CONDITION WIN32
 
 qt_internal_extend_target(Core CONDITION OS2
     SOURCES
+        global/qt_os2.h
         global/qoperatingsystemversion_os2.cpp
         io/qprocess_os2.cpp
         io/qfsfileengine_unix.cpp

@@ -42,6 +42,10 @@
 #  include "qt_windows.h"
 #endif // Q_OS_WIN || Q_OS_CYGWIN
 
+#ifdef Q_OS_OS2
+#include <unistd.h>
+#endif
+
 #include "archdetect.cpp"
 
 QT_BEGIN_NAMESPACE
@@ -718,7 +722,7 @@ QString QSysInfo::kernelType()
 */
 QString QSysInfo::kernelVersion()
 {
-#ifdef Q_OS_WIN
+#ifdef Q_OS_DOSLIKE
     const auto osver = QOperatingSystemVersion::current();
     return QString::asprintf("%d.%d.%d",
                              osver.majorVersion(), osver.minorVersion(), osver.microVersion());

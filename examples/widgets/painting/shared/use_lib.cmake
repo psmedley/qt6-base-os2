@@ -9,8 +9,10 @@ if(NOT TARGET Qt::Widgets)
     find_package(Qt6 REQUIRED COMPONENTS Widgets)
 endif()
 
+if (NOT OS2)
 if(NOT TARGET Qt::OpenGL)
     find_package(Qt6 OPTIONAL_COMPONENTS OpenGL)
+endif()
 endif()
 
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}" painting_shared)

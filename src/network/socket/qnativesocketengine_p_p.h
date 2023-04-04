@@ -63,7 +63,9 @@ typedef INT (WSAAPI *LPFN_WSASENDMSG)(SOCKET s, LPWSAMSG lpMsg, DWORD dwFlags,
 union qt_sockaddr {
     sockaddr a;
     sockaddr_in a4;
+#ifndef Q_OS_OS2
     sockaddr_in6 a6;
+#endif
 };
 
 class QSocketNotifier;
@@ -170,6 +172,7 @@ public:
             || address.protocol() == QAbstractSocket::AnyIPProtocol
             || socketProtocol == QAbstractSocket::IPv6Protocol
             || socketProtocol == QAbstractSocket::AnyIPProtocol) {
+#ifndef Q_OS_OS2
             memset(&aa->a6, 0, sizeof(sockaddr_in6));
             aa->a6.sin6_family = AF_INET6;
 #if QT_CONFIG(networkinterface)
@@ -180,6 +183,7 @@ public:
             memcpy(&aa->a6.sin6_addr, &tmp, sizeof(tmp));
             *sockAddrSize = sizeof(sockaddr_in6);
             SetSALen::set(&aa->a, sizeof(sockaddr_in6));
+#endif
         } else {
             memset(&aa->a, 0, sizeof(sockaddr_in));
             aa->a4.sin_family = AF_INET;

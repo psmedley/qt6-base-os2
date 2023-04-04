@@ -49,12 +49,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_SYSTEMSEMAPHORE
-
-QSystemSemaphorePrivate::QSystemSemaphorePrivate() :
-    semaphore(NULLHANDLE), error(QSystemSemaphore::NoError)
-{
-}
+#if QT_CONFIG(systemsemaphore)
 
 void QSystemSemaphorePrivate::setErrorString(APIRET arc, const QString &function)
 {
@@ -201,6 +196,6 @@ bool QSystemSemaphorePrivate::modifySemaphore(int count)
     return true;
 }
 
-#endif //QT_NO_SYSTEMSEMAPHORE
+#endif // QT_CONFIG(systemsemaphore)
 
 QT_END_NAMESPACE

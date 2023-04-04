@@ -68,7 +68,7 @@ public:
     sem_t *semaphore = SEM_FAILED;
     bool createdSemaphore = false;
 #elif defined(Q_OS_OS2)
-    HEV semaphore = nullptr;
+    HEV semaphore = -1;
 #else
     key_t unix_key = -1;
     int semaphore = -1;
