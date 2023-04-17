@@ -1,4 +1,0 @@
-#!/bin/sh
-# echo the invoked command
-set -x
-/usr/bin/strip --keep-section=.gnu_debuglink "$@"

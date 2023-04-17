@@ -1,8 +1,0 @@
-RCC_OBJECTS = 
-QMAKE_PRL_BUILD_DIR = /home/psmedley/qt6-base-os2/build/src/concurrent
-QMAKE_PRL_TARGET = libQt6Concurrent.so
-QMAKE_PRL_TARGET_PATH_FOR_CMAKE = /home/psmedley/qt6-base-os2/build/lib/libQt6Concurrent.so
-QMAKE_PRL_CONFIG = shared
-QMAKE_PRL_VERSION = 6.4.2
-QMAKE_PRL_LIBS_FOR_CMAKE = /home/psmedley/qt6-base-os2/build/lib/libQt6Core.so
-

@@ -1,5 +1,0 @@
-list(APPEND known_libs CUPS)
-set(QMAKE_LIBS_CUPS_RELEASE "/usr/lib/x86_64-linux-gnu/libcups.so")
-set(QMAKE_LIBDIR_CUPS_RELEASE "")
-set(QMAKE_INCDIR_CUPS_RELEASE "")
-set(QMAKE_DEFINES_CUPS_RELEASE "")

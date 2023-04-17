@@ -1,3 +1,0 @@
-/home/psmedley/qt6-base-os2/build/config.tests/arch/CMakeFiles/architecture_test.dir
-/home/psmedley/qt6-base-os2/build/config.tests/arch/CMakeFiles/edit_cache.dir
-/home/psmedley/qt6-base-os2/build/config.tests/arch/CMakeFiles/rebuild_cache.dir
