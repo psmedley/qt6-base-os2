@@ -1,1 +1,0 @@
-/usr/bin/c++ -DNDEBUG -O2 -Wl,--enable-new-dtags CMakeFiles/qdbusxml2cpp.dir/qdbusxml2cpp_autogen/mocs_compilation.cpp.o CMakeFiles/qdbusxml2cpp.dir/qdbusxml2cpp.cpp.o -o ../../../bin/qdbusxml2cpp  -Wl,-rpath,/home/psmedley/qt6-base-os2/build/lib: ../../../lib/libQt6DBus.so.6.4.2 ../../../lib/libQt6Core.so.6.4.2 

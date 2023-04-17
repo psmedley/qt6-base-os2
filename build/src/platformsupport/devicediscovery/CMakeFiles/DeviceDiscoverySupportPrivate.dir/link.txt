@@ -1,2 +1,0 @@
-/usr/bin/ar qc ../../../lib/libQt6DeviceDiscoverySupport.a CMakeFiles/DeviceDiscoverySupportPrivate.dir/DeviceDiscoverySupportPrivate_autogen/mocs_compilation.cpp.o CMakeFiles/DeviceDiscoverySupportPrivate.dir/qdevicediscovery_udev.cpp.o
-/usr/bin/ranlib ../../../lib/libQt6DeviceDiscoverySupport.a

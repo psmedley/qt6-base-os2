@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/SimdTestaesni.dir/main.cpp.o -o SimdTestaesni 

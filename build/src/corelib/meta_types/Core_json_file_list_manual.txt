@@ -1,1 +1,0 @@
-/home/psmedley/qt6-base-os2/build/src/corelib/kernel/moc_qobject.cpp.json

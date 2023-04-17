@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/SimdTestavx512dq.dir/main.cpp.o -o SimdTestavx512dq 

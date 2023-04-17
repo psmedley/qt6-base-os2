@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/SimdTestvaes.dir/main.cpp.o -o SimdTestvaes 
