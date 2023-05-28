@@ -486,24 +486,59 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
         QRect r = opt->rect;
         int fw = proxy()->pixelMetric(PM_DefaultFrameWidth, opt, widget);
         QRect br = r.adjusted(fw, fw, -fw, -fw);
-
-        int offset = (opt->state & State_Sunken) ? 1 : 0;
-        int step = (br.width() + 4) / 5;
-        p->fillRect(br.x() + offset, br.y() + offset +br.height() / 2 - step / 2,
-                    br.width(), step,
-                    opt->palette.buttonText());
+        int x = br.x();
+        int y = br.y();
+        int w = br.width();
+        int h = br.height();
+        p->save();
+        const qreal devicePixelRatio = p->device()->devicePixelRatio();
+        if (!qFuzzyCompare(devicePixelRatio, qreal(1))) {
+            const qreal inverseScale = qreal(1) / devicePixelRatio;
+            p->scale(inverseScale, inverseScale);
+            x = qRound(devicePixelRatio * x);
+            y = qRound(devicePixelRatio * y);
+            w = qRound(devicePixelRatio * w);
+            h = qRound(devicePixelRatio * h);
+            p->translate(0.5, 0.5);
+        }
+        int len = std::min(w, h);
+        if (len & 1)
+            ++len;
+        int step = (len + 4) / 5;
+        if (step & 1)
+            ++step;
+        const int step2 = step / 2;
+        QPoint center(x + w / 2, y + h / 2);
+        if (opt->state & State_Sunken) {
+            center += QPoint(proxy()->pixelMetric(PM_ButtonShiftHorizontal, opt),
+                             proxy()->pixelMetric(PM_ButtonShiftVertical, opt));
+        }
+        p->translate(center);
+        p->fillRect(-len / 2, -step2, len, step, opt->palette.buttonText());
         if (pe == PE_IndicatorSpinPlus)
-            p->fillRect(br.x() + br.width() / 2 - step / 2 + offset, br.y() + offset,
-                        step, br.height(),
-                        opt->palette.buttonText());
-
+            p->fillRect(-step2, -len / 2, step, len, opt->palette.buttonText());
+        p->restore();
         break; }
     case PE_IndicatorSpinUp:
     case PE_IndicatorSpinDown: {
         QRect r = opt->rect;
         int fw = proxy()->pixelMetric(PM_DefaultFrameWidth, opt, widget);
         // QRect br = r.adjusted(fw, fw, -fw, -fw);
-        int x = r.x(), y = r.y(), w = r.width(), h = r.height();
+        int x = r.x();
+        int y = r.y();
+        int w = r.width();
+        int h = r.height();
+        p->save();
+        const qreal devicePixelRatio = p->device()->devicePixelRatio();
+        if (!qFuzzyCompare(devicePixelRatio, qreal(1))) {
+            const qreal inverseScale = qreal(1) / devicePixelRatio;
+            p->scale(inverseScale, inverseScale);
+            x = qRound(devicePixelRatio * x);
+            y = qRound(devicePixelRatio * y);
+            w = qRound(devicePixelRatio * w);
+            h = qRound(devicePixelRatio * h);
+            p->translate(0.5, 0.5);
+        }
         int sw = w-4;
         if (sw < 3)
             break;
@@ -524,7 +559,6 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
             bsx = proxy()->pixelMetric(PM_ButtonShiftHorizontal, opt);
             bsy = proxy()->pixelMetric(PM_ButtonShiftVertical, opt);
         }
-        p->save();
         p->translate(sx + bsx, sy + bsy);
         p->setPen(opt->palette.buttonText().color());
         p->setBrush(opt->palette.buttonText());
@@ -2148,7 +2182,13 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
             QRegion clipRegion = p->clipRegion();
             p->setClipRect(opt->rect);
             proxy()->drawControl(CE_HeaderSection, header, p, widget);
-            QStyleOptionHeader subopt = *header;
+            // opt can be a QStyleOptionHeaderV2 and we must pass it to the subcontrol drawings
+            QStyleOptionHeaderV2 subopt;
+            QStyleOptionHeader &v1Copy = subopt;
+            if (auto v2 = qstyleoption_cast<const QStyleOptionHeaderV2 *>(opt))
+                subopt = *v2;
+            else
+                v1Copy = *header;
             subopt.rect = subElementRect(SE_HeaderLabel, header, widget);
             if (subopt.rect.isValid())
                 proxy()->drawControl(CE_HeaderLabel, &subopt, p, widget);

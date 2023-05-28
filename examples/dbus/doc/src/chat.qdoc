@@ -3,7 +3,7 @@
 
 /*!
     \example chat
-    \title D-Bus Chat Example
+    \title D-Bus Chat
     \ingroup examples-dbus
     \brief Demonstrates communication among instances of an application.
 
@@ -11,7 +11,7 @@
     among instances of an application. Users connect and send message to
     each other.
 
-    \image dbus-chat-example.png
+    \image dbus-chat-example.webp
 
     \include examples-run.qdocinc
 */

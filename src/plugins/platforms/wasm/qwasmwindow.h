@@ -18,23 +18,36 @@
 
 #include <emscripten/val.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
+
+namespace qstdweb {
+struct CancellationFlag;
+}
 
 namespace qstdweb {
 class EventCallback;
 }
 
 class ClientArea;
+struct DragEvent;
+struct KeyEvent;
+struct PointerEvent;
+class QWasmDeadKeySupport;
+struct WheelEvent;
 
 class QWasmWindow final : public QPlatformWindow
 {
 public:
-    QWasmWindow(QWindow *w, QWasmCompositor *compositor, QWasmBackingStore *backingStore);
+    QWasmWindow(QWindow *w, QWasmDeadKeySupport *deadKeySupport, QWasmCompositor *compositor,
+                QWasmBackingStore *backingStore);
     ~QWasmWindow() final;
 
     void destroy();
     void paint();
     void setZOrder(int order);
+    void setWindowCursor(QByteArray cssCursorName);
     void onActivationChanged(bool active);
     bool isVisible() const;
 
@@ -65,6 +78,7 @@ public:
     bool setKeyboardGrabEnabled(bool) override { return false; }
     bool setMouseGrabEnabled(bool grab) final;
     bool windowEvent(QEvent *event) final;
+    void setMask(const QRegion &region) final;
 
     QWasmScreen *platformScreen() const;
     void setBackingStore(QWasmBackingStore *store) { m_backingStore = store; }
@@ -72,22 +86,27 @@ public:
     QWindow *window() const { return m_window; }
 
     std::string canvasSelector() const;
-    emscripten::val context2d() { return m_context2d; }
-    emscripten::val a11yContainer() { return m_a11yContainer; }
-
+    emscripten::val context2d() const { return m_context2d; }
+    emscripten::val a11yContainer() const { return m_a11yContainer; }
+    emscripten::val inputHandlerElement() const { return m_windowContents; }
 
 private:
     friend class QWasmScreen;
 
     void invalidate();
-    bool hasTitleBar() const;
+    bool hasFrame() const;
+    bool hasMaximizeButton() const;
     void applyWindowState();
 
+    bool processKey(const KeyEvent &event);
     bool processPointer(const PointerEvent &event);
+    bool processDrop(const DragEvent &event);
+    bool processWheel(const WheelEvent &event);
 
     QWindow *m_window = nullptr;
     QWasmCompositor *m_compositor = nullptr;
     QWasmBackingStore *m_backingStore = nullptr;
+    QWasmDeadKeySupport *m_deadKeySupport;
     QRect m_normalGeometry {0, 0, 0 ,0};
 
     emscripten::val m_document;
@@ -101,9 +120,15 @@ private:
     std::unique_ptr<NonClientArea> m_nonClientArea;
     std::unique_ptr<ClientArea> m_clientArea;
 
+    std::unique_ptr<qstdweb::EventCallback> m_keyDownCallback;
+    std::unique_ptr<qstdweb::EventCallback> m_keyUpCallback;
+
     std::unique_ptr<qstdweb::EventCallback> m_pointerLeaveCallback;
     std::unique_ptr<qstdweb::EventCallback> m_pointerEnterCallback;
-    std::unique_ptr<qstdweb::EventCallback> m_pointerMoveCallback;
+
+    std::unique_ptr<qstdweb::EventCallback> m_dropCallback;
+
+    std::unique_ptr<qstdweb::EventCallback> m_wheelEventCallback;
 
     Qt::WindowStates m_state = Qt::WindowNoState;
     Qt::WindowStates m_previousWindowState = Qt::WindowNoState;
@@ -120,6 +145,8 @@ private:
     friend class QWasmCompositor;
     friend class QWasmEventTranslator;
     bool windowIsPopupType(Qt::WindowFlags flags) const;
+
+    std::shared_ptr<qstdweb::CancellationFlag> m_dropDataReadCancellationFlag;
 };
 
 QT_END_NAMESPACE

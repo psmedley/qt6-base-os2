@@ -31,6 +31,8 @@ private slots:
     void files();
     void hashLength_data();
     void hashLength();
+    void addDataAcceptsNullByteArrayView_data() { hashLength_data(); }
+    void addDataAcceptsNullByteArrayView();
     void move();
     void swap();
     // keep last
@@ -403,8 +405,36 @@ void tst_QCryptographicHash::hashLength()
 {
     QFETCH(const QCryptographicHash::Algorithm, algorithm);
 
-    QByteArray output = QCryptographicHash::hash("test", algorithm);
-    QCOMPARE(QCryptographicHash::hashLength(algorithm), output.size());
+    qsizetype expectedSize;
+    if (algorithm == QCryptographicHash::NumAlgorithms) {
+        // It's UB to call ::hash() with NumAlgorithms, but hashLength() is
+        // fine and returns 0 for invalid values:
+        expectedSize = 0;
+    } else {
+        expectedSize = QCryptographicHash::hash("test", algorithm).size();
+    }
+    QCOMPARE(QCryptographicHash::hashLength(algorithm), expectedSize);
+}
+
+void tst_QCryptographicHash::addDataAcceptsNullByteArrayView()
+{
+    QFETCH(const QCryptographicHash::Algorithm, algorithm);
+
+    if (!QCryptographicHash::supportsAlgorithm(algorithm))
+        QSKIP("QCryptographicHash doesn't support this algorithm");
+
+    QCryptographicHash hash1(algorithm);
+    hash1.addData("meep");
+    hash1.addData(QByteArrayView{}); // after other data
+
+    QCryptographicHash hash2(algorithm);
+    hash2.addData(QByteArrayView{}); // before any other data
+    hash2.addData("meep");
+
+    const auto expected = QCryptographicHash::hash("meep", algorithm);
+
+    QCOMPARE(hash1.resultView(), expected);
+    QCOMPARE(hash2.resultView(), expected);
 }
 
 void tst_QCryptographicHash::move()

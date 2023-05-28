@@ -305,6 +305,12 @@ endif()
     if(TARGET qt_plugins)
         add_dependencies(qt_plugins "${target}")
     endif()
+
+    # Record plugin for current repo.
+    if(qt_repo_plugins AND TARGET ${qt_repo_plugins})
+        add_dependencies(${qt_repo_plugins} "${target}")
+    endif()
+
     if(plugin_type STREQUAL "platforms")
         if(TARGET qpa_plugins)
             add_dependencies(qpa_plugins "${target}")
@@ -313,12 +319,6 @@ endif()
         if(_default_plugin AND TARGET qpa_default_plugins)
             add_dependencies(qpa_default_plugins "${target}")
         endif()
-    endif()
-
-    if(arg_NO_UNITY_BUILD)
-        set(arg_NO_UNITY_BUILD NO_UNITY_BUILD)
-    else()
-        set(arg_NO_UNITY_BUILD "")
     endif()
 
     set_property(TARGET "${target}" PROPERTY QT_DEFAULT_PLUGIN "${_default_plugin}")
@@ -336,8 +336,17 @@ endif()
         ${arg_PUBLIC_INCLUDE_DIRECTORIES}
     )
 
+    if(arg_NO_UNITY_BUILD)
+        set(arg_NO_UNITY_BUILD "NO_UNITY_BUILD")
+    else()
+        set(arg_NO_UNITY_BUILD "")
+    endif()
+
     qt_internal_extend_target("${target}"
+        ${arg_NO_UNITY_BUILD}
         SOURCES ${arg_SOURCES}
+        NO_UNITY_BUILD_SOURCES
+            ${arg_NO_UNITY_BUILD_SOURCES}
         INCLUDE_DIRECTORIES
             ${private_includes}
         SYSTEM_INCLUDE_DIRECTORIES
@@ -363,8 +372,6 @@ endif()
         MOC_OPTIONS ${arg_MOC_OPTIONS}
         ENABLE_AUTOGEN_TOOLS ${arg_ENABLE_AUTOGEN_TOOLS}
         DISABLE_AUTOGEN_TOOLS ${arg_DISABLE_AUTOGEN_TOOLS}
-        NO_UNITY_BUILD_SOURCES ${arg_NO_UNITY_BUILD_SOURCES}
-        ${arg_NO_UNITY_BUILD}
     )
 
     qt_internal_add_repo_local_defines("${target}")

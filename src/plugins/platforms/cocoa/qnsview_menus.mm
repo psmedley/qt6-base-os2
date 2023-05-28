@@ -25,6 +25,8 @@ static bool selectorIsCutCopyPaste(SEL selector)
 
 - (BOOL)validateMenuItem:(NSMenuItem*)item
 {
+    qCDebug(lcQpaMenus) << "Validating" << item << "for" << self;
+
     auto *nativeItem = qt_objc_cast<QCocoaNSMenuItem *>(item);
     if (!nativeItem)
         return item.enabled; // FIXME Test with with Qt as plugin or embedded QWindow.
@@ -88,10 +90,23 @@ static bool selectorIsCutCopyPaste(SEL selector)
     if (selectorIsCutCopyPaste(invocation.selector)) {
         NSObject *sender;
         [invocation getArgument:&sender atIndex:2];
-        if (auto *nativeItem = qt_objc_cast<QCocoaNSMenuItem *>(sender)) {
+        qCDebug(lcQpaMenus) << "Forwarding" << invocation.selector << "from" << sender;
+
+        // We claim to respond to standard edit actions such as cut/copy/paste,
+        // but these might not be exclusively coming from menu items that we
+        // control. For example, when embedded into a native UI (as a plugin),
+        // the menu items might be part of the host application, and if we're
+        // the first responder, we'll be the target of these actions. As we
+        // don't have a mechanism in Qt to trigger generic actions, we have
+        // to bail out if we don't have a QCocoaNSMenuItem we can activate().
+        // Note that we skip the call to super as well, as that would just
+        // try to invoke the current action on ourselves again.
+        if (auto *nativeItem = qt_objc_cast<QCocoaNSMenuItem *>(sender))
             [self qt_itemFired:nativeItem];
-            return;
-        }
+        else
+            qCDebug(lcQpaMenus) << "Ignoring action for menu item we didn't create";
+
+        return;
     }
 
     [super forwardInvocation:invocation];

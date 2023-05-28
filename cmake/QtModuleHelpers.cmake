@@ -573,7 +573,7 @@ endif()
     qt_internal_add_repo_local_defines("${target}")
 
     if(arg_NO_UNITY_BUILD)
-        set(arg_NO_UNITY_BUILD NO_UNITY_BUILD)
+        set(arg_NO_UNITY_BUILD "NO_UNITY_BUILD")
     else()
         set(arg_NO_UNITY_BUILD "")
     endif()
@@ -581,10 +581,14 @@ endif()
     if(NOT arg_EXTERNAL_HEADERS)
         set(arg_EXTERNAL_HEADERS "")
     endif()
+
     qt_internal_extend_target("${target}"
+        ${arg_NO_UNITY_BUILD}
         SOURCES
             ${arg_SOURCES}
             ${arg_EXTERNAL_HEADERS}
+        NO_UNITY_BUILD_SOURCES
+            ${arg_NO_UNITY_BUILD_SOURCES}
         INCLUDE_DIRECTORIES
             ${private_includes}
         SYSTEM_INCLUDE_DIRECTORIES
@@ -614,8 +618,6 @@ endif()
         PRECOMPILED_HEADER ${arg_PRECOMPILED_HEADER}
         NO_PCH_SOURCES ${arg_NO_PCH_SOURCES}
         OS2_SHORT_NAME ${arg_OS2_SHORT_NAME}
-        NO_UNITY_BUILD_SOURCES ${arg_NO_UNITY_BUILD_SOURCES}
-        ${arg_NO_UNITY_BUILD}
     )
 
     # The public module define is not meant to be used when building the module itself,
@@ -1069,7 +1071,7 @@ function(qt_describe_module target)
 
     get_target_property(target_type ${target} TYPE)
     if(NOT target_type STREQUAL "INTERFACE_LIBRARY")
-        get_target_property(plugin_types ${target} MODULE_PLUGIN_TYPES)
+        get_target_property(plugin_types ${target} QMAKE_MODULE_PLUGIN_TYPES)
         if(plugin_types)
             qt_internal_list_to_json_array(plugin_types plugin_types)
             string(APPEND extra_module_information "\n    \"plugin_types\": ${plugin_types},")
@@ -1191,6 +1193,16 @@ function(qt_internal_collect_module_headers out_var target)
 
     qt_internal_get_target_sources(sources ${target})
 
+    get_target_property(target_type ${target} TYPE)
+    if(target_type STREQUAL "INTERFACE_LIBRARY")
+        set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}")
+    else()
+        get_target_property(source_dir ${target} SOURCE_DIR)
+    endif()
+    get_filename_component(source_dir "${source_dir}" ABSOLUTE)
+
+    get_target_property(is_3rdparty_library ${target} _qt_module_is_3rdparty_header_library)
+
     get_target_property(public_filter ${target} _qt_module_public_headers_filter_regex)
     get_target_property(private_filter ${target} _qt_module_private_headers_filter_regex)
     get_target_property(qpa_filter ${target} _qt_module_qpa_headers_filter_regex)
@@ -1201,6 +1213,27 @@ function(qt_internal_collect_module_headers out_var target)
         if(NOT file_name MATCHES ".+\\.h$")
             continue()
         endif()
+
+        get_source_file_property(non_module_header ${file_path} _qt_non_module_header)
+        if(non_module_header)
+            continue()
+        endif()
+
+        get_filename_component(file_path "${file_path}" ABSOLUTE)
+
+        string(FIND "${file_path}" "${source_dir}" source_dir_pos)
+        if(source_dir_pos EQUAL 0)
+            set(is_outside_module_source_dir FALSE)
+        else()
+            set(is_outside_module_source_dir TRUE)
+        endif()
+
+        get_source_file_property(is_generated "${file_path}" GENERATED)
+        # Skip all header files outside the module source directory, except the generated files.
+        if(is_outside_module_source_dir AND NOT is_generated)
+            continue()
+        endif()
+
         get_source_file_property(condition ${file_path} _qt_extend_target_condition)
         if(NOT condition STREQUAL "" AND NOT condition STREQUAL "NOTFOUND")
             list(JOIN condition " " condition_string)
@@ -1209,15 +1242,18 @@ function(qt_internal_collect_module_headers out_var target)
                 "\nCondition:\n    ${condition_string}")
         endif()
 
-        get_source_file_property(is_generated "${file_path}" GENERATED)
-        get_filename_component(file_path "${file_path}" ABSOLUTE)
-        get_filename_component(file_path "${file_path}" REALPATH)
+        if(file_path MATCHES "3rdparty/.+" AND NOT is_3rdparty_library)
+            set(is_3rdparty_header TRUE)
+        else()
+            set(is_3rdparty_header FALSE)
+        endif()
         list(APPEND ${out_var}_all "${file_path}")
         if(qpa_filter AND file_name MATCHES "${qpa_filter}")
             list(APPEND ${out_var}_qpa "${file_path}")
         elseif(private_filter AND file_name MATCHES "${private_filter}")
             list(APPEND ${out_var}_private "${file_path}")
-        elseif(NOT public_filter OR file_name MATCHES "${public_filter}")
+        elseif((NOT public_filter OR file_name MATCHES "${public_filter}")
+            AND NOT is_3rdparty_header)
             list(APPEND ${out_var}_public "${file_path}")
         endif()
         if(is_generated)

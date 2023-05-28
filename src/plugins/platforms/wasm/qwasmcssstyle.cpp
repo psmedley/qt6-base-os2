@@ -26,13 +26,24 @@ const char *Style = R"css(
     overflow: hidden;
 }
 
+.qt-screen div {
+    touch-action: none;
+}
+
 .qt-window {
-    box-shadow: rgb(0 0 0 / 20%) 0px 10px 16px 0px, rgb(0 0 0 / 19%) 0px 6px 20px 0px;
     position: absolute;
     background-color: lightgray;
 }
 
-.qt-window.has-title-bar {
+.qt-window.transparent-for-input {
+    pointer-events: none;
+}
+
+.qt-window.has-shadow {
+    box-shadow: rgb(0 0 0 / 20%) 0px 10px 16px 0px, rgb(0 0 0 / 19%) 0px 6px 20px 0px;
+}
+
+.qt-window.has-frame {
     border: var(--border-width) solid lightgray;
     caret-color: transparent;
 }
@@ -42,7 +53,7 @@ const char *Style = R"css(
     display: none;
 }
 
-.qt-window.has-title-bar:not(.maximized) .resize-outline {
+.qt-window.has-frame:not(.maximized) .resize-outline {
     display: block;
 }
 
@@ -118,15 +129,21 @@ const char *Style = R"css(
     padding-bottom: 4px;
 }
 
-.qt-window.has-title-bar .title-bar {
+.qt-window.has-frame .title-bar {
     display: flex;
 }
 
 .title-bar .window-name {
+    display: none;
     font-family: 'Lucida Grande';
     white-space: nowrap;
     user-select: none;
     overflow: hidden;
+}
+
+
+.qt-window.has-title .title-bar .window-name {
+    display: block;
 }
 
 .title-bar .spacer {
@@ -139,6 +156,7 @@ const char *Style = R"css(
 
 .qt-window-canvas-container {
     display: flex;
+    pointer-events: none;
 }
 
 .qt-window-a11y-container {
@@ -168,21 +186,6 @@ const char *Style = R"css(
     background-size: 10px 10px;
 }
 
-.title-bar .image-button img[qt-builtin-image-type=x] {
-    background-image: url("data:image/svg+xml;base64,$close_icon");
-}
-
-.title-bar .image-button img[qt-builtin-image-type=qt-logo] {
-    background-image: url("qtlogo.svg");
-}
-
-.title-bar .image-button img[qt-builtin-image-type=restore] {
-    background-image: url("data:image/svg+xml;base64,$restore_icon");
-}
-
-.title-bar .image-button img[qt-builtin-image-type=maximize] {
-    background-image: url("data:image/svg+xml;base64,$maximize_icon");
-}
 .title-bar .action-button {
     pointer-events: all;
 }
@@ -205,24 +208,14 @@ const char *Style = R"css(
 
 )css";
 
-void replace(std::string &str, const std::string &from, const std::string_view &to)
-{
-    str.replace(str.find(from), from.length(), to);
-}
 } // namespace
 
 emscripten::val QWasmCSSStyle::createStyleElement(emscripten::val parent)
 {
     auto document = parent["ownerDocument"];
     auto screenStyle = document.call<emscripten::val>("createElement", emscripten::val("style"));
-    auto text = std::string(Style);
 
-    using IconType = Base64IconStore::IconType;
-    replace(text, "$close_icon", Base64IconStore::get()->getIcon(IconType::X));
-    replace(text, "$restore_icon", Base64IconStore::get()->getIcon(IconType::Restore));
-    replace(text, "$maximize_icon", Base64IconStore::get()->getIcon(IconType::Maximize));
-
-    screenStyle.set("textContent", text);
+    screenStyle.set("textContent", std::string(Style));
     return screenStyle;
 }
 

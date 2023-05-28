@@ -11,10 +11,12 @@
 
 #include "qwasmbase64iconstore.h"
 #include "qwasmdom.h"
+#include "qwasmclipboard.h"
+#include "qwasmintegration.h"
+#include "qwasmkeytranslator.h"
 #include "qwasmwindow.h"
 #include "qwasmwindowclientarea.h"
 #include "qwasmscreen.h"
-#include "qwasmstylepixmaps_p.h"
 #include "qwasmcompositor.h"
 #include "qwasmevent.h"
 #include "qwasmeventdispatcher.h"
@@ -23,9 +25,9 @@
 #include "qwasmclipboard.h"
 
 #include <iostream>
-#include <emscripten/val.h>
+#include <sstream>
 
-#include <GL/gl.h>
+#include <emscripten/val.h>
 
 #include <QtCore/private/qstdweb_p.h>
 
@@ -33,11 +35,13 @@ QT_BEGIN_NAMESPACE
 
 Q_GUI_EXPORT int qt_defaultDpiX();
 
-QWasmWindow::QWasmWindow(QWindow *w, QWasmCompositor *compositor, QWasmBackingStore *backingStore)
+QWasmWindow::QWasmWindow(QWindow *w, QWasmDeadKeySupport *deadKeySupport,
+                         QWasmCompositor *compositor, QWasmBackingStore *backingStore)
     : QPlatformWindow(w),
       m_window(w),
       m_compositor(compositor),
       m_backingStore(backingStore),
+      m_deadKeySupport(deadKeySupport),
       m_document(dom::document()),
       m_qtWindow(m_document.call<emscripten::val>("createElement", emscripten::val("div"))),
       m_windowContents(m_document.call<emscripten::val>("createElement", emscripten::val("div"))),
@@ -51,7 +55,7 @@ QWasmWindow::QWasmWindow(QWindow *w, QWasmCompositor *compositor, QWasmBackingSt
     m_nonClientArea = std::make_unique<NonClientArea>(this, m_qtWindow);
     m_nonClientArea->titleBar()->setTitle(window()->title());
 
-    m_clientArea = std::make_unique<ClientArea>(this, compositor->screen(), m_canvas);
+    m_clientArea = std::make_unique<ClientArea>(this, compositor->screen(), m_windowContents);
 
     m_qtWindow.call<void>("appendChild", m_windowContents);
 
@@ -91,15 +95,36 @@ QWasmWindow::QWasmWindow(QWindow *w, QWasmCompositor *compositor, QWasmBackingSt
 
     m_compositor->addWindow(this);
 
-    const auto callback = std::function([this](emscripten::val event) {
+    const auto pointerCallback = std::function([this](emscripten::val event) {
         if (processPointer(*PointerEvent::fromWeb(event)))
             event.call<void>("preventDefault");
     });
 
     m_pointerEnterCallback =
-            std::make_unique<qstdweb::EventCallback>(m_qtWindow, "pointerenter", callback);
+            std::make_unique<qstdweb::EventCallback>(m_qtWindow, "pointerenter", pointerCallback);
     m_pointerLeaveCallback =
-            std::make_unique<qstdweb::EventCallback>(m_qtWindow, "pointerleave", callback);
+            std::make_unique<qstdweb::EventCallback>(m_qtWindow, "pointerleave", pointerCallback);
+
+    m_dropCallback = std::make_unique<qstdweb::EventCallback>(
+            m_qtWindow, "drop", [this](emscripten::val event) {
+                if (processDrop(*DragEvent::fromWeb(event)))
+                    event.call<void>("preventDefault");
+            });
+
+    m_wheelEventCallback = std::make_unique<qstdweb::EventCallback>(
+            m_qtWindow, "wheel", [this](emscripten::val event) {
+                if (processWheel(*WheelEvent::fromWeb(event)))
+                    event.call<void>("preventDefault");
+            });
+
+    const auto keyCallback = std::function([this](emscripten::val event) {
+        if (processKey(*KeyEvent::fromWebWithDeadKeyTranslation(event, m_deadKeySupport)))
+            event.call<void>("preventDefault");
+    });
+
+    m_keyDownCallback =
+            std::make_unique<qstdweb::EventCallback>(m_qtWindow, "keydown", keyCallback);
+    m_keyUpCallback = std::make_unique<qstdweb::EventCallback>(m_qtWindow, "keyup", keyCallback);
 }
 
 QWasmWindow::~QWasmWindow()
@@ -141,23 +166,12 @@ void QWasmWindow::onNonClientAreaInteraction()
 
 bool QWasmWindow::onNonClientEvent(const PointerEvent &event)
 {
-    QPoint pointInScreen = platformScreen()->mapFromLocal(
+    QPointF pointInScreen = platformScreen()->mapFromLocal(
             dom::mapPoint(event.target, platformScreen()->element(), event.localPoint));
     return QWindowSystemInterface::handleMouseEvent(
             window(), QWasmIntegration::getTimestamp(), window()->mapFromGlobal(pointInScreen),
-            pointInScreen, event.mouseButtons, event.mouseButton, ([event]() {
-                switch (event.type) {
-                case EventType::PointerDown:
-                    return QEvent::NonClientAreaMouseButtonPress;
-                case EventType::PointerUp:
-                    return QEvent::NonClientAreaMouseButtonRelease;
-                case EventType::PointerMove:
-                    return QEvent::NonClientAreaMouseMove;
-                default:
-                    Q_ASSERT(false); // notreached
-                    return QEvent::None;
-                }
-            })(),
+            pointInScreen, event.mouseButtons, event.mouseButton,
+            MouseEvent::mouseEventTypeFromEventType(event.type, WindowArea::NonClient),
             event.modifiers);
 }
 
@@ -220,6 +234,11 @@ void QWasmWindow::paint()
 void QWasmWindow::setZOrder(int z)
 {
     m_qtWindow["style"].set("zIndex", std::to_string(z));
+}
+
+void QWasmWindow::setWindowCursor(QByteArray cssCursorName)
+{
+    m_windowContents["style"].set("cursor", emscripten::val(cssCursorName.constData()));
 }
 
 void QWasmWindow::setGeometry(const QRect &rect)
@@ -343,7 +362,14 @@ void QWasmWindow::onActivationChanged(bool active)
 void QWasmWindow::setWindowFlags(Qt::WindowFlags flags)
 {
     m_flags = flags;
-    dom::syncCSSClassWith(m_qtWindow, "has-title-bar", hasTitleBar());
+    dom::syncCSSClassWith(m_qtWindow, "has-frame", hasFrame());
+    dom::syncCSSClassWith(m_qtWindow, "has-shadow", !flags.testFlag(Qt::NoDropShadowWindowHint));
+    dom::syncCSSClassWith(m_qtWindow, "has-title", flags.testFlag(Qt::WindowTitleHint));
+    dom::syncCSSClassWith(m_qtWindow, "transparent-for-input",
+                          flags.testFlag(Qt::WindowTransparentForInput));
+
+    m_nonClientArea->titleBar()->setMaximizeVisible(hasMaximizeButton());
+    m_nonClientArea->titleBar()->setCloseVisible(m_flags.testFlag(Qt::WindowCloseButtonHint));
 }
 
 void QWasmWindow::setWindowState(Qt::WindowStates newState)
@@ -404,15 +430,35 @@ void QWasmWindow::applyWindowState()
     else
         newGeom = normalGeometry();
 
-    dom::syncCSSClassWith(m_qtWindow, "has-title-bar", hasTitleBar());
+    dom::syncCSSClassWith(m_qtWindow, "has-frame", hasFrame());
     dom::syncCSSClassWith(m_qtWindow, "maximized", isMaximized);
 
     m_nonClientArea->titleBar()->setRestoreVisible(isMaximized);
-    m_nonClientArea->titleBar()->setMaximizeVisible(!isMaximized);
+    m_nonClientArea->titleBar()->setMaximizeVisible(hasMaximizeButton());
 
     if (isVisible())
         QWindowSystemInterface::handleWindowStateChanged(window(), m_state, m_previousWindowState);
     setGeometry(newGeom);
+}
+
+bool QWasmWindow::processKey(const KeyEvent &event)
+{
+    constexpr bool ProceedToNativeEvent = false;
+    Q_ASSERT(event.type == EventType::KeyDown || event.type == EventType::KeyUp);
+
+    const auto clipboardResult =
+            QWasmIntegration::get()->getWasmClipboard()->processKeyboard(event);
+
+    using ProcessKeyboardResult = QWasmClipboard::ProcessKeyboardResult;
+    if (clipboardResult == ProcessKeyboardResult::NativeClipboardEventNeeded)
+        return ProceedToNativeEvent;
+
+    const auto result = QWindowSystemInterface::handleKeyEvent(
+            0, event.type == EventType::KeyDown ? QEvent::KeyPress : QEvent::KeyRelease, event.key,
+            event.modifiers, event.text);
+    return clipboardResult == ProcessKeyboardResult::NativeClipboardEventAndCopiedDataNeeded
+            ? ProceedToNativeEvent
+            : result;
 }
 
 bool QWasmWindow::processPointer(const PointerEvent &event)
@@ -438,6 +484,54 @@ bool QWasmWindow::processPointer(const PointerEvent &event)
     return false;
 }
 
+bool QWasmWindow::processDrop(const DragEvent &event)
+{
+    m_dropDataReadCancellationFlag = qstdweb::readDataTransfer(
+            event.dataTransfer,
+            [](QByteArray fileContent) {
+                QImage image;
+                image.loadFromData(fileContent, nullptr);
+                return image;
+            },
+            [this, event](std::unique_ptr<QMimeData> data) {
+                QWindowSystemInterface::handleDrag(window(), data.get(),
+                                                   event.pointInPage.toPoint(), event.dropAction,
+                                                   event.mouseButton, event.modifiers);
+
+                QWindowSystemInterface::handleDrop(window(), data.get(),
+                                                   event.pointInPage.toPoint(), event.dropAction,
+                                                   event.mouseButton, event.modifiers);
+
+                QWindowSystemInterface::handleDrag(window(), nullptr, QPoint(), Qt::IgnoreAction,
+                                                   {}, {});
+            });
+    return true;
+}
+
+bool QWasmWindow::processWheel(const WheelEvent &event)
+{
+    // Web scroll deltas are inverted from Qt deltas - negate.
+    const int scrollFactor = -([&event]() {
+        switch (event.deltaMode) {
+        case DeltaMode::Pixel:
+            return 1;
+        case DeltaMode::Line:
+            return 12;
+        case DeltaMode::Page:
+            return 20;
+        };
+    })();
+
+    const auto pointInScreen = platformScreen()->mapFromLocal(
+            dom::mapPoint(event.target, platformScreen()->element(), event.localPoint));
+
+    return QWindowSystemInterface::handleWheelEvent(
+            window(), QWasmIntegration::getTimestamp(), window()->mapFromGlobal(pointInScreen),
+            pointInScreen, (event.delta * scrollFactor).toPoint(),
+            (event.delta * scrollFactor).toPoint(), event.modifiers, Qt::NoScrollPhase,
+            Qt::MouseEventNotSynthesized, event.webkitDirectionInvertedFromDevice);
+}
+
 QRect QWasmWindow::normalGeometry() const
 {
     return m_normalGeometry;
@@ -453,10 +547,15 @@ void QWasmWindow::requestUpdate()
     m_compositor->requestUpdateWindow(this, QWasmCompositor::UpdateRequestDelivery);
 }
 
-bool QWasmWindow::hasTitleBar() const
+bool QWasmWindow::hasFrame() const
 {
-    return !m_state.testFlag(Qt::WindowFullScreen) && m_flags.testFlag(Qt::WindowTitleHint)
+    return !m_state.testFlag(Qt::WindowFullScreen) && !m_flags.testFlag(Qt::FramelessWindowHint)
             && !windowIsPopupType(m_flags);
+}
+
+bool QWasmWindow::hasMaximizeButton() const
+{
+    return !m_state.testFlag(Qt::WindowMaximized) && m_flags.testFlag(Qt::WindowMaximizeButtonHint);
 }
 
 bool QWasmWindow::windowIsPopupType(Qt::WindowFlags flags) const
@@ -502,6 +601,26 @@ bool QWasmWindow::windowEvent(QEvent *event)
     default:
         return QPlatformWindow::windowEvent(event);
     }
+}
+
+void QWasmWindow::setMask(const QRegion &region)
+{
+    if (region.isEmpty()) {
+        m_qtWindow["style"].set("clipPath", emscripten::val(""));
+        return;
+    }
+
+    std::ostringstream cssClipPath;
+    cssClipPath << "path('";
+    for (const auto &rect : region) {
+        const auto cssRect = rect.adjusted(0, 0, 1, 1);
+        cssClipPath << "M " << cssRect.left() << " " << cssRect.top() << " ";
+        cssClipPath << "L " << cssRect.right() << " " << cssRect.top() << " ";
+        cssClipPath << "L " << cssRect.right() << " " << cssRect.bottom() << " ";
+        cssClipPath << "L " << cssRect.left() << " " << cssRect.bottom() << " z ";
+    }
+    cssClipPath << "')";
+    m_qtWindow["style"].set("clipPath", emscripten::val(cssClipPath.str()));
 }
 
 std::string QWasmWindow::canvasSelector() const

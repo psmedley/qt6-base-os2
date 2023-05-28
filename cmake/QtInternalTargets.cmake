@@ -48,6 +48,11 @@ function(qt_internal_set_warnings_are_errors_flags target target_scope)
         if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11.0.0")
             # We do mixed enum arithmetic all over the place:
             list(APPEND flags -Wno-error=deprecated-enum-enum-conversion -Wno-error=deprecated-enum-float-conversion)
+
+            # GCC has some false positive, and it specifically comes through in MINGW
+            if (MINGW)
+                list(APPEND flags -Wno-error=stringop-overread)
+            endif()
         endif()
 
         if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11.0.0" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.2.0")
@@ -208,6 +213,21 @@ if(MACOS)
     target_compile_definitions(PlatformCommonInternal INTERFACE GL_SILENCE_DEPRECATION)
 elseif(UIKIT)
     target_compile_definitions(PlatformCommonInternal INTERFACE GLES_SILENCE_DEPRECATION)
+endif()
+
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0"
+)
+    # Xcode 14's Clang will emit objc_msgSend stubs by default, which ld
+    # from earlier Xcode versions will fail to understand when linking
+    # against static libraries with these stubs. Disable the stubs explicitly,
+    # for as long as we do support Xcode < 14.
+    set(is_static_lib "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>")
+    set(is_objc "$<COMPILE_LANGUAGE:OBJC,OBJCXX>")
+    set(is_static_and_objc "$<AND:${is_static_lib},${is_objc}>")
+    target_compile_options(PlatformCommonInternal INTERFACE
+        "$<${is_static_and_objc}:-fno-objc-msgsend-selector-stubs>"
+    )
 endif()
 
 if(MSVC)

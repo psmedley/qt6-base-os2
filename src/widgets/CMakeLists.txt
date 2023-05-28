@@ -68,10 +68,10 @@ qt_internal_add_module(Widgets
     GENERATE_CPP_EXPORTS
 )
 
-if(APPLE)
-    set_source_files_properties(kernel/qapplication.cpp
-                                PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-endif()
+qt_internal_extend_target(Widgets CONDITION APPLE
+    NO_UNITY_BUILD_SOURCES
+        kernel/qapplication.cpp
+)
 
 # Resources:
 set(qstyle_resource_files
@@ -693,7 +693,7 @@ if(QT_FEATURE_wizard)
     if(APPLE)
         set_source_files_properties(dialogs/qwizard.cpp
             PROPERTIES
-                COMPILE_FLAGS "-x objective-c++"
+                LANGUAGE OBJCXX
                 SKIP_PRECOMPILE_HEADERS ON
         )
     endif()

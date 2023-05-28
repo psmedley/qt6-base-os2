@@ -94,7 +94,7 @@ function(qt_internal_add_tool target_name)
     qt_internal_library_deprecation_level(deprecation_define)
 
     if(arg_NO_UNITY_BUILD)
-        set(arg_NO_UNITY_BUILD NO_UNITY_BUILD)
+        set(arg_NO_UNITY_BUILD "NO_UNITY_BUILD")
     else()
         set(arg_NO_UNITY_BUILD "")
     endif()
@@ -103,7 +103,9 @@ function(qt_internal_add_tool target_name)
         OUTPUT_DIRECTORY "${output_dir}"
         ${exceptions}
         NO_INSTALL
+        ${arg_NO_UNITY_BUILD}
         SOURCES ${arg_SOURCES}
+        NO_UNITY_BUILD_SOURCES ${arg_NO_UNITY_BUILD_SOURCES}
         INCLUDE_DIRECTORIES
             ${arg_INCLUDE_DIRECTORIES}
         DEFINES
@@ -119,13 +121,13 @@ function(qt_internal_add_tool target_name)
         LINK_OPTIONS ${arg_LINK_OPTIONS}
         MOC_OPTIONS ${arg_MOC_OPTIONS}
         DISABLE_AUTOGEN_TOOLS ${disable_autogen_tools}
-        TARGET_VERSION "${arg_TARGET_VERSION}"
-        TARGET_PRODUCT "${arg_TARGET_PRODUCT}"
-        TARGET_DESCRIPTION "${arg_TARGET_DESCRIPTION}"
-        TARGET_COMPANY "${arg_TARGET_COMPANY}"
-        TARGET_COPYRIGHT "${arg_TARGET_COPYRIGHT}"
-        NO_UNITY_BUILD_SOURCES "${arg_NO_UNITY_BUILD_SOURCES}"
-        ${arg_NO_UNITY_BUILD}
+        TARGET_VERSION ${arg_TARGET_VERSION}
+        TARGET_PRODUCT ${arg_TARGET_PRODUCT}
+        TARGET_DESCRIPTION ${arg_TARGET_DESCRIPTION}
+        TARGET_COMPANY ${arg_TARGET_COMPANY}
+        TARGET_COPYRIGHT ${arg_TARGET_COPYRIGHT}
+        # If you are putting anything after these, make sure that
+        # qt_set_target_info_properties knows how to process them
     )
     qt_internal_add_target_aliases("${target_name}")
     _qt_internal_apply_strict_cpp("${target_name}")

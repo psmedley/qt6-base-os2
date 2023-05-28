@@ -49,6 +49,7 @@
 #include <QtGui/qwindow.h>
 #include <qtimer.h>
 #include <QtWidgets/QDoubleSpinBox>
+#include <QtWidgets/QComboBox>
 
 #include <QtTest/QTest>
 #include <QtTest/private/qtesthelpers_p.h>
@@ -164,6 +165,8 @@ private slots:
     void tabOrderWithProxyDisabled();
     void tabOrderWithProxyOutOfOrder();
     void tabOrderWithCompoundWidgets();
+    void tabOrderWithCompoundWidgetsInflection_data();
+    void tabOrderWithCompoundWidgetsInflection();
     void tabOrderWithCompoundWidgetsNoFocusPolicy();
     void tabOrderNoChange();
     void tabOrderNoChange2();
@@ -171,6 +174,8 @@ private slots:
     void appFocusWidgetWhenLosingFocusProxy();
     void explicitTabOrderWithComplexWidget();
     void explicitTabOrderWithSpinBox_QTBUG81097();
+    void tabOrderComboBox_data();
+    void tabOrderComboBox();
 #if defined(Q_OS_WIN)
     void activation();
 #endif
@@ -2046,6 +2051,122 @@ void tst_QWidget::reverseTabOrder()
     QVERIFY(firstEdit->hasFocus());
 }
 
+void tst_QWidget::tabOrderComboBox_data()
+{
+    QTest::addColumn<const bool>("editableAtBeginning");
+    QTest::addColumn<const QList<int>>("firstTabOrder");
+    QTest::addColumn<const QList<int>>("secondTabOrder");
+
+    QTest::addRow("3 not editable") << false << QList<int>{2, 1, 0} << QList<int>{0, 1, 2};
+    QTest::addRow("4 editable") << true << QList<int>{2, 1, 0, 3} << QList<int>{3, 0, 2, 1};
+}
+
+static QList<QWidget *> getFocusChain(QWidget *start, bool bForward)
+{
+    QList<QWidget *> ret;
+    QWidget *cur = start;
+    // detect infinite loop
+    int count = 100;
+    auto loopGuard = qScopeGuard([]{
+        QFAIL("Inifinite loop detected in focus chain");
+    });
+    do {
+        ret += cur;
+        auto widgetPrivate = static_cast<QWidgetPrivate *>(qt_widget_private(cur));
+        cur = bForward ? widgetPrivate->focus_next : widgetPrivate->focus_prev;
+        if (!--count)
+            return ret;
+    } while (cur != start);
+    loopGuard.dismiss();
+    return ret;
+}
+
+QWidgetList expectedFocusChain(const QList<QComboBox *> &boxes, const QList<int> &sequence)
+{
+    Q_ASSERT(boxes.count() == sequence.count());
+    QWidgetList widgets;
+    for (int i : sequence) {
+        Q_ASSERT(i >= 0);
+        Q_ASSERT(i < boxes.count());
+        QComboBox *box = boxes.at(i);
+        widgets.append(box);
+        if (box->lineEdit())
+            widgets.append(box->lineEdit());
+    }
+
+    return widgets;
+}
+
+QWidgetList realFocusChain(const QList<QComboBox *> &boxes, const QList<int> &sequence)
+{
+    QWidgetList widgets = getFocusChain(boxes.at(sequence.at(0)), true);
+    // Filter everything with NoFocus
+    for (auto *widget : widgets) {
+        if (widget->focusPolicy() == Qt::NoFocus)
+            widgets.removeOne(widget);
+    }
+    return widgets;
+}
+
+void setTabOrder(const QList<QComboBox *> &boxes, const QList<int> &sequence)
+{
+    Q_ASSERT(boxes.count() == sequence.count());
+    QWidget *previous = nullptr;
+    for (int i : sequence) {
+        Q_ASSERT(i >= 0);
+        Q_ASSERT(i < boxes.count());
+        QWidget *box = boxes.at(i);
+        if (!previous) {
+            previous = box;
+        } else {
+            QWidget::setTabOrder(previous, box);
+            previous = box;
+        }
+    }
+}
+
+void tst_QWidget::tabOrderComboBox()
+{
+    QFETCH(const bool, editableAtBeginning);
+    QFETCH(const QList<int>, firstTabOrder);
+    QFETCH(const QList<int>, secondTabOrder);
+    const int count = firstTabOrder.count();
+    Q_ASSERT(count == secondTabOrder.count());
+
+    QWidget w;
+    w.setObjectName("MainWidget");
+    QVBoxLayout* layout = new QVBoxLayout();
+    w.setLayout(layout);
+
+    QList<QComboBox *> boxes;
+    for (int i = 0; i < count; ++i) {
+        auto box = new QComboBox;
+        box->setObjectName("ComboBox " + QString::number(i));
+        if (editableAtBeginning) {
+            box->setEditable(true);
+            box->lineEdit()->setObjectName("LineEdit " + QString::number(i));
+        }
+        boxes.append(box);
+        layout->addWidget(box);
+    }
+    layout->addStretch();
+
+#define COMPARE(seq)\
+    setTabOrder(boxes, seq);\
+    QCOMPARE(realFocusChain(boxes, seq), expectedFocusChain(boxes, seq))
+
+    COMPARE(firstTabOrder);
+
+    if (!editableAtBeginning) {
+        for (auto *box : boxes)
+            box->setEditable(box);
+    }
+
+    COMPARE(secondTabOrder);
+
+#undef COMPARE
+}
+
 void tst_QWidget::tabOrderWithProxy()
 {
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
@@ -2267,18 +2388,6 @@ void tst_QWidget::tabOrderWithCompoundWidgets()
     QVERIFY(lastEdit->hasFocus());
 }
 
-static QList<QWidget *> getFocusChain(QWidget *start, bool bForward)
-{
-    QList<QWidget *> ret;
-    QWidget *cur = start;
-    do {
-        ret += cur;
-        auto widgetPrivate = static_cast<QWidgetPrivate *>(qt_widget_private(cur));
-        cur = bForward ? widgetPrivate->focus_next : widgetPrivate->focus_prev;
-    } while (cur != start);
-    return ret;
-}
-
 void tst_QWidget::tabOrderWithProxyOutOfOrder()
 {
     Container container;
@@ -2338,6 +2447,121 @@ void tst_QWidget::tabOrderWithProxyOutOfOrder()
     QCOMPARE(QApplication::focusWidget(), &outsideButton);
     container.backTab();
     QCOMPARE(QApplication::focusWidget(), &cancelButton);
+}
+
+static bool isFocusChainConsistent(QWidget *widget)
+{
+    auto forward = getFocusChain(widget, true);
+    auto backward = getFocusChain(widget, false);
+    auto logger = qScopeGuard([=]{
+        qCritical("Focus chain is not consistent!");
+        qWarning() << forward.size() << "forwards: " << forward;
+        qWarning() << backward.size() << "backwards:" << backward;
+    });
+    // both lists start with the same, the widget
+    if (forward.takeFirst() != backward.takeFirst())
+        return false;
+    const qsizetype chainLength = forward.size();
+    if (backward.size() != chainLength)
+        return false;
+    for (qsizetype i = 0; i < chainLength; ++i) {
+        if (forward.at(i) != backward.at(chainLength - i - 1))
+            return false;
+    }
+    logger.dismiss();
+    return true;
+}
+
+/*
+    This tests that we end up with consistent and complete chains when we set
+    the tab order from a widget (the lineEdit) inside a compound (the tabWidget)
+    to the compound, or visa versa. In that case, QWidget::setTabOrder will walk
+    the focus chain to the focus child inside the compound to replace the compound
+    itself when manipulating the tab order. If that last focus child is then
+    however also the lineEdit, then we must not create an inconsistent or
+    incomplete loop.
+
+    The tabWidget is seen as a compound because QTabWidget sets the tab bar as
+    the focus proxy, and it has more widgets inside, like pages, toolbuttons etc.
+*/
+void tst_QWidget::tabOrderWithCompoundWidgetsInflection_data()
+{
+    QTest::addColumn<QByteArrayList>("tabOrder");
+
+    QTest::addRow("forward")
+        << QByteArrayList{"dialog", "tabWidget", "lineEdit", "compound", "okButton", "cancelButton"};
+    QTest::addRow("backward")
+        << QByteArrayList{"dialog", "cancelButton", "okButton", "compound", "lineEdit", "tabWidget"};
+}
+
+void tst_QWidget::tabOrderWithCompoundWidgetsInflection()
+{
+    QFETCH(const QByteArrayList, tabOrder);
+
+    QDialog dialog;
+    dialog.setObjectName("dialog");
+    QTabWidget *tabWidget = new QTabWidget;
+    tabWidget->setObjectName("tabWidget");
+    tabWidget->setFocusPolicy(Qt::TabFocus);
+    QWidget *page = new QWidget;
+    page->setObjectName("page");
+    QLineEdit *lineEdit = new QLineEdit;
+    lineEdit->setObjectName("lineEdit");
+    QWidget *compound = new QWidget;
+    compound->setObjectName("compound");
+    compound->setFocusPolicy(Qt::TabFocus);
+    QPushButton *okButton = new QPushButton("Ok");
+    okButton->setObjectName("okButton");
+    okButton->setFocusPolicy(Qt::TabFocus);
+    QPushButton *cancelButton = new QPushButton("Cancel");
+    cancelButton->setObjectName("cancelButton");
+    cancelButton->setFocusPolicy(Qt::TabFocus);
+
+    QVBoxLayout *pageLayout = new QVBoxLayout;
+    pageLayout->addWidget(lineEdit);
+    page->setLayout(pageLayout);
+    tabWidget->addTab(page, "Tab");
+
+    QHBoxLayout *compoundLayout = new QHBoxLayout;
+    compoundLayout->addStretch();
+    compoundLayout->addWidget(cancelButton);
+    compoundLayout->addWidget(okButton);
+    compound->setFocusProxy(okButton);
+    compound->setLayout(compoundLayout);
+
+    QVBoxLayout *dialogLayout = new QVBoxLayout;
+    dialogLayout->addWidget(tabWidget);
+    dialogLayout->addWidget(compound);
+    dialog.setLayout(dialogLayout);
+
+    QVERIFY(isFocusChainConsistent(&dialog));
+
+    QList<QWidget *> expectedFocusChain;
+    for (qsizetype i = 0; i < tabOrder.size() - 1; ++i) {
+        QWidget *first = dialog.findChild<QWidget *>(tabOrder.at(i));
+        if (!first && tabOrder.at(i) == dialog.objectName())
+            first = &dialog;
+        QVERIFY(first);
+        if (i == 0)
+            expectedFocusChain.append(first);
+        QWidget *second = dialog.findChild<QWidget *>(tabOrder.at(i + 1));
+        QVERIFY(second);
+        expectedFocusChain.append(second);
+        QWidget::setTabOrder(first, second);
+        QVERIFY(isFocusChainConsistent(&dialog));
+    }
+
+    const auto forwardChain = getFocusChain(&dialog, true);
+    auto logger = qScopeGuard([=]{
+        qCritical("Order of widgets in focus chain not matching:");
+        qCritical() << " Actual  :" << forwardChain;
+        qCritical() << " Expected:" << expectedFocusChain;
+    });
+    for (qsizetype i = 0; i < expectedFocusChain.size() - 2; ++i) {
+        QVERIFY(forwardChain.indexOf(expectedFocusChain.at(i)) <
+                forwardChain.indexOf(expectedFocusChain.at(i + 1)));
+    }
+    logger.dismiss();
 }
 
 void tst_QWidget::tabOrderWithCompoundWidgetsNoFocusPolicy()

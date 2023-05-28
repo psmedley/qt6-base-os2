@@ -3,14 +3,14 @@
 
 /*!
     \example remotecontrolledcar
-    \title D-Bus Remote Controlled Car Example
+    \title D-Bus Remote Controlled Car
     \ingroup examples-dbus
     \brief Shows how to use Qt D-Bus to control a car from another application.
 
     The Remote Controlled Car example shows how to use \l{Qt D-Bus} to control
     one application from another.
 
-    \image remotecontrolledcar-car-example.png
+    \image remotecontrolledcar-car-example.webp
 
     \include examples-run.qdocinc
 */

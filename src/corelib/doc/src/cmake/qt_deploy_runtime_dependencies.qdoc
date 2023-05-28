@@ -38,6 +38,7 @@ qt_deploy_runtime_dependencies(
     [NO_OVERWRITE]
     [NO_APP_STORE_COMPLIANCE]
     [NO_TRANSLATIONS]
+    [NO_COMPILER_RUNTIME]
     [PRE_INCLUDE_REGEXES regexes...]
     [PRE_EXCLUDE_REGEXES regexes...]
     [POST_INCLUDE_REGEXES regexes...]
@@ -53,8 +54,12 @@ When installing an application, it may be desirable to also install the
 libraries and plugins it depends on. When the application is a macOS app bundle
 or a Windows executable, \c{qt_deploy_runtime_dependencies()} can be called
 from an install-time script to deploy those dependencies. It will install
-non-system libraries (both Qt and those provided by the project), plus an
-appropriate set of Qt plugins.
+non-system Qt libraries plus an appropriate set of Qt plugins.
+
+On Linux, the command will deploy additional libraries, beyond just those
+related to Qt, that are included with the project. However, when executed on
+macOS or Windows, the command will use either \c macdeployqt or \c windeployqt,
+which will only deploy libraries that are specific to Qt.
 
 This command only considers runtime dependencies for which linking
 relationships exist in the underlying binaries. It does not deploy QML modules,
@@ -123,6 +128,9 @@ On platforms other than macOS, Qt translations are automatically deployed. To
 inhibit this behavior, specify \c{NO_TRANSLATIONS}. Use
 \l{qt6_deploy_translations}{qt_deploy_translations()} to deploy translations
 in a customized way.
+
+For Windows desktop applications, the required runtime files for the compiler
+are also installed by default. To prevent this, specify \c{NO_COMPILER_RUNTIME}.
 
 On Linux, deploying runtime dependencies is based on CMake's
 \c{file(GET_RUNTIME_DEPENDENCIES)} command. The options \c{PRE_INCLUDE_REGEXES},

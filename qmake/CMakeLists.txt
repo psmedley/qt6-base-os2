@@ -35,6 +35,8 @@ if("${hostdatadir}" STREQUAL "")
     set(hostdatadir ".")
 endif()
 
+qt_internal_library_deprecation_level(deprecation_define)
+
 target_compile_definitions(QtLibraryInfo PUBLIC
     PROEVALUATOR_FULL
     QT_BUILD_QMAKE
@@ -44,6 +46,7 @@ target_compile_definitions(QtLibraryInfo PUBLIC
     QT_HOST_MKSPEC="${QT_QMAKE_HOST_MKSPEC}"
     QT_TARGET_MKSPEC="${QT_QMAKE_TARGET_MKSPEC}"
     QT_HOST_DATADIR="${hostdatadir}"
+    ${deprecation_define}
 )
 
 if(NOT QT_FEATURE_qmake)
@@ -54,6 +57,7 @@ qt_get_tool_target_name(target_name qmake)
 qt_internal_add_tool(${target_name}
     TOOLS_TARGET Core # special case
     USER_FACING
+    NO_UNITY_BUILD
     INSTALL_VERSIONED_LINK
     SOURCES
         cachekeys.h
@@ -133,7 +137,6 @@ set_target_properties(${target_name} PROPERTIES
     AUTOMOC OFF
     AUTORCC OFF
     AUTOUIC OFF
-    UNITY_BUILD OFF
 )
 
 qt_internal_apply_gc_binaries(${target_name} PRIVATE) # special case

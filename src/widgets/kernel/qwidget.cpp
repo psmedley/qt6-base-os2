@@ -3547,6 +3547,10 @@ int QWidget::y() const
     See the \l{Window Geometry} documentation for an overview of geometry
     issues with windows.
 
+    \note Not all windowing systems support setting or querying top level window positions.
+    On such a system, programmatically moving windows may not have any effect, and artificial
+    values may be returned for the current positions, such as \c QPoint(0, 0).
+
     \sa frameGeometry, size, x(), y()
 */
 QPoint QWidget::pos() const
@@ -6408,6 +6412,30 @@ void QWidget::setFocusProxy(QWidget * w)
         d->focus_prev = oldPrev;
         oldPrev->d_func()->focus_next = this;
         firstChild->d_func()->focus_prev = this;
+    } else if (w && w->isAncestorOf(this)) {
+        // If the focus proxy is a parent, 'this' has to be inserted directly after its parent in the focus chain
+        // remove it from the chain and insert this into the focus chain after its parent
+
+        // is this the case already?
+        QWidget *parentsNext = w->d_func()->focus_next;
+        if (parentsNext == this) {
+            // nothing to do.
+            Q_ASSERT(d->focus_prev == w);
+        } else {
+            // Remove 'this' from the focus chain by making prev and next point directly to each other
+            QWidget *myOldNext = d->focus_next;
+            QWidget *myOldPrev = d->focus_prev;
+            if (myOldNext && myOldPrev) {
+                myOldNext->d_func()->focus_prev = myOldPrev;
+                myOldPrev->d_func()->focus_next = myOldNext;
+            }
+
+            // Insert 'this' behind the parent
+            w->d_func()->focus_next = this;
+            d->focus_prev = w;
+            d->focus_next = parentsNext;
+            parentsNext->d_func()->focus_prev = this;
+        }
     }
 
     if (moveFocusToProxy)
@@ -6952,16 +6980,16 @@ void QWidget::setTabOrder(QWidget* first, QWidget *second)
         return;
     }
 
-    auto determineLastFocusChild = [](QWidget *target, QWidget *&lastFocusChild)
+    const auto determineLastFocusChild = [](QWidget *target, QWidget *noFurtherThan)
     {
         // Since we need to repeat the same logic for both 'first' and 'second', we add a function that
         // determines the last focus child for a widget, taking proxies and compound widgets into account.
         // If the target is not a compound widget (it doesn't have a focus proxy that points to a child),
         // 'lastFocusChild' will be set to the target itself.
-        lastFocusChild = target;
+        QWidget *lastFocusChild = target;
 
         QWidget *focusProxy = target->d_func()->deepestFocusProxy();
-        if (!focusProxy || !target->isAncestorOf(focusProxy)) {
+        if (!focusProxy) {
             // QTBUG-81097: Another case is possible here. We can have a child
             // widget, that sets its focusProxy() to the parent (target).
             // An example of such widget is a QLineEdit, nested into
@@ -6974,30 +7002,35 @@ void QWidget::setTabOrder(QWidget* first, QWidget *second)
                     break;
                 }
             }
-            return;
+        } else if (target->isAncestorOf(focusProxy)) {
+            lastFocusChild = focusProxy;
+            for (QWidget *focusNext = lastFocusChild->d_func()->focus_next;
+                focusNext != focusProxy && target->isAncestorOf(focusNext) && focusNext->window() == focusProxy->window();
+                focusNext = focusNext->d_func()->focus_next) {
+                if (focusNext == noFurtherThan)
+                    break;
+                if (focusNext->focusPolicy() != Qt::NoFocus)
+                    lastFocusChild = focusNext;
+            }
         }
-
-        lastFocusChild = focusProxy;
-
-        for (QWidget *focusNext = lastFocusChild->d_func()->focus_next;
-             focusNext != focusProxy && target->isAncestorOf(focusNext) && focusNext->window() == focusProxy->window();
-             focusNext = focusNext->d_func()->focus_next) {
-            if (focusNext->focusPolicy() != Qt::NoFocus)
-                lastFocusChild = focusNext;
-        }
+        return lastFocusChild;
     };
-    auto setPrev = [](QWidget *w, QWidget *prev)
-    {
+    auto setPrev = [](QWidget *w, QWidget *prev) {
         w->d_func()->focus_prev = prev;
     };
-    auto setNext = [](QWidget *w, QWidget *next)
-    {
+    auto setNext = [](QWidget *w, QWidget *next) {
         w->d_func()->focus_next = next;
     };
 
+    // detect inflection in case we have compound widgets
+    QWidget *lastFocusChildOfFirst = determineLastFocusChild(first, second);
+    if (lastFocusChildOfFirst == second)
+        lastFocusChildOfFirst = first;
+    QWidget *lastFocusChildOfSecond = determineLastFocusChild(second, first);
+    if (lastFocusChildOfSecond == first)
+        lastFocusChildOfSecond = second;
+
     // remove the second widget from the chain
-    QWidget *lastFocusChildOfSecond;
-    determineLastFocusChild(second, lastFocusChildOfSecond);
     {
         QWidget *oldPrev = second->d_func()->focus_prev;
         QWidget *prevWithFocus = oldPrev;
@@ -7012,8 +7045,6 @@ void QWidget::setTabOrder(QWidget* first, QWidget *second)
     }
 
     // insert the second widget into the chain
-    QWidget *lastFocusChildOfFirst;
-    determineLastFocusChild(first, lastFocusChildOfFirst);
     {
         QWidget *oldNext = lastFocusChildOfFirst->d_func()->focus_next;
         setPrev(second, lastFocusChildOfFirst);

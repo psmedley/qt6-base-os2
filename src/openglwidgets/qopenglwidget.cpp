@@ -178,6 +178,13 @@ QT_BEGIN_NAMESPACE
 
   \snippet code/doc_gui_widgets_qopenglwidget.cpp 2
 
+  \note It is up to the application to ensure depth and stencil buffers are
+  requested from the underlying windowing system interface. Without requesting
+  a non-zero depth buffer size there is no guarantee that a depth buffer will
+  be available, and as a result depth testing related OpenGL operations may
+  fail to function as expected. Commonly used depth and stencil buffer size
+  requests are 24 and 8, respectively.
+
   With OpenGL 3.0+ contexts, when portability is not important, the versioned
   QOpenGLFunctions variants give easy access to all the modern OpenGL functions
   available in a given version:
@@ -684,8 +691,6 @@ void QOpenGLWidgetPrivate::reset()
 
     destroyFbos();
 
-    resetRhiDependentResources();
-
     if (initialized)
         q->doneCurrent();
 
@@ -958,6 +963,10 @@ void QOpenGLWidgetPrivate::render()
     f->glViewport(0, 0, q->width() * q->devicePixelRatio(), q->height() * q->devicePixelRatio());
     inPaintGL = true;
 
+#ifdef Q_OS_WASM
+    f->glDepthMask(GL_TRUE);
+#endif
+
     QOpenGLContextPrivate::get(ctx)->defaultFboRedirect = fbos[currentTargetBuffer]->handle();
     q->paintGL();
 
@@ -1009,6 +1018,8 @@ void QOpenGLWidgetPrivate::destroyFbos()
     fbos[QOpenGLWidget::RightBuffer] = nullptr;
     delete resolvedFbos[QOpenGLWidget::RightBuffer];
     resolvedFbos[QOpenGLWidget::RightBuffer] = nullptr;
+
+    resetRhiDependentResources();
 }
 
 QImage QOpenGLWidgetPrivate::grabFramebuffer()
@@ -1380,7 +1391,7 @@ GLuint QOpenGLWidget::defaultFramebufferObject(TargetBuffer targetBuffer) const
   This virtual function is called once before the first call to
   paintGL() or resizeGL(). Reimplement it in a subclass.
 
-  This function should set up any required OpenGL resources and state.
+  This function should set up any required OpenGL resources.
 
   There is no need to call makeCurrent() because this has already been
   done when this function is called. Note however that the framebuffer
@@ -1421,6 +1432,13 @@ void QOpenGLWidget::resizeGL(int w, int h)
   bound, and the viewport is set up by a call to glViewport(). No
   other state is set and no clearing or drawing is performed by the
   framework.
+
+  \note To ensure portability, do not expect that state set in initializeGL()
+  persists. Rather, set all necessary state, for example, by calling
+  glEnable(), in paintGL(). This is because some platforms, such as WebAssembly
+  with WebGL, may have limitations on OpenGL contexts in some situations, which
+  can lead to using the context used with the QOpenGLWidget for other purposes
+  as well.
 
   When \l QSurfaceFormat::StereoBuffers is enabled, this function
   will be called twice - once for each buffer. Query what buffer is

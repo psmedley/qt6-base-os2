@@ -6,7 +6,7 @@ project(qt_single_test VERSION 6.0.0 LANGUAGES C CXX ASM)
 
 find_package(Qt6 REQUIRED COMPONENTS BuildInternals Core)
 
-include(${CMAKE_CURRENT_LIST_DIR}/Main.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/Main.cmake NO_POLICY_SCOPE)
 
 # Get the absolute path of the passed-in project dir, relative to the current working directory
 # of the calling script, rather than relative to this source directory.
@@ -17,6 +17,9 @@ if(DEFINED PWD)
 else()
     set(absolute_project_path "${QT_STANDALONE_TEST_PATH}")
 endif()
+
+# If path does not include the drive letter, we try to add it.
+get_filename_component(absolute_project_path "." REALPATH BASE_DIR "${absolute_project_path}")
 
 if(NOT IS_DIRECTORY "${absolute_project_path}")
     get_filename_component(filename "${absolute_project_path}" NAME)

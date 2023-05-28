@@ -428,14 +428,14 @@ void QWindowPrivate::updateSiblingPosition(SiblingPosition position)
 
     QObjectList &siblings = q->parent()->d_ptr->children;
 
-    const int siblingCount = siblings.size() - 1;
+    const qsizetype siblingCount = siblings.size() - 1;
     if (siblingCount == 0)
         return;
 
-    const int currentPosition = siblings.indexOf(q);
+    const qsizetype currentPosition = siblings.indexOf(q);
     Q_ASSERT(currentPosition >= 0);
 
-    const int targetPosition = position == PositionTop ? siblingCount : 0;
+    const qsizetype targetPosition = position == PositionTop ? siblingCount : 0;
 
     if (currentPosition == targetPosition)
         return;
@@ -1249,6 +1249,8 @@ bool QWindow::isExposed() const
     Typically active windows should appear active from a style perspective.
 
     To get the window that currently has focus, use QGuiApplication::focusWindow().
+
+    \sa requestActivate()
 */
 bool QWindow::isActive() const
 {
@@ -1873,6 +1875,10 @@ void QWindow::setFramePosition(const QPoint &point)
     For interactively moving windows, see startSystemMove(). For interactively
     resizing windows, see startSystemResize().
 
+    \note Not all windowing systems support setting or querying top level window positions.
+    On such a system, programmatically moving windows may not have any effect, and artificial
+    values may be returned for the current positions, such as \c QPoint(0, 0).
+
     \sa position(), startSystemMove()
 */
 void QWindow::setPosition(const QPoint &pt)
@@ -1895,6 +1901,10 @@ void QWindow::setPosition(int posx, int posy)
 /*!
     \fn QPoint QWindow::position() const
     \brief Returns the position of the window on the desktop excluding any window frame
+
+    \note Not all windowing systems support setting or querying top level window positions.
+    On such a system, programmatically moving windows may not have any effect, and artificial
+    values may be returned for the current positions, such as \c QPoint(0, 0).
 
     \sa setPosition()
 */

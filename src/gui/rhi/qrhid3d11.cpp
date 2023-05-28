@@ -285,6 +285,20 @@ bool QRhiD3D11::create(QRhi::Flags flags)
             qWarning("ID3D11DeviceContext1 not supported");
             return false;
         }
+
+        D3D11_FEATURE_DATA_D3D11_OPTIONS features = {};
+        if (SUCCEEDED(dev->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS, &features, sizeof(features)))) {
+            // The D3D _runtime_ may be 11.1, but the underlying _driver_ may
+            // still not support this D3D_FEATURE_LEVEL_11_1 feature. (e.g.
+            // because it only does 11_0)
+            if (!features.ConstantBufferOffsetting) {
+                qWarning("Constant buffer offsetting is not supported by the driver");
+                return false;
+            }
+        } else {
+            qWarning("Failed to query D3D11_FEATURE_D3D11_OPTIONS");
+            return false;
+        }
     } else {
         Q_ASSERT(dev && context);
         featureLevel = dev->GetFeatureLevel();
@@ -704,7 +718,7 @@ void QRhiD3D11::setPipelineCacheData(const QByteArray &data)
 
     const size_t headerSize = sizeof(QD3D11PipelineCacheDataHeader);
     if (data.size() < qsizetype(headerSize)) {
-        qWarning("setPipelineCacheData: Invalid blob size (header incomplete)");
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: Invalid blob size (header incomplete)");
         return;
     }
     const size_t dataOffset = headerSize;
@@ -713,21 +727,21 @@ void QRhiD3D11::setPipelineCacheData(const QByteArray &data)
 
     const quint32 rhiId = pipelineCacheRhiId();
     if (header.rhiId != rhiId) {
-        qWarning("setPipelineCacheData: The data is for a different QRhi version or backend (%u, %u)",
-                 rhiId, header.rhiId);
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: The data is for a different QRhi version or backend (%u, %u)",
+                rhiId, header.rhiId);
         return;
     }
     const quint32 arch = quint32(sizeof(void*));
     if (header.arch != arch) {
-        qWarning("setPipelineCacheData: Architecture does not match (%u, %u)",
-                 arch, header.arch);
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: Architecture does not match (%u, %u)",
+                arch, header.arch);
         return;
     }
     if (header.count == 0)
         return;
 
     if (data.size() < qsizetype(dataOffset + header.dataSize)) {
-        qWarning("setPipelineCacheData: Invalid blob size (data incomplete)");
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: Invalid blob size (data incomplete)");
         return;
     }
 

@@ -827,6 +827,7 @@ void QXmlStreamReaderPrivate::init()
     isWhitespace = true;
     isCDATA = false;
     standalone = false;
+    hasStandalone = false;
     tos = 0;
     resumeReduction = 0;
     state_stack[tos++] = 0;
@@ -1721,7 +1722,7 @@ void QXmlStreamReaderPrivate::checkPublicLiteral(QStringView publicId)
 {
 //#x20 | #xD | #xA | [a-zA-Z0-9] | [-'()+,./:=?;!*#@$_%]
 
-    const ushort *data = reinterpret_cast<const ushort *>(publicId.constData());
+    const char16_t *data = publicId.utf16();
     uchar c = 0;
     qsizetype i;
     for (i = publicId.size() - 1; i >= 0; --i) {
@@ -1777,7 +1778,6 @@ void QXmlStreamReaderPrivate::startDocument()
      * proper order:
      *
      * [23]     XMLDecl     ::=     '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>' */
-    bool hasStandalone = false;
 
     for (qsizetype i = 0; err.isNull() && i < n; ++i) {
         Attribute &attrib = attributeStack[i];
@@ -3829,8 +3829,7 @@ void QXmlStreamWriter::writeCurrentToken(const QXmlStreamReader &reader)
 }
 
 /*!
- \fn bool QXmlStreamAttributes::hasAttribute(const QString &qualifiedName) const
- \since 4.5
+ \fn bool QXmlStreamAttributes::hasAttribute(QAnyStringView qualifiedName) const
 
  Returns \c true if this QXmlStreamAttributes has an attribute whose
  qualified name is \a qualifiedName; otherwise returns \c false.
@@ -3844,16 +3843,9 @@ void QXmlStreamWriter::writeCurrentToken(const QXmlStreamReader &reader)
 */
 
 /*!
- \fn bool QXmlStreamAttributes::hasAttribute(QLatin1StringView qualifiedName) const
+ \fn bool QXmlStreamAttributes::hasAttribute(QAnyStringView namespaceUri,
+                                             QAnyStringView name) const
  \overload
- \since 4.5
-*/
-
-/*!
- \fn bool QXmlStreamAttributes::hasAttribute(const QString &namespaceUri,
-                                             const QString &name) const
- \overload
- \since 4.5
 
  Returns \c true if this QXmlStreamAttributes has an attribute whose
  namespace URI and name correspond to \a namespaceUri and \a name;

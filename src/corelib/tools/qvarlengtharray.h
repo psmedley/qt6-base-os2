@@ -52,7 +52,8 @@ protected:
     qsizetype s;      // size
     void *ptr;     // data
 
-    Q_ALWAYS_INLINE constexpr void verify(qsizetype pos = 0, qsizetype n = 1) const
+    Q_ALWAYS_INLINE constexpr void verify([[maybe_unused]] qsizetype pos = 0,
+                                          [[maybe_unused]] qsizetype n = 1) const
     {
         Q_ASSERT(pos >= 0);
         Q_ASSERT(pos <= size());
@@ -654,22 +655,22 @@ QVarLengthArray(InputIterator, InputIterator) -> QVarLengthArray<ValueType>;
 
 template <class T, qsizetype Prealloc>
 Q_INLINE_TEMPLATE QVarLengthArray<T, Prealloc>::QVarLengthArray(qsizetype asize)
+    : QVarLengthArray()
 {
+    Q_ASSERT_X(asize >= 0, "QVarLengthArray::QVarLengthArray(qsizetype)",
+               "Size must be greater than or equal to 0.");
+
+    // historically, this ctor worked for non-copyable/non-movable T, so keep it working, why not?
+    // resize(asize) // this requires a movable or copyable T, can't use, need to do it by hand
+
+    if (asize > Prealloc) {
+        this->ptr = malloc(asize * sizeof(T));
+        Q_CHECK_PTR(this->ptr);
+        this->a = asize;
+    }
+    if constexpr (QTypeInfo<T>::isComplex)
+        std::uninitialized_default_construct_n(data(), asize);
     this->s = asize;
-    Q_ASSERT_X(size() >= 0, "QVarLengthArray::QVarLengthArray()", "Size must be greater than or equal to 0.");
-    if (size() > Prealloc) {
-        this->ptr = malloc(size() * sizeof(T));
-        Q_CHECK_PTR(data());
-        this->a = size();
-    } else {
-        this->ptr = this->array;
-        this->a = Prealloc;
-    }
-    if constexpr (QTypeInfo<T>::isComplex) {
-        T *i = end();
-        while (i != begin())
-            q20::construct_at(--i);
-    }
 }
 
 template <class T>

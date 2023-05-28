@@ -20,7 +20,7 @@ class QPlatformOpenGLContext;
 class QWasmWindow;
 class QWasmBackingStore;
 class QWasmCompositor;
-class QWasmEventTranslator;
+class QWasmDeadKeySupport;
 class QOpenGLContext;
 
 class QWasmScreen : public QObject, public QPlatformScreen
@@ -36,9 +36,10 @@ public:
     emscripten::val element() const;
     QString eventTargetId() const;
     QString outerScreenId() const;
+    QPointingDevice *touchDevice() { return m_touchDevice.get(); }
 
     QWasmCompositor *compositor();
-    QWasmEventTranslator *eventTranslator();
+    QWasmDeadKeySupport *deadKeySupport() { return m_deadKeySupport.get(); }
 
     QRect geometry() const override;
     int depth() const override;
@@ -52,8 +53,8 @@ public:
     QWindow *topWindow() const;
     QWindow *topLevelAt(const QPoint &p) const override;
 
-    QPoint mapFromLocal(const QPoint &p) const;
-    QPoint clipPoint(const QPoint &p) const;
+    QPointF mapFromLocal(const QPointF &p) const;
+    QPointF clipPoint(const QPointF &p) const;
 
     void invalidateSize();
     void updateQScreenAndCanvasRenderSize();
@@ -67,7 +68,8 @@ private:
     emscripten::val m_container;
     emscripten::val m_shadowContainer;
     std::unique_ptr<QWasmCompositor> m_compositor;
-    std::unique_ptr<QWasmEventTranslator> m_eventTranslator;
+    std::unique_ptr<QPointingDevice> m_touchDevice;
+    std::unique_ptr<QWasmDeadKeySupport> m_deadKeySupport;
     QRect m_geometry = QRect(0, 0, 100, 100);
     int m_depth = 32;
     QImage::Format m_format = QImage::Format_RGB32;

@@ -876,7 +876,7 @@ QByteArray QRhiMetal::pipelineCacheData()
 
         QTemporaryFile tmp;
         if (!tmp.open()) {
-            qWarning("pipelineCacheData: Failed to create temporary file for Metal");
+            qCDebug(QRHI_LOG_INFO, "pipelineCacheData: Failed to create temporary file for Metal");
             return data;
         }
         tmp.close(); // the file exists until the tmp dtor runs
@@ -886,13 +886,14 @@ QByteArray QRhiMetal::pipelineCacheData()
         NSError *err = nil;
         if (![d->binArch serializeToURL: url error: &err]) {
             const QString msg = QString::fromNSString(err.localizedDescription);
-            qWarning("Failed to serialize MTLBinaryArchive: %s", qPrintable(msg));
+            // Some of these "errors" are not actual errors. (think of "Nothing to serialize")
+            qCDebug(QRHI_LOG_INFO, "Failed to serialize MTLBinaryArchive: %s", qPrintable(msg));
             return data;
         }
 
         QFile f(fn);
         if (!f.open(QIODevice::ReadOnly)) {
-            qWarning("pipelineCacheData: Failed to reopen temporary file");
+            qCDebug(QRHI_LOG_INFO, "pipelineCacheData: Failed to reopen temporary file");
             return data;
         }
         const QByteArray blob = f.readAll();
@@ -927,7 +928,7 @@ void QRhiMetal::setPipelineCacheData(const QByteArray &data)
 
     const size_t headerSize = sizeof(QMetalPipelineCacheDataHeader);
     if (data.size() < qsizetype(headerSize)) {
-        qWarning("setPipelineCacheData: Invalid blob size (header incomplete)");
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: Invalid blob size (header incomplete)");
         return;
     }
 
@@ -937,32 +938,32 @@ void QRhiMetal::setPipelineCacheData(const QByteArray &data)
 
     const quint32 rhiId = pipelineCacheRhiId();
     if (header.rhiId != rhiId) {
-        qWarning("setPipelineCacheData: The data is for a different QRhi version or backend (%u, %u)",
-                 rhiId, header.rhiId);
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: The data is for a different QRhi version or backend (%u, %u)",
+                rhiId, header.rhiId);
         return;
     }
 
     const quint32 arch = quint32(sizeof(void*));
     if (header.arch != arch) {
-        qWarning("setPipelineCacheData: Architecture does not match (%u, %u)",
-                 arch, header.arch);
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: Architecture does not match (%u, %u)",
+                arch, header.arch);
         return;
     }
 
     if (header.osMajor != osMajor || header.osMinor != osMinor) {
-        qWarning("setPipelineCacheData: OS version does not match (%u.%u, %u.%u)",
-                 osMajor, osMinor, header.osMajor, header.osMinor);
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: OS version does not match (%u.%u, %u.%u)",
+                osMajor, osMinor, header.osMajor, header.osMinor);
         return;
     }
 
     const size_t driverStrLen = qMin(sizeof(header.driver) - 1, size_t(driverInfoStruct.deviceName.length()));
     if (strncmp(header.driver, driverInfoStruct.deviceName.constData(), driverStrLen)) {
-        qWarning("setPipelineCacheData: Metal device name does not match");
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: Metal device name does not match");
         return;
     }
 
     if (data.size() < qsizetype(dataOffset + header.dataSize)) {
-        qWarning("setPipelineCacheData: Invalid blob size (data incomplete)");
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: Invalid blob size (data incomplete)");
         return;
     }
 
@@ -971,7 +972,7 @@ void QRhiMetal::setPipelineCacheData(const QByteArray &data)
 
         QTemporaryFile tmp;
         if (!tmp.open()) {
-            qWarning("pipelineCacheData: Failed to create temporary file for Metal");
+            qCDebug(QRHI_LOG_INFO, "pipelineCacheData: Failed to create temporary file for Metal");
             return;
         }
         tmp.write(p, header.dataSize);
@@ -2189,15 +2190,13 @@ QRhi::FrameOpResult QRhiMetal::beginOffscreenFrame(QRhiCommandBuffer **cb, QRhi:
     Q_UNUSED(flags);
 
     currentFrameSlot = (currentFrameSlot + 1) % QMTL_FRAMES_IN_FLIGHT;
-    if (swapchains.count() > 1) {
-        for (QMetalSwapChain *sc : std::as_const(swapchains)) {
-            // wait+signal is the general pattern to ensure the commands for a
-            // given frame slot have completed (if sem is 1, we go 0 then 1; if
-            // sem is 0 we go -1, block, completion increments to 0, then us to 1)
-            dispatch_semaphore_t sem = sc->d->sem[currentFrameSlot];
-            dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
-            dispatch_semaphore_signal(sem);
-        }
+    for (QMetalSwapChain *sc : std::as_const(swapchains)) {
+        // wait+signal is the general pattern to ensure the commands for a
+        // given frame slot have completed (if sem is 1, we go 0 then 1; if
+        // sem is 0 we go -1, block, completion increments to 0, then us to 1)
+        dispatch_semaphore_t sem = sc->d->sem[currentFrameSlot];
+        dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+        dispatch_semaphore_signal(sem);
     }
 
     d->ofr.active = true;

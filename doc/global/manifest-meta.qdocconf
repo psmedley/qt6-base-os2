@@ -95,6 +95,8 @@ manifestmeta.android.names          =   "Qt3D/Qt 3D: Basic Shapes C++ Example" \
                                         "QtQuickControls/Qt Quick Controls - Gallery" \
                                         "QtQuickControls/Qt Quick Controls - Imagine Style Example: Automotive" \
                                         "QtQuickControls/Qt Quick Controls - Imagine Style Example: Music Player" \
+                                        "QtQuickControls/Qt Quick Controls - Side Panel" \
+                                        "QtQuickControls/Qt Quick Controls - Swipe to Remove" \
                                         "QtQuickControls/Qt Quick Controls - Text Editor" \
                                         "QtQuickControls/Qt Quick Controls - Wearable Demo" \
                                         "QtQuickDialogs/*" \
@@ -155,7 +157,6 @@ manifestmeta.ios.names              =  "QtCore/Contiguous Cache Example" \
                                        "QtCore/Queued Custom Type Example" \
                                        "QtGui/OpenGL Window Example" \
                                        "QtGui/Raster Window Example" \
-                                       "QtNetwork/Loopback Example" \
                                        "QtNetwork/Network Chat Example" \
                                        "QtNetwork/Torrent Example" \
                                        "QtOpenGL/2D Painting Example" \

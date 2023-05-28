@@ -1609,10 +1609,15 @@ void tst_QDateTime::addMSecs()
             QCOMPARE(result.addMSecs(qint64(-nsecs) * 1000), dt);
         }
     };
+#define VERIFY(datum) \
+    verify(datum); \
+    if (QTest::currentTestFailed()) \
+        return
 
-    verify(dt.addMSecs(qint64(nsecs) * 1000));
-    verify(dt.addDuration(std::chrono::seconds(nsecs)));
-    verify(dt.addDuration(std::chrono::milliseconds(nsecs * 1000)));
+    VERIFY(dt.addMSecs(qint64(nsecs) * 1000));
+    VERIFY(dt.addDuration(std::chrono::seconds(nsecs)));
+    VERIFY(dt.addDuration(std::chrono::milliseconds(nsecs * 1000)));
+#undef VERIFY
 }
 
 #if QT_DEPRECATED_SINCE(6, 9)
@@ -2660,10 +2665,16 @@ void tst_QDateTime::fromStringDateFormat_data()
     QTest::newRow("ISO 24:00") << QString::fromLatin1("2012-06-04T24:00:00")
                                << Qt::ISODate << QDate(2012, 6, 5).startOfDay();
 #if QT_CONFIG(timezone)
-    QTest::newRow("ISO 24:00 in DST") // Only special if TZ=America/Sao_Paulo
+    const QByteArray sysId = QTimeZone::systemTimeZoneId();
+    const bool midnightSkip = sysId == "America/Sao_Paulo" || sysId == "America/Asuncion"
+        || sysId == "America/Cordoba" || sysId == "America/Argentina/Cordoba"
+        || sysId == "America/Campo_Grande"
+        || sysId == "America/Cuiaba" || sysId == "America/Buenos_Aires"
+        || sysId == "America/Argentina/Buenos_Aires"
+        || sysId == "America/Argentina/Tucuman" || sysId == "Brazil/East";
+    QTest::newRow("ISO 24:00 in DST") // Midnight spring forward in some of South America.
         << QString::fromLatin1("2008-10-18T24:00") << Qt::ISODate
-        << QDateTime(QDate(2008, 10, 19),
-                     QTime(QTimeZone::systemTimeZoneId() == "America/Sao_Paulo" ? 1 : 0, 0));
+        << QDateTime(QDate(2008, 10, 19), QTime(midnightSkip ? 1 : 0, 0));
 #endif
     QTest::newRow("ISO 24:00 end of month")
         << QString::fromLatin1("2012-06-30T24:00:00")
@@ -2825,8 +2836,6 @@ void tst_QDateTime::fromStringDateFormat_data()
         << Qt::RFC2822Date << QDateTime(QDate(1987, 2, 13), QTime(14, 24, 51), UTC);
     QTest::newRow("RFC 850 and 1036 +0000") << QString::fromLatin1("Thu Jan 01 00:12:34 1970 +0000")
         << Qt::RFC2822Date << QDateTime(QDate(1970, 1, 1), QTime(0, 12, 34), UTC);
-    QTest::newRow("RFC 850 and 1036 +0000") << QString::fromLatin1("Thu Jan 01 00:12:34 1970 +0000")
-        << Qt::RFC2822Date << QDateTime(QDate(1970, 1, 1), QTime(0, 12, 34), UTC);
     // No timezone assume UTC
     QTest::newRow("RFC 850 and 1036 no timezone") << QString::fromLatin1("Thu Jan 01 00:12:34 1970")
         << Qt::RFC2822Date << QDateTime(QDate(1970, 1, 1), QTime(0, 12, 34), UTC);
@@ -2975,9 +2984,6 @@ void tst_QDateTime::fromStringStringFormat_data()
     QTest::newRow("offset-from-utc:3-digit-with-colon")
         << QString("2008-10-13 -4:30 11.50") << QString("yyyy-MM-dd t hh.mm")
         << QDateTime(QDate(2008, 10, 13), QTime(11, 50), QTimeZone::fromSecondsAheadOfUtc(-16200));
-    QTest::newRow("offset-from-utc:merged-with-time")
-        << QString("2008-10-13 UTC+010011.50") << QString("yyyy-MM-dd thh.mm")
-        << QDateTime(QDate(2008, 10, 13), QTime(11, 50), QTimeZone::fromSecondsAheadOfUtc(3600));
     QTest::newRow("offset-from-utc:with-colon-merged-with-time")
         << QString("2008-10-13 UTC+01:0011.50") << QString("yyyy-MM-dd thh.mm")
         << QDateTime(QDate(2008, 10, 13), QTime(11, 50), QTimeZone::fromSecondsAheadOfUtc(3600));

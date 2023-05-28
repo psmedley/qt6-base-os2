@@ -191,9 +191,9 @@ Q_DECL_UNUSED static constexpr quint64 MaximumPreallocatedElementCount =
     array or map it refers to will be modified with the new value. In all other
     aspects, its API is identical to QCborValue.
 
-    \sa QCborArray, QCborMap, QCborStreamReader, QCborStreamWriter
-    \sa QJsonValue, QJsonDocument, {Cbordump Example}, {Convert Example}
-    \sa {JSON Save Game Example}
+    \sa QCborArray, QCborMap, QCborStreamReader, QCborStreamWriter,
+        QJsonValue, QJsonDocument, {Convert Example}, {JSON Save Game Example}
+        {Parsing and displaying CBOR data}
  */
 
 /*!
@@ -889,7 +889,7 @@ static void writeDoubleToCbor(QCborStreamWriter &writer, double d, QCborValue::E
             // no data loss, we could use float
 #ifndef QT_BOOTSTRAPPED
             if ((opt & QCborValue::UseFloat16) == QCborValue::UseFloat16) {
-                qfloat16 f16 = f;
+                qfloat16 f16 = qfloat16(f);
                 if (f16 == f)
                     return writer.append(f16);
             }
@@ -973,7 +973,7 @@ QCborContainerPrivate *QCborContainerPrivate::grow(QCborContainerPrivate *d, qsi
     Q_ASSERT(index >= 0);
     d = detach(d, index + 1);
     Q_ASSERT(d);
-    int j = d->elements.size();
+    qsizetype j = d->elements.size();
     while (j++ < index)
         d->append(Undefined());
     return d;

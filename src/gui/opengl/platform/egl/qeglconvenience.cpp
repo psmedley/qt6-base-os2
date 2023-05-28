@@ -88,13 +88,12 @@ QList<EGLint> q_createConfigAttributesFromFormat(const QSurfaceFormat &format)
 
 bool q_reduceConfigAttributes(QList<EGLint> *configAttributes)
 {
-    int i = -1;
     // Reduce the complexity of a configuration request to ask for less
     // because the previous request did not result in success.  Returns
     // true if the complexity was reduced, or false if no further
     // reductions in complexity are possible.
 
-    i = configAttributes->indexOf(EGL_SWAP_BEHAVIOR);
+    qsizetype i = configAttributes->indexOf(EGL_SWAP_BEHAVIOR);
     if (i >= 0) {
         configAttributes->remove(i,2);
     }
@@ -216,14 +215,17 @@ EGLConfig QEglConfigChooser::chooseConfig()
         configureAttributes.append(EGL_OPENVG_BIT);
         break;
 #ifdef EGL_VERSION_1_4
-    case QSurfaceFormat::DefaultRenderableType:
+    case QSurfaceFormat::DefaultRenderableType: {
 #ifndef QT_NO_OPENGL
-        if (QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL)
+        // NVIDIA EGL only provides desktop GL for development purposes, and recommends against using it.
+        const char *vendor = eglQueryString(display(), EGL_VENDOR);
+        if (QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL && (!vendor || !strstr(vendor, "NVIDIA")))
             configureAttributes.append(EGL_OPENGL_BIT);
         else
 #endif // QT_NO_OPENGL
             needsES2Plus = true;
         break;
+    }
     case QSurfaceFormat::OpenGL:
          configureAttributes.append(EGL_OPENGL_BIT);
          break;
@@ -255,7 +257,7 @@ EGLConfig QEglConfigChooser::chooseConfig()
 
         // Fetch all of the matching configurations and find the
         // first that matches the pixel format we wanted.
-        int i = configureAttributes.indexOf(EGL_RED_SIZE);
+        qsizetype i = configureAttributes.indexOf(EGL_RED_SIZE);
         m_confAttrRed = configureAttributes.at(i+1);
         i = configureAttributes.indexOf(EGL_GREEN_SIZE);
         m_confAttrGreen = configureAttributes.at(i+1);
@@ -265,7 +267,8 @@ EGLConfig QEglConfigChooser::chooseConfig()
         m_confAttrAlpha = i == -1 ? 0 : configureAttributes.at(i+1);
 
         QList<EGLConfig> configs(matching);
-        eglChooseConfig(display(), configureAttributes.constData(), configs.data(), configs.size(), &matching);
+        eglChooseConfig(display(), configureAttributes.constData(), configs.data(),
+                        EGLint(configs.size()), &matching);
         if (!cfg && matching > 0)
             cfg = configs.first();
 
@@ -353,6 +356,7 @@ QSurfaceFormat q_glFormatFromConfig(EGLDisplay display, const EGLConfig config, 
     else if (referenceFormat.renderableType() == QSurfaceFormat::DefaultRenderableType
 #ifndef QT_NO_OPENGL
              && QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL
+             && !strstr(eglQueryString(display, EGL_VENDOR), "NVIDIA")
 #endif
              && (renderableType & EGL_OPENGL_BIT))
         format.setRenderableType(QSurfaceFormat::OpenGL);

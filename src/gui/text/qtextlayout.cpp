@@ -741,7 +741,7 @@ int QTextLayout::leftCursorPosition(int oldPos) const
     return newPos;
 }
 
-/*!/
+/*!
     Returns \c true if position \a pos is a valid cursor position.
 
     In a Unicode context some positions in the text are not valid
@@ -1364,7 +1364,7 @@ void QTextLayout::drawCursor(QPainter *p, const QPointF &pos, int cursorPosition
         pen.setCosmetic(true);
         const qreal center = x + qreal(width) / 2;
         p->setPen(pen);
-        p->drawLine(QPointF(center, y), QPointF(center, y + (base + descent).toReal()));
+        p->drawLine(QPointF(center, y), QPointF(center, qCeil(y + (base + descent).toReal())));
         p->setPen(origPen);
     }
     p->setCompositionMode(origCompositionMode);
@@ -2164,9 +2164,12 @@ found:
         eng->maxWidth = qMax(eng->maxWidth, line.textWidth);
     } else {
         eng->minWidth = qMax(eng->minWidth, lbh.minw);
-        eng->layoutData->currentMaxWidth += line.textWidth;
-        if (!manuallyWrapped)
-            eng->layoutData->currentMaxWidth += lbh.spaceData.textWidth;
+        if (qAddOverflow(eng->layoutData->currentMaxWidth, line.textWidth, &eng->layoutData->currentMaxWidth))
+            eng->layoutData->currentMaxWidth = QFIXED_MAX;
+        if (!manuallyWrapped) {
+            if (qAddOverflow(eng->layoutData->currentMaxWidth, lbh.spaceData.textWidth, &eng->layoutData->currentMaxWidth))
+                eng->layoutData->currentMaxWidth = QFIXED_MAX;
+        }
         eng->maxWidth = qMax(eng->maxWidth, eng->layoutData->currentMaxWidth);
         if (manuallyWrapped)
             eng->layoutData->currentMaxWidth = 0;

@@ -43,9 +43,6 @@ endif()
 qt_install_3rdparty_library_wrap_config_extra_file(BundledZLIB)
 
 add_subdirectory(corelib)
-if (QT_FEATURE_ctf AND QT_FEATURE_library)
-    add_subdirectory(corelib/tracing)
-endif()
 
 # Needs to be after corelib, because some of them reference Core.
 add_subdirectory(3rdparty)
@@ -74,6 +71,7 @@ add_subdirectory(tools)
 
 if(QT_FEATURE_gui)
     add_subdirectory(gui)
+    add_subdirectory(assets)
 
     if(QT_FEATURE_opengl)
         add_subdirectory(opengl)

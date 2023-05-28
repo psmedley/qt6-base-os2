@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "qwasmscreen.h"
-#include "qwasmwindow.h"
-#include "qwasmeventtranslator.h"
+
 #include "qwasmcompositor.h"
-#include "qwasmintegration.h"
 #include "qwasmstring.h"
 #include "qwasmcssstyle.h"
+#include "qwasmintegration.h"
+#include "qwasmkeytranslator.h"
+#include "qwasmwindow.h"
 
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
@@ -30,7 +31,7 @@ QWasmScreen::QWasmScreen(const emscripten::val &containerOrCanvas)
     : m_container(containerOrCanvas),
       m_shadowContainer(emscripten::val::undefined()),
       m_compositor(new QWasmCompositor(this)),
-      m_eventTranslator(new QWasmEventTranslator())
+      m_deadKeySupport(std::make_unique<QWasmDeadKeySupport>())
 {
     auto document = m_container["ownerDocument"];
     // Each screen is represented by a div container. All of the windows exist therein as
@@ -71,12 +72,17 @@ QWasmScreen::QWasmScreen(const emscripten::val &containerOrCanvas)
     emscripten::val::module_property("specialHTMLTargets")
             .set(outerScreenId().toStdString(), m_container);
 
-    // Install event handlers on the container/canvas. This must be
-    // done after the canvas has been created above.
-    m_compositor->initEventHandlers();
-
     updateQScreenAndCanvasRenderSize();
     m_shadowContainer.call<void>("focus");
+
+    m_touchDevice = std::make_unique<QPointingDevice>(
+            "touchscreen", 1, QInputDevice::DeviceType::TouchScreen,
+            QPointingDevice::PointerType::Finger,
+            QPointingDevice::Capability::Position | QPointingDevice::Capability::Area
+                    | QPointingDevice::Capability::NormalizedPosition,
+            10, 0);
+
+    QWindowSystemInterface::registerInputDevice(m_touchDevice.get());
 }
 
 QWasmScreen::~QWasmScreen()
@@ -110,11 +116,6 @@ QWasmScreen *QWasmScreen::get(QScreen *screen)
 QWasmCompositor *QWasmScreen::compositor()
 {
     return m_compositor.get();
-}
-
-QWasmEventTranslator *QWasmScreen::eventTranslator()
-{
-    return m_eventTranslator.get();
 }
 
 emscripten::val QWasmScreen::element() const
@@ -208,15 +209,16 @@ QWindow *QWasmScreen::topLevelAt(const QPoint &p) const
     return m_compositor->windowAt(p);
 }
 
-QPoint QWasmScreen::mapFromLocal(const QPoint &p) const
+QPointF QWasmScreen::mapFromLocal(const QPointF &p) const
 {
     return geometry().topLeft() + p;
 }
 
-QPoint QWasmScreen::clipPoint(const QPoint &p) const
+QPointF QWasmScreen::clipPoint(const QPointF &p) const
 {
-    return QPoint(qBound(screen()->geometry().left(), p.x(), screen()->geometry().right()),
-                  qBound(screen()->geometry().top(), p.y(), screen()->geometry().bottom()));
+    const auto geometryF = screen()->geometry().toRectF();
+    return QPointF(qBound(geometryF.left(), p.x(), geometryF.right()),
+                   qBound(geometryF.top(), p.y(), geometryF.bottom()));
 }
 
 void QWasmScreen::invalidateSize()

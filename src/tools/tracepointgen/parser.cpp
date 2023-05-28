@@ -131,7 +131,7 @@ static QString preprocessMetadata(const QString &in)
 int Parser::lineNumber(qsizetype offset) const
 {
     DEBUGPRINTF(printf("tracepointgen: lineNumber: offset %u, line count: %u\n", offset , m_offsets.size()));
-    for (auto line : m_offsets) {
+    for (const auto line : m_offsets) {
         DEBUGPRINTF(printf("tracepointgen: lineNumber: %d %d %d\n", line.begin, line.end, line.line));
         if (offset >= line.begin && offset <= line.end)
             return line.line;
@@ -240,7 +240,7 @@ QStringList Parser::findEnumValues(const QString &name, const QStringList &inclu
     QString enumName = split.last();
     DEBUGPRINTF(printf("searching for %s\n", qPrintable(name)));
     QStringList ret;
-    for (auto filename : includes) {
+    for (const QString &filename : includes) {
         QFile input(filename);
         if (!input.open(QIODevice::ReadOnly | QIODevice::Text)) {
             DEBUGPRINTF(printf("Cannot open '%s' for reading: %s\n",
@@ -300,8 +300,8 @@ QStringList Parser::findEnumValues(const QString &name, const QStringList &inclu
                     int begin = data.indexOf(QLatin1Char('{'), match.capturedEnd());
                     int end = data.indexOf(QLatin1Char('}'), begin);
                     QString block = data.mid(begin + 1, end - begin - 1);
-                    QStringList enums = block.split(QLatin1Char('\n'));
-                    for (auto e : enums) {
+                    const QStringList enums = block.split(QLatin1Char('\n'));
+                    for (const auto &e : enums) {
                         const auto trimmed = e.trimmed();
                         if (!trimmed.isEmpty() && !trimmed.startsWith(QLatin1Char('#')))
                             ret << trimmed;
@@ -327,7 +327,7 @@ static QList<EnumNameValue> enumsToValues(const QStringList &values)
 {
     int cur = 0;
     QList<EnumNameValue> ret;
-    for (auto value : values) {
+    for (const QString &value : values) {
         EnumNameValue r;
         if (value.contains(QLatin1Char('='))) {
             size_t offset = value.indexOf(QLatin1Char('='));
@@ -438,8 +438,8 @@ void Parser::parseMetadata(const QString &data, qsizetype offset, const QStringL
                     return a.value < b.value;
                 });
                 values.clear();
-                int prevValue = moreValues.first().value;
-                for (auto v : moreValues) {
+                int prevValue = std::as_const(moreValues).front().value;
+                for (const auto &v : std::as_const(moreValues)) {
                     QString a;
                     if (v.valueStr.isNull()) {
                         if (v.value == prevValue + 1 && !flags)
@@ -585,16 +585,16 @@ void Parser::write(QIODevice &input) const
     QTextStream out(&input);
     if (m_prefixes.size() > 0) {
         out << QStringLiteral("{\n");
-        for (auto prefix : m_prefixes)
+        for (const auto &prefix : m_prefixes)
             out << prefix << "\n";
         out << QStringLiteral("}\n");
     }
-    for (auto m : m_metadata)
+    for (const auto &m : m_metadata)
         out << m << "\n";
-    for (auto func : m_functions) {
+    for (const auto &func : m_functions) {
         out << func.className << "_" << func.functionName << "_entry(" << func.functionParameters << ")\n";
         out << func.className << "_" << func.functionName << "_exit()\n";
     }
-    for (auto point : m_points)
+    for (const auto &point : m_points)
         out << point.name << "(" << point.parameters << ")\n";
 }

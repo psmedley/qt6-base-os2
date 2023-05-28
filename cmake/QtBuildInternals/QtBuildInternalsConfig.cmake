@@ -230,11 +230,20 @@ if(NOT QT_BUILD_INTERNALS_SKIP_SYSTEM_PREFIX_ADJUSTMENT)
     qt_build_internals_set_up_system_prefixes()
 endif()
 
-macro(qt_build_internals_set_up_private_api)
+# The macro sets all the necessary pre-conditions and setup consistent environment for building
+# the Qt repository. It has to be called right after the find_package(Qt6 COMPONENTS BuildInternals)
+# call. Otherwise we cannot make sure that all the required policies will be applied to the Qt
+# components that are involved in build procedure.
+macro(qt_internal_project_setup)
     # Check for the minimum CMake version.
     include(QtCMakeVersionHelpers)
     qt_internal_require_suitable_cmake_version()
     qt_internal_upgrade_cmake_policies()
+endmacro()
+
+macro(qt_build_internals_set_up_private_api)
+    # TODO: this call needs to be removed once all repositories got the qtbase update
+    qt_internal_project_setup()
 
     # Qt specific setup common for all modules:
     include(QtSetup)
@@ -436,6 +445,31 @@ macro(qt_build_repo_begin)
     endif()
 
     string(TOLOWER ${PROJECT_NAME} project_name_lower)
+
+    # Target to build all plugins that are part of the current repo.
+    set(qt_repo_plugins "qt_plugins_${project_name_lower}")
+    if(NOT TARGET ${qt_repo_plugins})
+        add_custom_target(${qt_repo_plugins})
+    endif()
+
+    # Target to build all plugins that are part of the current repo and the current repo's
+    # dependencies plugins. Used for external project example dependencies.
+    set(qt_repo_plugins_recursive "${qt_repo_plugins}_recursive")
+    if(NOT TARGET ${qt_repo_plugins_recursive})
+        add_custom_target(${qt_repo_plugins_recursive})
+        add_dependencies(${qt_repo_plugins_recursive} "${qt_repo_plugins}")
+    endif()
+
+    qt_internal_read_repo_dependencies(qt_repo_deps "${PROJECT_SOURCE_DIR}")
+    if(qt_repo_deps)
+        foreach(qt_repo_dep IN LISTS qt_repo_deps)
+            if(TARGET qt_plugins_${qt_repo_dep})
+                message(DEBUG
+                    "${qt_repo_plugins_recursive} depends on qt_plugins_${qt_repo_dep}")
+                add_dependencies(${qt_repo_plugins_recursive} "qt_plugins_${qt_repo_dep}")
+            endif()
+        endforeach()
+    endif()
 
     set(qt_repo_targets_name ${project_name_lower})
     set(qt_docs_target_name docs_${project_name_lower})
@@ -644,6 +678,8 @@ function(qt_internal_get_standalone_tests_config_file_name out_var)
 endfunction()
 
 macro(qt_build_tests)
+    set(CMAKE_UNITY_BUILD OFF)
+
     if(QT_BUILD_STANDALONE_TESTS)
         # Find location of TestsConfig.cmake. These contain the modules that need to be
         # find_package'd when testing.
@@ -714,6 +750,8 @@ macro(qt_build_tests)
             add_subdirectory(manual)
         endif()
     endif()
+
+    set(CMAKE_UNITY_BUILD ${QT_UNITY_BUILD})
 endmacro()
 
 function(qt_compute_relative_path_from_cmake_config_dir_to_prefix)
@@ -799,19 +837,22 @@ macro(qt_examples_build_begin)
 
     cmake_parse_arguments(arg "${options}" "${singleOpts}" "${multiOpts}" ${ARGN})
 
+    set(CMAKE_UNITY_BUILD OFF)
+
     # Use by qt_internal_add_example.
     set(QT_EXAMPLE_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
     if(arg_EXTERNAL_BUILD AND QT_BUILD_EXAMPLES_AS_EXTERNAL)
         # Examples will be built using ExternalProject.
-        # We always depend on all plugins so as to prevent opportunities for
+        # We depend on all plugins built as part of the current repo as well as current repo's
+        # dependencies plugins, to prevent opportunities for
         # weird errors associated with loading out-of-date plugins from
         # unrelated Qt modules.
         # We also depend on all targets from this repo's src and tools subdirectories
         # to ensure that we've built anything that a find_package() call within
         # an example might use. Projects can add further dependencies if needed,
         # but that should rarely be necessary.
-        set(QT_EXAMPLE_DEPENDENCIES qt_plugins ${arg_DEPENDS})
+        set(QT_EXAMPLE_DEPENDENCIES ${qt_repo_plugins_recursive} ${arg_DEPENDS})
 
         if(TARGET ${qt_repo_targets_name}_src)
             list(APPEND QT_EXAMPLE_DEPENDENCIES ${qt_repo_targets_name}_src)
@@ -927,12 +968,15 @@ macro(qt_examples_build_end)
         if(TARGET Qt::Widgets)
             qt_autogen_tools(${target} ENABLE_AUTOGEN_TOOLS "uic")
         endif()
+        set_target_properties(${target} PROPERTIES UNITY_BUILD OFF)
     endforeach()
 
     install(CODE "
 # Restore backed up CMAKE_INSTALL_PREFIX.
 set(CMAKE_INSTALL_PREFIX \"\${_qt_internal_examples_cmake_install_prefix_backup}\")
 ")
+
+    set(CMAKE_UNITY_BUILD ${QT_UNITY_BUILD})
 endmacro()
 
 function(qt_internal_add_example subdir)

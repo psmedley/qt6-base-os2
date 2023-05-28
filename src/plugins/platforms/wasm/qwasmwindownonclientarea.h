@@ -4,6 +4,7 @@
 #ifndef QWASMWINDOWNONCLIENTAREA_H
 #define QWASMWINDOWNONCLIENTAREA_H
 
+#include <QtCore/qrect.h>
 #include <QtCore/qtconfigmacros.h>
 #include <QtCore/qnamespace.h>
 
@@ -155,7 +156,7 @@ private:
     struct ResizeData
     {
         Qt::Edges edges = Qt::Edges::fromInt(0);
-        QPoint originInScreenCoords;
+        QPointF originInScreenCoords;
         QPoint minShrink;
         QPoint maxGrow;
         QRect initialBounds;
@@ -176,6 +177,7 @@ public:
     void setTitle(const QString &title);
     void setRestoreVisible(bool visible);
     void setMaximizeVisible(bool visible);
+    void setCloseVisible(bool visible);
     void setIcon(std::string_view imageData, std::string_view format);
     void setWidth(int width);
 
@@ -187,7 +189,7 @@ private:
     bool onPointerUp(const PointerEvent &event);
     bool onDoubleClick();
 
-    QPoint clipPointWithScreen(const QPoint &pointInTitleBarCoords) const;
+    QPointF clipPointWithScreen(const QPointF &pointInTitleBarCoords) const;
 
     QWasmWindow *m_window;
 
@@ -200,7 +202,8 @@ private:
     std::unique_ptr<WebImageButton> m_icon;
 
     int m_capturedPointerId = -1;
-    QPoint m_lastMovePoint;
+    QPointF m_moveStartPoint;
+    QPoint m_moveStartWindowPosition;
 
     std::unique_ptr<qstdweb::EventCallback> m_mouseDownEvent;
     std::unique_ptr<qstdweb::EventCallback> m_mouseMoveEvent;

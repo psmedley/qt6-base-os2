@@ -78,6 +78,7 @@ struct QWindowsWindowData
 {
     Qt::WindowFlags flags;
     QRect geometry;
+    QRect restoreGeometry;
     QMargins fullFrameMargins; // Do not use directly for windows, see FrameDirty.
     QMargins customMargins;    // User-defined, additional frame for NCCALCSIZE
     HWND hwnd = nullptr;
@@ -218,6 +219,8 @@ public:
     void setGeometry(const QRect &rect) override;
     QRect geometry() const override { return m_data.geometry; }
     QRect normalGeometry() const override;
+    QRect restoreGeometry() const { return m_data.restoreGeometry; }
+    void updateRestoreGeometry();
 
     void setVisible(bool visible) override;
     bool isVisible() const;
@@ -281,7 +284,7 @@ public:
     bool handleWmPaint(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, LRESULT *result);
 
     void handleMoved();
-    void handleResized(int wParam);
+    void handleResized(int wParam, LPARAM lParam);
     void handleHidden();
     void handleCompositionSettingsChanged();
     void handleDpiScaledSize(WPARAM wParam, LPARAM lParam, LRESULT *result);
@@ -377,7 +380,6 @@ private:
     HICON m_iconBig = nullptr;
     void *m_surface = nullptr;
     int m_savedDpi = 96;
-    bool m_firstBgDraw = false;
 
     static bool m_screenForGLInitialized;
 

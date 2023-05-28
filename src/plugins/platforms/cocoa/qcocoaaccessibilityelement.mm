@@ -80,6 +80,8 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 
 @implementation QMacAccessibilityElement {
     QAccessible::Id axid;
+    int m_rowIndex;
+    int m_columnIndex;
 
     // used by NSAccessibilityTable
     NSMutableArray<QMacAccessibilityElement *> *rows;       // corresponds to accessibilityRows
@@ -105,12 +107,40 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
     self = [super init];
     if (self) {
         axid = anId;
+        m_rowIndex = -1;
+        m_columnIndex = -1;
         rows = nil;
         columns = nil;
         synthesizedRole = role;
-        QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-        if (iface && iface->tableInterface() && !synthesizedRole)
-            [self updateTableModel];
+        // table: if this is not created as an element managed by the table, then
+        // it's either the table itself, or an element created for an already existing
+        // cell interface (or an element that's not at all related to a table).
+        if (!synthesizedRole) {
+            if (QAccessibleInterface *iface = QAccessible::accessibleInterface(axid)) {
+                if (iface->tableInterface()) {
+                    [self updateTableModel];
+                } else if (const auto *cell = iface->tableCellInterface()) {
+                    // If we create an element for a table cell, initialize it with row/column
+                    // and insert it into the corresponding row's columns array.
+                    m_rowIndex = cell->rowIndex();
+                    m_columnIndex = cell->columnIndex();
+                    QAccessibleInterface *table = cell->table();
+                    Q_ASSERT(table);
+                    QAccessibleTableInterface *tableInterface = table->tableInterface();
+                    if (tableInterface) {
+                        auto *tableElement = [QMacAccessibilityElement elementWithInterface:table];
+                        Q_ASSERT(tableElement);
+                        Q_ASSERT(tableElement->rows && int(tableElement->rows.count) > m_rowIndex);
+                        auto *rowElement = tableElement->rows[m_rowIndex];
+                        if (!rowElement->columns) {
+                            rowElement->columns = [rowElement populateTableRow:rowElement->columns
+                                                              count:tableInterface->columnCount()];
+                        }
+                        rowElement->columns[m_columnIndex] = self;
+                    }
+                }
+            }
+        }
     }
 
     return self;
@@ -126,14 +156,21 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 
     QMacAccessibilityElement *element = cache->elementForId(anId);
     if (!element) {
-        QAccessibleInterface *iface = QAccessible::accessibleInterface(anId);
-        Q_ASSERT(iface);
-        if (!iface || !iface->isValid())
-            return nil;
+        Q_ASSERT(QAccessible::accessibleInterface(anId));
         element = [[self alloc] initWithId:anId];
         cache->insertElement(anId, element);
     }
     return element;
+}
+
++ (instancetype)elementWithInterface:(QAccessibleInterface *)iface
+{
+    Q_ASSERT(iface);
+    if (!iface)
+        return nil;
+
+    const QAccessible::Id anId = QAccessible::uniqueId(iface);
+    return [self elementWithId:anId];
 }
 
 - (void)invalidate {
@@ -173,8 +210,7 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 
 - (NSMutableArray *)populateTableArray:(NSMutableArray *)array role:(NSAccessibilityRole)role count:(int)count
 {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (iface && iface->isValid()) {
+    if (QAccessibleInterface *iface = self.qtInterface) {
         if (!array) {
             array = [NSMutableArray<QMacAccessibilityElement *> arrayWithCapacity:count];
             [array retain];
@@ -187,6 +223,10 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
             QMacAccessibilityElement *element =
                     [[QMacAccessibilityElement alloc] initWithId:axid role:role];
             if (element) {
+                if (role == NSAccessibilityRowRole)
+                    element->m_rowIndex = n;
+                else if (role == NSAccessibilityColumnRole)
+                    element->m_columnIndex = n;
                 [array addObject:element];
                 [element release];
             } else {
@@ -198,11 +238,38 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
     return nil;
 }
 
+- (NSMutableArray *)populateTableRow:(NSMutableArray *)array count:(int)count
+{
+    Q_ASSERT(synthesizedRole == NSAccessibilityRowRole);
+    if (!array) {
+        array = [NSMutableArray<QMacAccessibilityElement *> arrayWithCapacity:count];
+        [array retain];
+        // When macOS asks for the children of a row, then we populate the row's column
+        // array with synthetic elements as place holders. This way, we don't have to
+        // create QAccessibleInterfaces for every cell before they are really needed.
+        // We don't add those synthetic elements into the cache, and we give them the
+        // same axid as the table. This way, we can get easily to the table, and from
+        // there to the QAccessibleInterface for the cell, when we have to eventually
+        // associate such an interface with the element (at which point it is no longer
+        // a placeholder).
+        for (int n = 0; n < count; ++n) {
+            // columns will have same axid as table (but not inserted in cache)
+            QMacAccessibilityElement *cell =
+                    [[QMacAccessibilityElement alloc] initWithId:axid role:NSAccessibilityCellRole];
+            if (cell) {
+                cell->m_rowIndex = m_rowIndex;
+                cell->m_columnIndex = n;
+                [array addObject:cell];
+            }
+        }
+    }
+    Q_ASSERT(array);
+    return array;
+}
 
 - (void)updateTableModel
 {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (iface && iface->isValid()) {
+    if (QAccessibleInterface *iface = self.qtInterface) {
         if (QAccessibleTableInterface *table = iface->tableInterface()) {
             Q_ASSERT(!self.isManagedByParent);
             rows = [self populateTableArray:rows role:NSAccessibilityRowRole count:table->rowCount()];
@@ -211,16 +278,50 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
     }
 }
 
+- (QAccessibleInterface *)qtInterface
+{
+    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
+    if (!iface || !iface->isValid())
+        return nullptr;
+
+    // If this is a placeholder element for a table cell, associate it with the
+    // cell interface (which will be created now, if needed). The current axid is
+    // for the table to which the cell belongs, so iface is pointing at the table.
+    if (synthesizedRole == NSAccessibilityCellRole) {
+        // get the cell interface - there must be a valid one
+        QAccessibleTableInterface *table = iface->tableInterface();
+        Q_ASSERT(table);
+        QAccessibleInterface *cell = table->cellAt(m_rowIndex, m_columnIndex);
+        Q_ASSERT(cell && cell->isValid());
+        iface = cell;
+
+        // no longer a placeholder
+        axid = QAccessible::uniqueId(cell);
+        synthesizedRole = nil;
+
+        QAccessibleCache *cache = QAccessibleCache::instance();
+        if (QMacAccessibilityElement *cellElement = cache->elementForId(axid)) {
+            // there already is another, non-placeholder element in the cache
+            Q_ASSERT(cellElement->synthesizedRole == nil);
+            // we have to release it if it's not us
+            if (cellElement != self) {
+                // for the same cell position
+                Q_ASSERT(cellElement->m_rowIndex == m_rowIndex && cellElement->m_columnIndex == m_columnIndex);
+                [cellElement release];
+            }
+        }
+
+        cache->insertElement(axid, self);
+    }
+    return iface;
+}
+
 //
 // accessibility protocol
 //
 
 - (BOOL)isAccessibilityFocused
 {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid()) {
-        return false;
-    }
     // Just check if the app thinks we're focused.
     id focusedElement = NSApp.accessibilityApplicationFocusedUIElement;
     return [focusedElement isEqual:self];
@@ -240,31 +341,33 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (NSString *) accessibilityRole {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
-        return NSAccessibilityUnknownRole;
+    // shortcut for cells, rows, and columns in a table
     if (synthesizedRole)
         return synthesizedRole;
-    return QCocoaAccessible::macRole(iface);
+    if (QAccessibleInterface *iface = self.qtInterface)
+        return QCocoaAccessible::macRole(iface);
+    return NSAccessibilityUnknownRole;
 }
 
 - (NSString *) accessibilitySubRole {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
-        return NSAccessibilityUnknownRole;
-    return QCocoaAccessible::macSubrole(iface);
+    if (QAccessibleInterface *iface = self.qtInterface)
+        return QCocoaAccessible::macSubrole(iface);
+    return NSAccessibilityUnknownRole;
 }
 
 - (NSString *) accessibilityRoleDescription {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
-        return NSAccessibilityUnknownRole;
-    return NSAccessibilityRoleDescription(self.accessibilityRole, self.accessibilitySubRole);
+    if (QAccessibleInterface *iface = self.qtInterface)
+        return NSAccessibilityRoleDescription(self.accessibilityRole, self.accessibilitySubRole);
+    return NSAccessibilityUnknownRole;
 }
 
 - (NSArray *) accessibilityChildren {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
+    // shortcut for cells
+    if (synthesizedRole == NSAccessibilityCellRole)
+        return nil;
+
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
         return nil;
     if (QAccessibleTableInterface *table = iface->tableInterface()) {
         // either a table or table rows/columns
@@ -320,25 +423,10 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
         } else if (synthesizedRole == NSAccessibilityRowRole) {
             // axid matches the parent table axid so that we can easily find the parent table
             // children of row are cell/any items
-            QMacAccessibilityElement *tableElement = [QMacAccessibilityElement elementWithId:axid];
-            Q_ASSERT(tableElement->rows);
-            NSUInteger rowIndex = [tableElement->rows indexOfObjectIdenticalTo:self];
-            Q_ASSERT(rowIndex != NSNotFound);
-            int numColumns = table->columnCount();
-            NSMutableArray<QMacAccessibilityElement *> *cells =
-                    [NSMutableArray<QMacAccessibilityElement *> arrayWithCapacity:numColumns];
-            for (int i = 0; i < numColumns; ++i) {
-                QAccessibleInterface *cell = table->cellAt(rowIndex, i);
-                if (cell && cell->isValid()) {
-                    QAccessible::Id cellId = QAccessible::uniqueId(cell);
-                    QMacAccessibilityElement *element =
-                            [QMacAccessibilityElement elementWithId:cellId];
-                    if (element) {
-                        [cells addObject:element];
-                    }
-                }
-            }
-            return NSAccessibilityUnignoredChildren(cells);
+            Q_ASSERT(m_rowIndex >= 0);
+            const int numColumns = table->columnCount();
+            columns = [self populateTableRow:columns count:numColumns];
+            return NSAccessibilityUnignoredChildren(columns);
         }
     }
     return QCocoaAccessible::unignoredChildren(iface);
@@ -355,26 +443,34 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (NSString *) accessibilityTitle {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
-        return nil;
-    if (iface->role() == QAccessible::StaticText)
-        return nil;
-    if (self.isManagedByParent)
-        return nil;
-    return iface->text(QAccessible::Name).toNSString();
+    if (QAccessibleInterface *iface = self.qtInterface) {
+        if (iface->role() == QAccessible::StaticText)
+            return nil;
+        if (self.isManagedByParent)
+            return nil;
+        return iface->text(QAccessible::Name).toNSString();
+    }
+    return nil;
 }
 
 - (BOOL) isAccessibilityEnabled {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
-        return false;
-    return !iface->state().disabled;
+    if (QAccessibleInterface *iface = self.qtInterface)
+        return !iface->state().disabled;
+    return false;
 }
 
 - (id)accessibilityParent {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
+    if (synthesizedRole == NSAccessibilityCellRole) {
+        // a synthetic cell without interface - shortcut to the row
+        QMacAccessibilityElement *tableElement =
+                    [QMacAccessibilityElement elementWithId:axid];
+        Q_ASSERT(tableElement && tableElement->rows && int(tableElement->rows.count) > m_rowIndex);
+        QMacAccessibilityElement *rowElement = tableElement->rows[m_rowIndex];
+        return rowElement;
+    }
+
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
         return nil;
 
     if (self.isManagedByParent) {
@@ -389,23 +485,21 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 
     if (QAccessibleInterface *parent = iface->parent()) {
         if (parent->tableInterface()) {
-            if (QAccessibleTableCellInterface *cell = iface->tableCellInterface()) {
-                // parent of cell should be row
-                QAccessible::Id parentId = QAccessible::uniqueId(parent);
-                QMacAccessibilityElement *tableElement =
-                        [QMacAccessibilityElement elementWithId:parentId];
+            QMacAccessibilityElement *tableElement =
+                    [QMacAccessibilityElement elementWithInterface:parent];
 
-                const int rowIndex = cell->rowIndex();
-                if (tableElement->rows && int([tableElement->rows count]) > rowIndex) {
-                    QMacAccessibilityElement *rowElement = tableElement->rows[rowIndex];
-                    return NSAccessibilityUnignoredAncestor(rowElement);
-                }
-            }
+            // parent of cell should be row
+            int rowIndex = -1;
+            if (m_rowIndex >= 0 && m_columnIndex >= 0)
+                rowIndex = m_rowIndex;
+            else if (QAccessibleTableCellInterface *cell = iface->tableCellInterface())
+                rowIndex = cell->rowIndex();
+            Q_ASSERT(tableElement->rows && int([tableElement->rows count]) > rowIndex);
+            QMacAccessibilityElement *rowElement = tableElement->rows[rowIndex];
+            return NSAccessibilityUnignoredAncestor(rowElement);
         }
-        if (parent->role() != QAccessible::Application) {
-            QAccessible::Id parentId = QAccessible::uniqueId(parent);
-            return NSAccessibilityUnignoredAncestor([QMacAccessibilityElement elementWithId: parentId]);
-        }
+        if (parent->role() != QAccessible::Application)
+            return NSAccessibilityUnignoredAncestor([QMacAccessibilityElement elementWithInterface: parent]);
     }
 
     if (QWindow *window = iface->window()) {
@@ -419,8 +513,8 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (NSRect)accessibilityFrame {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
         return NSZeroRect;
 
     QRect rect;
@@ -437,10 +531,7 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
             int &row = isRow ? cellPos.ry() : cellPos.rx();
             int &col = isRow ? cellPos.rx() : cellPos.ry();
 
-            QMacAccessibilityElement *tableElement =
-                    [QMacAccessibilityElement elementWithId:axid];
-            NSArray *tracks = isRow ? tableElement->rows : tableElement->columns;
-            NSUInteger trackIndex = [tracks indexOfObjectIdenticalTo:self];
+            NSUInteger trackIndex = self.accessibilityIndex;
             if (trackIndex != NSNotFound) {
                 row = int(trackIndex);
                 if (QAccessibleInterface *firstCell = table->cellAt(cellPos.y(), cellPos.x())) {
@@ -463,71 +554,50 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (NSString*)accessibilityLabel {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid()) {
-        qWarning() << "Called accessibilityLabel on invalid object: " << axid;
-        return nil;
-    }
-    return iface->text(QAccessible::Description).toNSString();
+    if (QAccessibleInterface *iface = self.qtInterface)
+        return iface->text(QAccessible::Description).toNSString();
+    qWarning() << "Called accessibilityLabel on invalid object: " << axid;
+    return nil;
 }
 
 - (void)setAccessibilityLabel:(NSString*)label{
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
-        return;
-    iface->setText(QAccessible::Description, QString::fromNSString(label));
-}
-
-- (id) accessibilityMinValue:(QAccessibleInterface*)iface {
-    if (QAccessibleValueInterface *val = iface->valueInterface())
-        return @(val->minimumValue().toDouble());
-    return nil;
-}
-
-- (id) accessibilityMaxValue:(QAccessibleInterface*)iface {
-    if (QAccessibleValueInterface *val = iface->valueInterface())
-        return @(val->maximumValue().toDouble());
-    return nil;
+    if (QAccessibleInterface *iface = self.qtInterface)
+        iface->setText(QAccessible::Description, QString::fromNSString(label));
 }
 
 - (id) accessibilityValue {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
-        return nil;
-
-    // VoiceOver asks for the value attribute for all elements. Return nil
-    // if we don't want the element to have a value attribute.
-    if (!QCocoaAccessible::hasValueAttribute(iface))
-        return nil;
-
-    return QCocoaAccessible::getValueAttribute(iface);
+    if (QAccessibleInterface *iface = self.qtInterface) {
+        // VoiceOver asks for the value attribute for all elements. Return nil
+        // if we don't want the element to have a value attribute.
+        if (QCocoaAccessible::hasValueAttribute(iface))
+            return QCocoaAccessible::getValueAttribute(iface);
+    }
+    return nil;
 }
 
 - (NSInteger) accessibilityNumberOfCharacters {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
-        return 0;
-    if (QAccessibleTextInterface *text = iface->textInterface())
-        return text->characterCount();
+    if (QAccessibleInterface *iface = self.qtInterface) {
+        if (QAccessibleTextInterface *text = iface->textInterface())
+            return text->characterCount();
+    }
     return 0;
 }
 
 - (NSString *) accessibilitySelectedText {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
-        return nil;
-    if (QAccessibleTextInterface *text = iface->textInterface()) {
-        int start = 0;
-        int end = 0;
-        text->selection(0, &start, &end);
-        return text->text(start, end).toNSString();
+    if (QAccessibleInterface *iface = self.qtInterface) {
+        if (QAccessibleTextInterface *text = iface->textInterface()) {
+            int start = 0;
+            int end = 0;
+            text->selection(0, &start, &end);
+            return text->text(start, end).toNSString();
+        }
     }
     return nil;
 }
 
 - (NSRange) accessibilitySelectedTextRange {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
         return NSRange();
     if (QAccessibleTextInterface *text = iface->textInterface()) {
         int start = 0;
@@ -544,8 +614,8 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (NSInteger)accessibilityLineForIndex:(NSInteger)index {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
         return 0;
     if (QAccessibleTextInterface *text = iface->textInterface()) {
         QString textToPos = text->text(0, index);
@@ -555,8 +625,8 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (NSRange)accessibilityVisibleCharacterRange {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
         return NSRange();
     // FIXME This is not correct and may impact performance for big texts
     if (QAccessibleTextInterface *text = iface->textInterface())
@@ -565,8 +635,8 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (NSInteger) accessibilityInsertionPointLineNumber {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
         return 0;
     if (QAccessibleTextInterface *text = iface->textInterface()) {
         int position = text->cursorPosition();
@@ -577,8 +647,8 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 
 - (NSArray *)accessibilityParameterizedAttributeNames {
 
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid()) {
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface) {
         qWarning() << "Called attribute on invalid object: " << axid;
         return nil;
     }
@@ -601,8 +671,8 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (id)accessibilityAttributeValue:(NSString *)attribute forParameter:(id)parameter {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid()) {
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface) {
         qWarning() << "Called attribute on invalid object: " << axid;
         return nil;
     }
@@ -670,8 +740,8 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (BOOL)accessibilityIsAttributeSettable:(NSString *)attribute {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
         return NO;
 
     if ([attribute isEqualToString:NSAccessibilityFocusedAttribute]) {
@@ -689,8 +759,8 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (void)accessibilitySetValue:(id)value forAttribute:(NSString *)attribute {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
         return;
     if ([attribute isEqualToString:NSAccessibilityFocusedAttribute]) {
         if (QAccessibleActionInterface *action = iface->actionInterface())
@@ -718,8 +788,8 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 
 - (NSArray *)accessibilityActionNames {
     NSMutableArray *nsActions = [[NSMutableArray new] autorelease];
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
         return nsActions;
 
     const QStringList &supportedActionNames = QAccessibleBridgeUtils::effectiveActionNames(iface);
@@ -733,8 +803,8 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (NSString *)accessibilityActionDescription:(NSString *)action {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface)
         return nil; // FIXME is that the right return type??
     QString qtAction = QCocoaAccessible::translateAction(action, iface);
     QString description;
@@ -751,8 +821,7 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (void)accessibilityPerformAction:(NSString *)action {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (iface && iface->isValid()) {
+    if (QAccessibleInterface *iface = self.qtInterface) {
         const QString qtAction = QCocoaAccessible::translateAction(action, iface);
         QAccessibleBridgeUtils::performEffectiveAction(iface, qtAction);
     }
@@ -761,15 +830,20 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 // misc
 
 - (BOOL)accessibilityIsIgnored {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid())
-        return true;
-    return QCocoaAccessible::shouldBeIgnored(iface);
+    // Short-cut for placeholders and synthesized elements. Working around a bug
+    // that corrups lists returned by NSAccessibilityUnignoredChildren, otherwise
+    // we could ignore rows and columns that are outside the table.
+    if (self.isManagedByParent)
+        return false;
+
+    if (QAccessibleInterface *iface = self.qtInterface)
+        return QCocoaAccessible::shouldBeIgnored(iface);
+    return true;
 }
 
 - (id)accessibilityHitTest:(NSPoint)point {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (!iface || !iface->isValid()) {
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface) {
 //        qDebug("Hit test: INVALID");
         return NSAccessibilityUnignoredAncestor(self);
     }
@@ -788,26 +862,23 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
             childInterface = childOfChildInterface;
     } while (childOfChildInterface && childOfChildInterface->isValid());
 
-    QAccessible::Id childId = QAccessible::uniqueId(childInterface);
     // hit a child, forward to child accessible interface.
-    QMacAccessibilityElement *accessibleElement = [QMacAccessibilityElement elementWithId:childId];
+    QMacAccessibilityElement *accessibleElement = [QMacAccessibilityElement elementWithInterface:childInterface];
     if (accessibleElement)
         return NSAccessibilityUnignoredAncestor(accessibleElement);
     return NSAccessibilityUnignoredAncestor(self);
 }
 
 - (id)accessibilityFocusedUIElement {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-
-    if (!iface || !iface->isValid()) {
+    QAccessibleInterface *iface = self.qtInterface;
+    if (!iface) {
         qWarning("FocusedUIElement for INVALID");
         return nil;
     }
 
     QAccessibleInterface *childInterface = iface->focusChild();
     if (childInterface && childInterface->isValid()) {
-        QAccessible::Id childAxid = QAccessible::uniqueId(childInterface);
-        QMacAccessibilityElement *accessibleElement = [QMacAccessibilityElement elementWithId:childAxid];
+        QMacAccessibilityElement *accessibleElement = [QMacAccessibilityElement elementWithInterface:childInterface];
         return NSAccessibilityUnignoredAncestor(accessibleElement);
     }
 
@@ -815,8 +886,7 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (NSString *) accessibilityHelp {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (iface && iface->isValid()) {
+    if (QAccessibleInterface *iface = self.qtInterface) {
         const QString helpText = iface->text(QAccessible::Help);
         if (!helpText.isEmpty())
             return helpText.toNSString();
@@ -829,19 +899,17 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
  */
 - (NSInteger) accessibilityIndex {
     NSInteger index = 0;
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (iface && iface->isValid()) {
+    if (synthesizedRole == NSAccessibilityCellRole)
+        return m_columnIndex;
+    if (QAccessibleInterface *iface = self.qtInterface) {
         if (self.isManagedByParent) {
             // axid matches the parent table axid so that we can easily find the parent table
             // children of row are cell/any items
             if (QAccessibleTableInterface *table = iface->tableInterface()) {
-                QMacAccessibilityElement *tableElement = [QMacAccessibilityElement elementWithId:axid];
-                NSArray *track = synthesizedRole == NSAccessibilityRowRole
-                               ? tableElement->rows : tableElement->columns;
-                if (track) {
-                    NSUInteger trackIndex = [track indexOfObjectIdenticalTo:self];
-                    index = (NSInteger)trackIndex;
-                }
+                if (m_rowIndex >= 0)
+                    index = NSInteger(m_rowIndex);
+                else if (m_columnIndex >= 0)
+                    index = NSInteger(m_columnIndex);
             }
         }
     }
@@ -849,18 +917,18 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 }
 
 - (NSArray *) accessibilityRows {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (iface && iface->isValid() && iface->tableInterface() && !synthesizedRole) {
-        if (rows)
+    if (!synthesizedRole && rows) {
+        QAccessibleInterface *iface = self.qtInterface;
+        if (iface && iface->tableInterface())
             return NSAccessibilityUnignoredChildren(rows);
     }
     return nil;
 }
 
 - (NSArray *) accessibilityColumns {
-    QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (iface && iface->isValid() && iface->tableInterface() && !synthesizedRole) {
-        if (columns)
+    if (!synthesizedRole && columns) {
+        QAccessibleInterface *iface = self.qtInterface;
+        if (iface && iface->tableInterface())
             return NSAccessibilityUnignoredChildren(columns);
     }
     return nil;

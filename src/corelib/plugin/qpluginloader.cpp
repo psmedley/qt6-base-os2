@@ -235,7 +235,7 @@ static QString locatePlugin(const QString& fileName)
     suffixes.prepend(QString());
 
     // Split up "subdir/filename"
-    const int slash = fileName.lastIndexOf(u'/');
+    const qsizetype slash = fileName.lastIndexOf(u'/');
     const auto baseName = QStringView{fileName}.mid(slash + 1);
     const auto basePath = isAbsolute ? QStringView() : QStringView{fileName}.left(slash + 1); // keep the '/'
 
@@ -379,7 +379,19 @@ Q_GLOBAL_STATIC(StaticPluginList, staticPluginList)
 */
 void Q_CORE_EXPORT qRegisterStaticPluginFunction(QStaticPlugin plugin)
 {
-    staticPluginList()->append(plugin);
+    // using operator* because we shouldn't be registering plugins while
+    // unloading the application!
+    StaticPluginList &plugins = *staticPluginList;
+
+    // insert the plugin in the list, sorted by address, so we can detect
+    // duplicate registrations
+    auto comparator = [=](const QStaticPlugin &p1, const QStaticPlugin &p2) {
+        using Less = std::less<decltype(plugin.instance)>;
+        return Less{}(p1.instance, p2.instance);
+    };
+    auto pos = std::lower_bound(plugins.constBegin(), plugins.constEnd(), plugin, comparator);
+    if (pos == plugins.constEnd() || pos->instance != plugin.instance)
+        plugins.insert(pos, plugin);
 }
 
 /*!
@@ -390,12 +402,11 @@ void Q_CORE_EXPORT qRegisterStaticPluginFunction(QStaticPlugin plugin)
 QObjectList QPluginLoader::staticInstances()
 {
     QObjectList instances;
-    const StaticPluginList *plugins = staticPluginList();
-    if (plugins) {
-        const int numPlugins = plugins->size();
-        instances.reserve(numPlugins);
-        for (int i = 0; i < numPlugins; ++i)
-            instances += plugins->at(i).instance();
+    if (staticPluginList.exists()) {
+        const StaticPluginList &plugins = *staticPluginList;
+        instances.reserve(plugins.size());
+        for (QStaticPlugin plugin : plugins)
+            instances += plugin.instance();
     }
     return instances;
 }

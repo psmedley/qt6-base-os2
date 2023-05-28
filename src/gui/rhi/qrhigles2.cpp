@@ -655,6 +655,8 @@ bool QRhiGles2::create(QRhi::Flags flags)
         return false;
 
     f = static_cast<QOpenGLExtensions *>(ctx->extraFunctions());
+    const QSurfaceFormat actualFormat = ctx->format();
+    caps.gles = actualFormat.renderableType() == QSurfaceFormat::OpenGLES;
 
     if (!caps.gles) {
         glPolygonMode = reinterpret_cast<void(QOPENGLF_APIENTRYP)(GLenum, GLenum)>(
@@ -704,8 +706,6 @@ bool QRhiGles2::create(QRhi::Flags flags)
     }
     if (version)
         driverInfoStruct.deviceName += QByteArray(version);
-
-    const QSurfaceFormat actualFormat = ctx->format();
 
     caps.ctxMajor = actualFormat.majorVersion();
     caps.ctxMinor = actualFormat.minorVersion();
@@ -765,8 +765,6 @@ bool QRhiGles2::create(QRhi::Flags flags)
     }
 
     f->glGetIntegerv(GL_MAX_TEXTURE_SIZE, &caps.maxTextureSize);
-
-    caps.gles = actualFormat.renderableType() == QSurfaceFormat::OpenGLES;
 
     if (!caps.gles || caps.ctxMajor >= 3) {
         // non-ES or ES 3.0+
@@ -1473,7 +1471,7 @@ void QRhiGles2::setPipelineCacheData(const QByteArray &data)
 
     const size_t headerSize = sizeof(QGles2PipelineCacheDataHeader);
     if (data.size() < qsizetype(headerSize)) {
-        qWarning("setPipelineCacheData: Invalid blob size (header incomplete)");
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: Invalid blob size (header incomplete)");
         return;
     }
     const size_t dataOffset = headerSize;
@@ -1482,14 +1480,14 @@ void QRhiGles2::setPipelineCacheData(const QByteArray &data)
 
     const quint32 rhiId = pipelineCacheRhiId();
     if (header.rhiId != rhiId) {
-        qWarning("setPipelineCacheData: The data is for a different QRhi version or backend (%u, %u)",
-                 rhiId, header.rhiId);
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: The data is for a different QRhi version or backend (%u, %u)",
+                rhiId, header.rhiId);
         return;
     }
     const quint32 arch = quint32(sizeof(void*));
     if (header.arch != arch) {
-        qWarning("setPipelineCacheData: Architecture does not match (%u, %u)",
-                 arch, header.arch);
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: Architecture does not match (%u, %u)",
+                arch, header.arch);
         return;
     }
     if (header.programBinaryCount == 0)
@@ -1497,12 +1495,12 @@ void QRhiGles2::setPipelineCacheData(const QByteArray &data)
 
     const size_t driverStrLen = qMin(sizeof(header.driver) - 1, size_t(driverInfoStruct.deviceName.size()));
     if (strncmp(header.driver, driverInfoStruct.deviceName.constData(), driverStrLen)) {
-        qWarning("setPipelineCacheData: OpenGL vendor/renderer/version does not match");
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: OpenGL vendor/renderer/version does not match");
         return;
     }
 
     if (data.size() < qsizetype(dataOffset + header.dataSize)) {
-        qWarning("setPipelineCacheData: Invalid blob size (data incomplete)");
+        qCDebug(QRHI_LOG_INFO, "setPipelineCacheData: Invalid blob size (data incomplete)");
         return;
     }
 
@@ -3335,6 +3333,10 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             break;
         case QGles2CommandBuffer::Command::BlitFromRenderbuffer:
         {
+            // Altering the scissor state, so reset the stored state, although
+            // not strictly required as long as blit is done in endPass() only.
+            cbD->graphicsPassState.reset();
+            f->glDisable(GL_SCISSOR_TEST);
             GLuint fbo[2];
             f->glGenFramebuffers(2, fbo);
             f->glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo[0]);

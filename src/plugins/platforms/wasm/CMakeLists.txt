@@ -21,22 +21,20 @@ qt_internal_add_plugin(QWasmIntegrationPlugin
         qwasmdom.cpp qwasmdom.h
         qwasmevent.cpp qwasmevent.h
         qwasmeventdispatcher.cpp qwasmeventdispatcher.h
-        qwasmeventtranslator.cpp qwasmeventtranslator.h
         qwasmfontdatabase.cpp qwasmfontdatabase.h
         qwasmintegration.cpp qwasmintegration.h
+        qwasmkeytranslator.cpp qwasmkeytranslator.h
         qwasmoffscreensurface.cpp qwasmoffscreensurface.h
         qwasmopenglcontext.cpp qwasmopenglcontext.h
         qwasmplatform.cpp qwasmplatform.h
         qwasmscreen.cpp qwasmscreen.h
         qwasmservices.cpp qwasmservices.h
         qwasmstring.cpp qwasmstring.h
-        qwasmstylepixmaps_p.h
         qwasmtheme.cpp qwasmtheme.h
         qwasmwindow.cpp qwasmwindow.h
         qwasmwindowclientarea.cpp qwasmwindowclientarea.h
         qwasmwindownonclientarea.cpp qwasmwindownonclientarea.h
         qwasminputcontext.cpp qwasminputcontext.h
-        qwasmdrag.cpp qwasmdrag.h
         qwasmwindowstack.cpp qwasmwindowstack.h
     DEFINES
         QT_EGL_NO_X11

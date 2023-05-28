@@ -15,6 +15,7 @@ function(qt_internal_add_benchmark target)
         "${__qt_internal_add_executable_multi_args}"
     )
     _qt_internal_validate_all_args_are_parsed(arg)
+    _qt_internal_validate_no_unity_build(arg)
 
     qt_remove_args(exec_args
         ARGS_TO_REMOVE
@@ -239,6 +240,8 @@ function(qt_internal_add_test_to_batch batch_name name)
         arg "${optional_args}" "${single_value_args}" "${multi_value_args}" ${ARGN})
     qt_internal_prepare_test_target_flags(version_arg exceptions_text gui_text ${ARGN})
 
+    _qt_internal_validate_no_unity_build(arg)
+
     _qt_internal_test_batch_target_name(target)
 
     # Lazy-init the test batch
@@ -262,6 +265,7 @@ function(qt_internal_add_test_to_batch batch_name name)
         set_property(TARGET ${target} PROPERTY _qt_has_lowdpi ${arg_LOWDPI})
         set_property(TARGET ${target} PROPERTY _qt_version ${version_arg})
         set_property(TARGET ${target} PROPERTY _qt_is_test_executable TRUE)
+        set_property(TARGET ${target} PROPERTY _qt_is_manual_test ${arg_MANUAL})
     else()
         # Check whether the args match with the batch. Some differences between
         # flags cannot be reconciled - one should not combine these tests into
@@ -396,6 +400,7 @@ function(qt_internal_add_test name)
         "${multi_value_args}"
     )
     _qt_internal_validate_all_args_are_parsed(arg)
+    _qt_internal_validate_no_unity_build(arg)
 
     if (NOT arg_OUTPUT_DIRECTORY)
         set(arg_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
@@ -495,6 +500,7 @@ function(qt_internal_add_test name)
         )
         set(setting_up_batched_test FALSE)
         set_target_properties(${name} PROPERTIES _qt_is_test_executable TRUE)
+        set_target_properties(${name} PROPERTIES _qt_is_manual_test ${arg_MANUAL})
     endif()
 
     foreach(path IN LISTS arg_QML_IMPORTPATH)

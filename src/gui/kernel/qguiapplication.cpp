@@ -18,7 +18,7 @@
 #include <qpa/qplatformintegration.h>
 
 #include <QtCore/QAbstractEventDispatcher>
-#include <QtCore/QStandardPaths>
+#include <QtCore/QFileInfo>
 #include <QtCore/QVariant>
 #include <QtCore/private/qcoreapplication_p.h>
 #include <QtCore/private/qabstracteventdispatcher_p.h>
@@ -50,6 +50,7 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <qpa/qwindowsysteminterface_p.h>
 #include "private/qwindow_p.h"
+#include "private/qicon_p.h"
 #include "private/qcursor_p.h"
 #if QT_CONFIG(opengl)
 #  include "private/qopenglcontext_p.h"
@@ -96,12 +97,14 @@
 
 #include <qtgui_tracepoints_p.h>
 
-#include <ctype.h>
+#include <private/qtools_p.h>
+
 #include <limits>
 
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
+using namespace QtMiscUtils;
 
 // Helper macro for static functions to check on the existence of the application class.
 #define CHECK_QAPP_INSTANCE(...) \
@@ -229,7 +232,7 @@ static void initThemeHints()
 static bool checkNeedPortalSupport()
 {
 #if QT_CONFIG(dbus)
-    return !QStandardPaths::locate(QStandardPaths::RuntimeLocation, "flatpak-info"_L1).isEmpty() || qEnvironmentVariableIsSet("SNAP");
+    return QFileInfo::exists("/.flatpak-info"_L1) || qEnvironmentVariableIsSet("SNAP");
 #else
     return false;
 #endif // QT_CONFIG(dbus)
@@ -256,20 +259,20 @@ struct QWindowGeometrySpecification
 static inline int nextGeometryToken(const QByteArray &a, int &pos, char *op)
 {
     *op = 0;
-    const int size = a.size();
+    const qsizetype size = a.size();
     if (pos >= size)
         return -1;
 
     *op = a.at(pos);
     if (*op == '+' || *op == '-' || *op == 'x')
         pos++;
-    else if (isdigit(*op))
+    else if (isAsciiDigit(*op))
         *op = 'x'; // If it starts with a digit, it is supposed to be a width specification.
     else
         return -1;
 
     const int numberPos = pos;
-    for ( ; pos < size && isdigit(a.at(pos)); ++pos) ;
+    for ( ; pos < size && isAsciiDigit(a.at(pos)); ++pos) ;
 
     bool ok;
     const int result = a.mid(numberPos, pos - numberPos).toInt(&ok);
@@ -557,9 +560,11 @@ static QWindowGeometrySpecification windowGeometrySpecification = Q_WINDOW_GEOME
     \list
         \li \c {altgr}, detect the key \c {AltGr} found on some keyboards as
                Qt::GroupSwitchModifier (since Qt 5.12).
-        \li \c {darkmode=[1|2]} controls how Qt responds to the activation
+        \li \c {darkmode=[0|1|2]} controls how Qt responds to the activation
                of the \e{Dark Mode for applications} introduced in Windows 10
                1903 (since Qt 5.15).
+
+               A value of 0 disables dark mode support.
 
                A value of 1 causes Qt to switch the window borders to black
                when \e{Dark Mode for applications} is activated and no High
@@ -749,7 +754,8 @@ QString QGuiApplication::applicationDisplayName()
     of unread messages or similar.
 
     The badge will be overlaid on the application's icon in the Dock
-    on \macos, the home screen icon on iOS, or the task bar on Windows.
+    on \macos, the home screen icon on iOS, or the task bar on Windows
+    and Linux.
 
     If the number is outside the range supported by the platform, the
     number will be clamped to the supported range. If the number does
@@ -946,6 +952,8 @@ bool QGuiApplicationPrivate::isWindowBlocked(QWindow *window, QWindow **blocking
 /*!
     Returns the QWindow that receives events tied to focus,
     such as key events.
+
+    \sa QWindow::requestActivate()
 */
 QWindow *QGuiApplication::focusWindow()
 {
@@ -1305,7 +1313,7 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
     if (!platformArguments.isEmpty()) {
         if (QObject *nativeInterface = QGuiApplicationPrivate::platform_integration->nativeInterface()) {
             for (const QString &argument : std::as_const(platformArguments)) {
-                const int equalsPos = argument.indexOf(u'=');
+                const qsizetype equalsPos = argument.indexOf(u'=');
                 const QByteArray name =
                     equalsPos != -1 ? argument.left(equalsPos).toUtf8() : argument.toUtf8();
                 const QVariant value =
@@ -1325,7 +1333,7 @@ static void init_plugins(const QList<QByteArray> &pluginList)
 {
     for (int i = 0; i < pluginList.size(); ++i) {
         QByteArray pluginSpec = pluginList.at(i);
-        int colonPos = pluginSpec.indexOf(':');
+        qsizetype colonPos = pluginSpec.indexOf(':');
         QObject *plugin;
         if (colonPos < 0)
             plugin = QGenericPluginFactory::create(QLatin1StringView(pluginSpec), QString());
@@ -1592,7 +1600,7 @@ void Q_TRACE_INSTRUMENT(qtgui) QGuiApplicationPrivate::init()
             ++i;
             if (argv[i] && *argv[i]) {
                 session_id = QString::fromLatin1(argv[i]);
-                int p = session_id.indexOf(u'_');
+                qsizetype p = session_id.indexOf(u'_');
                 if (p >= 0) {
                     session_key = session_id.mid(p +1);
                     session_id = session_id.left(p);
@@ -2587,15 +2595,16 @@ void QGuiApplicationPrivate::processSafeAreaMarginsChangedEvent(QWindowSystemInt
 
 void QGuiApplicationPrivate::processThemeChanged(QWindowSystemInterfacePrivate::ThemeChangeEvent *tce)
 {
+    QStyleHintsPrivate::get(QGuiApplication::styleHints())->setColorScheme(colorScheme());
     if (self)
         self->handleThemeChanged();
+
+    QIconPrivate::clearIconCache();
 
     QEvent themeChangeEvent(QEvent::ThemeChange);
     const QWindowList windows = tce->window ? QWindowList{tce->window} : window_list;
     for (auto *window : windows)
         QGuiApplication::sendSpontaneousEvent(window, &themeChangeEvent);
-
-    QStyleHintsPrivate::get(QGuiApplication::styleHints())->setColorScheme(colorScheme());
 }
 
 /*!
@@ -2683,6 +2692,7 @@ void QGuiApplicationPrivate::processCloseEvent(QWindowSystemInterfacePrivate::Cl
     if (e->window.data()->d_func()->blockedByModalWindow && !e->window.data()->d_func()->inClose) {
         // a modal window is blocking this window, don't allow close events through, unless they
         // originate from a call to QWindow::close.
+        e->eventAccepted = false;
         return;
     }
 

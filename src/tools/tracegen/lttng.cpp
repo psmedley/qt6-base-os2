@@ -20,8 +20,19 @@ static void writeCtfMacro(QTextStream &stream, const Provider &provider, const T
     const int arrayLen = field.arrayLen;
 
     if (arrayLen > 0) {
-        stream << "ctf_array(" <<paramType << ", "
-               << name << ", " << name << ", " << arrayLen << ")";
+        if (paramType == QStringLiteral("double") || paramType == QStringLiteral("float")) {
+            const char *newline = nullptr;
+            for (int i = 0; i < arrayLen; i++) {
+                stream << newline;
+                stream << "ctf_float(" <<paramType << ", " << name << "_" << QString::number(i) << ", "
+                       << name << "[" << QString::number(i) << "]" << ")";
+                newline = "\n        ";
+            }
+
+        } else {
+            stream << "ctf_array(" <<paramType << ", "
+                   << name << ", " << name << ", " << arrayLen << ")";
+        }
         return;
     }
 
@@ -56,24 +67,24 @@ static void writeCtfMacro(QTextStream &stream, const Provider &provider, const T
         stream << "ctf_string(" << name << ", " << name << ".toString().toUtf8().constData())";
         return;
     case Tracepoint::Field::QtRect:
-        stream << "ctf_integer(int, x, " << name << ".x()) "
-               << "ctf_integer(int, y, " << name << ".y()) "
-               << "ctf_integer(int, width, " << name << ".width()) "
-               << "ctf_integer(int, height, " << name << ".height()) ";
+        stream << "ctf_integer(int, QRect_" << name << "_x, " << name << ".x()) "
+               << "ctf_integer(int, QRect_" << name << "_y, " << name << ".y()) "
+               << "ctf_integer(int, QRect_" << name << "_width, " << name << ".width()) "
+               << "ctf_integer(int, QRect_" << name << "_height, " << name << ".height()) ";
         return;
     case Tracepoint::Field::QtSizeF:
-        stream << "ctf_float(int, width, " << name << ".width()) "
-               << "ctf_float(int, height, " << name << ".height()) ";
+        stream << "ctf_float(double, QSizeF_" << name << "_width, " << name << ".width()) "
+               << "ctf_float(double, QSizeF_" << name << "_height, " << name << ".height()) ";
         return;
     case Tracepoint::Field::QtRectF:
-        stream << "ctf_float(int, x, " << name << ".x()) "
-               << "ctf_float(int, y, " << name << ".y()) "
-               << "ctf_float(int, width, " << name << ".width()) "
-               << "ctf_float(int, height, " << name << ".height()) ";
+        stream << "ctf_float(double, QRectF_" << name << "_x, " << name << ".x()) "
+               << "ctf_float(double, QRectF_" << name << "_y, " << name << ".y()) "
+               << "ctf_float(double, QRectF_" << name << "_width, " << name << ".width()) "
+               << "ctf_float(double, QRectF_" << name << "_height, " << name << ".height()) ";
         return;
     case Tracepoint::Field::QtSize:
-        stream << "ctf_integer(int, width, " << name << ".width()) "
-               << "ctf_integer(int, height, " << name << ".height()) ";
+        stream << "ctf_integer(int, QSize_" << name << "_width, " << name << ".width()) "
+               << "ctf_integer(int, QSize_" << name << "_height, " << name << ".height()) ";
         return;
     case Tracepoint::Field::EnumeratedType:
         stream << "ctf_enum(" << provider.name << ", " << typeToTypeName(paramType) << ", int, " << name << ", " << name << ") ";
@@ -90,6 +101,7 @@ static void writeCtfMacro(QTextStream &stream, const Provider &provider, const T
 
 static void writePrologue(QTextStream &stream, const QString &fileName, const Provider &provider)
 {
+    writeCommonPrologue(stream);
     const QString guard = includeGuard(fileName);
 
     stream << "#undef TRACEPOINT_PROVIDER\n";

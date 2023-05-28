@@ -38,6 +38,8 @@ qt_internal_add_plugin(QWindowsIntegrationPlugin
         qwindowstheme.cpp qwindowstheme.h
         qwindowsthreadpoolrunner.h
         qwindowswindow.cpp qwindowswindow.h
+    NO_UNITY_BUILD_SOURCES
+        qwindowspointerhandler.cpp
     DEFINES
         QT_NO_CAST_FROM_ASCII
         QT_NO_FOREACH
@@ -65,10 +67,6 @@ qt_internal_add_plugin(QWindowsIntegrationPlugin
         d3d9
         runtimeobject
 )
-
-# Duplicated symbols
-set_source_files_properties(qwindowspointerhandler.cpp qwindowsmousehandler.cpp
-                            PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Resources:
 set_source_files_properties("openglblacklists/default.json"
@@ -104,6 +102,8 @@ qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION QT_FEATURE_opengl 
 qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION MINGW
     LIBRARIES
         uuid
+    NO_PCH_SOURCES
+        qwindowspointerhandler.cpp
 )
 
 qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION QT_FEATURE_systemtrayicon
@@ -199,7 +199,3 @@ qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION MINGW AND QT_FEATU
     LIBRARIES
         uuid
 )
-
-if (MINGW)
-    set_source_files_properties(qwindowspointerhandler.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
-endif()

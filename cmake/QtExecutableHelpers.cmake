@@ -64,12 +64,12 @@ function(qt_internal_add_executable name)
             QT_DELAYED_TARGET_COPYRIGHT "${arg_TARGET_COPYRIGHT}"
             )
     else()
-        if("${arg_TARGET_DESCRIPTION}" STREQUAL "")
+        if(NOT arg_TARGET_DESCRIPTION)
             set(arg_TARGET_DESCRIPTION "Qt ${name}")
         endif()
         qt_set_target_info_properties(${name} ${ARGN}
-            TARGET_DESCRIPTION "${arg_TARGET_DESCRIPTION}"
-            TARGET_VERSION "${arg_VERSION}")
+            TARGET_DESCRIPTION ${arg_TARGET_DESCRIPTION}
+            TARGET_VERSION ${arg_VERSION})
     endif()
 
     if (WIN32 AND NOT arg_DELAY_RC)
@@ -111,13 +111,15 @@ function(qt_internal_add_executable name)
     endif()
 
     if(arg_NO_UNITY_BUILD)
-        set(arg_NO_UNITY_BUILD NO_UNITY_BUILD)
+        set(arg_NO_UNITY_BUILD "NO_UNITY_BUILD")
     else()
         set(arg_NO_UNITY_BUILD "")
     endif()
 
     qt_internal_extend_target("${name}"
+        ${arg_NO_UNITY_BUILD}
         SOURCES ${arg_SOURCES}
+        NO_UNITY_BUILD_SOURCES ${arg_NO_UNITY_BUILD_SOURCES}
         INCLUDE_DIRECTORIES ${private_includes}
         DEFINES ${arg_DEFINES}
         LIBRARIES
@@ -134,8 +136,6 @@ function(qt_internal_add_executable name)
         MOC_OPTIONS ${arg_MOC_OPTIONS}
         ENABLE_AUTOGEN_TOOLS ${arg_ENABLE_AUTOGEN_TOOLS}
         DISABLE_AUTOGEN_TOOLS ${arg_DISABLE_AUTOGEN_TOOLS}
-        NO_UNITY_BUILD_SOURCES ${arg_NO_UNITY_BUILD_SOURCES}
-        ${arg_NO_UNITY_BUILD}
     )
     set_target_properties("${name}" PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${arg_OUTPUT_DIRECTORY}"
@@ -402,7 +402,7 @@ function(qt_internal_add_configure_time_executable target)
     set(timestamp_file "${target_binary_dir}/${target_binary}_timestamp")
     add_custom_command(OUTPUT "${target_binary_path}" "${timestamp_file}"
         COMMAND
-            ${CMAKE_COMMAND} --build "${target_binary_dir}" ${config_build_arg}
+            ${CMAKE_COMMAND} --build "${target_binary_dir}" --clean-first ${config_build_arg}
         COMMAND
             ${CMAKE_COMMAND} -E touch "${timestamp_file}"
         DEPENDS
@@ -470,6 +470,7 @@ function(qt_internal_add_configure_time_executable target)
             OUTPUT_VARIABLE try_compile_output
         )
 
+        file(WRITE "${timestamp_file}" "")
         if(NOT result)
             message(FATAL_ERROR "Unable to build ${target}: ${try_compile_output}")
         endif()

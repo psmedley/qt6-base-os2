@@ -209,16 +209,15 @@ static const QPointingDevice *pointingDeviceFor(qint64 deviceID)
         case NSEventTypeOtherMouseUp:
             return QEvent::NonClientAreaMouseButtonRelease;
 
+        case NSEventTypeMouseMoved:
         case NSEventTypeLeftMouseDragged:
         case NSEventTypeRightMouseDragged:
         case NSEventTypeOtherMouseDragged:
             return QEvent::NonClientAreaMouseMove;
 
         default:
-            break;
+            Q_UNREACHABLE();
         }
-
-        return QEvent::None;
     }();
 
     qCInfo(lcQpaMouse) << eventType << "at" << qtWindowPoint << "with" << m_frameStrutButtons << "in" << self.window;
@@ -484,10 +483,6 @@ static const QPointingDevice *pointingDeviceFor(qint64 deviceID)
 
 - (void)cursorUpdate:(NSEvent *)theEvent
 {
-    // Note: We do not get this callback when moving from a subview that
-    // uses the legacy cursorRect API, so the cursor is reset to the arrow
-    // cursor. See rdar://34183708
-
     if (!NSApp.active)
         return;
 

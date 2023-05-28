@@ -331,6 +331,7 @@ private slots:
 
     void constructFromIncompatibleMetaType_data();
     void constructFromIncompatibleMetaType();
+    void constructFromQtLT65MetaType();
     void copyNonDefaultConstructible();
 
 private:
@@ -5636,10 +5637,37 @@ void tst_QVariant::constructFromIncompatibleMetaType()
    QVERIFY(!QVariant(regular).convert(type));
 }
 
+void tst_QVariant::constructFromQtLT65MetaType()
+{
+   auto qsizeIface = QtPrivate::qMetaTypeInterfaceForType<QSize>();
+
+   QtPrivate::QMetaTypeInterface qsize64Iface = {
+       /*revision*/0,
+       8,
+       8,
+       QMetaType::NeedsConstruction | QMetaType::NeedsDestruction,
+       0,
+       qsizeIface->metaObjectFn,
+       "FakeQSize",
+       qsizeIface->defaultCtr,
+       qsizeIface->copyCtr,
+       qsizeIface->moveCtr,
+       /*dtor =*/  nullptr,
+       qsizeIface->equals,
+       qsizeIface->lessThan,
+       qsizeIface->debugStream,
+       qsizeIface->dataStreamOut,
+       qsizeIface->dataStreamIn,
+       /*legacyregop =*/ nullptr
+   };
+   QVariant var{ QMetaType(&qsize64Iface) };
+   QVERIFY(var.isValid());
+}
+
 void tst_QVariant::copyNonDefaultConstructible()
 {
     NonDefaultConstructible ndc(42);
-    QVariant var(QMetaType::fromType<NonDefaultConstructible>(), &ndc);
+    QVariant var = QVariant::fromValue(ndc);
     QVERIFY(var.isDetached());
     QCOMPARE(var.metaType(), QMetaType::fromType<NonDefaultConstructible>());
     QVERIFY(var.constData() != &ndc);

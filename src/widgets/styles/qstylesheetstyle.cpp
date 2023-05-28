@@ -1056,8 +1056,8 @@ QRenderRule::QRenderRule(const QList<Declaration> &declarations, const QObject *
                         }
                     } else if (hintName.endsWith("icon"_L1)) {
                         hintValue = decl.iconValue();
-                    } else if (hintName == "button-layout"_L1
-                                && decl.d->values.size() != 0 && decl.d->values.at(0).type == Value::String) {
+                    } else if (hintName == "button-layout"_L1 && decl.d->values.size() != 0
+                               && decl.d->values.at(0).type == QCss::Value::String) {
                         hintValue = subControlLayout(decl.d->values.at(0).variant.toString());
                     } else {
                         int integer;
@@ -1603,8 +1603,8 @@ public:
             return nodeName == "QToolTip"_L1;
 #endif
         do {
-            const ushort *uc = (const ushort *)nodeName.constData();
-            const ushort *e = uc + nodeName.size();
+            const auto *uc = reinterpret_cast<const char16_t *>(nodeName.constData());
+            const auto *e = uc + nodeName.size();
             const uchar *c = (const uchar *)metaObject->className();
             while (*c && uc != e && (*uc == *c || (*c == ':' && *uc == '-'))) {
                 ++uc;
@@ -4101,7 +4101,12 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
 
     case CE_HeaderLabel:
         if (const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(opt)) {
-            QStyleOptionHeader hdr(*header);
+          QStyleOptionHeaderV2 hdr;
+          QStyleOptionHeader &v1Copy = hdr;
+          if (auto v2 = qstyleoption_cast<const QStyleOptionHeaderV2 *>(opt))
+              hdr = *v2;
+          else
+              v1Copy = *header;
             QRenderRule subRule = renderRule(w, opt, PseudoElement_HeaderViewSection);
             if (hasStyleRule(w, PseudoElement_HeaderViewUpArrow)
              || hasStyleRule(w, PseudoElement_HeaderViewDownArrow)) {
@@ -4249,12 +4254,11 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
             if (rule.hasDrawable()) {
                 rule.drawFrame(p, opt->rect);
                 p->save();
-                switch (sgOpt->corner) {
-                case Qt::BottomRightCorner: break;
-                case Qt::BottomLeftCorner: p->rotate(90); break;
-                case Qt::TopLeftCorner: p->rotate(180); break;
-                case Qt::TopRightCorner: p->rotate(270); break;
-                default: break;
+                static constexpr int rotation[] = { 180, 270, 90, 0 };
+                if (rotation[sgOpt->corner]) {
+                    p->translate(opt->rect.center());
+                    p->rotate(rotation[sgOpt->corner]);
+                    p->translate(-opt->rect.center());
                 }
                 rule.drawImage(p, opt->rect);
                 p->restore();

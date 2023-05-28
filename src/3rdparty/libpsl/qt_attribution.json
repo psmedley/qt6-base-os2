@@ -13,14 +13,17 @@ It allows browsers to, for example:
 - Highlight the most important part of a domain name in the user interface
 
 - Accurately sort history entries by site",
+    "SecurityCritical": true,
 
     "Files": "psl_data.cpp",
     "QtUsage": "Used in Qt Network to avoid setting \"supercookies\" in the cookie jar
 supported by Qt (by the QNetworkCookieJar class).",
 
-    "Homepage": "Consult https://github.com/publicsuffix/list for the sha1 but download from ...",
+    "Comment": "Consult https://github.com/publicsuffix/list for the sha1 but download from ...",
     "Homepage": "http://publicsuffix.org/",
-    "Version": "f15705582ed13f390c59541300dea7288acf4137, fetched on 2023-02-02",
+    "Version": "a304485800b4b6b796fcccbb3be1585f189ee038, fetched on 2023-05-03",
+    "DownloadLocation": "https://publicsuffix.org/list/public_suffix_list.dat",
+
     "License": "Mozilla Public License 2.0",
     "LicenseFile": "PSL-LICENSE.txt",
     "LicenseId": "MPL-2.0",
@@ -32,7 +35,7 @@ It is now maintained on github (https://github.com/publicsuffix/list)."
     "Name": "libpsl - C library to handle the Public Suffix List",
     "QDocModule": "qtnetwork",
     "Description": "Libpsl allows checking domains against the Public Suffix List.",
-    "Files": "src/lookup_string_in_fixed_set.c src/psl-make-dafsa",
+    "Files": [ "src/lookup_string_in_fixed_set.c", "src/psl-make-dafsa" ],
     "QtUsage": "Used to compress the embedded copy of publicsuffix list and
 to lookup entries in it.",
     "Homepage": "https://github.com/rockdaboot/libpsl",

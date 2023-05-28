@@ -665,14 +665,14 @@ void QCoreApplicationPrivate::initLocale()
             qWarning("Detected locale \"%s\" with character encoding \"%s\", which is not UTF-8.\n"
                      "Qt depends on a UTF-8 locale, but has failed to switch to one.\n"
                      "If this causes problems, reconfigure your locale. See the locale(1) manual\n"
-                     "for more information.", oldLocale.constData(), charEncoding);
+                     "for more information.", oldLocale.constData(), nl_langinfo(CODESET));
         } else if (warnOnOverride) {
             // Let the user know we over-rode their configuration.
             qWarning("Detected locale \"%s\" with character encoding \"%s\", which is not UTF-8.\n"
                      "Qt depends on a UTF-8 locale, and has switched to \"%s\" instead.\n"
                      "If this causes problems, reconfigure your locale. See the locale(1) manual\n"
                      "for more information.",
-                     oldLocale.constData(), charEncoding, newLocale.constData());
+                     oldLocale.constData(), nl_langinfo(CODESET), newLocale.constData());
         }
     }
 #  endif // Platform choice
@@ -2288,7 +2288,8 @@ static void replacePercentN(QString *result, int n)
     This function is not virtual. You can use alternative translation
     techniques by subclassing \l QTranslator.
 
-    \sa QObject::tr(), installTranslator(), removeTranslator(), translate()
+    \sa QObject::tr(), installTranslator(), removeTranslator(),
+        {Internationalization and Translations}
 */
 QString QCoreApplication::translate(const char *context, const char *sourceText,
                                     const char *disambiguation, int n)
@@ -2791,7 +2792,7 @@ Qt::PermissionStatus QCoreApplication::checkPermission(const QPermission &permis
 
 /*!
     \fn template<typename Functor> void QCoreApplication::requestPermission(
-        const QPermission &permission, Functor functor)
+        const QPermission &permission, Functor &&functor)
 
     Requests the given \a permission.
 
@@ -2844,8 +2845,9 @@ Qt::PermissionStatus QCoreApplication::checkPermission(const QPermission &permis
     qApp->requestPermission(QCameraPermission{}, this, &CamerWidget::permissionUpdated);
     \endcode
 
-    If \a context is destroyed before the request completes,
-    the \a functor will not be called.
+    The \a functor will be called in the thread of the \a context object. If
+    \a context is destroyed before the request completes, the \a functor will
+    not be called.
 
     \include permissions.qdocinc requestPermission-postamble
 
@@ -2872,6 +2874,43 @@ void QCoreApplication::requestPermission(const QPermission &requestedPermission,
 
     Q_ASSERT(slotObj);
 
+    // If we have a context object, then we dispatch the permission response
+    // asynchronously through a received object that lives in the same thread
+    // as the context object. Otherwise we call the functor synchronously when
+    // we get a response (which might still be asynchronous for the caller).
+    class PermissionReceiver : public QObject
+    {
+    public:
+        PermissionReceiver(QtPrivate::QSlotObjectBase *slotObject, const QObject *context)
+            : slotObject(slotObject), context(context)
+        {}
+    protected:
+        bool event(QEvent *event) override {
+            if (event->type() == QEvent::MetaCall) {
+                auto metaCallEvent = static_cast<QMetaCallEvent *>(event);
+                if (metaCallEvent->id() == ushort(-1)) {
+                    Q_ASSERT(slotObject);
+                    // only execute if context object is still alive
+                    if (context)
+                        slotObject->call(const_cast<QObject*>(context.data()), metaCallEvent->args());
+                    slotObject->destroyIfLastRef();
+                    deleteLater();
+
+                    return true;
+                }
+            }
+            return QObject::event(event);
+        }
+    private:
+        QtPrivate::QSlotObjectBase *slotObject;
+        QPointer<const QObject> context;
+    };
+    PermissionReceiver *receiver = nullptr;
+    if (context) {
+        receiver = new PermissionReceiver(slotObj, context);
+        receiver->moveToThread(context->thread());
+    }
+
     QPermissions::Private::requestPermission(requestedPermission, [=](Qt::PermissionStatus status) {
         Q_ASSERT_X(status != Qt::PermissionStatus::Undetermined, "QPermission",
             "QCoreApplication::requestPermission() should never return Undetermined");
@@ -2882,11 +2921,28 @@ void QCoreApplication::requestPermission(const QPermission &requestedPermission,
             QPermission permission = requestedPermission;
             permission.m_status = status;
 
-            void *argv[] = { nullptr, &permission };
-            slotObj->call(const_cast<QObject*>(context), argv);
+            if (receiver) {
+                const int nargs = 2;
+                auto metaCallEvent = new QMetaCallEvent(slotObj, qApp, ushort(-1), nargs);
+                Q_CHECK_PTR(metaCallEvent);
+                void **args = metaCallEvent->args();
+                QMetaType *types = metaCallEvent->types();
+                const auto voidType = QMetaType::fromType<void>();
+                const auto permissionType = QMetaType::fromType<QPermission>();
+                types[0] = voidType;
+                types[1] = permissionType;
+                args[0] = nullptr;
+                args[1] = permissionType.create(&permission);
+                Q_CHECK_PTR(args[1]);
+                qApp->postEvent(receiver, metaCallEvent);
+            } else {
+                void *argv[] = { nullptr, &permission };
+                slotObj->call(const_cast<QObject*>(context), argv);
+            }
         }
 
-        slotObj->destroyIfLastRef();
+        if (!receiver)
+            slotObj->destroyIfLastRef();
     });
 }
 

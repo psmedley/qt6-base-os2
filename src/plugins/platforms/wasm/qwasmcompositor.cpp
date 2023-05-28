@@ -3,7 +3,6 @@
 
 #include "qwasmcompositor.h"
 #include "qwasmwindow.h"
-#include "qwasmeventtranslator.h"
 #include "qwasmeventdispatcher.h"
 #include "qwasmclipboard.h"
 #include "qwasmevent.h"
@@ -18,43 +17,13 @@
 
 #include <emscripten/bind.h>
 
-namespace {
-QWasmWindow *asWasmWindow(QWindow *window)
-{
-    return static_cast<QWasmWindow*>(window->handle());
-}
-}  // namespace
-
 using namespace emscripten;
 
 Q_GUI_EXPORT int qt_defaultDpiX();
 
-bool g_scrollingInvertedFromDevice = false;
-
-static void mouseWheelEvent(emscripten::val event)
-{
-    emscripten::val wheelInverted = event["webkitDirectionInvertedFromDevice"];
-    if (wheelInverted.as<bool>())
-        g_scrollingInvertedFromDevice = true;
-}
-
-EMSCRIPTEN_BINDINGS(qtMouseModule) {
-    function("qtMouseWheelEvent", &mouseWheelEvent);
-}
-
 QWasmCompositor::QWasmCompositor(QWasmScreen *screen)
-    : QObject(screen),
-      m_windowStack(std::bind(&QWasmCompositor::onTopWindowChanged, this)),
-      m_eventTranslator(std::make_unique<QWasmEventTranslator>())
+    : QObject(screen), m_windowStack(std::bind(&QWasmCompositor::onTopWindowChanged, this))
 {
-    m_touchDevice = std::make_unique<QPointingDevice>(
-            "touchscreen", 1, QInputDevice::DeviceType::TouchScreen,
-            QPointingDevice::PointerType::Finger,
-            QPointingDevice::Capability::Position | QPointingDevice::Capability::Area
-                | QPointingDevice::Capability::NormalizedPosition,
-            10, 0);
-
-    QWindowSystemInterface::registerInputDevice(m_touchDevice.get());
     QWindowSystemInterface::setSynchronousWindowSystemEvents(true);
 }
 
@@ -74,18 +43,12 @@ void QWasmCompositor::onScreenDeleting()
 void QWasmCompositor::deregisterEventHandlers()
 {
     QByteArray screenElementSelector = screen()->eventTargetId().toUtf8();
-    emscripten_set_keydown_callback(screenElementSelector.constData(), 0, 0, NULL);
-    emscripten_set_keyup_callback(screenElementSelector.constData(), 0, 0, NULL);
-
-    emscripten_set_wheel_callback(screenElementSelector.constData(), 0, 0, NULL);
 
     emscripten_set_touchstart_callback(screenElementSelector.constData(), 0, 0, NULL);
     emscripten_set_touchend_callback(screenElementSelector.constData(), 0, 0, NULL);
     emscripten_set_touchmove_callback(screenElementSelector.constData(), 0, 0, NULL);
-    emscripten_set_touchcancel_callback(screenElementSelector.constData(), 0, 0, NULL);
 
-    screen()->element().call<void>("removeEventListener", std::string("drop"),
-                                   val::module_property("qtDrop"), val(true));
+    emscripten_set_touchcancel_callback(screenElementSelector.constData(), 0, 0, NULL);
 }
 
 void QWasmCompositor::destroy()
@@ -93,41 +56,6 @@ void QWasmCompositor::destroy()
     // TODO(mikolaj.boc): Investigate if m_isEnabled is needed at all. It seems like a frame should
     // not be generated after this instead.
     m_isEnabled = false; // prevent frame() from creating a new m_context
-}
-
-void QWasmCompositor::initEventHandlers()
-{
-    if (platform() == Platform::MacOS) {
-        if (!emscripten::val::global("window")["safari"].isUndefined()) {
-            screen()->element().call<void>("addEventListener", val("wheel"),
-                                           val::module_property("qtMouseWheelEvent"));
-        }
-    }
-
-    constexpr EM_BOOL UseCapture = 1;
-
-    const QByteArray screenElementSelector = screen()->eventTargetId().toUtf8();
-    emscripten_set_keydown_callback(screenElementSelector.constData(), (void *)this, UseCapture,
-                                    &keyboard_cb);
-    emscripten_set_keyup_callback(screenElementSelector.constData(), (void *)this, UseCapture,
-                                  &keyboard_cb);
-
-    emscripten_set_wheel_callback(screenElementSelector.constData(), (void *)this, UseCapture,
-                                  &wheel_cb);
-
-    emscripten_set_touchstart_callback(screenElementSelector.constData(), (void *)this, UseCapture,
-                                       &touchCallback);
-    emscripten_set_touchend_callback(screenElementSelector.constData(), (void *)this, UseCapture,
-                                     &touchCallback);
-    emscripten_set_touchmove_callback(screenElementSelector.constData(), (void *)this, UseCapture,
-                                      &touchCallback);
-    emscripten_set_touchcancel_callback(screenElementSelector.constData(), (void *)this, UseCapture,
-                                        &touchCallback);
-
-    screen()->element().call<void>("addEventListener", std::string("drop"),
-                                   val::module_property("qtDrop"), val(true));
-    screen()->element().set("data-qtdropcontext", // ? unique
-                            emscripten::val(quintptr(reinterpret_cast<void *>(screen()))));
 }
 
 void QWasmCompositor::addWindow(QWasmWindow *window)
@@ -272,7 +200,7 @@ void QWasmCompositor::handleBackingStoreFlush(QWindow *window)
     // Request update to flush the updated backing store content, unless we are currently
     // processing an update, in which case the new content will flushed as a part of that update.
     if (!m_inDeliverUpdateRequest)
-        requestUpdateWindow(asWasmWindow(window));
+        requestUpdateWindow(static_cast<QWasmWindow *>(window->handle()));
 }
 
 int dpiScaled(qreal value)
@@ -314,182 +242,4 @@ void QWasmCompositor::onTopWindowChanged()
 QWasmScreen *QWasmCompositor::screen()
 {
     return static_cast<QWasmScreen *>(parent());
-}
-
-int QWasmCompositor::keyboard_cb(int eventType, const EmscriptenKeyboardEvent *keyEvent, void *userData)
-{
-    QWasmCompositor *wasmCompositor = reinterpret_cast<QWasmCompositor *>(userData);
-    return static_cast<int>(wasmCompositor->processKeyboard(eventType, keyEvent));
-}
-
-int QWasmCompositor::wheel_cb(int eventType, const EmscriptenWheelEvent *wheelEvent, void *userData)
-{
-    QWasmCompositor *compositor = (QWasmCompositor *) userData;
-    return static_cast<int>(compositor->processWheel(eventType, wheelEvent));
-}
-
-int QWasmCompositor::touchCallback(int eventType, const EmscriptenTouchEvent *touchEvent, void *userData)
-{
-    auto compositor = reinterpret_cast<QWasmCompositor*>(userData);
-    return static_cast<int>(compositor->processTouch(eventType, touchEvent));
-}
-
-bool QWasmCompositor::processKeyboard(int eventType, const EmscriptenKeyboardEvent *emKeyEvent)
-{
-    constexpr bool ProceedToNativeEvent = false;
-    Q_ASSERT(eventType == EMSCRIPTEN_EVENT_KEYDOWN || eventType == EMSCRIPTEN_EVENT_KEYUP);
-
-    auto translatedEvent = m_eventTranslator->translateKeyEvent(eventType, emKeyEvent);
-
-    const QFlags<Qt::KeyboardModifier> modifiers = KeyboardModifier::getForEvent(*emKeyEvent);
-
-    const auto clipboardResult = QWasmIntegration::get()->getWasmClipboard()->processKeyboard(
-            translatedEvent, modifiers);
-
-    using ProcessKeyboardResult = QWasmClipboard::ProcessKeyboardResult;
-    if (clipboardResult == ProcessKeyboardResult::NativeClipboardEventNeeded)
-        return ProceedToNativeEvent;
-
-    if (translatedEvent.text.isEmpty())
-        translatedEvent.text = QString(emKeyEvent->key);
-    if (translatedEvent.text.size() > 1)
-        translatedEvent.text.clear();
-    const auto result =
-            QWindowSystemInterface::handleKeyEvent(
-                    0, translatedEvent.type, translatedEvent.key, modifiers, translatedEvent.text);
-    return clipboardResult == ProcessKeyboardResult::NativeClipboardEventAndCopiedDataNeeded
-            ? ProceedToNativeEvent
-            : result;
-}
-
-bool QWasmCompositor::processWheel(int eventType, const EmscriptenWheelEvent *wheelEvent)
-{
-    Q_UNUSED(eventType);
-
-    const EmscriptenMouseEvent* mouseEvent = &wheelEvent->mouse;
-
-    int scrollFactor = 0;
-    switch (wheelEvent->deltaMode) {
-        case DOM_DELTA_PIXEL:
-            scrollFactor = 1;
-            break;
-        case DOM_DELTA_LINE:
-            scrollFactor = 12;
-            break;
-        case DOM_DELTA_PAGE:
-            scrollFactor = 20;
-            break;
-    };
-
-    scrollFactor = -scrollFactor; // Web scroll deltas are inverted from Qt deltas.
-
-    Qt::KeyboardModifiers modifiers = KeyboardModifier::getForEvent(*mouseEvent);
-    QPoint targetPointInScreenCoords =
-            screen()->mapFromLocal(QPoint(mouseEvent->targetX, mouseEvent->targetY));
-
-    QWindow *targetWindow = screen()->compositor()->windowAt(targetPointInScreenCoords, 5);
-    if (!targetWindow)
-        return 0;
-    QPoint pointInTargetWindowCoords = targetWindow->mapFromGlobal(targetPointInScreenCoords);
-
-    QPoint pixelDelta;
-
-    if (wheelEvent->deltaY != 0) pixelDelta.setY(wheelEvent->deltaY * scrollFactor);
-    if (wheelEvent->deltaX != 0) pixelDelta.setX(wheelEvent->deltaX * scrollFactor);
-
-    QPoint angleDelta = pixelDelta; // FIXME: convert from pixels?
-
-    bool accepted = QWindowSystemInterface::handleWheelEvent(
-            targetWindow, QWasmIntegration::getTimestamp(), pointInTargetWindowCoords,
-            targetPointInScreenCoords, pixelDelta, angleDelta, modifiers,
-            Qt::NoScrollPhase, Qt::MouseEventNotSynthesized,
-            g_scrollingInvertedFromDevice);
-    return accepted;
-}
-
-bool QWasmCompositor::processTouch(int eventType, const EmscriptenTouchEvent *touchEvent)
-{
-    QList<QWindowSystemInterface::TouchPoint> touchPointList;
-    touchPointList.reserve(touchEvent->numTouches);
-    QWindow *targetWindow = nullptr;
-
-    qWarning() << Q_FUNC_INFO << "number emTouchPoint:" << touchEvent->numTouches;
-
-    for (int i = 0; i < touchEvent->numTouches; i++) {
-
-        const EmscriptenTouchPoint *emTouchPoint = &touchEvent->touches[i];
-
-
-        QPoint targetPointInScreenCoords =
-                screen()->mapFromLocal(QPoint(emTouchPoint->targetX, emTouchPoint->targetY));
-
-        targetWindow = screen()->compositor()->windowAt(targetPointInScreenCoords, 5);
-        if (targetWindow == nullptr)
-            continue;
-
-        QWindowSystemInterface::TouchPoint touchPoint;
-
-        touchPoint.area = QRect(0, 0, 8, 8);
-        touchPoint.id = emTouchPoint->identifier;
-        touchPoint.pressure = 1.0;
-
-        touchPoint.area.moveCenter(targetPointInScreenCoords);
-
-        const auto tp = m_pressedTouchIds.constFind(touchPoint.id);
-        if (tp != m_pressedTouchIds.constEnd())
-            touchPoint.normalPosition = tp.value();
-
-        QPointF pointInTargetWindowCoords = QPointF(targetWindow->mapFromGlobal(targetPointInScreenCoords));
-        QPointF normalPosition(pointInTargetWindowCoords.x() / targetWindow->width(),
-                               pointInTargetWindowCoords.y() / targetWindow->height());
-
-        const bool stationaryTouchPoint = (normalPosition == touchPoint.normalPosition);
-        touchPoint.normalPosition = normalPosition;
-
-        switch (eventType) {
-            case EMSCRIPTEN_EVENT_TOUCHSTART:
-                if (emTouchPoint->isChanged) {
-                    if (tp != m_pressedTouchIds.constEnd()) {
-                        touchPoint.state = (stationaryTouchPoint
-                                            ? QEventPoint::State::Stationary
-                                            : QEventPoint::State::Updated);
-                    } else {
-                        touchPoint.state = QEventPoint::State::Pressed;
-                    }
-                    m_pressedTouchIds.insert(touchPoint.id, touchPoint.normalPosition);
-                }
-            break;
-            case EMSCRIPTEN_EVENT_TOUCHEND:
-                if (emTouchPoint->isChanged) {
-                    touchPoint.state = QEventPoint::State::Released;
-                    m_pressedTouchIds.remove(touchPoint.id);
-                }
-                break;
-            case EMSCRIPTEN_EVENT_TOUCHMOVE:
-                if (emTouchPoint->isChanged) {
-                        touchPoint.state = (stationaryTouchPoint
-                                            ? QEventPoint::State::Stationary
-                                            : QEventPoint::State::Updated);
-
-                        m_pressedTouchIds.insert(touchPoint.id, touchPoint.normalPosition);
-                }
-                break;
-            default:
-                break;
-        }
-
-        touchPointList.append(touchPoint);
-    }
-
-    QFlags<Qt::KeyboardModifier> keyModifier = KeyboardModifier::getForEvent(*touchEvent);
-
-    bool accepted = false;
-
-    if (eventType == EMSCRIPTEN_EVENT_TOUCHCANCEL)
-        accepted = QWindowSystemInterface::handleTouchCancelEvent(targetWindow, QWasmIntegration::getTimestamp(), m_touchDevice.get(), keyModifier);
-    else
-        accepted = QWindowSystemInterface::handleTouchEvent(
-                targetWindow, QWasmIntegration::getTimestamp(), m_touchDevice.get(), touchPointList, keyModifier);
-
-    return static_cast<int>(accepted);
 }

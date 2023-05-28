@@ -304,6 +304,18 @@ qt_internal_add_module(Core
         tools/qvarlengtharray.h
         tools/qvector.h
         tools/qversionnumber.cpp tools/qversionnumber.h
+    NO_UNITY_BUILD_SOURCES
+        # MinGW complains about `free-nonheap-object` in ~QSharedDataPointer()
+        # despite the fact that appropriate checks are in place to avoid that!
+        tools/qshareddata.cpp tools/qshareddata.h
+        text/qlocale.cpp text/qlocale.h
+        global/qglobal.cpp  # undef qFatal
+        global/qlogging.cpp # undef qFatal
+        text/qstringconverter.cpp # enum Data
+        tools/qcryptographichash.cpp # KeccakNISTInterface/Final
+    NO_PCH_SOURCES
+        compat/removed_api.cpp
+        global/qsimd.cpp
     DEFINES
         QT_NO_FOREACH
         QT_NO_USING_NAMESPACE
@@ -328,15 +340,6 @@ qt_internal_add_module(Core
     ${corelib_extra_cmake_files}
 )
 _qt_internal_setup_deploy_support()
-
-set(corelib_no_pch_sources
-    compat/removed_api.cpp
-    global/qsimd.cpp
-)
-
-foreach(src ${corelib_no_pch_sources})
-    qt_update_ignore_pch_source(Core ${src})
-endforeach()
 
 add_dependencies(Core qmodule_pri)
 
@@ -429,7 +432,7 @@ if(ANDROID)
         jar/Qt${QtBase_VERSION_MAJOR}Android.jar
     )
     set_property(TARGET Core APPEND PROPERTY QT_ANDROID_LIB_DEPENDENCIES
-        plugins/platforms/libplugins_platforms_qtforandroid.so
+        ${INSTALL_PLUGINSDIR}/platforms/libplugins_platforms_qtforandroid.so
     )
     set_property(TARGET Core APPEND PROPERTY QT_ANDROID_PERMISSIONS
         android.permission.INTERNET android.permission.WRITE_EXTERNAL_STORAGE
@@ -513,7 +516,6 @@ qt_internal_extend_target(Core CONDITION WIN32
         kernel/qwinregistry.cpp kernel/qwinregistry_p.h
         plugin/qsystemlibrary.cpp plugin/qsystemlibrary_p.h
         thread/qthread_win.cpp
-    # DEFINES # special case: remove
     LIBRARIES
         advapi32
         authz
@@ -555,6 +557,19 @@ qt_internal_extend_target(Core CONDITION OS2
         io/qstorageinfo_unix.cpp
 )
 
+qt_internal_extend_target(Core CONDITION WIN32
+    NO_UNITY_BUILD_SOURCES
+        global/qsimd.cpp # Q_DECL_INIT_PRIORITY
+        serialization/qcborvalue.cpp # various windows.h clashes
+        serialization/qjsoncbor.cpp
+        serialization/qjsonvalue.cpp
+        serialization/qxmlstream.cpp
+        text/qbytearray.cpp
+        text/qlatin1stringmatcher.cpp
+        text/qunicodetools.cpp
+        tools/qhash.cpp # Q_DECL_INIT_PRIORITY
+)
+
 if(NOT WIN32)
     ### Qt7: remove
     # Make qwineventnotifier.h available on non-Windows platforms too for code bases that include
@@ -584,6 +599,17 @@ qt_internal_extend_target(Core CONDITION APPLE
         ${FWFoundation}
     PUBLIC_LIBRARIES
         ${FWIOKit}
+    DEFINES
+        _DARWIN_C_SOURCE    # This resolves two issues,
+                            #   - Provide DT_* macros to qfilesystemengine_unix.cpp
+                            #   - Enables SOCK_MAXADDRLEN in case its missing during the unity build
+    NO_UNITY_BUILD_SOURCES
+        kernel/qsystemerror.cpp
+        # This makes sure that the tst_qmakelib passes. For some reason,
+        # QtCore ends up returning a corrupted error message in
+        # write_file(): fail
+        kernel/qelapsedtimer_mac.cpp # Temporary exclusion, until this,
+                                     # https://codereview.qt-project.org/c/qt/qtbase/+/462132, is merged
 )
 
 qt_internal_extend_target(Core CONDITION MACOS
@@ -648,12 +674,6 @@ qt_internal_extend_target(Core CONDITION UNIX
         thread/qthread_unix.cpp
 )
 
-qt_internal_extend_target(Core CONDITION APPLE
-    NO_UNITY_BUILD_SOURCES
-        io/qfilesystemengine_unix.cpp # avoid undefined DT_* macros
-        io/qlockfile_unix.cpp         # avoid undefined SOCK_MAXADDRLEN (in proc_info.h)
-)
-
 qt_internal_extend_target(Core CONDITION QT_FEATURE_thread
     SOURCES
         thread/qatomic.cpp
@@ -668,6 +688,10 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_thread
 qt_internal_extend_target(Core CONDITION QT_FEATURE_thread AND UNIX
     SOURCES
         thread/qwaitcondition_unix.cpp
+    NO_UNITY_BUILD_SOURCES
+        thread/qwaitcondition_unix.cpp
+        # Temporary exclusion until this, https://codereview.qt-project.org/c/qt/qtbase/+/472013,
+        # or this, https://codereview.qt-project.org/c/qt/qtbase/+/471184 addresses the issue.
 )
 
 qt_internal_extend_target(Core CONDITION APPLE AND QT_FEATURE_thread
@@ -952,6 +976,8 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_process AND UNIX
     SOURCES
         ../3rdparty/forkfd/forkfd.h
         io/forkfd_qt.cpp
+    NO_UNITY_BUILD_SOURCES
+        io/forkfd_qt.cpp    # EINTR_LOOP macro clashes
     INCLUDE_DIRECTORIES
         ../3rdparty/forkfd
 )
@@ -981,6 +1007,12 @@ qt_internal_extend_target(Core CONDITION ANDROID
         kernel/qjnihelpers.cpp kernel/qjnihelpers_p.h
         platform/android/qandroidextras_p.h platform/android/qandroidextras.cpp
         platform/android/qandroidnativeinterface.cpp
+    NO_UNITY_BUILD_SOURCES
+        platform/android/qandroidextras.cpp
+        # qtNativeClassName conflicts with similar symbols in android headers
+        # TODO: Resolve conflicts between various variables set as,
+        # `org/qtproject/qt/android/QtNative` QtAndroidPrivate might be a good
+        # place to put them.
 )
 
 qt_internal_extend_target(Core CONDITION WIN32
@@ -1117,6 +1149,8 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_cborstreamreader
 qt_internal_extend_target(Core CONDITION QT_FEATURE_cborstreamwriter
     SOURCES
         serialization/qcborstreamwriter.cpp serialization/qcborstreamwriter.h
+    NO_UNITY_BUILD_SOURCES
+        serialization/qcborstreamwriter.cpp # CBOR macro clashes
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_mimetype
@@ -1297,31 +1331,11 @@ set_source_files_properties(
     thread/qmutex_unix.cpp
     PROPERTIES HEADER_FILE_ONLY ON)  # special case: These files are included by qmutex.cpp!
 
-set_source_files_properties(serialization/qcborstreamwriter.cpp # CBOR macro clashes
-                            io/forkfd_qt.cpp # EINTR_LOOP macro clashes
-                            global/qglobal.cpp  # undef qFatal
-                            global/qlogging.cpp # undef qFatal
-                            text/qstringconverter.cpp # enum Data
-                            tools/qcryptographichash.cpp # KeccakNISTInterface/Final
-                            ${corelib_no_pch_sources} # NO_PCH_SOURCES
-                            PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-
 # Remove QT_NO_CAST_TO_ASCII to ensure that the symbols are included in the library.
 if(WIN32)
     get_target_property(defines Core COMPILE_DEFINITIONS)
     list(REMOVE_ITEM defines QT_NO_CAST_TO_ASCII)
     set_target_properties(Core PROPERTIES COMPILE_DEFINITIONS "${defines}")
-
-    set_source_files_properties(global/qsimd.cpp # Q_DECL_INIT_PRIORITY
-                                serialization/qcborvalue.cpp # various windows.h clashes
-                                serialization/qjsoncbor.cpp
-                                serialization/qjsonvalue.cpp
-                                serialization/qxmlstream.cpp
-                                text/qbytearray.cpp
-                                text/qlatin1stringmatcher.cpp
-                                text/qunicodetools.cpp
-                                tools/qhash.cpp # Q_DECL_INIT_PRIORITY
-                                PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 endif()
 
 qt_internal_apply_gc_binaries_conditional(Core PUBLIC)

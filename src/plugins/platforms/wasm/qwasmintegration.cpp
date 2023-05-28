@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "qwasmintegration.h"
-#include "qwasmeventtranslator.h"
 #include "qwasmeventdispatcher.h"
 #include "qwasmcompositor.h"
 #include "qwasmopenglcontext.h"
@@ -81,12 +80,6 @@ QWasmIntegration::QWasmIntegration()
       m_clipboard(new QWasmClipboard),
       m_accessibility(new QWasmAccessibility)
 {
-    // Temporary measure to make dropEvent appear in the library. EMSCRIPTEN_KEEPALIVE does not
-    // work, nor does a Q_CONSTRUCTOR_FUNCTION in qwasmdrag.cpp.
-    volatile bool foolEmcc = false;
-    if (foolEmcc)
-        dropEvent(emscripten::val::undefined());
-
     s_instance = this;
 
     touchPoints = emscripten::val::global("navigator")["maxTouchPoints"].as<int>();
@@ -171,8 +164,10 @@ bool QWasmIntegration::hasCapability(QPlatformIntegration::Capability cap) const
 
 QPlatformWindow *QWasmIntegration::createPlatformWindow(QWindow *window) const
 {
-    QWasmCompositor *compositor = QWasmScreen::get(window->screen())->compositor();
-    return new QWasmWindow(window, compositor, m_backingStores.value(window));
+    auto *wasmScreen = QWasmScreen::get(window->screen());
+    QWasmCompositor *compositor = wasmScreen->compositor();
+    return new QWasmWindow(window, wasmScreen->deadKeySupport(), compositor,
+                           m_backingStores.value(window));
 }
 
 QPlatformBackingStore *QWasmIntegration::createPlatformBackingStore(QWindow *window) const

@@ -1121,6 +1121,12 @@ void QComboBoxPrivate::_q_rowsRemoved(const QModelIndex &parent, int /*start*/, 
         q->updateGeometry();
     }
 
+    // model has removed the last row
+    if (model->rowCount(root) == 0) {
+        setCurrentIndex(QModelIndex());
+        return;
+    }
+
     // model has changed the currentIndex
     if (currentIndex.row() != indexBeforeChange) {
         if (!currentIndex.isValid() && q->count()) {
@@ -2090,7 +2096,7 @@ int QComboBox::currentIndex() const
 void QComboBox::setCurrentIndex(int index)
 {
     Q_D(QComboBox);
-    QModelIndex mi = d->model->index(index, d->modelColumn, d->root);
+    QModelIndex mi = index >= 0 ? d->model->index(index, d->modelColumn, d->root) : QModelIndex();
     d->setCurrentIndex(mi);
 }
 
@@ -2127,10 +2133,15 @@ void QComboBoxPrivate::setCurrentIndex(const QModelIndex &mi)
         }
         updateLineEditGeometry();
     }
-    // If the model was reset to an empty, currentIndex will be invalidated
+    // If the model was reset to an empty one, currentIndex will be invalidated
     // (because it's a QPersistentModelIndex), but the index change will never
-    // be advertised. So we need an explicit check for such condition.
+    // be advertised. So an explicit check for this condition is needed.
+    // The variable used for that check has to be reset when a previously valid
+    // index becomes invalid.
     const bool modelResetToEmpty = !normalized.isValid() && indexBeforeChange != -1;
+    if (modelResetToEmpty)
+        indexBeforeChange = -1;
+
     if (indexChanged || modelResetToEmpty) {
         q->update();
         _q_emitCurrentIndexChanged(currentIndex);
@@ -2490,10 +2501,12 @@ bool QComboBoxPrivate::showNativePopup()
         QVariant textVariant = model->data(rowIndex, Qt::EditRole);
         item->setText(textVariant.toString());
         QVariant iconVariant = model->data(rowIndex, Qt::DecorationRole);
+        const Qt::ItemFlags itemFlags = model->flags(rowIndex);
         if (iconVariant.canConvert<QIcon>())
             item->setIcon(iconVariant.value<QIcon>());
         item->setCheckable(true);
         item->setChecked(i == currentIndex);
+        item->setEnabled(itemFlags & Qt::ItemIsEnabled);
         if (!currentItem || i == currentIndex)
             currentItem = item;
 
@@ -2794,31 +2807,30 @@ void QComboBox::hidePopup()
         return;
 
 #if QT_CONFIG(effects)
-    // Flash selected/triggered item (if any).
-    if (style()->styleHint(QStyle::SH_Menu_FlashTriggeredItem)) {
-        QItemSelectionModel *selectionModel = d->container->itemView()
-                                            ? d->container->itemView()->selectionModel() : nullptr;
-        if (selectionModel && selectionModel->hasSelection()) {
-            const QItemSelection selection = selectionModel->selection();
+    QItemSelectionModel *selectionModel = d->container->itemView()
+                                        ? d->container->itemView()->selectionModel() : nullptr;
+    // Flash selected/triggered item (if any) before hiding the popup.
+    if (style()->styleHint(QStyle::SH_Menu_FlashTriggeredItem) &&
+        selectionModel && selectionModel->hasSelection()) {
+        const QItemSelection selection = selectionModel->selection();
 
-            QTimer::singleShot(0, d->container, [d, selection, selectionModel]{
+        QTimer::singleShot(0, d->container, [d, selection, selectionModel]{
+            QSignalBlocker modelBlocker(d->model);
+            QSignalBlocker viewBlocker(d->container->itemView());
+            QSignalBlocker containerBlocker(d->container);
+
+            // Deselect item and wait 60 ms.
+            selectionModel->select(selection, QItemSelectionModel::Toggle);
+            QTimer::singleShot(60, d->container, [d, selection, selectionModel]{
                 QSignalBlocker modelBlocker(d->model);
                 QSignalBlocker viewBlocker(d->container->itemView());
                 QSignalBlocker containerBlocker(d->container);
-
-                // Deselect item and wait 60 ms.
                 selectionModel->select(selection, QItemSelectionModel::Toggle);
-                QTimer::singleShot(60, d->container, [d, selection, selectionModel]{
-                    QSignalBlocker modelBlocker(d->model);
-                    QSignalBlocker viewBlocker(d->container->itemView());
-                    QSignalBlocker containerBlocker(d->container);
-                    selectionModel->select(selection, QItemSelectionModel::Toggle);
-                    QTimer::singleShot(20, d->container, [d] {
-                        d->doHidePopup();
-                    });
+                QTimer::singleShot(20, d->container, [d] {
+                    d->doHidePopup();
                 });
             });
-        }
+        });
     } else
 #endif // QT_CONFIG(effects)
     {
