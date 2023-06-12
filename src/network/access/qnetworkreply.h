@@ -123,7 +123,7 @@ Q_SIGNALS:
     void metaDataChanged();
     void finished();
     void errorOccurred(QNetworkReply::NetworkError);
-#if QT_CONFIG(ssl)
+#if (QT_CONFIG(ssl) || defined(__OS2__))
     void encrypted();
     void sslErrors(const QList<QSslError> &errors);
     void preSharedKeyAuthenticationRequired(QSslPreSharedKeyAuthenticator *authenticator);
