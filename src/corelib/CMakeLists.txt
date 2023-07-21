@@ -1109,7 +1109,7 @@ qt_internal_extend_target(Core CONDITION WATCHOS
         ${FWWatchKit}
 )
 
-qt_internal_extend_target(Core CONDITION QT_FEATURE_poll_select AND UNIX
+qt_internal_extend_target(Core CONDITION QT_FEATURE_poll_select AND (UNIX OR OS2)
     SOURCES
         kernel/qpoll.cpp
 )
