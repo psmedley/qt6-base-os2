@@ -17,8 +17,12 @@
 #include <time.h>
 #include <errno.h>
 #include <fcntl.h>
-#ifndef Q_OS_OS2IFNAME
+#ifndef QT_NO_IPV6IFNAME
+#ifdef Q_OS_LINUX
+#include <linux/if.h>
+#else // Q_OS_LINUX
 #include <net/if.h>
+#endif // !Q_OS_LINUX
 #endif
 #ifdef QT_LINUXBASE
 #include <arpa/inet.h>

@@ -308,14 +308,14 @@ QString AndroidContentFileEngineIterator::currentFileName() const
 {
     if (m_index < 0 || m_index > m_files.size())
         return QString();
-    // Returns a full path since contstructing a content path from the file name
-    // and a tree URI only will not point to a valid file URI.
-    return m_files.at(m_index)->uri().toString();
+    return m_files.at(m_index)->name();
 }
 
 QString AndroidContentFileEngineIterator::currentFilePath() const
 {
-    return currentFileName();
+    if (m_index < 0 || m_index > m_files.size())
+        return QString();
+    return m_files.at(m_index)->uri().toString();
 }
 
 // Start of Cursor
@@ -593,10 +593,14 @@ DocumentFile::DocumentFile(const QJniObject &uri,
 
 QJniObject parseUri(const QString &uri)
 {
+    QString uriToParse = uri;
+    if (uriToParse.contains(' '))
+        uriToParse.replace(' ', QUrl::toPercentEncoding(" "));
+
     return QJniObject::callStaticMethod<QtJniTypes::UriType>(
                 QtJniTypes::className<QtJniTypes::Uri>(),
                 "parse",
-                QJniObject::fromString(uri).object<jstring>());
+                QJniObject::fromString(uriToParse).object<jstring>());
 }
 
 DocumentFilePtr DocumentFile::parseFromAnyUri(const QString &fileName)

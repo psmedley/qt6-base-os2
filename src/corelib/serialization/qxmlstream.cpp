@@ -1296,7 +1296,9 @@ inline qsizetype QXmlStreamReaderPrivate::fastScanContentCharList()
     return n;
 }
 
-inline qsizetype QXmlStreamReaderPrivate::fastScanName(qint16 *prefix)
+// Fast scan an XML attribute name (e.g. "xml:lang").
+inline QXmlStreamReaderPrivate::FastScanNameResult
+QXmlStreamReaderPrivate::fastScanName(Value *val)
 {
     qsizetype n = 0;
     uint c;
@@ -1304,7 +1306,8 @@ inline qsizetype QXmlStreamReaderPrivate::fastScanName(qint16 *prefix)
         if (n >= 4096) {
             // This is too long to be a sensible name, and
             // can exhaust memory, or the range of decltype(*prefix)
-            return 0;
+            raiseNamePrefixTooLongError();
+            return {};
         }
         switch (c) {
         case '\n':
@@ -1333,23 +1336,23 @@ inline qsizetype QXmlStreamReaderPrivate::fastScanName(qint16 *prefix)
         case '+':
         case '*':
             putChar(c);
-            if (prefix && *prefix == n+1) {
-                *prefix = 0;
+            if (val && val->prefix == n + 1) {
+                val->prefix = 0;
                 putChar(':');
                 --n;
             }
-            return n;
+            return FastScanNameResult(n);
         case ':':
-            if (prefix) {
-                if (*prefix == 0) {
-                    *prefix = qint16(n + 2);
+            if (val) {
+                if (val->prefix == 0) {
+                    val->prefix = qint16(n + 2);
                 } else { // only one colon allowed according to the namespace spec.
                     putChar(c);
-                    return n;
+                    return FastScanNameResult(n);
                 }
             } else {
                 putChar(c);
-                return n;
+                return FastScanNameResult(n);
             }
             Q_FALLTHROUGH();
         default:
@@ -1358,12 +1361,12 @@ inline qsizetype QXmlStreamReaderPrivate::fastScanName(qint16 *prefix)
         }
     }
 
-    if (prefix)
-        *prefix = 0;
+    if (val)
+        val->prefix = 0;
     qsizetype pos = textBuffer.size() - n;
     putString(textBuffer, pos);
     textBuffer.resize(pos);
-    return 0;
+    return FastScanNameResult(0);
 }
 
 enum NameChar { NameBeginning, NameNotBeginning, NotName };
@@ -1812,7 +1815,7 @@ void QXmlStreamReaderPrivate::startDocument()
             else
                 err = QXmlStream::tr("Standalone accepts only yes or no.");
         } else {
-            err = QXmlStream::tr("Invalid attribute in XML declaration.");
+            err = QXmlStream::tr("Invalid attribute in XML declaration: %1 = %2").arg(key).arg(value);
         }
     }
 
@@ -1839,6 +1842,14 @@ void QXmlStreamReaderPrivate::raiseError(QXmlStreamReader::Error error, const QS
 void QXmlStreamReaderPrivate::raiseWellFormedError(const QString &message)
 {
     raiseError(QXmlStreamReader::NotWellFormedError, message);
+}
+
+void QXmlStreamReaderPrivate::raiseNamePrefixTooLongError()
+{
+    // TODO: add a ImplementationLimitsExceededError and use it instead
+    raiseError(QXmlStreamReader::NotWellFormedError,
+               QXmlStream::tr("Length of XML attribute name exceeds implemnetation limits (4KiB "
+                              "characters)."));
 }
 
 void QXmlStreamReaderPrivate::parseError()

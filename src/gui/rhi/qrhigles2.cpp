@@ -949,7 +949,8 @@ bool QRhiGles2::create(QRhi::Flags flags)
 
     if (!caps.gles) {
         f->glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
-        f->glEnable(GL_POINT_SPRITE);
+        if (!caps.coreProfile)
+            f->glEnable(GL_POINT_SPRITE);
     } // else (with gles) these are always on
 
     // Match D3D and others when it comes to seamless cubemap filtering.
@@ -3353,7 +3354,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             f->glBlitFramebuffer(0, 0, cmd.args.blitFromRb.w, cmd.args.blitFromRb.h,
                                  0, 0, cmd.args.blitFromRb.w, cmd.args.blitFromRb.h,
                                  GL_COLOR_BUFFER_BIT,
-                                 GL_LINEAR);
+                                 GL_NEAREST); // Qt 5 used Nearest when resolving samples, stick to that
             f->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
             f->glDeleteFramebuffers(2, fbo);
         }

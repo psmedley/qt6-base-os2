@@ -1,9 +1,10 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
-#include <QtWidgets>
-
 #include "xbelreader.h"
+
+#include <QStyle>
+#include <QTreeWidget>
 
 //! [0]
 XbelReader::XbelReader(QTreeWidget *treeWidget)
@@ -54,11 +55,11 @@ void XbelReader::readXBEL()
 
     while (xml.readNextStartElement()) {
         if (xml.name() == QLatin1String("folder"))
-            readFolder(0);
+            readFolder(nullptr);
         else if (xml.name() == QLatin1String("bookmark"))
-            readBookmark(0);
+            readBookmark(nullptr);
         else if (xml.name() == QLatin1String("separator"))
-            readSeparator(0);
+            readSeparator(nullptr);
         else
             xml.skipCurrentElement();
     }

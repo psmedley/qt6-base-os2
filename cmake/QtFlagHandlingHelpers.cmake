@@ -124,10 +124,19 @@ endfunction()
 
 function(qt_internal_apply_gc_binaries target visibility)
     set(possible_visibilities PRIVATE INTERFACE PUBLIC)
-    list(FIND possible_visibilities "${visibility}" known_visibility)
-    if (known_visibility EQUAL "-1")
+    if(NOT visibility IN_LIST possible_visibilities)
         message(FATAL_ERROR "Visibitily setting must be one of PRIVATE, INTERFACE or PUBLIC.")
     endif()
+
+    string(JOIN "" clang_or_gcc_begin
+        "$<$<OR:"
+            "$<CXX_COMPILER_ID:GNU>,"
+            "$<CXX_COMPILER_ID:Clang>,"
+            "$<CXX_COMPILER_ID:AppleClang>,"
+            "$<CXX_COMPILER_ID:IntelLLVM>"
+        ">:"
+    )
+    set(clang_or_gcc_end ">")
 
     if ((GCC OR CLANG) AND NOT WASM AND NOT UIKIT AND NOT MSVC)
         if(APPLE)
@@ -137,16 +146,19 @@ function(qt_internal_apply_gc_binaries target visibility)
         elseif(LINUX OR BSD OR WIN32 OR ANDROID)
             set(gc_sections_flag "-Wl,--gc-sections")
         endif()
+        set(gc_sections_flag
+            "${clang_or_gcc_begin}${gc_sections_flag}${clang_or_gcc_end}")
     endif()
     if(gc_sections_flag)
         target_link_options("${target}" ${visibility} "${gc_sections_flag}")
     endif()
 
     if((GCC OR CLANG) AND NOT WASM AND NOT UIKIT AND NOT MSVC AND NOT OS2)
-        set(split_sections_flags "-ffunction-sections" "-fdata-sections")
+        set(split_sections_flags
+            "${clang_or_gcc_begin}-ffunction-sections;-fdata-sections${clang_or_gcc_end}")
     endif()
     if(split_sections_flags)
-        target_compile_options("${target}" ${visibility} ${split_sections_flags})
+        target_compile_options("${target}" ${visibility} "${split_sections_flags}")
     endif()
 endfunction()
 
@@ -156,13 +168,17 @@ function(qt_internal_apply_intel_cet target visibility)
     endif()
 
     set(possible_visibilities PRIVATE INTERFACE PUBLIC)
-    list(FIND possible_visibilities "${visibility}" known_visibility)
-    if (known_visibility EQUAL "-1")
+    if(NOT visibility IN_LIST possible_visibilities)
         message(FATAL_ERROR "Visibitily setting must be one of PRIVATE, INTERFACE or PUBLIC.")
     endif()
 
     if(GCC)
-        set(flags "-mshstk")
+        string(JOIN "" flags
+            "$<$<OR:"
+                "$<CXX_COMPILER_ID:GNU>,"
+                "$<CXX_COMPILER_ID:Clang>,"
+                "$<CXX_COMPILER_ID:AppleClang>"
+            ">:-mshstk>")
     endif()
     if(flags)
         target_compile_options("${target}" ${visibility} "${flags}")
@@ -287,14 +303,15 @@ function(qt_set_msvc_cplusplus_options target visibility)
     # Check qt_config_compile_test for more info.
     if(MSVC AND MSVC_VERSION GREATER_EQUAL 1913)
         set(flags "-Zc:__cplusplus" "-permissive-")
-        target_compile_options("${target}" ${visibility} "$<$<COMPILE_LANGUAGE:CXX>:${flags}>")
+        target_compile_options("${target}" ${visibility}
+            "$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:${flags}>")
     endif()
 endfunction()
 
 function(qt_enable_utf8_sources target)
     set(utf8_flags "")
     if(MSVC)
-        list(APPEND utf8_flags "-utf-8")
+        list(APPEND utf8_flags "$<$<CXX_COMPILER_ID:MSVC>:-utf-8>")
     endif()
 
     if(utf8_flags)
@@ -557,12 +574,20 @@ endfunction()
 
 # Removes specified flags from CMAKE_<LANGUAGES>_FLAGS[_CONFIGS] variables
 #
-# IN_CACHE enables flags removal from CACHE
-# CONFIGS list of configurations that need to clear flags. Clears all configs by default if not
-# specified.
-# LANGUAGES list of LANGUAGES that need clear flags. Clears all languages by default if not
-# specified.
-# REGEX enables the flag processing as a regular expression.
+# Option Arguments:
+#   IN_CACHE
+#       Enables flags removal from CACHE
+#   REGEX
+#       Enables the flag processing as a regular expression.
+#
+# Multi-value Arguments:
+#   CONFIGS
+#       List of configurations that need to clear flags. Clears all configs by default if not
+#       specified.
+#
+#   LANGUAGES
+#       List of LANGUAGES that need clear flags. Clears all languages by default if not
+#       specified.
 function(qt_internal_remove_compiler_flags flags)
     cmake_parse_arguments(PARSE_ARGV 1 arg
         "IN_CACHE;REGEX"
@@ -585,8 +610,7 @@ function(qt_internal_remove_compiler_flags flags)
     if(arg_CONFIGS)
         set(configs "${arg_CONFIGS}")
     else()
-        message(FATAL_ERROR
-                "You must specify at least one configuration for which to remove the flags.")
+        qt_internal_get_configs_for_flag_manipulation(configs)
     endif()
 
     if(arg_REGEX)
@@ -992,14 +1016,42 @@ function(qt_internal_set_up_config_optimizations_like_in_qmake)
                 IN_CACHE)
     endif()
 
+    # Legacy Android toolchain file adds the `-g` flag to CMAKE_<LANG>_FLAGS, as a
+    # result, our release build ends up containing debug symbols. To avoid that, we
+    # remove the flag from CMAKE_<LANGL>_FLAGS and add
+    # it to CMAKE_<LANG>_FLAGS_DEBUG.
+    #
+    # Note:
+    #   The new `android.toolchain.cmake` file does not have this problem, but
+    #   it has other issues, eg., https://github.com/android/ndk/issues/1693, so we
+    #   cannot force it. While we do load the new toolchain, it automatically falls
+    #   back to the legacy toolchain, ie., `android-legacy.toolchain.cmake` which
+    #   has the problem described above.
+    #
+    # Todo:
+    #   When the new toolchain is fixed, and it doesn't fall back to the legacy
+    #   anymore by default, then we should be able to remove this workaround.
+    if(ANDROID AND ANDROID_COMPILER_FLAGS MATCHES "(^| )-g")
+        qt_internal_remove_compiler_flags("-g")
+        qt_internal_add_compiler_flags(FLAGS "-g" CONFIGS DEBUG RELWITHDEBINFO)
+    endif()
+
     # Update all relevant flags in the calling scope
-    foreach(config ${configs})
-        foreach(lang ${enabled_languages})
+    foreach(lang ${enabled_languages})
+        set(flag_var_name "CMAKE_${lang}_FLAGS")
+        set(${flag_var_name} "${${flag_var_name}}" PARENT_SCOPE)
+
+        foreach(config ${configs})
             set(flag_var_name "CMAKE_${lang}_FLAGS_${config}")
             set(${flag_var_name} "${${flag_var_name}}" PARENT_SCOPE)
         endforeach()
+    endforeach()
 
-        foreach(t ${target_link_types})
+    foreach(t ${target_link_types})
+        set(flag_var_name "CMAKE_${t}_LINKER_FLAGS")
+        set(${flag_var_name} "${${flag_var_name}}" PARENT_SCOPE)
+
+        foreach(config ${configs})
             set(flag_var_name "CMAKE_${t}_LINKER_FLAGS_${config}")
             set(${flag_var_name} "${${flag_var_name}}" PARENT_SCOPE)
         endforeach()

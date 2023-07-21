@@ -7,49 +7,48 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QWidget>
-#include <QBuffer>
 #include <QXmlStreamReader>
-#include <QUrl>
-
 
 QT_BEGIN_NAMESPACE
 class QLineEdit;
+class QPushButton;
 class QTreeWidget;
 class QTreeWidgetItem;
-class QPushButton;
+class QUrl;
 QT_END_NAMESPACE
 
+//! [0]
 class RSSListing : public QWidget
 {
     Q_OBJECT
 public:
-    RSSListing(QWidget *widget = nullptr);
+    explicit RSSListing(const QString &url = QString(), QWidget *widget = nullptr);
 
 public slots:
     void fetch();
     void finished(QNetworkReply *reply);
-    void readyRead();
-    void metaDataChanged();
-    void itemActivated(QTreeWidgetItem * item);
+    void consumeData();
     void error(QNetworkReply::NetworkError);
 
 private:
     void parseXml();
     void get(const QUrl &url);
 
+    // Parser state:
     QXmlStreamReader xml;
     QString currentTag;
     QString linkString;
     QString titleString;
 
+    // Network state:
     QNetworkAccessManager manager;
     QNetworkReply *currentReply;
 
+    // UI elements:
     QLineEdit *lineEdit;
     QTreeWidget *treeWidget;
     QPushButton *fetchButton;
-
 };
+//! [0]
 
 #endif
-
