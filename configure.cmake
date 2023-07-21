@@ -1104,6 +1104,11 @@ qt_feature("ccache"
     CONDITION QT_USE_CCACHE
 )
 qt_feature_config("ccache" QMAKE_PRIVATE_CONFIG)
+qt_feature("unity-build"
+    LABEL "Unity Build"
+    AUTODETECT 1
+    CONDITION QT_UNITY_BUILD
+)
 qt_feature("static_runtime"
     LABEL "Statically link the C/C++ runtime library"
     AUTODETECT OFF
@@ -1156,6 +1161,9 @@ qt_configure_add_summary_entry(
 qt_configure_add_summary_entry(
     ARGS "ccache"
     CONDITION UNIX
+)
+qt_configure_add_summary_entry(
+    ARGS "unity-build"
 )
 qt_configure_add_summary_entry(
     TYPE "firstAvailableFeature"
@@ -1326,3 +1334,11 @@ qt_extra_definition("QT_VERSION_PATCH" ${PROJECT_VERSION_PATCH} PUBLIC)
 
 qt_extra_definition("QT_COPYRIGHT" \"${QT_COPYRIGHT}\" PRIVATE)
 qt_extra_definition("QT_COPYRIGHT_YEAR" \"${QT_COPYRIGHT_YEAR}\" PRIVATE)
+
+qt_configure_add_report_entry(
+    TYPE WARNING
+    MESSAGE "QT_ALLOW_SYMLINK_IN_PATHS is enabled. This is not recommended, and it may lead to unexpected issues.
+E.g., When building QtWebEngine, enabling this option may result in build issues in certain platforms.
+See https://bugreports.qt.io/browse/QTBUG-59769."
+    CONDITION QT_ALLOW_SYMLINK_IN_PATHS
+)

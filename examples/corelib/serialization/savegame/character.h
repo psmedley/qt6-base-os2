@@ -8,6 +8,8 @@
 #include <QObject>
 #include <QString>
 
+QT_FORWARD_DECLARE_CLASS(QTextStream)
+
 //! [0]
 class Character
 {
@@ -31,10 +33,10 @@ public:
     ClassType classType() const;
     void setClassType(ClassType classType);
 
-    void read(const QJsonObject &json);
-    void write(QJsonObject &json) const;
+    static Character fromJson(const QJsonObject &json);
+    QJsonObject toJson() const;
 
-    void print(int indentation = 0) const;
+    void print(QTextStream &s, int indentation = 0) const;
 private:
     QString mName;
     int mLevel = 0;

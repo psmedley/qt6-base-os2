@@ -223,6 +223,7 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
         reply->errorString = tr("Server could not process query");
         return;
     case SERVFAIL:
+    case NOTIMP:
         reply->error = QDnsLookup::ServerFailureError;
         reply->errorString = tr("Server failure");
         return;
@@ -290,6 +291,7 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
         }
         const quint16 type = (p[0] << 8) | p[1];
         p += 2; // RR type
+        const qint16 rrclass = (p[0] << 8) | p[1];
         p += 2; // RR class
         const quint32 ttl = (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
         p += 4;
@@ -297,6 +299,8 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
         p += 2;
         if ((p - response) + size > responseLength)
             return;             // truncated
+        if (rrclass != C_IN)
+            continue;
 
         if (type == QDnsLookup::A) {
             if (size != 4) {

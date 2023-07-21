@@ -168,6 +168,8 @@ if(WIN32)
     # Needed for M_PI define. Same as mkspecs/features/qt_module.prf.
     # It's set for every module being built, but it's not propagated to user apps.
     target_compile_definitions(PlatformModuleInternal INTERFACE _USE_MATH_DEFINES)
+    # Not disabling min/max macros may result in unintended substitutions of std::min/max
+    target_compile_definitions(PlatformCommonInternal INTERFACE NOMINMAX)
 endif()
 if(FEATURE_largefile AND UNIX)
     target_compile_definitions(PlatformCommonInternal
@@ -350,8 +352,8 @@ function(qt_get_implicit_sse2_genex_condition out_var)
     set(is_shared_lib "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>")
     set(is_static_lib "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>")
     set(is_static_qt_build "$<NOT:$<BOOL:${QT_BUILD_SHARED_LIBS}>>")
-    set(is_staitc_lib_during_static_qt_build "$<AND:${is_static_qt_build},${is_static_lib}>")
-    set(enable_sse2_condition "$<OR:${is_shared_lib},${is_staitc_lib_during_static_qt_build}>")
+    set(is_static_lib_during_static_qt_build "$<AND:${is_static_qt_build},${is_static_lib}>")
+    set(enable_sse2_condition "$<OR:${is_shared_lib},${is_static_lib_during_static_qt_build}>")
     set(${out_var} "${enable_sse2_condition}" PARENT_SCOPE)
 endfunction()
 

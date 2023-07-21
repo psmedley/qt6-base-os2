@@ -229,6 +229,8 @@ public:
         return index > def->begin && index < def->end - 1;
     }
 
+    void prependNamespaces(BaseDef &def, const QList<NamespaceDef> &namespaceList) const;
+
     Type parseType();
 
     bool parseEnum(EnumDef *def);
@@ -271,6 +273,7 @@ public:
 
     void checkSuperClasses(ClassDef *def);
     void checkProperties(ClassDef* cdef);
+    bool testForFunctionModifiers(FunctionDef *def);
 };
 
 inline QByteArray noRef(const QByteArray &type)

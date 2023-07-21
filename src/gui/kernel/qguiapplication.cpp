@@ -19,6 +19,7 @@
 
 #include <QtCore/QAbstractEventDispatcher>
 #include <QtCore/QFileInfo>
+#include <QtCore/QStandardPaths>
 #include <QtCore/QVariant>
 #include <QtCore/private/qcoreapplication_p.h>
 #include <QtCore/private/qabstracteventdispatcher_p.h>
@@ -776,9 +777,9 @@ void QGuiApplication::setBadgeNumber(qint64 number)
     \brief the base name of the desktop entry for this application
     \since 5.7
 
-    This is the file name, without the full path, of the desktop entry
-    that represents this application according to the freedesktop desktop
-    entry specification.
+    This is the file name, without the full path or the trailing ".desktop"
+    extension of the desktop entry that represents this application
+    according to the freedesktop desktop entry specification.
 
     This property gives a precise indication of what desktop entry represents
     the application and it is needed by the windowing system to retrieve
@@ -792,6 +793,15 @@ void QGuiApplication::setDesktopFileName(const QString &name)
     if (!QGuiApplicationPrivate::desktopFileName)
         QGuiApplicationPrivate::desktopFileName = new QString;
     *QGuiApplicationPrivate::desktopFileName = name;
+    if (name.endsWith(QLatin1String(".desktop"))) { // ### Qt 7: remove
+        const QString filePath = QStandardPaths::locate(QStandardPaths::ApplicationsLocation, name);
+        if (!filePath.isEmpty()) {
+            qWarning("QGuiApplication::setDesktopFileName: the specified desktop file name "
+                     "ends with .desktop. For compatibility reasons, the .desktop suffix will "
+                     "be removed. Please specify a desktop file name without .desktop suffix");
+            (*QGuiApplicationPrivate::desktopFileName).chop(8);
+        }
+    }
 }
 
 QString QGuiApplication::desktopFileName()
@@ -1523,7 +1533,11 @@ void QGuiApplicationPrivate::createEventDispatcher()
     if (platform_integration == nullptr)
         createPlatformIntegration();
 
-    // The platform integration should not mess with the event dispatcher
+    // The platform integration should not result in creating an event dispatcher
+    Q_ASSERT_X(!threadData.loadRelaxed()->eventDispatcher, "QGuiApplication",
+        "Creating the platform integration resulted in creating an event dispatcher");
+
+    // Nor should it mess with the QCoreApplication's event dispatcher
     Q_ASSERT(!eventDispatcher);
 
     eventDispatcher = platform_integration->createEventDispatcher();
@@ -2362,6 +2376,7 @@ void QGuiApplicationPrivate::processWheelEvent(QWindowSystemInterfacePrivate::Wh
                    mouse_buttons, e->modifiers, e->phase, e->inverted, e->source, device);
     ev.setTimestamp(e->timestamp);
     QGuiApplication::sendSpontaneousEvent(window, &ev);
+    e->eventAccepted = ev.isAccepted();
 #else
      Q_UNUSED(e);
 #endif // QT_CONFIG(wheelevent)

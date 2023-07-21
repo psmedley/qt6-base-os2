@@ -9862,13 +9862,12 @@ void QWidget::actionEvent(QActionEvent *)
 
     Main window applications typically use reimplementations of this function to check
     whether the user's work has been saved and ask for permission before closing.
-    For example, the \l{Qt Widgets - Application Example} uses a helper function to
+    For example, the \l{Text Edit} example uses a helper function to
     determine whether or not to close the window:
 
-    \snippet mainwindows/application/mainwindow.cpp 3
-    \snippet mainwindows/application/mainwindow.cpp 4
+    \snippet richtext/textedit/textedit.cpp closeevent
 
-    \sa event(), hide(), close(), QCloseEvent, {Qt Widgets - Application Example}
+    \sa event(), hide(), close(), QCloseEvent
 */
 
 void QWidget::closeEvent(QCloseEvent *event)
@@ -10207,7 +10206,7 @@ void QWidget::ensurePolished() const
     Returns the mask currently set on a widget. If no mask is set the
     return value will be an empty region.
 
-    \sa setMask(), clearMask(), QRegion::isEmpty(), {Shaped Clock Example}
+    \sa setMask(), clearMask(), QRegion::isEmpty()
 */
 QRegion QWidget::mask() const
 {
@@ -12938,8 +12937,16 @@ QPainter *QWidget::sharedPainter() const
     widget, window system controls in that area may or may not be
     visible, depending on the platform.
 
-    Note that this effect can be slow if the region is particularly
-    complex.
+    Since QRegion allows arbitrarily complex regions to be created, widget
+    masks can be made to suit the most unconventionally-shaped windows, and
+    even allow widgets to be displayed with holes in them. Note that this
+    effect can be slow if the region is particularly complex.
+
+    Widget masks are used to hint to the window system that the application
+    does not want mouse events for areas outside the mask. On most systems,
+    they also result in coarse visual clipping. To get smooth window edges, use
+    translucent background and anti-aliased painting instead, as shown in the
+    \l{Translucent Background} example.
 
     \sa windowOpacity
 */
@@ -13025,7 +13032,7 @@ void QWidgetPrivate::setMask_sys(const QRegion &region)
     Masked widgets receive mouse events only on their visible
     portions.
 
-    \sa clearMask(), windowOpacity(), {Shaped Clock Example}
+    \sa clearMask(), windowOpacity()
 */
 void QWidget::setMask(const QBitmap &bitmap)
 {

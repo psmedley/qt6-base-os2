@@ -566,16 +566,11 @@ void QVariant::create(QMetaType type, const void *copy)
     \fn QVariant::~QVariant()
 
     Destroys the QVariant and the contained object.
-
-    Note that subclasses that reimplement clear() should reimplement
-    the destructor to call clear(). This destructor calls clear(), but
-    because it is the destructor, QVariant::clear() is called rather
-    than a subclass's clear().
 */
 
 QVariant::~QVariant()
 {
-    if ((d.is_shared && !d.data.shared->ref.deref()) || (!d.is_shared))
+    if (!d.is_shared || !d.data.shared->ref.deref())
         customClear(&d);
 }
 
@@ -1066,7 +1061,7 @@ const char *QVariant::typeName() const
 */
 void QVariant::clear()
 {
-    if ((d.is_shared && !d.data.shared->ref.deref()) || (!d.is_shared))
+    if (!d.is_shared || !d.data.shared->ref.deref())
         customClear(&d);
     d = {};
 }

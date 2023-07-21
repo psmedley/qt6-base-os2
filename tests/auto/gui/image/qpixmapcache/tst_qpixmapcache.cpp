@@ -13,6 +13,8 @@ Q_AUTOTEST_EXPORT int qt_qpixmapcache_qpixmapcache_total_used();
 Q_AUTOTEST_EXPORT int q_QPixmapCache_keyHashSize();
 QT_END_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 class tst_QPixmapCache : public QObject
 {
     Q_OBJECT
@@ -29,11 +31,13 @@ private slots:
     void setCacheLimit();
     void find();
     void insert();
+    void failedInsertReturnsInvalidKey();
     void replace();
     void remove();
     void clear();
     void pixmapKey();
     void noLeak();
+    void clearDoesNotLeakStringKeys();
     void strictCacheLimit();
     void noCrashOnLargeInsert();
 };
@@ -102,16 +106,16 @@ void tst_QPixmapCache::setCacheLimit()
     //The int part of the API
     p1 = new QPixmap(2, 3);
     QPixmapCache::Key key = QPixmapCache::insert(*p1);
-    QVERIFY(QPixmapCache::find(key, p1) != 0);
+    QVERIFY(QPixmapCache::find(key, p1));
     delete p1;
 
     QPixmapCache::setCacheLimit(0);
-    QVERIFY(QPixmapCache::find(key, p1) == 0);
+    QVERIFY(!QPixmapCache::find(key, p1));
 
     p1 = new QPixmap(2, 3);
     QPixmapCache::setCacheLimit(1000);
     QPixmapCache::replace(key, *p1);
-    QVERIFY(QPixmapCache::find(key, p1) == 0);
+    QVERIFY(!QPixmapCache::find(key, p1));
 
     delete p1;
 
@@ -120,10 +124,10 @@ void tst_QPixmapCache::setCacheLimit()
     QPixmapCache::clear();
     p1 = new QPixmap(2, 3);
     key = QPixmapCache::insert(*p1);
-    QVERIFY(QPixmapCache::find(key, p1) != 0);
+    QVERIFY(QPixmapCache::find(key, p1));
     p1->detach(); // dectach so that the cache thinks no-one is using it.
     QPixmapCache::setCacheLimit(0);
-    QVERIFY(QPixmapCache::find(key, p1) == 0);
+    QVERIFY(!QPixmapCache::find(key, p1));
     QPixmapCache::setCacheLimit(1000);
     key = QPixmapCache::insert(*p1);
     QVERIFY(key.isValid());
@@ -137,7 +141,7 @@ void tst_QPixmapCache::setCacheLimit()
     QPixmap p2;
     p1 = new QPixmap(2, 3);
     key = QPixmapCache::insert(*p1);
-    QVERIFY(QPixmapCache::find(key, &p2) != 0);
+    QVERIFY(QPixmapCache::find(key, &p2));
     //we flush the cache
     p1->detach();
     p2.detach();
@@ -145,8 +149,8 @@ void tst_QPixmapCache::setCacheLimit()
     QPixmapCache::setCacheLimit(1000);
     QPixmapCache::Key key2 = QPixmapCache::insert(*p1);
     QCOMPARE(getPrivate(key2)->key, 1);
-    QVERIFY(QPixmapCache::find(key, &p2) == 0);
-    QVERIFY(QPixmapCache::find(key2, &p2) != 0);
+    QVERIFY(!QPixmapCache::find(key, &p2));
+    QVERIFY(QPixmapCache::find(key2, &p2));
     QCOMPARE(p2, *p1);
 
     delete p1;
@@ -169,7 +173,7 @@ void tst_QPixmapCache::setCacheLimit()
     QCOMPARE(getPrivate(key2)->key, 1);
     //This old key is not valid anymore after the flush
     QVERIFY(!key.isValid());
-    QVERIFY(QPixmapCache::find(key, &p2) == 0);
+    QVERIFY(!QPixmapCache::find(key, &p2));
     delete p1;
 }
 
@@ -207,7 +211,7 @@ void tst_QPixmapCache::find()
         QPixmapCache::insert(p5);
 
     //at that time the first key has been erase because no more place in the cache
-    QVERIFY(QPixmapCache::find(key, &p1) == 0);
+    QVERIFY(!QPixmapCache::find(key, &p1));
     QVERIFY(!key.isValid());
 }
 
@@ -266,6 +270,7 @@ void tst_QPixmapCache::insert()
     for (int i = 0; i < numberOfKeys; ++i) {
         QPixmap p3(10,10);
         keys.append(QPixmapCache::insert(p3));
+        QVERIFY(keys.back().isValid());
     }
 
     num = 0;
@@ -277,6 +282,32 @@ void tst_QPixmapCache::insert()
     estimatedNum = (1024 * QPixmapCache::cacheLimit())
                        / ((p1.width() * p1.height() * p1.depth()) / 8);
     QVERIFY(num <= estimatedNum);
+}
+
+void tst_QPixmapCache::failedInsertReturnsInvalidKey()
+{
+    //
+    // GIVEN: a pixmap whose memory footprint exceeds the cache's limit:
+    //
+    QPixmapCache::setCacheLimit(20);
+
+    QPixmap pm(256, 256);
+    pm.fill(Qt::transparent);
+    QCOMPARE_GT(pm.width() * pm.height() * pm.depth() / 8,
+                QPixmapCache::cacheLimit() * 1024);
+
+    //
+    // WHEN: trying to add this pixmap to the cache
+    //
+    const auto success = QPixmapCache::insert(u"foo"_s, pm); // QString API
+    { QPixmap r; QVERIFY(!QPixmapCache::find(u"foo"_s, &r)); }
+    const auto key = QPixmapCache::insert(pm);               // "int" API
+
+    //
+    // THEN: failure is reported to the user
+    //
+    QVERIFY(!key.isValid()); // "int" API
+    QVERIFY(!success);       // QString API
 }
 
 void tst_QPixmapCache::replace()
@@ -340,11 +371,11 @@ void tst_QPixmapCache::remove()
     QVERIFY(p1.toImage() == p1.toImage()); // sanity check
 
     QPixmapCache::remove(key);
-    QVERIFY(QPixmapCache::find(key, &p1) == 0);
+    QVERIFY(!QPixmapCache::find(key, &p1));
 
     //Broken key
     QPixmapCache::remove(QPixmapCache::Key());
-    QVERIFY(QPixmapCache::find(QPixmapCache::Key(), &p1) == 0);
+    QVERIFY(!QPixmapCache::find(QPixmapCache::Key(), &p1));
 
     //Test if keys are release
     QPixmapCache::clear();
@@ -358,7 +389,7 @@ void tst_QPixmapCache::remove()
     QPixmapCache::clear();
     key = QPixmapCache::insert(p1);
     QCOMPARE(getPrivate(key)->key, 1);
-    QVERIFY(QPixmapCache::find(key, &p1) != 0);
+    QVERIFY(QPixmapCache::find(key, &p1));
     QPixmapCache::remove(key);
     QCOMPARE(p1.isDetached(), true);
 
@@ -368,8 +399,8 @@ void tst_QPixmapCache::remove()
     QPixmapCache::insert("red", p1);
     key = QPixmapCache::insert(p1);
     QPixmapCache::remove(key);
-    QVERIFY(QPixmapCache::find(key, &p1) == 0);
-    QVERIFY(QPixmapCache::find("red", &p1) != 0);
+    QVERIFY(!QPixmapCache::find(key, &p1));
+    QVERIFY(QPixmapCache::find("red", &p1));
 }
 
 void tst_QPixmapCache::clear()
@@ -413,7 +444,7 @@ void tst_QPixmapCache::clear()
     QPixmapCache::clear();
 
     for (int k = 0; k < numberOfKeys; ++k) {
-        QVERIFY(QPixmapCache::find(keys.at(k), &p1) == 0);
+        QVERIFY(!QPixmapCache::find(keys.at(k), &p1));
         QVERIFY(!keys[k].isValid());
     }
 }
@@ -476,6 +507,39 @@ void tst_QPixmapCache::noLeak()
     int newSize = q_QPixmapCache_keyHashSize();
 
     QCOMPARE(oldSize, newSize);
+}
+
+void tst_QPixmapCache::clearDoesNotLeakStringKeys()
+{
+    QPixmapCache::setCacheLimit(20); // 20KiB
+    //
+    // GIVEN: a QPixmap with QString key `key` in QPixmapCache
+    //
+    QString key;
+    {
+        QPixmap pm(64, 64);
+        QCOMPARE_LT(pm.width() * pm.height() * std::ceil(pm.depth() / 8.0),
+                    QPixmapCache::cacheLimit() * 1024);
+        pm.fill(Qt::transparent);
+        key = u"theKey"_s.repeated(20); // avoid eventual QString SSO
+        QVERIFY(key.isDetached());
+        QPixmapCache::insert(key, pm);
+    }
+    QVERIFY(!key.isDetached()); // was saved inside QPixmapCache
+
+    //
+    // WHEN: clearing the cache:
+    //
+    QPixmapCache::clear();
+
+    //
+    // THEN: `key` is no longer referenced by QPixmapCache:
+    //
+    QVERIFY(key.isDetached());
+    // verify that the pixmap is really gone from the cache
+    // (do it after the key check, because QPixmapCache cleans up `key` on a failed lookup)
+    QPixmap r;
+    QVERIFY(!QPixmapCache::find(key, &r));
 }
 
 
