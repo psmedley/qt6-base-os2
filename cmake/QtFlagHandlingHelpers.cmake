@@ -33,22 +33,15 @@ function(qt_internal_add_linker_version_script target)
         endif()
         string(APPEND contents "};\n")
         set(current "Qt_${PROJECT_VERSION_MAJOR}")
-        if (QT_NAMESPACE STREQUAL "")
-            set(tag_symbol "qt_version_tag")
-        else()
-            set(tag_symbol "qt_version_tag_${QT_NAMESPACE}")
-        endif()
         string(APPEND contents "${current} { *; };\n")
 
-        foreach(minor_version RANGE ${PROJECT_VERSION_MINOR})
-            set(previous "${current}")
-            set(current "Qt_${PROJECT_VERSION_MAJOR}.${minor_version}")
-            if (minor_version EQUAL ${PROJECT_VERSION_MINOR})
-                string(APPEND contents "${current} { ${tag_symbol}; } ${previous};\n")
-            else()
-                string(APPEND contents "${current} {} ${previous};\n")
-            endif()
-        endforeach()
+        get_target_property(type ${target} TYPE)
+        if(NOT target_type STREQUAL "INTERFACE_LIBRARY")
+            set(property_genex "$<TARGET_PROPERTY:${target},_qt_extra_linker_script_content>")
+            set(check_genex "$<BOOL:${property_genex}>")
+            string(APPEND contents
+                "$<${check_genex}:${property_genex}>")
+        endif()
 
         set(infile "${CMAKE_CURRENT_BINARY_DIR}/${target}.version.in")
         set(outfile "${CMAKE_CURRENT_BINARY_DIR}/${target}.version")
@@ -85,6 +78,11 @@ endfunction()
 
 function(qt_internal_add_link_flags_no_undefined target)
     if (NOT QT_BUILD_SHARED_LIBS OR WASM)
+        return()
+    endif()
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+        # ld64 defaults to -undefined,error, and in Xcode 15
+        # passing this option is deprecated, causing a warning.
         return()
     endif()
     if ((GCC OR CLANG) AND NOT MSVC AND NOT OS2)
@@ -146,8 +144,15 @@ function(qt_internal_apply_gc_binaries target visibility)
         elseif(LINUX OR BSD OR WIN32 OR ANDROID)
             set(gc_sections_flag "-Wl,--gc-sections")
         endif()
+
+        # Save the flag value with and without genex wrapping, so we can remove the wrapping
+        # when generating .pc pkgconfig files.
+        set_property(GLOBAL PROPERTY _qt_internal_gc_sections_without_genex "${gc_sections_flag}")
+
         set(gc_sections_flag
             "${clang_or_gcc_begin}${gc_sections_flag}${clang_or_gcc_end}")
+
+        set_property(GLOBAL PROPERTY _qt_internal_gc_sections_with_genex "${gc_sections_flag}")
     endif()
     if(gc_sections_flag)
         target_link_options("${target}" ${visibility} "${gc_sections_flag}")

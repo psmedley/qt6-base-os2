@@ -38,6 +38,15 @@ static QByteArray &operator<<(QByteArray &arr, T val)
     return arr;
 }
 
+static FILE *openFile(const QString &filename, const QString &mode)
+{
+#ifdef Q_OS_WINDOWS
+    return _wfopen(qUtf16Printable(filename), qUtf16Printable(mode));
+#else
+    return fopen(qPrintable(filename), qPrintable(mode));
+#endif
+}
+
 QCtfLibImpl *QCtfLibImpl::s_instance = nullptr;
 
 QCtfLib *QCtfLibImpl::instance()
@@ -68,7 +77,7 @@ QCtfLibImpl::QCtfLibImpl()
     }
 
     const QString filename = location + QStringLiteral("/session.json");
-    FILE *file = fopen(qPrintable(filename), "rb");
+    FILE *file = openFile(qPrintable(filename), "rb"_L1);
     if (!file) {
         qCWarning(lcDebugTrace) << "unable to open session file: "
                                 << filename << ", " << qt_error_string();
@@ -107,6 +116,7 @@ QCtfLibImpl::QCtfLibImpl()
         }
         m_location = location + QStringLiteral("/ust");
         std::filesystem::create_directory(qPrintable(m_location), qPrintable(location));
+        clearLocation();
     }
     m_session.all = m_session.tracepoints.contains(QStringLiteral("all"));
 
@@ -122,20 +132,40 @@ QCtfLibImpl::QCtfLibImpl()
     metadata.replace(QStringLiteral("$CLOCK_NAME"), m_timer.isMonotonic() ? QStringLiteral("monotonic") : QStringLiteral("system"));
     metadata.replace(QStringLiteral("$CLOCK_TYPE"), m_timer.isMonotonic() ? QStringLiteral("Monotonic clock") : QStringLiteral("System clock"));
     metadata.replace(QStringLiteral("$CLOCK_OFFSET"), QString::number(datetime.toMSecsSinceEpoch() * 1000000));
-#if Q_BYTE_ORDER == Q_BIG_ENDIAN
-    metadata.replace(QStringLiteral("$ENDIANNESS"), QStringLiteral("be"));
-#else
-    metadata.replace(QStringLiteral("$ENDIANNESS"), QStringLiteral("le"));
-#endif
+    metadata.replace(QStringLiteral("$ENDIANNESS"), QSysInfo::ByteOrder == QSysInfo::BigEndian ? u"be"_s : u"le"_s);
     writeMetadata(metadata, true);
 
     m_timer.start();
 }
 
+void QCtfLibImpl::clearLocation()
+{
+    const std::filesystem::path location{qUtf16Printable(m_location)};
+    for (auto const& dirEntry : std::filesystem::directory_iterator{location})
+    {
+        const auto path = dirEntry.path();
+#if __cplusplus > 201703L
+        if (dirEntry.is_regular_file()
+            && path.filename().wstring().starts_with(std::wstring_view(L"channel_"))
+            && !path.has_extension()) {
+#else
+        const auto strview = std::wstring_view(L"channel_");
+        const auto sub = path.filename().wstring().substr(0, strview.length());
+        if (dirEntry.is_regular_file() && sub.compare(strview) == 0
+            && !path.has_extension()) {
+#endif
+            if (!std::filesystem::remove(path)) {
+                qCInfo(lcDebugTrace) << "Unable to clear output location.";
+                break;
+            }
+        }
+    }
+}
+
 void QCtfLibImpl::writeMetadata(const QString &metadata, bool overwrite)
 {
     FILE *file = nullptr;
-    file = fopen(qPrintable(m_location + "/metadata"_L1), overwrite ? "w+b": "ab");
+    file = openFile(qPrintable(m_location + "/metadata"_L1), overwrite ? "w+b"_L1: "ab"_L1);
     if (!file)
         return;
 
@@ -151,7 +181,7 @@ void QCtfLibImpl::writeMetadata(const QString &metadata, bool overwrite)
 void QCtfLibImpl::writeCtfPacket(QCtfLibImpl::Channel &ch)
 {
     FILE *file = nullptr;
-    file = fopen(ch.channelName, "ab");
+    file = openFile(ch.channelName, "ab"_L1);
     if (file) {
         /*  Each packet contains header and context, which are defined in the metadata.txt */
         QByteArray packet;
@@ -272,11 +302,6 @@ void QCtfLibImpl::doTracepoint(const QCtfTracePointEvent &point, const QByteArra
 
     if (ch.channelName[0] == 0) {
         m_threadIndices.insert(thread, m_threadIndices.size());
-        sprintf(ch.channelName, "%s/channel_%d", qPrintable(m_location), m_threadIndices[thread]);
-        FILE *f = nullptr;
-        f = fopen(ch.channelName, "wb");
-        if (f)
-            fclose(f);
         ch.minTimestamp = ch.maxTimestamp = timestamp;
         ch.thread = thread;
         ch.threadIndex = m_threadIndices[thread];

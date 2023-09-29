@@ -624,7 +624,7 @@ void Moc::parse()
         Token t = next();
         switch (t) {
             case NAMESPACE: {
-                int rewind = index;
+                qsizetype rewind = index;
                 if (test(IDENTIFIER)) {
                     QByteArray nsName = lexem();
                     QByteArrayList nested;
@@ -927,7 +927,7 @@ void Moc::parse()
                 default:
                     FunctionDef funcDef;
                     funcDef.access = access;
-                    int rewind = index--;
+                    qsizetype rewind = index--;
                     if (parseMaybeFunction(&def, &funcDef)) {
                         if (funcDef.isConstructor) {
                             if ((access == FunctionDef::Public) && funcDef.isInvokable) {
@@ -1150,8 +1150,9 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
     fprintf(out, "QT_WARNING_DISABLE_GCC(\"-Wuseless-cast\")\n");
 
     fputs("", out);
-    for (int i = 0; i < classList.size(); ++i) {
-        Generator generator(&classList[i], metaTypes, knownQObjectClasses, knownGadgets, out, requireCompleteTypes);
+    for (ClassDef &def : classList) {
+        Generator generator(&def, metaTypes, knownQObjectClasses, knownGadgets, out,
+                            requireCompleteTypes);
         generator.generateCode();
     }
     fputs("", out);
@@ -1708,7 +1709,7 @@ void Moc::parseSlotInPrivate(ClassDef *def, FunctionDef::Access access)
 
 QByteArray Moc::lexemUntil(Token target)
 {
-    int from = index;
+    qsizetype from = index;
     until(target);
     QByteArray s;
     while (from <= index) {
@@ -1744,7 +1745,7 @@ bool Moc::until(Token target) {
     //when searching commas within the default argument, we should take care of template depth (anglecount)
     // unfortunately, we do not have enough semantic information to know if '<' is the operator< or
     // the beginning of a template type. so we just use heuristics.
-    int possible = -1;
+    qsizetype possible = -1;
 
     while (index < symbols.size()) {
         Token t = symbols.at(index++).token;
@@ -1879,7 +1880,7 @@ void Moc::checkProperties(ClassDef *cdef)
         }
 
         if (p.read.isEmpty() && p.member.isEmpty() && p.bind.isEmpty()) {
-            const int rewind = index;
+            const qsizetype rewind = index;
             if (p.location >= 0)
                 index = p.location;
             QByteArray msg = "Property declaration " + p.name + " has neither an associated QProperty<> member"
@@ -1936,7 +1937,7 @@ void Moc::checkProperties(ClassDef *cdef)
                     cdef->nonClassSignalList << p.notify;
                     p.notifyId = -1 - cdef->nonClassSignalList.size();
                 } else {
-                    p.notifyId = -2 - index;
+                    p.notifyId = int(-2 - index);
                 }
             }
         }

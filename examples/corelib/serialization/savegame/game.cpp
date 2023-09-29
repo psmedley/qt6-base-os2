@@ -11,6 +11,8 @@
 #include <QRandomGenerator>
 #include <QTextStream>
 
+using namespace Qt::StringLiterals;
+
 Character Game::player() const
 {
     return mPlayer;
@@ -25,37 +27,32 @@ QList<Level> Game::levels() const
 void Game::newGame()
 {
     mPlayer = Character();
-    mPlayer.setName(QStringLiteral("Hero"));
+    mPlayer.setName("Hero"_L1);
     mPlayer.setClassType(Character::Archer);
     mPlayer.setLevel(QRandomGenerator::global()->bounded(15, 21));
 
     mLevels.clear();
     mLevels.reserve(2);
 
-    Level village(QStringLiteral("Village"));
+    Level village("Village"_L1);
     QList<Character> villageNpcs;
     villageNpcs.reserve(2);
-    villageNpcs.append(Character(QStringLiteral("Barry the Blacksmith"),
-                                 QRandomGenerator::global()->bounded(8, 11),
-                                 Character::Warrior));
-    villageNpcs.append(Character(QStringLiteral("Terry the Trader"),
-                                 QRandomGenerator::global()->bounded(6, 8),
-                                 Character::Warrior));
+    villageNpcs.append(Character("Barry the Blacksmith"_L1,
+                                 QRandomGenerator::global()->bounded(8, 11), Character::Warrior));
+    villageNpcs.append(Character("Terry the Trader"_L1,
+                                 QRandomGenerator::global()->bounded(6, 8), Character::Warrior));
     village.setNpcs(villageNpcs);
     mLevels.append(village);
 
-    Level dungeon(QStringLiteral("Dungeon"));
+    Level dungeon("Dungeon"_L1);
     QList<Character> dungeonNpcs;
     dungeonNpcs.reserve(3);
-    dungeonNpcs.append(Character(QStringLiteral("Eric the Evil"),
-                                 QRandomGenerator::global()->bounded(18, 26),
-                                 Character::Mage));
-    dungeonNpcs.append(Character(QStringLiteral("Eric's Left Minion"),
-                                 QRandomGenerator::global()->bounded(5, 7),
-                                 Character::Warrior));
-    dungeonNpcs.append(Character(QStringLiteral("Eric's Right Minion"),
-                                 QRandomGenerator::global()->bounded(4, 9),
-                                 Character::Warrior));
+    dungeonNpcs.append(Character("Eric the Evil"_L1,
+                                 QRandomGenerator::global()->bounded(18, 26), Character::Mage));
+    dungeonNpcs.append(Character("Eric's Left Minion"_L1,
+                                 QRandomGenerator::global()->bounded(5, 7), Character::Warrior));
+    dungeonNpcs.append(Character("Eric's Right Minion"_L1,
+                                 QRandomGenerator::global()->bounded(4, 9), Character::Warrior));
     dungeon.setNpcs(dungeonNpcs);
     mLevels.append(dungeon);
 }
@@ -64,9 +61,7 @@ void Game::newGame()
 //! [loadGame]
 bool Game::loadGame(Game::SaveFormat saveFormat)
 {
-    QFile loadFile(saveFormat == Json
-        ? QStringLiteral("save.json")
-        : QStringLiteral("save.dat"));
+    QFile loadFile(saveFormat == Json ? "save.json"_L1 : "save.dat"_L1);
 
     if (!loadFile.open(QIODevice::ReadOnly)) {
         qWarning("Couldn't open save file.");
@@ -76,15 +71,13 @@ bool Game::loadGame(Game::SaveFormat saveFormat)
     QByteArray saveData = loadFile.readAll();
 
     QJsonDocument loadDoc(saveFormat == Json
-        ? QJsonDocument::fromJson(saveData)
-        : QJsonDocument(QCborValue::fromCbor(saveData).toMap().toJsonObject()));
+                          ? QJsonDocument::fromJson(saveData)
+                          : QJsonDocument(QCborValue::fromCbor(saveData).toMap().toJsonObject()));
 
     read(loadDoc.object());
 
-    QTextStream(stdout) << "Loaded save for "
-                        << loadDoc["player"]["name"].toString()
-                        << " using "
-                        << (saveFormat != Json ? "CBOR" : "JSON") << "...\n";
+    QTextStream(stdout) << "Loaded save for " << loadDoc["player"]["name"].toString()
+                        << " using " << (saveFormat != Json ? "CBOR" : "JSON") << "...\n";
     return true;
 }
 //! [loadGame]
@@ -92,9 +85,7 @@ bool Game::loadGame(Game::SaveFormat saveFormat)
 //! [saveGame]
 bool Game::saveGame(Game::SaveFormat saveFormat) const
 {
-    QFile saveFile(saveFormat == Json
-        ? QStringLiteral("save.json")
-        : QStringLiteral("save.dat"));
+    QFile saveFile(saveFormat == Json ? "save.json"_L1 : "save.dat"_L1);
 
     if (!saveFile.open(QIODevice::WriteOnly)) {
         qWarning("Couldn't open save file.");
@@ -102,9 +93,8 @@ bool Game::saveGame(Game::SaveFormat saveFormat) const
     }
 
     QJsonObject gameObject = toJson();
-    saveFile.write(saveFormat == Json
-        ? QJsonDocument(gameObject).toJson()
-        : QCborValue::fromJsonValue(gameObject).toCbor());
+    saveFile.write(saveFormat == Json ? QJsonDocument(gameObject).toJson()
+                                      : QCborValue::fromJsonValue(gameObject).toCbor());
 
     return true;
 }

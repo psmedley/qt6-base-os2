@@ -765,14 +765,21 @@ void checkErrorOutput(const QString &test, const QByteArray &errorOutput)
         return;
 
 #ifdef Q_CC_MINGW
-    if (test == "blacklisted" // calls qFatal()
-        || test == "silent") // calls qFatal()
-#endif
+    if (test == "silent") // calls qFatal()
         return;
+#endif
 
 #ifdef Q_OS_WIN
     if (test == "crashes")
         return; // Complains about uncaught exception
+#endif
+
+#ifdef Q_OS_UNIX
+    if (test == "assert"
+        || test == "crashes"
+        || test == "failfetchtype"
+        || test == "faildatatype")
+    return; // Outputs "Received signal 6 (SIGABRT)"
 #endif
 
 #if defined(Q_OS_LINUX) || defined(Q_OS_OS2)
@@ -784,7 +791,6 @@ void checkErrorOutput(const QString &test, const QByteArray &errorOutput)
     if (QTestPrivate::isRunningArmOnX86() &&
 #endif
         (test == "assert"
-         || test == "blacklisted"
          || test == "crashes"
          || test == "faildatatype"
          || test == "failfetchtype"
@@ -977,8 +983,7 @@ TestProcessResult runTestProcess(const QString &test, const QStringList &argumen
     const bool expectedCrash = test == "assert" || test == "exceptionthrow"
         || test == "fetchbogus" || test == "crashedterminate"
         || test == "faildatatype" || test == "failfetchtype"
-        || test == "crashes" || test == "silent"
-        || test == "blacklisted" || test == "watchdog";
+        || test == "crashes" || test == "silent" || test == "watchdog";
 
     if (expectedCrash) {
         environment.insert("QTEST_DISABLE_CORE_DUMP", "1");

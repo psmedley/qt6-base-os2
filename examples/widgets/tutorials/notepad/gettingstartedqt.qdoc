@@ -4,6 +4,7 @@
 /*!
     \example tutorials/notepad
     \title Getting Started Programming with Qt Widgets
+    \examplecategory {User Interface Components}
     \brief A tutorial for Qt Widgets based notepad application.
 
     In this topic, we teach basic Qt knowledge by implementing a simple
@@ -486,10 +487,6 @@
         \header
             \li About
             \li Here
-        \row
-            \li MDI applications
-            \li QMdiArea,
-               \l{MDI Example}
         \row
             \li Files and I/O devices
             \li QFile, QIODevice

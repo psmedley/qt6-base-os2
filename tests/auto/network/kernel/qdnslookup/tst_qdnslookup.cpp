@@ -5,6 +5,7 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <QtTest/private/qpropertytesthelper_p.h>
 
 #include <QtNetwork/QDnsLookup>
 #include <QtNetwork/QHostAddress>
@@ -36,6 +37,7 @@ private slots:
     void lookupReuse();
     void lookupAbortRetry();
     void bindingsAndProperties();
+    void automatedBindings();
 };
 
 void tst_QDnsLookup::initTestCase()
@@ -62,9 +64,9 @@ QString tst_QDnsLookup::domainName(const QString &input)
 
 QString tst_QDnsLookup::domainNameList(const QString &input)
 {
-    QStringList list = input.split(QLatin1Char(';'));
+    const QStringList list = input.split(QLatin1Char(';'));
     QString result;
-    foreach (const QString &s, list) {
+    for (const QString &s : list) {
         if (!result.isEmpty())
             result += ';';
         result += domainName(s);
@@ -407,6 +409,31 @@ void tst_QDnsLookup::bindingsAndProperties()
     nameserverProp.setBinding(lookup.bindableNameserver().makeBinding());
     lookup.setNameserver(QHostAddress::Any);
     QCOMPARE(nameserverProp.value(), QHostAddress::Any);
+}
+
+void tst_QDnsLookup::automatedBindings()
+{
+    QDnsLookup lookup;
+
+    QTestPrivate::testReadWritePropertyBasics(lookup, u"aaaa"_s, u"txt"_s, "name");
+    if (QTest::currentTestFailed()) {
+        qDebug("Failed property test for QDnsLookup::name");
+        return;
+    }
+
+    QTestPrivate::testReadWritePropertyBasics(lookup, QDnsLookup::AAAA, QDnsLookup::TXT, "type");
+    if (QTest::currentTestFailed()) {
+        qDebug("Failed property test for QDnsLookup::type");
+        return;
+    }
+
+    QTestPrivate::testReadWritePropertyBasics(lookup, QHostAddress{QHostAddress::Any},
+                                              QHostAddress{QHostAddress::LocalHost},
+                                              "nameserver");
+    if (QTest::currentTestFailed()) {
+        qDebug("Failed property test for QDnsLookup::nameserver");
+        return;
+    }
 }
 
 QTEST_MAIN(tst_QDnsLookup)

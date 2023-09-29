@@ -1271,7 +1271,6 @@ void QWidgetPrivate::create()
         win->setProperty("_q_showWithoutActivating", QVariant(true));
     if (q->testAttribute(Qt::WA_MacAlwaysShowToolWindow))
         win->setProperty("_q_macAlwaysShowToolWindow", QVariant(true));
-    setNetWmWindowTypes(true); // do nothing if none of WA_X11NetWmWindowType* is set
     win->setFlags(flags);
     fixPosIncludesFrame();
     if (q->testAttribute(Qt::WA_Moved)
@@ -1355,6 +1354,7 @@ void QWidgetPrivate::create()
         Q_ASSERT(id != WId(0));
         setWinId(id);
     }
+    setNetWmWindowTypes(true); // do nothing if none of WA_X11NetWmWindowType* is set
 
     // Check children and create windows for them if necessary
     q_createNativeChildrenAndSetParent(q);
@@ -6853,6 +6853,13 @@ QWidget *QWidget::focusWidget() const
     return const_cast<QWidget *>(d_func()->focus_child);
 }
 
+QObject *QWidgetPrivate::focusObject()
+{
+    Q_Q(QWidget);
+    QWidget *proxy = deepestFocusProxy();
+    return proxy ? proxy : q;
+}
+
 /*!
     Returns the next widget in this widget's focus chain.
 
@@ -9613,7 +9620,7 @@ void QWidget::tabletEvent(QTabletEvent *event)
     implementation if you act upon the key.
 
     \sa keyReleaseEvent(), setFocusPolicy(),
-    focusInEvent(), focusOutEvent(), event(), QKeyEvent, {Tetrix Example}
+    focusInEvent(), focusOutEvent(), event(), QKeyEvent
 */
 
 void QWidget::keyPressEvent(QKeyEvent *event)
@@ -9862,10 +9869,6 @@ void QWidget::actionEvent(QActionEvent *)
 
     Main window applications typically use reimplementations of this function to check
     whether the user's work has been saved and ask for permission before closing.
-    For example, the \l{Text Edit} example uses a helper function to
-    determine whether or not to close the window:
-
-    \snippet richtext/textedit/textedit.cpp closeevent
 
     \sa event(), hide(), close(), QCloseEvent
 */
@@ -10816,11 +10819,19 @@ void QWidget::setParent(QWidget *parent, Qt::WindowFlags f)
         // problematic when it comes to large widget trees.
         if (q_evaluateRhiConfig(this, nullptr, &surfaceType)) {
             newtlw->d_func()->usesRhiFlush = true;
+            bool recreate = false;
             if (QWindow *w = newtlw->windowHandle()) {
-                if (w->surfaceType() != surfaceType) {
-                    newtlw->destroy();
-                    newtlw->create();
-                }
+                if (w->surfaceType() != surfaceType)
+                    recreate = true;
+            }
+            // QTBUG-115652: Besides the toplevel the nativeParentWidget()'s QWindow must be checked as well.
+            if (QWindow *w = d->windowHandle(QWidgetPrivate::WindowHandleMode::Closest)) {
+                if (w->surfaceType() != surfaceType)
+                    recreate = true;
+            }
+            if (recreate) {
+                newtlw->destroy();
+                newtlw->create();
             }
         }
     }
@@ -11510,8 +11521,7 @@ void QWidgetPrivate::setWindowOpacity_sys(qreal level)
     its parent because other children of the parent might have been
     modified.
 
-    \sa windowTitle, {Qt Widgets - Application Example},
-    {MDI Example}
+    \sa windowTitle
 */
 bool QWidget::isWindowModified() const
 {

@@ -456,6 +456,8 @@ private slots:
     void append_bytearray_special_cases();
 #endif
 
+    void appendFromRawData();
+
     void operator_pluseq_qstring()            { operator_pluseq_impl<QString>(); }
     void operator_pluseq_qstring_data()       { operator_pluseq_data(); }
     void operator_pluseq_qstringview()        { operator_pluseq_impl<QStringView, QString &(QString::*)(QStringView)>(); }
@@ -3276,6 +3278,21 @@ void tst_QString::append_bytearray_special_cases()
 }
 #endif // !defined(QT_RESTRICTED_CAST_FROM_ASCII) && !defined(QT_NO_CAST_FROM_ASCII)
 
+void tst_QString::appendFromRawData()
+{
+    const char16_t utf[] = u"Hello World!";
+    auto *rawData = reinterpret_cast<const QChar *>(utf);
+    QString str = QString::fromRawData(rawData, std::size(utf) - 1);
+
+    QString copy;
+    copy.append(str);
+    QCOMPARE(copy, str);
+    // We make an _actual_ copy, because appending a byte array
+    // created with fromRawData() might be optimized to copy the DataPointer,
+    // which means we may point to temporary stack data.
+    QCOMPARE_NE((void *)copy.constData(), (void *)str.constData());
+}
+
 void tst_QString::operator_pluseq_special_cases()
 {
     QString a;
@@ -3998,18 +4015,18 @@ void tst_QString::toNum_base_data()
     QTest::newRow("77") << u"77"_s << 8 << 63;
     QTest::newRow("077") << u"077"_s << 8 << 63;
 
-    QTest::newRow("0xFF") << u"0xFF"_s << 0 << 255;
-    QTest::newRow("077") << u"077"_s << 0 << 63;
-    QTest::newRow("255") << u"255"_s << 0 << 255;
+    QTest::newRow("0xFF - deduced base") << u"0xFF"_s << 0 << 255;
+    QTest::newRow("077 - deduced base") << u"077"_s << 0 << 63;
+    QTest::newRow("255 - deduced base") << u"255"_s << 0 << 255;
 
     QTest::newRow(" FF") << u" FF"_s << 16 << 255;
     QTest::newRow(" 0xFF") << u" 0xFF"_s << 16 << 255;
     QTest::newRow(" 77") << u" 77"_s << 8 << 63;
     QTest::newRow(" 077") << u" 077"_s << 8 << 63;
 
-    QTest::newRow(" 0xFF") << u" 0xFF"_s << 0 << 255;
-    QTest::newRow(" 077") << u" 077"_s << 0 << 63;
-    QTest::newRow(" 255") << u" 255"_s << 0 << 255;
+    QTest::newRow(" 0xFF - deduced base") << u" 0xFF"_s << 0 << 255;
+    QTest::newRow(" 077 - deduced base") << u" 077"_s << 0 << 63;
+    QTest::newRow(" 255 - deduced base") << u" 255"_s << 0 << 255;
 
     QTest::newRow("\tFF\t") << u"\tFF\t"_s << 16 << 255;
     QTest::newRow("\t0xFF  ") << u"\t0xFF  "_s << 16 << 255;
@@ -4060,9 +4077,9 @@ void tst_QString::toNum_base_neg_data()
     QTest::newRow("-77") << u"-77"_s << 8 << -63;
     QTest::newRow("-077") << u"-077"_s << 8 << -63;
 
-    QTest::newRow("-0xFE") << u"-0xFE"_s << 0 << -254;
-    QTest::newRow("-077") << u"-077"_s << 0 << -63;
-    QTest::newRow("-254") << u"-254"_s << 0 << -254;
+    QTest::newRow("-0xFE - deduced base") << u"-0xFE"_s << 0 << -254;
+    QTest::newRow("-077 - deduced base") << u"-077"_s << 0 << -63;
+    QTest::newRow("-254 - deduced base") << u"-254"_s << 0 << -254;
 }
 
 void tst_QString::toNum_base_neg()

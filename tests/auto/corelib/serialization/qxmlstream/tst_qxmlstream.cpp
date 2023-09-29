@@ -590,6 +590,9 @@ private slots:
 
     void entityExpansionLimit() const;
 
+    void tokenErrorHandling_data() const;
+    void tokenErrorHandling() const;
+
 private:
     static QByteArray readFile(const QString &filename);
 
@@ -1140,6 +1143,10 @@ void tst_QXmlStream::readNextStartElement() const
     }
 
     QCOMPARE(amountOfB, 2);
+
+    // well-formed document end follows
+    QVERIFY(!reader.readNextStartElement());
+    QCOMPARE(reader.error(), QXmlStreamReader::NoError);
 }
 
 void tst_QXmlStream::readElementText() const
@@ -1825,19 +1832,19 @@ void tst_QXmlStream::test_fastScanName_data() const
 
     // 4096 is the limit in QXmlStreamReaderPrivate::fastScanName()
 
-    QByteArray arr = "<a"_ba + ":" + QByteArray("b").repeated(4096 - 1);
+    QByteArray arr = "<a:" + QByteArray("b").repeated(4096 - 1);
     QTest::newRow("data1") << arr << QXmlStreamReader::PrematureEndOfDocumentError;
 
-    arr = "<a"_ba + ":" + QByteArray("b").repeated(4096);
+    arr = "<a:" + QByteArray("b").repeated(4096);
     QTest::newRow("data2") << arr << QXmlStreamReader::NotWellFormedError;
 
-    arr = "<"_ba + QByteArray("a").repeated(4000) + ":" + QByteArray("b").repeated(96);
+    arr = "<" + QByteArray("a").repeated(4000) + ":" + QByteArray("b").repeated(96);
     QTest::newRow("data3") << arr << QXmlStreamReader::PrematureEndOfDocumentError;
 
-    arr = "<"_ba + QByteArray("a").repeated(4000) + ":" + QByteArray("b").repeated(96 + 1);
+    arr = "<" + QByteArray("a").repeated(4000) + ":" + QByteArray("b").repeated(96 + 1);
     QTest::newRow("data4") << arr << QXmlStreamReader::NotWellFormedError;
 
-    arr = "<"_ba + QByteArray("a").repeated(4000 + 1) + ":" + QByteArray("b").repeated(96);
+    arr = "<" + QByteArray("a").repeated(4000 + 1) + ":" + QByteArray("b").repeated(96);
     QTest::newRow("data5") << arr << QXmlStreamReader::NotWellFormedError;
 }
 
@@ -1853,6 +1860,43 @@ void tst_QXmlStream::test_fastScanName() const
 
     QCOMPARE(tokenType, QXmlStreamReader::Invalid);
     QCOMPARE(reader.error(), errorType);
+}
+
+void tst_QXmlStream::tokenErrorHandling_data() const
+{
+    QTest::addColumn<QString>("fileName");
+    QTest::addColumn<QXmlStreamReader::Error>("expectedError");
+    QTest::addColumn<QString>("errorKeyWord");
+
+    constexpr auto invalid = QXmlStreamReader::Error::UnexpectedElementError;
+    constexpr auto valid = QXmlStreamReader::Error::NoError;
+    QTest::newRow("DtdInBody") << "dtdInBody.xml" << invalid << "DTD";
+    QTest::newRow("multipleDTD") << "multipleDtd.xml" << invalid << "second DTD";
+    QTest::newRow("wellFormed") << "wellFormed.xml" << valid << "";
+}
+
+void tst_QXmlStream::tokenErrorHandling() const
+{
+    QFETCH(const QString, fileName);
+    QFETCH(const QXmlStreamReader::Error, expectedError);
+    QFETCH(const QString, errorKeyWord);
+
+    const QDir dir(QFINDTESTDATA("tokenError"));
+    QFile file(dir.absoluteFilePath(fileName));
+
+    // Cross-compiling: Files may not be found when running test standalone
+    // QSKIP in that case, because the tested functionality is platform independent.
+    if (!file.exists())
+        QSKIP(QObject::tr("Testfile %1 not found.").arg(fileName).toUtf8().constData());
+
+    file.open(QIODevice::ReadOnly);
+    QXmlStreamReader reader(&file);
+    while (!reader.atEnd())
+        reader.readNext();
+
+    QCOMPARE(reader.error(), expectedError);
+    if (expectedError != QXmlStreamReader::Error::NoError)
+        QVERIFY(reader.errorString().contains(errorKeyWord));
 }
 
 #include "tst_qxmlstream.moc"
