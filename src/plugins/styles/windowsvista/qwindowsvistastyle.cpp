@@ -4525,8 +4525,7 @@ QRect QWindowsVistaStyle::subControlRect(ComplexControl control, const QStyleOpt
 #endif // QT_CONFIG(mdiarea)
 
     default:
-        return visualRect(option->direction, option->rect,
-                          QWindowsStyle::subControlRect(control, option, subControl, widget));
+        return QWindowsStyle::subControlRect(control, option, subControl, widget);
     }
 
     return visualRect(option->direction, option->rect, rect);
@@ -4681,6 +4680,7 @@ void QWindowsVistaStyle::polish(QWidget *widget)
             QPalette pal = widget->palette();
             pal.setColor(QPalette::ButtonText, QColor(21, 28, 85));
             pal.setColor(QPalette::BrightText, QColor(7, 64, 229));
+            pal.setResolveMask(0);
             widget->setPalette(pal);
         }
 #endif // QT_CONFIG(commandlinkbutton)
@@ -4694,6 +4694,7 @@ void QWindowsVistaStyle::polish(QWidget *widget)
                 QColor textColor = QColor::fromRgb(bgRef);
                 QPalette pal;
                 pal.setColor(QPalette::All, QPalette::ToolTipText, textColor);
+                pal.setResolveMask(0);
                 widget->setPalette(pal);
             }
         } else if (qobject_cast<QMessageBox *> (widget)) {
@@ -4818,7 +4819,7 @@ void QWindowsVistaStyle::polish(QPalette &pal)
 {
     Q_D(QWindowsVistaStyle);
 
-    if (qApp->styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
+    if (QGuiApplicationPrivate::colorScheme() == Qt::ColorScheme::Dark) {
         // System runs in dark mode, but the Vista style cannot use a dark palette.
         // Overwrite with the light system palette.
         using QWindowsApplication = QNativeInterface::Private::QWindowsApplication;

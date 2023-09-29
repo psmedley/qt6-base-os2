@@ -46,7 +46,6 @@
 
 #define TEST_DOMAIN ".test.qt-project.org"
 
-
 class tst_QHostInfo : public QObject
 {
     Q_OBJECT
@@ -373,7 +372,7 @@ static QStringList reverseLookupHelper(const QString &ip)
     QList<QByteArray> lines;
     QProcess python;
     python.setProcessChannelMode(QProcess::ForwardedErrorChannel);
-    python.start("python", QStringList() << QString("-c") << pythonCode << ip);
+    python.start("python3", QStringList() << QString("-c") << pythonCode << ip);
     if (python.waitForFinished()) {
         if (python.exitStatus() == QProcess::NormalExit && python.exitCode() == 0)
             lines = python.readAllStandardOutput().split('\n');
@@ -554,24 +553,22 @@ void tst_QHostInfo::threadSafetyAsynchronousAPI()
 {
     const int nattempts = 10;
     const int lookupsperthread = 10;
-    QList<QThread*> threads;
-    QList<LookupReceiver*> receivers;
+    QThread threads[nattempts];
+    LookupReceiver receivers[nattempts];
     for (int i = 0; i < nattempts; ++i) {
-        QThread* thread = new QThread;
-        LookupReceiver* receiver = new LookupReceiver;
+        QThread *thread = &threads[i];
+        LookupReceiver *receiver = &receivers[i];
         receiver->numrequests = lookupsperthread;
-        receivers.append(receiver);
         receiver->moveToThread(thread);
         connect(thread, SIGNAL(started()), receiver, SLOT(start()));
         thread->start();
-        threads.append(thread);
     }
-    for (int k = threads.size() - 1; k >= 0; --k)
-        QVERIFY(threads.at(k)->wait(60000));
-    foreach (LookupReceiver* receiver, receivers) {
-        QCOMPARE(receiver->result.error(), QHostInfo::NoError);
-        QCOMPARE(receiver->result.addresses().at(0).toString(), QString("192.0.2.1"));
-        QCOMPARE(receiver->numrequests, 0);
+    for (int k = nattempts - 1; k >= 0; --k)
+        QVERIFY(threads[k].wait(60000));
+    for (LookupReceiver &receiver : receivers) {
+        QCOMPARE(receiver.result.error(), QHostInfo::NoError);
+        QCOMPARE(receiver.result.addresses().at(0).toString(), QString("192.0.2.1"));
+        QCOMPARE(receiver.numrequests, 0);
     }
 }
 

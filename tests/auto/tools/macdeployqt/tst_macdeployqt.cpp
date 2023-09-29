@@ -199,11 +199,11 @@ void runVerifyDeployment(const QString &name)
     const QList<QString> parts = QString::fromLocal8Bit(libraries).split("dyld: loaded:");
     const QString qtPath = QLibraryInfo::path(QLibraryInfo::PrefixPath);
     // Let assume Qt is not installed in system
-    foreach (QString part, parts) {
-        part = part.trimmed();
-        if (part.isEmpty())
+    for (const QString &part : parts) {
+        const auto trimmed = part.trimmed();
+        if (trimmed.isEmpty())
             continue;
-        QVERIFY(!parts.startsWith(qtPath));
+        QVERIFY(!trimmed.startsWith(qtPath));
     }
 }
 

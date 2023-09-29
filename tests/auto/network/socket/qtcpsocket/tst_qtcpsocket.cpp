@@ -281,7 +281,7 @@ tst_QTcpSocket::tst_QTcpSocket()
     tmpSocket = 0;
 
     //This code relates to the socketsConstructedBeforeEventLoop test case
-    earlyConstructedSockets = new SocketPair;
+    earlyConstructedSockets = new SocketPair(this);
     QVERIFY(earlyConstructedSockets->create());
     earlyBytesWrittenCount = 0;
     earlyReadyReadCount = 0;
@@ -487,8 +487,8 @@ void tst_QTcpSocket::bind_data()
     bool testIpv6 = false;
 
     // iterate all interfaces, add all addresses on them as test data
-    QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
-    foreach (const QNetworkInterface &netinterface, interfaces) {
+    const QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
+    for (const QNetworkInterface &netinterface : interfaces) {
         if (!netinterface.isValid())
             continue;
 

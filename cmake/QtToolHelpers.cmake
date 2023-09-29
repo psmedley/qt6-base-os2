@@ -114,6 +114,7 @@ function(qt_internal_add_tool target_name)
         NO_INSTALL
         ${arg_NO_UNITY_BUILD}
         SOURCES ${arg_SOURCES}
+        NO_PCH_SOURCES ${arg_NO_PCH_SOURCES}
         NO_UNITY_BUILD_SOURCES ${arg_NO_UNITY_BUILD_SOURCES}
         INCLUDE_DIRECTORIES
             ${arg_INCLUDE_DIRECTORIES}
@@ -348,7 +349,7 @@ function(qt_export_tools module_name)
             string(REGEX REPLACE "_native$" "" tool_name ${tool_name})
         endif()
         set(extra_cmake_statements "${extra_cmake_statements}
-if (NOT QT_NO_CREATE_TARGETS)
+if(NOT QT_NO_CREATE_TARGETS AND ${INSTALL_CMAKE_NAMESPACE}${target}_FOUND)
     __qt_internal_promote_target_to_global(${INSTALL_CMAKE_NAMESPACE}::${tool_name})
 endif()
 ")

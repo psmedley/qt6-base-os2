@@ -21,6 +21,7 @@
 
 
 #include <memory>
+#include <optional>
 
 #ifndef QXMLSTREAM_P_H
 #define QXMLSTREAM_P_H
@@ -296,6 +297,17 @@ public:
     QStringDecoder decoder;
     bool atEnd;
 
+    enum class XmlContext
+    {
+        Prolog,
+        Body,
+    };
+
+    XmlContext currentContext = XmlContext::Prolog;
+    bool foundDTD = false;
+    bool isValidToken(QXmlStreamReader::TokenType type);
+    void checkToken();
+
     /*!
       \sa setType()
      */
@@ -498,17 +510,7 @@ public:
     qsizetype fastScanLiteralContent();
     qsizetype fastScanSpace();
     qsizetype fastScanContentCharList();
-
-    struct FastScanNameResult {
-        FastScanNameResult() : ok(false) {}
-        explicit FastScanNameResult(qsizetype len) : addToLen(len), ok(true) { }
-        operator bool() { return ok; }
-        qsizetype operator*() { Q_ASSERT(ok); return addToLen; }
-        qsizetype addToLen;
-        bool ok;
-    };
-    FastScanNameResult fastScanName(Value *val = nullptr);
-
+    std::optional<qsizetype> fastScanName(Value *val = nullptr);
     inline qsizetype fastScanNMTOKEN();
 
 

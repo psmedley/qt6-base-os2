@@ -9,6 +9,7 @@
 #include <qpa/qplatformintegrationfactory_p.h>
 #include "private/qevent_p.h"
 #include "private/qeventpoint_p.h"
+#include "private/qiconloader_p.h"
 #include "qfont.h"
 #include "qpointingdevice.h"
 #include <qpa/qplatformfontdatabase.h>
@@ -1193,14 +1194,26 @@ QWindow *QGuiApplication::topLevelAt(const QPoint &pos)
         \li \c xcb is a plugin for the X11 window system, used on some desktop Linux platforms.
     \endlist
 
+    \note Calling this function without a QGuiApplication will return the default
+    platform name, if available. The default platform name is not affected by the
+    \c{-platform} command line option, or the \c QT_QPA_PLATFORM environment variable.
+
     For more information about the platform plugins for embedded Linux devices,
     see \l{Qt for Embedded Linux}.
 */
 
 QString QGuiApplication::platformName()
 {
-    return QGuiApplicationPrivate::platform_name ?
-           *QGuiApplicationPrivate::platform_name : QString();
+    if (!QGuiApplication::instance()) {
+#ifdef QT_QPA_DEFAULT_PLATFORM_NAME
+        return QStringLiteral(QT_QPA_DEFAULT_PLATFORM_NAME);
+#else
+        return QString();
+#endif
+    } else {
+        return QGuiApplicationPrivate::platform_name ?
+            *QGuiApplicationPrivate::platform_name : QString();
+    }
 }
 
 Q_LOGGING_CATEGORY(lcQpaPluginLoading, "qt.qpa.plugin");
@@ -1235,6 +1248,10 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
         QGuiApplicationPrivate::platform_integration = QPlatformIntegrationFactory::create(name, arguments, argc, argv, platformPluginPath);
         if (Q_UNLIKELY(!QGuiApplicationPrivate::platform_integration)) {
             if (availablePlugins.contains(name)) {
+                if (name == QStringLiteral("xcb") && QVersionNumber::compare(QLibraryInfo::version(), QVersionNumber(6, 5, 0)) >= 0) {
+                    qCWarning(lcQpaPluginLoading).nospace().noquote()
+                            << "From 6.5.0, xcb-cursor0 or libxcb-cursor0 is needed to load the Qt xcb platform plugin.";
+                }
                 qCInfo(lcQpaPluginLoading).nospace().noquote()
                         << "Could not load the Qt platform plugin \"" << name << "\" in \""
                         << QDir::toNativeSeparators(platformPluginPath) << "\" even though it was found.";
@@ -2610,11 +2627,12 @@ void QGuiApplicationPrivate::processSafeAreaMarginsChangedEvent(QWindowSystemInt
 
 void QGuiApplicationPrivate::processThemeChanged(QWindowSystemInterfacePrivate::ThemeChangeEvent *tce)
 {
-    QStyleHintsPrivate::get(QGuiApplication::styleHints())->setColorScheme(colorScheme());
     if (self)
         self->handleThemeChanged();
 
     QIconPrivate::clearIconCache();
+
+    QStyleHintsPrivate::get(QGuiApplication::styleHints())->setColorScheme(colorScheme());
 
     QEvent themeChangeEvent(QEvent::ThemeChange);
     const QWindowList windows = tce->window ? QWindowList{tce->window} : window_list;
@@ -2638,6 +2656,7 @@ void QGuiApplicationPrivate::handleThemeChanged()
 {
     updatePalette();
 
+    QIconLoader::instance()->updateSystemTheme();
     QAbstractFileIconProviderPrivate::clearIconTypeCache();
 
     if (!(applicationResourceFlags & ApplicationFontExplicitlySet)) {

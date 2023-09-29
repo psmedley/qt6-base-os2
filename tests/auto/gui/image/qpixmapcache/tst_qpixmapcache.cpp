@@ -7,6 +7,8 @@
 #include <qpixmapcache.h>
 #include "private/qpixmapcache_p.h"
 
+#include <functional>
+
 QT_BEGIN_NAMESPACE // The test requires QT_BUILD_INTERNAL
 Q_AUTOTEST_EXPORT void qt_qpixmapcache_flush_detached_pixmaps();
 Q_AUTOTEST_EXPORT int qt_qpixmapcache_qpixmapcache_total_used();
@@ -38,8 +40,13 @@ private slots:
     void pixmapKey();
     void noLeak();
     void clearDoesNotLeakStringKeys();
+    void evictionDoesNotLeakStringKeys();
+    void reducingCacheLimitDoesNotLeakStringKeys();
     void strictCacheLimit();
     void noCrashOnLargeInsert();
+
+private:
+    void stringLeak_impl(std::function<void()> whenOp);
 };
 
 static QPixmapCache::KeyData* getPrivate(QPixmapCache::Key &key)
@@ -112,9 +119,9 @@ void tst_QPixmapCache::setCacheLimit()
     QPixmapCache::setCacheLimit(0);
     QVERIFY(!QPixmapCache::find(key, p1));
 
-    p1 = new QPixmap(2, 3);
     QPixmapCache::setCacheLimit(1000);
-    QPixmapCache::replace(key, *p1);
+    p1 = new QPixmap(2, 3);
+    QVERIFY(!QPixmapCache::replace(key, *p1));
     QVERIFY(!QPixmapCache::find(key, p1));
 
     delete p1;
@@ -511,6 +518,33 @@ void tst_QPixmapCache::noLeak()
 
 void tst_QPixmapCache::clearDoesNotLeakStringKeys()
 {
+    stringLeak_impl([] { QPixmapCache::clear(); });
+}
+
+void tst_QPixmapCache::evictionDoesNotLeakStringKeys()
+{
+    stringLeak_impl([] {
+        // fill the cache with other pixmaps to force eviction of "our" pixmap:
+        constexpr int Iterations = 10;
+        for (int i = 0; i < Iterations; ++i) {
+            QPixmap pm(64, 64);
+            pm.fill(Qt::transparent);
+            [[maybe_unused]] auto r = QPixmapCache::insert(pm);
+        }
+    });
+}
+
+void tst_QPixmapCache::reducingCacheLimitDoesNotLeakStringKeys()
+{
+    stringLeak_impl([] {
+        QPixmapCache::setCacheLimit(0);
+    });
+}
+
+void tst_QPixmapCache::stringLeak_impl(std::function<void()> whenOp)
+{
+    QVERIFY(whenOp);
+
     QPixmapCache::setCacheLimit(20); // 20KiB
     //
     // GIVEN: a QPixmap with QString key `key` in QPixmapCache
@@ -528,9 +562,11 @@ void tst_QPixmapCache::clearDoesNotLeakStringKeys()
     QVERIFY(!key.isDetached()); // was saved inside QPixmapCache
 
     //
-    // WHEN: clearing the cache:
+    // WHEN: performing the given operation
     //
-    QPixmapCache::clear();
+    whenOp();
+    if (QTest::currentTestFailed())
+        return;
 
     //
     // THEN: `key` is no longer referenced by QPixmapCache:
