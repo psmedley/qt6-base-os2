@@ -341,7 +341,9 @@ endif()
             RUNTIME_OUTPUT_DIRECTORY "${QT_BUILD_DIR}/${INSTALL_BINDIR}"
             ARCHIVE_OUTPUT_DIRECTORY "${QT_BUILD_DIR}/${INSTALL_LIBDIR}"
             VERSION ${PROJECT_VERSION}
+if (NOT OS2)
             SOVERSION ${PROJECT_VERSION_MAJOR}
+endif()
             )
         qt_set_target_info_properties(${target} ${ARGN})
         qt_handle_multi_config_output_dirs("${target}")
