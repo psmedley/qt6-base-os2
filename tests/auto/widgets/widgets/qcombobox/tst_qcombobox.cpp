@@ -170,6 +170,7 @@ private slots:
     void checkMenuItemPosWhenStyleSheetIsSet();
     void checkEmbeddedLineEditWhenStyleSheetIsSet();
     void propagateStyleChanges();
+    void clearModel();
 
 private:
     PlatformInputContext m_platformInputContext;
@@ -1653,6 +1654,16 @@ void tst_QComboBox::setModel()
     QCOMPARE(box.rootModelIndex(), rootModelIndex);
     box.setModel(box.model());
     QCOMPARE(box.rootModelIndex(), rootModelIndex);
+
+    // check that setting the same model as the completer's doesn't crash
+    QCompleter *completer = new QCompleter(&box);
+    box.setEditable(true);
+    box.setCompleter(completer);
+    auto *listModel = new QStringListModel({ "one", "two" }, completer);
+    completer->setModel(listModel);
+    QCOMPARE(listModel->rowCount(), 2); // make sure it wasn't deleted
+    box.setModel(listModel);
+    QCOMPARE(listModel->rowCount(), 2); // make sure it wasn't deleted
 }
 
 void tst_QComboBox::setCustomModelAndView()
@@ -3588,6 +3599,37 @@ void tst_QComboBox::propagateStyleChanges()
     combo.setSizeAdjustPolicy(QComboBox::AdjustToContents);
     combo.setStyle(&frameStyle);
     QVERIFY(frameStyle.inquired);
+}
+
+void tst_QComboBox::clearModel()
+{
+    QStringListModel model({ QLatin1String("one"), QLatin1String("two"), QLatin1String("three") });
+
+    QComboBox combo;
+    combo.setModel(&model);
+    combo.setCurrentIndex(1);
+
+    QCOMPARE(combo.currentIndex(), 1);
+    QCOMPARE(combo.currentText(), model.index(1).data().toString());
+
+    QSignalSpy indexSpy(&combo, &QComboBox::currentIndexChanged);
+    QSignalSpy textSpy(&combo, &QComboBox::currentTextChanged);
+
+    QVERIFY(indexSpy.isEmpty());
+    QVERIFY(textSpy.isEmpty());
+
+    model.setStringList({});
+
+    QCOMPARE(indexSpy.count(), 1);
+    const int index = indexSpy.takeFirst().at(0).toInt();
+    QCOMPARE(index, -1);
+
+    QCOMPARE(textSpy.count(), 1);
+    const QString text = textSpy.takeFirst().at(0).toString();
+    QCOMPARE(text, QString());
+
+    QCOMPARE(combo.currentIndex(), -1);
+    QCOMPARE(combo.currentText(), QString());
 }
 
 QTEST_MAIN(tst_QComboBox)

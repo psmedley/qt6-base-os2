@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Copyright (C) 2016 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -88,6 +88,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <chrono>
+#include <memory>
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -319,7 +320,7 @@ public:
     static QMetaMethod findMethod(const QObject *obj, const char *signature);
 
 private:
-    bool invokeTest(int index, const char *data, WatchDog *watchDog) const;
+    bool invokeTest(int index, QLatin1String tag, WatchDog *watchDog) const;
     void invokeTestOnData(int index) const;
 
     QMetaMethod m_initTestCaseMethod; // might not exist, check isValid().
@@ -1117,6 +1118,26 @@ public:
 #endif
 
 
+static void printUnknownDataTagError(QLatin1String name, QLatin1String tag,
+                                     const QTestTable &lTable, const QTestTable &gTable)
+{
+    fprintf(stderr, "Unknown testdata for function %s(): '%s'\n", name.data(), tag.data());
+    const int localDataCount = lTable.dataCount();
+    if (localDataCount) {
+        fputs("Available test-specific data tags:\n", stderr);
+        for (int i = 0; i < localDataCount; ++i)
+            fprintf(stderr, "\t%s\n", lTable.testData(i)->dataTag());
+    }
+    const int globalDataCount = gTable.dataCount();
+    if (globalDataCount) {
+        fputs("Available global data tags:\n", stderr);
+        for (int i = 0; i < globalDataCount; ++i)
+            fprintf(stderr, "\t%s\n", gTable.testData(i)->dataTag());
+    }
+    if (localDataCount == 0 && globalDataCount == 0)
+        fputs("Function has no data tags\n", stderr);
+}
+
 /*!
     \internal
 
@@ -1125,8 +1146,8 @@ public:
 
     If the function was successfully called, true is returned, otherwise
     false.
- */
-bool TestMethods::invokeTest(int index, const char *data, WatchDog *watchDog) const
+*/
+bool TestMethods::invokeTest(int index, QLatin1String tag, WatchDog *watchDog) const
 {
     QBenchmarkTestMethodData benchmarkData;
     QBenchmarkTestMethodData::current = &benchmarkData;
@@ -1142,6 +1163,21 @@ bool TestMethods::invokeTest(int index, const char *data, WatchDog *watchDog) co
     const QTestTable *gTable = QTestTable::globalTestTable();
     const int globalDataCount = gTable->dataCount();
     int curGlobalDataIndex = 0;
+    const auto globalDataTag = [gTable, globalDataCount](int index) {
+        return globalDataCount ? gTable->testData(index)->dataTag() : nullptr;
+    };
+
+    const auto dataTagMatches = [](QLatin1String tag, QLatin1String local, QLatin1String global) {
+        if (tag.isEmpty()) // No tag specified => run all data sets for this function
+            return true;
+        if (tag == local || tag == global) // Equal to either => run it
+            return true;
+        // Also allow global:local as a match:
+        return tag.startsWith(global) && tag.endsWith(local) &&
+               tag.size() == global.size() + 1 + local.size() &&
+               tag[global.size()] == ':';
+    };
+    bool foundFunction = false;
 
     /* For each entry in the global data table, do: */
     do {
@@ -1155,30 +1191,21 @@ bool TestMethods::invokeTest(int index, const char *data, WatchDog *watchDog) co
                 break;
         }
 
-        bool foundFunction = false;
         int curDataIndex = 0;
         const int dataCount = table.dataCount();
-
-        // Data tag requested but none available?
-        if (data && !dataCount) {
-            // Let empty data tag through.
-            if (!*data)
-                data = nullptr;
-            else {
-                fprintf(stderr, "Unknown testdata for function %s(): '%s'\n", name.constData(), data);
-                fprintf(stderr, "Function has no testdata.\n");
-                return false;
-            }
-        }
+        const auto dataTag = [&table, dataCount](int index) {
+            return dataCount ? table.testData(index)->dataTag() : nullptr;
+        };
 
         /* For each entry in this test's data table, do: */
         do {
             QTestResult::setSkipCurrentTest(false);
             QTestResult::setBlacklistCurrentTest(false);
-            if (!data || !qstrcmp(data, table.testData(curDataIndex)->dataTag())) {
+            if (dataTagMatches(tag, QLatin1String(dataTag(curDataIndex)),
+                               QLatin1String(globalDataTag(curGlobalDataIndex)))) {
                 foundFunction = true;
-
-                QTestPrivate::checkBlackLists(name.constData(), dataCount ? table.testData(curDataIndex)->dataTag() : nullptr);
+                QTestPrivate::checkBlackLists(name.constData(), dataTag(curDataIndex),
+                                              globalDataTag(curGlobalDataIndex));
 
                 QTestDataSetter s(curDataIndex >= dataCount ? nullptr : table.testData(curDataIndex));
 
@@ -1190,24 +1217,20 @@ bool TestMethods::invokeTest(int index, const char *data, WatchDog *watchDog) co
                 if (watchDog)
                     watchDog->testFinished();
 
-                if (data)
+                if (!tag.isEmpty() && !globalDataCount)
                     break;
             }
             ++curDataIndex;
         } while (curDataIndex < dataCount);
 
-        if (data && !foundFunction) {
-            fprintf(stderr, "Unknown testdata for function %s: '%s()'\n", name.constData(), data);
-            fprintf(stderr, "Available testdata:\n");
-            for (int i = 0; i < table.dataCount(); ++i)
-                fprintf(stderr, "%s\n", table.testData(i)->dataTag());
-            return false;
-        }
-
         QTestResult::setCurrentGlobalTestData(nullptr);
         ++curGlobalDataIndex;
     } while (curGlobalDataIndex < globalDataCount);
 
+    if (!tag.isEmpty() && !foundFunction) {
+        printUnknownDataTagError(QLatin1String(name), tag, table, *gTable);
+        QTestResult::addFailure(qPrintable(QLatin1String("Data tag not found: %1").arg(tag)));
+    }
     QTestResult::finishedCurrentTestFunction();
     QTestResult::setSkipCurrentTest(false);
     QTestResult::setBlacklistCurrentTest(false);
@@ -1337,9 +1360,9 @@ char *toHexRepresentation(const char *ba, int length)
 char *toPrettyCString(const char *p, int length)
 {
     bool trimmed = false;
-    QScopedArrayPointer<char> buffer(new char[256]);
+    auto buffer = std::make_unique<char[]>(256);
     const char *end = p + length;
-    char *dst = buffer.data();
+    char *dst = buffer.get();
 
     bool lastWasHexEscape = false;
     *dst++ = '"';
@@ -1349,7 +1372,7 @@ char *toPrettyCString(const char *p, int length)
         //  2 bytes: a simple escape sequence (\n)
         //  3 bytes: "" and a character
         //  4 bytes: an hex escape sequence (\xHH)
-        if (dst - buffer.data() > 246) {
+        if (dst - buffer.get() > 246) {
             // plus the quote, the three dots and NUL, it's 255 in the worst case
             trimmed = true;
             break;
@@ -1410,18 +1433,8 @@ char *toPrettyCString(const char *p, int length)
         *dst++ = '.';
     }
     *dst++ = '\0';
-    return buffer.take();
+    return buffer.release();
 }
-
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-// this used to be the signature up to and including Qt 5.9
-// keep it for BC reasons:
-Q_TESTLIB_EXPORT
-char *toPrettyUnicode(const ushort *p, int length)
-{
-    return toPrettyUnicode(QStringView(p, length));
-}
-#endif
 
 /*!
     \internal
@@ -1436,13 +1449,13 @@ char *toPrettyUnicode(QStringView string)
     auto length = string.size();
     // keep it simple for the vast majority of cases
     bool trimmed = false;
-    QScopedArrayPointer<char> buffer(new char[256]);
+    auto buffer = std::make_unique<char[]>(256);
     const ushort *end = p + length;
-    char *dst = buffer.data();
+    char *dst = buffer.get();
 
     *dst++ = '"';
     for ( ; p != end; ++p) {
-        if (dst - buffer.data() > 245) {
+        if (dst - buffer.get() > 245) {
             // plus the quote, the three dots and NUL, it's 250, 251 or 255
             trimmed = true;
             break;
@@ -1492,7 +1505,7 @@ char *toPrettyUnicode(QStringView string)
         *dst++ = '.';
     }
     *dst++ = '\0';
-    return buffer.take();
+    return buffer.release();
 }
 
 void TestMethods::invokeTests(QObject *testObject) const
@@ -1529,7 +1542,7 @@ void TestMethods::invokeTests(QObject *testObject) const
                 const char *data = nullptr;
                 if (i < QTest::testTags.size() && !QTest::testTags.at(i).isEmpty())
                     data = qstrdup(QTest::testTags.at(i).toLatin1().constData());
-                const bool ok = invokeTest(i, data, watchDog.data());
+                const bool ok = invokeTest(i, QLatin1String(data), watchDog.data());
                 delete [] data;
                 if (!ok)
                     break;
@@ -1665,11 +1678,16 @@ public:
         sigemptyset(&handledSignals);
 
         const int fatalSignals[] = {
-             SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGBUS, SIGFPE, SIGSEGV, SIGPIPE, SIGTERM, 0 };
+             SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGBUS, SIGFPE, SIGSEGV, SIGPIPE, SIGTERM };
 
         struct sigaction act;
         memset(&act, 0, sizeof(act));
+#  ifdef SA_SIGINFO
+        act.sa_flags |= SA_SIGINFO;
+        act.sa_sigaction = FatalSignalHandler::signal;
+#  else
         act.sa_handler = FatalSignalHandler::signal;
+#  endif
 
         // Remove the handler after it is invoked.
 #  if !defined(Q_OS_INTEGRITY)
@@ -1698,23 +1716,31 @@ public:
         // Block all fatal signals in our signal handler so we don't try to close
         // the testlog twice.
         sigemptyset(&act.sa_mask);
-        for (int i = 0; fatalSignals[i]; ++i)
-            sigaddset(&act.sa_mask, fatalSignals[i]);
+        for (int signal : fatalSignals)
+            sigaddset(&act.sa_mask, signal);
+
+        // The destructor can only restore SIG_DFL, so only register for signals
+        // that had default handling previously.
+        const auto isDefaultHandler = [](const struct sigaction &old) {
+#  ifdef SA_SIGINFO
+            // void sa_sigaction(int, siginfo_t *, void *) is never the default:
+            if (old.sa_flags & SA_SIGINFO)
+                return false;
+#  endif
+            // Otherwise, the handler is void sa_handler(int) but may be
+            // SIG_DFL (default action) or SIG_IGN (ignore signal):
+            return old.sa_handler == SIG_DFL;
+        };
 
         struct sigaction oldact;
-
-        for (int i = 0; fatalSignals[i]; ++i) {
-            sigaction(fatalSignals[i], &act, &oldact);
-            if (
-#  ifdef SA_SIGINFO
-                oldact.sa_flags & SA_SIGINFO ||
-#  endif
-                oldact.sa_handler != SIG_DFL) {
-                sigaction(fatalSignals[i], &oldact, nullptr);
-            } else
-            {
-                sigaddset(&handledSignals, fatalSignals[i]);
-            }
+        for (int signal : fatalSignals) {
+            // Registering reveals the existing handler:
+            if (sigaction(signal, &act, &oldact))
+                continue; // Failed to set our handler; nothing to restore.
+            if (isDefaultHandler(oldact))
+                sigaddset(&handledSignals, signal);
+            else // Restore non-default handler:
+                sigaction(signal, &oldact, nullptr);
         }
 #endif // defined(Q_OS_UNIX) && !defined(Q_OS_WASM)
     }
@@ -1722,21 +1748,29 @@ public:
     ~FatalSignalHandler()
     {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_WASM)
-        // Unregister any of our remaining signal handlers
+        // Restore the default signal handler in place of ours.
+        // If ours has been replaced, leave the replacement alone.
         struct sigaction act;
         memset(&act, 0, sizeof(act));
         act.sa_handler = SIG_DFL;
 
-        struct sigaction oldact;
+        auto isOurs = [](const struct sigaction &old) {
+#  ifdef SA_SIGINFO
+            return (old.sa_flags & SA_SIGINFO) && old.sa_sigaction == FatalSignalHandler::signal;
+#  else
+            return old.sa_handler == FatalSignalHandler::signal;
+#  endif
+        };
+        struct sigaction action;
 
-        for (int i = 1; i < 32; ++i) {
-            if (!sigismember(&handledSignals, i))
+        for (int signum = 1; signum < 32; ++signum) {
+            if (!sigismember(&handledSignals, signum))
                 continue;
-            sigaction(i, &act, &oldact);
+            if (sigaction(signum, nullptr, &action))
+                continue; // Failed to query present handler
 
-            // If someone overwrote it in the mean time, put it back
-            if (oldact.sa_handler != FatalSignalHandler::signal)
-                sigaction(i, &oldact, nullptr);
+            if (isOurs(action))
+                sigaction(signum, &act, nullptr);
         }
 #endif
     }
@@ -1788,7 +1822,11 @@ private:
 #endif // defined(Q_OS_WIN)
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_WASM)
+#  ifdef SA_SIGINFO
+    static void signal(int signum, siginfo_t * /* info */, void * /* ucontext */)
+#  else
     static void signal(int signum)
+#endif
     {
         const int msecsFunctionTime = qRound(QTestLog::msecsFunctionTime());
         const int msecsTotalTime = qRound(QTestLog::msecsTotalTime());
@@ -1942,18 +1980,33 @@ int QTest::qRun()
         if (!noCrashHandler)
             handler.reset(new FatalSignalHandler);
 
+        bool seenBad = false;
         TestMethods::MetaMethods commandLineMethods;
         for (const QString &tf : qAsConst(QTest::testFunctions)) {
-                const QByteArray tfB = tf.toLatin1();
-                const QByteArray signature = tfB + QByteArrayLiteral("()");
-                QMetaMethod m = TestMethods::findMethod(currentTestObject, signature.constData());
-                if (!m.isValid() || !isValidSlot(m)) {
-                    fprintf(stderr, "Unknown test function: '%s'. Possible matches:\n", tfB.constData());
-                    qPrintTestSlots(stderr, tfB.constData());
-                    fprintf(stderr, "\n%s -functions\nlists all available test functions.\n", QTestResult::currentAppName());
-                    exit(1);
-                }
+            const QByteArray tfB = tf.toLatin1();
+            const QByteArray signature = tfB + QByteArrayLiteral("()");
+            QMetaMethod m = TestMethods::findMethod(currentTestObject, signature.constData());
+            if (m.isValid() && isValidSlot(m)) {
                 commandLineMethods.push_back(m);
+            } else {
+                fprintf(stderr, "Unknown test function: '%s'. Possible matches:\n",
+                        tfB.constData());
+                qPrintTestSlots(stderr, tfB.constData());
+                QTestResult::setCurrentTestFunction(tfB.constData());
+                QTestResult::addFailure(
+                    qPrintable(QLatin1String("Function not found: %1").arg(tf)));
+                QTestResult::finishedCurrentTestFunction();
+                // Ditch the tag that came with tf as test function:
+                QTest::testTags.remove(commandLineMethods.size());
+                seenBad = true;
+            }
+        }
+        if (seenBad) {
+            // Provide relevant help to do better next time:
+            fprintf(stderr, "\n%s -functions\nlists all available test functions.\n\n",
+                    QTestResult::currentAppName());
+            if (commandLineMethods.empty()) // All requested functions missing.
+                return 1;
         }
         TestMethods test(currentTestObject, commandLineMethods);
         test.invokeTests(currentTestObject);

@@ -731,7 +731,7 @@ QRegion QGraphicsViewPrivate::rubberBandRegion(const QWidget *widget, const QRec
     option.shape = QRubberBand::Rectangle;
 
     QRegion tmp;
-    tmp += rect;
+    tmp += rect.adjusted(-1, -1, 1, 1);
     if (widget->style()->styleHint(QStyle::SH_RubberBand_Mask, &option, widget, &mask))
         tmp &= mask.region;
     return tmp;
@@ -3719,7 +3719,12 @@ void QGraphicsView::drawBackground(QPainter *painter, const QRectF &rect)
         return;
     }
 
+    const bool wasAa = painter->testRenderHint(QPainter::Antialiasing);
+    if (wasAa)
+        painter->setRenderHints(QPainter::Antialiasing, false);
     painter->fillRect(rect, d->backgroundBrush);
+    if (wasAa)
+        painter->setRenderHints(QPainter::Antialiasing, true);
 }
 
 /*!

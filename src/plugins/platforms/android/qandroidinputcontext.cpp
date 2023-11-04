@@ -629,14 +629,25 @@ void QAndroidInputContext::updateSelectionHandles()
 
     if (cpos == anchor || im->anchorRectangle().isNull()) {
         auto curRect = cursorRectangle();
-        QPoint cursorPoint = qPlatformWindow->mapToGlobal(QPoint(curRect.x() + (curRect.width() / 2), curRect.y() + curRect.height()));
-        QPoint editMenuPoint(cursorPoint.x(), cursorPoint.y());
+        QPoint cursorPointGlobal = qPlatformWindow->mapToGlobal(
+                    QPoint(curRect.x() + (curRect.width() / 2), curRect.y() + curRect.height()));
+        QPoint cursorPoint(curRect.center().x(), curRect.bottom());
+        int x = curRect.x();
+        int y = curRect.y();
+
+        // Use x and y for the editMenuPoint from the cursorPointGlobal when the cursor is in the Dialog
+        if (cursorPointGlobal != cursorPoint) {
+            x = cursorPointGlobal.x();
+            y = cursorPointGlobal.y();
+        }
+
+        QPoint editMenuPoint(x, y);
         m_handleMode &= ShowEditPopup;
         m_handleMode |= ShowCursor;
         uint32_t buttons = readOnly ? 0 : EditContext::PasteButton;
         if (!query.value(Qt::ImSurroundingText).toString().isEmpty())
             buttons |= EditContext::SelectAllButton;
-        QtAndroidInput::updateHandles(m_handleMode, editMenuPoint, buttons, cursorPoint);
+        QtAndroidInput::updateHandles(m_handleMode, editMenuPoint, buttons, cursorPointGlobal);
         // The VK is hidden, reset the timer
         if (m_hideCursorHandleTimer.isActive())
             m_hideCursorHandleTimer.start();
@@ -654,22 +665,26 @@ void QAndroidInputContext::updateSelectionHandles()
     QPoint leftPoint(qPlatformWindow->mapToGlobal(leftRect.bottomLeft().toPoint()));
     QPoint rightPoint(qPlatformWindow->mapToGlobal(rightRect.bottomRight().toPoint()));
 
-    if (m_selectHandleWidth == 0)
-            m_selectHandleWidth = QtAndroidInput::getSelectHandleWidth() / 2;
-    int rightSideOfScreen = QtAndroid::androidPlatformIntegration()->screen()->availableGeometry().right();
-    if (leftPoint.x() < m_selectHandleWidth)
-        leftPoint.setX(m_selectHandleWidth);
+    QAndroidPlatformIntegration *platformIntegration = QtAndroid::androidPlatformIntegration();
+    if (platformIntegration) {
+        if (m_selectHandleWidth == 0)
+                m_selectHandleWidth = QtAndroidInput::getSelectHandleWidth() / 2;
 
-    if (rightPoint.x() > rightSideOfScreen - m_selectHandleWidth)
-        rightPoint.setX(rightSideOfScreen - m_selectHandleWidth);
+        int rightSideOfScreen = platformIntegration->screen()->availableGeometry().right();
+        if (leftPoint.x() < m_selectHandleWidth)
+            leftPoint.setX(m_selectHandleWidth);
 
-    QPoint editPoint(qPlatformWindow->mapToGlobal(leftRect.united(rightRect).topLeft().toPoint()));
-    uint32_t buttons = readOnly ? EditContext::CopyButton | EditContext::SelectAllButton
-                                : EditContext::AllButtons;
+        if (rightPoint.x() > rightSideOfScreen - m_selectHandleWidth)
+            rightPoint.setX(rightSideOfScreen - m_selectHandleWidth);
 
-    QtAndroidInput::updateHandles(m_handleMode, editPoint, buttons, leftPoint, rightPoint,
-                                  query.value(Qt::ImCurrentSelection).toString().isRightToLeft());
-    m_hideCursorHandleTimer.stop();
+        QPoint editPoint(qPlatformWindow->mapToGlobal(leftRect.united(rightRect).topLeft().toPoint()));
+        uint32_t buttons = readOnly ? EditContext::CopyButton | EditContext::SelectAllButton
+                                    : EditContext::AllButtons;
+
+        QtAndroidInput::updateHandles(m_handleMode, editPoint, buttons, leftPoint, rightPoint,
+                                      query.value(Qt::ImCurrentSelection).toString().isRightToLeft());
+        m_hideCursorHandleTimer.stop();
+    }
 }
 
 /*

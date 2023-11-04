@@ -357,7 +357,7 @@ QString fileArchitecture(const Options &options, const QString &path)
         return {};
     }
 
-    readElf = QLatin1String("%1 -needed-libs %2").arg(shellQuote(readElf), shellQuote(path));
+    readElf = QLatin1String("%1 --needed-libs %2").arg(shellQuote(readElf), shellQuote(path));
 
     FILE *readElfCommand = openProcess(readElf);
     if (!readElfCommand) {
@@ -1050,7 +1050,7 @@ bool readInputFile(Options *options)
                     options->rootPaths.push_back(path.toString());
             }
         } else {
-            options->rootPaths.push_back(options->inputFileName);
+            options->rootPaths.push_back(QFileInfo(options->inputFileName).absolutePath());
         }
     }
 
@@ -1437,8 +1437,10 @@ bool updateLibsXml(Options *options)
 
                     plugin = qtDependency.relativePath;
                 }
-                if (qtDependency.relativePath.contains(QLatin1String("libQt5OpenGL"))
-                        || qtDependency.relativePath.contains(QLatin1String("libQt5Quick"))) {
+                if (qtDependency.relativePath.contains(
+                            QString::asprintf("libQt%dOpenGL", QT_VERSION_MAJOR))
+                    || qtDependency.relativePath.contains(
+                            QString::asprintf("libQt%dQuick", QT_VERSION_MAJOR))) {
                     options->usesOpenGL |= true;
                     break;
                 }
@@ -1775,7 +1777,7 @@ QStringList getQtLibsFromElf(const Options &options, const QString &fileName)
         return QStringList();
     }
 
-    readElf = QLatin1String("%1 -needed-libs %2").arg(shellQuote(readElf), shellQuote(fileName));
+    readElf = QLatin1String("%1 --needed-libs %2").arg(shellQuote(readElf), shellQuote(fileName));
 
     FILE *readElfCommand = openProcess(readElf);
     if (!readElfCommand) {
@@ -1879,23 +1881,35 @@ bool scanImports(Options *options, QSet<QString> *usedDependencies)
         fprintf(stdout, "Scanning for QML imports.\n");
 
     QString qmlImportScanner;
-    if (!options->qmlImportScannerBinaryPath.isEmpty())
+    if (!options->qmlImportScannerBinaryPath.isEmpty()) {
         qmlImportScanner = options->qmlImportScannerBinaryPath;
-    else
-        qmlImportScanner = options->qtInstallDirectory + QLatin1String("/bin/qmlimportscanner");
+    } else {
+        qmlImportScanner = options->qtInstallDirectory + QLatin1Char('/') + defaultLibexecDir()
+                + QLatin1String("/qmlimportscanner");
+    }
 #if defined(Q_OS_WIN32)
     qmlImportScanner += QLatin1String(".exe");
 #endif
 
     QStringList importPaths;
-    importPaths += shellQuote(options->qtInstallDirectory + QLatin1String("/qml"));
 
+    // In Conan's case, qtInstallDirectory will point only to qtbase installed files, which
+    // lacks a qml directory. We don't want to pass it as an import path if it doesn't exist
+    // because it will cause qmlimportscanner to fail.
+    // This also covers the case when only qtbase is installed in a regular Qt build.
+    const QString mainImportPath = options->qtInstallDirectory + QLatin1String("/qml");
+    if (QFile::exists(mainImportPath))
+        importPaths += shellQuote(mainImportPath);
+
+    // These are usually provided by CMake in the deployment json file from paths specified
+    // in CMAKE_FIND_ROOT_PATH. They might not have qml modules.
     for (const QString &prefix : options->extraPrefixDirs)
-        if (QDir().exists(prefix + QLatin1String("/qml")))
+        if (QFile::exists(prefix + QLatin1String("/qml")))
             importPaths += shellQuote(prefix + QLatin1String("/qml"));
 
+    // These are provided by both CMake and qmake.
     for (const QString &qmlImportPath : qAsConst(options->qmlImportPaths)) {
-        if (QDir().exists(qmlImportPath)) {
+        if (QFile::exists(qmlImportPath)) {
             importPaths += shellQuote(qmlImportPath);
         } else {
             fprintf(stderr, "Warning: QML import path %s does not exist.\n",
@@ -2473,15 +2487,16 @@ static GradleProperties readGradleProperties(const QString &path)
 
 static bool mergeGradleProperties(const QString &path, GradleProperties properties)
 {
-    QFile::remove(path + QLatin1Char('~'));
-    QFile::rename(path, path + QLatin1Char('~'));
+    const QString oldPathStr = path + QLatin1Char('~');
+    QFile::remove(oldPathStr);
+    QFile::rename(path, oldPathStr);
     QFile file(path);
     if (!file.open(QIODevice::Truncate | QIODevice::WriteOnly | QIODevice::Text)) {
         fprintf(stderr, "Can't open file: %s for writing\n", qPrintable(file.fileName()));
         return false;
     }
 
-    QFile oldFile(path + QLatin1Char('~'));
+    QFile oldFile(oldPathStr);
     if (oldFile.open(QIODevice::ReadOnly)) {
         while (!oldFile.atEnd()) {
             QByteArray line(oldFile.readLine());
@@ -2497,6 +2512,7 @@ static bool mergeGradleProperties(const QString &path, GradleProperties properti
             file.write(line);
         }
         oldFile.close();
+        QFile::remove(oldPathStr);
     }
 
     for (GradleProperties::const_iterator it = properties.begin(); it != properties.end(); ++it)

@@ -591,9 +591,8 @@ void QHighDpiScaling::setScreenFactor(QScreen *screen, qreal factor)
     else
         QHighDpiScaling::m_namedScreenScaleFactors.insert(name, factor);
 
-    // hack to force re-evaluation of screen geometry
     if (screen->handle())
-        screen->d_func()->setPlatformScreen(screen->handle()); // updates geometries based on scale factor
+        screen->d_func()->updateLogicalDpi();
 }
 
 QPoint QHighDpiScaling::mapPositionToNative(const QPoint &pos, const QPlatformScreen *platformScreen)
@@ -785,3 +784,5 @@ QHighDpiScaling::ScaleAndOrigin QHighDpiScaling::scaleAndOrigin(const QWindow *,
 }
 #endif //QT_NO_HIGHDPISCALING
 QT_END_NAMESPACE
+
+#include "moc_qhighdpiscaling_p.cpp"

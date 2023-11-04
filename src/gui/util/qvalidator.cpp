@@ -491,7 +491,7 @@ void QIntValidator::setRange(int bottom, int top)
     \brief the validator's lowest acceptable value
 
     By default, this property's value is derived from the lowest signed
-    integer available (typically -2147483647).
+    integer available (-2147483648).
 
     \sa setRange()
 */
@@ -505,7 +505,7 @@ void QIntValidator::setBottom(int bottom)
     \brief the validator's highest acceptable value
 
     By default, this property's value is derived from the highest signed
-    integer available (typically 2147483647).
+    integer available (2147483647).
 
     \sa setRange()
 */
@@ -693,7 +693,11 @@ QValidator::State QDoubleValidatorPrivate::validateWithLocale(QString &input, QL
     if (notation == QDoubleValidator::StandardNotation) {
         double max = qMax(qAbs(q->b), qAbs(q->t));
         qlonglong v;
-        if (convertDoubleTo(max, &v)) {
+        // Need a whole number to pass to convertDoubleTo() or it fails. Use
+        // floor, as max is positive so this has the same number of digits
+        // before the decimal point, where qCeil() might take us up to a power
+        // of ten, adding a digit.
+        if (convertDoubleTo(qFloor(max), &v)) {
             qlonglong n = pow10(numDigits(v));
             // In order to get the highest possible number in the intermediate
             // range we need to get 10 to the power of the number of digits
@@ -964,5 +968,7 @@ void QRegularExpressionValidatorPrivate::setRegularExpression(const QRegularExpr
 #endif // QT_CONFIG(regularexpression)
 
 QT_END_NAMESPACE
+
+#include "moc_qvalidator.cpp"
 
 #endif // QT_NO_VALIDATOR

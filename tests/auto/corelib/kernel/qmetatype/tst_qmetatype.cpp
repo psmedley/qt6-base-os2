@@ -44,6 +44,7 @@
 #endif
 
 Q_DECLARE_METATYPE(QMetaType::Type)
+Q_DECLARE_METATYPE(QPartialOrdering)
 
 namespace CheckTypeTraits
 {
@@ -592,6 +593,10 @@ void tst_QMetaType::normalizedTypes()
 #define TYPENAME_DATA(MetaTypeName, MetaTypeId, RealType)\
     QTest::newRow(#RealType) << int(QMetaType::MetaTypeName) << #RealType;
 
+namespace enumerations {
+    enum Test { a = 0 };
+}
+
 void tst_QMetaType::typeName_data()
 {
     QTest::addColumn<int>("aType");
@@ -628,6 +633,8 @@ void tst_QMetaType::typeName_data()
     // template instance class derived from Q_GADGET enabled class
     QTest::newRow("GadgetDerivedAndTyped<int>") << ::qMetaTypeId<GadgetDerivedAndTyped<int>>() << QString::fromLatin1("GadgetDerivedAndTyped<int>");
     QTest::newRow("GadgetDerivedAndTyped<int>*") << ::qMetaTypeId<GadgetDerivedAndTyped<int>*>() << QString::fromLatin1("GadgetDerivedAndTyped<int>*");
+
+    QTest::newRow("msvcKeywordPartOfName") << ::qMetaTypeId<enumerations::Test>() << QString::fromLatin1("enumerations::Test");
 }
 
 void tst_QMetaType::typeName()
@@ -1349,6 +1356,58 @@ FOR_EACH_CORE_METATYPE(RETURN_CONSTRUCT_COPY_FUNCTION)
 
     QFETCH(int, type);
     TypeTestFunctionGetter::get(type)();
+}
+
+void tst_QMetaType::selfCompare_data()
+{
+    qRegisterMetaType<QPartialOrdering>();
+    QTest::addColumn<int>("type");
+    QTest::addColumn<QPartialOrdering>("order");
+
+    auto orderingFor = [](QMetaType::Type t) {
+        if (t == QMetaType::UnknownType || t == QMetaType::Void)
+            return QPartialOrdering::Unordered;
+        return QPartialOrdering::Equivalent;
+    };
+
+    QTest::newRow("unknown-type") << int(QMetaType::UnknownType) << orderingFor(QMetaType::UnknownType);
+
+#define ADD_METATYPE_TEST_ROW(MetaTypeName, MetaTypeId, RealType) \
+    QTest::newRow(QMetaType::typeName(QMetaType::MetaTypeName)) << int(QMetaType::MetaTypeName) << orderingFor(QMetaType::MetaTypeName);
+FOR_EACH_CORE_METATYPE(ADD_METATYPE_TEST_ROW)
+#undef ADD_METATYPE_TEST_ROW
+}
+
+void tst_QMetaType::selfCompare()
+{
+    QFETCH(int, type);
+    QFETCH(QPartialOrdering, order);
+
+    QMetaType t(type);
+    void *v1 = t.create(nullptr);
+    void *v2 = t.create(nullptr);
+    auto scope = qScopeGuard([=] {
+        t.destroy(v1);
+        t.destroy(v2);
+    });
+
+    // all these types have an equality comparator
+    QCOMPARE(t.equals(v1, v2), order == QPartialOrdering::Equivalent);
+
+    if (t.iface() && t.iface()->lessThan)
+        QCOMPARE(t.compare(v1, v2), order);
+
+    // for the primitive types, do a memcmp() too
+    switch (type) {
+    default:
+        break;
+
+#define ADD_METATYPE_CASE(MetaTypeName, MetaTypeId, RealType) \
+    case QMetaType::MetaTypeName:
+FOR_EACH_PRIMITIVE_METATYPE(ADD_METATYPE_CASE)
+#undef ADD_METATYPE_CASE
+        QCOMPARE(memcmp(v1, v2, t.sizeOf()), 0);
+    }
 }
 
 typedef QString CustomString;

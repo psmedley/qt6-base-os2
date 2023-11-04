@@ -169,10 +169,10 @@ QT_BEGIN_NAMESPACE
         Replies only, type: QMetaType::QUrl (no default)
         If present, it indicates that the server is redirecting the
         request to a different URL. The Network Access API does follow
-        redirections by default, but if
-        QNetworkRequest::ManualRedirectPolicy is enabled and
-        the redirect was not handled in redirected() then this
-        attribute will be present.
+        redirections by default, unless
+        QNetworkRequest::ManualRedirectPolicy is used. Additionally, if
+        QNetworkRequest::UserVerifiedRedirectPolicy is used, then this
+        attribute will be set if the redirect was not followed.
         The returned URL might be relative. Use QUrl::resolved()
         to create an absolute URL out of it.
 
@@ -495,10 +495,9 @@ QNetworkRequest::QNetworkRequest()
     // Initial values proposed by RFC 7540 are quite draconian, but we
     // know about servers configured with this value as maximum possible,
     // rejecting our SETTINGS frame and sending us a GOAWAY frame with the
-    // flow control error set. Unless an application sets its own parameters,
-    // we don't send SETTINGS_INITIAL_WINDOW_SIZE, but increase
-    // (via WINDOW_UPDATE) the session window size. These are our 'defaults':
-    d->h2Configuration.setStreamReceiveWindowSize(Http2::defaultSessionWindowSize);
+    // flow control error set. If this causes a problem - the app should
+    // set a proper configuration. We'll use our defaults, as documented.
+    d->h2Configuration.setStreamReceiveWindowSize(Http2::qtDefaultStreamReceiveWindowSize);
     d->h2Configuration.setSessionReceiveWindowSize(Http2::maxSessionReceiveWindowSize);
     d->h2Configuration.setServerPushEnabled(false);
 #endif // QT_CONFIG(http)
@@ -725,9 +724,8 @@ QSslConfiguration QNetworkRequest::sslConfiguration() const
 /*!
     Sets this network request's SSL configuration to be \a config. The
     settings that apply are the private key, the local certificate,
-    the SSL protocol (SSLv2, SSLv3, TLSv1.0 where applicable), the CA
-    certificates and the ciphers that the SSL backend is allowed to
-    use.
+    the TLS protocol (e.g. TLS 1.3), the CA certificates and the ciphers that
+    the SSL backend is allowed to use.
 
     \sa sslConfiguration(), QSslConfiguration::defaultConfiguration()
 */
@@ -874,7 +872,7 @@ void QNetworkRequest::setPeerVerifyName(const QString &peerName)
 
     \list
       \li Window size for connection-level flowcontrol is 2147483647 octets
-      \li Window size for stream-level flowcontrol is 21474836 octets
+      \li Window size for stream-level flowcontrol is 214748364 octets
       \li Max frame size is 16384
     \endlist
 

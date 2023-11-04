@@ -821,10 +821,11 @@ QJniObject QAndroidIntent::handle() const
 /*!
     \namespace QtAndroidPrivate
     \preliminary
-    \inmodule QtCore
+    \inmodule QtCorePrivate
     \since 6.2
-    \brief The QtAndroid namespace provides miscellaneous functions to aid Android development.
-    \inheaderfile QtAndroid
+    \brief The QtAndroidPrivate namespace provides miscellaneous functions
+           to aid Android development.
+    \inheaderfile QtCore/private/qandroidextras_p.h
 */
 
 /*!
@@ -1227,7 +1228,7 @@ QtAndroidPrivate::requestPermission(QtAndroidPrivate::PermissionType permission)
     promise->start();
     const auto nativePermissions = nativeStringsFromPermission(permission);
 
-    if (nativePermissions.size() > 0) {
+    if (nativePermissions.size() > 0 && QtAndroidPrivate::acquireAndroidDeadlockProtector()) {
         requestPermissionsInternal(nativePermissions).then(
                     [promise, permission](QFuture<QtAndroidPrivate::PermissionResult> future) {
             auto AuthorizedCount = future.results().count(QtAndroidPrivate::Authorized);
@@ -1239,6 +1240,7 @@ QtAndroidPrivate::requestPermission(QtAndroidPrivate::PermissionType permission)
             } else {
                 promise->addResult(QtAndroidPrivate::Denied, 0);
             }
+            QtAndroidPrivate::releaseAndroidDeadlockProtector();
             promise->finish();
         });
 

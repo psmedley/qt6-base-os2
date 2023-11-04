@@ -256,6 +256,7 @@ void QXcbConnection::xi2SetupSlavePointerDevice(void *info, bool removeExisting,
     TabletData tabletData;
 #endif
     QXcbScrollingDevicePrivate *scrollingDeviceP = nullptr;
+    bool used = false;
     auto scrollingDevice = [&]() {
         if (!scrollingDeviceP)
             scrollingDeviceP = new QXcbScrollingDevicePrivate(name, deviceInfo->deviceid,
@@ -412,7 +413,7 @@ void QXcbConnection::xi2SetupSlavePointerDevice(void *info, bool removeExisting,
     }
 
     if (!isTablet) {
-        TouchDeviceData *dev = populateTouchDevices(deviceInfo, scrollingDeviceP);
+        TouchDeviceData *dev = populateTouchDevices(deviceInfo, scrollingDeviceP, &used);
         if (dev && lcQpaXInputDevices().isDebugEnabled()) {
             if (dev->qtTouchDevice->type() == QInputDevice::DeviceType::TouchScreen)
                 qCDebug(lcQpaXInputDevices, "   it's a touchscreen with type %d capabilities 0x%X max touch points %d",
@@ -435,12 +436,18 @@ void QXcbConnection::xi2SetupSlavePointerDevice(void *info, bool removeExisting,
             if (master)
                 scrollingDeviceP->seatName = master->seatName();
             QWindowSystemInterface::registerInputDevice(new QXcbScrollingDevice(*scrollingDeviceP, master));
+            used = true;
         } else {
             QWindowSystemInterface::registerInputDevice(new QPointingDevice(
                     name, deviceInfo->deviceid,
                     QInputDevice::DeviceType::Mouse, QPointingDevice::PointerType::Generic,
                     caps, 1, buttonCount, (master ? master->seatName() : QString()), QPointingDeviceUniqueId(), master));
         }
+    }
+
+    if (!used && scrollingDeviceP) {
+        QXcbScrollingDevice *holder = new QXcbScrollingDevice(*scrollingDeviceP, master);
+        holder->deleteLater();
     }
 }
 
@@ -521,7 +528,7 @@ QXcbConnection::TouchDeviceData *QXcbConnection::touchDeviceForId(int id)
     return dev;
 }
 
-QXcbConnection::TouchDeviceData *QXcbConnection::populateTouchDevices(void *info, QXcbScrollingDevicePrivate *scrollingDeviceP)
+QXcbConnection::TouchDeviceData *QXcbConnection::populateTouchDevices(void *info, QXcbScrollingDevicePrivate *scrollingDeviceP, bool *used)
 {
     auto *deviceInfo = reinterpret_cast<xcb_input_xi_device_info_t *>(info);
     QPointingDevice::Capabilities caps;
@@ -614,6 +621,7 @@ QXcbConnection::TouchDeviceData *QXcbConnection::populateTouchDevices(void *info
             dev.qtTouchDevice = new QXcbScrollingDevice(*scrollingDeviceP, master);
             if (Q_UNLIKELY(!caps.testFlag(QInputDevice::Capability::Scroll)))
                 qCDebug(lcQpaXInputDevices) << "unexpectedly missing RelVert/HorizWheel atoms for touchpad with scroll capability" << dev.qtTouchDevice;
+            *used = true;
         } else {
             dev.qtTouchDevice = new QPointingDevice(QString::fromUtf8(xcb_input_xi_device_info_name(deviceInfo),
                                                                       xcb_input_xi_device_info_name_length(deviceInfo)),
@@ -708,8 +716,12 @@ void QXcbConnection::xi2HandleEvent(xcb_ge_event_t *event)
                         event->event_type, xiDeviceEvent->sequence, xiDeviceEvent->detail,
                         fixed1616ToReal(xiDeviceEvent->event_x), fixed1616ToReal(xiDeviceEvent->event_y),
                         fixed1616ToReal(xiDeviceEvent->root_x), fixed1616ToReal(xiDeviceEvent->root_y),xiDeviceEvent->event);
-            if (QXcbWindow *platformWindow = platformWindowFromId(xiDeviceEvent->event))
+            if (QXcbWindow *platformWindow = platformWindowFromId(xiDeviceEvent->event)) {
                 xi2ProcessTouch(xiDeviceEvent, platformWindow);
+            } else { // When the window cannot be matched, delete it from touchPoints
+                if (TouchDeviceData *dev = touchDeviceForId(xiDeviceEvent->sourceid))
+                    dev->touchPoints.remove((xiDeviceEvent->detail % INT_MAX));
+            }
             break;
         }
     } else if (xiEnterEvent && eventListener) {
@@ -1307,6 +1319,9 @@ void QXcbConnection::xi2ReportTabletEvent(const void *event, TabletData *tabletD
     double pressure = 0, rotation = 0, tangentialPressure = 0;
     int xTilt = 0, yTilt = 0;
     static const bool useValuators = !qEnvironmentVariableIsSet("QT_XCB_TABLET_LEGACY_COORDINATES");
+    const QPointingDevice *dev = QPointingDevicePrivate::tabletDevice(QInputDevice::DeviceType(tabletData->tool),
+                                                                      QPointingDevice::PointerType(tabletData->pointerType),
+                                                                      QPointingDeviceUniqueId::fromNumericId(tabletData->serialId));
 
     // Valuators' values are relative to the physical size of the current virtual
     // screen. Therefore we cannot use QScreen/QWindow geometry and should use
@@ -1354,7 +1369,8 @@ void QXcbConnection::xi2ReportTabletEvent(const void *event, TabletData *tabletD
                 tangentialPressure = normalizedValue * 2.0 - 1.0; // Convert 0..1 range to -1..+1 range
                 break;
             case QInputDevice::DeviceType::Stylus:
-                rotation = normalizedValue * 360.0 - 180.0; // Convert 0..1 range to -180..+180 degrees
+                if (dev->capabilities().testFlag(QInputDevice::Capability::Rotation))
+                    rotation = normalizedValue * 360.0 - 180.0; // Convert 0..1 range to -180..+180 degrees
                 break;
             default:    // Other types of styli do not use this valuator
                 break;
@@ -1373,11 +1389,10 @@ void QXcbConnection::xi2ReportTabletEvent(const void *event, TabletData *tabletD
             local.x(), local.y(), global.x(), global.y(),
             (int)tabletData->buttons, pressure, xTilt, yTilt, rotation, (int)modifiers);
 
-    QWindowSystemInterface::handleTabletEvent(window, ev->time, local, global,
-                                              int(tabletData->tool), int(tabletData->pointerType),
+    QWindowSystemInterface::handleTabletEvent(window, ev->time, dev, local, global,
                                               tabletData->buttons, pressure,
                                               xTilt, yTilt, tangentialPressure,
-                                              rotation, 0, tabletData->serialId, modifiers);
+                                              rotation, 0, modifiers);
 }
 
 QXcbConnection::TabletData *QXcbConnection::tabletDataForDevice(int id)

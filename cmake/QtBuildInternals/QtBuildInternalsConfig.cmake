@@ -74,6 +74,9 @@ macro(qt_set_up_build_internals_paths)
     # building qtdeclarative, rather than having to build qtbase first (which will copy
     # QtBuild.cmake to the build dir). This is similar to qmake non-prefix builds, where the
     # source qtbase/mkspecs directory is used.
+    # TODO: Clean this up, together with qt_internal_try_compile_binary_for_strip to only use the
+    # the qtbase sources when building qtbase. And perhaps also when doing a non-prefix
+    # developer-build.
     if(EXISTS "${QT_SOURCE_TREE}/cmake")
         list(PREPEND CMAKE_MODULE_PATH "${QT_SOURCE_TREE}/cmake")
     endif()
@@ -125,9 +128,14 @@ function(qt_build_internals_disable_pkg_config_if_needed)
     endif()
 
     # Features won't have been evaluated yet if this is the first run, have to evaluate this here
-    if(NOT "${FEATURE_pkg_config}" AND "${INPUT_pkg_config}"
-       AND NOT "${INPUT_pkg_config}" STREQUAL "undefined")
-        set(FEATURE_pkg_config ON)
+    if ((NOT DEFINED "FEATURE_pkg_config") AND (DEFINED "INPUT_pkg_config")
+            AND (NOT "${INPUT_pkg_config}" STREQUAL "undefined")
+            AND (NOT "${INPUT_pkg_config}" STREQUAL ""))
+        if(INPUT_pkg_config)
+            set(FEATURE_pkg_config ON)
+        else()
+            set(FEATURE_pkg_config OFF)
+        endif()
     endif()
 
     # If user explicitly specified a value for the feature, honor it, even if it might break
@@ -273,15 +281,17 @@ function(qt_build_internals_add_toplevel_targets)
             set(qt_repo_target_name "${qt_repo_targets_name}_${qt_repo_target_basename}")
             message(DEBUG "${qt_repo_target_name} depends on ${qt_repo_targets}")
             add_custom_target("${qt_repo_target_name}"
-                                DEPENDS ${qt_repo_targets}
-                                COMMENT "Building everything in ${qt_repo_targets_name}/${qt_repo_target_basename}")
+                COMMENT "Building everything in ${qt_repo_targets_name}/${qt_repo_target_basename}")
+            add_dependencies("${qt_repo_target_name}" ${qt_repo_targets})
             list(APPEND qt_repo_target_all "${qt_repo_target_name}")
         endif()
     endforeach()
     if (qt_repo_target_all)
+        # Note qt_repo_targets_name is different from qt_repo_target_name that is used above.
         add_custom_target("${qt_repo_targets_name}"
-                            DEPENDS ${qt_repo_target_all}
                             COMMENT "Building everything in ${qt_repo_targets_name}")
+        add_dependencies("${qt_repo_targets_name}" ${qt_repo_target_all})
+        message(DEBUG "${qt_repo_targets_name} depends on ${qt_repo_target_all}")
     endif()
 endfunction()
 
@@ -371,6 +381,8 @@ endmacro()
 macro(qt_build_repo_begin)
     qt_build_internals_set_up_private_api()
     qt_enable_cmake_languages()
+
+    qt_internal_generate_binary_strip_wrapper()
 
     # Add global docs targets that will work both for per-repo builds, and super builds.
     if(NOT TARGET docs)
@@ -638,15 +650,21 @@ function(qt_compute_relative_path_from_cmake_config_dir_to_prefix)
     #
     # Similar code exists in Qt6CoreConfigExtras.cmake.in and src/corelib/CMakeLists.txt which
     # might not be needed anymore.
+    if(CMAKE_STAGING_PREFIX)
+        set(__qt_prefix "${CMAKE_STAGING_PREFIX}")
+    else()
+        set(__qt_prefix "${CMAKE_INSTALL_PREFIX}")
+    endif()
+
     if(QT_WILL_INSTALL)
         get_filename_component(clean_config_prefix
-                               "${CMAKE_INSTALL_PREFIX}/${QT_CONFIG_INSTALL_DIR}" ABSOLUTE)
+                               "${__qt_prefix}/${QT_CONFIG_INSTALL_DIR}" ABSOLUTE)
     else()
         get_filename_component(clean_config_prefix "${QT_CONFIG_BUILD_DIR}" ABSOLUTE)
     endif()
     file(RELATIVE_PATH
          qt_path_from_cmake_config_dir_to_prefix
-         "${clean_config_prefix}" "${CMAKE_INSTALL_PREFIX}")
+         "${clean_config_prefix}" "${__qt_prefix}")
      set(qt_path_from_cmake_config_dir_to_prefix "${qt_path_from_cmake_config_dir_to_prefix}"
          PARENT_SCOPE)
 endfunction()
@@ -693,15 +711,9 @@ endfunction()
 # Mean to be called when configuring examples as part of the main build tree, as well as for CMake
 # tests (tests that call CMake to try and build CMake applications).
 macro(qt_internal_set_up_build_dir_package_paths)
-    list(APPEND CMAKE_PREFIX_PATH "${QT_BUILD_DIR}")
+    list(PREPEND CMAKE_PREFIX_PATH "${QT_BUILD_DIR}/${INSTALL_LIBDIR}/cmake")
     # Make sure the CMake config files do not recreate the already-existing targets
     set(QT_NO_CREATE_TARGETS TRUE)
-
-    # TODO: Remove reliance on CMAKE_FIND_ROOT_PATH_MODE_PACKAGE and instead pass any required
-    # prefixes as a combination of CMAKE_PREFIX_PATH and CMAKE_FIND_ROOT_PATH like we do in
-    # qt_internal_add_tool.
-    set(BACKUP_CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ${CMAKE_FIND_ROOT_PATH_MODE_PACKAGE})
-    set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE "BOTH")
 endmacro()
 
 macro(qt_examples_build_begin)
@@ -781,12 +793,15 @@ macro(qt_examples_build_begin)
 
     # Examples that are built as part of the Qt build need to use the CMake config files from the
     # build dir, because they are not installed yet in a prefix build.
-    # Appending to CMAKE_PREFIX_PATH helps find the initial Qt6Config.cmake.
-    # Appending to QT_EXAMPLES_CMAKE_PREFIX_PATH helps find components of Qt6, because those
+    # Prepending to CMAKE_PREFIX_PATH helps find the initial Qt6Config.cmake.
+    # Prepending to QT_EXAMPLES_CMAKE_PREFIX_PATH helps find components of Qt6, because those
     # find_package calls use NO_DEFAULT_PATH, and thus CMAKE_PREFIX_PATH is ignored.
+    # Prepending to CMAKE_FIND_ROOT_PATH ensures the components are found while cross-compiling
+    # without setting CMAKE_FIND_ROOT_PATH_MODE_PACKAGE to BOTH.
     if(NOT QT_IS_EXTERNAL_EXAMPLES_BUILD OR NOT __qt_all_examples_ported_to_external_projects)
         qt_internal_set_up_build_dir_package_paths()
-        list(APPEND QT_EXAMPLES_CMAKE_PREFIX_PATH "${QT_BUILD_DIR}")
+        list(PREPEND CMAKE_FIND_ROOT_PATH "${QT_BUILD_DIR}")
+        list(PREPEND QT_EXAMPLES_CMAKE_PREFIX_PATH "${QT_BUILD_DIR}/${INSTALL_LIBDIR}/cmake")
     endif()
 
     # Because CMAKE_INSTALL_RPATH is empty by default in the repo project, examples need to have
@@ -839,8 +854,6 @@ macro(qt_examples_build_end)
         endif()
     endforeach()
 
-    set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ${BACKUP_CMAKE_FIND_ROOT_PATH_MODE_PACKAGE})
-
     install(CODE "
 # Restore backed up CMAKE_INSTALL_PREFIX.
 set(CMAKE_INSTALL_PREFIX \"\${_qt_internal_examples_cmake_install_prefix_backup}\")
@@ -873,8 +886,15 @@ unset(CMAKE_INSTALL_PREFIX)
 
     # Override the install prefix in the subdir cmake_install.cmake, so that
     # relative install(TARGETS DESTINATION) calls in example projects install where we tell them to.
-    set(CMAKE_INSTALL_PREFIX
-        "${CMAKE_INSTALL_PREFIX}/${INSTALL_EXAMPLESDIR}/${example_rel_path}")
+    # Allow customizing the installation path of the examples. Will be used in CI.
+    if(QT_INTERNAL_EXAMPLES_INSTALL_PREFIX)
+        set(qt_example_install_prefix "${QT_INTERNAL_EXAMPLES_INSTALL_PREFIX}")
+    else()
+        set(qt_example_install_prefix "${CMAKE_INSTALL_PREFIX}/${INSTALL_EXAMPLESDIR}")
+    endif()
+    file(TO_CMAKE_PATH "${qt_example_install_prefix}" qt_example_install_prefix)
+
+    set(CMAKE_INSTALL_PREFIX "${qt_example_install_prefix}/${example_rel_path}")
 
     # Make sure unclean example projects have their INSTALL_EXAMPLEDIR set to "."
     # Won't have any effect on example projects that don't use INSTALL_EXAMPLEDIR.
@@ -921,8 +941,6 @@ function(qt_internal_add_example_external_project subdir)
         set(arg_NAME "${arg_NAME}-${short_hash}")
     endif()
 
-    # TODO: Fix 'prefix Qt' example builds not to rely on CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
-    #       for finding Qt packages when cross-compiling.
     # TODO: Fix example builds when using Conan / install prefixes are different for each repo.
     if(QT_SUPERBUILD OR QtBase_BINARY_DIR)
         # When doing a top-level build or when building qtbase,
@@ -940,27 +958,28 @@ function(qt_internal_add_example_external_project subdir)
         # for all repos except the one that is currently built. For the repo that is currently
         # built, we pick up the Config files from the current repo build dir instead.
         # For non-prefix builds, there's only one prefix, the main build dir.
+        # Both are handled by this assignment.
         set(qt_prefixes "${QT_BUILD_DIR}")
+
+        # Appending to QT_ADDITIONAL_PACKAGES_PREFIX_PATH helps find Qt6 components in
+        # non-qtbase prefix builds because we use NO_DEFAULT_PATH in find_package calls.
+        # It also handles the cross-compiling scenario where we need to adjust both the root path
+        # and prefixes, with the prefixes containing lib/cmake. This leverages the infrastructure
+        # previously added for Conan.
+        list(APPEND QT_ADDITIONAL_PACKAGES_PREFIX_PATH ${qt_prefixes})
+
+        # In a prefix build, look up all repo Config files in the install prefix,
+        # except for the current repo, which will look in the build dir (handled above).
         if(QT_WILL_INSTALL)
             list(APPEND qt_prefixes "${QT6_INSTALL_PREFIX}")
-
-            # Appending to QT_EXAMPLES_CMAKE_PREFIX_PATH helps find Qt6 components in
-            # non-qtbase prefix builds because we use NO_DEFAULT_PATH in find_package calls.
-            set(QT_EXAMPLES_CMAKE_PREFIX_PATH "${qt_prefixes}")
         endif()
     endif()
 
     set(vars_to_pass_if_defined)
     set(var_defs)
     if(QT_HOST_PATH OR CMAKE_CROSSCOMPILING)
-        # Android NDK forces CMAKE_FIND_ROOT_PATH_MODE_PACKAGE to ONLY, so we
-        # can't rely on this setting here making it through to the example
-        # project.
-        # TODO: Remove CMAKE_FIND_ROOT_PATH_MODE_PACKAGE once cross-compiling examples uses
-        # CMAKE_FIND_ROOT_PATH + CMAKE_PREFIX_PATH instead.
         list(APPEND var_defs
             -DCMAKE_TOOLCHAIN_FILE:FILEPATH=${qt_cmake_dir}/qt.toolchain.cmake
-            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE:STRING=BOTH
         )
     else()
         list(PREPEND CMAKE_PREFIX_PATH ${qt_prefixes})
@@ -999,13 +1018,48 @@ function(qt_internal_add_example_external_project subdir)
         endforeach()
     endif()
 
+    # When cross-compiling for a qemu target in our CI, we source an environment script
+    # that sets environment variables like CC and CXX. These are parsed by CMake on initial
+    # configuration to populate the cache vars CMAKE_${lang}_COMPILER.
+    # If the environment variable specified not only the compiler path, but also a list of flags
+    # to pass to the compiler, CMake parses those out into a separate CMAKE_${lang}_COMPILER_ARG1
+    # cache variable. In such a case, we want to ensure that the external project also sees those
+    # flags.
+    # Unfortunately we can't do that by simply forwarding CMAKE_${lang}_COMPILER_ARG1 to the EP
+    # because it breaks the compiler identification try_compile call, it simply doesn't consider
+    # the cache var. From what I could gather, it's a limitation of try_compile and the list
+    # of variables it considers for forwarding.
+    # To fix this case, we ensure not to pass either cache variable, and let the external project
+    # and its compiler identification try_compile project pick up the compiler and the flags
+    # from the environment variables instead.
+    foreach(lang_as_env_var CC CXX OBJC OBJCXX)
+        if(lang_as_env_var STREQUAL "CC")
+            set(lang_as_cache_var "C")
+        else()
+            set(lang_as_cache_var "${lang_as_env_var}")
+        endif()
+        set(lang_env_value "$ENV{${lang_as_env_var}}")
+        if(lang_env_value
+                AND CMAKE_${lang_as_cache_var}_COMPILER
+                AND CMAKE_${lang_as_cache_var}_COMPILER_ARG1)
+            # The compiler environment variable is set and specifies a list of extra flags, don't
+            # forward the compiler cache vars and rely on the environment variable to be picked up
+            # instead.
+        else()
+            list(APPEND vars_to_pass_if_defined "CMAKE_${lang_as_cache_var}_COMPILER:STRING")
+        endif()
+    endforeach()
+    unset(lang_as_env_var)
+    unset(lang_as_cache_var)
+    unset(lang_env_value)
+
     list(APPEND vars_to_pass_if_defined
         CMAKE_BUILD_TYPE:STRING
         CMAKE_CONFIGURATION_TYPES:STRING
         CMAKE_PREFIX_PATH:STRING
         QT_EXAMPLES_CMAKE_PREFIX_PATH:STRING
+        QT_ADDITIONAL_PACKAGES_PREFIX_PATH:STRING
         CMAKE_FIND_ROOT_PATH:STRING
-        CMAKE_FIND_ROOT_PATH_MODE_PACKAGE:STRING
         BUILD_SHARED_LIBS:BOOL
         CMAKE_OSX_ARCHITECTURES:STRING
         CMAKE_OSX_DEPLOYMENT_TARGET:STRING
@@ -1030,6 +1084,10 @@ function(qt_internal_add_example_external_project subdir)
         list(APPEND var_defs -D${var_with_type}=${varForGenex})
     endforeach()
 
+    if(QT_INTERNAL_VERBOSE_EXAMPLES)
+        list(APPEND var_defs -DCMAKE_MESSAGE_LOG_LEVEL:STRING=DEBUG)
+        list(APPEND var_defs -DCMAKE_AUTOGEN_VERBOSE:BOOL=TRUE)
+    endif()
 
     set(deps "")
     list(REMOVE_DUPLICATES QT_EXAMPLE_DEPENDENCIES)
@@ -1103,16 +1161,23 @@ function(qt_internal_add_example_external_project subdir)
     #    example_source_dir, use _qt_internal_override_example_install_dir_to_dot to ensure
     #    INSTALL_EXAMPLEDIR does not interfere.
 
-    # Allow installing somewhere under the build dir.
-    if(QT_INTERNAL_CUSTOM_INSTALL_DIR)
-        set(qt_example_install_prefix "${QT_INTERNAL_CUSTOM_INSTALL_DIR}")
+    # Allow customizing the installation path of the examples. Will be used in CI.
+    if(QT_INTERNAL_EXAMPLES_INSTALL_PREFIX)
+        set(qt_example_install_prefix "${QT_INTERNAL_EXAMPLES_INSTALL_PREFIX}")
     else()
         set(qt_example_install_prefix "${CMAKE_INSTALL_PREFIX}/${INSTALL_EXAMPLESDIR}")
     endif()
+    file(TO_CMAKE_PATH "${qt_example_install_prefix}" qt_example_install_prefix)
 
     set(example_install_prefix "${qt_example_install_prefix}/${example_rel_path}")
 
     set(ep_binary_dir    "${CMAKE_CURRENT_BINARY_DIR}/${subdir}")
+
+    set(build_command "")
+    if(QT_INTERNAL_VERBOSE_EXAMPLES AND CMAKE_GENERATOR MATCHES "Ninja")
+        set(build_command BUILD_COMMAND "${CMAKE_COMMAND}" --build "." -- -v)
+    endif()
+
     ExternalProject_Add(${arg_NAME}
         EXCLUDE_FROM_ALL TRUE
         SOURCE_DIR       "${CMAKE_CURRENT_SOURCE_DIR}/${subdir}"
@@ -1121,6 +1186,7 @@ function(qt_internal_add_example_external_project subdir)
         BINARY_DIR       "${ep_binary_dir}"
         INSTALL_DIR      "${example_install_prefix}"
         INSTALL_COMMAND  ""
+        ${build_command}
         TEST_COMMAND     ""
         DEPENDS          ${deps}
         CMAKE_CACHE_ARGS ${var_defs}

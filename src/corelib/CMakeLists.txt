@@ -103,7 +103,6 @@ qt_internal_add_module(Core
         kernel/qcoreapplication_platform.h
         kernel/qcorecmdlineargs_p.h
         kernel/qcoreevent.cpp kernel/qcoreevent.h
-        kernel/qcoreglobaldata.cpp kernel/qcoreglobaldata_p.h
         kernel/qdeadlinetimer.cpp kernel/qdeadlinetimer.h kernel/qdeadlinetimer_p.h
         kernel/qelapsedtimer.cpp kernel/qelapsedtimer.h
         kernel/qeventloop.cpp kernel/qeventloop.h
@@ -532,6 +531,8 @@ qt_internal_extend_target(Core CONDITION APPLE
     LIBRARIES
         ${FWCoreFoundation}
         ${FWFoundation}
+    PUBLIC_LIBRARIES
+        ${FWIOKit}
 )
 
 qt_internal_extend_target(Core CONDITION MACOS
@@ -542,7 +543,6 @@ qt_internal_extend_target(Core CONDITION MACOS
         ${FWSecurity}
     PUBLIC_LIBRARIES
         ${FWDiskArbitration}
-        ${FWIOKit}
 )
 
 qt_internal_extend_target(Core CONDITION INTEGRITY
@@ -556,10 +556,10 @@ qt_internal_extend_target(Core CONDITION INTEGRITY
         --pending_instantiations=128
 )
 
-# Workaround for QTBUG-90353
-# Remove if MinGW (our only supported gcc version < 9) is no longer supported
-qt_internal_extend_target(Core CONDITION GCC AND (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0.0")
-    PUBLIC_COMPILE_OPTIONS -Wno-error=invalid-offsetof
+# Workaround for QTBUG-101411
+# Remove if QCC (gcc version 8.3.0) for QNX 7.1.0 is no longer supported
+qt_internal_extend_target(Core CONDITION QCC AND (CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "8.3.0")
+    PUBLIC_COMPILE_OPTIONS $<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-offsetof>
 )
 
 #### Keys ignored in scope 14:.:.:corelib.pro:pathIsAbsolute(_ss_CMAKE_HOST_DATA_DIR):
@@ -747,7 +747,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_backtrace
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_system_doubleconversion
     LIBRARIES
-        WrapDoubleConversion::WrapDoubleConversion
+        WrapSystemDoubleConversion::WrapSystemDoubleConversion
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_doubleconversion AND NOT QT_FEATURE_system_doubleconversion
@@ -905,7 +905,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_datetimeparser
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_zstd
     LIBRARIES
-        ZSTD::ZSTD
+        WrapZSTD::WrapZSTD
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_filesystemwatcher
@@ -1380,6 +1380,14 @@ if(NOT QT_FEATURE_system_zlib)
         HEADER_MODULE
         NO_CONFIG_HEADER_FILE
     )
+    set_target_properties(ZlibPrivate PROPERTIES
+        _qt_module_is_3rdparty_header_library TRUE
+        _qt_module_skip_depends_include TRUE
+    )
+    set_property(TARGET ZlibPrivate
+                 APPEND PROPERTY EXPORT_PROPERTIES _qt_module_is_3rdparty_header_library)
+    set_property(TARGET ZlibPrivate
+                 APPEND PROPERTY EXPORT_PROPERTIES _qt_module_skip_depends_include)
 endif()
 
 qt_internal_add_optimize_full_flags()

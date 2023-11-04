@@ -255,7 +255,9 @@ function(qt_internal_add_module target)
         endif()
 
         if (arg_SKIP_DEPENDS_INCLUDE)
-            set_target_properties(${target} PROPERTIES QT_MODULE_SKIP_DEPENDS_INCLUDE TRUE)
+            set_target_properties(${target} PROPERTIES _qt_module_skip_depends_include TRUE)
+            set_property(TARGET "${target}" APPEND PROPERTY
+                         EXPORT_PROPERTIES _qt_module_skip_depends_include)
         endif()
         if(is_framework)
             set_target_properties(${target} PROPERTIES
@@ -402,16 +404,20 @@ function(qt_internal_add_module target)
         set(fw_install_header_dir "${INSTALL_LIBDIR}/${fw_header_dir}")
         set(fw_output_header_dir "${QT_BUILD_DIR}/${fw_install_header_dir}")
         list(APPEND public_includes
-            # Add the lib/Foo.framework dir as include path to let CMake generate
-            # the -F compiler flag for framework-style includes to work.
-            "$<INSTALL_INTERFACE:${fw_install_dir}>"
-
             # Add the framework Headers subdir, so that non-framework-style includes work. The
             # BUILD_INTERFACE Headers symlink was previously claimed not to exist at the relevant
             # time, and a fully specified Header path was used instead. This doesn't seem to be a
             # problem anymore.
             "$<BUILD_INTERFACE:${fw_output_header_dir}>"
             "$<INSTALL_INTERFACE:${fw_install_header_dir}>"
+
+            # Add the lib/Foo.framework dir as an include path to let CMake generate
+            # the -F compiler flag for framework-style includes to work.
+            # Make sure it is added AFTER the lib/Foo.framework/Headers include path,
+            # to mitigate issues like QTBUG-101718 and QTBUG-101775 where an include like
+            # #include <QtCore> might cause moc to include the QtCore framework shared library
+            # instead of the actual header.
+            "$<INSTALL_INTERFACE:${fw_install_dir}>"
         )
     endif()
 

@@ -718,11 +718,14 @@ QString QJsonValue::toString() const
  */
 QJsonArray QJsonValue::toArray(const QJsonArray &defaultValue) const
 {
-    const auto dd = QJsonPrivate::Value::container(value);
-    const auto n = QJsonPrivate::Value::valueHelper(value);
-    if (value.type() != QCborValue::Array || n >= 0 || !dd)
+    if (!isArray())
         return defaultValue;
-
+    QCborContainerPrivate *dd = nullptr;
+    const auto n = QJsonPrivate::Value::valueHelper(value);
+    const auto container = QJsonPrivate::Value::container(value);
+    Q_ASSERT(n == -1 || container == nullptr);
+    if (n < 0)
+        dd = container;
     return QJsonArray(dd);
 }
 
@@ -745,11 +748,14 @@ QJsonArray QJsonValue::toArray() const
  */
 QJsonObject QJsonValue::toObject(const QJsonObject &defaultValue) const
 {
-    const auto dd = QJsonPrivate::Value::container(value);
-    const auto n = QJsonPrivate::Value::valueHelper(value);
-    if (value.type() != QCborValue::Map || n >= 0 || !dd)
+    if (!isObject())
         return defaultValue;
-
+    QCborContainerPrivate *dd = nullptr;
+    const auto container = QJsonPrivate::Value::container(value);
+    const auto n = QJsonPrivate::Value::valueHelper(value);
+    Q_ASSERT(n == -1 || container == nullptr);
+    if (n < 0)
+        dd = container;
     return QJsonObject(dd);
 }
 
@@ -765,7 +771,6 @@ QJsonObject QJsonValue::toObject() const
     return toObject(QJsonObject());
 }
 
-#if QT_STRINGVIEW_LEVEL < 2
 /*!
     Returns a QJsonValue representing the value for the key \a key.
 
@@ -782,7 +787,6 @@ const QJsonValue QJsonValue::operator[](const QString &key) const
 {
     return (*this)[QStringView(key)];
 }
-#endif
 
 /*!
     \overload

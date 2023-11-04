@@ -146,6 +146,8 @@ function(qt_internal_setup_docker_test_fixture name)
 
     if(DEFINED QT_TESTSERVER_COMPOSE_FILE)
         set(TESTSERVER_COMPOSE_FILE ${QT_TESTSERVER_COMPOSE_FILE})
+    elseif(QNX)
+        set(TESTSERVER_COMPOSE_FILE "${QT_SOURCE_TREE}/tests/testserver/docker-compose-qemu-bridge-network.yml")
     else()
         set(TESTSERVER_COMPOSE_FILE "${QT_SOURCE_TREE}/tests/testserver/docker-compose-bridge-network.yml")
     endif()
@@ -482,8 +484,9 @@ for this function. Will be ignored")
     # Prepend emulator to test command in generated cmake script instead. Keep in mind that
     # CROSSCOMPILING_EMULATOR don't check if actual cross compilation is configured,
     # emulator is prepended independently.
-    if(CMAKE_CROSSCOMPILING)
-        get_test_property(${arg_NAME} CROSSCOMPILING_EMULATOR crosscompiling_emulator)
+    set(crosscompiling_emulator "")
+    if(CMAKE_CROSSCOMPILING AND TARGET ${arg_NAME})
+        get_target_property(crosscompiling_emulator ${arg_NAME} CROSSCOMPILING_EMULATOR)
         if(NOT crosscompiling_emulator)
             set(crosscompiling_emulator "")
         else()

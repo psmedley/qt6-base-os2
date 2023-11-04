@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2021 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
@@ -63,6 +63,7 @@
 #include <QtCore/qbasicatomic.h>
 #include <QtCore/qjnienvironment.h>
 #include <QtCore/qjniobject.h>
+#include <QtCore/qprocess.h>
 #include <QtCore/qresource.h>
 #include <QtCore/qthread.h>
 #include <QtGui/private/qguiapplication_p.h>
@@ -210,9 +211,10 @@ namespace QtAndroid
         QJniObject::callStaticMethod<void>(m_applicationClass, "setSystemUiVisibility", "(I)V", jint(uiVisibility));
     }
 
-    void notifyAccessibilityLocationChange()
+    void notifyAccessibilityLocationChange(uint accessibilityObjectId)
     {
-        QJniObject::callStaticMethod<void>(m_applicationClass, "notifyAccessibilityLocationChange");
+        QJniObject::callStaticMethod<void>(m_applicationClass, "notifyAccessibilityLocationChange",
+                                           "(I)V", accessibilityObjectId);
     }
 
     void notifyObjectHide(uint accessibilityObjectId, uint parentObjectId)
@@ -230,6 +232,12 @@ namespace QtAndroid
     {
         QJniObject::callStaticMethod<void>(m_applicationClass, "notifyValueChanged",
                                            "(ILjava/lang/String;)V", accessibilityObjectId, value);
+    }
+
+    void notifyScrolledEvent(uint accessibilityObjectId)
+    {
+        QJniObject::callStaticMethod<void>(m_applicationClass, "notifyScrolledEvent", "(I)V",
+                                           accessibilityObjectId);
     }
 
     void notifyQtAndroidPluginRunning(bool running)
@@ -490,11 +498,11 @@ static jboolean startQtAndroidPlugin(JNIEnv *env, jobject /*object*/, jstring pa
     }
 
     const char *nativeString = env->GetStringUTFChars(paramsString, 0);
-    QByteArray string = nativeString;
+    const QStringList argsList = QProcess::splitCommand(QString::fromUtf8(nativeString));
     env->ReleaseStringUTFChars(paramsString, nativeString);
 
-    for (auto str : string.split('\t'))
-        m_applicationParams.append(str.split(' '));
+    for (const QString &arg : argsList)
+        m_applicationParams.append(arg.toUtf8());
 
     // Go home
     QDir::setCurrent(QDir::homePath());
@@ -551,16 +559,21 @@ static void startQtApplication(JNIEnv */*env*/, jclass /*clazz*/)
             vm->AttachCurrentThread(&env, &args);
     }
 
+    // Register type for invokeMethod() calls.
+    qRegisterMetaType<Qt::ScreenOrientation>("Qt::ScreenOrientation");
+
     // Register resources if they are available
     if (QFile{QStringLiteral("assets:/android_rcc_bundle.rcc")}.exists())
         QResource::registerResource(QStringLiteral("assets:/android_rcc_bundle.rcc"));
 
-    QVarLengthArray<const char *> params(m_applicationParams.size());
-    for (int i = 0; i < m_applicationParams.size(); i++)
-        params[i] = static_cast<const char *>(m_applicationParams[i].constData());
+    const int argc = m_applicationParams.size();
+    QVarLengthArray<char *> argv(argc + 1);
+    for (int i = 0; i < argc; i++)
+        argv[i] = m_applicationParams[i].data();
+    argv[argc] = nullptr;
 
     startQtAndroidPluginCalled.fetchAndAddRelease(1);
-    int ret = m_main(m_applicationParams.length(), const_cast<char **>(params.data()));
+    int ret = m_main(argc, argv.data());
 
     if (m_mainLibraryHnd) {
         int res = dlclose(m_mainLibraryHnd);
@@ -667,11 +680,13 @@ static void setDisplayMetrics(JNIEnv * /*env*/, jclass /*clazz*/, jint screenWid
                 qRound(double(screenHeightPixels) / ydpi * 25.4), screenWidthPixels,
                 screenHeightPixels);
     } else {
-        m_androidPlatformIntegration->setPhysicalSize(qRound(double(screenWidthPixels)  / xdpi * 25.4),
-                                                      qRound(double(screenHeightPixels) / ydpi * 25.4));
-        m_androidPlatformIntegration->setScreenSize(screenWidthPixels, screenHeightPixels);
-        m_androidPlatformIntegration->setAvailableGeometry(QRect(availableLeftPixels, availableTopPixels,
-                                                                 availableWidthPixels, availableHeightPixels));
+        const QSize physicalSize(qRound(double(screenWidthPixels) / xdpi * 25.4),
+                                 qRound(double(screenHeightPixels) / ydpi * 25.4));
+        const QSize screenSize(screenWidthPixels, screenHeightPixels);
+        const QRect availableGeometry(availableLeftPixels, availableTopPixels,
+                                      availableWidthPixels, availableHeightPixels);
+        m_androidPlatformIntegration->setScreenSizeParameters(physicalSize, screenSize,
+                                                              availableGeometry);
         m_androidPlatformIntegration->setRefreshRate(refreshRate);
     }
 }
@@ -767,9 +782,13 @@ static void handleOrientationChanged(JNIEnv */*env*/, jobject /*thiz*/, jint new
     QAndroidPlatformIntegration::setScreenOrientation(screenOrientation, native);
     QMutexLocker lock(&m_platformMutex);
     if (m_androidPlatformIntegration) {
-        QPlatformScreen *screen = m_androidPlatformIntegration->screen();
-        QWindowSystemInterface::handleScreenOrientationChange(screen->screen(),
-                                                              screenOrientation);
+        QAndroidPlatformScreen *screen = m_androidPlatformIntegration->screen();
+        // Use invokeMethod to keep the certain order of the "geometry change"
+        // and "orientation change" event handling.
+        if (screen) {
+            QMetaObject::invokeMethod(screen, "setOrientation", Qt::AutoConnection,
+                                      Q_ARG(Qt::ScreenOrientation, screenOrientation));
+        }
     }
 }
 
@@ -777,6 +796,12 @@ static void handleRefreshRateChanged(JNIEnv */*env*/, jclass /*cls*/, jfloat ref
 {
     if (m_androidPlatformIntegration)
         m_androidPlatformIntegration->setRefreshRate(refreshRate);
+}
+
+static void handleUiDarkModeChanged(JNIEnv */*env*/, jobject /*thiz*/, jint newUiMode)
+{
+    QAndroidPlatformIntegration::setAppearance(
+        (newUiMode == 1 ) ? QPlatformTheme::Appearance::Dark : QPlatformTheme::Appearance::Light);
 }
 
 static void onActivityResult(JNIEnv */*env*/, jclass /*cls*/,
@@ -809,6 +834,7 @@ static JNINativeMethod methods[] = {
     { "setSurface", "(ILjava/lang/Object;II)V", (void *)setSurface },
     { "updateWindow", "()V", (void *)updateWindow },
     { "updateApplicationState", "(I)V", (void *)updateApplicationState },
+    { "handleUiDarkModeChanged", "(I)V", (void *)handleUiDarkModeChanged },
     { "handleOrientationChanged", "(II)V", (void *)handleOrientationChanged },
     { "onActivityResult", "(IILandroid/content/Intent;)V", (void *)onActivityResult },
     { "onNewIntent", "(Landroid/content/Intent;)V", (void *)onNewIntent },

@@ -157,7 +157,7 @@ bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode)
 
             if (ret == -1) {
                 q->setError(errno == EMFILE ? QFile::ResourceError : QFile::OpenError,
-                            qt_error_string(int(errno)));
+                            qt_error_string(errno));
                 return false;
             }
         }
@@ -256,7 +256,7 @@ qint64 QFSFileEnginePrivate::nativeRead(char *data, qint64 len)
         }
         if (readBytes == 0 && !feof(fh)) {
             // if we didn't read anything and we're not at EOF, it must be an error
-            q->setError(QFile::ReadError, qt_error_string(int(errno)));
+            q->setError(QFile::ReadError, qt_error_string(errno));
             return -1;
         }
         return readBytes;
@@ -612,13 +612,13 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
 
     Q_Q(QFSFileEngine);
     if (openMode == QIODevice::NotOpen) {
-        q->setError(QFile::PermissionsError, qt_error_string(int(EACCES)));
+        q->setError(QFile::PermissionsError, qt_error_string(EACCES));
         return nullptr;
     }
 
     if (offset < 0 || offset > maxFileOffset
             || size < 0 || quint64(size) > quint64(size_t(-1))) {
-        q->setError(QFile::UnspecifiedError, qt_error_string(int(EINVAL)));
+        q->setError(QFile::UnspecifiedError, qt_error_string(EINVAL));
         return nullptr;
     }
 
@@ -646,7 +646,7 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
     int extra = offset % pageSize;
 
     if (quint64(size + extra) > quint64((size_t)-1)) {
-        q->setError(QFile::UnspecifiedError, qt_error_string(int(EINVAL)));
+        q->setError(QFile::UnspecifiedError, qt_error_string(EINVAL));
         return nullptr;
     }
 
@@ -671,16 +671,16 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
 
     switch(errno) {
     case EBADF:
-        q->setError(QFile::PermissionsError, qt_error_string(int(EACCES)));
+        q->setError(QFile::PermissionsError, qt_error_string(EACCES));
         break;
     case ENFILE:
     case ENOMEM:
-        q->setError(QFile::ResourceError, qt_error_string(int(errno)));
+        q->setError(QFile::ResourceError, qt_error_string(errno));
         break;
     case EINVAL:
         // size are out of bounds
     default:
-        q->setError(QFile::UnspecifiedError, qt_error_string(int(errno)));
+        q->setError(QFile::UnspecifiedError, qt_error_string(errno));
         break;
     }
     return nullptr;

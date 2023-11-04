@@ -1443,15 +1443,17 @@ void QTextEngine::shapeText(int item) const
 
     bool kerningEnabled;
     bool letterSpacingIsAbsolute;
-    bool shapingEnabled;
+    bool shapingEnabled = false;
     QFixed letterSpacing, wordSpacing;
 #ifndef QT_NO_RAWFONT
     if (useRawFont) {
         QTextCharFormat f = format(&si);
         QFont font = f.font();
         kerningEnabled = font.kerning();
+#  if QT_CONFIG(harfbuzz)
         shapingEnabled = QFontEngine::scriptRequiresOpenType(QChar::Script(si.analysis.script))
                 || (font.styleStrategy() & QFont::PreferNoShaping) == 0;
+#  endif
         wordSpacing = QFixed::fromReal(font.wordSpacing());
         letterSpacing = QFixed::fromReal(font.letterSpacing());
         letterSpacingIsAbsolute = true;
@@ -1460,8 +1462,10 @@ void QTextEngine::shapeText(int item) const
     {
         QFont font = this->font(si);
         kerningEnabled = font.d->kerning;
+#if QT_CONFIG(harfbuzz)
         shapingEnabled = QFontEngine::scriptRequiresOpenType(QChar::Script(si.analysis.script))
                 || (font.d->request.styleStrategy & QFont::PreferNoShaping) == 0;
+#endif
         letterSpacingIsAbsolute = font.d->letterSpacingIsAbsolute;
         letterSpacing = font.d->letterSpacing;
         wordSpacing = font.d->wordSpacing;
@@ -2341,6 +2345,12 @@ QFontEngine *QTextEngine::fontEngine(const QScriptItem &si, QFixed *ascent, QFix
             if (feCache.prevScaledFontEngine) {
                 scaledEngine = feCache.prevScaledFontEngine;
             } else {
+                // GCC 12 gets confused about QFontEngine::ref, for some non-obvious reason
+                //  warning: ‘unsigned int __atomic_or_fetch_4(volatile void*, unsigned int, int)’ writing 4 bytes
+                //  into a region of size 0 overflows the destination [-Wstringop-overflow=]
+                QT_WARNING_PUSH
+                QT_WARNING_DISABLE_GCC("-Wstringop-overflow")
+
                 QFontEngine *scEngine = rawFont.d->fontEngine->cloneWithSize(smallCapsFraction * rawFont.pixelSize());
                 scEngine->ref.ref();
                 scaledEngine = QFontEngineMulti::createMultiFontEngine(scEngine, script);
@@ -2350,6 +2360,7 @@ QFontEngine *QTextEngine::fontEngine(const QScriptItem &si, QFixed *ascent, QFix
                 if (!scEngine->ref.deref())
                     delete scEngine;
 
+                QT_WARNING_POP
             }
         }
     } else
@@ -3896,10 +3907,12 @@ QTextLineItemIterator::QTextLineItemIterator(QTextEngine *_eng, int _lineNum, co
 
     x += eng->alignLine(line);
 
-    QVarLengthArray<uchar> levels(nItems);
-    for (int i = 0; i < nItems; ++i)
-        levels[i] = eng->layoutData->items.at(i + firstItem).analysis.bidiLevel;
-    QTextEngine::bidiReorder(nItems, levels.data(), visualOrder.data());
+    if (nItems > 0) {
+        QVarLengthArray<uchar> levels(nItems);
+        for (int i = 0; i < nItems; ++i)
+            levels[i] = eng->layoutData->items.at(i + firstItem).analysis.bidiLevel;
+        QTextEngine::bidiReorder(nItems, levels.data(), visualOrder.data());
+    }
 
     eng->shapeLine(line);
 }

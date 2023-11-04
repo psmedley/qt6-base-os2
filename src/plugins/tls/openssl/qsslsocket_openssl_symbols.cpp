@@ -157,7 +157,7 @@ DEFINEFUNC2(void, OPENSSL_sk_push, OPENSSL_STACK *a, a, void *b, b, return, DUMM
 DEFINEFUNC(void, OPENSSL_sk_free, OPENSSL_STACK *a, a, return, DUMMYARG)
 DEFINEFUNC2(void *, OPENSSL_sk_value, OPENSSL_STACK *a, a, int b, b, return nullptr, return)
 DEFINEFUNC(int, SSL_session_reused, SSL *a, a, return 0, return)
-DEFINEFUNC2(unsigned long, SSL_CTX_set_options, SSL_CTX *ctx, ctx, unsigned long op, op, return 0, return)
+DEFINEFUNC2(qssloptions, SSL_CTX_set_options, SSL_CTX *ctx, ctx, qssloptions op, op, return 0, return)
 using info_callback = void (*) (const SSL *ssl, int type, int val);
 DEFINEFUNC2(void, SSL_set_info_callback, SSL *ssl, ssl, info_callback cb, cb, return, return)
 DEFINEFUNC(const char *, SSL_alert_type_string, int value, value, return nullptr, return)
@@ -906,9 +906,10 @@ bool q_resolveOpenSslSymbols()
     triedToResolveSymbols = true;
 
     LoadedOpenSsl libs = loadOpenSsl();
-    if (!libs.ssl || !libs.crypto)
-        // failed to load them
+    if (!libs.ssl || !libs.crypto) {
+        qCWarning(lcTlsBackend, "Failed to load libssl/libcrypto.");
         return false;
+    }
 
     RESOLVEFUNC(OPENSSL_init_ssl)
     RESOLVEFUNC(OPENSSL_init_crypto)

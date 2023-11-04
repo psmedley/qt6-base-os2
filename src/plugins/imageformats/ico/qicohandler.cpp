@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
@@ -59,6 +59,8 @@ QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcIco, "qt.gui.imageio.ico")
 
+namespace {
+
 // These next two structs represent how the icon information is stored
 // in an ICO file.
 typedef struct
@@ -97,6 +99,8 @@ typedef struct {                    // BMP information header
     quint32_le biClrImportant;        // number of important colors
 } BMP_INFOHDR ,*LPBMP_INFOHDR;
 #define BMP_INFOHDR_SIZE 40
+
+}
 
 class ICOReader
 {
@@ -468,7 +472,9 @@ QImage ICOReader::iconAt(int index)
 
             static const uchar pngMagicData[] = { 137, 80, 78, 71, 13, 10, 26, 10 };
 
-            iod->seek(iconEntry.dwImageOffset);
+            if (!iod->seek(iconEntry.dwImageOffset)
+                || iconEntry.dwBytesInRes > iod->bytesAvailable())
+                return img;
 
             const QByteArray pngMagic = QByteArray::fromRawData((const char*)pngMagicData, sizeof(pngMagicData));
             const bool isPngImage = (iod->read(pngMagic.size()) == pngMagic);

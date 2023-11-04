@@ -102,12 +102,22 @@
 
 static QString sys_qualifiedLibraryName(const QString &fileName)
 {
+#ifdef Q_OS_ANDROID
+    // On Android all the libraries must be located in the APK's libs subdir
+    const QStringList paths = QCoreApplication::libraryPaths();
+    if (!paths.isEmpty()) {
+        return QLatin1String("%1/%2%3_%4%5").arg(paths.first(), PREFIX, fileName,
+                                                 ANDROID_ARCH, SUFFIX);
+    }
+    return fileName;
+#else
     QString name = QLatin1String("bin/") + QLatin1String(PREFIX) + fileName + QLatin1String(SUFFIX);
     const QString libname = QFINDTESTDATA(name);
     QFileInfo fi(libname);
     if (fi.exists())
         return fi.canonicalFilePath();
     return libname;
+#endif
 }
 
 QT_FORWARD_DECLARE_CLASS(QPluginLoader)
@@ -441,11 +451,19 @@ void tst_QPluginLoader::relativePath()
 #if !defined(QT_SHARED)
     QSKIP("This test requires Qt to create shared libraries.");
 #endif
+#ifdef Q_OS_ANDROID
+    // On Android we do not need to explicitly set library paths, as they are
+    // already set.
+    // But we need to use ARCH suffix in pulgin name
+    const QString pluginName("theplugin_" ANDROID_ARCH SUFFIX);
+#else
     // Windows binaries run from release and debug subdirs, so we can't rely on the current dir.
     const QString binDir = QFINDTESTDATA("bin");
     QVERIFY(!binDir.isEmpty());
     QCoreApplication::addLibraryPath(binDir);
-    QPluginLoader loader(THEPLUGIN SUFFIX);
+    const QString pluginName(THEPLUGIN SUFFIX);
+#endif
+    QPluginLoader loader(pluginName);
     loader.load(); // not recommended, instance() should do the job.
     PluginInterface *instance = qobject_cast<PluginInterface*>(loader.instance());
     QVERIFY(instance);
@@ -458,13 +476,27 @@ void tst_QPluginLoader::absolutePath()
 #if !defined(QT_SHARED)
     QSKIP("This test requires Qt to create shared libraries.");
 #endif
+#ifdef Q_OS_ANDROID
+    // On Android we need to clear library paths to make sure that the absolute
+    // path works
+    const QStringList libraryPaths = QCoreApplication::libraryPaths();
+    QVERIFY(!libraryPaths.isEmpty());
+    QCoreApplication::setLibraryPaths(QStringList());
+    const QString pluginPath(libraryPaths.first() + "/" PREFIX "theplugin_" ANDROID_ARCH SUFFIX);
+#else
     // Windows binaries run from release and debug subdirs, so we can't rely on the current dir.
     const QString binDir = QFINDTESTDATA("bin");
     QVERIFY(!binDir.isEmpty());
     QVERIFY(QDir::isAbsolutePath(binDir));
-    QPluginLoader loader(binDir + "/" PREFIX THEPLUGIN SUFFIX);
+    const QString pluginPath(binDir + "/" PREFIX THEPLUGIN SUFFIX);
+#endif
+    QPluginLoader loader(pluginPath);
     loader.load(); // not recommended, instance() should do the job.
     PluginInterface *instance = qobject_cast<PluginInterface*>(loader.instance());
+#ifdef Q_OS_ANDROID
+    // Restore library paths
+    QCoreApplication::setLibraryPaths(libraryPaths);
+#endif
     QVERIFY(instance);
     QCOMPARE(instance->pluginName(), QLatin1String("Plugin ok"));
     QVERIFY(loader.unload());

@@ -310,13 +310,6 @@ public:
         m_received[event->type()]++;
         m_order << event->type();
         switch (event->type()) {
-        case QEvent::Expose:
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_DEPRECATED
-            m_exposeRegion = static_cast<QExposeEvent *>(event)->region();
-QT_WARNING_POP
-            break;
-
         case QEvent::PlatformSurface:
             m_surfaceventType = static_cast<QPlatformSurfaceEvent *>(event)->surfaceEventType();
             break;
@@ -346,11 +339,6 @@ QT_WARNING_POP
         return m_order.indexOf(type);
     }
 
-    QRegion exposeRegion() const
-    {
-        return m_exposeRegion;
-    }
-
     QPlatformSurfaceEvent::SurfaceEventType surfaceEventType() const
     {
         return m_surfaceventType;
@@ -362,7 +350,6 @@ QT_WARNING_POP
 private:
     QHash<QEvent::Type, int> m_received;
     QList<QEvent::Type> m_order;
-    QRegion m_exposeRegion;
     QPlatformSurfaceEvent::SurfaceEventType m_surfaceventType;
 };
 
@@ -822,16 +809,6 @@ void tst_QWindow::isExposed()
     QTRY_VERIFY(window.received(QEvent::Expose) > 0);
     QTRY_VERIFY(window.isExposed());
 
-#ifndef Q_OS_WIN
-    // This is a top-level window so assuming it is completely exposed, the
-    // expose region must be (0, 0), (width, height). If this is not the case,
-    // the platform plugin is sending expose events with a region in an
-    // incorrect coordinate system.
-    QRect r = window.exposeRegion().boundingRect();
-    r = QRect(window.mapToGlobal(r.topLeft()), r.size());
-    QCOMPARE(r, window.geometry());
-#endif
-
     window.hide();
 
     QCoreApplication::processEvents();
@@ -1183,14 +1160,18 @@ void tst_QWindow::touchToMouseTranslation()
     QVERIFY(QTest::qWaitForWindowExposed(&window));
 
     QList<QWindowSystemInterface::TouchPoint> points;
-    QWindowSystemInterface::TouchPoint tp1, tp2;
+    QWindowSystemInterface::TouchPoint tp1, tp2, tp3;
     const QRectF pressArea(101, 102, 4, 4);
+    const QRectF pressArea1(107, 110, 4, 4);
     const QRectF moveArea(105, 108, 4, 4);
     tp1.id = 1;
     tp1.state = QEventPoint::State::Pressed;
     tp1.area = QHighDpi::toNativePixels(pressArea, &window);
     tp2.id = 2;
     tp2.state = QEventPoint::State::Pressed;
+    tp3.id = 3;
+    tp3.state = QEventPoint::State::Pressed;
+    tp3.area = QHighDpi::toNativePixels(pressArea1, &window);
     points << tp1 << tp2;
     QWindowSystemInterface::handleTouchEvent(&window, touchDevice, points);
     // Now an update but with changed list order. The mouse event should still
@@ -1263,6 +1244,40 @@ void tst_QWindow::touchToMouseTranslation()
 
     points.clear();
     points.append(tp2);
+    points[0].state = QEventPoint::State::Released;
+    QWindowSystemInterface::handleTouchEvent(&window, touchDevice, points);
+    QCoreApplication::processEvents();
+    points.clear();
+    points.append(tp1);
+    points[0].state = QEventPoint::State::Released;
+    QWindowSystemInterface::handleTouchEvent(&window, touchDevice, points);
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(window.mouseReleaseButton, 1);
+
+    points.clear();
+    points.append(tp1);
+    points[0].state = QEventPoint::State::Pressed;
+    QWindowSystemInterface::handleTouchEvent(&window, touchDevice, points);
+    QCoreApplication::processEvents();
+    points.clear();
+    points.append(tp2);
+    points[0].state = QEventPoint::State::Pressed;
+    QWindowSystemInterface::handleTouchEvent(&window, touchDevice, points);
+    QCoreApplication::processEvents();
+    points.clear();
+    points.append(tp3);
+    points[0].state = QEventPoint::State::Pressed;
+    QWindowSystemInterface::handleTouchEvent(&window, touchDevice, points);
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(window.mousePressButton, 1);
+
+    points.clear();
+    points.append(tp2);
+    points[0].state = QEventPoint::State::Released;
+    QWindowSystemInterface::handleTouchEvent(&window, touchDevice, points);
+    QCoreApplication::processEvents();
+    points.clear();
+    points.append(tp3);
     points[0].state = QEventPoint::State::Released;
     QWindowSystemInterface::handleTouchEvent(&window, touchDevice, points);
     QCoreApplication::processEvents();

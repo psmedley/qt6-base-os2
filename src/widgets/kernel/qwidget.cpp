@@ -5333,7 +5333,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
         QWidgetEffectSourcePrivate *sourced = static_cast<QWidgetEffectSourcePrivate *>
                                                          (source->d_func());
         if (!sourced->context) {
-            const QRegion effectRgn(rgn.boundingRect());
+            const QRegion effectRgn((flags & UseEffectRegionBounds) ? rgn.boundingRect() : rgn);
             QWidgetPaintContext context(pdev, effectRgn, offset, flags, sharedPainter, repaintManager);
             sourced->context = &context;
             if (!sharedPainter) {
@@ -5365,6 +5365,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
         }
     }
 #endif // QT_CONFIG(graphicseffect)
+    flags = flags & ~UseEffectRegionBounds;
 
     const bool alsoOnScreen = flags & DrawPaintOnScreen;
     const bool recursive = flags & DrawRecursive;
@@ -5402,6 +5403,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
                     beginBackingStorePainting();
 #endif
                     QPainter p(q);
+                    p.setRenderHint(QPainter::SmoothPixmapTransform);
                     paintBackground(&p, toBePainted, (asRoot || onScreen) ? (flags | DrawAsRoot) : DrawWidgetFlags());
 #ifndef QT_NO_OPENGL
                     endBackingStorePainting();
@@ -6537,7 +6539,14 @@ void QWidget::clearFocus()
     }
 
     QTLWExtra *extra = window()->d_func()->maybeTopData();
-    QObject *originalFocusObject = (extra && extra->window) ? extra->window->focusObject() : nullptr;
+    QObject *originalFocusObject = nullptr;
+    if (extra && extra->window) {
+        originalFocusObject = extra->window->focusObject();
+        // the window's focus object might already be nullptr if we are in the destructor, but we still
+        // need to update QGuiApplication and input context if we have a focus widget.
+        if (!originalFocusObject)
+            originalFocusObject = focusWidget();
+    }
 
     QWidget *w = this;
     while (w) {
@@ -10883,6 +10892,13 @@ void QWidgetPrivate::update(T r)
 {
     Q_Q(QWidget);
 
+#ifndef QT_NO_OPENGL
+    if (renderToTexture && !q->isVisible()) {
+        renderToTextureReallyDirty = 1;
+        return;
+    }
+#endif
+
     if (!q->isVisible() || !q->updatesEnabled())
         return;
 
@@ -12918,4 +12934,4 @@ QDebug operator<<(QDebug debug, const QWidget *widget)
 QT_END_NAMESPACE
 
 #include "moc_qwidget.cpp"
-
+#include "moc_qwidget_p.cpp"

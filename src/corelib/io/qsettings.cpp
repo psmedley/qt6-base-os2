@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -83,8 +83,9 @@
 #define Q_XDG_PLATFORM
 #endif
 
-#if !defined(QT_NO_STANDARDPATHS) && (defined(Q_XDG_PLATFORM) || defined(QT_PLATFORM_UIKIT))
-#define QSETTINGS_USE_QSTANDARDPATHS
+#if !defined(QT_NO_STANDARDPATHS)                                                                  \
+        && (defined(Q_XDG_PLATFORM) || defined(QT_PLATFORM_UIKIT) || defined(Q_OS_ANDROID))
+#    define QSETTINGS_USE_QSTANDARDPATHS
 #endif
 
 // ************************************************************************
@@ -605,7 +606,8 @@ void QSettingsPrivate::iniEscapedString(const QString &str, QByteArray &result)
     bool needsQuotes = false;
     bool escapeNextIfDigit = false;
     bool useCodec = !str.startsWith(QLatin1String("@ByteArray("))
-                    && !str.startsWith(QLatin1String("@Variant("));
+                    && !str.startsWith(QLatin1String("@Variant("))
+                    && !str.startsWith(QLatin1String("@DateTime("));
 
     int i;
     int startPos = result.size();
@@ -1343,6 +1345,15 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
     }
 
 #ifndef QT_BOOTSTRAPPED
+    QString lockFileName = confFile->name + QLatin1String(".lock");
+
+#    if defined(Q_OS_ANDROID) && defined(QSETTINGS_USE_QSTANDARDPATHS)
+    // On android and if it is a content URL put the lock file in a
+    // writable location to prevent permissions issues and invalid paths.
+    if (confFile->name.startsWith(QLatin1String("content:")))
+        lockFileName = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                + QFileInfo(lockFileName).fileName();
+#    endif
     /*
         Use a lockfile in order to protect us against other QSettings instances
         trying to write the same settings at the same time.
@@ -1350,7 +1361,7 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
         We only need to lock if we are actually writing as only concurrent writes are a problem.
         Concurrent read and write are not a problem because the writing operation is atomic.
     */
-    QLockFile lockFile(confFile->name + QLatin1String(".lock"));
+    QLockFile lockFile(lockFileName);
     if (!readOnly && !lockFile.lock() && atomicSyncOnly) {
         setStatus(QSettings::AccessError);
         return;
@@ -1428,6 +1439,11 @@ void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
 #if !defined(QT_BOOTSTRAPPED) && QT_CONFIG(temporaryfile)
         QSaveFile sf(confFile->name);
         sf.setDirectWriteFallback(!atomicSyncOnly);
+#    ifdef Q_OS_ANDROID
+        // QSaveFile requires direct write when using content scheme URL in Android
+        if (confFile->name.startsWith(QLatin1String("content:")))
+            sf.setDirectWriteFallback(true);
+#    endif
 #else
         QFile sf(confFile->name);
 #endif
@@ -2087,8 +2103,10 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
 
     \snippet settings/settings.cpp 15
 
-    Note that type information is not preserved when reading settings from INI
-    files; all values will be returned as QString.
+    Note that INI files lose the distinction between numeric data and the
+    strings used to encode them, so values written as numbers shall be read back
+    as QString. The numeric value can be recovered using \l QString::toInt(), \l
+    QString::toDouble() and related functions.
 
     The \l{tools/settingseditor}{Settings Editor} example lets you
     experiment with different settings location and with fallbacks
@@ -2371,9 +2389,10 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
                             On 32-bit Windows or from a 64-bit application on 64-bit Windows,
                             this works the same as specifying NativeFormat.
                             This enum value was added in Qt 5.7.
-    \value IniFormat        Store the settings in INI files. Note that type information
-                            is not preserved when reading settings from INI files;
-                            all values will be returned as QString.
+    \value IniFormat        Store the settings in INI files. Note that INI files
+                            lose the distinction between numeric data and the
+                            strings used to encode them, so values written as
+                            numbers shall be read back as QString.
 
     \value InvalidFormat    Special value returned by registerFormat().
     \omitvalue CustomFormat1
@@ -2440,7 +2459,7 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
     \section2 Compatibility with older Qt versions
 
     Please note that this behavior is different to how QSettings behaved
-    in versions of Qt prior to Qt 6. INI files written with Qt 5 or earlier aree
+    in versions of Qt prior to Qt 6. INI files written with Qt 5 or earlier are
     however fully readable by a Qt 6 based application (unless a ini codec
     different from utf8 had been set). But INI files written with Qt 6
     will only be readable by older Qt versions if you set the "iniCodec" to

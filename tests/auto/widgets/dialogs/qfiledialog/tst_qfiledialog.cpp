@@ -443,7 +443,18 @@ void tst_QFiledialog::completer_data()
     QTest::newRow("goto root")     << QString()        << rootPath << -1;
     QTest::newRow("start at root") << rootPath << QString()        << -1;
 
-    QFileInfoList list = QDir::root().entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    QDir dir = QDir::root();
+#ifdef Q_OS_ANDROID
+    // Android 11 and above doesn't allow accessing root filesystem as before,
+    // so let's opt int for the app's home.
+    if (QNativeInterface::QAndroidApplication::sdkVersion() >= 30) {
+        const auto homePaths = QStandardPaths::standardLocations(QStandardPaths::HomeLocation);
+        QVERIFY(!homePaths.isEmpty());
+        dir = QDir(homePaths.first());
+    }
+#endif
+
+    QFileInfoList list = dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
     QVERIFY(!list.isEmpty());
     const QString folder = list.first().absoluteFilePath();
     QTest::newRow("start at one below root r") << folder << "r" << -1;
@@ -1452,6 +1463,10 @@ void tst_QFiledialog::widgetlessNativeDialog()
 {
     if (!QGuiApplicationPrivate::platformTheme()->usePlatformNativeDialog(QPlatformTheme::FileDialog))
         QSKIP("This platform always uses widgets to realize its QFileDialog, instead of the native file dialog.");
+#ifdef Q_OS_ANDROID
+    // QTBUG-101194
+    QSKIP("Android: This keeeps the window open. Figure out why.");
+#endif
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs, false);
     QFileDialog fd;
     fd.setWindowModality(Qt::ApplicationModal);
@@ -1568,6 +1583,10 @@ void tst_QFiledialog::rejectModalDialogs()
 {
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This freezes. Figure out why.");
+#ifdef Q_OS_ANDROID
+    // QTBUG-101194
+    QSKIP("Android: This freezes. Figure out why.");
+#endif
 
     // QTBUG-38672 , static functions should return empty Urls
     DialogRejecter dr;
@@ -1599,6 +1618,12 @@ void tst_QFiledialog::QTBUG49600_nativeIconProviderCrash()
 {
     if (!QGuiApplicationPrivate::platformTheme()->usePlatformNativeDialog(QPlatformTheme::FileDialog))
         QSKIP("This platform always uses widgets to realize its QFileDialog, instead of the native file dialog.");
+
+#ifdef Q_OS_ANDROID
+    // QTBUG-101194
+    QSKIP("Android: This hangs. Figure out why.");
+#endif
+
     QFileDialog fd;
     fd.iconProvider();
 }
@@ -1630,6 +1655,10 @@ void tst_QFiledialog::focusObjectDuringDestruction()
 {
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This freezes. Figure out why.");
+#ifdef Q_OS_ANDROID
+    // QTBUG-101194
+    QSKIP("Android: This freezes. Figure out why.");
+#endif
 
     QTRY_VERIFY(QGuiApplication::topLevelWindows().isEmpty());
 

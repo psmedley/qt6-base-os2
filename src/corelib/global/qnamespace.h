@@ -208,6 +208,7 @@ namespace Qt {
         // size of a multi-variant string.
         TextLongestVariant = 0x80000
     };
+    Q_DECLARE_MIXED_ENUM_OPERATORS_SYMMETRIC(int, AlignmentFlag, TextFlag)
 
     enum TextElideMode {
         ElideLeft,
@@ -215,6 +216,7 @@ namespace Qt {
         ElideMiddle,
         ElideNone
     };
+    Q_DECLARE_MIXED_ENUM_OPERATORS_SYMMETRIC(int, TextElideMode, TextFlag)
 
     enum WhiteSpaceMode {
         WhiteSpaceNormal,
@@ -1816,7 +1818,7 @@ namespace Qt {
     Q_ENUM_NS(TimerType)
     Q_ENUM_NS(ScrollPhase)
     Q_ENUM_NS(MouseEventSource)
-    Q_FLAG_NS(MouseEventFlag)
+    Q_FLAG_NS(MouseEventFlags)
     Q_ENUM_NS(ChecksumType)
     Q_ENUM_NS(HighDpiScaleFactorRoundingPolicy)
     Q_ENUM_NS(TabFocusBehavior)

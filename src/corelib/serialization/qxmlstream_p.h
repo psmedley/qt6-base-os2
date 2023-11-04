@@ -70,7 +70,7 @@ public:
     qsizetype m_size = 0;
 
     constexpr XmlStringRef() = default;
-    constexpr inline XmlStringRef(const QString *string, int pos, int length)
+    constexpr inline XmlStringRef(const QString *string, qsizetype pos, qsizetype length)
         : m_string(string), m_pos(pos), m_size(length)
     {
     }
@@ -189,7 +189,7 @@ public:
         XmlStringRef name;
         XmlStringRef qualifiedName;
         NamespaceDeclaration namespaceDeclaration;
-        int tagStackStringStorageSize;
+        qsizetype tagStackStringStorageSize;
         qsizetype namespaceDeclarationsSize;
     };
 
@@ -197,14 +197,14 @@ public:
     QXmlStreamPrivateTagStack();
     QXmlStreamSimpleStack<NamespaceDeclaration> namespaceDeclarations;
     QString tagStackStringStorage;
-    int tagStackStringStorageSize;
-    int initialTagStackStringStorageSize;
+    qsizetype tagStackStringStorageSize;
+    qsizetype initialTagStackStringStorageSize;
     bool tagsDone;
 
     XmlStringRef addToStringStorage(QStringView s)
     {
-        int pos = tagStackStringStorageSize;
-        int sz = s.size();
+        qsizetype pos = tagStackStringStorageSize;
+        qsizetype sz = s.size();
         if (pos != tagStackStringStorage.size())
             tagStackStringStorage.resize(pos);
         tagStackStringStorage.append(s.data(), sz);
@@ -246,7 +246,7 @@ public:
     uchar firstByte;
     qint64 nbytesread;
     QString readBuffer;
-    int readBufferPos;
+    qsizetype readBufferPos;
     QXmlStreamSimpleStack<uint> putStack;
     struct Entity {
         Entity() = default;
@@ -405,9 +405,9 @@ public:
     int tos;
     int stack_size;
     struct Value {
-        int pos;
-        int len;
-        int prefix;
+        qsizetype pos;  // offset into textBuffer
+        qsizetype len;  // length incl. prefix (if any)
+        qint16 prefix;  // prefix of a name (as in "prefix:name") limited to 4k in fastScanName()
         ushort c;
     };
 
@@ -500,11 +500,11 @@ public:
 
     // scan optimization functions. Not strictly necessary but LALR is
     // not very well suited for scanning fast
-    int fastScanLiteralContent();
-    int fastScanSpace();
-    int fastScanContentCharList();
-    int fastScanName(int *prefix = nullptr);
-    inline int fastScanNMTOKEN();
+    qsizetype fastScanLiteralContent();
+    qsizetype fastScanSpace();
+    qsizetype fastScanContentCharList();
+    qsizetype fastScanName(qint16 *prefix = nullptr);
+    inline qsizetype fastScanNMTOKEN();
 
 
     bool parse();

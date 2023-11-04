@@ -101,7 +101,7 @@ QT_BEGIN_NAMESPACE
     \value Scroll
            Indicates that the device has a scroll capability.
 
-    \value PixelScroll \since 6.2
+    \value [since 6.2] PixelScroll
            Indicates that the device (usually a
            \l {QInputDevice::DeviceType::TouchPad}{touchpad})
            scrolls with \l {QWheelEvent::pixelDelta()}{pixel precision}.
@@ -392,3 +392,5 @@ QDebug operator<<(QDebug debug, const QInputDevice *device)
 #endif // !QT_NO_DEBUG_STREAM
 
 QT_END_NAMESPACE
+
+#include "moc_qinputdevice.cpp"

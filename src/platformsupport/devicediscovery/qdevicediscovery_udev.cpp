@@ -75,7 +75,7 @@ QDeviceDiscovery *QDeviceDiscovery::create(QDeviceTypes types, QObject *parent)
 
 QDeviceDiscoveryUDev::QDeviceDiscoveryUDev(QDeviceTypes types, struct udev *udev, QObject *parent) :
     QDeviceDiscovery(types, parent),
-    m_udev(udev), m_udevMonitor(0), m_udevMonitorFileDescriptor(-1), m_udevSocketNotifier(0)
+    m_udev(udev)
 {
     if (!m_udev)
         return;
@@ -258,3 +258,5 @@ bool QDeviceDiscoveryUDev::checkDeviceType(udev_device *dev)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qdevicediscovery_udev_p.cpp"

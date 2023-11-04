@@ -9,7 +9,12 @@ os2
 osx
 windows
 os2
-# https://github.com/bitwiseworks/qtbase-os2/issues/47
+# QTBUG-102095
+[watchDirectory]
+macos arm ci
+# QTBUG-102096
+[signalsEmittedAfterFileMoved]
+macos arm ci# https://github.com/bitwiseworks/qtbase-os2/issues/47
 [basicTest:native backend-testfile]
 os2
 [basicTest:native backend-specialchars]

@@ -191,19 +191,19 @@ tst_QLocale::tst_QLocale()
 
 void tst_QLocale::initTestCase()
 {
-#if QT_CONFIG(process)
-#  ifdef Q_OS_ANDROID
-    m_sysapp = QCoreApplication::applicationDirPath() + "/libsyslocaleapp.so";
-#  else // !defined(Q_OS_ANDROID)
+#ifdef Q_OS_ANDROID
+    // We can't start a QProcess on Android, and we anyway skip the test
+    // that uses m_sysapp. So no need to initialize it properly.
+    return;
+#elif QT_CONFIG(process)
     const QString syslocaleapp_dir = QFINDTESTDATA("syslocaleapp");
     QVERIFY2(!syslocaleapp_dir.isEmpty(),
             qPrintable(QStringLiteral("Cannot find 'syslocaleapp' starting from ")
                        + QDir::toNativeSeparators(QDir::currentPath())));
     m_sysapp = syslocaleapp_dir + QStringLiteral("/syslocaleapp");
-#    ifdef Q_OS_DOSLIKE
+#ifdef Q_OS_DOSLIKE
     m_sysapp += QStringLiteral(".exe");
-#    endif
-#  endif // Q_OS_ANDROID
+#endif
     const QFileInfo fi(m_sysapp);
     QVERIFY2(fi.exists() && fi.isExecutable(),
              qPrintable(QDir::toNativeSeparators(m_sysapp)
@@ -560,10 +560,10 @@ static inline bool runSysAppTest(const QString &binary,
 void tst_QLocale::emptyCtor_data()
 {
 #if !QT_CONFIG(process)
-    QSKIP("No qprocess support", SkipAll);
+    QSKIP("No qprocess support");
 #endif
 #ifdef Q_OS_ANDROID
-    QSKIP("This test crashes on Android");
+    QSKIP("Can't start QProcess to run a custom user binary on Android");
 #endif
 
     QTest::addColumn<QString>("expected");
@@ -1000,9 +1000,23 @@ void tst_QLocale::stringToFloat()
     QLocale locale(locale_name);
     QCOMPARE(locale.name(), locale_name);
 
+    if constexpr (std::numeric_limits<float>::has_denorm != std::denorm_present) {
+        if (qstrcmp(QTest::currentDataTag(), "C float -min") == 0
+                || qstrcmp(QTest::currentDataTag(), "C float min") == 0)
+            QSKIP("Skipping 'denorm' as this type lacks denormals on this system");
+    }
     bool ok;
     float f = locale.toFloat(num_str, &ok);
     QCOMPARE(ok, good);
+
+    if constexpr (std::numeric_limits<double>::has_denorm != std::denorm_present) {
+        if (qstrcmp(QTest::currentDataTag(), "C double min") == 0
+                || qstrcmp(QTest::currentDataTag(), "C double -min") == 0
+                || qstrcmp(QTest::currentDataTag(), "C tiny") == 0
+                || qstrcmp(QTest::currentDataTag(), "C -tiny") == 0) {
+            QSKIP("Skipping 'denorm' as this type lacks denormals on this system");
+        }
+    }
 
     {
         // Make sure result is independent of locale:
@@ -1845,7 +1859,8 @@ void tst_QLocale::toDateTime_data()
     QTest::addColumn<QDateTime>("result");
     QTest::addColumn<QString>("format");
     QTest::addColumn<QString>("string");
-    QTest::addColumn<bool>("clean"); // No non-format letters in format string
+    // No non-format letters in format string, no time-zone (t format):
+    QTest::addColumn<bool>("clean");
 
     QTest::newRow("1C") << "C" << QDateTime(QDate(1974, 12, 1), QTime(5, 14, 0))
                         << "d/M/yyyy hh:h:mm" << "1/12/1974 05:5:14" << true;
@@ -1898,6 +1913,18 @@ void tst_QLocale::toDateTime_data()
                              << "d'dd'd/MMM'M'/yysss" << "1dd1/des.M/74033" << false;
     QTest::newRow("12no_NO") << "no_NO" << QDateTime(QDate(1974, 12, 1), QTime(15, 0, 0))
                              << "d'd'dd/M/yyh" << "1d01/12/7415" << false;
+
+    QTest::newRow("short-ss") // QTBUG-102199: trips over an assert in CET
+        << "C" << QDateTime() // Single-digit seconds does not match ss format.
+        << u"ddd, d MMM yyyy HH:mm:ss"_qs << u"Sun, 29 Mar 2020 02:26:3"_qs << true;
+
+    QTest::newRow("short-ss-Z") // Same, but with a valid date-time:
+        << "C" << QDateTime()
+        << u"ddd, d MMM yyyy HH:mm:ss t"_qs << u"Sun, 29 Mar 2020 02:26:3 Z"_qs << false;
+
+    QTest::newRow("s-Z") // Same, but with a format that accepts the single digit:
+        << "C" << QDateTime(QDate(2020, 3, 29), QTime(2, 26, 3), Qt::UTC)
+        << u"ddd, d MMM yyyy HH:mm:s t"_qs << u"Sun, 29 Mar 2020 02:26:3 Z"_qs << false;
 
     QTest::newRow("RFC-1123")
         << "C" << QDateTime(QDate(2007, 11, 1), QTime(18, 8, 30))
@@ -3076,7 +3103,12 @@ public:
 
     QVariant query(QueryType type, QVariant /*in*/) const override
     {
-        return type == UILanguages ? QVariant(QStringList{m_name}) : QVariant();
+        if (type == UILanguages) {
+            if (m_name == u"en-DE") // QTBUG-104930: simulate macOS's list not including m_name.
+                return QVariant(QStringList{QStringLiteral("en-GB"), QStringLiteral("de-DE")});
+            return QVariant(QStringList{m_name});
+        }
+        return QVariant();
     }
 
     QLocale fallbackLocale() const override
@@ -3091,6 +3123,9 @@ private:
 
 void tst_QLocale::systemLocale_data()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("Android already has a QSystemLocale installed, we can't override it");
+#endif
     // Test uses MySystemLocale, so is platform-independent.
     QTest::addColumn<QString>("name");
     QTest::addColumn<QLocale::Language>("language");
@@ -3102,6 +3137,12 @@ void tst_QLocale::systemLocale_data()
     QTest::addRow("ukrainian")
         << QString("uk") << QLocale::Ukrainian
         << QStringList{QStringLiteral("uk"), QStringLiteral("uk-UA"), QStringLiteral("uk-Cyrl-UA")};
+    QTest::addRow("english-germany")
+        << QString("en-DE") << QLocale::English
+        // First two were missed out before fix to QTBUG-104930:
+        << QStringList{QStringLiteral("en-DE"), QStringLiteral("en-Latn-DE"),
+                       QStringLiteral("en-GB"), QStringLiteral("en-Latn-GB"),
+                       QStringLiteral("de-DE"), QStringLiteral("de"), QStringLiteral("de-Latn-DE")};
     QTest::addRow("german")
         << QString("de") << QLocale::German
         << QStringList{QStringLiteral("de"), QStringLiteral("de-DE"), QStringLiteral("de-Latn-DE")};
@@ -3126,7 +3167,11 @@ void tst_QLocale::systemLocale()
         MySystemLocale sLocale(name);
         QCOMPARE(QLocale().language(), language);
         QCOMPARE(QLocale::system().language(), language);
+        auto reporter = qScopeGuard([]() {
+            qDebug("\n\t%s", qPrintable(QLocale::system().uiLanguages().join(u"\n\t")));
+        });
         QCOMPARE(QLocale::system().uiLanguages(), uiLanguages);
+        reporter.dismiss();
     }
 
     QCOMPARE(QLocale(), originalLocale);

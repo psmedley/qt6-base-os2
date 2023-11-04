@@ -1561,11 +1561,12 @@ bool AtSpiAdaptor::inheritsQAction(QObject *object)
 // Component
 static QAccessibleInterface * getWindow(QAccessibleInterface * interface)
 {
-    if (interface->role() == QAccessible::Window)
+    if (interface->role() == QAccessible::Dialog || interface->role() == QAccessible::Window)
         return interface;
 
     QAccessibleInterface * parent = interface->parent();
-    while (parent && parent->role() != QAccessible::Window)
+    while (parent && parent->role() != QAccessible::Dialog
+            && parent->role() != QAccessible::Window)
         parent = parent->parent();
 
     return parent;
@@ -1583,7 +1584,7 @@ static QRect getRelativeRect(QAccessibleInterface *interface)
         wr = window->rect();
 
         cr.setX(cr.x() - wr.x());
-        cr.setY(cr.x() - wr.y());
+        cr.setY(cr.y() - wr.y());
     }
     return cr;
 }
@@ -1841,7 +1842,7 @@ bool AtSpiAdaptor::textInterface(QAccessibleInterface *interface, const QString 
         uint coordType = message.arguments().at(2).toUInt();
         if (coordType == ATSPI_COORD_TYPE_WINDOW) {
             QWindow *win = interface->window();
-            point -= QPoint(win->x(), win->y());
+            point += QPoint(win->x(), win->y());
         }
         int offset = interface->textInterface()->offsetAtPoint(point);
         sendReply(connection, message, offset);
@@ -1979,8 +1980,9 @@ namespace
                     value != QLatin1String("right") &&
                     value != QLatin1String("center")
                 ) {
+                    qCDebug(lcAccessibilityAtspi) << "Unknown text-align attribute value \""
+                                                  << value << "\" cannot be translated to AT-SPI.";
                     value = QString();
-                    qCDebug(lcAccessibilityAtspi) << "Unknown text-align attribute value \"" << value << "\" cannot be translated to AT-SPI.";
                 }
             }
         } else if (ia2Name == QLatin1String("font-size")) {
@@ -1992,8 +1994,9 @@ namespace
                 value != QLatin1String("italic") &&
                 value != QLatin1String("oblique")
             ) {
+                qCDebug(lcAccessibilityAtspi) << "Unknown font-style attribute value \"" << value
+                                              << "\" cannot be translated to AT-SPI.";
                 value = QString();
-                qCDebug(lcAccessibilityAtspi) << "Unknown font-style attribute value \"" << value << "\" cannot be translated to AT-SPI.";
             }
         } else if (ia2Name == QLatin1String("text-underline-type")) {
             name = QStringLiteral("underline");
@@ -2001,8 +2004,9 @@ namespace
                 value != QLatin1String("single") &&
                 value != QLatin1String("double")
             ) {
+                qCDebug(lcAccessibilityAtspi) << "Unknown text-underline-type attribute value \""
+                                              << value << "\" cannot be translated to AT-SPI.";
                 value = QString();
-                qCDebug(lcAccessibilityAtspi) << "Unknown text-underline-type attribute value \"" << value << "\" cannot be translated to AT-SPI.";
             }
         } else if (ia2Name == QLatin1String("font-weight")) {
             name = QStringLiteral("weight");
@@ -2017,8 +2021,9 @@ namespace
                 value != QLatin1String("super") &&
                 value != QLatin1String("sub")
             ) {
+                qCDebug(lcAccessibilityAtspi) << "Unknown text-position attribute value \"" << value
+                                              << "\" cannot be translated to AT-SPI.";
                 value = QString();
-                qCDebug(lcAccessibilityAtspi) << "Unknown text-position attribute value \"" << value << "\" cannot be translated to AT-SPI.";
             }
         } else if (ia2Name == QLatin1String("writing-mode")) {
             name = QStringLiteral("direction");
@@ -2031,8 +2036,9 @@ namespace
                 value = QStringLiteral("rtl");
                 qCDebug(lcAccessibilityAtspi) << "writing-mode attribute value \"tb\" translated only w.r.t. horizontal direction; vertical direction ignored";
             } else {
+                qCDebug(lcAccessibilityAtspi) << "Unknown writing-mode attribute value \"" << value
+                                              << "\" cannot be translated to AT-SPI.";
                 value = QString();
-                qCDebug(lcAccessibilityAtspi) << "Unknown writing-mode attribute value \"" << value << "\" cannot be translated to AT-SPI.";
             }
         } else if (ia2Name == QLatin1String("language")) {
             // OK - ATK has no docs on the format of the value, IAccessible2 has reasonable format - leave it at that now
@@ -2283,10 +2289,10 @@ bool AtSpiAdaptor::tableInterface(QAccessibleInterface *interface, const QString
         QAccessibleInterface * captionInterface= interface->tableInterface()->caption();
         if (captionInterface) {
             QSpiObjectReference ref = QSpiObjectReference(connection, QDBusObjectPath(pathForInterface(captionInterface)));
-            sendReply(connection, message, QVariant::fromValue(ref));
+            sendReply(connection, message, QVariant::fromValue(QDBusVariant(QVariant::fromValue(ref))));
         } else {
-            sendReply(connection, message, QVariant::fromValue(
-                          QSpiObjectReference(connection, QDBusObjectPath(ATSPI_DBUS_PATH_NULL))));
+            sendReply(connection, message, QVariant::fromValue(QDBusVariant(QVariant::fromValue(
+                          QSpiObjectReference(connection, QDBusObjectPath(ATSPI_DBUS_PATH_NULL))))));
         }
     } else if (function == QLatin1String("GetNColumns")) {
         connection.send(message.createReply(QVariant::fromValue(QDBusVariant(
@@ -2482,4 +2488,6 @@ bool AtSpiAdaptor::tableInterface(QAccessibleInterface *interface, const QString
 }
 
 QT_END_NAMESPACE
+
+#include "moc_atspiadaptor_p.cpp"
 #endif //QT_NO_ACCESSIBILITY

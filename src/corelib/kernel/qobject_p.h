@@ -57,7 +57,6 @@
 #include "QtCore/qlist.h"
 #include "QtCore/qobject.h"
 #include "QtCore/qpointer.h"
-#include "QtCore/qreadwritelock.h"
 #include "QtCore/qsharedpointer.h"
 #include "QtCore/qvariant.h"
 #include "QtCore/qproperty.h"
@@ -276,8 +275,10 @@ public:
             if (c)
                 deleteOrphaned(c);
             SignalVector *v = signalVector.loadRelaxed();
-            if (v)
+            if (v) {
+                v->~SignalVector();
                 free(v);
+            }
         }
 
         // must be called on the senders connection data
@@ -308,14 +309,19 @@ public:
             if (vector && vector->allocated > size)
                 return;
             size = (size + 7) & ~7;
-            SignalVector *newVector = reinterpret_cast<SignalVector *>(malloc(sizeof(SignalVector) + (size + 1) * sizeof(ConnectionList)));
+            void *ptr = malloc(sizeof(SignalVector) + (size + 1) * sizeof(ConnectionList));
+            auto newVector = new (ptr) SignalVector;
+
             int start = -1;
             if (vector) {
+                // not (yet) existing trait:
+                //static_assert(std::is_relocatable_v<SignalVector>);
+                //static_assert(std::is_relocatable_v<ConnectionList>);
                 memcpy(newVector, vector, sizeof(SignalVector) + (vector->allocated + 1) * sizeof(ConnectionList));
                 start = vector->count();
             }
             for (int i = start; i < int(size); ++i)
-                newVector->at(i) = ConnectionList();
+                new (&newVector->at(i)) ConnectionList();
             newVector->next = nullptr;
             newVector->allocated = size;
 
@@ -350,7 +356,7 @@ public:
 
     void setParent_helper(QObject *);
     void moveToThread_helper();
-    void setThreadData_helper(QThreadData *currentData, QThreadData *targetData);
+    void setThreadData_helper(QThreadData *currentData, QThreadData *targetData, QBindingStatus *status);
     void _q_reregisterTimers(void *pointer);
 
     bool isSender(const QObject *receiver, const char *signal) const;
@@ -371,6 +377,8 @@ public:
     // the API public in QObject. This is used by QQmlNotifierEndpoint.
     inline void connectNotify(const QMetaMethod &signal);
     inline void disconnectNotify(const QMetaMethod &signal);
+
+    void reinitBindingStorageAfterThreadMove();
 
     template <typename Func1, typename Func2>
     static inline QMetaObject::Connection connect(const typename QtPrivate::FunctionPointer<Func1>::Object *sender, Func1 signal,
@@ -452,7 +460,7 @@ inline void QObjectPrivate::checkForIncompatibleLibraryVersion(int version) cons
 
 inline bool QObjectPrivate::isDeclarativeSignalConnected(uint signal_index) const
 {
-    return declarativeData && QAbstractDeclarativeData::isSignalConnected
+    return !isDeletingChildren && declarativeData && QAbstractDeclarativeData::isSignalConnected
             && QAbstractDeclarativeData::isSignalConnected(declarativeData, q_func(), signal_index);
 }
 

@@ -71,8 +71,7 @@ static const int kControlUnicode = 0x2303;
 static const int kOptionUnicode = 0x2325;
 static const int kCommandUnicode = 0x2318;
 
-static const int NumEntries = 21;
-static const MacSpecialKey entries[NumEntries] = {
+static const MacSpecialKey entries[] = {
     { Qt::Key_Escape, 0x238B },
     { Qt::Key_Tab, 0x21E5 },
     { Qt::Key_Backtab, 0x21E4 },
@@ -80,6 +79,7 @@ static const MacSpecialKey entries[NumEntries] = {
     { Qt::Key_Return, 0x21B5 },
     { Qt::Key_Enter, 0x2324 },
     { Qt::Key_Delete, 0x2326 },
+    { Qt::Key_Clear, 0x2327 },
     { Qt::Key_Home, 0x2196 },
     { Qt::Key_End, 0x2198 },
     { Qt::Key_Left, 0x2190 },
@@ -93,7 +93,9 @@ static const MacSpecialKey entries[NumEntries] = {
     { Qt::Key_Meta, kControlUnicode },
     { Qt::Key_Alt, kOptionUnicode },
     { Qt::Key_CapsLock, 0x21EA },
+    { Qt::Key_Eject, 0x23CF },
 };
+static const int NumEntries = std::size(entries);
 
 static bool operator<(const MacSpecialKey &entry, int key)
 {
@@ -105,12 +107,11 @@ static bool operator<(int key, const MacSpecialKey &entry)
     return key < entry.key;
 }
 
-static const MacSpecialKey * const MacSpecialKeyEntriesEnd = entries + NumEntries;
 
 QChar qt_macSymbolForQtKey(int key)
 {
-    const MacSpecialKey *i = std::lower_bound(entries, MacSpecialKeyEntriesEnd, key);
-    if ((i == MacSpecialKeyEntriesEnd) || (key < *i))
+    const auto i = std::lower_bound(std::begin(entries), std::end(entries), key);
+    if (i == std::end(entries) || key < *i)
         return QChar();
     ushort macSymbol = i->macSymbol;
     if (qApp->testAttribute(Qt::AA_MacDontSwapCtrlAndMeta)
@@ -127,8 +128,7 @@ QChar qt_macSymbolForQtKey(int key)
 static int qtkeyForMacSymbol(const QChar ch)
 {
     const ushort unicode = ch.unicode();
-    for (int i = 0; i < NumEntries; ++i) {
-        const MacSpecialKey &entry = entries[i];
+    for (const MacSpecialKey &entry : entries) {
         if (entry.macSymbol == unicode) {
             int key = entry.key;
             if (qApp->testAttribute(Qt::AA_MacDontSwapCtrlAndMeta)
@@ -1680,3 +1680,5 @@ QDebug operator<<(QDebug dbg, const QKeySequence &p)
 */
 
 QT_END_NAMESPACE
+
+#include "moc_qkeysequence.cpp"

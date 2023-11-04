@@ -206,9 +206,8 @@ public:
     QXcbWindow *mousePressWindow() const { return m_mousePressWindow; }
     void setMousePressWindow(QXcbWindow *);
 
-    QByteArray startupId() const { return m_startupId; }
-    void setStartupId(const QByteArray &nextId) { m_startupId = nextId; }
-    void clearStartupId() { m_startupId.clear(); }
+    QByteArray startupId() const;
+    void setStartupId(const QByteArray &nextId);
 
     void grabServer();
     void ungrabServer();
@@ -285,7 +284,7 @@ private:
         QSizeF size;                         // device size in mm
         bool providesTouchOrientation = false;
     };
-    TouchDeviceData *populateTouchDevices(void *info, QXcbScrollingDevicePrivate *scrollingDeviceP);
+    TouchDeviceData *populateTouchDevices(void *info, QXcbScrollingDevicePrivate *scrollingDeviceP, bool *used = nullptr);
     TouchDeviceData *touchDeviceForId(int id);
     void xi2HandleEvent(xcb_ge_event_t *event);
     void xi2HandleHierarchyEvent(void *event);

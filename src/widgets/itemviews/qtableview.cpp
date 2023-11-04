@@ -918,10 +918,29 @@ void QTableViewPrivate::drawAndClipSpans(const QRegion &area, QPainter *painter,
         visibleSpans = spans.spansInRect(logicalColumn(firstVisualColumn), logicalRow(firstVisualRow),
                                          lastVisualColumn - firstVisualColumn + 1, lastVisualRow - firstVisualRow + 1);
     } else {
-        for(int x = firstVisualColumn; x <= lastVisualColumn; x++)
-            for(int y = firstVisualRow; y <= lastVisualRow; y++)
-                visibleSpans.insert(spans.spanAt(x,y));
-        visibleSpans.remove(nullptr);
+        // Any cell outside the viewport, on the top or left, can still end up visible inside the
+        // viewport if is has a span. Calculating if a spanned cell overlaps with the viewport is
+        // "easy" enough when the columns (or rows) in the view are aligned with the columns
+        // in the model; In that case you know that if a column is outside the viewport on the
+        // right, it cannot affect the drawing of the cells inside the viewport, even with a span.
+        // And under that assumption, the spansInRect() function can be used (which is optimized
+        // to only iterate the spans that are close to the viewport).
+        // But when the view has rearranged the columns (or rows), this is no longer true. In that
+        // case, even if a column, according to the model, is outside the viewport on the right, it
+        // can still overlap with the viewport. This can happen if it was moved to the left of the
+        // viewport and one of its cells has a span. In that case we need to take the theoretically
+        // slower route and iterate through all the spans, and check if any of them overlaps with
+        // the viewport.
+        const auto spanList = spans.spans;
+        for (QSpanCollection::Span *span : spanList) {
+            const int spanVisualLeft = visualColumn(span->left());
+            const int spanVisualTop = visualRow(span->top());
+            const int spanVisualRight = spanVisualLeft + span->width() - 1;
+            const int spanVisualBottom = spanVisualTop + span->height() - 1;
+            if ((spanVisualLeft <= lastVisualColumn && spanVisualRight >= firstVisualColumn)
+                    && (spanVisualTop <= lastVisualRow && spanVisualBottom >= firstVisualRow))
+                visibleSpans.insert(span);
+        }
     }
 
     for (QSpanCollection::Span *span : qAsConst(visibleSpans)) {
@@ -1165,6 +1184,8 @@ int QTableViewPrivate::heightHintForIndex(const QModelIndex &index, int hint, QS
     table can be found by using rowHeight(); similarly, the width of
     columns can be found using columnWidth().  Since both of these are plain
     widgets, you can hide either of them using their hide() functions.
+    Each header is configured with its \l{QHeaderView::}{highlightSections}
+    and \l{QHeaderView::}{sectionsClickable} properties set to \c true.
 
     Rows and columns can be hidden and shown with hideRow(), hideColumn(),
     showRow(), and showColumn(). They can be selected with selectRow()

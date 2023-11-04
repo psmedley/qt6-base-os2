@@ -421,7 +421,6 @@ class AppearanceSync {
 public:
     AppearanceSync()
     {
-#if QT_MACOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_10_14)
         if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::MacOSMojave
             && !isDarkMode()) {
             auto requiredAppearanceName = NSApplication.sharedApplication.effectiveAppearance.name;
@@ -430,7 +429,6 @@ public:
                 NSAppearance.currentAppearance = [NSAppearance appearanceNamed:requiredAppearanceName];
             }
         }
-#endif // QT_MACOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_10_14)
     }
 
     ~AppearanceSync()
@@ -1851,13 +1849,9 @@ NSView *QMacStylePrivate::cocoaControl(CocoaControl widget) const
         || widget.size == QStyleHelper::SizeDefault)
         return nil;
 
-    if (widget.type == Box) {
-        if (__builtin_available(macOS 10.14, *)) {
-            if (isDarkMode()) {
-                // See render code in drawPrimitive(PE_FrameTabWidget)
-                widget.type = Box_Dark;
-            }
-        }
+    if (widget.type == Box && isDarkMode()) {
+        // See render code in drawPrimitive(PE_FrameTabWidget)
+        widget.type = Box_Dark;
     }
 
     NSView *bv = cocoaControls.value(widget, nil);
@@ -2102,7 +2096,6 @@ QMacStyle::QMacStyle()
                 QCoreApplication::sendEvent(o, &event);
     });
 
-#if QT_MACOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_10_14)
     Q_D(QMacStyle);
     // FIXME: Tie this logic into theme change, or even polish/unpolish
     if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::MacOSMojave) {
@@ -2113,7 +2106,6 @@ QMacStyle::QMacStyle()
             d->cocoaControls.clear();
         });
     }
-#endif
 }
 
 QMacStyle::~QMacStyle()
@@ -3748,9 +3740,14 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
             // not show its state otherwise):
             [pb highlight:isPressed];
 
-            // For default/checked button this will give the required
-            // button accent color:
-            pb.keyEquivalent = isHighlighted ? @"\r" : @"";
+
+            if (cw.type == QMacStylePrivate::Button_SquareButton) {
+                pb.state = isHighlighted && !isPressed ? NSControlStateValueOn : NSControlStateValueOff;
+            } else {
+                // For default/checked button this will give the required
+                // button accent color:
+                pb.keyEquivalent = isHighlighted ? @"\r" : @"";
+            }
 
             d->drawNSViewInRect(pb, frameRect, p, ^(CGContextRef, const CGRect &r) {
                 [pb.cell drawBezelWithFrame:r inView:pb.superview];
@@ -3809,7 +3806,7 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                     btn.palette.setColor(QPalette::ButtonText, Qt::white);
             }
 
-            if (!isDarkMode() && QOperatingSystemVersion::current() > QOperatingSystemVersion::MacOSBigSur) {
+            if (isEnabled && !isDarkMode() && QOperatingSystemVersion::current() > QOperatingSystemVersion::MacOSBigSur) {
                 if (!isDefault && !(btn.state & State_On)) {
                     // On macOS 12 it's a gray button, white text color (if set in the
                     // previous statement) would be almost invisible.
@@ -4115,32 +4112,12 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                 }
                 p->restore();
             }
-
-            // TODO Needs size adjustment to fit the focus ring
-            if (tabOpt->state & State_HasFocus) {
-                QMacStylePrivate::CocoaControlType focusRingType;
-                switch (tp) {
-                case QStyleOptionTab::Beginning:
-                    focusRingType = verticalTabs ? QMacStylePrivate::SegmentedControl_Last
-                                                 : QMacStylePrivate::SegmentedControl_First;
-                    break;
-                case QStyleOptionTab::Middle:
-                    focusRingType = QMacStylePrivate::SegmentedControl_Middle;
-                    break;
-                case QStyleOptionTab::End:
-                    focusRingType = verticalTabs ? QMacStylePrivate::SegmentedControl_First
-                                                 : QMacStylePrivate::SegmentedControl_Last;
-                    break;
-                case QStyleOptionTab::OnlyOneTab:
-                    focusRingType = QMacStylePrivate::SegmentedControl_Single;
-                    break;
-                }
-            }
         }
         break;
     case CE_TabBarTabLabel:
         if (const auto *tab = qstyleoption_cast<const QStyleOptionTab *>(opt)) {
             QStyleOptionTab myTab = *tab;
+            const auto foregroundRole = w ? w->foregroundRole() : QPalette::WindowText;
             const auto tabDirection = QMacStylePrivate::tabDirection(tab->shape);
             const bool verticalTabs = tabDirection == QMacStylePrivate::East
                                    || tabDirection == QMacStylePrivate::West;
@@ -4154,11 +4131,11 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
             if (!myTab.documentMode && (myTab.state & State_Selected) && (myTab.state & State_Active))
                 if (const auto *tabBar = qobject_cast<const QTabBar *>(w))
                     if (!tabBar->tabTextColor(tabBar->currentIndex()).isValid())
-                        myTab.palette.setColor(QPalette::WindowText, Qt::white);
+                        myTab.palette.setColor(foregroundRole, Qt::white);
 
             if (myTab.documentMode && isDarkMode()) {
                 bool active = (myTab.state & State_Selected) && (myTab.state & State_Active);
-                myTab.palette.setColor(QPalette::WindowText, active ? Qt::white : Qt::gray);
+                myTab.palette.setColor(foregroundRole, active ? Qt::white : Qt::gray);
             }
 
             int heightOffset = 0;

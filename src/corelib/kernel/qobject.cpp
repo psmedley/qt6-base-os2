@@ -71,6 +71,7 @@
 
 #include <new>
 #include <mutex>
+#include <memory>
 
 #include <ctype.h>
 #include <limits.h>
@@ -125,7 +126,7 @@ static int *queuedConnectionTypes(const QMetaMethod &method)
 
 static int *queuedConnectionTypes(const QArgumentType *argumentTypes, int argc)
 {
-    QScopedArrayPointer<int> types(new int[argc + 1]);
+    auto types = std::make_unique<int[]>(argc + 1);
     for (int i = 0; i < argc; ++i) {
         const QArgumentType &type = argumentTypes[i];
         if (type.type())
@@ -145,7 +146,7 @@ static int *queuedConnectionTypes(const QArgumentType *argumentTypes, int argc)
     }
     types[argc] = 0;
 
-    return types.take();
+    return types.release();
 }
 
 static QBasicMutex _q_ObjectMutexPool[131];
@@ -507,6 +508,13 @@ bool QObjectPrivate::maybeSignalConnected(uint signalIndex) const
         return c != nullptr;
     }
     return false;
+}
+
+void QObjectPrivate::reinitBindingStorageAfterThreadMove()
+{
+    bindingStorage.reinitAfterThreadMove();
+    for (int i = 0; i < children.size(); ++i)
+        children[i]->d_func()->reinitBindingStorageAfterThreadMove();
 }
 
 /*!
@@ -996,6 +1004,16 @@ QObject::~QObject()
     d->wasDeleted = true;
     d->blockSig = 0; // unblock signals so we always emit destroyed()
 
+    if (!d->bindingStorage.isValid()) {
+        // this might be the case after an incomplete thread-move
+        // remove this object from the pending list in that case
+        if (QThread *ownThread = thread()) {
+            auto *privThread = static_cast<QThreadPrivate *>(
+                        QObjectPrivate::get(ownThread));
+            privThread->removeObjectWithPendingBindingStatusChange(this);
+        }
+    }
+
     // If we reached this point, we need to clear the binding data
     // as the corresponding properties are no longer useful
     d->clearBindingStorage();
@@ -1017,7 +1035,7 @@ QObject::~QObject()
         emit destroyed(this);
     }
 
-    if (d->declarativeData && QAbstractDeclarativeData::destroyed)
+    if (!d->isDeletingChildren && d->declarativeData && QAbstractDeclarativeData::destroyed)
         QAbstractDeclarativeData::destroyed(d->declarativeData, this);
 
     QObjectPrivate::ConnectionData *cd = d->connections.loadRelaxed();
@@ -1606,7 +1624,7 @@ void QObject::moveToThread(QThread *targetThread)
 
     QThreadData *currentData = QThreadData::current();
     QThreadData *targetData = targetThread ? QThreadData::get2(targetThread) : nullptr;
-    QThreadData *thisThreadData = d->threadData.loadRelaxed();
+    QThreadData *thisThreadData = d->threadData.loadAcquire();
     if (!thisThreadData->thread.loadAcquire() && currentData == targetData) {
         // one exception to the rule: we allow moving objects with no thread affinity to the current thread
         currentData = d->threadData;
@@ -1640,7 +1658,16 @@ void QObject::moveToThread(QThread *targetThread)
     currentData->ref();
 
     // move the object
-    d_func()->setThreadData_helper(currentData, targetData);
+    auto threadPrivate =  targetThread
+        ? static_cast<QThreadPrivate *>(QThreadPrivate::get(targetThread))
+        : nullptr;
+    QBindingStatus *bindingStatus = threadPrivate
+        ? threadPrivate->bindingStatus()
+        : nullptr;
+    if (threadPrivate && !bindingStatus) {
+        bindingStatus = threadPrivate->addObjectWithPendingBindingStatusChange(this);
+    }
+    d_func()->setThreadData_helper(currentData, targetData, bindingStatus);
 
     locker.unlock();
 
@@ -1653,15 +1680,21 @@ void QObjectPrivate::moveToThread_helper()
     Q_Q(QObject);
     QEvent e(QEvent::ThreadChange);
     QCoreApplication::sendEvent(q, &e);
+    bindingStorage.clear();
     for (int i = 0; i < children.size(); ++i) {
         QObject *child = children.at(i);
         child->d_func()->moveToThread_helper();
     }
 }
 
-void QObjectPrivate::setThreadData_helper(QThreadData *currentData, QThreadData *targetData)
+void QObjectPrivate::setThreadData_helper(QThreadData *currentData, QThreadData *targetData, QBindingStatus *status)
 {
     Q_Q(QObject);
+
+    if (status) {
+        // the new thread is already running
+        this->bindingStorage.bindingStatus = status;
+    }
 
     // move posted events
     int eventsMoved = 0;
@@ -1717,7 +1750,7 @@ void QObjectPrivate::setThreadData_helper(QThreadData *currentData, QThreadData 
 
     for (int i = 0; i < children.size(); ++i) {
         QObject *child = children.at(i);
-        child->d_func()->setThreadData_helper(currentData, targetData);
+        child->d_func()->setThreadData_helper(currentData, targetData, status);
     }
 }
 
@@ -2403,6 +2436,7 @@ static bool check_method_code(int code, const QObject *object, const char *metho
     return true;
 }
 
+Q_DECL_COLD_FUNCTION
 static void err_method_notfound(const QObject *object,
                                 const char *method, const char *func)
 {
@@ -2420,6 +2454,7 @@ static void err_method_notfound(const QObject *object,
                   object->metaObject()->className(), method + 1, loc ? " in " : "", loc ? loc : "");
 }
 
+Q_DECL_COLD_FUNCTION
 static void err_info_about_objects(const char *func, const QObject *sender, const QObject *receiver)
 {
     QString a = sender ? sender->objectName() : QString();
@@ -2557,7 +2592,7 @@ int QObject::receivers(const char *signal) const
         if (!d->isSignalConnected(signal_index))
             return receivers;
 
-        if (d->declarativeData && QAbstractDeclarativeData::receivers) {
+        if (!d->isDeletingChildren && d->declarativeData && QAbstractDeclarativeData::receivers) {
             receivers += QAbstractDeclarativeData::receivers(d->declarativeData, this,
                                                              signal_index);
         }

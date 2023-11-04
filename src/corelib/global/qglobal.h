@@ -78,6 +78,24 @@
 #define QT_CONFIG(feature) (1/QT_FEATURE_##feature == 1)
 #define QT_REQUIRE_CONFIG(feature) Q_STATIC_ASSERT_X(QT_FEATURE_##feature == 1, "Required feature " #feature " for file " __FILE__ " not available.")
 
+/*
+   helper macros to make some simple code work active in Qt 6 or Qt 7 only,
+   like:
+     struct QT6_ONLY(Q_CORE_EXPORT) QTrivialClass
+     {
+         void QT7_ONLY(Q_CORE_EXPORT) void operate();
+     }
+*/
+#if QT_VERSION_MAJOR == 7
+#  define QT7_ONLY(...)         __VA_ARGS__
+#  define QT6_ONLY(...)
+#elif QT_VERSION_MAJOR == 6
+#  define QT7_ONLY(...)
+#  define QT6_ONLY(...)         __VA_ARGS__
+#else
+#  error Qt major version not 6 or 7
+#endif
+
 /* These two macros makes it possible to turn the builtin line expander into a
  * string literal. */
 #define QT_STRINGIFY2(x) #x
@@ -207,10 +225,6 @@ namespace QT_NAMESPACE {}
 # define QT_END_INCLUDE_NAMESPACE
 
 #endif /* __cplusplus */
-
-#if defined(Q_OS_DARWIN) && !defined(QT_LARGEFILE_SUPPORT)
-#  define QT_LARGEFILE_SUPPORT 64
-#endif
 
 #ifndef __ASSEMBLER__
 QT_BEGIN_NAMESPACE
@@ -983,7 +997,7 @@ Q_CORE_EXPORT Q_DECL_CONST_FUNCTION bool qSharedBuild() noexcept;
 */
 #ifndef qUtf16Printable
 #  define qUtf16Printable(string) \
-    static_cast<const wchar_t*>(static_cast<const void*>(QString(string).utf16()))
+    static_cast<const wchar_t*>(static_cast<const void*>(QtPrivate::asString(string).utf16()))
 #endif
 
 class QString;
@@ -1035,6 +1049,9 @@ Q_CORE_EXPORT void qBadAlloc();
 template <typename T>
 inline T *q_check_ptr(T *p) { Q_CHECK_PTR(p); return p; }
 
+#if 0
+#pragma qt_class(QFunctionPointer)
+#endif
 typedef void (*QFunctionPointer)();
 
 #if !defined(Q_UNIMPLEMENTED)

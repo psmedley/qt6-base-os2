@@ -225,6 +225,7 @@ public:
         OldFontLetterSpacingType = 0x2033,
         OldFontStretch = 0x2034,
         OldTextUnderlineColor = 0x2010,
+        OldFontFamily = 0x2000, // same as FontFamily
 
         ObjectType = 0x2f00,
 
@@ -330,7 +331,7 @@ public:
     ~QTextFormat();
 
     void swap(QTextFormat &other)
-    { qSwap(d, other.d); qSwap(format_type, other.format_type); }
+    { d.swap(other.d); std::swap(format_type, other.format_type); }
 
     void merge(const QTextFormat &other);
 

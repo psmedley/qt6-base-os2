@@ -63,6 +63,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include <algorithm>
+
 #define IS_RAW_DATA(d) ((d)->flags() & QArrayData::RawDataType)
 
 QT_BEGIN_NAMESPACE
@@ -530,6 +532,15 @@ quint16 qChecksum(QByteArrayView data, Qt::ChecksumType standard)
     The default value is -1, which specifies zlib's default
     compression.
 
+//![compress-limit-note]
+    \note The maximum size of data that this function can consume is limited by
+    what the platform's \c{unsigned long} can represent (a Zlib limitation).
+    That means that data > 4GiB can be compressed and decompressed on a 64-bit
+    Unix system, but not on a 64-bit Windows system. Portable code should
+    therefore avoid using qCompress()/qUncompress() to compress more than 4GiB
+    of input.
+//![compress-limit-note]
+
     \sa qUncompress(const QByteArray &data)
 */
 
@@ -539,6 +550,8 @@ quint16 qChecksum(QByteArrayView data, Qt::ChecksumType standard)
 
     Compresses the first \a nbytes of \a data at compression level
     \a compressionLevel and returns the compressed data in a new byte array.
+
+    \include qbytearray.cpp compress-limit-note
 */
 
 #ifndef QT_NO_COMPRESS
@@ -603,6 +616,15 @@ QByteArray qCompress(const uchar* data, qsizetype nbytes, int compressionLevel)
     contain the expected length (in bytes) of the uncompressed data,
     expressed as an unsigned, big-endian, 32-bit integer.
 
+//![uncompress-limit-note]
+    \note The maximum size of data that this function can produce is limited by
+    what the platform's \c{unsigned long} can represent (a Zlib limitation).
+    That means that data > 4GiB can be compressed and decompressed on a 64-bit
+    Unix system, but not on a 64-bit Windows system. Portable code should
+    therefore avoid using qCompress()/qUncompress() to compress more than 4GiB
+    of input.
+//![uncompress-limit-note]
+
     \sa qCompress()
 */
 
@@ -619,6 +641,8 @@ static QByteArray invalidCompressedData()
 
     Uncompresses the first \a nbytes of \a data and returns a new byte
     array with the uncompressed data.
+
+    \include qbytearray.cpp uncompress-limit-note
 */
 QByteArray qUncompress(const uchar* data, qsizetype nbytes)
 {
@@ -634,7 +658,7 @@ QByteArray qUncompress(const uchar* data, qsizetype nbytes)
     size_t expectedSize = size_t((data[0] << 24) | (data[1] << 16) |
                                  (data[2] <<  8) | (data[3]      ));
     size_t len = qMax(expectedSize, 1ul);
-    const size_t maxPossibleSize = MaxAllocSize - sizeof(QByteArray::Data);
+    constexpr size_t maxPossibleSize = MaxAllocSize - sizeof(QByteArray::Data);
     if (Q_UNLIKELY(len >= maxPossibleSize)) {
         // QByteArray does not support that huge size anyway.
         return invalidCompressedData();
@@ -663,6 +687,8 @@ QByteArray qUncompress(const uchar* data, qsizetype nbytes)
             return QByteArray();
 
         case Z_BUF_ERROR:
+            static_assert(maxPossibleSize <= (std::numeric_limits<decltype(len)>::max)() / 2,
+                          "oops, next line may overflow");
             len *= 2;
             if (Q_UNLIKELY(len >= maxPossibleSize)) {
                 // QByteArray does not support that huge size anyway.
@@ -918,8 +944,8 @@ QByteArray qUncompress(const uchar* data, qsizetype nbytes)
     comparison is limited to ASCII. Non-ASCII characters are treated as
     caseless, since their case depends on encoding. This affects functions that
     support a case insensitive option or that change the case of their
-    arguments. Functions that this affects include contains(), indexOf(),
-    lastIndexOf(), isLower(), isUpper(), toLower() and toUpper().
+    arguments. Functions that this affects include compare(), isLower(),
+    isUpper(), toLower() and toUpper().
 
     This issue does not apply to \l{QString}s since they represent characters
     using Unicode.
@@ -2645,7 +2671,7 @@ qsizetype QtPrivate::count(QByteArrayView haystack, QByteArrayView needle) noexc
 
 qsizetype QByteArray::count(char ch) const
 {
-    return static_cast<int>(countCharHelper(*this, ch));
+    return countCharHelper(*this, ch);
 }
 
 /*! \fn qsizetype QByteArray::count() const
@@ -2734,28 +2760,6 @@ static constexpr inline bool isUpperCaseAscii(char c)
     return c >= 'A' && c <= 'Z';
 }
 
-/*!
-    Returns \c true if this byte array contains only ASCII uppercase letters,
-    otherwise returns \c false.
-    \since 5.12
-
-    \sa isLower(), toUpper()
-*/
-bool QByteArray::isUpper() const
-{
-    if (isEmpty())
-        return false;
-
-    const char *d = data();
-
-    for (qsizetype i = 0, max = size(); i < max; ++i) {
-        if (!isUpperCaseAscii(d[i]))
-            return false;
-    }
-
-    return true;
-}
-
 /*
     Returns true if \a c is an lowercase ASCII letter.
  */
@@ -2765,25 +2769,35 @@ static constexpr inline bool isLowerCaseAscii(char c)
 }
 
 /*!
-    Returns \c true if this byte array contains only lowercase ASCII letters,
-    otherwise returns \c false.
+    Returns \c true if this byte array is uppercase, that is, if
+    it's identical to its toUpper() folding.
+
+    Note that this does \e not mean that the byte array only contains
+    uppercase letters; only that it contains no ASCII lowercase letters.
+
+    \since 5.12
+
+    \sa isLower(), toUpper()
+*/
+bool QByteArray::isUpper() const
+{
+    return std::none_of(begin(), end(), isLowerCaseAscii);
+}
+
+/*!
+    Returns \c true if this byte array is lowercase, that is, if
+    it's identical to its toLower() folding.
+
+    Note that this does \e not mean that the byte array only contains
+    lowercase letters; only that it contains no ASCII uppercase letters.
+
     \since 5.12
 
     \sa isUpper(), toLower()
  */
 bool QByteArray::isLower() const
 {
-    if (isEmpty())
-        return false;
-
-    const char *d = data();
-
-    for (qsizetype i = 0, max = size(); i < max; ++i) {
-        if (!isLowerCaseAscii(d[i]))
-            return false;
-    }
-
-    return true;
+    return std::none_of(begin(), end(), isUpperCaseAscii);
 }
 
 /*!
@@ -3850,19 +3864,21 @@ QByteArray QByteArray::toBase64(Base64Options options) const
     const char padchar = '=';
     qsizetype padlen = 0;
 
-    QByteArray tmp((size() + 2) / 3 * 4, Qt::Uninitialized);
+    const qsizetype sz = size();
+
+    QByteArray tmp((sz + 2) / 3 * 4, Qt::Uninitialized);
 
     qsizetype i = 0;
     char *out = tmp.data();
-    while (i < size()) {
+    while (i < sz) {
         // encode 3 bytes at a time
         int chunk = 0;
         chunk |= int(uchar(data()[i++])) << 16;
-        if (i == size()) {
+        if (i == sz) {
             padlen = 2;
         } else {
             chunk |= int(uchar(data()[i++])) << 8;
-            if (i == size())
+            if (i == sz)
                 padlen = 1;
             else
                 chunk |= int(uchar(data()[i++]));
@@ -4335,7 +4351,7 @@ QByteArray::FromBase64Result QByteArray::fromBase64Encoding(QByteArray &&base64,
                                                     base64.size(),
                                                     base64.data(), // in-place
                                                     options);
-        base64.truncate(int(base64result.decodedLength));
+        base64.truncate(base64result.decodedLength);
         return { std::move(base64), base64result.status };
     }
 
@@ -4351,7 +4367,7 @@ QByteArray::FromBase64Result QByteArray::fromBase64Encoding(const QByteArray &ba
                                                 base64Size,
                                                 const_cast<char *>(result.constData()),
                                                 options);
-    result.truncate(int(base64result.decodedLength));
+    result.truncate(base64result.decodedLength);
     return { std::move(result), base64result.status };
 }
 

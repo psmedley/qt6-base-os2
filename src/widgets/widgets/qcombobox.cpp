@@ -92,7 +92,8 @@ QComboBoxPrivate::QComboBoxPrivate()
       shownOnce(false),
       duplicatesEnabled(false),
       frame(true),
-      inserting(false)
+      inserting(false),
+      hidingPopup(false)
 {
 }
 
@@ -2171,7 +2172,11 @@ void QComboBoxPrivate::setCurrentIndex(const QModelIndex &mi)
         }
         updateLineEditGeometry();
     }
-    if (indexChanged) {
+    // If the model was reset to an empty, currentIndex will be invalidated
+    // (because it's a QPersistentModelIndex), but the index change will never
+    // be advertised. So we need an explicit check for such condition.
+    const bool modelResetToEmpty = !normalized.isValid() && indexBeforeChange != -1;
+    if (indexChanged || modelResetToEmpty) {
         q->update();
         _q_emitCurrentIndexChanged(currentIndex);
     }
@@ -2837,6 +2842,13 @@ void QComboBox::showPopup()
 void QComboBox::hidePopup()
 {
     Q_D(QComboBox);
+    if (d->hidingPopup)
+        return;
+    d->hidingPopup = true;
+    // can't use QBoolBlocker on a bitfield
+    auto resetHidingPopup = qScopeGuard([d]{
+        d->hidingPopup = false;
+    });
     if (d->container && d->container->isVisible()) {
 #if QT_CONFIG(effects)
         QSignalBlocker modelBlocker(d->model);

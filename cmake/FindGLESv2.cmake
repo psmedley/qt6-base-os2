@@ -15,6 +15,9 @@ else()
     if(EGL_LIBRARY)
         list(APPEND CMAKE_REQUIRED_LIBRARIES "${EGL_LIBRARY}")
     endif()
+    if(_qt_igy_gui_libs)
+        list(APPEND CMAKE_REQUIRED_LIBRARIES "${_qt_igy_gui_libs}")
+    endif()
     set(_includes "${CMAKE_REQUIRED_INCLUDES}")
     list(APPEND CMAKE_REQUIRED_INCLUDES "${GLESv2_INCLUDE_DIR}")
 
@@ -26,7 +29,7 @@ else()
 #  include <GLES2/gl2.h>
 #endif
 
-int main(int argc, char *argv[]) {
+int main(int, char **) {
     glUniform1f(1, GLfloat(1.0));
     glClear(GL_COLOR_BUFFER_BIT);
 }" HAVE_GLESv2)

@@ -1,6 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
+** Copyright (C) 2021 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -105,6 +106,7 @@ private Q_SLOTS:
     void toJson();
     void toJsonSillyNumericValues();
     void toJsonLargeNumericValues();
+    void toJsonDenormalValues();
     void fromJson();
     void fromJsonErrors();
     void parseNumbers();
@@ -393,11 +395,14 @@ void tst_QtJson::testNumbers_2()
     // Validate the last actual value is min denorm
     QVERIFY2(floatValues_1[1074] == 4.9406564584124654417656879286822e-324, QString("Min denorm value is incorrect: %1").arg(floatValues_1[1074]).toLatin1());
 
-    // Validate that every value is half the value before it up to 1
-    for (int index = 1074; index > 0; index--) {
-        QVERIFY2(floatValues_1[index] != 0, QString("2**- %1 should not be 0").arg(index).toLatin1());
-
-        QVERIFY2(floatValues_1[index - 1] == (floatValues_1[index] * 2), QString("Value should be double adjacent value at index %1").arg(index).toLatin1());
+    if constexpr (std::numeric_limits<double>::has_denorm == std::denorm_present) {
+        // Validate that every value is half the value before it up to 1
+        for (int index = 1074; index > 0; index--) {
+            QVERIFY2(floatValues_1[index] != 0, QString("2**- %1 should not be 0").arg(index).toLatin1());
+            QVERIFY2(floatValues_1[index - 1] == (floatValues_1[index] * 2), QString("Value should be double adjacent value at index %1").arg(index).toLatin1());
+        }
+    } else {
+        qInfo("Skipping denormal test as this system's double type lacks support");
     }
 }
 
@@ -781,15 +786,20 @@ void tst_QtJson::testValueObject()
 void tst_QtJson::testValueArray()
 {
     QJsonArray array;
+    QJsonArray otherArray = {"wrong value"};
+    QJsonValue value(array);
+    QCOMPARE(value.toArray(), array);
+    QCOMPARE(value.toArray(otherArray), array);
+
     array.append(999.);
     array.append(QLatin1String("test"));
     array.append(true);
-
-    QJsonValue value(array);
+    value = array;
 
     // if we don't modify the original JsonArray, toArray()
     // on the JsonValue should return the same object (non-detached).
     QCOMPARE(value.toArray(), array);
+    QCOMPARE(value.toArray(otherArray), array);
 
     // if we modify the original array, it should detach
     array.append(QLatin1String("test"));
@@ -799,14 +809,23 @@ void tst_QtJson::testValueArray()
 void tst_QtJson::testObjectNested()
 {
     QJsonObject inner, outer;
+    QJsonObject otherObject = {{"wrong key", "wrong value"}};
+    QJsonValue v = inner;
+    QCOMPARE(v.toObject(), inner);
+    QCOMPARE(v.toObject(otherObject), inner);
+
     inner.insert("number", 999.);
     outer.insert("nested", inner);
 
     // if we don't modify the original JsonObject, value()
     // should return the same object (non-detached).
     QJsonObject value = outer.value("nested").toObject();
+    v = value;
     QCOMPARE(value, inner);
     QCOMPARE(value.value("number").toDouble(), 999.);
+    QCOMPARE(v.toObject(), inner);
+    QCOMPARE(v.toObject(otherObject), inner);
+    QCOMPARE(v["number"].toDouble(), 999.);
 
     // if we modify the original object, it should detach and not
     // affect the nested object
@@ -1818,16 +1837,13 @@ void tst_QtJson::toJsonLargeNumericValues()
     QJsonArray array;
     array.append(QJsonValue(1.234567)); // actual precision bug in Qt 5.0.0
     array.append(QJsonValue(1.7976931348623157e+308)); // JS Number.MAX_VALUE
-    array.append(QJsonValue(5e-324));                  // JS Number.MIN_VALUE
     array.append(QJsonValue(std::numeric_limits<double>::min()));
     array.append(QJsonValue(std::numeric_limits<double>::max()));
     array.append(QJsonValue(std::numeric_limits<double>::epsilon()));
-    array.append(QJsonValue(std::numeric_limits<double>::denorm_min()));
     array.append(QJsonValue(0.0));
     array.append(QJsonValue(-std::numeric_limits<double>::min()));
     array.append(QJsonValue(-std::numeric_limits<double>::max()));
     array.append(QJsonValue(-std::numeric_limits<double>::epsilon()));
-    array.append(QJsonValue(-std::numeric_limits<double>::denorm_min()));
     array.append(QJsonValue(-0.0));
     array.append(QJsonValue(9007199254740992LL));  // JS Number max integer
     array.append(QJsonValue(-9007199254740992LL)); // JS Number min integer
@@ -1841,27 +1857,21 @@ void tst_QtJson::toJsonLargeNumericValues()
             "        1.234567,\n"
             "        1.7976931348623157e+308,\n"
 #ifdef QT_NO_DOUBLECONVERSION // "shortest" double conversion is not very short then
-            "        4.9406564584124654e-324,\n"
             "        2.2250738585072014e-308,\n"
             "        1.7976931348623157e+308,\n"
             "        2.2204460492503131e-16,\n"
-            "        4.9406564584124654e-324,\n"
             "        0,\n"
             "        -2.2250738585072014e-308,\n"
             "        -1.7976931348623157e+308,\n"
             "        -2.2204460492503131e-16,\n"
-            "        -4.9406564584124654e-324,\n"
 #else
-            "        5e-324,\n"
             "        2.2250738585072014e-308,\n"
             "        1.7976931348623157e+308,\n"
             "        2.220446049250313e-16,\n"
-            "        5e-324,\n"
             "        0,\n"
             "        -2.2250738585072014e-308,\n"
             "        -1.7976931348623157e+308,\n"
             "        -2.220446049250313e-16,\n"
-            "        -5e-324,\n"
 #endif
             "        0,\n"
             "        9007199254740992,\n"
@@ -1875,6 +1885,42 @@ void tst_QtJson::toJsonLargeNumericValues()
     doc.setObject(object);
     json = doc.toJson();
     QCOMPARE(json, expected);
+}
+
+void tst_QtJson::toJsonDenormalValues()
+{
+    if constexpr (std::numeric_limits<double>::has_denorm == std::denorm_present) {
+        QJsonObject object;
+        QJsonArray array;
+        array.append(QJsonValue(5e-324));                  // JS Number.MIN_VALUE
+        array.append(QJsonValue(std::numeric_limits<double>::denorm_min()));
+        array.append(QJsonValue(-std::numeric_limits<double>::denorm_min()));
+        object.insert("Array", array);
+
+        QByteArray json = QJsonDocument(object).toJson();
+        QByteArray expected =
+                "{\n"
+                "    \"Array\": [\n"
+#ifdef QT_NO_DOUBLECONVERSION // "shortest" double conversion is not very short then
+                "        4.9406564584124654e-324,\n"
+                "        4.9406564584124654e-324,\n"
+                "        -4.9406564584124654e-324\n"
+#else
+                "        5e-324,\n"
+                "        5e-324,\n"
+                "        -5e-324\n"
+#endif
+                "    ]\n"
+                "}\n";
+
+        QCOMPARE(json, expected);
+        QJsonDocument doc;
+        doc.setObject(object);
+        json = doc.toJson();
+        QCOMPARE(json, expected);
+    } else {
+        QSKIP("Skipping 'denorm' as this type lacks denormals on this system");
+    }
 }
 
 void tst_QtJson::fromJson()
@@ -2199,12 +2245,12 @@ void tst_QtJson::parseNumbers()
             QCOMPARE(val.toDouble(), (double)numbers[i].n);
         }
     }
+    // test number parsing
+    struct Numbers {
+        const char *str;
+        double n;
+    };
     {
-        // test number parsing
-        struct Numbers {
-            const char *str;
-            double n;
-        };
         Numbers numbers [] = {
             { "0", 0 },
             { "1", 1 },
@@ -2220,8 +2266,6 @@ void tst_QtJson::parseNumbers()
             { "1.1e10", 1.1e10 },
             { "1.1e308", 1.1e308 },
             { "-1.1e308", -1.1e308 },
-            { "1.1e-308", 1.1e-308 },
-            { "-1.1e-308", -1.1e-308 },
             { "1.1e+308", 1.1e+308 },
             { "-1.1e+308", -1.1e+308 },
             { "1.e+308", 1.e+308 },
@@ -2242,6 +2286,29 @@ void tst_QtJson::parseNumbers()
             QCOMPARE(val.type(), QJsonValue::Double);
             QCOMPARE(val.toDouble(), numbers[i].n);
         }
+    }
+    if constexpr (std::numeric_limits<double>::has_denorm == std::denorm_present) {
+        Numbers numbers [] = {
+            { "1.1e-308", 1.1e-308 },
+            { "-1.1e-308", -1.1e-308 }
+        };
+        int size = sizeof(numbers)/sizeof(Numbers);
+        for (int i = 0; i < size; ++i) {
+            QByteArray json = "[ ";
+            json += numbers[i].str;
+            json += " ]";
+            QJsonDocument doc = QJsonDocument::fromJson(json);
+            QVERIFY(!doc.isEmpty());
+            QCOMPARE(doc.isArray(), true);
+            QCOMPARE(doc.isObject(), false);
+            QJsonArray array = doc.array();
+            QCOMPARE(array.size(), 1);
+            QJsonValue val = array.at(0);
+            QCOMPARE(val.type(), QJsonValue::Double);
+            QCOMPARE(val.toDouble(), numbers[i].n);
+        }
+    } else {
+        qInfo("Skipping denormal test as this system's double type lacks support");
     }
 }
 

@@ -65,6 +65,13 @@
 #include "qvarlengtharray.h"
 #include "private/qlocking_p.h"
 
+#if !defined(QT_APPLE_NO_PRIVATE_APIS)
+extern "C" {
+typedef uint32_t csr_config_t;
+extern int csr_get_active_config(csr_config_t *) __attribute__((weak_import));
+}
+#endif
+
 QT_BEGIN_NAMESPACE
 
 // --------------------------------------------------------------------------
@@ -133,7 +140,7 @@ bool AppleUnifiedLogger::messageHandler(QtMsgType msgType, const QMessageLogCont
 
     const bool isDefault = !context.category || !strcmp(context.category, "default");
     os_log_t log = isDefault ? OS_LOG_DEFAULT :
-        cachedLog(subsystem, QString::fromLatin1(context.category));
+        os_log_create(subsystem.toLatin1().constData(), context.category);
     os_log_type_t logType = logTypeForMessageType(msgType);
 
     if (!os_log_type_enabled(log, logType))
@@ -167,29 +174,6 @@ os_log_type_t AppleUnifiedLogger::logTypeForMessageType(QtMsgType msgType)
     }
 
     return OS_LOG_TYPE_DEFAULT;
-}
-
-os_log_t AppleUnifiedLogger::cachedLog(const QString &subsystem, const QString &category)
-{
-    static QBasicMutex mutex;
-    const auto locker = qt_scoped_lock(mutex);
-
-    static QHash<QPair<QString, QString>, os_log_t> logs;
-    const auto cacheKey = qMakePair(subsystem, category);
-    os_log_t log = logs.value(cacheKey);
-
-    if (!log) {
-        log = os_log_create(subsystem.toLatin1().constData(),
-            category.toLatin1().constData());
-        logs.insert(cacheKey, log);
-
-        // Technically we should release the os_log_t resource when done
-        // with it, but since we don't know when a category is disabled
-        // we keep all cached os_log_t instances until shutdown, where
-        // the OS will clean them up for us.
-    }
-
-    return log;
 }
 
 #endif // QT_USE_APPLE_UNIFIED_LOGGING
@@ -279,16 +263,9 @@ QMacAutoReleasePool::QMacAutoReleasePool()
 
 #ifdef QT_DEBUG
     void *poolFrame = nullptr;
-    if (__builtin_available(macOS 10.14, iOS 12.0, tvOS 12.0, watchOS 5.0, *)) {
-        void *frame;
-        if (backtrace_from_fp(__builtin_frame_address(0), &frame, 1))
-            poolFrame = frame;
-    } else {
-        static const int maxFrames = 3;
-        void *callstack[maxFrames];
-        if (backtrace(callstack, maxFrames) == maxFrames)
-            poolFrame = callstack[maxFrames - 1];
-    }
+    void *frame;
+    if (backtrace_from_fp(__builtin_frame_address(0), &frame, 1))
+        poolFrame = frame;
 
     if (poolFrame) {
         Dl_info info;
@@ -359,14 +336,9 @@ QDebug operator<<(QDebug debug, const QCFString &string)
 #ifdef Q_OS_MACOS
 bool qt_mac_applicationIsInDarkMode()
 {
-#if QT_MACOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_10_14)
-    if (__builtin_available(macOS 10.14, *)) {
-        auto appearance = [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:
-                @[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
-        return [appearance isEqualToString:NSAppearanceNameDarkAqua];
-    }
-#endif
-    return false;
+    auto appearance = [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:
+            @[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
+    return [appearance isEqualToString:NSAppearanceNameDarkAqua];
 }
 
 bool qt_mac_runningUnderRosetta()
@@ -381,6 +353,12 @@ bool qt_mac_runningUnderRosetta()
 std::optional<uint32_t> qt_mac_sipConfiguration()
 {
     static auto configuration = []() -> std::optional<uint32_t> {
+#if !defined(QT_APPLE_NO_PRIVATE_APIS)
+        csr_config_t config;
+        if (csr_get_active_config && csr_get_active_config(&config) == 0)
+            return config;
+#endif
+
         QIOType<io_registry_entry_t> nvram = IORegistryEntryFromPath(kIOMasterPortDefault, "IODeviceTree:/options");
         if (!nvram) {
             qWarning("Failed to locate NVRAM entry in IO registry");
@@ -389,10 +367,8 @@ std::optional<uint32_t> qt_mac_sipConfiguration()
 
         QCFType<CFTypeRef> csrConfig = IORegistryEntryCreateCFProperty(nvram,
             CFSTR("csr-active-config"), kCFAllocatorDefault, IOOptionBits{});
-        if (!csrConfig) {
-            qWarning("Failed to locate SIP config in NVRAM");
-            return {};
-        }
+        if (!csrConfig)
+            return {}; // SIP config is not available
 
         if (auto type = CFGetTypeID(csrConfig); type != CFDataGetTypeID()) {
             qWarning() << "Unexpected SIP config type" << CFCopyTypeIDDescription(type);
@@ -685,11 +661,9 @@ QMacVersion::VersionTuple QMacVersion::versionsForImage(const mach_header *machH
             || loadCommand->cmd == LC_VERSION_MIN_TVOS || loadCommand->cmd == LC_VERSION_MIN_WATCHOS) {
             auto versionCommand = reinterpret_cast<version_min_command *>(loadCommand);
             return makeVersionTuple(versionCommand->version, versionCommand->sdk, osForLoadCommand(loadCommand->cmd));
-#if QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_10_13, __IPHONE_11_0, __TVOS_11_0, __WATCHOS_4_0)
         } else if (loadCommand->cmd == LC_BUILD_VERSION) {
             auto versionCommand = reinterpret_cast<build_version_command *>(loadCommand);
             return makeVersionTuple(versionCommand->minos, versionCommand->sdk, osForPlatform(versionCommand->platform));
-#endif
         }
         commandCursor += loadCommand->cmdsize;
     }

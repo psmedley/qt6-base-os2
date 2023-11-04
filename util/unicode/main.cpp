@@ -81,6 +81,47 @@ static void initAgeMap()
     }
 }
 
+static const char *east_asian_width_string =
+R"(enum class EastAsianWidth : unsigned int {
+    A,
+    F,
+    H,
+    N,
+    Na,
+    W,
+};
+
+)";
+
+enum class EastAsianWidth : unsigned int {
+    A,
+    F,
+    H,
+    N,
+    Na,
+    W,
+};
+
+static QHash<QByteArray, EastAsianWidth> eastAsianWidthMap;
+
+static void initEastAsianWidthMap()
+{
+    constexpr struct W {
+        EastAsianWidth width;
+        const char *name;
+    } widths[] = {
+        { EastAsianWidth::A,  "A"  },
+        { EastAsianWidth::F,  "F"  },
+        { EastAsianWidth::H,  "H"  },
+        { EastAsianWidth::N,  "N"  },
+        { EastAsianWidth::Na, "Na" },
+        { EastAsianWidth::W,  "W"  },
+    };
+
+    for (auto &w : widths)
+        eastAsianWidthMap.insert(w.name, w.width);
+}
+
 static QHash<QByteArray, QChar::Category> categoryMap;
 
 static void initCategoryMap()
@@ -368,10 +409,6 @@ static const char *word_break_class_string =
     "    WordBreak_MidNum,\n"
     "    WordBreak_Numeric,\n"
     "    WordBreak_ExtendNumLet,\n"
-    "    WordBreak_E_Base,\n"
-    "    WordBreak_E_Modifier,\n"
-    "    WordBreak_Glue_After_Zwj,\n"
-    "    WordBreak_E_Base_GAZ,\n"
     "    WordBreak_WSegSpace,\n"
     "\n"
     "    NumWordBreakClasses\n"
@@ -396,10 +433,6 @@ enum WordBreakClass {
     WordBreak_MidNum,
     WordBreak_Numeric,
     WordBreak_ExtendNumLet,
-    WordBreak_E_Base,
-    WordBreak_E_Modifier,
-    WordBreak_Glue_After_Zwj,
-    WordBreak_E_Base_GAZ,
     WordBreak_WSegSpace,
 
     WordBreak_Unassigned
@@ -431,10 +464,6 @@ static void initWordBreak()
         { WordBreak_MidNum, "MidNum" },
         { WordBreak_Numeric, "Numeric" },
         { WordBreak_ExtendNumLet, "ExtendNumLet" },
-        { WordBreak_E_Base, "E_Base" },
-        { WordBreak_E_Modifier, "E_Modifier" },
-        { WordBreak_Glue_After_Zwj, "Glue_After_Zwj" },
-        { WordBreak_E_Base_GAZ, "E_Base_GAZ" },
         { WordBreak_WSegSpace, "WSegSpace" },
         { WordBreak_Unassigned, 0 }
     };
@@ -823,7 +852,8 @@ static const char *property_string =
     "    ushort joining             : 3;\n"
     "    signed short digitValue    : 5;\n"
     "    signed short mirrorDiff    : 16;\n"
-    "    ushort unicodeVersion      : 8; /* 5 used */\n"
+    "    ushort unicodeVersion      : 5; /* 5 used */\n"
+    "    ushort eastAsianWidth      : 3; /* 3 used */\n"
     "    ushort nfQuickCheck        : 8;\n" // could be narrowed
     "#ifdef Q_OS_WASM\n"
     "    unsigned char              : 0; //wasm 64 packing trick\n"
@@ -861,6 +891,10 @@ static const char *methods =
     "Q_CORE_EXPORT LineBreakClass QT_FASTCALL lineBreakClass(char32_t ucs4) noexcept;\n"
     "inline LineBreakClass lineBreakClass(QChar ch) noexcept\n"
     "{ return lineBreakClass(ch.unicode()); }\n"
+    "\n"
+    "Q_CORE_EXPORT EastAsianWidth QT_FASTCALL eastAsianWidth(char32_t ucs4) noexcept;\n"
+    "inline EastAsianWidth eastAsianWidth(QChar ch) noexcept\n"
+    "{ return eastAsianWidth(ch.unicode()); }\n"
     "\n";
 
 static const int SizeOfPropertiesStruct = 20;
@@ -883,6 +917,7 @@ struct PropertyFlags {
                 && direction == o.direction
                 && joining == o.joining
                 && age == o.age
+                && eastAsianWidth == o.eastAsianWidth
                 && digitValue == o.digitValue
                 && mirrorDiff == o.mirrorDiff
                 && lowerCaseDiff == o.lowerCaseDiff
@@ -909,6 +944,8 @@ struct PropertyFlags {
     QChar::JoiningType joining : 3;
     // from DerivedAge.txt
     QChar::UnicodeVersion age : 5;
+    // From EastAsianWidth.txt
+    EastAsianWidth eastAsianWidth = EastAsianWidth::N;
     int digitValue = -1;
 
     int mirrorDiff : 16;
@@ -1440,6 +1477,52 @@ static void readDerivedAge()
         for (int codepoint = from; codepoint <= to; ++codepoint) {
             UnicodeData &d = UnicodeData::valueRef(codepoint);
             d.p.age = age;
+        }
+    }
+}
+
+static void readEastAsianWidth()
+{
+    qDebug("Reading EastAsianWidth.txt");
+
+    QFile f("data/EastAsianWidth.txt");
+    if (!f.exists() || !f.open(QFile::ReadOnly))
+        qFatal("Couldn't find or read EastAsianWidth.txt");
+
+    while (!f.atEnd()) {
+        QByteArray line = f.readLine().trimmed();
+
+        int comment = line.indexOf('#');
+        line = (comment < 0 ? line : line.left(comment)).simplified();
+
+        if (line.isEmpty())
+            continue;
+
+        QList<QByteArray> fields = line.split(';');
+        Q_ASSERT(fields.size() == 2);
+
+        // That would be split(".."), but that API does not exist.
+        const QByteArray codePoints = fields[0].trimmed().replace("..", ".");
+        QList<QByteArray> cl = codePoints.split('.');
+        Q_ASSERT(cl.size() >= 1 && cl.size() <= 2);
+
+        const QByteArray widthString = fields[1].trimmed();
+        if (!eastAsianWidthMap.contains(widthString)) {
+            qFatal("Unhandled EastAsianWidth property value for %s: %s",
+                   qPrintable(codePoints), qPrintable(widthString));
+        }
+        auto width = eastAsianWidthMap.value(widthString);
+
+        bool ok;
+        const int first = cl[0].toInt(&ok, 16);
+        const int last = ok && cl.size() == 2 ? cl[1].toInt(&ok, 16) : first;
+        Q_ASSERT(ok);
+
+        for (int codepoint = first; codepoint <= last; ++codepoint) {
+            UnicodeData &ud = UnicodeData::valueRef(codepoint);
+            // Ensure that ranges don't overlap.
+            Q_ASSERT(ud.p.eastAsianWidth == EastAsianWidth::N);
+            ud.p.eastAsianWidth = width;
         }
     }
 }
@@ -2496,8 +2579,11 @@ static QByteArray createPropertyInfo()
 //     "        signed short mirrorDiff    : 16;\n"
         out += QByteArray::number( p.mirrorDiff );
         out += ", ";
-//     "        ushort unicodeVersion      : 8; /* 5 used */\n"
+//     "        ushort unicodeVersion      : 5; /* 5 used */\n"
         out += QByteArray::number( p.age );
+        out += ", ";
+//     "        ushort eastAsianWidth      : 3;" /* 3 used */\n"
+        out += QByteArray::number( static_cast<unsigned int>(p.eastAsianWidth) );
         out += ", ";
 //     "        ushort nfQuickCheck        : 8;\n"
         out += QByteArray::number( p.nfQuickCheck );
@@ -2594,6 +2680,11 @@ static QByteArray createPropertyInfo()
            "Q_CORE_EXPORT LineBreakClass QT_FASTCALL lineBreakClass(char32_t ucs4) noexcept\n"
            "{\n"
            "    return static_cast<LineBreakClass>(qGetProp(ucs4)->lineBreakClass);\n"
+           "}\n"
+           "\n"
+           "Q_CORE_EXPORT EastAsianWidth QT_FASTCALL eastAsianWidth(char32_t ucs4) noexcept\n"
+           "{\n"
+           "    return static_cast<EastAsianWidth>(qGetProp(ucs4)->eastAsianWidth);\n"
            "}\n"
            "\n";
 
@@ -3050,6 +3141,7 @@ QByteArray createCasingInfo()
 int main(int, char **)
 {
     initAgeMap();
+    initEastAsianWidthMap();
     initCategoryMap();
     initDecompositionMap();
     initDirectionMap();
@@ -3064,6 +3156,7 @@ int main(int, char **)
     readBidiMirroring();
     readArabicShaping();
     readDerivedAge();
+    readEastAsianWidth();
     readDerivedNormalizationProps();
     readSpecialCasing();
     readCaseFolding();
@@ -3169,6 +3262,7 @@ int main(int, char **)
     f.write("namespace QUnicodeTables {\n\n");
     f.write(property_string);
     f.write(sizeOfPropertiesStructCheck);
+    f.write(east_asian_width_string);
     f.write(grapheme_break_class_string);
     f.write(word_break_class_string);
     f.write(sentence_break_class_string);

@@ -1187,10 +1187,16 @@ QString QGuiApplication::platformName()
 }
 
 Q_LOGGING_CATEGORY(lcQpaPluginLoading, "qt.qpa.plugin");
+Q_LOGGING_CATEGORY(lcQpaTheme, "qt.qpa.theme");
 Q_LOGGING_CATEGORY(lcPtrDispatch, "qt.pointer.dispatch");
 
 static void init_platform(const QString &pluginNamesWithArguments, const QString &platformPluginPath, const QString &platformThemeName, int &argc, char **argv)
 {
+    qCDebug(lcQpaPluginLoading) << "init_platform called with"
+        << "pluginNamesWithArguments" << pluginNamesWithArguments
+        << "platformPluginPath" << platformPluginPath
+        << "platformThemeName" << platformThemeName;
+
     QStringList plugins = pluginNamesWithArguments.split(QLatin1Char(';'), Qt::SkipEmptyParts);
     QStringList platformArguments;
     QStringList availablePlugins = QPlatformIntegrationFactory::keys(platformPluginPath);
@@ -1206,6 +1212,8 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
         argumentsKey[0] = argumentsKey.at(0).toUpper();
         arguments.append(QLibraryInfo::platformPluginArguments(argumentsKey));
 
+        qCDebug(lcQpaPluginLoading) << "Attempting to load Qt platform plugin" << name << "with arguments" << arguments;
+
         // Create the platform integration.
         QGuiApplicationPrivate::platform_integration = QPlatformIntegrationFactory::create(name, arguments, argc, argv, platformPluginPath);
         if (Q_UNLIKELY(!QGuiApplicationPrivate::platform_integration)) {
@@ -1219,6 +1227,7 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
                         << QDir::toNativeSeparators(platformPluginPath) << "\"";
             }
         } else {
+            qCDebug(lcQpaPluginLoading) << "Successfully loaded Qt platform plugin" << name;
             QGuiApplicationPrivate::platform_name = new QString(name);
             platformArguments = arguments;
             break;
@@ -1247,37 +1256,50 @@ static void init_platform(const QString &pluginNamesWithArguments, const QString
 
     // 1) Fetch the platform name from the environment if present.
     QStringList themeNames;
-    if (!platformThemeName.isEmpty())
+    if (!platformThemeName.isEmpty()) {
+        qCDebug(lcQpaTheme) << "Adding" << platformThemeName << "from environment to list of theme names";
         themeNames.append(platformThemeName);
+    }
 
     // 2) Special case - check whether it's a flatpak or snap app to use xdg-desktop-portal platform theme for portals support
     if (checkNeedPortalSupport()) {
+        qCDebug(lcQpaTheme) << "Adding xdgdesktopportal to list of theme names";
         themeNames.append(QStringLiteral("xdgdesktopportal"));
     }
 
     // 3) Ask the platform integration for a list of theme names
-    themeNames += QGuiApplicationPrivate::platform_integration->themeNames();
+    const auto platformIntegrationThemeNames = QGuiApplicationPrivate::platform_integration->themeNames();
+    qCDebug(lcQpaTheme) << "Adding platform integration's theme names to list of theme names:" << platformIntegrationThemeNames;
+    themeNames += platformIntegrationThemeNames;
     // 4) Look for a theme plugin.
     for (const QString &themeName : qAsConst(themeNames)) {
+        qCDebug(lcQpaTheme) << "Attempting to create platform theme" << themeName << "via QPlatformThemeFactory::create";
         QGuiApplicationPrivate::platform_theme = QPlatformThemeFactory::create(themeName, platformPluginPath);
-        if (QGuiApplicationPrivate::platform_theme)
+        if (QGuiApplicationPrivate::platform_theme) {
+            qCDebug(lcQpaTheme) << "Successfully created platform theme" << themeName;
             break;
+        }
     }
 
     // 5) If no theme plugin was found ask the platform integration to
     // create a theme
     if (!QGuiApplicationPrivate::platform_theme) {
         for (const QString &themeName : qAsConst(themeNames)) {
+            qCDebug(lcQpaTheme) << "Attempting to create platform theme" << themeName << "via createPlatformTheme";
             QGuiApplicationPrivate::platform_theme = QGuiApplicationPrivate::platform_integration->createPlatformTheme(themeName);
-            if (QGuiApplicationPrivate::platform_theme)
+            if (QGuiApplicationPrivate::platform_theme) {
+                qCDebug(lcQpaTheme) << "Successfully created platform theme" << themeName;
                 break;
+            }
         }
         // No error message; not having a theme plugin is allowed.
     }
 
     // 6) Fall back on the built-in "null" platform theme.
-    if (!QGuiApplicationPrivate::platform_theme)
+    if (!QGuiApplicationPrivate::platform_theme) {
+        qCDebug(lcQpaTheme) << "Failed to create platform theme; using \"null\" platform theme";
         QGuiApplicationPrivate::platform_theme = new QPlatformTheme;
+    }
 
 #ifndef QT_NO_PROPERTIES
     // Set arguments as dynamic properties on the native interface as
@@ -2500,8 +2522,15 @@ void QGuiApplicationPrivate::processActivatedEvent(QWindowSystemInterfacePrivate
     if (self) {
         self->notifyActiveWindowChange(previous);
 
-        if (previousFocusObject != qApp->focusObject())
+        if (previousFocusObject != qApp->focusObject() ||
+            // We are getting an activation change but there is no new focusObject, and we also
+            // don't have a previousFocusObject in the previously active window anymore. This can
+            // happen when window gets destroyed (see QWidgetWindow::focusObject returning nullptr
+            // when already in the QWidget destructor), so update the focusObject to avoid dangling
+            // pointers. See also QWidget::clearFocus(), which tries to cover for this as well.
+            (previous && previousFocusObject == nullptr && qApp->focusObject() == nullptr)) {
             self->_q_updateFocusObject(qApp->focusObject());
+        }
     }
 
     emit qApp->focusWindowChanged(newFocus);
@@ -2883,13 +2912,13 @@ void QGuiApplicationPrivate::processTouchEvent(QWindowSystemInterfacePrivate::To
 
         case QEventPoint::State::Released:
             if (Q_UNLIKELY(!window.isNull() && window != mut.window()))
-                qCWarning(lcPtrDispatch) << "delivering touch release to same window" << mut.window() << "not" << window.data();
+                qCDebug(lcPtrDispatch) << "delivering touch release to same window" << mut.window() << "not" << window.data();
             window = mut.window();
             break;
 
         default: // update or stationary
             if (Q_UNLIKELY(!window.isNull() && window != mut.window()))
-                qCWarning(lcPtrDispatch) << "delivering touch update to same window" << mut.window() << "not" << window.data();
+                qCDebug(lcPtrDispatch) << "delivering touch update to same window" << mut.window() << "not" << window.data();
             window = mut.window();
             break;
         }
@@ -2973,7 +3002,7 @@ void QGuiApplicationPrivate::processTouchEvent(QWindowSystemInterfacePrivate::To
                 QEvent::Type mouseEventType = QEvent::MouseMove;
                 Qt::MouseButton button = Qt::NoButton;
                 Qt::MouseButtons buttons = Qt::LeftButton;
-                if (eventType == QEvent::TouchBegin  && m_fakeMouseSourcePointId < 0) {
+                if (eventType == QEvent::TouchBegin || m_fakeMouseSourcePointId < 0) {
                     m_fakeMouseSourcePointId = touchEvent.point(0).id();
                     qCDebug(lcPtrDispatch) << "synthesizing mouse events from touchpoint" << m_fakeMouseSourcePointId;
                 }
@@ -3387,6 +3416,7 @@ QPalette QGuiApplicationPrivate::basePalette() const
 
 void QGuiApplicationPrivate::handlePaletteChanged(const char *className)
 {
+#if QT_DEPRECATED_SINCE(6, 0)
     if (!className) {
         Q_ASSERT(app_pal);
 QT_WARNING_PUSH
@@ -3394,6 +3424,9 @@ QT_WARNING_DISABLE_DEPRECATED
         emit qGuiApp->paletteChanged(*QGuiApplicationPrivate::app_pal);
 QT_WARNING_POP
     }
+#else
+    Q_UNUSED(className);
+#endif // QT_DEPRECATED_SINCE(6, 0)
 
     if (is_app_running && !is_app_closing) {
         QEvent event(QEvent::ApplicationPaletteChange);
@@ -3452,10 +3485,14 @@ void QGuiApplication::setFont(const QFont &font)
     if (emitChange && qGuiApp) {
         auto font = *QGuiApplicationPrivate::app_font;
         locker.unlock();
+#if QT_DEPRECATED_SINCE(6, 0)
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
         emit qGuiApp->fontChanged(font);
 QT_WARNING_POP
+#else
+        Q_UNUSED(font);
+#endif // QT_DEPRECATED_SINCE(6, 0)
         QEvent event(QEvent::ApplicationFontChange);
         QGuiApplication::sendEvent(qGuiApp, &event);
     }

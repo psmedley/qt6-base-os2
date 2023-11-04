@@ -1134,7 +1134,13 @@ void QDBusConnectionPrivate::closeConnection()
         }
     }
 
-    qDeleteAll(pendingCalls);
+    for (auto it = pendingCalls.begin(); it != pendingCalls.end(); ++it) {
+        auto call = *it;
+        if (!call->ref.deref()) {
+            delete call;
+        }
+    }
+    pendingCalls.clear();
 
     // Disconnect all signals from signal hooks and from the object tree to
     // avoid QObject::destroyed being sent to dbus daemon thread which has
@@ -2582,6 +2588,12 @@ QDBusConnectionPrivate::findMetaObject(const QString &service, const QString &pa
         QDBusMetaObject *mo = cachedMetaObjects.value(interface, nullptr);
         if (mo)
             return mo;
+    }
+    if (path.isEmpty()) {
+        error = QDBusError(QDBusError::InvalidObjectPath,
+                           QLatin1String("Object path cannot be empty"));
+        lastError = error;
+        return nullptr;
     }
 
     // introspect the target object

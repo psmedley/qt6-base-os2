@@ -117,8 +117,8 @@ QT_BEGIN_NAMESPACE
     The second approach is to handle user events directly by reimplementing
     editorEvent().
 
-    \sa {model-view-programming}{Model/View Programming}, QStyledItemDelegate,
-        {Pixelator Example}, QStyledItemDelegate, QStyle
+    \sa {model-view-programming}{Model/View Programming}, {Pixelator Example},
+        QStyledItemDelegate, QStyle
 */
 
 /*!
@@ -380,12 +380,7 @@ bool QAbstractItemDelegate::helpEvent(QHelpEvent *event,
         const QString tooltip = index.isValid() ?
               d->textForRole(Qt::ToolTipRole, index.data(Qt::ToolTipRole), option.locale, precision) :
               QString();
-        QRect rect;
-        if (index.isValid()) {
-            const QRect r = view->visualRect(index);
-            rect = QRect(view->mapToGlobal(r.topLeft()), r.size());
-        }
-        QToolTip::showText(he->globalPos(), tooltip, view, rect);
+        QToolTip::showText(he->globalPos(), tooltip, view->viewport(), option.rect);
         event->setAccepted(!tooltip.isEmpty());
         break;
         }
@@ -521,12 +516,13 @@ bool QAbstractItemDelegatePrivate::editorEventFilter(QObject *object, QEvent *ev
             // If the application loses focus while editing, then the focus needs to go back
             // to the itemview when the editor closes. This ensures that when the application
             // is active again it will have the focus on the itemview as expected.
+            QWidget *editorParent = editor->parentWidget();
             const bool manuallyFixFocus = (event->type() == QEvent::FocusOut) && !editor->hasFocus() &&
-                    editor->parentWidget() &&
+                    editorParent &&
                     (static_cast<QFocusEvent *>(event)->reason() == Qt::ActiveWindowFocusReason);
             emit q->closeEditor(editor, QAbstractItemDelegate::NoHint);
             if (manuallyFixFocus)
-                editor->parentWidget()->setFocus();
+                editorParent->setFocus();
         }
 #ifndef QT_NO_SHORTCUT
     } else if (event->type() == QEvent::ShortcutOverride) {

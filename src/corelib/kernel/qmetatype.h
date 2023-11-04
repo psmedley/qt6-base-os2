@@ -417,7 +417,7 @@ public:
     { return QMetaType(type).name(); }
     QT_DEPRECATED_VERSION_6_0
     static int sizeOf(int type)
-    { return QMetaType(type).sizeOf(); }
+    { return int(QMetaType(type).sizeOf()); }
     QT_DEPRECATED_VERSION_6_0
     static TypeFlags typeFlags(int type)
     { return QMetaType(type).flags(); }
@@ -1520,7 +1520,7 @@ struct SharedPointerMetaTypeIdHelper<SMART_POINTER<T>, true> \
 }; \
 template<typename T> \
 struct MetaTypeSmartPointerHelper<SMART_POINTER<T> , \
-        typename std::enable_if<IsPointerToTypeDerivedFromQObject<T*>::Value>::type> \
+        typename std::enable_if<IsPointerToTypeDerivedFromQObject<T*>::Value && !std::is_const_v<T>>::type> \
 { \
     static bool registerConverter() \
     { \
@@ -1714,7 +1714,7 @@ private:
 #ifdef Q_CC_MSVC
         /// On MSVC, keywords like class or struct are not separated with spaces in constexpr
         /// context
-        if (msvcKw)
+        if (msvcKw && !is_ident_char(*b))
             return true;
 #endif
         Q_UNUSED(msvcKw);
@@ -2154,7 +2154,7 @@ constexpr auto typenameHelper()
         constexpr int suffix = sizeof("]");
 #endif
 
-#if (defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && !defined(Q_CC_CLANG) && Q_CC_GNU < 804)
+#if defined(Q_CC_GNU_ONLY) && Q_CC_GNU_ONLY < 804
         auto func = Q_FUNC_INFO;
         const char *begin = func + prefix;
         const char *end = func + sizeof(Q_FUNC_INFO) - suffix;

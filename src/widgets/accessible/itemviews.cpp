@@ -409,7 +409,27 @@ QAccessible::Role QAccessibleTable::role() const
 
 QAccessible::State QAccessibleTable::state() const
 {
-    return QAccessible::State();
+    QAccessible::State state;
+    const auto *w = view();
+
+    if (w->testAttribute(Qt::WA_WState_Visible) == false)
+        state.invisible = true;
+    if (w->focusPolicy() != Qt::NoFocus)
+        state.focusable = true;
+    if (w->hasFocus())
+        state.focused = true;
+    if (!w->isEnabled())
+        state.disabled = true;
+    if (w->isWindow()) {
+        if (w->windowFlags() & Qt::WindowSystemMenuHint)
+            state.movable = true;
+        if (w->minimumSize() != w->maximumSize())
+            state.sizeable = true;
+        if (w->isActiveWindow())
+            state.active = true;
+    }
+
+    return state;
 }
 
 QAccessibleInterface *QAccessibleTable::childAt(int x, int y) const
@@ -423,6 +443,15 @@ QAccessibleInterface *QAccessibleTable::childAt(int x, int y) const
         return child(logicalIndex(index));
     }
     return nullptr;
+}
+
+QAccessibleInterface *QAccessibleTable::focusChild() const
+{
+    QModelIndex index = view()->currentIndex();
+    if (!index.isValid())
+        return nullptr;
+
+    return child(logicalIndex(index));
 }
 
 int QAccessibleTable::childCount() const
@@ -681,6 +710,20 @@ QAccessibleInterface *QAccessibleTree::childAt(int x, int y) const
     QPoint indexPosition = view()->mapFromGlobal(QPoint(x, y) - viewportOffset);
 
     QModelIndex index = view()->indexAt(indexPosition);
+    if (!index.isValid())
+        return nullptr;
+
+    const QTreeView *treeView = qobject_cast<const QTreeView*>(view());
+    int row = treeView->d_func()->viewIndex(index) + (horizontalHeader() ? 1 : 0);
+    int column = index.column();
+
+    int i = row * view()->model()->columnCount() + column;
+    return child(i);
+}
+
+QAccessibleInterface *QAccessibleTree::focusChild() const
+{
+    QModelIndex index = view()->currentIndex();
     if (!index.isValid())
         return nullptr;
 

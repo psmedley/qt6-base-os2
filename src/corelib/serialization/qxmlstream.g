@@ -219,6 +219,8 @@
 #ifndef QXMLSTREAMPARSER_P_H
 #define QXMLSTREAMPARSER_P_H
 
+QT_BEGIN_NAMESPACE
+
 #ifndef QT_NO_XMLSTREAMREADER
 
 bool QXmlStreamReaderPrivate::parse()
@@ -756,14 +758,14 @@ attlist_decl ::= langle_bang ATTLIST qname attdef_list space_opt RANGLE;
         case $rule_number: {
             if (referenceToUnparsedEntityDetected && !standalone)
                 break;
-            int n = dtdAttributes.size();
+            qsizetype n = dtdAttributes.size();
             XmlStringRef tagName = addToStringStorage(symName(3));
             while (n--) {
                 DtdAttribute &dtdAttribute = dtdAttributes[n];
                 if (!dtdAttribute.tagName.isNull())
                     break;
                 dtdAttribute.tagName = tagName;
-                for (int i = 0; i < n; ++i) {
+                for (qsizetype i = 0; i < n; ++i) {
                     if ((dtdAttributes[i].tagName.isNull() || dtdAttributes[i].tagName == tagName)
                         && dtdAttributes[i].attributeQualifiedName == dtdAttribute.attributeQualifiedName) {
                         dtdAttribute.attributeQualifiedName.clear(); // redefined, delete it
@@ -869,7 +871,7 @@ processing_instruction ::= LANGLE QUESTIONMARK name space;
 /.
         case $rule_number: {
             setType(QXmlStreamReader::ProcessingInstruction);
-            int pos = sym(4).pos + sym(4).len;
+            const qsizetype pos = sym(4).pos + sym(4).len;
             processingInstructionTarget = symString(3);
             if (scanUntil("?>")) {
                 processingInstructionData = XmlStringRef(&textBuffer, pos, textBuffer.size() - pos - 2);
@@ -921,7 +923,7 @@ comment ::= comment_start RANGLE;
 /.
         case $rule_number: {
             setType(QXmlStreamReader::Comment);
-            int pos = sym(1).pos + 4;
+            const qsizetype pos = sym(1).pos + 4;
             text = XmlStringRef(&textBuffer, pos, textBuffer.size() - pos - 3);
         } break;
 ./
@@ -933,7 +935,7 @@ cdata ::= langle_bang CDATA_START;
             setType(QXmlStreamReader::Characters);
             isCDATA = true;
             isWhitespace = false;
-            int pos = sym(2).pos;
+            const qsizetype pos = sym(2).pos;
             if (scanUntil("]]>", -1)) {
                 text = XmlStringRef(&textBuffer, pos, textBuffer.size() - pos - 3);
             } else {
@@ -1201,8 +1203,7 @@ attribute ::= qname space_opt EQ space_opt attribute_value;
 
                 XmlStringRef attributeQualifiedName = symName(1);
                 bool normalize = false;
-                for (int a = 0; a < dtdAttributes.size(); ++a) {
-                    DtdAttribute &dtdAttribute = dtdAttributes[a];
+                for (const DtdAttribute &dtdAttribute : std::as_const(dtdAttributes)) {
                     if (!dtdAttribute.isCDATA
                         && dtdAttribute.tagName == qualifiedName
                         && dtdAttribute.attributeQualifiedName == attributeQualifiedName
@@ -1213,10 +1214,10 @@ attribute ::= qname space_opt EQ space_opt attribute_value;
                 }
                 if (normalize) {
                     // normalize attribute value (simplify and trim)
-                    int pos = textBuffer.size();
-                    int n = 0;
+                    const qsizetype pos = textBuffer.size();
+                    qsizetype n = 0;
                     bool wasSpace = true;
-                    for (int i = 0; i < attribute.value.len; ++i) {
+                    for (qsizetype i = 0; i < attribute.value.len; ++i) {
                         QChar c = textBuffer.at(attribute.value.pos + i);
                         if (c.unicode() == ' ') {
                             if (wasSpace)
@@ -1299,9 +1300,9 @@ etag ::= LANGLE SLASH qname space_opt RANGLE;
             Tag tag = tagStack_pop();
 
             namespaceUri = tag.namespaceDeclaration.namespaceUri;
+            prefix = tag.namespaceDeclaration.prefix;
             name = tag.name;
             qualifiedName = tag.qualifiedName;
-            prefix = tag.namespaceDeclaration.prefix;
             if (qualifiedName != symName(3))
                 raiseWellFormedError(QXmlStream::tr("Opening and ending tag mismatch."));
         } break;
@@ -1548,6 +1549,8 @@ nmtoken ::= COLON;
 }
 
 #endif
+
+QT_END_NAMESPACE
 
 #endif
 

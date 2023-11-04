@@ -96,7 +96,6 @@ struct BMP_BITMAPV5HEADER {
     DWORD  bV5ProfileSize;
     DWORD  bV5Reserved;
 };
-static const int BMP_BITFIELDS = 3;
 
 static const char dibFormatC[] = "dib";
 
@@ -173,6 +172,18 @@ static bool qt_write_dibv5(QDataStream &s, QImage image)
     bi.bV5Intent        = BMP_LCS_GM_IMAGES;    //LCS_GM_IMAGES
 
     d->write(reinterpret_cast<const char*>(&bi), bi.bV5Size);
+    if (s.status() != QDataStream::Ok)
+        return false;
+
+    d->write(reinterpret_cast<const char *>(&bi.bV5RedMask), sizeof(bi.bV5RedMask));
+    if (s.status() != QDataStream::Ok)
+        return false;
+
+    d->write(reinterpret_cast<const char *>(&bi.bV5GreenMask), sizeof(bi.bV5GreenMask));
+    if (s.status() != QDataStream::Ok)
+        return false;
+
+    d->write(reinterpret_cast<const char *>(&bi.bV5BlueMask), sizeof(bi.bV5BlueMask));
     if (s.status() != QDataStream::Ok)
         return false;
 
@@ -929,6 +940,7 @@ public:
     QVariant convertToMime(const QString &mime, IDataObject *pDataObj, QMetaType preferredType) const override;
     QString mimeForFormat(const FORMATETC &formatetc) const override;
 private:
+    bool hasOriginalDIBV5(IDataObject *pDataObj) const;
     UINT CF_PNG;
 };
 
@@ -1010,15 +1022,41 @@ bool QWindowsMimeImage::convertFromMime(const FORMATETC &formatetc, const QMimeD
     return false;
 }
 
+bool QWindowsMimeImage::hasOriginalDIBV5(IDataObject *pDataObj) const
+{
+    bool isSynthesized = true;
+    IEnumFORMATETC *pEnum = nullptr;
+    HRESULT res = pDataObj->EnumFormatEtc(1, &pEnum);
+    if (res == S_OK && pEnum) {
+        FORMATETC fc;
+        while ((res = pEnum->Next(1, &fc, nullptr)) == S_OK) {
+            if (fc.ptd)
+                CoTaskMemFree(fc.ptd);
+            if (fc.cfFormat == CF_DIB)
+                break;
+            if (fc.cfFormat == CF_DIBV5) {
+                isSynthesized = false;
+                break;
+            }
+        }
+        pEnum->Release();
+    }
+    return !isSynthesized;
+}
+
 QVariant QWindowsMimeImage::convertToMime(const QString &mimeType, IDataObject *pDataObj, QMetaType preferredType) const
 {
     Q_UNUSED(preferredType);
     QVariant result;
     if (mimeType != u"application/x-qt-image")
         return result;
-    //Try to convert from DIBV5 as it is the most
-    //widespread format that support transparency
-    if (canGetData(CF_DIBV5, pDataObj)) {
+    // Try to convert from DIBV5 as it is the most widespread format that supports transparency,
+    // but avoid synthesizing it, as that typically loses transparency, e.g. from Office
+    const bool canGetDibV5 = canGetData(CF_DIBV5, pDataObj);
+    const bool hasOrigDibV5 = canGetDibV5 ? hasOriginalDIBV5(pDataObj) : false;
+    qCDebug(lcQpaMime) << "canGetDibV5:" << canGetDibV5 << "hasOrigDibV5:" << hasOrigDibV5;
+    if (hasOrigDibV5) {
+        qCDebug(lcQpaMime) << "Decoding DIBV5";
         QImage img;
         QByteArray data = getData(CF_DIBV5, pDataObj);
         QBuffer buffer(&data);
@@ -1027,6 +1065,7 @@ QVariant QWindowsMimeImage::convertToMime(const QString &mimeType, IDataObject *
     }
     //PNG, MS Office place this (undocumented)
     if (canGetData(CF_PNG, pDataObj)) {
+        qCDebug(lcQpaMime) << "Decoding PNG";
         QImage img;
         QByteArray data = getData(CF_PNG, pDataObj);
         if (img.loadFromData(data, "PNG")) {
@@ -1035,6 +1074,7 @@ QVariant QWindowsMimeImage::convertToMime(const QString &mimeType, IDataObject *
     }
     //Fallback to DIB
     if (canGetData(CF_DIB, pDataObj)) {
+        qCDebug(lcQpaMime) << "Decoding DIB";
         QImage img;
         QByteArray data = getData(CF_DIBV5, pDataObj);
         QBuffer buffer(&data);

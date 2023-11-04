@@ -1137,10 +1137,9 @@ QList<QSize> QIcon::availableSizes(Mode mode, State state) const
     Returns the name used to create the icon, if available.
 
     Depending on the way the icon was created, it may have an associated
-    name. This is the case for icons created with fromTheme() or icons
-    using a QIconEngine which supports the QIconEngine::IconNameHook.
+    name. This is the case for icons created with fromTheme().
 
-    \sa fromTheme(), QIconEngine
+    \sa fromTheme(), QIconEngine::iconName()
 */
 QString QIcon::name() const
 {
@@ -1311,11 +1310,15 @@ void QIcon::setFallbackThemeName(const QString &name)
 */
 QIcon QIcon::fromTheme(const QString &name)
 {
-    QIcon icon;
 
-    if (qtIconCache()->contains(name)) {
-        icon = *qtIconCache()->object(name);
-    } else if (QDir::isAbsolutePath(name)) {
+    if (QIcon *cachedIcon = qtIconCache()->object(name)) {
+        if (!cachedIcon->isNull())
+            return *cachedIcon;
+        qtIconCache()->remove(name);
+    }
+
+    QIcon icon;
+    if (QDir::isAbsolutePath(name)) {
         return QIcon(name);
     } else {
         QPlatformTheme * const platformTheme = QGuiApplicationPrivate::platformTheme();

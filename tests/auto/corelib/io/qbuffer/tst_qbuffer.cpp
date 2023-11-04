@@ -31,6 +31,9 @@
 
 #include <QBuffer>
 #include <QByteArray>
+#include <QElapsedTimer>
+
+#include <string>
 
 class tst_QBuffer : public QObject
 {
@@ -43,6 +46,7 @@ private slots:
     void writeBlock_data();
     void writeBlock();
     void seek();
+    void invalidSeeks();
     void seekTest_data();
     void seekTest();
     void read_rawdata();
@@ -58,6 +62,7 @@ private slots:
     void readLineBoundaries();
     void getAndUngetChar();
     void writeAfterQByteArrayResize();
+    void writeOfMoreThan2GiB();
     void read_null();
 
 protected slots:
@@ -285,6 +290,29 @@ void tst_QBuffer::seek()
     const qint64 pos = 10;
     QVERIFY(buffer.seek(pos));
     QCOMPARE(buffer.size(), pos);
+}
+
+void tst_QBuffer::invalidSeeks()
+{
+    if constexpr (sizeof(qsizetype) == sizeof(qint64)) {
+        // sizeof(qsizetype) == sizeof(qint64), so +1 would overflow
+        QSKIP("This is a 32-bit-only test.");
+    } else {
+        QBuffer buffer;
+        buffer.open(QIODevice::WriteOnly);
+        QCOMPARE(buffer.buffer().size(), qsizetype(0));
+        QCOMPARE(buffer.pos(), qint64(0));
+        constexpr qint64 MaxQByteArrayCapacity = (std::numeric_limits<qsizetype>::max)();
+        // this should fail fast, not after trying to allocate nearly 2 GiB of data,
+        // potentially crashing in the process:
+        QVERIFY(!buffer.seek(2 * MaxQByteArrayCapacity - 1));
+        QCOMPARE(buffer.buffer().size(), qsizetype(0));
+        QCOMPARE(buffer.pos(), qint64(0));
+        // ditto:
+        QVERIFY(!buffer.seek(MaxQByteArrayCapacity + 1));
+        QCOMPARE(buffer.buffer().size(), qsizetype(0));
+        QCOMPARE(buffer.pos(), qint64(0));
+    }
 }
 
 void tst_QBuffer::seekTest_data()
@@ -597,6 +625,55 @@ void tst_QBuffer::writeAfterQByteArrayResize()
 
     buffer.write(QByteArray().fill('b', 1000));
     QCOMPARE(buffer.buffer().size(), 1000);
+}
+
+void tst_QBuffer::writeOfMoreThan2GiB()
+{
+    if constexpr (sizeof(void*) == 4)
+        QSKIP("This is a 64-bit-only test");
+
+    [[maybe_unused]] constexpr size_t GiB = 1024 * 1024 * 1024;
+
+#ifndef QT_NO_EXCEPTIONS
+
+    try {
+        //
+        // GIVEN: an empty QBuffer open for writing
+        //
+        QBuffer buffer;
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+
+        //
+        // WHEN: writing more than 2GiB in a singe chunk:
+        //
+        QElapsedTimer timer;
+        timer.start();
+
+        const std::string input(2 * GiB + 1, 42);
+
+        qDebug("created dataset in %lld ms", timer.restart());
+
+        const auto inputSize = qint64(input.size());
+
+        QCOMPARE(buffer.write(input.data(), inputSize), inputSize);
+
+        qDebug("performed write in %lld ms", timer.restart());
+
+        //
+        // THEN: the buffer contains the written data
+        //
+        QCOMPARE(buffer.buffer().size(), inputSize);
+        QVERIFY(buffer.buffer() == QByteArrayView{input});
+
+        qDebug("verified result in %lld ms", timer.elapsed());
+
+    } catch (const std::bad_alloc &) {
+        QSKIP("Cannot allocate enough memory for this test");
+    }
+
+#else
+    QSKIP("This test requires exceptions enabled.");
+#endif // QT_NO_EXCEPTIONS
 }
 
 void tst_QBuffer::read_null()

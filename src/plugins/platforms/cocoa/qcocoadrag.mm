@@ -175,13 +175,11 @@ bool QCocoaDrag::maybeDragMultipleItems()
 
     const QMacAutoReleasePool pool;
 
-    NSWindow *theWindow = [m_lastEvent window];
-    Q_ASSERT(theWindow);
-
-    if (![theWindow.contentView respondsToSelector:@selector(draggingSession:sourceOperationMaskForDraggingContext:)])
+    NSView *view = m_lastView ? m_lastView : m_lastEvent.window.contentView;
+    if (![view respondsToSelector:@selector(draggingSession:sourceOperationMaskForDraggingContext:)])
         return false;
 
-    auto *sourceView = static_cast<NSView<NSDraggingSource>*>(theWindow.contentView);
+    auto *sourceView = static_cast<NSView<NSDraggingSource>*>(view);
 
     const auto &qtUrls = m_drag->mimeData()->urls();
     NSPasteboard *dragBoard = [NSPasteboard pasteboardWithName:NSPasteboardNameDrag];
@@ -220,6 +218,12 @@ bool QCocoaDrag::maybeDragMultipleItems()
     // contains a combined picture for all urls we drag.
     auto imageOrNil = dragImage;
     for (const auto &qtUrl : qtUrls) {
+        if (!qtUrl.isValid())
+            continue;
+
+        if (qtUrl.isRelative()) // NSPasteboardWriting rejects such items.
+            continue;
+
         NSURL *nsUrl = qtUrl.toNSURL();
         auto *newItem = [[[NSDraggingItem alloc] initWithPasteboardWriter:nsUrl] autorelease];
         const NSRect itemFrame = NSMakeRect(itemLocation.x, itemLocation.y,

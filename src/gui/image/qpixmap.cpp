@@ -68,6 +68,8 @@
 
 #include <qtgui_tracepoints_p.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 // MSVC 19.28 does show spurious warning "C4723: potential divide by 0" for code that divides
@@ -652,7 +654,9 @@ void QPixmap::setDevicePixelRatio(qreal scaleFactor)
     This value should be used when using the pixmap size in user interface
     size calculations.
 
-    The return value is equivalent to pixmap.size() / pixmap.devicePixelRatio(),
+    The return value is equivalent to pixmap.size() / pixmap.devicePixelRatio().
+
+    \since 6.2
 */
 QSizeF QPixmap::deviceIndependentSize() const
 {
@@ -1479,9 +1483,9 @@ QPixmap QPixmap::fromImage(const QImage &image, Qt::ImageConversionFlags flags)
         return QPixmap();
     }
 
-    QScopedPointer<QPlatformPixmap> data(QGuiApplicationPrivate::platformIntegration()->createPlatformPixmap(QPlatformPixmap::PixmapType));
+    std::unique_ptr<QPlatformPixmap> data(QGuiApplicationPrivate::platformIntegration()->createPlatformPixmap(QPlatformPixmap::PixmapType));
     data->fromImage(image, flags);
-    return QPixmap(data.take());
+    return QPixmap(data.release());
 }
 
 /*!
@@ -1506,9 +1510,9 @@ QPixmap QPixmap::fromImageInPlace(QImage &image, Qt::ImageConversionFlags flags)
         return QPixmap();
     }
 
-    QScopedPointer<QPlatformPixmap> data(QGuiApplicationPrivate::platformIntegration()->createPlatformPixmap(QPlatformPixmap::PixmapType));
+    std::unique_ptr<QPlatformPixmap> data(QGuiApplicationPrivate::platformIntegration()->createPlatformPixmap(QPlatformPixmap::PixmapType));
     data->fromImageInPlace(image, flags);
-    return QPixmap(data.take());
+    return QPixmap(data.release());
 }
 
 /*!
@@ -1530,9 +1534,9 @@ QPixmap QPixmap::fromImageReader(QImageReader *imageReader, Qt::ImageConversionF
         return QPixmap();
     }
 
-    QScopedPointer<QPlatformPixmap> data(QGuiApplicationPrivate::platformIntegration()->createPlatformPixmap(QPlatformPixmap::PixmapType));
+    std::unique_ptr<QPlatformPixmap> data(QGuiApplicationPrivate::platformIntegration()->createPlatformPixmap(QPlatformPixmap::PixmapType));
     data->fromImageReader(imageReader, flags);
-    return QPixmap(data.take());
+    return QPixmap(data.release());
 }
 
 /*!

@@ -484,14 +484,14 @@ bool QXmlStreamReaderPrivate::parse()
         case 88: {
             if (referenceToUnparsedEntityDetected && !standalone)
                 break;
-            int n = dtdAttributes.size();
+            qsizetype n = dtdAttributes.size();
             XmlStringRef tagName = addToStringStorage(symName(3));
             while (n--) {
                 DtdAttribute &dtdAttribute = dtdAttributes[n];
                 if (!dtdAttribute.tagName.isNull())
                     break;
                 dtdAttribute.tagName = tagName;
-                for (int i = 0; i < n; ++i) {
+                for (qsizetype i = 0; i < n; ++i) {
                     if ((dtdAttributes[i].tagName.isNull() || dtdAttributes[i].tagName == tagName)
                         && dtdAttributes[i].attributeQualifiedName == dtdAttribute.attributeQualifiedName) {
                         dtdAttribute.attributeQualifiedName.clear(); // redefined, delete it
@@ -572,7 +572,7 @@ bool QXmlStreamReaderPrivate::parse()
 
         case 96: {
             setType(QXmlStreamReader::ProcessingInstruction);
-            int pos = sym(4).pos + sym(4).len;
+            const qsizetype pos = sym(4).pos + sym(4).len;
             processingInstructionTarget = symString(3);
             if (scanUntil("?>")) {
                 processingInstructionData = XmlStringRef(&textBuffer, pos, textBuffer.size() - pos - 2);
@@ -611,7 +611,7 @@ bool QXmlStreamReaderPrivate::parse()
 
         case 100: {
             setType(QXmlStreamReader::Comment);
-            int pos = sym(1).pos + 4;
+            const qsizetype pos = sym(1).pos + 4;
             text = XmlStringRef(&textBuffer, pos, textBuffer.size() - pos - 3);
         } break;
 
@@ -619,7 +619,7 @@ bool QXmlStreamReaderPrivate::parse()
             setType(QXmlStreamReader::Characters);
             isCDATA = true;
             isWhitespace = false;
-            int pos = sym(2).pos;
+            const qsizetype pos = sym(2).pos;
             if (scanUntil("]]>", -1)) {
                 text = XmlStringRef(&textBuffer, pos, textBuffer.size() - pos - 3);
             } else {
@@ -766,8 +766,7 @@ bool QXmlStreamReaderPrivate::parse()
 
                 XmlStringRef attributeQualifiedName = symName(1);
                 bool normalize = false;
-                for (int a = 0; a < dtdAttributes.size(); ++a) {
-                    DtdAttribute &dtdAttribute = dtdAttributes[a];
+                for (const DtdAttribute &dtdAttribute : std::as_const(dtdAttributes)) {
                     if (!dtdAttribute.isCDATA
                         && dtdAttribute.tagName == qualifiedName
                         && dtdAttribute.attributeQualifiedName == attributeQualifiedName
@@ -778,10 +777,10 @@ bool QXmlStreamReaderPrivate::parse()
                 }
                 if (normalize) {
                     // normalize attribute value (simplify and trim)
-                    int pos = textBuffer.size();
-                    int n = 0;
+                    const qsizetype pos = textBuffer.size();
+                    qsizetype n = 0;
                     bool wasSpace = true;
-                    for (int i = 0; i < attribute.value.len; ++i) {
+                    for (qsizetype i = 0; i < attribute.value.len; ++i) {
                         QChar c = textBuffer.at(attribute.value.pos + i);
                         if (c.unicode() == ' ') {
                             if (wasSpace)

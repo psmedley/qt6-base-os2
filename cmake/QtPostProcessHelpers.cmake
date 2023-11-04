@@ -178,24 +178,25 @@ function(qt_internal_create_module_depends_file target)
         # Normalize module by stripping leading "Qt::" and trailing "Private"
         if (dep MATCHES "(Qt|${QT_CMAKE_EXPORT_NAMESPACE})::([-_A-Za-z0-9]+)")
             set(dep "${CMAKE_MATCH_2}")
-            if (TARGET Qt::${dep})
-                get_target_property(dep_type Qt::${dep} TYPE)
-                if (NOT dep_type STREQUAL "INTERFACE_LIBRARY")
-                    get_target_property(skip_module_depends_include Qt::${dep} QT_MODULE_SKIP_DEPENDS_INCLUDE)
-                    if (skip_module_depends_include)
-                        continue()
-                    endif()
-                else()
-                    get_target_property(is_versionless_target Qt::${dep} _qt_is_versionless_target)
-                    if(is_versionless_target)
-                        get_target_property(module_has_headers ${QT_CMAKE_EXPORT_NAMESPACE}::${dep}
-                            _qt_module_has_headers)
-                    else()
-                        get_target_property(module_has_headers Qt::${dep} _qt_module_has_headers)
-                    endif()
-                    if (NOT module_has_headers)
-                        continue()
-                    endif()
+            set(real_dep_target "Qt::${dep}")
+
+            if(TARGET "${real_dep_target}")
+                get_target_property(is_versionless_target "${real_dep_target}"
+                                    _qt_is_versionless_target)
+                if(is_versionless_target)
+                    set(real_dep_target "${QT_CMAKE_EXPORT_NAMESPACE}::${dep}")
+                endif()
+
+                get_target_property(skip_module_depends_include "${real_dep_target}"
+                                    _qt_module_skip_depends_include)
+                if(skip_module_depends_include)
+                    continue()
+                endif()
+
+                get_target_property(module_has_headers "${real_dep_target}"
+                                    _qt_module_has_headers)
+                if(NOT module_has_headers)
+                    continue()
                 endif()
             endif()
         endif()
@@ -397,7 +398,7 @@ function(qt_internal_create_plugins_files)
     endif()
     qt_internal_get_qt_repo_known_modules(repo_known_modules)
 
-    message("Generating Plugins files for ${repo_known_modules}...")
+    set(modules_with_plugins "")
     foreach (QT_MODULE ${repo_known_modules})
         get_target_property(target_type "${QT_MODULE}" TYPE)
         if(target_type STREQUAL "INTERFACE_LIBRARY")
@@ -449,6 +450,7 @@ endif()")
 
         get_target_property(qt_plugins "${QT_MODULE}" QT_PLUGINS)
         if(qt_plugins OR QT_MODULE_PLUGIN_INCLUDES)
+            list(APPEND modules_with_plugins "${QT_MODULE}")
             configure_file(
                 "${QT_CMAKE_DIR}/QtPlugins.cmake.in"
                 "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${QT_MODULE}Plugins.cmake"
@@ -461,6 +463,10 @@ endif()")
             )
         endif()
     endforeach()
+    if(modules_with_plugins)
+        message(STATUS "Generated QtModulePlugins.cmake files for the following modules:"
+            " ${modules_with_plugins}")
+    endif()
 endfunction()
 
 function(qt_generate_install_prefixes out_var)
@@ -596,10 +602,11 @@ endif()\n")
                 "set(QT_BUILD_TOOLS_WHEN_CROSSCOMPILING \"TRUE\" CACHE BOOL \"\" FORCE)\n")
         endif()
 
-        if(QT_INTERNAL_CUSTOM_INSTALL_DIR)
-            file(TO_CMAKE_PATH "${QT_INTERNAL_CUSTOM_INSTALL_DIR}" qt_internal_custom_install_dir)
+        if(QT_INTERNAL_EXAMPLES_INSTALL_PREFIX)
+            file(TO_CMAKE_PATH
+                "${QT_INTERNAL_EXAMPLES_INSTALL_PREFIX}" examples_install_prefix)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
-                "set(QT_INTERNAL_CUSTOM_INSTALL_DIR \"${qt_internal_custom_install_dir}\" CACHE STRING \"\")\n")
+                "set(QT_INTERNAL_EXAMPLES_INSTALL_PREFIX \"${examples_install_prefix}\" CACHE STRING \"\")\n")
         endif()
 
         # Save the default qpa platform.
@@ -742,7 +749,7 @@ function(qt_internal_create_config_file_for_standalone_tests)
             continue()
         endif()
 
-        get_target_property(is_3rd_party "${m}" QT_MODULE_IS_3RDPARTY_LIBRARY)
+        get_target_property(is_3rd_party "${m}" _qt_module_is_3rdparty_library)
         if(NOT is_3rd_party)
             list(APPEND modules "${m}")
         endif()

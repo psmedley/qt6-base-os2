@@ -64,6 +64,8 @@ QT_BEGIN_NAMESPACE
     \ingroup qpa
     \brief The QPlatformTheme class allows customizing the UI based on themes.
 
+    See the init_platform function in qguiapplication.cpp for the complete
+    platform initialization process.
 */
 
 /*!
@@ -788,3 +790,5 @@ unsigned QPlatformThemePrivate::currentKeyPlatforms()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qplatformtheme.cpp"

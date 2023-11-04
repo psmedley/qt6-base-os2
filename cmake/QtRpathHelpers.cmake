@@ -1,11 +1,32 @@
+# Returns the platform-specific relative rpath base token, if it's supported.
+# If it's not supported, returns the string NO_KNOWN_RPATH_REL_BASE.
+function(qt_internal_get_relative_rpath_base_token out_var)
+    if(APPLE)
+        set(rpath_rel_base "@loader_path")
+    elseif(LINUX OR SOLARIS OR FREEBSD OR HURD)
+        set(rpath_rel_base "$ORIGIN")
+    else()
+        set(rpath_rel_base "NO_KNOWN_RPATH_REL_BASE")
+    endif()
+    set(${out_var} "${rpath_rel_base}" PARENT_SCOPE)
+endfunction()
+
+# Computes a relative rpath between ${rpath} and ${install_location} using tokens
+# like $ORIGIN / @loader_path
+# Not all platforms support such tokens though, in which case the returned rpath will be invalid.
+#
+# install_location: a directory relative to CMAKE_INSTALL_PREFIX, where the binary will be installed
+# rpath:            an rpath to embed, can be either an absolute path or a path relative to
+# ${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR}.
 function(qt_compute_relative_rpath_base rpath install_location out_var)
     set(install_lib_dir_absolute "${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR}")
     get_filename_component(rpath_absolute "${rpath}"
                            ABSOLUTE BASE_DIR "${install_lib_dir_absolute}")
 
-   if(NOT IS_ABSOLUTE)
-       set(install_location_absolute "${CMAKE_INSTALL_PREFIX}/${install_location}")
-   endif()
+    set(install_location_absolute "${install_location}")
+    if(NOT IS_ABSOLUTE "${install_location_absolute}")
+        set(install_location_absolute "${CMAKE_INSTALL_PREFIX}/${install_location}")
+    endif()
     # Compute relative rpath from where the target will be installed, to the place where libraries
     # will be placed (INSTALL_LIBDIR).
     file(RELATIVE_PATH rpath_relative "${install_location_absolute}" "${rpath_absolute}")
@@ -18,13 +39,9 @@ function(qt_compute_relative_rpath_base rpath install_location out_var)
     # Prepend $ORIGIN / @loader_path style tokens (qmake's QMAKE_REL_RPATH_BASE), to make the
     # relative rpaths work. qmake does this automatically when generating a project, so it wasn't
     # needed in the .prf files, but for CMake we need to prepend them ourselves.
-    if(APPLE)
-        set(rpath_rel_base "@loader_path")
-    elseif(LINUX OR SOLARIS OR FREEBSD)
-        set(rpath_rel_base "$ORIGIN")
-    else()
+    qt_internal_get_relative_rpath_base_token(rpath_rel_base)
+    if(rpath_rel_base STREQUAL "NO_KNOWN_RPATH_REL_BASE")
         message(WARNING "No known RPATH_REL_BASE for target platform.")
-        set(rpath_rel_base "NO_KNOWN_RPATH_REL_BASE")
     endif()
 
     if(rpath_relative STREQUAL ".")
@@ -37,24 +54,34 @@ function(qt_compute_relative_rpath_base rpath install_location out_var)
 endfunction()
 
 # Applies necessary rpaths to a target upon target installation.
-# No-op when targeting Windows, Android, or non-prefix builds.
+# No-op when targeting Windows, Android.
 #
-# If no RELATIVE_RPATH option is given, embeds an absolute path rpath to ${INSTALL_LIBDIR}.
-# If RELATIVE_RPATH is given, the INSTALL_PATH value is to compute the relative path from
-# ${INSTALL_LIBDIR} to wherever the target will be installed (the value of INSTALL_PATH).
-# It's the equivalent of qmake's relative_qt_rpath.
+# Since abf72395411b135054b5820f64f93dfbcda430b8 rpaths are also applied in non-prefix builds,
+# to address -rpath-link issues when cross-compiling, although this might not be needed anymore
+# due to 606124c5cceba0dd4a406a9278588b58bb9f9800.
+# See QTBUG-86533 for the whole saga.
+#
+# If no RELATIVE_RPATH option is given, embeds an absolute path rpath to
+# ${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR} into the target.
+
+# If RELATIVE_RPATH is given, the INSTALL_PATH value is used to compute the relative path from
+# ${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR} to wherever the target will be installed
+# (the value of INSTALL_PATH).
+# INSTALL_PATH is expected to be a relative directory where the binary / library will be installed.
+
+# RELATIVE_RPATH is the equivalent of qmake's relative_qt_rpath.
 # INSTALL_PATH is used to implement the equivalent of qmake's $$qtRelativeRPathBase().
 #
-# A cache variable QT_DISABLE_RPATH can be set to disable embedding any rpaths when installing.
+# QT_DISABLE_RPATH can be set to disable embedding any Qt specific rpaths.
 function(qt_apply_rpaths)
-    # No rpath support for win32 and android. Also no need to apply rpaths when doing a non-prefix
-    # build.
+    # No rpath support for win32 and android.
     if(WIN32 OR ANDROID)
         return()
     endif()
 
-    # Rpaths xplicitly disabled (like for uikit), equivalent to qmake's no_qt_rpath.
-    if(QT_DISABLE_RPATH)
+    # Rpaths explicitly disabled (like for uikit), equivalent to qmake's no_qt_rpath.
+    # Or feature was turned OFF.
+    if(QT_DISABLE_RPATH OR NOT QT_FEATURE_rpath)
         return()
     endif()
 
@@ -108,8 +135,18 @@ function(qt_apply_rpaths)
         endif()
     endif()
 
+    qt_internal_get_relative_rpath_base_token(rpath_base_token)
+    if(rpath_base_token STREQUAL "NO_KNOWN_RPATH_REL_BASE")
+        set(relative_rpath_supported FALSE)
+    else()
+        set(relative_rpath_supported TRUE)
+    endif()
+
     # Somewhat similar to mkspecs/features/qt.prf
-    if(arg_RELATIVE_RPATH)
+    # Embed either an absolute path to the installed Qt lib dir, or a relative one, based on
+    # where ${target} is installed.
+    # Don't embed relative rpaths if the platform does not support it.
+    if(arg_RELATIVE_RPATH AND relative_rpath_supported)
         qt_compute_relative_rpath_base(
             "${_default_install_rpath}" "${arg_INSTALL_PATH}" relative_rpath)
         list(APPEND rpaths "${relative_rpath}")
@@ -119,11 +156,20 @@ function(qt_apply_rpaths)
 
     # Somewhat similar to mkspecs/features/qt_build_extra.prf.
     foreach(rpath ${QT_EXTRA_RPATHS})
-        if(IS_ABSOLUTE)
+        if(IS_ABSOLUTE "${rpath}")
             list(APPEND rpaths "${rpath}")
         else()
-            qt_compute_relative_rpath_base("${rpath}" "${arg_INSTALL_PATH}" relative_rpath)
-            list(APPEND rpaths "${relative_rpath}")
+            if(relative_rpath_supported)
+                qt_compute_relative_rpath_base("${rpath}" "${arg_INSTALL_PATH}" relative_rpath)
+                list(APPEND rpaths "${relative_rpath}")
+            else()
+                # Any extra relative rpaths on a platform that does not support relative rpaths,
+                # need to be transformed into absolute ones.
+                set(install_lib_dir_absolute "${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR}")
+                get_filename_component(rpath_absolute "${rpath}"
+                                       ABSOLUTE BASE_DIR "${install_lib_dir_absolute}")
+                list(APPEND rpaths "${rpath_absolute}")
+            endif()
         endif()
     endforeach()
 

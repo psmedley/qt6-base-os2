@@ -30,8 +30,12 @@ qt_find_package(ATSPI2 PROVIDED_TARGETS PkgConfig::ATSPI2 MODULE_NAME gui QMAKE_
 qt_find_package(DirectFB PROVIDED_TARGETS PkgConfig::DirectFB MODULE_NAME gui QMAKE_LIB directfb)
 qt_find_package(Libdrm PROVIDED_TARGETS Libdrm::Libdrm MODULE_NAME gui QMAKE_LIB drm)
 qt_find_package(EGL PROVIDED_TARGETS EGL::EGL MODULE_NAME gui QMAKE_LIB egl)
+if(INTEGRITY AND _qt_igy_gui_libs)
+    qt_find_package(IntegrityPlatformGraphics
+        PROVIDED_TARGETS IntegrityPlatformGraphics::IntegrityPlatformGraphics
+        MODULE_NAME gui QMAKE_LIB integrity_platform_graphics)
+endif()
 qt_find_package(WrapSystemFreetype 2.2.0 PROVIDED_TARGETS WrapSystemFreetype::WrapSystemFreetype MODULE_NAME gui QMAKE_LIB freetype)
-set_package_properties(WrapFreetype PROPERTIES TYPE REQUIRED)
 if(QT_FEATURE_system_zlib)
     qt_add_qmake_lib_dependency(freetype zlib)
 endif()
@@ -58,7 +62,7 @@ if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
     qt_find_package(X11 PROVIDED_TARGETS X11::X11 MODULE_NAME gui QMAKE_LIB xlib)
 endif()
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
-    qt_find_package(X11 PROVIDED_TARGETS ${X11_SM_LIB} ${X11_ICE_LIB} MODULE_NAME gui QMAKE_LIB x11sm)
+    qt_find_package(X11 PROVIDED_TARGETS X11::SM X11::ICE MODULE_NAME gui QMAKE_LIB x11sm)
 endif()
 if((X11_SUPPORTED) OR QT_FIND_ALL_PACKAGES_ALWAYS)
     qt_find_package(XCB 1.11 PROVIDED_TARGETS XCB::XCB MODULE_NAME gui QMAKE_LIB xcb)
@@ -289,11 +293,16 @@ fbGetDisplayByIndex(0);
 "# FIXME: qmake: ['DEFINES += EGL_API_FB=1', '!integrity: DEFINES += LINUX=1']
 )
 
+set(test_libs EGL::EGL)
+if(INTEGRITY AND _qt_igy_gui_libs)
+    set(test_libs ${test_libs} IntegrityPlatformGraphics::IntegrityPlatformGraphics)
+endif()
+
 # egl-openwfd
 qt_config_compile_test(egl_openwfd
     LABEL "OpenWFD EGL"
     LIBRARIES
-        EGL::EGL
+        ${test_libs}
     CODE
 "#include <wfd.h>
 
@@ -397,10 +406,15 @@ if(WASM)
 endif()
 # special case end
 
+set(test_libs GLESv2::GLESv2)
+if(INTEGRITY AND _qt_igy_gui_libs)
+    set(test_libs ${test_libs} IntegrityPlatformGraphics::IntegrityPlatformGraphics)
+endif()
+
 qt_config_compile_test(opengles3
     LABEL "OpenGL ES 3.0"
     LIBRARIES
-        GLESv2::GLESv2
+        ${test_libs}
 # special case begin
     COMPILE_OPTIONS ${extra_compiler_options}
 # special case end
@@ -425,11 +439,12 @@ glMapBufferRange(GL_ARRAY_BUFFER, 0, 0, GL_MAP_READ_BIT);
 }
 ")
 
+
 # opengles31
 qt_config_compile_test(opengles31
     LABEL "OpenGL ES 3.1"
     LIBRARIES
-        GLESv2::GLESv2
+        ${test_libs}
     CODE
 "#include <GLES3/gl31.h>
 
@@ -447,7 +462,7 @@ glProgramUniform1i(0, 0, 0);
 qt_config_compile_test(opengles32
     LABEL "OpenGL ES 3.2"
     LIBRARIES
-        GLESv2::GLESv2
+        ${test_libs}
     CODE
 "#include <GLES3/gl32.h>
 
@@ -775,7 +790,7 @@ qt_feature("egl_x11" PRIVATE
 qt_feature("eglfs" PRIVATE
     SECTION "Platform plugins"
     LABEL "EGLFS"
-    CONDITION NOT ANDROID AND NOT APPLE AND NOT WIN32 AND NOT WASM AND QT_FEATURE_egl
+    CONDITION NOT ANDROID AND NOT APPLE AND NOT WIN32 AND NOT WASM AND NOT QNX AND QT_FEATURE_egl
 )
 qt_feature("eglfs_brcm" PRIVATE
     LABEL "EGLFS Raspberry Pi"
@@ -863,7 +878,7 @@ qt_feature("sessionmanager" PUBLIC
 qt_feature_definition("sessionmanager" "QT_NO_SESSIONMANAGER" NEGATE VALUE "1")
 qt_feature("tslib" PRIVATE
     LABEL "tslib"
-    CONDITION Tslib_FOUND
+    CONDITION Tslib_FOUND AND NOT INTEGRITY
 )
 qt_feature("tuiotouch" PRIVATE
     LABEL "TuioTouch"
@@ -1298,7 +1313,7 @@ qt_configure_add_report_entry(
 )
 qt_configure_add_report_entry(
     TYPE ERROR
-    MESSAGE "The OpenGL functionality tests failed!  You might need to modify the include and library search paths by editing QMAKE_INCDIR_OPENGL[_ES2], QMAKE_LIBDIR_OPENGL[_ES2] and QMAKE_LIBS_OPENGL[_ES2] in the mkspec for your platform."
+    MESSAGE "The OpenGL functionality tests failed! You might need to modify the OpenGL package search path by setting the OpenGL_DIR CMake variable to the OpenGL library's installation directory."
     CONDITION QT_FEATURE_gui AND NOT WATCHOS AND ( NOT INPUT_opengl STREQUAL 'no' ) AND NOT QT_FEATURE_opengl_desktop AND NOT QT_FEATURE_opengles2 AND NOT QT_FEATURE_opengl_dynamic
 )
 qt_configure_add_report_entry(

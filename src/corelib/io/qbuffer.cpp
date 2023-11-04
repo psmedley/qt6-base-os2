@@ -41,6 +41,8 @@
 #include <QtCore/qmetaobject.h>
 #include "private/qiodevice_p.h"
 
+#include <limits>
+
 QT_BEGIN_NAMESPACE
 
 /** QBufferPrivate **/
@@ -212,7 +214,7 @@ QBuffer::~QBuffer()
 }
 
 /*!
-    Makes QBuffer uses the QByteArray pointed to by \a
+    Makes QBuffer use the QByteArray pointed to by \a
     byteArray as its internal buffer. The caller is responsible for
     ensuring that \a byteArray remains valid until the QBuffer is
     destroyed, or until setBuffer() is called to change the buffer.
@@ -366,7 +368,9 @@ qint64 QBuffer::size() const
 bool QBuffer::seek(qint64 pos)
 {
     Q_D(QBuffer);
-    if (pos > d->buf->size() && isWritable()) {
+    const auto oldBufSize = d->buf->size();
+    constexpr qint64 MaxSeekPos = (std::numeric_limits<decltype(oldBufSize)>::max)();
+    if (pos <= MaxSeekPos && pos > oldBufSize && isWritable()) {
         if (seek(d->buf->size())) {
             const qint64 gapSize = pos - d->buf->size();
             if (write(QByteArray(gapSize, 0)) != gapSize) {
@@ -377,7 +381,7 @@ bool QBuffer::seek(qint64 pos)
             return false;
         }
     } else if (pos > d->buf->size() || pos < 0) {
-        qWarning("QBuffer::seek: Invalid pos: %d", int(pos));
+        qWarning("QBuffer::seek: Invalid pos: %lld", pos);
         return false;
     }
     return QIODevice::seek(pos);
@@ -421,17 +425,19 @@ qint64 QBuffer::readData(char *data, qint64 len)
 qint64 QBuffer::writeData(const char *data, qint64 len)
 {
     Q_D(QBuffer);
-    int extraBytes = pos() + len - d->buf->size();
-    if (extraBytes > 0) { // overflow
-        int newSize = d->buf->size() + extraBytes;
-        d->buf->resize(newSize);
-        if (d->buf->size() != newSize) { // could not resize
+    const quint64 required = quint64(pos()) + quint64(len); // cannot overflow (pos() ≥ 0, len ≥ 0)
+
+    if (required > quint64(d->buf->size())) { // capacity exceeded
+        // The following must hold, since qsizetype covers half the virtual address space:
+        Q_ASSUME(required <= quint64((std::numeric_limits<qsizetype>::max)()));
+        d->buf->resize(qsizetype(required));
+        if (quint64(d->buf->size()) != required) { // could not resize
             qWarning("QBuffer::writeData: Memory allocation error");
             return -1;
         }
     }
 
-    memcpy(d->buf->data() + pos(), data, int(len));
+    memcpy(d->buf->data() + pos(), data, size_t(len));
 
 #ifndef QT_NO_QOBJECT
     d->writtenSinceLastEmit += len;
@@ -444,15 +450,22 @@ qint64 QBuffer::writeData(const char *data, qint64 len)
 }
 
 #ifndef QT_NO_QOBJECT
+static bool is_tracked_signal(const QMetaMethod &signal)
+{
+    // dynamic initialization: minimize the number of guard variables:
+    static const struct {
+        QMetaMethod readyReadSignal = QMetaMethod::fromSignal(&QBuffer::readyRead);
+        QMetaMethod bytesWrittenSignal = QMetaMethod::fromSignal(&QBuffer::bytesWritten);
+    } sigs;
+    return signal == sigs.readyReadSignal || signal == sigs.bytesWrittenSignal;
+}
 /*!
     \reimp
     \internal
 */
 void QBuffer::connectNotify(const QMetaMethod &signal)
 {
-    static const QMetaMethod readyReadSignal = QMetaMethod::fromSignal(&QBuffer::readyRead);
-    static const QMetaMethod bytesWrittenSignal = QMetaMethod::fromSignal(&QBuffer::bytesWritten);
-    if (signal == readyReadSignal || signal == bytesWrittenSignal)
+    if (is_tracked_signal(signal))
         d_func()->signalConnectionCount++;
 }
 
@@ -463,9 +476,7 @@ void QBuffer::connectNotify(const QMetaMethod &signal)
 void QBuffer::disconnectNotify(const QMetaMethod &signal)
 {
     if (signal.isValid()) {
-        static const QMetaMethod readyReadSignal = QMetaMethod::fromSignal(&QBuffer::readyRead);
-        static const QMetaMethod bytesWrittenSignal = QMetaMethod::fromSignal(&QBuffer::bytesWritten);
-        if (signal == readyReadSignal || signal == bytesWrittenSignal)
+        if (is_tracked_signal(signal))
             d_func()->signalConnectionCount--;
     } else {
         d_func()->signalConnectionCount = 0;

@@ -51,10 +51,11 @@ namespace QtAndroidAccessibility
     void initialize();
     bool isActive();
     bool registerNatives(JNIEnv *env);
-    void notifyLocationChange();
+    void notifyLocationChange(uint accessibilityObjectId);
     void notifyObjectHide(uint accessibilityObjectId);
     void notifyObjectFocus(uint accessibilityObjectId);
     void notifyValueChanged(uint accessibilityObjectId);
+    void notifyScrolledEvent(uint accessibilityObjectId);
     void createAccessibilityContextObject(QObject *parent);
 }
 

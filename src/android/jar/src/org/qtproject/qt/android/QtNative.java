@@ -128,6 +128,13 @@ public class QtNative
         }
     };
 
+    public static boolean isStarted()
+    {
+        boolean hasActivity = m_activity != null && m_activityDelegate != null;
+        boolean hasService = m_service != null && m_serviceDelegate != null;
+        return m_started && (hasActivity || hasService);
+    }
+
     private static ClassLoader m_classLoader = null;
     public static ClassLoader classLoader()
     {
@@ -699,9 +706,10 @@ public class QtNative
     public static native void quitQtCoreApplication();
     public static native void quitQtAndroidPlugin();
     public static native void terminateQt();
+    public static native boolean updateNativeActivity();
     // application methods
 
-    private static void quitApp()
+    public static void quitApp()
     {
         runAction(new Runnable() {
             @Override
@@ -711,6 +719,8 @@ public class QtNative
                      m_activity.finish();
                  if (m_service != null)
                      m_service.stopSelf();
+
+                 m_started = false;
             }
         });
     }
@@ -962,13 +972,13 @@ public class QtNative
         return m_activityDelegate.isKeyboardVisible() && !m_isKeyboardHiding;
     }
 
-    private static void notifyAccessibilityLocationChange()
+    private static void notifyAccessibilityLocationChange(final int viewId)
     {
         runAction(new Runnable() {
             @Override
             public void run() {
                 if (m_activityDelegate != null) {
-                    m_activityDelegate.notifyAccessibilityLocationChange();
+                    m_activityDelegate.notifyAccessibilityLocationChange(viewId);
                 }
             }
         });
@@ -1010,6 +1020,18 @@ public class QtNative
         });
     }
 
+    private static void notifyScrolledEvent(final int viewId)
+    {
+        runAction(new Runnable() {
+            @Override
+            public void run() {
+                if (m_activityDelegate != null) {
+                    m_activityDelegate.notifyScrolledEvent(viewId);
+                }
+            }
+        });
+    }
+
     public static void notifyQtAndroidPluginRunning(final boolean running)
     {
         m_activityDelegate.notifyQtAndroidPluginRunning(running);
@@ -1044,9 +1066,16 @@ public class QtNative
 
     private static void clearClipData()
     {
-        if (Build.VERSION.SDK_INT >= 28 && m_clipboardManager != null)
-            m_clipboardManager.clearPrimaryClip();
-         m_usePrimaryClip = false;
+        if (m_clipboardManager != null) {
+            if (Build.VERSION.SDK_INT >= 28) {
+                m_clipboardManager.clearPrimaryClip();
+            } else {
+                String[] mimeTypes = { ClipDescription.MIMETYPE_UNKNOWN };
+                ClipData data = new ClipData("", mimeTypes, new ClipData.Item(new Intent()));
+                m_clipboardManager.setPrimaryClip(data);
+            }
+        }
+        m_usePrimaryClip = false;
     }
     private static void setClipboardText(String text)
     {
@@ -1376,6 +1405,7 @@ public class QtNative
     public static native void handleOrientationChanged(int newRotation, int nativeOrientation);
     public static native void handleRefreshRateChanged(float refreshRate);
     // screen methods
+    public static native void handleUiDarkModeChanged(int newUiMode);
 
     // pointer methods
     public static native void mouseDown(int winId, int x, int y);

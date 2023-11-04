@@ -49,7 +49,7 @@
 #include <qpainterpath.h>
 #include <qdebug.h>
 #include <qbitmap.h>
-#include <qmath.h>
+#include "qmath_p.h"
 #include <qrandom.h>
 
 //   #include <private/qdatabuffer_p.h>
@@ -1194,7 +1194,7 @@ void QRasterPaintEngine::clip(const QVectorPath &path, Qt::ClipOperation op)
 #endif
             const qreal *points = path.points();
             QRectF r(points[0], points[1], points[4]-points[0], points[5]-points[1]);
-            if (setClipRectInDeviceCoords(s->matrix.mapRect(r).toAlignedRect(), op))
+            if (setClipRectInDeviceCoords(qt_mapFillRect(r, s->matrix), op))
                 return;
         }
     }
@@ -1222,7 +1222,6 @@ void QRasterPaintEngine::clip(const QVectorPath &path, Qt::ClipOperation op)
         ensureOutlineMapper();
         d->rasterize(d->outlineMapper->convertPath(path), qt_span_clip, &clipData, nullptr);
 
-        newClip->clipTransform = s->matrix;
         newClip->fixup();
 
         if (s->flags.has_clip_ownership)
@@ -1254,7 +1253,7 @@ void QRasterPaintEngine::clip(const QRect &rect, Qt::ClipOperation op)
         QPaintEngineEx::clip(rect, op);
         return;
 
-    } else if (!setClipRectInDeviceCoords(s->matrix.mapRect(QRectF(rect)).toRect(), op)) {
+    } else if (!setClipRectInDeviceCoords(qt_mapFillRect(rect, s->matrix), op)) {
         QPaintEngineEx::clip(rect, op);
         return;
     }
@@ -1307,7 +1306,6 @@ bool QRasterPaintEngine::setClipRectInDeviceCoords(const QRect &r, Qt::ClipOpera
         return false;
     }
 
-    s->clip->clipTransform = s->matrix;
     qrasterpaintengine_dirty_clip(d, s);
     return true;
 }
@@ -1363,7 +1361,6 @@ void QRasterPaintEngine::clip(const QRegion &region, Qt::ClipOperation op)
         else if (curClip->hasRegionClip)
             newClip->setClipRegion(r & curClip->clipRegion);
 
-        newClip->clipTransform = s->matrix;
         qrasterpaintengine_dirty_clip(d, s);
     }
 }
@@ -2297,6 +2294,7 @@ void QRasterPaintEngine::drawImage(const QRectF &r, const QImage &img, const QRe
             || d->rasterBuffer->compositionMode == QPainter::CompositionMode_Source))
     {
         RotationType rotationType = qRotationType(s->matrix);
+        Q_ASSUME(d->rasterBuffer->format < QImage::NImageFormats);
         const QPixelLayout::BPP plBpp = qPixelLayouts[d->rasterBuffer->format].bpp;
 
         if (rotationType != NoRotation && qMemRotateFunctions[plBpp][rotationType] && img.rect().contains(sr.toAlignedRect())) {
@@ -2991,7 +2989,7 @@ inline bool QRasterPaintEnginePrivate::isUnclipped(const QRectF &rect,
                                                    int penWidth) const
 {
     const QRectF norm = rect.normalized();
-    if (norm.left() < INT_MIN || norm.top() < INT_MIN
+    if (norm.left() <= INT_MIN || norm.top() <= INT_MIN
             || norm.right() > INT_MAX || norm.bottom() > INT_MAX
             || norm.width() > INT_MAX || norm.height() > INT_MAX)
         return false;
@@ -3687,27 +3685,8 @@ void QRasterPaintEnginePrivate::updateClipping()
     if (!s->clipEnabled)
         return;
 
-    bool noClipPath = s->clipPath.isEmpty();
-    bool noClipRegion = s->clipRegion.isEmpty();
-
-    if (noClipPath && noClipRegion)
-        return;
-
-    if (!s->clip)
-        return;
-
-    const QTransform stateTransform = s->matrix;
-    s->matrix = s->clip->clipTransform;
-
     qrasterpaintengine_state_setNoClip(s);
-
-    if (noClipRegion) {
-        q->clip(qtVectorPathForPath(s->clipPath), s->clipOperation);
-    } else {
-        q->clip(s->clipRegion, s->clipOperation);
-    }
-
-    s->matrix = stateTransform;
+    replayClipOperations();
 }
 
 void QRasterPaintEnginePrivate::recalculateFastImages()

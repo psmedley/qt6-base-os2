@@ -369,8 +369,10 @@ function(qt6_add_resources outfiles )
                                MAIN_DEPENDENCY ${infile}
                                DEPENDS ${_rc_depends} "${_out_depends}" ${QT_CMAKE_EXPORT_NAMESPACE}::rcc
                                VERBATIM)
-            set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOMOC ON)
-            set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOUIC ON)
+            set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOMOC ON
+                                                              SKIP_AUTOUIC ON
+                                                              SKIP_UNITY_BUILD_INCLUSION ON
+                                                              )
             list(APPEND ${outfiles} ${outfile})
         endforeach()
         set(${outfiles} ${${outfiles}} PARENT_SCOPE)
@@ -399,6 +401,18 @@ endif()
 # qt6_add_big_resources(outfiles inputfile ... )
 
 function(qt6_add_big_resources outfiles )
+    if(CMAKE_GENERATOR STREQUAL "Xcode" AND IOS)
+        message(WARNING
+            "Due to CMake limitations, qt6_add_big_resources can't be used when building for iOS. "
+            "See https://bugreports.qt.io/browse/QTBUG-103497 for details. "
+            "Falling back to using qt6_add_resources. "
+            "Consider using qt6_add_resources directly to silence this warning."
+        )
+        qt6_add_resources(${ARGV})
+        set(${outfiles} ${${outfiles}} PARENT_SCOPE)
+        return()
+    endif()
+
     if (CMAKE_VERSION VERSION_LESS 3.9)
         message(FATAL_ERROR, "qt6_add_big_resources requires CMake 3.9 or newer")
     endif()
@@ -786,35 +800,98 @@ function(_qt_internal_find_ios_development_team_id out_var)
                             -x -c "print IDEProvisioningTeams" "${xcode_preferences_path}"
                     OUTPUT_VARIABLE teams_xml
                     ERROR_VARIABLE plist_error)
+
+    # Parsing state.
+    set(is_free "")
+    set(current_team_id "")
+    set(parsing_is_free FALSE)
+    set(parsing_team_id FALSE)
+    set(first_team_id "")
+
+    # Parse the xml output and return the first encountered non-free team id. If no non-free team id
+    # is found, return the first encountered free team id.
+    # If no team is found, return an empty string.
+    #
+    # Example input:
+    #<plist version="1.0">
+    #<dict>
+    #    <key>marty@planet.local</key>
+    #    <array>
+    #        <dict>
+    #            <key>isFreeProvisioningTeam</key>
+    #            <false/>
+    #            <key>teamID</key>
+    #            <string>AAA</string>
+    #            ...
+    #        </dict>
+    #        <dict>
+    #            <key>isFreeProvisioningTeam</key>
+    #            <true/>
+    #            <key>teamID</key>
+    #            <string>BBB</string>
+    #            ...
+    #        </dict>
+    #    </array>
+    #</dict>
+    #</plist>
     if(teams_xml AND NOT plist_error)
         string(REPLACE "\n" ";" teams_xml_lines "${teams_xml}")
+
         foreach(xml_line ${teams_xml_lines})
-            if(xml_line MATCHES "<key>(.+)</key>")
-                set(first_account "${CMAKE_MATCH_1}")
-                string(STRIP "${first_account}" first_account)
-                break()
+            string(STRIP "${xml_line}" xml_line)
+            if(xml_line STREQUAL "<dict>")
+                # Clean any previously found values when a new team dict is matched.
+                set(is_free "")
+                set(current_team_id "")
+
+            elseif(xml_line STREQUAL "<key>isFreeProvisioningTeam</key>")
+                set(parsing_is_free TRUE)
+
+            elseif(parsing_is_free)
+                set(parsing_is_free FALSE)
+
+                if(xml_line MATCHES "true")
+                    set(is_free TRUE)
+                else()
+                    set(is_free FALSE)
+                endif()
+
+            elseif(xml_line STREQUAL "<key>teamID</key>")
+                set(parsing_team_id TRUE)
+
+            elseif(parsing_team_id)
+                set(parsing_team_id FALSE)
+                if(xml_line MATCHES "<string>([^<]+)</string>")
+                    set(current_team_id "${CMAKE_MATCH_1}")
+                else()
+                    continue()
+                endif()
+
+                string(STRIP "${current_team_id}" current_team_id)
+
+                # If this is the first team id we found so far, remember that, regardless if's free
+                # or not.
+                if(NOT first_team_id AND current_team_id)
+                    set(first_team_id "${current_team_id}")
+                endif()
+
+                # Break early if we found a non-free team id and use it, because we prefer
+                # a non-free team for signing, just like qmake.
+                if(NOT is_free AND current_team_id)
+                    set(first_team_id "${current_team_id}")
+                    break()
+                endif()
             endif()
         endforeach()
     endif()
 
-    if(NOT first_account)
+    if(NOT first_team_id)
         message(DEBUG "Failed to extract an Xcode development team id.")
-        return()
-    endif()
-
-    # Extract the first team ID
-    execute_process(COMMAND "/usr/libexec/PlistBuddy"
-                            -c "print IDEProvisioningTeams:${first_account}:0:teamID"
-                            "${xcode_preferences_path}"
-                    OUTPUT_VARIABLE team_id
-                    ERROR_VARIABLE team_id_error)
-    if(team_id AND NOT team_id_error)
-        message(DEBUG "Successfully extracted the first encountered Xcode development team id.")
-        string(STRIP "${team_id}" team_id)
-        set_property(GLOBAL PROPERTY _qt_internal_ios_development_team_id "${team_id}")
-        set("${out_var}" "${team_id}" PARENT_SCOPE)
-    else()
         set("${out_var}" "" PARENT_SCOPE)
+    else()
+        message(DEBUG "Successfully extracted the first encountered Xcode development team id.")
+        set_property(GLOBAL PROPERTY _qt_internal_ios_development_team_id "${first_team_id}")
+        set("${out_var}" "${first_team_id}" PARENT_SCOPE)
     endif()
 endfunction()
 
@@ -857,12 +934,47 @@ function(_qt_internal_get_ios_bundle_identifier_prefix out_var)
     endif()
 endfunction()
 
+function(_qt_internal_escape_rfc_1034_identifier value out_var)
+    # According to https://datatracker.ietf.org/doc/html/rfc1034#section-3.5
+    # we can only use letters, digits, dot (.) and hyphens (-).
+    # Underscores are not allowed.
+    string(REGEX REPLACE "[^A-Za-z0-9.]" "-" value "${value}")
+
+    set("${out_var}" "${value}" PARENT_SCOPE)
+endfunction()
+
 function(_qt_internal_get_default_ios_bundle_identifier out_var)
     _qt_internal_get_ios_bundle_identifier_prefix(prefix)
     if(NOT prefix)
         set(prefix "com.yourcompany")
+
+        # For a better out-of-the-box experience, try to create a unique prefix by appending
+        # the sha1 of the team id, if one is found.
+        _qt_internal_find_ios_development_team_id(team_id)
+        if(team_id)
+            string(SHA1 hash "${team_id}")
+            string(SUBSTRING "${hash}" 0 8 infix)
+            string(APPEND prefix ".${infix}")
+        else()
+            message(WARNING
+                "No organization bundle identifier prefix could be retrieved from Xcode "
+                "preferences. This can lead to code signing issues due to a non-unique bundle "
+                "identifier. Please set up an organization prefix by creating a new project within "
+                "Xcode, or consider providing a custom bundle identifier by specifying the "
+                "XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER property."
+            )
+        endif()
     endif()
-    set("${out_var}" "${prefix}.\${PRODUCT_NAME:rfc1034identifier}" PARENT_SCOPE)
+
+    # Escape the prefix according to rfc 1034, it's important for code-signing. If an invalid
+    # identifier is used, calling xcodebuild on the command line says that no provisioning profile
+    # could be found, with no additional error message. If one opens the generated project with
+    # Xcode and clicks on 'Try again' to get a new profile, it shows a semi-useful error message
+    # that the identifier is invalid.
+    _qt_internal_escape_rfc_1034_identifier("${prefix}" prefix)
+
+    set(identifier "${prefix}.\${PRODUCT_NAME:rfc1034identifier}")
+    set("${out_var}" "${identifier}" PARENT_SCOPE)
 endfunction()
 
 function(_qt_internal_set_placeholder_apple_bundle_version target)
@@ -889,7 +1001,7 @@ function(_qt_internal_set_placeholder_apple_bundle_version target)
     endif()
 endfunction()
 
-function(_qt_internal_finalize_ios_app target)
+function(_qt_internal_set_xcode_development_team_id target)
     # If user hasn't provided a development team id, try to find the first one specified
     # in the Xcode preferences.
     if(NOT CMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM AND NOT QT_NO_SET_XCODE_DEVELOPMENT_TEAM_ID)
@@ -900,32 +1012,173 @@ function(_qt_internal_finalize_ios_app target)
                                   PROPERTIES XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${team_id}")
         endif()
     endif()
+endfunction()
 
-    # If user hasn't provided a bundle identifier for the app, get a default identifier
-    # using the default bundle prefix from Xcode preferences and add it to the generated
-    # Info.plist file.
-    if(NOT MACOSX_BUNDLE_GUI_IDENTIFIER AND NOT QT_NO_SET_XCODE_BUNDLE_IDENTIFIER)
-        get_target_property(existing_id "${target}" MACOSX_BUNDLE_GUI_IDENTIFIER)
-        if(NOT existing_id)
-            _qt_internal_get_default_ios_bundle_identifier(bundle_id)
-            set_target_properties("${target}"
-                                  PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER "${bundle_id}")
-        endif()
+function(_qt_internal_set_xcode_bundle_identifier target)
+    # Skip all logic if requested.
+    if(QT_NO_SET_XCODE_BUNDLE_IDENTIFIER)
+        return()
     endif()
 
-    # Reuse the same bundle identifier for the Xcode property.
-    if(NOT CMAKE_XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
-            AND NOT QT_NO_SET_XCODE_BUNDLE_IDENTIFIER)
-        get_target_property(existing_id "${target}" XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER)
-        if(NOT existing_id)
+    # There are two fields to consider: the CFBundleIdentifier key (CFBI) to be written to
+    # Info.plist
+    # and the PRODUCT_BUNDLE_IDENTIFIER (PBI) property to set in the Xcode project.
+    # The following logic enables the best out-of-the-box experience combined with maximum
+    # customization.
+    # 1) If values for both fields are not provided, assign ${PRODUCT_BUNDLE_IDENTIFIER} to CFBI
+    #    (which is expanded by xcodebuild at build time and will use the value of PBI) and
+    #    auto-compute a default PBI from Xcode's ${PRODUCT_NAME}.
+    # 2) If CFBI is set and PBI isn't, use given CFBI and keep PBI empty.
+    # 3) If PBI is set and CFBI isn't, assign ${PRODUCT_BUNDLE_IDENTIFIER} to CFBI and use
+    #    the given PBI.
+    # 4) If both are set, use both given values.
+    # TLDR:
+    # cfbi    pbi   -> result_cfbi result_pbi
+    # unset   unset    computed    computed
+    # set     unset    given_val   unset
+    # unset   set      computed    given_val
+    # set     set      given_val   given_val
+
+    get_target_property(existing_cfbi "${target}" MACOSX_BUNDLE_GUI_IDENTIFIER)
+    if(NOT MACOSX_BUNDLE_GUI_IDENTIFIER AND NOT existing_cfbi)
+        set(is_cfbi_given FALSE)
+    else()
+        set(is_cfbi_given TRUE)
+    endif()
+
+    if(NOT is_cfbi_given)
+        set_target_properties("${target}"
+                              PROPERTIES
+                              MACOSX_BUNDLE_GUI_IDENTIFIER "\${PRODUCT_BUNDLE_IDENTIFIER}")
+    endif()
+
+    get_target_property(existing_pbi "${target}" XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER)
+    if(NOT CMAKE_XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER AND NOT existing_pbi)
+        set(is_pbi_given FALSE)
+    else()
+        set(is_pbi_given TRUE)
+    endif()
+
+    if(NOT is_pbi_given AND NOT is_cfbi_given)
+        _qt_internal_get_default_ios_bundle_identifier(bundle_id)
+        set_target_properties("${target}"
+                              PROPERTIES
+                              XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${bundle_id}")
+    endif()
+endfunction()
+
+function(_qt_internal_set_xcode_targeted_device_family target)
+    if(NOT CMAKE_XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY
+            AND NOT QT_NO_SET_XCODE_TARGETED_DEVICE_FAMILY)
+        get_target_property(existing_device_family
+            "${target}" XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY)
+        if(NOT existing_device_family)
+            set(device_family_iphone_and_ipad "1,2")
             set_target_properties("${target}"
-                                  PROPERTIES XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
-                                  "${bundle_id}")
+                                  PROPERTIES
+                                  XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY
+                                  "${device_family_iphone_and_ipad}")
         endif()
     endif()
+endfunction()
+
+function(_qt_internal_set_xcode_code_sign_style target)
+    if(NOT CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_STYLE
+            AND NOT QT_NO_SET_XCODE_CODE_SIGN_STYLE)
+        get_target_property(existing_code_style
+            "${target}" XCODE_ATTRIBUTE_CODE_SIGN_STYLE)
+        if(NOT existing_code_style)
+            set(existing_code_style "Automatic")
+            set_target_properties("${target}"
+                                  PROPERTIES
+                                  XCODE_ATTRIBUTE_CODE_SIGN_STYLE
+                                  "${existing_code_style}")
+        endif()
+    endif()
+endfunction()
+
+# Workaround for https://gitlab.kitware.com/cmake/cmake/-/issues/15183
+function(_qt_internal_set_xcode_install_path target)
+    if(NOT CMAKE_XCODE_ATTRIBUTE_INSTALL_PATH
+            AND NOT QT_NO_SET_XCODE_INSTALL_PATH)
+        get_target_property(existing_install_path
+            "${target}" XCODE_ATTRIBUTE_INSTALL_PATH)
+        if(NOT existing_install_path)
+            set_target_properties("${target}"
+                                  PROPERTIES
+                                  XCODE_ATTRIBUTE_INSTALL_PATH
+                                  "$(inherited)")
+        endif()
+    endif()
+endfunction()
+
+function(_qt_internal_set_xcode_bundle_display_name target)
+    # We want the value of CFBundleDisplayName to be ${PRODUCT_NAME}, but we can't put that
+    # into the Info.plist.in template file directly, because the implicit configure_file(Info.plist)
+    # done by CMake is not using the @ONLY option, so CMake would treat the assignment as
+    # variable expansion. Escaping using backslashes does not help.
+    # Work around it by assigning the dollar char to a separate cache var, and expand it, so that
+    # the final value in the file will be ${PRODUCT_NAME}, to be evaluated at build time by Xcode.
+    set(QT_INTERNAL_DOLLAR_VAR "$" CACHE STRING "")
+endfunction()
+
+function(_qt_internal_set_xcode_bitcode_enablement target)
+    if(CMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE
+        OR QT_NO_SET_XCODE_ENABLE_BITCODE)
+        return()
+    endif()
+
+    get_target_property(existing_bitcode_enablement
+        "${target}" XCODE_ATTRIBUTE_ENABLE_BITCODE)
+    if(NOT existing_bitcode_enablement MATCHES "-NOTFOUND")
+        return()
+    endif()
+
+    # Disable bitcode to match Xcode 14's new default
+    set_target_properties("${target}"
+        PROPERTIES
+        XCODE_ATTRIBUTE_ENABLE_BITCODE
+        "NO")
+endfunction()
+
+function(_qt_internal_set_ios_simulator_arch target)
+    if(CMAKE_XCODE_ATTRIBUTE_ARCHS
+        OR QT_NO_SET_XCODE_ARCHS)
+        return()
+    endif()
+
+    get_target_property(existing_archs
+        "${target}" XCODE_ATTRIBUTE_ARCHS)
+    if(NOT existing_archs MATCHES "-NOTFOUND")
+        return()
+    endif()
+
+    if(NOT x86_64 IN_LIST QT_OSX_ARCHITECTURES)
+        return()
+    endif()
+
+    if(CMAKE_OSX_ARCHITECTURES AND NOT x86_64 IN_LIST CMAKE_OSX_ARCHITECTURES)
+        return()
+    endif()
+
+    set_target_properties("${target}"
+        PROPERTIES
+        "XCODE_ATTRIBUTE_ARCHS[sdk=iphonesimulator*]"
+        "x86_64")
+endfunction()
+
+function(_qt_internal_finalize_ios_app target)
+    _qt_internal_set_xcode_development_team_id("${target}")
+    _qt_internal_set_xcode_bundle_identifier("${target}")
+    _qt_internal_set_xcode_targeted_device_family("${target}")
+    _qt_internal_set_xcode_code_sign_style("${target}")
+    _qt_internal_set_xcode_bundle_display_name("${target}")
+    _qt_internal_set_xcode_bitcode_enablement("${target}")
+    _qt_internal_set_xcode_install_path("${target}")
 
     _qt_internal_handle_ios_launch_screen("${target}")
     _qt_internal_set_placeholder_apple_bundle_version("${target}")
+    _qt_internal_set_ios_simulator_arch("${target}")
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
@@ -1812,6 +2065,19 @@ function(_qt_internal_expose_source_file_to_ide target file)
     else()
         set_property(TARGET ${ide_target} APPEND PROPERTY SOURCES "${file}")
     endif()
+
+    set(scope_args)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
+        set(scope_args TARGET_DIRECTORY "${target}")
+    endif()
+    get_source_file_property(
+        target_dependency "${file}" ${scope_args} _qt_resource_target_dependency)
+    if(target_dependency)
+        if(NOT TARGET "${target_dependency}")
+            message(FATAL_ERROR "Target dependency on source file ${file} is not a cmake target.")
+        endif()
+        add_dependencies(${ide_target} ${target_dependency})
+    endif()
 endfunction()
 
 #
@@ -1898,7 +2164,12 @@ function(_qt_internal_process_resource target resourceName)
         string(APPEND qrcContents "${file}</file>\n")
         list(APPEND files "${file}")
 
-        get_source_file_property(target_dependency ${file} QT_RESOURCE_TARGET_DEPENDENCY)
+        set(scope_args)
+        if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
+            set(scope_args TARGET_DIRECTORY ${target})
+        endif()
+        get_source_file_property(
+            target_dependency ${file} ${scope_args} _qt_resource_target_dependency)
         if (NOT target_dependency)
             list(APPEND resource_dependencies ${file})
         else()
@@ -1977,6 +2248,7 @@ function(_qt_internal_process_resource target resourceName)
         set_source_files_properties(${generatedOutfile} ${scope_args} PROPERTIES
             SKIP_AUTOGEN TRUE
             GENERATED TRUE
+            SKIP_UNITY_BUILD_INCLUSION TRUE
         )
         get_target_property(target_source_dir ${target} SOURCE_DIR)
         if(NOT target_source_dir STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -2275,6 +2547,7 @@ macro(_qt_internal_override_example_install_dir_to_dot)
     # to CMAKE_INSTALL_PREFIX.
     if(QT_INTERNAL_SET_EXAMPLE_INSTALL_DIR_TO_DOT)
         set(INSTALL_EXAMPLEDIR ".")
+        set(_qt_internal_example_dir_set_to_dot TRUE)
     endif()
 endmacro()
 

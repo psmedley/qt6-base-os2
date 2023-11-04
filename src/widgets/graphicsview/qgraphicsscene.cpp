@@ -1815,8 +1815,8 @@ void QGraphicsScene::render(QPainter *painter, const QRectF &target, const QRect
     // in reverse order).
     QList<QGraphicsItem *> itemList = items(sourceRect, Qt::IntersectsItemBoundingRect);
     QGraphicsItem **itemArray = new QGraphicsItem *[itemList.size()];
-    const int numItems = itemList.size();
-    for (int i = 0; i < numItems; ++i)
+    const qsizetype numItems = itemList.size();
+    for (qsizetype i = 0; i < numItems; ++i)
         itemArray[numItems - i - 1] = itemList.at(i);
     itemList.clear();
 
@@ -1833,7 +1833,7 @@ void QGraphicsScene::render(QPainter *painter, const QRectF &target, const QRect
 
     // Generate the style options
     QStyleOptionGraphicsItem *styleOptionArray = new QStyleOptionGraphicsItem[numItems];
-    for (int i = 0; i < numItems; ++i)
+    for (qsizetype i = 0; i < numItems; ++i)
         itemArray[i]->d_ptr->initStyleOption(&styleOptionArray[i], painterTransform, targetRect.toRect());
 
     // Render the scene.
@@ -2284,11 +2284,18 @@ void QGraphicsScene::clearSelection()
 
     // Disable emitting selectionChanged
     ++d->selectionChanging;
-    bool changed = !d->selectedItems.isEmpty();
+    // iterate over a copy, as clearing selection might invalidate selectedItems
+    const auto selectedItems = d->selectedItems;
+    QSet<QGraphicsItem *> stillSelectedSet;
 
-    for (QGraphicsItem *item : qAsConst(d->selectedItems))
+    for (QGraphicsItem *item : selectedItems) {
         item->setSelected(false);
-    d->selectedItems.clear();
+        // items might override itemChange to prevent deselection
+        if (item->isSelected())
+            stillSelectedSet << item;
+    }
+    const bool changed = stillSelectedSet != selectedItems;
+    d->selectedItems = stillSelectedSet;
 
     // Re-enable emitting selectionChanged() for individual items.
     --d->selectionChanging;

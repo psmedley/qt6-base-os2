@@ -624,7 +624,7 @@ bool QSqlTableModel::clearItemData(const QModelIndex &index)
 */
 void QSqlTableModel::setQuery(const QSqlQuery &query)
 {
-    QSqlQueryModel::setQuery(query);
+    QT_IGNORE_DEPRECATIONS(QSqlQueryModel::setQuery(query);)
 }
 
 /*!
@@ -1466,3 +1466,5 @@ QSqlRecord QSqlTableModel::primaryValues(int row) const
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qsqltablemodel.cpp"

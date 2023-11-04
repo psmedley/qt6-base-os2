@@ -671,11 +671,10 @@ void QVncServer::newConnection()
 void QVncServer::discardClient(QVncClient *client)
 {
     clients.removeOne(client);
+    qvnc_screen->disableClientCursor(client);
     client->deleteLater();
-    if (clients.isEmpty()) {
-        qvnc_screen->disableClientCursor(client);
+    if (clients.isEmpty())
         qvnc_screen->setPowerState(QPlatformScreen::PowerStateOff);
-    }
 }
 
 inline QImage QVncServer::screenImage() const
@@ -684,3 +683,5 @@ inline QImage QVncServer::screenImage() const
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qvnc_p.cpp"
