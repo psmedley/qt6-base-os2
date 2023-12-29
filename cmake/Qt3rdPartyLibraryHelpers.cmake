@@ -180,7 +180,9 @@ function(qt_internal_add_3rdparty_library target)
         RUNTIME_OUTPUT_DIRECTORY "${QT_BUILD_DIR}/${INSTALL_BINDIR}"
         ARCHIVE_OUTPUT_DIRECTORY "${QT_BUILD_DIR}/${INSTALL_LIBDIR}"
         VERSION ${PROJECT_VERSION}
+if (NOT OS2)
         SOVERSION ${PROJECT_VERSION_MAJOR}
+endif()
         _qt_module_is_3rdparty_library TRUE
         _qt_module_skip_depends_include TRUE
     )

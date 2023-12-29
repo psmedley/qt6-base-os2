@@ -56,8 +56,33 @@
 
 QT_BEGIN_NAMESPACE
 
-// defined in qprocess.cpp
-extern QByteArray qt_prettyDebug(const char *data, int len, int maxSize);
+/*
+    Returns a human readable representation of the first \a len
+    characters in \a data.
+*/
+
+static QByteArray qt_prettyDebug(const char *data, int len, int maxSize)
+{
+    if (!data) return "(null)";
+    QByteArray out;
+    for (int i = 0; i < len; ++i) {
+        char c = data[i];
+        if (isprint(c)) {
+            out += c;
+        } else switch (c) {
+        case '\n': out += "\\n"; break;
+        case '\r': out += "\\r"; break;
+        case '\t': out += "\\t"; break;
+        default:
+            QString tmp;
+            tmp.asprintf("\\%o", c);
+            out += tmp.toLatin1();
+        }
+    }
+    if (len < maxSize)
+        out += "...";
+    return out;
+}
 
 // redirect qDebug output to a file in the root directory of the current drive
 static void msgHandler(QtMsgType, const QMessageLogContext &ctx, const QString &msg)
@@ -430,7 +455,7 @@ void QProcessManager::run()
         if (instance->deathFlag.testAndSetRelaxed(1, 0)) {
             DEBUG(() << "child death signaled");
             for (QProcess *proc : processes) {
-                DEBUG(() << "pid" << proc->d_func()->pid << "waitMode" << hex << proc->d_func()->waitMode);
+                DEBUG(() << "pid" << proc->d_func()->pid << "waitMode" /*<< hex*/ << proc->d_func()->waitMode);
                 if (proc->d_func()->waitMode) {
                     DosPostEventSem(proc->d_func()->waitSem);
                 } else {
@@ -1227,7 +1252,7 @@ void QProcessPrivate::terminateProcess()
         // safest approach as it will give the app an opportunity to save its
         // data via a normal route (and also to refuse to close).
         HSWITCH hswitch = WinQuerySwitchHandle(NULLHANDLE, pid);
-        DEBUG(() << "hswitch" << hex << hswitch);
+        DEBUG(() << "hswitch" /*<< hex*/ << hswitch);
         if (hswitch != NULLHANDLE) {
             SWCNTRL swcntrl;
             memset(&swcntrl, 0, sizeof(swcntrl));
@@ -1433,7 +1458,7 @@ void QProcessPrivate::waitForDeadChild()
 
 int QProcessPrivate::_q_notified(int flags)
 {
-    DEBUG(() << "flags" << hex << flags << "waitMode" << hex << waitMode << dec << "pid" << pid);
+    DEBUG(() << "flags" /*<< hex*/ << flags << "waitMode" /*<< hex*/ << waitMode /*<< dec*/ << "pid" << pid);
 
     int ret = 0;
 
@@ -1524,7 +1549,7 @@ int QProcessPrivate::_q_notified(int flags)
     if (waitMode)
         waitMode |= ret;
 
-    DEBUG(() << "ret" << hex << ret << "waitMode" << hex << waitMode);
+    DEBUG(() << "ret" /*<< hex*/ << ret << "waitMode" /*<< hex*/ << waitMode);
     return ret;
 }
 
@@ -1605,10 +1630,10 @@ qint64 QProcess::writeData(const char *data, qint64 len)
     Q_D(QProcess);
 
     if (d->stdinChannel.closed) {
-#if defined QPROCESS_DEBUG
-        qDebug("QProcess::writeData(%p \"%s\", %lld) == 0 (write channel closing)",
-               data, QtDebugUtils::toPrintable(data, len, 16).constData(), len);
-#endif
+//#if defined QPROCESS_DEBUG
+//        qDebug("QProcess::writeData(%p \"%s\", %lld) == 0 (write channel closing)",
+//               data, QtDebugUtils::toPrintable(data, len, 16).constData(), len);
+//#endif
         return 0;
     }
 
@@ -1616,10 +1641,10 @@ qint64 QProcess::writeData(const char *data, qint64 len)
     if (d->stdinChannel.notifier)
         d->stdinChannel.notifier->setEnabled(true);
 
-#if defined QPROCESS_DEBUG
-    qDebug("QProcess::writeData(%p \"%s\", %lld) == %lld (written to buffer)",
-           data, QtDebugUtils::toPrintable(data, len, 16).constData(), len, len);
-#endif
+//#if defined QPROCESS_DEBUG
+//    qDebug("QProcess::writeData(%p \"%s\", %lld) == %lld (written to buffer)",
+//           data, QtDebugUtils::toPrintable(data, len, 16).constData(), len, len);
+//#endif
 #if defined(Q_OS_OS2)
     // Try to write some bytes (there may be space in the pipe). Asyncronously,
     // so that a subsequent waitForBytesWritten call could succeed. This is
