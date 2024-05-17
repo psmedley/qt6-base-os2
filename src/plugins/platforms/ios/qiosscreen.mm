@@ -108,8 +108,8 @@ static QIOSScreen* qtPlatformScreenFor(UIScreen *uiScreen)
 
 + (void)screenConnected:(NSNotification*)notification
 {
-    Q_ASSERT_X(QIOSIntegration::instance(), Q_FUNC_INFO,
-        "Screen connected before QIOSIntegration creation");
+    if (!QIOSIntegration::instance())
+        return; // Will be added when QIOSIntegration is created
 
     QWindowSystemInterface::handleScreenAdded(new QIOSScreen([notification object]));
 }
@@ -288,7 +288,7 @@ QIOSScreen::QIOSScreen(UIScreen *screen)
     if (!qt_apple_isApplicationExtension()) {
         for (UIWindow *existingWindow in qt_apple_sharedApplication().windows) {
             if (existingWindow.screen == m_uiScreen) {
-                m_uiWindow = [m_uiWindow retain];
+                m_uiWindow = [existingWindow retain];
                 break;
             }
         }

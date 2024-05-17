@@ -62,7 +62,6 @@
 #include <QtCore/qvariant.h>
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qdebug.h>
-#include <QtCore/qtextstream.h>
 #include <QtCore/qoperatingsystemversion.h>
 #include <QtCore/qsysinfo.h>
 #include <QtCore/qcache.h>
@@ -92,17 +91,6 @@ QT_BEGIN_NAMESPACE
 static inline QColor COLORREFToQColor(COLORREF cr)
 {
     return QColor(GetRValue(cr), GetGValue(cr), GetBValue(cr));
-}
-
-static inline QTextStream& operator<<(QTextStream &str, const QColor &c)
-{
-    str.setIntegerBase(16);
-    str.setFieldWidth(2);
-    str.setPadChar(u'0');
-    str << " rgb: #" << c.red()  << c.green() << c.blue();
-    str.setIntegerBase(10);
-    str.setFieldWidth(0);
-    return str;
 }
 
 static inline bool booleanSystemParametersInfo(UINT what, bool defaultValue)
@@ -605,20 +593,22 @@ void QWindowsTheme::refreshFonts()
     clearFonts();
     if (!QGuiApplication::desktopSettingsAware())
         return;
+
+    const int dpi = 96;
     NONCLIENTMETRICS ncm;
-    auto &screenManager = QWindowsContext::instance()->screenManager();
-    QWindowsContext::nonClientMetricsForScreen(&ncm, screenManager.screens().value(0));
+    QWindowsContext::nonClientMetrics(&ncm, dpi);
     qCDebug(lcQpaWindows) << __FUNCTION__ << ncm;
-    const QFont menuFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfMenuFont);
-    const QFont messageBoxFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfMessageFont);
-    const QFont statusFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfStatusFont);
-    const QFont titleFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfCaptionFont);
+
+    const QFont menuFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfMenuFont, dpi);
+    const QFont messageBoxFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfMessageFont, dpi);
+    const QFont statusFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfStatusFont, dpi);
+    const QFont titleFont = QWindowsFontDatabase::LOGFONT_to_QFont(ncm.lfCaptionFont, dpi);
     QFont fixedFont(QStringLiteral("Courier New"), messageBoxFont.pointSize());
     fixedFont.setStyleHint(QFont::TypeWriter);
 
     LOGFONT lfIconTitleFont;
-    SystemParametersInfo(SPI_GETICONTITLELOGFONT, sizeof(lfIconTitleFont), &lfIconTitleFont, 0);
-    const QFont iconTitleFont = QWindowsFontDatabase::LOGFONT_to_QFont(lfIconTitleFont);
+    SystemParametersInfoForDpi(SPI_GETICONTITLELOGFONT, sizeof(lfIconTitleFont), &lfIconTitleFont, 0, dpi);
+    const QFont iconTitleFont = QWindowsFontDatabase::LOGFONT_to_QFont(lfIconTitleFont, dpi);
 
     m_fonts[SystemFont] = new QFont(QWindowsFontDatabase::systemDefaultFont());
     m_fonts[MenuFont] = new QFont(menuFont);

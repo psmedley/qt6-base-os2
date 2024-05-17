@@ -711,7 +711,7 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
             if (cg == QPalette::Normal && !(vopt->state & QStyle::State_Active))
                 cg = QPalette::Inactive;
 
-            if ((vopt->state & QStyle::State_Selected) &&  proxy()->styleHint(QStyle::SH_ItemView_ShowDecorationSelected, opt, widget))
+            if ((vopt->state & QStyle::State_Selected) && vopt->showDecorationSelected)
                 p->fillRect(vopt->rect, vopt->palette.brush(cg, QPalette::Highlight));
             else if (vopt->features & QStyleOptionViewItem::Alternate)
                 p->fillRect(vopt->rect, vopt->palette.brush(cg, QPalette::AlternateBase));
@@ -1711,8 +1711,9 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                     alignment |= Qt::TextHideMnemonic;
                 rect.translate(shiftX, shiftY);
                 p->setFont(toolbutton->font);
+                const QString text = d->toolButtonElideText(toolbutton, rect, alignment);
                 proxy()->drawItemText(p, rect, alignment, toolbutton->palette,
-                             opt->state & State_Enabled, toolbutton->text,
+                             opt->state & State_Enabled, text,
                              QPalette::ButtonText);
             } else {
                 QPixmap pm;

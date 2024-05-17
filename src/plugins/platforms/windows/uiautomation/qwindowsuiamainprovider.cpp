@@ -74,10 +74,13 @@ QT_BEGIN_NAMESPACE
 
 using namespace QWindowsUiAutomation;
 
+QMutex QWindowsUiaMainProvider::m_mutex;
 
 // Returns a cached instance of the provider for a specific acessible interface.
 QWindowsUiaMainProvider *QWindowsUiaMainProvider::providerForAccessible(QAccessibleInterface *accessible)
 {
+    QMutexLocker locker(&m_mutex);
+
     if (!accessible)
         return nullptr;
 
@@ -107,10 +110,11 @@ QWindowsUiaMainProvider::~QWindowsUiaMainProvider()
 void QWindowsUiaMainProvider::notifyFocusChange(QAccessibleEvent *event)
 {
     if (QAccessibleInterface *accessible = event->accessibleInterface()) {
-        // If this is a table/tree/list, raise event for the focused cell/item instead.
-        if (accessible->tableInterface())
+        // If this is a complex element, raise event for the focused child instead.
+        if (accessible->childCount()) {
             if (QAccessibleInterface *child = accessible->focusChild())
                 accessible = child;
+        }
         if (QWindowsUiaMainProvider *provider = providerForAccessible(accessible))
             QWindowsUiaWrapper::instance()->raiseAutomationEvent(provider, UIA_AutomationFocusChangedEventId);
     }
@@ -275,6 +279,8 @@ ULONG QWindowsUiaMainProvider::AddRef()
 
 ULONG STDMETHODCALLTYPE QWindowsUiaMainProvider::Release()
 {
+    QMutexLocker locker(&m_mutex);
+
     if (!--m_ref) {
         delete this;
         return 0;

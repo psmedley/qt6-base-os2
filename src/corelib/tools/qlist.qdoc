@@ -153,21 +153,7 @@
     support \c operator==().  These requirements are documented on a
     per-function basis.
 
-    Like the other container classes, QList provides \l{Java-style iterators}
-    (QListIterator and QMutableListIterator) and \l{STL-style iterators}
-    (QList::const_iterator and QList::iterator). In practice, iterators are
-    handy when working with generic algorithms provided by \l{generic
-    algorithms}{Qt} and the C++ standard library. \l{Java-style iterators} are
-    provided for backwards compatibility, prefer \l{STL-style iterators} when
-    writing C++ code.
-
-    \note Iterators over a QList, and references to individual elements
-    within one, cannot be relied on to remain valid when any non-const method
-    of the QList is called. Accessing such an iterator or reference after
-    the call to a non-const method leads to undefined behavior. When stability
-    for iterator-like functionality is required, you should use indexes instead
-    of iterators as they are not tied to QList's internal state and thus do
-    not get invalidated.
+    For iterating over the items, see \l {Iterating over Containers}.
 
     In addition to QList, Qt also provides QVarLengthArray, a very
     low-level class with little functionality that is optimized for
@@ -587,17 +573,14 @@
 
     Removes all the elements from the list.
 
-    \note Until Qt 5.6, this also released the memory used by
-    the list. From Qt 5.7, the capacity is preserved. To shed
-    all capacity, swap with a default-constructed list:
-    \code
-    QList<T> l ...;
-    QList<T>().swap(l);
-    Q_ASSERT(l.capacity() == 0);
-    \endcode
-    or call squeeze().
+    If this list is not shared, the capacity() is preserved. Use squeeze() to
+    shed excess capacity.
 
-    \sa squeeze()
+    \note In Qt versions prior to 5.7 (for QVector) and 6.0 (for QList), this
+    function released the memory used by the list instead of preserving the
+    capacity.
+
+    \sa resize(), squeeze()
 */
 
 /*! \fn template <typename T> const T &QList<T>::at(qsizetype i) const

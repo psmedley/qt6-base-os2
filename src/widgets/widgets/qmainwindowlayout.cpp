@@ -2625,6 +2625,36 @@ QLayoutItem *QMainWindowLayout::unplug(QWidget *widget, bool group)
         } else
 #endif // QT_CONFIG(tabwidget)
         {
+            // Dock widget is unplugged from a main window dock
+            // => height or width need to be decreased by separator size
+            switch (dockWidgetArea(dw)) {
+            case Qt::LeftDockWidgetArea:
+            case Qt::RightDockWidgetArea:
+                r.setHeight(r.height() - sep);
+                break;
+            case Qt::TopDockWidgetArea:
+            case Qt::BottomDockWidgetArea:
+                r.setWidth(r.width() - sep);
+                break;
+            case Qt::NoDockWidgetArea:
+            case Qt::DockWidgetArea_Mask:
+                break;
+            }
+
+            // Depending on the title bar layout (vertical / horizontal),
+            // width and height have to provide minimum space for window handles
+            // and mouse dragging.
+            // Assuming horizontal title bar, if the dock widget does not have a layout.
+            const auto *layout = qobject_cast<QDockWidgetLayout *>(dw->layout());
+            const bool verticalTitleBar = layout ? layout->verticalTitleBar : false;
+            const int tbHeight = QApplication::style()
+                      ? QApplication::style()->pixelMetric(QStyle::PixelMetric::PM_TitleBarHeight)
+                      : 20;
+            const int minHeight = verticalTitleBar ? 2 * tbHeight : tbHeight;
+            const int minWidth = verticalTitleBar ? tbHeight : 2 * tbHeight;
+            r.setSize(r.size().expandedTo(QSize(minWidth, minHeight)));
+            qCDebug(lcQpaDockWidgets) << dw << "will be unplugged with size" << r.size();
+
             dw->d_func()->unplug(r);
         }
     }

@@ -623,7 +623,7 @@ bool QNativeSocketEnginePrivate::nativeListen(int backlog)
     return true;
 }
 
-int QNativeSocketEnginePrivate::nativeAccept()
+qintptr QNativeSocketEnginePrivate::nativeAccept()
 {
     int acceptedDescriptor = qt_safe_accept(socketDescriptor, nullptr, nullptr);
     if (acceptedDescriptor == -1) {
@@ -669,7 +669,7 @@ int QNativeSocketEnginePrivate::nativeAccept()
         }
     }
 
-    return acceptedDescriptor;
+    return qintptr(acceptedDescriptor);
 }
 
 #ifndef QT_NO_NETWORKINTERFACE

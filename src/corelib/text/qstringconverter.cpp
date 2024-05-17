@@ -218,7 +218,7 @@ static inline const uchar *simdFindNonAscii(const uchar *src, const uchar *end, 
 #ifdef __AVX2__
     // do 32 characters at a time
     // (this is similar to simdTestMask in qstring.cpp)
-    const __m256i mask = _mm256_set1_epi8(0x80);
+    const __m256i mask = _mm256_set1_epi8(char(0x80));
     for ( ; end - src >= 32; src += 32) {
         __m256i data = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(src));
         if (_mm256_testz_si256(mask, data))
@@ -1204,6 +1204,11 @@ QChar *QUtf32::convertToUnicode(QChar *out, QByteArrayView in, QStringConverter:
 }
 
 #if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED)
+int QLocal8Bit::checkUtf8()
+{
+    return GetACP() == CP_UTF8 ? 1 : -1;
+}
+
 static QString convertToUnicodeCharByChar(QByteArrayView in, QStringConverter::State *state)
 {
     qsizetype length = in.size();
@@ -1257,7 +1262,7 @@ static QString convertToUnicodeCharByChar(QByteArrayView in, QStringConverter::S
 }
 
 
-QString QLocal8Bit::convertToUnicode(QByteArrayView in, QStringConverter::State *state)
+QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, QStringConverter::State *state)
 {
     qsizetype length = in.size();
 
@@ -1345,7 +1350,7 @@ QString QLocal8Bit::convertToUnicode(QByteArrayView in, QStringConverter::State 
     return s;
 }
 
-QByteArray QLocal8Bit::convertFromUnicode(QStringView in, QStringConverter::State *state)
+QByteArray QLocal8Bit::convertFromUnicode_sys(QStringView in, QStringConverter::State *state)
 {
     const QChar *ch = in.data();
     qsizetype uclen = in.size();

@@ -50,6 +50,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
+import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.Rect;
@@ -79,6 +80,8 @@ import android.view.Surface;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.view.ViewTreeObserver;
@@ -120,8 +123,6 @@ public class QtActivityDelegate
     private static final String ENVIRONMENT_VARIABLES_KEY = "environment.variables";
     private static final String APPLICATION_PARAMETERS_KEY = "application.parameters";
     private static final String STATIC_INIT_CLASSES_KEY = "static.init.classes";
-    private static final String EXTRACT_STYLE_KEY = "extract.android.style";
-    private static final String EXTRACT_STYLE_MINIMAL_KEY = "extract.android.style.option";
 
     public static final int SYSTEM_UI_VISIBILITY_NORMAL = 0;
     public static final int SYSTEM_UI_VISIBILITY_FULLSCREEN = 1;
@@ -743,11 +744,8 @@ public class QtActivityDelegate
             libraries.remove(libraries.size() - 1);
         }
 
-        if (loaderParams.containsKey(EXTRACT_STYLE_KEY)) {
-            String path = loaderParams.getString(EXTRACT_STYLE_KEY);
-            new ExtractStyle(m_activity, path, loaderParams.containsKey(EXTRACT_STYLE_MINIMAL_KEY) &&
-                                               loaderParams.getBoolean(EXTRACT_STYLE_MINIMAL_KEY));
-        }
+        ExtractStyle.setup(loaderParams);
+        ExtractStyle.runIfNeeded(m_activity, isUiModeDark(m_activity.getResources().getConfiguration()));
 
         try {
             m_super_dispatchKeyEvent = m_activity.getClass().getMethod("super_dispatchKeyEvent", KeyEvent.class);
@@ -1025,13 +1023,33 @@ public class QtActivityDelegate
             updateFullScreen();
     }
 
+    boolean isUiModeDark(Configuration config)
+    {
+        return (config.uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+    }
+
     private void handleUiModeChange(int uiMode)
     {
+        // QTBUG-108365
+        if (Build.VERSION.SDK_INT >= 30) {
+            // Since 29 version we are using Theme_DeviceDefault_DayNight
+            Window window = m_activity.getWindow();
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                // set APPEARANCE_LIGHT_STATUS_BARS if needed
+                int appearanceLight = Color.luminance(window.getStatusBarColor()) > 0.5 ?
+                        WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS : 0;
+                controller.setSystemBarsAppearance(appearanceLight,
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
+            }
+        }
         switch (uiMode) {
             case Configuration.UI_MODE_NIGHT_NO:
+                ExtractStyle.runIfNeeded(m_activity, false);
                 QtNative.handleUiDarkModeChanged(0);
                 break;
             case Configuration.UI_MODE_NIGHT_YES:
+                ExtractStyle.runIfNeeded(m_activity, true);
                 QtNative.handleUiDarkModeChanged(1);
                 break;
         }

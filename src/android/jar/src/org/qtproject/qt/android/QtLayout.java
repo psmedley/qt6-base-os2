@@ -42,7 +42,9 @@ package org.qtproject.qt.android;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Rect;
 import android.os.Build;
+import android.util.Log;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.view.Display;
@@ -50,6 +52,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.graphics.Insets;
+import android.view.WindowMetrics;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 
 public class QtLayout extends ViewGroup
 {
@@ -93,53 +99,53 @@ public class QtLayout extends ViewGroup
     @Override
     protected void onSizeChanged (int w, int h, int oldw, int oldh)
     {
-        WindowInsets insets = getRootWindowInsets();
-
-        DisplayMetrics realMetrics = new DisplayMetrics();
-        Display display = (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
-                ? ((Activity)getContext()).getWindowManager().getDefaultDisplay()
-                : ((Activity)getContext()).getDisplay();
-        display.getRealMetrics(realMetrics);
-
-        if ((realMetrics.widthPixels > realMetrics.heightPixels) != (w > h)) {
-            // This is an intermediate state during display rotation.
-            // The new size is still reported for old orientation, while
-            // realMetrics contain sizes for new orientation. Setting
-            // such parameters will produce inconsistent results, so
-            // we just skip them.
-            // We will have another onSizeChanged() with normal values
-            // a bit later.
+        Activity activity = (Activity)getContext();
+        if (activity == null)
             return;
+
+        final WindowManager windowManager = activity.getWindowManager();
+        Display display;
+
+        final WindowInsets rootInsets = getRootWindowInsets();
+
+        int insetLeft = 0;
+        int insetTop = 0;
+
+        int maxWidth = 0;
+        int maxHeight = 0;
+
+        if (android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            display = windowManager.getDefaultDisplay();
+
+            final DisplayMetrics maxMetrics = new DisplayMetrics();
+            display.getRealMetrics(maxMetrics);
+            maxWidth = maxMetrics.widthPixels;
+            maxHeight = maxMetrics.heightPixels;
+
+            insetLeft = rootInsets.getStableInsetLeft();
+            insetTop = rootInsets.getStableInsetTop();
+        } else {
+            display = activity.getDisplay();
+
+            final WindowMetrics maxMetrics = windowManager.getMaximumWindowMetrics();
+            maxWidth = maxMetrics.getBounds().width();
+            maxHeight = maxMetrics.getBounds().height();
+
+            insetLeft = rootInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()).left;
+            insetTop = rootInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()).top;
         }
 
-        boolean isFullScreenView = h == realMetrics.heightPixels;
-        // The code uses insets for fullscreen mode only. However in practice
-        // the insets can be reported incorrectly. Both on Android 6 and Android 11
-        // a non-zero bottom inset is reported even when the
-        // WindowManager.LayoutParams.FLAG_FULLSCREEN flag is set.
-        // To avoid that, add an extra check for the fullscreen mode.
-        // The insets-related logic is not removed for the case when
-        // isFullScreenView == true, but hasFlagFullscreen == false, although
-        // I can't get such case in my tests.
-        final int windowFlags = ((Activity)getContext()).getWindow().getAttributes().flags;
-        final boolean hasFlagFullscreen =
-                (windowFlags & WindowManager.LayoutParams.FLAG_FULLSCREEN) != 0;
-        int insetLeft =
-                (isFullScreenView && !hasFlagFullscreen) ? insets.getSystemWindowInsetLeft() : 0;
-        int insetTop =
-                (isFullScreenView && !hasFlagFullscreen) ? insets.getSystemWindowInsetTop() : 0;
-        int insetRight =
-                (isFullScreenView && !hasFlagFullscreen) ? insets.getSystemWindowInsetRight() : 0;
-        int insetBottom =
-                (isFullScreenView && !hasFlagFullscreen) ? insets.getSystemWindowInsetBottom() : 0;
+        final DisplayMetrics displayMetrics = activity.getResources().getDisplayMetrics();
+        double xdpi = displayMetrics.xdpi;
+        double ydpi = displayMetrics.ydpi;
+        double density = displayMetrics.density;
+        double scaledDensity = displayMetrics.scaledDensity;
+        float refreshRate = display.getRefreshRate();
 
-        int usableAreaWidth = w - insetLeft - insetRight;
-        int usableAreaHeight = h - insetTop - insetBottom;
-
-        QtNative.setApplicationDisplayMetrics(
-                realMetrics.widthPixels, realMetrics.heightPixels, insetLeft, insetTop,
-                usableAreaWidth, usableAreaHeight, realMetrics.xdpi, realMetrics.ydpi,
-                realMetrics.scaledDensity, realMetrics.density, display.getRefreshRate());
+        QtNative.setApplicationDisplayMetrics(maxWidth, maxHeight, insetLeft,
+                                              insetTop, w, h,
+                                              xdpi,ydpi,scaledDensity, density,
+                                              refreshRate);
 
         int newRotation = display.getRotation();
         if (m_ownDisplayRotation != m_activityDisplayRotation

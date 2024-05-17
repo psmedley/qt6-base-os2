@@ -1162,13 +1162,17 @@ void tst_QDockWidget::createTestWidgets(QMainWindow* &mainWindow, QPointer<QWidg
     mainWindow->setDockOptions(QMainWindow::AllowTabbedDocks | QMainWindow::GroupedDragging);
     mainWindow->move(m_topLeft);
 
+    const int minWidth = QApplication::style()->pixelMetric(QStyle::PM_TitleBarHeight);
+    const QSize minSize(minWidth, 2 * minWidth);
     d1 = new QDockWidget(mainWindow);
+    d1->setMinimumSize(minSize);
     d1->setWindowTitle("I am D1");
     d1->setObjectName("D1");
     d1->setFeatures(QDockWidget::DockWidgetFeatureMask);
     d1->setAllowedAreas(Qt::DockWidgetArea::AllDockWidgetAreas);
 
     d2 = new QDockWidget(mainWindow);
+    d2->setMinimumSize(minSize);
     d2->setWindowTitle("I am D2");
     d2->setObjectName("D2");
     d2->setFeatures(QDockWidget::DockWidgetFeatureMask);
@@ -1250,21 +1254,33 @@ void tst_QDockWidget::unplugAndResize(QMainWindow* mainWindow, QDockWidget* dw, 
         return;
     }
 
+    // Remember size for comparison with unplugged object
+#ifdef Q_OS_LINUX
+    const int pluggedWidth = dw->width();
+    const int pluggedHeight = dw->height();
+#endif
+
     // unplug and resize a dock Widget
     qCDebug(lcTestDockWidget) << "*** unplug and resize" << dw->objectName();
     QPoint pos1 = dw->mapToGlobal(dw->rect().center());
     pos1.rx() += mx;
     pos1.ry() += my;
     moveDockWidget(dw, pos1, dw->mapToGlobal(dw->rect().center()));
-    //QTest::mousePress(dw, Qt::LeftButton, Qt::KeyboardModifiers(), dw->mapFromGlobal(pos1));
     QTRY_VERIFY(dw->isFloating());
+
+    // Unplugged object's size may differ max. by 2x frame size
+#ifdef Q_OS_LINUX
+    const int xMargin = 2 * dw->frameSize().width();
+    const int yMargin = 2 * dw->frameSize().height();
+    QVERIFY(dw->height() - pluggedHeight <= xMargin);
+    QVERIFY(dw->width() - pluggedWidth <= yMargin);
+#endif
 
     qCDebug(lcTestDockWidget) << "Resizing" << dw->objectName() << "to" << size;
     dw->setFixedSize(size);
     QTest::qWait(waitingTime);
     qCDebug(lcTestDockWidget) << "Move" << dw->objectName() << "to its home" << dw->mapFromGlobal(home);
     dw->move(home);
-    //moveDockWidget(dw, home);
 }
 
 bool tst_QDockWidget::checkFloatingTabs(QMainWindow* mainWindow, QPointer<QDockWidgetGroupWindow> &ftabs, const QList<QDockWidget*> &dwList) const
@@ -1330,6 +1346,8 @@ void tst_QDockWidget::xcbMessageHandler(QtMsgType type, const QMessageLogContext
 // test floating tabs and item_tree consistency
 void tst_QDockWidget::floatingTabs()
 {
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("Test skipped on Wayland.");
 #ifdef Q_OS_WIN
     QSKIP("Test skipped on Windows platforms");
 #endif // Q_OS_WIN

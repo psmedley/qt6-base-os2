@@ -313,15 +313,6 @@ QRasterPaintEnginePrivate::QRasterPaintEnginePrivate() :
 */
 
 /*!
-    \typedef QSpan
-    \relates QRasterPaintEngine
-
-    A struct equivalent to QT_FT_Span, containing a position (x,
-    y), the span's length in pixels and its color/coverage (a value
-    ranging from 0 to 255).
-*/
-
-/*!
     \since 4.5
 
     Creates a raster based paint engine for operating on the given
@@ -452,13 +443,7 @@ bool QRasterPaintEngine::begin(QPaintDevice *device)
 
     QRasterPaintEngineState *s = state();
     ensureOutlineMapper();
-    d->outlineMapper->m_clip_rect = d->deviceRect;
-
-    if (d->outlineMapper->m_clip_rect.width() > QT_RASTER_COORD_LIMIT)
-        d->outlineMapper->m_clip_rect.setWidth(QT_RASTER_COORD_LIMIT);
-    if (d->outlineMapper->m_clip_rect.height() > QT_RASTER_COORD_LIMIT)
-        d->outlineMapper->m_clip_rect.setHeight(QT_RASTER_COORD_LIMIT);
-
+    d->outlineMapper->setClipRect(d->deviceRect);
     d->rasterizer->setClipRect(d->deviceRect);
 
     s->penData.init(d->rasterBuffer.data(), this);
