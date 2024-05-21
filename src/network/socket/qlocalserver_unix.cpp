@@ -377,9 +377,9 @@ void QLocalServerPrivate::setError(const QString &function)
         if (err)
             errorString += QString(QLatin1String(" (%1)")).arg(QLatin1String(err));
         error = QAbstractSocket::UnknownSocketError;
-#if defined QLOCALSERVER_DEBUG
+//#if defined QLOCALSERVER_DEBUG
         qWarning() << errorString << "fullServerName:" << fullServerName;
-#endif
+//#endif
     }
 }
 
