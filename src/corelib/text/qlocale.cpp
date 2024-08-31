@@ -38,6 +38,12 @@
 **
 ****************************************************************************/
 
+#if defined( __OS2__) && (__GNUC__ >= 10) 
+// GCC newer than 9 has stack alignment issues with this source file
+#pragma GCC push_options
+#pragma GCC target("no-sse")
+#endif
+
 #include "qglobal.h"
 
 #if (defined(QT_STATIC) || defined(QT_BOOTSTRAPPED)) && defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 1000
@@ -4491,6 +4497,10 @@ QDebug operator<<(QDebug dbg, const QLocale &l)
 }
 #endif
 QT_END_NAMESPACE
+
+#ifdef Q_OS_OS2
+#pragma GCC pop_options
+#endif
 
 #ifndef QT_NO_QOBJECT
 #include "moc_qlocale.cpp"
