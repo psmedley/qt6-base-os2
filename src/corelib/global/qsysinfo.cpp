@@ -894,6 +894,9 @@ QString QSysInfo::prettyProductName()
         result += " Version "_L1 + displayVersion;
     return result;
 #  endif // Windows
+#elif defined(Q_OS_OS2)
+    // todo detect if we're running ArcaOS and which version
+    return QLatin1String("OS/2");
 #elif defined(Q_OS_HAIKU)
     return "Haiku "_L1 + productVersion();
 #elif defined(Q_OS_UNIX)

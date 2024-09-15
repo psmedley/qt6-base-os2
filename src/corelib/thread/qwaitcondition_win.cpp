@@ -11,6 +11,7 @@
 
 #ifdef Q_OS_OS2
 #include "qmutex_p.h"
+#include <private/qreadwritelock_p.h>
 #include "qt_os2.h"
 #else
 #define Q_MUTEX_T void *

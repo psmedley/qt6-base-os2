@@ -37,6 +37,8 @@ typedef HANDLE Q_PIPE;
 #elif defined(Q_OS_OS2)
 #include "QtCore/qt_os2.h"
 #define INVALID_HFILE HFILE(~0)
+typedef int Q_PIPE;
+#define INVALID_Q_PIPE -1
 #else
 typedef int Q_PIPE;
 #define INVALID_Q_PIPE -1
@@ -369,6 +371,7 @@ public:
     Channel::Pipe *pipes[3] = { &stdinChannel.pipe, &stdoutChannel.pipe, &stderrChannel.pipe };
     USHORT procKey;
     bool threadSafe;
+    bool crashed = false;
 #endif
 
     bool waitForStarted(const QDeadlineTimer &deadline);
